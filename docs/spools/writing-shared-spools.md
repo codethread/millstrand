@@ -353,17 +353,7 @@ straddling both.
 The authoritative [discovery-tier contract](../reference.md#discovery-tiers-help-about-prime)
 applies to shared-spool CLIs.
 
-- Verbs follow role, and a role a primitive already names is never renamed. For
-  entity lifecycles: `start`, `finish --outcome`, `abort` only for real
-  teardown, `status <id>`, and `list`. For workflow steps: `start`, `next`,
-  `complete`, `choose`, and `status`. For processes: `spawn`, `kill`, `retry`,
-  `await`, `logs`, and `ps`. An op that fronts one of these behaviors takes the
-  role's verb — a subcommand that reaches `workflow/advance!` is `next`, not a
-  domain synonym. A workflow may use `ready` for a projection containing only
-  its current actionable frontier, distinct from a broader lifecycle `status`.
-  It may use `continue` for a terminal defer handoff that closes the current
-  root and pours an independently registered root under the same run id; this
-  is not a synonym for `advance!` or a returning procedure call.
+- Verbs follow role, and a role a primitive already names is never renamed. For entity lifecycles: `start`, `finish --outcome`, `abort` only for real teardown, `status <id>`, and `list`. For workflow steps: `start`, `next`, `complete`, `choose`, and `status`. For processes: `spawn`, `kill`, `retry`, `await`, `logs`, and `ps`. An op that fronts one of these behaviors takes the role's verb — a subcommand that reaches `workflow/advance!` is `next`, not a domain synonym. A workflow may use `ready` for a projection containing only its current actionable frontier, distinct from a broader lifecycle `status`. It may use `continue` for a terminal defer handoff that closes the current root and pours an independently registered root under the same run id; this is not a synonym for `advance!` or a returning procedure call.
 - Use `--by` for attribution. Name attribute-stamping flags after the attribute:
   `--owner`, `--branch`, `--worktree`, and `--feature`. Prefer seconds-first,
   unit-suffixed durations such as `--timeout-secs`, and use `--outcome` for
