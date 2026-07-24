@@ -359,7 +359,11 @@ applies to shared-spool CLIs.
   `complete`, `choose`, and `status`. For processes: `spawn`, `kill`, `retry`,
   `await`, `logs`, and `ps`. An op that fronts one of these behaviors takes the
   role's verb — a subcommand that reaches `workflow/advance!` is `next`, not a
-  domain synonym.
+  domain synonym. A workflow may use `ready` for a projection containing only
+  its current actionable frontier, distinct from a broader lifecycle `status`.
+  It may use `continue` for a terminal defer handoff that closes the current
+  root and pours an independently registered root under the same run id; this
+  is not a synonym for `advance!` or a returning procedure call.
 - Use `--by` for attribution. Name attribute-stamping flags after the attribute:
   `--owner`, `--branch`, `--worktree`, and `--feature`. Prefer seconds-first,
   unit-suffixed durations such as `--timeout-secs`, and use `--outcome` for
