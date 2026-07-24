@@ -293,19 +293,30 @@
       (is (not (s/valid? ::runtime/module-declaration
                          (assoc image-declaration :after [:ok 2]))))))
   (testing "module-opts names the public input grammar module! consults"
-    (let [image-opts {:ns 'skein.api.runtime.alpha-test :load :image
-                      :contribute 'skein.api.runtime.alpha-test/image-contribute}]
-      (is (s/valid? ::runtime/module-opts image-opts))
+    (let [image-opts {:ns 'skein.api.runtime.alpha-test :load :image}]
+      (is (s/valid? ::runtime/module-opts image-opts)
+          "image opts are a source target plus world policy, nothing else")
       (is (s/valid? ::runtime/module-opts {:file "modules/demo.clj"}))
-      (is (s/valid? ::runtime/module-opts (dissoc image-opts :contribute))
-          "Phase A image opts no longer require an explicit :contribute (G4)")
+      (is (s/valid? ::runtime/module-opts
+                    {:ns 'demo.ns :spools ['demo/root] :after [:other]
+                     :required? true}))
       (is (not (s/valid? ::runtime/module-opts
                          (assoc image-opts :file "modules/demo.clj"))))
       (is (not (s/valid? ::runtime/module-opts (assoc image-opts :load :classpath))))
       (is (not (s/valid? ::runtime/module-opts (assoc image-opts :unknown 1))))
       (is (not (s/valid? ::runtime/module-opts {:ns 'demo.ns :file "modules/demo.clj"})))
-      (is (not (s/valid? ::runtime/module-opts
-                         {:ns 'demo.ns :contribute 'unqualified})))))
+      (is (not (s/valid? ::runtime/module-opts {:ns 'demo.ns :required? :yes})))))
+  (testing "entry points are convention-only: opts name neither entry point"
+    (is (not (s/valid? ::runtime/module-opts
+                       {:ns 'demo.ns :contribute 'demo.ns/contribute}))
+        "a module's :contribute lives in its namespace's spool var")
+    (is (not (s/valid? ::runtime/module-opts
+                       {:ns 'demo.ns :reconcile 'demo.ns/reconcile}))
+        "a module's :reconcile lives in its namespace's spool var")
+    (is (not (s/valid? ::runtime/module-opts
+                       {:file "modules/demo.clj"
+                        :contribute 'demo.ns/contribute
+                        :reconcile 'demo.ns/reconcile}))))
   (testing "refresh-opts names the option grammar refresh!/plan consult"
     (is (s/valid? ::runtime/refresh-opts {}))
     (is (s/valid? ::runtime/refresh-opts {:only [:demo]}))
@@ -317,6 +328,18 @@
     (is (s/valid? ::runtime/collect-entry-opts {:override? true}))
     (is (not (s/valid? ::runtime/collect-entry-opts {:override? :yes})))
     (is (not (s/valid? ::runtime/collect-entry-opts {:unknown true})))))
+
+(defn- refusal-data
+  "Return the `ex-data` of the loud refusal `f` throws, or nil when it returns.
+
+  Assertions read the refusal payload rather than its prose so they hold for
+  whichever validation seam names the offending key first."
+  [f]
+  (try
+    (f)
+    nil
+    (catch clojure.lang.ExceptionInfo error
+      (ex-data error))))
 
 (defn- write-module-source! [config-dir relative-path ns-sym body]
   (let [file (io/file config-dir relative-path)]
@@ -375,7 +398,25 @@
                                 (runtime/refresh! rt {:only [:missing]})))
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"exactly one"
                                 (runtime/module! rt :bad {:file "modules/demo.clj"
-                                                          :ns 'demo.ns}))))))))
+                                                          :ns 'demo.ns}))))
+        (testing "entry-point keys are refused outright, with no fallback"
+          (let [contribute-refusal
+                (refusal-data
+                 #(runtime/module! rt :legacy-contribute
+                                   {:file "modules/demo.clj"
+                                    :contribute 'skein.api.runtime.alpha-test/image-contribute}))
+                reconcile-refusal
+                (refusal-data
+                 #(runtime/module! rt :legacy-reconcile
+                                   {:ns ns-sym
+                                    :reconcile 'skein.api.runtime.alpha-test/image-contribute}))]
+            (is (str/includes? (pr-str contribute-refusal) ":contribute")
+                "a declared :contribute is refused loudly, naming the offending key")
+            (is (str/includes? (pr-str reconcile-refusal) ":reconcile")
+                "a declared :reconcile is refused loudly, naming the offending key")
+            (is (empty? (select-keys (:modules (runtime/status rt))
+                                     [:legacy-contribute :legacy-reconcile]))
+                "a refused declaration is not recorded")))))))
 
 (deftest spool-spec-owns-the-def-spool-convention-shape
   (testing "a map with at least one entry-point symbol and no other keys is valid"
@@ -396,21 +437,32 @@
   [_ctx]
   {:queries {"image-q" [:= [:attr :k] :image]}})
 
+(defn- image-spool-namespace!
+  "Intern a public `spool` var naming `image-contribute` in a fresh namespace.
+
+  Image modules resolve their entry points from the declared namespace's public
+  `spool` var in the live JVM image, so the fixture interns one instead of
+  loading module source."
+  []
+  (let [ns-sym 'skein.api.runtime.alpha-test.image-target]
+    (intern (create-ns ns-sym) 'spool
+            {:contribute 'skein.api.runtime.alpha-test/image-contribute})
+    ns-sym))
+
 (deftest image-module-declaration-activates-and-validates
   (with-started-runtime
     nil
     {}
     (fn [rt _world]
-      (testing "an image declaration activates from the live image and validates"
+      (testing "an image declaration activates from its namespace's spool var"
         (let [result (runtime/module! rt :image
-                                      {:ns 'skein.api.runtime.alpha-test
-                                       :load :image
-                                       :contribute 'skein.api.runtime.alpha-test/image-contribute})]
+                                      {:ns (image-spool-namespace!)
+                                       :load :image})]
           (is (= :applied (:status result)))
           (is (s/valid? ::runtime/module-result result))
           (is (= :image (get-in result [:modules :image :source/status])))
           (is (= [:= [:attr :k] :image] (get (graph/queries rt) "image-q")))))
-      (testing "an image namespace with no spool var and no :contribute fails at evaluation"
+      (testing "an image namespace with no spool var fails at evaluation"
         (let [result (runtime/module! rt :image-bare
                                       {:ns 'skein.api.runtime.alpha-test :load :image})
               outcome (get-in result [:modules :image-bare])]
@@ -421,13 +473,11 @@
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"accepts only :image"
                               (runtime/module! rt :image-bad
                                                {:ns 'skein.api.runtime.alpha-test
-                                                :load :classpath
-                                                :contribute 'skein.api.runtime.alpha-test/image-contribute})))
+                                                :load :classpath})))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"accepts only an :ns source target"
                               (runtime/module! rt :image-bad
                                                {:file "modules/demo.clj"
-                                                :load :image
-                                                :contribute 'skein.api.runtime.alpha-test/image-contribute})))))))
+                                                :load :image})))))))
 
 (deftest reload-code-composes-code-reload-and-residual-classification
   (with-started-runtime

@@ -61,7 +61,12 @@
   `:after`, and `:required?` values. `:load :image` (the only accepted `:load`
   value) trusts the already-loaded JVM image: it requires an `:ns` target and
   refresh never source-loads that module, so its entry points resolve from the
-  namespace's `spool` var (or an explicit Phase A `:contribute`) at evaluation."
+  namespace's `spool` var at evaluation.
+
+  Entry-point keys are refused by `module!`'s public `::module-opts` grammar
+  but stay readable here: a coordinator picked up without a restart still holds
+  declarations collected before the cutover, and their retained reconcilers
+  must keep tearing down (DELTA-Dsp-004.D3)."
   [key opts]
   (when-not (keyword? key)
     (fail! "Module key must be a keyword" {:module/key key}))

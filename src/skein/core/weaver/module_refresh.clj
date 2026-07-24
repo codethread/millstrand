@@ -398,9 +398,9 @@
                           :collection/reload? true
                           :classpath-binding classpath-binding}))
           ;; No reachable on-disk source: the namespace is already live in the
-          ;; image, so its Vars come from the inherited/classpath image and any
-          ;; declaration contribution from an explicit :contribute. Report an
-          ;; unchanged source rather than reloading.
+          ;; image, so its Vars, its `spool` var included, come from the
+          ;; inherited/classpath image. Report an unchanged source rather than
+          ;; reloading.
           {:ns ns-sym :classpath-binding classpath-binding})
 
         :else
@@ -419,10 +419,10 @@
 (defn- evaluate-image-module
   "Evaluate a `:load :image` module: trust the already-loaded JVM image for its
   `:ns` target with no source load and no contribution-collection scope. Entry
-  points resolve from the namespace's `spool` var (or an explicit Phase A
-  `:contribute`); image mode collects no authoring forms, so a namespace with no
-  resolvable `:contribute` fails loudly (PROP-Dsp-001.G4/G5). The outcome carries
-  `:source/status :image`, its resolved entry points, and no source stamp."
+  points resolve from the namespace's `spool` var; image mode collects no
+  authoring forms, so a namespace with no resolvable `:contribute` fails loudly
+  (PROP-Dsp-001.G4/G5). The outcome carries `:source/status :image`, its
+  resolved entry points, and no source stamp."
   [runtime with-loader key declaration]
   (let [ns-sym (:ns declaration)]
     (when-not (find-ns ns-sym)
@@ -435,8 +435,8 @@
       (when-not contribute
         (fail! (format/reflow
                 "|Image module resolves no :contribute entry point; its namespace
-                 |needs a public spool var (or an explicit :contribute) because
-                 |image mode collects no authoring forms")
+                 |needs a public spool var because image mode collects no
+                 |authoring forms")
                {:module/key key :ns ns-sym :load :image}))
       (let [resolved-fns (resolve-entry-point-fns! with-loader key resolved)
             contribution
@@ -472,6 +472,9 @@
             contribution (cond
                            contribute-fn
                            (do
+                             ;; Scoped to a spool-var :contribute: a declaration
+                             ;; carrying its own reaches here only through a live
+                             ;; pickup, and keeps its precedence (DELTA-Dsp-004.D3).
                              (when (and (seq collected)
                                         (not (contains? declaration :contribute)))
                                (fail! (format/reflow

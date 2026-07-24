@@ -4,12 +4,11 @@
 ;; re-reads this file to recollect the whole graph. Startup-file collection only
 ;; STAGES declarations — no source load, publication, or reconcile runs here — so
 ;; this file holds no imperative effects; each concern's registrations live in its
-;; module's contribution (authoring forms or its namespace's `def spool`
-;; `:contribute`) or its `:reconcile`. In-tree modules resolve their entry points
-;; from that public `spool` var by convention (PROP-Dsp-001), so their
-;; declarations name only a source target and world policy; the remaining
-;; explicit `:contribute`/`:reconcile` keys back pinned sibling spools that have
-;; no `spool` var yet, and drop out in Phase C.
+;; module's contribution (authoring forms or its namespace's `def spool` entry
+;; point) or that var's reconcile entry point. Every module here — in-tree spool,
+;; pinned sibling, and workspace file alike — resolves its entry points from that
+;; public `spool` var by convention (PROP-Dsp-001), so a declaration names only a
+;; source target and world policy.
 ;;
 ;; File-per-concern map (each is one module):
 ;;   config.clj        — named queries + the devflow/kanban/hitl CLI op surface
@@ -65,13 +64,11 @@
                   :spools ['skein.spools/unsafe-text-search]})
 ;; devflow is an external git-distributed spool: activation is gated on the
 ;; approved codethread/devflow coordinate (spools.edn pin or a developer's
-;; spools.local.edn checkout), never on an incidental classpath copy. It still
-;; publishes and reconciles through the peer spool's module entry points.
+;; spools.local.edn checkout), never on an incidental classpath copy. It
+;; publishes and reconciles through the peer spool's own `spool` var.
 (runtime/module! runtime :skein/spools-devflow
                  {:ns 'ct.spools.devflow
                   :spools ['codethread/devflow]
-                  :contribute 'ct.spools.devflow/contribute
-                  :reconcile 'ct.spools.devflow/reconcile
                   :required? true})
 
 ;; --- workspace authoring macros (skein.macros/macros root) ------------------
@@ -107,21 +104,15 @@
 (runtime/module! runtime :skein/spools-shuttle
                  {:ns 'ct.spools.agent-run
                   :spools ['ct.spools/agent-run]
-                  :contribute 'ct.spools.agent-run/contribute
-                  :reconcile 'ct.spools.agent-run/reconcile
                   :required? true})
 (runtime/module! runtime :skein/spools-delegation
                  {:ns 'ct.spools.delegation
                   :spools ['ct.spools/delegation]
-                  :contribute 'ct.spools.delegation/contribute
-                  :reconcile 'ct.spools.delegation/reconcile
                   :after [:skein/spools-shuttle]
                   :required? true})
 (runtime/module! runtime :skein/spools-bench
                  {:ns 'ct.spools.bench
                   :spools ['ct.spools/bench]
-                  :contribute 'ct.spools.bench/contribute
-                  :reconcile 'ct.spools.bench/reconcile
                   :after [:skein/spools-shuttle]
                   :required? true})
 
@@ -166,8 +157,6 @@
 (runtime/module! runtime :skein/spools-kanban
                  {:ns 'ct.spools.kanban
                   :spools ['codethread/kanban]
-                  :contribute 'ct.spools.kanban/contribute
-                  :reconcile 'ct.spools.kanban/reconcile
                   :required? true})
 (runtime/module! runtime :kanban/tracker
                  {:file "kanban_tracker.clj"
@@ -226,8 +215,6 @@
 (runtime/module! runtime :skein/spools-treadle
                  {:ns 'ct.spools.executors.subagent
                   :spools ['ct.spools/agent-run]
-                  :contribute 'ct.spools.executors.subagent/contribute
-                  :reconcile 'ct.spools.executors.subagent/reconcile
                   :after [:skein/spools-shuttle :skein/spools-workflow
                           :harnesses :workflows]
                   :required? true})
