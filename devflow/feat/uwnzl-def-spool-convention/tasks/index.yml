@@ -25,9 +25,9 @@ tasks:
     status: complete
     blocked_by: [1, 2, 3, 4]
   - id: 6
-    description: "[HITL] External Skein v1 stamp gate (card b3v1r)"
-    task_file: tasks/006-hitl-external-skein-v1-stamp.md
-    status: blocked
+    description: "[HITL] Authorize coordinated pre-v1 breaking cutover"
+    task_file: tasks/006-hitl-pre-v1-breaking-cutover.md
+    status: complete
     blocked_by: [5]
   - id: 7
     description: Prepare sibling spool conversions
@@ -35,7 +35,7 @@ tasks:
     status: pending
     blocked_by: [5]
   - id: 8
-    description: Publish sibling releases and raise v1 floors
+    description: Publish reviewed pre-v1 sibling releases
     task_file: tasks/008-publish-sibling-releases.md
     status: pending
     blocked_by: [6, 7]
