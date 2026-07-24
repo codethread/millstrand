@@ -20,12 +20,12 @@ Coordinator-only acceptance once every Phase A branch is integrated into `codex/
 
 - **TASK-Dsp-005.DW1:** Every gate in MI2–MI4 is green with commands and results recorded on the doing task and the plan's Developer Notes.
 - **TASK-Dsp-005.DW2:** All review findings are resolved and resubmitted.
-- **TASK-Dsp-005.DW3:** The invariance proof (`PLAN-Dsp-001.V1`) holds in the integrated worktree, and the branch is ready to land — Phase A may land here, but no external stamp or sibling release depends on it yet.
+- **TASK-Dsp-005.DW3:** The invariance proof (`PLAN-Dsp-001.V1`) holds in the integrated worktree, and the branch is ready to land. Phase A may land here; sibling release work remains outside this task.
 
 ## TASK-Dsp-005.P4 Out of scope
 
 - **TASK-Dsp-005.OS1:** Do not run `make install` or restart the canonical weaver.
-- **TASK-Dsp-005.OS2:** The Skein v1 stamp (Task 6) and any sibling release (Tasks 7–8).
+- **TASK-Dsp-005.OS2:** The pre-v1 cutover decision (Task 6) and any sibling release (Tasks 7–8).
 
 ## TASK-Dsp-005.P5 References
 

@@ -24,13 +24,13 @@ A module's activation entry points move out of its declaration and into a `(def 
 | PLAN-Dsp-001.AA4 | In-tree `spools/*`, `.skein/*.clj`, `.skein/init.clj` | `def module` → `def spool` (drop `:ns`), file-module `spool` vars, in-tree init triples dropped, parity test narrowed |
 | PLAN-Dsp-001.AA5 | Test helpers and fixtures (`test_support.clj`, coordinator tests) | `activate-spool!` takes and requires a namespace symbol; regression matrix for the new seams |
 | PLAN-Dsp-001.AA6 | Root specs, ADR-003 successor, `docs/spools/*`, generated API docs | Truthful per-phase contract updates, recorded C19 exception, docs of the transitional window |
-| PLAN-Dsp-001.AA7 | Sibling repos (devflow, kanban, agent-harness) — Phase B | `spool` exports, `module` deletions, own-surface conversion, `:skein/min "v1"` floors, new markers after external stamp card `b3v1r` |
+| PLAN-Dsp-001.AA7 | Sibling repos (devflow, kanban, agent-harness) — Phase B | `spool` exports, `module` deletions, own-surface conversion, pre-v1 breaking markers, release exceptions naming the compatible Phase A commit |
 
 ## PLAN-Dsp-001.P4 Contract and migration impact
 
 - **PLAN-Dsp-001.CM1 (grammar break, recorded not shimmed):** Phase C removes `:contribute`/`:reconcile` from `::module-opts` under TEN-000@1 — no aliases, no shims. Withdrawing accepted input keys breaks SPEC-003.C19's accretion promise for `skein.api.runtime.alpha`, so `DELTA-Dsp-001.CC5` stages the exact C19 exception wording now and promotes it into the root spec only when Phase C lands. The coordinator approved that wording under the user's delegated sign-off authority in note `dp90p`; Phase A does not break C19 because the keys are still accepted.
 - **PLAN-Dsp-001.CM2 (per-phase spec truthfulness):** Each phase's land updates the root specs to describe that phase's actual behaviour. Phase A's deltas document the convention and the transitional acceptance of the old keys as a recorded pending-removal obligation; Phase C's delta completes the removal. No land ships a knowingly false root spec.
-- **PLAN-Dsp-001.CM3 (no data migration, no forced restart):** No schema or persisted-config migration. The canonical world consumes siblings at pinned shas, so nothing changes there until the Phase C pin bump and refresh. Convention-dependent sibling releases set `:skein/min "v1"` only after the separate hitl card `b3v1r` stamps a Skein `v1` that includes Phase A; this feature does not own or create that stamp.
+- **PLAN-Dsp-001.CM3 (pre-v1 compatibility exception, no forced restart):** No schema or persisted-config migration. The canonical world consumes siblings at pinned SHAs, so nothing changes there until the Phase C pin bump and refresh. By user direction on 2026-07-24, the sibling releases may break against pre-Phase-A Skein under TEN-000@1 and publish before Skein v1. They do not add a false `:skein/min` floor. Each release exception names Phase A merge `343f886880092bc38ed3e0522eca2d95a7cf04bc` as the first compatible Skein commit, and Phase C pins the exact reviewed marker SHAs. This feature still does not create the Skein v1 stamp.
 
 ## PLAN-Dsp-001.P5 Implementation phases
 
@@ -44,9 +44,9 @@ Outcome: this checkout resolves `spool` by convention with the legacy keys still
 - **Records** (`m47vr`): ADR-003 successor, truthful Phase A root-spec merges, the recorded C19 exception, `docs/spools/*` updates, and `make api-docs`. Runs after code integration.
 - **Accept** (`z12za`): coordinator-only atomic verification and adversarial review across the integrated worktree before land.
 
-### PLAN-Dsp-001.PH-B Phase B — sibling releases and floors (blocked on external Skein v1)
+### PLAN-Dsp-001.PH-B Phase B — coordinated pre-v1 sibling releases
 
-Outcome: after Phase A lands and hitl card `b3v1r` closes with a Skein `v1` marker that includes it, devflow.spool, kanban.spool, and agent-harness.spool each export `(def spool …)`, delete the `module` export, convert their own consuming surfaces (workspace config, fixtures, activation helpers, docs), raise `:skein/min` to `v1`, and cut new `v<int>` markers with `release-exception.md` records per each repo's precedent. Sibling suites hard-code `../skein-src` (waq0l note `5bae1`), so Phase A lands before the external stamp and sibling releases. The coordinator may prepare Phase B branches earlier but must not publish convention-dependent releases against an unmarked core.
+Outcome: after Phase A lands, devflow.spool, kanban.spool, and agent-harness.spool each export `(def spool …)`, delete the `module` export, convert their own consuming surfaces (workspace config, fixtures, activation helpers, docs), and cut new `v<int>` markers with `release-exception.md` records per each repo's precedent. The records name Phase A merge `343f886880092bc38ed3e0522eca2d95a7cf04bc` as the first compatible Skein commit. No `:skein/min` floor is added while no Skein marker can state that truthfully. Sibling suites hard-code `../skein-src` (waq0l note `5bae1`), so every release gate runs against landed Phase A.
 
 ### PLAN-Dsp-001.PH-C Phase C — pin and grammar cutover
 
@@ -76,7 +76,7 @@ Outcome: the transitional window closes. Bump sibling pins, drop the remaining s
   - Integration branch `codex/uwnzl-def-spool-convention`; worktrees `codex/uwnzl-phase-a-{core,lint,specs,intree}`.
   - Live tracked runs at last coordinator note `14ioi`: `hvg4g` (core), `s9xhz` (lint), `mo25j` (spec deltas). Core runs under story workflow `uwnzl-phase-a-core-story` at behavior step `u80vl` with a TerraMed reviewer.
 - **PLAN-Dsp-001.TC3 (authority and boundaries):** Coordinator authority is delegated for phased implementation, tracked runs, reviews, merges, releases, rebuilds, and refreshes; skein-src `v1` must not be stamped (ruling `wnxuv`). Tests exercise the real image path, not workaround-only spellings; `:load :image` stays unless a clearly test-only spelling is materially better without widening scope.
-- **PLAN-Dsp-001.TC4 (external release dependency):** Kanban task `l5lwo` (Phase B) depends on card `b3v1r`, which alone owns the Skein `v1` stamp. Until that card closes, Phase A may land but convention-dependent sibling markers and `:skein/min "v1"` floors may not.
+- **PLAN-Dsp-001.TC4 (pre-v1 break authorized):** On 2026-07-24 the user removed card `b3v1r` as a dependency of kanban task `l5lwo` and authorized the coordinated sibling break under TEN-000@1. Phase B may prepare and publish the convention-dependent markers now. It must not add a false `:skein/min` floor or create the Skein v1 stamp. Exact reviewed marker SHAs and release-exception records bridge compatibility until Phase C pins them and a later Skein marker can express a floor.
 
 ## PLAN-Dsp-001.P9 Developer Notes
 
@@ -85,3 +85,7 @@ Append notes here. Do not rewrite earlier notes.
 ### PLAN-Dsp-001.DN1 Plan authored — 2026-07-24
 
 - Written against `PROP-Dsp-001`, `DELTA-Dsp-001`/`DELTA-Dsp-002`, and archaeology `tmzb0`/`xkpij`/`niyif`, with `w6z1g` as the detailed tracker. Status set to Active because Phase A task runs are already live (`hvg4g`, `s9xhz`, `mo25j`).
+
+### PLAN-Dsp-001.DN2 Pre-v1 cutover authorized — 2026-07-24
+
+- The user declined to stamp Skein v1 yet and authorized the sibling and core breaks under TEN-000@1. Task 6 now records that HITL decision instead of waiting for `b3v1r`. Tasks 7 and 8 may run in order without the stamp. Sibling releases carry no `:skein/min` floor; each release exception names Phase A merge `343f886880092bc38ed3e0522eca2d95a7cf04bc` as the first compatible Skein commit. Phase C pins the exact reviewed release SHAs before removing the legacy module keys.
