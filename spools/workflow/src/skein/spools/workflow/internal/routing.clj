@@ -11,6 +11,7 @@
   and the pour ride one batch, a failing apply commits nothing and the run stays
   resumable."
   (:require [clojure.string :as str]
+            [skein.api.format.alpha :as fmt]
             [skein.api.graph.alpha :as graph]
             [skein.api.spool.alpha :refer [fail!]]
             [skein.api.weaver.alpha :as weaver]
@@ -27,31 +28,34 @@
   the workflow engine's to close."
   #{"root" "step" "checkpoint" "defer" "procedure"})
 
+(def ^:private notes-removed-guidance
+  (fmt/reflow
+   "|Record the outcome in your own namespaced :attributes, which complete!
+    |merges onto the closed step in the same mutation."))
+
 (defn refuse-notes!
   "Fail loudly when `opts` carries `:notes`, naming the op that received it.
 
   The engine records no outcome prose of its own: a caller with something to say
-  about a close says it in its own namespaced attributes, which `:attributes`
-  merges onto the closed step in the same mutation. Silently dropping `:notes`
-  would leave a caller believing it had recorded an outcome it did not, so the
-  removed argument refuses (TEN-003)."
+  about a close says it in its own namespaced attributes. Silently dropping
+  `:notes` would leave a caller believing it had recorded an outcome it did not,
+  so the removed argument refuses (TEN-003)."
   [op opts]
   (when (contains? opts :notes)
-    (fail! (str "Workflow " op " no longer accepts :notes; record outcomes in your own "
-                "namespaced :attributes")
+    (fail! (str "Workflow " op " no longer accepts :notes")
            {:reason :workflow/notes-removed
             :op op
             :notes (:notes opts)
-            :alternative "{:attributes {\"your-spool/outcome\" \"…\"}}"})))
+            :guidance notes-removed-guidance})))
 
 (defn close-attributes!
   "Return the attribute map to merge onto a step closed by complete!, from its
-  optional `:attributes` opt. Returns nil when the opt is absent or empty."
+  optional `:attributes` opt. Returns nil when the opt is absent or empty.
+
+  The shape is judged at the public `complete!` boundary, which owns the spec;
+  this is the merge, not a second gate."
   [opts]
-  (let [{:keys [attributes]} opts]
-    (when (and (contains? opts :attributes) (not (map? attributes)))
-      (fail! "Workflow :attributes must be a map" {:attributes attributes}))
-    (not-empty attributes)))
+  (not-empty (:attributes opts)))
 
 (defn- depends-on-edges
   "Return the depends-on adjacency (from-id -> #{to-id ...}) internal to

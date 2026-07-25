@@ -520,9 +520,12 @@
   ready steps; without it, exactly one step must be ready. opts may also include
   `:attributes`, a map merged onto the closed step in the closing mutation — the
   engine's one composition point for a caller's own outcome vocabulary, and the
-  reason it publishes none of its own. A non-blank `:by` is recorded as
-  \"workflow/outcome-by\" on any step it is supplied for, but is only required
-  when closing a gate step (one built with `gate`).
+  reason it publishes none of its own. Its keys are non-blank attribute-key
+  strings, judged here by the same
+  `:skein.spools.workflow.request/attributes` spec the CLI request carries, so a
+  direct Clojure caller and a worker verb are held to one contract. A non-blank
+  `:by` is recorded as \"workflow/outcome-by\" on any step it is supplied for,
+  but is only required when closing a gate step (one built with `gate`).
 
   When the closed step is the last active inner step beneath a `procedure`
   join, the join closes in the same transaction (see `cascade-join-ids`). All
@@ -533,6 +536,9 @@
    (let [rt (current/runtime)]
      (util/require-map! opts [:opts])
      (routing/refuse-notes! "complete!" opts)
+     (when (contains? opts :attributes)
+       (require-valid! :skein.spools.workflow.request/attributes (:attributes opts)
+                       "Invalid workflow complete attributes"))
      (guard/with-run!
        rt run-id
        (fn []

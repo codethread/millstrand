@@ -434,6 +434,25 @@
           ;; a typed value survives the merge as itself, not as its printed form
           (is (= 7 (get-in strand [:attributes :acme/exit-code]))))))))
 
+(deftest workflow-complete-holds-direct-callers-to-the-attributes-spec
+  ;; The worker CLI validates its request map; a direct Clojure caller reaches
+  ;; the same mutation, so the same spec judges it rather than a looser local check.
+  (with-runtime
+    (fn [_rt _]
+      (let [definition (workflow/workflow "Bad attrs run" (workflow/step :a "Do A" :self))
+            [step] (:ready (workflow/start! "bad-attrs-run" definition {}))]
+        (doseq [[label attributes] [["a non-map" "acme/outcome=ok"]
+                                    ["a keyword key" {:acme/outcome "ok"}]
+                                    ["a blank key" {"" "ok"}]]]
+          (testing label
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                  #"Invalid workflow complete attributes"
+                                  (workflow/complete! "bad-attrs-run" {:attributes attributes})))))
+        (is (= "active" (:state (repl/strand (:id step)))))
+        (testing "an empty map is a stated no-op, not a rejection"
+          (workflow/complete! "bad-attrs-run" {:attributes {}})
+          (is (= "closed" (:state (repl/strand (:id step))))))))))
+
 (deftest workflow-complete-and-advance-refuse-removed-notes-arg
   (with-runtime
     (fn [_rt _]
