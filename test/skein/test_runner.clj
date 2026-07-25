@@ -36,7 +36,7 @@
    'skein.api.hooks.alpha-test
    'skein.alpha-test 'skein.core.client-test 'skein.spools.workflow-test
    ;; each test drives its own disposable runtime and registry — no shared state.
-   'skein.spools.workflow-cli-test
+   'skein.spools.workflow-cli-test 'skein.spools.workflow-run-cli-test
    'skein.spools.batteries-test 'skein.api.spool-test 'skein.config-ops-test
    'skein.macros.queries-test 'skein.macros.ops-test 'skein.macros.rules-test 'skein.macros.patterns-test
    ;; large-attr load harness structural smoke: boots its own :publish? false

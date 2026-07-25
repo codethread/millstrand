@@ -42,8 +42,21 @@
       1 (first roots)
       (throw (ex-info "Multiple active workflow roots found" {:run-id run-id :roots roots})))))
 
+(def ^:private unpositioned
+  "Sort key for a step strand poured before `workflow/position` existed.
+
+  Those runs sort after every positioned step and among themselves by id, which
+  is the order they have always had — a run in flight when the attribute
+  arrived keeps reading the way it did, rather than reordering mid-run."
+  Long/MAX_VALUE)
+
+(defn- frontier-order
+  "Return the sort key that puts a ready strand in its definition position."
+  [strand]
+  [(or (attr strand :workflow/position) unpositioned) (:id strand)])
+
 (defn- raw-ready
-  "Return the run's ready workflow work strands.
+  "Return the run's ready workflow work strands, in definition order.
 
   A root with an active depends-on blocker (a `bond!` from another molecule)
   parent-blocks the whole run: its steps stay hidden until the blocking root
@@ -58,6 +71,7 @@
       (->> ready
            (filter #(contains? ids (:id %)))
            (remove #(contains? #{"root" "procedure"} (attr % :workflow/role)))
+           (sort-by frontier-order)
            vec))))
 
 (defn raw-ready-step [rt run-id]

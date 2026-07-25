@@ -21,12 +21,10 @@
   legacy constructor is opaque: it gets an empty entrypoint vector, a stated
   opacity marker, and no invented contract, so a reader can tell \"declares no
   params\" apart from \"is a function nobody can inspect\"."
-  (:require [clojure.spec.alpha :as s]
-            [skein.api.spool.alpha :refer [fail!]]
-            [skein.spools.workflow.internal.definitions :as defs]
+  (:require [skein.spools.workflow.internal.definitions :as defs]
             [skein.spools.workflow.internal.registry :as registry]
             [skein.spools.workflow.internal.specs :as specs]
-            [skein.spools.workflow.internal.util :as util]))
+            [skein.spools.workflow.internal.util :as util :refer [require-shape!]]))
 
 (def ^:private legacy-doc
   "The doc reported for an opaque legacy constructor entry.
@@ -43,22 +41,6 @@
   `defworkflow` requires a doc, but a raw definition map registered directly may
   omit it; the catalogue says so rather than dropping the field."
   "No doc declared.")
-
-(defn- require-shape!
-  "Return `value` once it satisfies `spec`, else fail loudly with `reason`.
-
-  Requests validate before any lookup and projections validate before emission,
-  so a malformed discovery answer is a loud failure here rather than a shape a
-  worker has to defend against. The failure carries `s/explain-str` as plain
-  text, matching the JSON boundary the rest of the spool holds."
-  [spec value reason message context]
-  (when-not (s/valid? spec value)
-    (fail! message
-           (assoc context
-                  :reason reason
-                  :spec (str spec)
-                  :explain (s/explain-str spec value))))
-  value)
 
 (defn- item-id
   "Return the declared id of workflow item `item` as a plain string."
