@@ -111,10 +111,10 @@
 (defn- resolve-procedure
   "Return the call target's classification `{:kind … :value …}`.
 
-  `:value` is the canonical procedure value — a map or a function — so cycle
-  detection and dispatch never depend on whether the author wrote a registered
-  name, a symbol, or the value itself. A registered name must declare `:call`;
-  anything else is a raw trusted value with no capability to check."
+  `:value` is the canonical procedure definition map, so cycle detection and
+  dispatch never depend on whether the author wrote a registered name, a
+  symbol, a Var, or the definition itself. A registered name must declare
+  `:call`; the other forms are trusted values with no capability to check."
   [procedure]
   (cond
     (keyword? procedure)
@@ -125,14 +125,16 @@
       {:kind :raw :value @resolved}
       (fail! "Workflow procedure symbol cannot be resolved" {:procedure procedure}))
 
+    (var? procedure) {:kind :raw :value @procedure}
+
     :else {:kind :raw :value procedure}))
 
-(defn- procedure-workflow [procedure params]
-  (cond
-    (map? procedure) procedure
-    (fn? procedure) (procedure params)
-    :else (fail! "Workflow procedure must be a workflow map, function, or resolvable symbol"
-                 {:procedure procedure})))
+(defn- procedure-workflow [procedure _params]
+  (if (map? procedure)
+    procedure
+    (fail! "Workflow procedure must be a definition map, a Var, or a resolvable symbol"
+           {:procedure procedure
+            :resolved-class (some-> procedure class .getName)})))
 
 (defn- prefixed-ref [call-id ref]
   (keyword (str (name call-id) "--" (name (util/normalize-ref ref [:procedure :ref])))))

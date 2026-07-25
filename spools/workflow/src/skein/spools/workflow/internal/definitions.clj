@@ -97,9 +97,10 @@
 (defn resolve-registered
   "Return the live classification of registered workflow `name`.
 
-  The result carries `:name`, `:definition` (the resolved symbol), `:kind`, and
-  `:value`. An unregistered name, an unresolvable symbol, and a symbol resolving
-  to an unusable value each fail before any caller can act on them."
+  The result carries `:name`, `:definition` (the resolved symbol), `:value`
+  (the definition map itself), and `:entrypoints`. An unregistered name, an
+  unresolvable symbol, and a symbol resolving to anything but a definition map
+  each fail before any caller can act on them."
   [rt name]
   (let [definition (registry/workflow-definition rt name)
         owner (registry/definition-owner rt name)
@@ -121,9 +122,7 @@
   The registry is where the capability contract applies: a name is reached by
   callers that only know the name, so what they may do with it has to be
   declared. Trusted Clojure holding a Var or a workflow value directly is
-  already past that boundary and is not checked (TEN-002).
-
-  "
+  already past that boundary and is not checked (TEN-002)."
   [resolved entrypoint]
   (when (:name resolved)
     (let [declared (:entrypoints resolved)]
@@ -423,20 +422,20 @@
                       :entrypoints (vec (sort (:entrypoints declared)))))))))
 
 (defn- candidate-entry
-  "Resolve one candidate entry into `{:kind … :entrypoints …}`, validating
+  "Resolve one candidate entry into `{:value … :entrypoints …}`, validating
   everything judgeable from the entry alone."
   [rt name definition owner]
   (let [context {:name name :definition definition :owner owner}
-        resolved (classify definition @(resolve-symbol rt definition context))]
-    (let [value (:value resolved)]
-      (require-valid! :skein.spools.workflow/definition value
-                      "Registered workflow definition is invalid")
-      (validate-defaults! context (:defaults value))
-      (validate-param-spec! context (:param-spec value))
-      (validate-input-specs! context value)
-      (validate-defer-topology! value)
-      (validate-defer-bindings! value context)
-      resolved)))
+        resolved (classify definition @(resolve-symbol rt definition context))
+        value (:value resolved)]
+    (require-valid! :skein.spools.workflow/definition value
+                    "Registered workflow definition is invalid")
+    (validate-defaults! context (:defaults value))
+    (validate-param-spec! context (:param-spec value))
+    (validate-input-specs! context value)
+    (validate-defer-topology! value)
+    (validate-defer-bindings! value context)
+    resolved))
 
 (defn validate-candidates!
   "Validate the complete staged definition registry before publication.
@@ -457,8 +456,7 @@
                                                                (get owners name))))
                             {}
                             entries)]
-    (doseq [[name {:keys [kind value]}] resolved
-            :when (= :static kind)]
+    (doseq [[name {:keys [value]}] resolved]
       (validate-references! {:name name
                              :definition (get entries name)
                              :owner (get owners name)}
