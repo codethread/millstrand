@@ -32,13 +32,22 @@
             [skein.spools.workflow.internal.util :as util])
   (:import [java.security MessageDigest]))
 
-(def entrypoints
-  "The invocation capabilities a static definition may declare.
+(def entrypoint-order
+  "The invocation capabilities a static definition may declare, in the order
+  every projection reports them.
 
   `:start` begins a fresh run, `:continue` is any tail continuation — an
   authored checkpoint route or a worker-selected deferred exit — and `:call`
-  allows inline procedure expansion inside another workflow."
-  #{:start :continue :call})
+  allows inline procedure expansion inside another workflow.
+
+  A definition declares its capabilities as a set, so this vector is where the
+  reported order comes from: discovery emits `[\"start\" \"continue\"]` for the
+  same definition however its author wrote the set."
+  [:start :continue :call])
+
+(def entrypoints
+  "The invocation capabilities a static definition may declare, as a set."
+  (set entrypoint-order))
 
 (def ^:private repair-choices
   ["Restore the Var the registry entry names."
