@@ -11,9 +11,10 @@
   here; the mechanics they compose live in `skein.spools.workflow.internal.*`:
   `compile` (compile/normalize/expand pipeline), `query` (run views/ready/done/
   history), `routing` (checkpoint choice validation, routing, and cascading
-  closes), `registry` (runtime-owned registries), and `util` (shared validation/
-  ref-normalization). Specs stay registered here so `explain` and
-  `s/explain-data` paths are unchanged."
+  closes), `registry` (runtime-owned registries), `definitions` (definition
+  resolution, entrypoint rules, and pre-publication candidate validation), and
+  `util` (shared validation/ref-normalization). Specs stay registered here so
+  `explain` and `s/explain-data` paths are unchanged."
   (:refer-clojure :exclude [compile])
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -203,8 +204,9 @@
 (defn describe
   "Return a compile-time projection of `workflow` without materializing any strand.
 
-  `workflow` may be a workflow map, a constructor var, or a registered workflow
-  keyword. Loop/call expansion and condition filtering apply exactly as
+  `workflow` may be a workflow map, a definition var, or a registered workflow
+  keyword; a static definition's `:defaults` merge under `params` first. Loop and
+  call expansion and condition filtering apply exactly as
   `compile` runs them, so the description matches what would pour for `params`:
   excluded steps are absent, procedure joins appear as `:procedure` steps, and
   each checkpoint's choices carry their declared `:input` and their
@@ -759,7 +761,7 @@
 (defn contribute
   "Module contribution for the workflow spool.
 
-  The workflow spool supplies no constructors or executors of its own — those
+  The workflow spool supplies no definitions or executors of its own — those
   are contributed by the workflows that pour them and by the executors that
   register — so it contributes no declarative entries. It materializes the
   registry handle so a dependent module contributing to the workflow kinds finds

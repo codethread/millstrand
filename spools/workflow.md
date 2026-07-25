@@ -200,10 +200,14 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
 - `(start! run-id workflow params opts)` — fails if `run-id` already has an
   active root; pours the workflow with `workflow/run-id run-id`; returns the
   `{:ready [...] :done boolean}` result. `workflow` may be a pre-built map, a
-  constructor var (`#'my.ns/flow`), or a registered workflow keyword. Var/keyword
-  starts derive `:definition`; when `:context` is absent they default it from
-  `params`, stringifying keyword values and failing loudly on non-JSON-safe
-  values (pass `:context` explicitly for those cases).
+  definition var (`#'my.ns/flow`), or a registered workflow keyword. Var and
+  keyword starts derive `:definition`; a registered name also records
+  `workflow/definition-name` and, for a static definition, must declare the
+  `:start` entrypoint — the refusal happens before anything is poured. A static
+  definition's `:defaults` merge under `params` first, so what the run compiles
+  and persists is the resolved map. When `:context` is absent it defaults from
+  those resolved params, stringifying keyword values and failing loudly on
+  non-JSON-safe values (pass `:context` explicitly for those cases).
 - `(ready run-id)` / `(ready run-id selector)` — all currently ready,
   agent-facing step views for the run (vector, possibly empty). Each view carries
   `:run-id` so a stage cutover is visible in-band; procedure join steps never

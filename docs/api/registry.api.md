@@ -6,7 +6,7 @@
 Blessed owner-partitioned registry primitive for spool domains.
 
   A spool domain with its own replaceable declarations — chime rules,
-  workflow constructors, harness aliases, and the like — declares each
+  workflow definitions, harness aliases, and the like — declares each
   definition family as a *kind* and then publishes complete owner
   partitions under it. Declaring a kind (id, entry spec, binding-moment
   datum, and the fixed layer policy) makes it a valid contribution-map key

@@ -236,6 +236,15 @@
 
 ;; --- candidate validation -----------------------------------------------------
 
+;; The publication coordinator calls `validate-candidates!` by symbol, so the
+;; shape it passes is a contract with no compile-time check behind it. These own
+;; it: a coordinator change that reshapes the callback input is a named failure
+;; here rather than a nil punning its way through the checks below.
+(s/def ::runtime map?)
+(s/def ::entries (s/map-of keyword? qualified-symbol?))
+(s/def ::owners (s/map-of keyword? keyword?))
+(s/def ::candidate-input (s/keys :req-un [::runtime ::entries] :opt-un [::owners]))
+
 (defn- choice-next-names
   "Return the registered workflow names a step's checkpoint choices route to.
 
@@ -316,12 +325,18 @@
 (defn validate-candidates!
   "Validate the complete staged definition registry before publication.
 
+  The input conforms to `::candidate-input`: the `:runtime`, the kind's complete
+  effective `:entries`, and the `:owners` that supplied them (SPEC-003.C23b).
+
   Every entry is resolved and classified first, so cross-entry checks read the
   same registry the publication would install — including a target an owner has
   just deleted by omission. Throwing here rejects the whole refresh, leaving
   every owner's previous live partition in place."
-  [{:keys [runtime entries owners]}]
-  (let [resolved (reduce-kv (fn [acc name definition]
+  [input]
+  (require-valid! ::candidate-input input
+                  "Workflow definition candidate validation input is invalid")
+  (let [{:keys [runtime entries owners]} input
+        resolved (reduce-kv (fn [acc name definition]
                               (assoc acc name (candidate-entry runtime name definition
                                                                (get owners name))))
                             {}
