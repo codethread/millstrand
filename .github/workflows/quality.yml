@@ -115,6 +115,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Pinned sibling suites prove their tested Skein checkout descends
+          # from the Phase A floor, so this job needs the commit graph.
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
