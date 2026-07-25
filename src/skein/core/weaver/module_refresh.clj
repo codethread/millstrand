@@ -540,6 +540,43 @@
       order)
      order)))
 
+(defn- retained-legacy-modules
+  "Return the affected pre-cutover declarations, keyed by module.
+
+  A declaration carrying `:contribute`/`:reconcile` can only be graph state a
+  live coordinator held before it picked the cutover up, because no authoring
+  seam accepts the keys (DELTA-Dsp-004.D3). `legacy-resolved-entry-points` stays
+  the single reader of them."
+  [graph order]
+  (select-keys (entry-points/legacy-resolved-entry-points {:graph graph}) order))
+
+(defn- refuse-retained-legacy-evaluation!
+  "Refuse a targeted refresh that would evaluate a retained pre-cutover module.
+
+  Convention-only resolution reads such a declaration as a post-cutover one with
+  no entry points, which would retract its published contribution and replace
+  its retained resolved set with an empty one, dropping the reconciler its
+  removal still has to run. The refusal precedes synchronization, evaluation,
+  and publication, so the graph, contributions, retained resolved entry points,
+  resources, and live registrations all stay as they were. A full refresh is the
+  migration path: it removes an omitted pre-cutover module through that retained
+  reconciler (DELTA-Dsp-004.D3/D3a, SPEC-004.C46b)."
+  [mode graph order selected]
+  (when (= :targeted mode)
+    (when-let [retained (not-empty (retained-legacy-modules graph order))]
+      (fail! (format/reflow
+              "|Targeted refresh would evaluate a module declared before the
+               |def-spool cutover, whose entry points live in retained
+               |coordinator state rather than a public spool var; evaluating it
+               |would retract its live contribution and lose its reconciler. Run
+               |a full refresh, which migrates or removes it through that
+               |retained state")
+             {:reason :retained-legacy-declaration
+              :mode mode
+              :module/keys (vec (keys retained))
+              :retained/entry-points retained
+              :selected (vec (sort-by pr-str selected))}))))
+
 (defn- previous-module [state key]
   {:module/declaration (get-in state [:graph key])
    :module/contribution (get-in state [:contributions key])
@@ -827,7 +864,11 @@
   `:only` for targeted refresh, or internal `:declare` for module declaration
   outside startup collection. `:dry-run? true` uses the current synchronized
   roots, then runs collection, source-load, and staging without synchronizing,
-  publishing, reconciling, or recording coordinator state (CC14)."
+  publishing, reconciling, or recording coordinator state (CC14).
+
+  A targeted refresh that would evaluate a retained pre-cutover declaration —
+  directly or as an affected dependent — throws before anything mutates, leaving
+  the live world untouched (DELTA-Dsp-004.D3)."
   [runtime {:keys [load-startup-files! with-loader]} opts]
   ;; The runtime slot is one dedicated Object monitor. Splint cannot see the
   ;; stable object behind the map lookup; refreshes serialize so two collectors
@@ -857,6 +898,7 @@
                         #{})
               selected (or selected (set (keys graph)))
               order (module-graph/affected-modules graph selected)
+              _ (refuse-retained-legacy-evaluation! mode graph order selected)
               ;; An empty graph needs no acquisition pass. Any desired or current
               ;; module graph owns synchronization through this coordinator.
               sync-result (if (:dry-run? opts)

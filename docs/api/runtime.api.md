@@ -41,7 +41,7 @@ Return the normalized approved spool roots for `runtime`'s config dir.
   symbols to the declared `spools.edn` entry, effective post-overlay coordinate,
   provenance, and overlay claim or nil. The result conforms to
   `::approved-result`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L52-L62">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L51-L61">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.alpha/clock">`clock`</a>
 ``` clojure
@@ -92,7 +92,7 @@ Return declared spool families with release-floor validation as data.
   and bump suggestions. Stage-1 structural errors still throw. The explicit
   `running-marker` arity accepts nil to leave Skein floor checks pending. The
   result conforms to `::declared-result`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L68-L83">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L67-L82">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.alpha/module!">`module!`</a>
 ``` clojure
@@ -121,8 +121,9 @@ Declare one stable runtime module under keyword `key` for `runtime`.
   the same source load collected authoring forms is a loud conflict; a
   `:reconcile`-only `spool` var composes with authoring forms. Opts naming
   `:contribute` or `:reconcile` — qualified or not — are refused with the
-  removed keys named and the `spool`-var remedy; the keys carry no alias and no
-  fallback (DELTA-Dsp-003.CC1).
+  removed keys named, the module key, and a `(def spool …)` remedy, the same
+  refusal a directly authored declaration raises; the keys carry no alias and
+  no fallback (DELTA-Dsp-003.CC1).
 
   `:load :image` (SPEC-004.C45/C46, ADR-003.P4) trusts the
   already-loaded JVM image for the `:ns` target: refresh performs no source
@@ -147,7 +148,7 @@ Declare one stable runtime module under keyword `key` for `runtime`.
   dependents (CC4). Whole-module removal is expressed by omitting the module
   from a successfully collected full graph, not here. Malformed declarations
   fail loudly. The staged or refreshed result conforms to `::module-result`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L293-L344">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L292-L344">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.alpha/now">`now`</a>
 ``` clojure
@@ -222,7 +223,7 @@ Return the running Skein release marker and its provenance.
   Git command failures throw. Consumers that require marker arithmetic must
   reject `:none` explicitly. The result conforms to
   `::release-marker-result`; marker claims conform to `::release-marker-claim`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L94-L109">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L93-L108">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.alpha/reload-code!">`reload-code!`</a>
 ``` clojure
@@ -255,7 +256,7 @@ Remove `lib` from `runtime`'s primary `spools.edn`.
   Refuses a missing family or a family whose root libs appear in another
   family's `:requires`, naming all requirers. Inputs and result conform to
   `::spool-family` and `::spool-write-result`. Only the primary file is changed.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L154-L181">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L153-L180">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.alpha/spool-state">`spool-state`</a>
 ``` clojure
@@ -313,4 +314,4 @@ Insert or replace `lib` in `runtime`'s primary `spools.edn`.
   post-edit config is validated through sync's stage-1 contract before an atomic
   write. Only the `:spools` map is rewritten, so comments outside it are kept.
   The result conforms to `::spool-write-result`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L129-L148">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L128-L147">Source</a></sub></p>

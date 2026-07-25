@@ -32,9 +32,7 @@ Then declare it from trusted config:
 
 (runtime/module! runtime :skein/spools-guild
   {:ns 'skein.spools.guild
-   :spools ['skein.spools/guild]
-   :contribute 'skein.spools.guild/contribute
-   :reconcile 'skein.spools.guild/reconcile})
+   :spools ['skein.spools/guild]})
 ```
 
 Every Guild fn takes the runtime as its first argument and never reads the
@@ -89,11 +87,13 @@ contract is [SPEC-003.C60a/C60b](../devflow/specs/repl-api.md). Run
 ### Activation
 
 ```clojure
-(runtime/module! runtime :skein/spools-guild guild/module)
+(runtime/module! runtime :skein/spools-guild
+  {:ns 'skein.spools.guild
+   :spools ['skein.spools/guild]})
 (guild/set-fallback-guild-name! runtime "frontend")
 ```
 
-Guild activates through the module lifecycle: `guild/module` is the exported base declaration (`contribute` publishes the `guild` op, `reconcile` clears previous guild declarations in that runtime). The guild name is read from runtime metadata when available; `set-fallback-guild-name!` records a fallback for contexts without it — reconcile resets the fallback, so call it after activation.
+Guild activates through the module lifecycle. The declaration names only the source target; the coordinator resolves the entry points from Guild's public `spool` var, whose `contribute` publishes the `guild` op and whose `reconcile` clears previous guild declarations in that runtime. The guild name is read from runtime metadata when available; `set-fallback-guild-name!` records a fallback for contexts without it. Reconcile resets the fallback, so call it after activation.
 
 ### `guild list`
 
@@ -145,9 +145,7 @@ With the Guild root approved in the backend repo's `.skein/spools.edn` and activ
 
 (runtime/module! runtime :skein/spools-guild
   {:ns 'skein.spools.guild
-   :spools ['skein.spools/guild]
-   :contribute 'skein.spools.guild/contribute
-   :reconcile 'skein.spools.guild/reconcile})
+   :spools ['skein.spools/guild]})
 
 ;; Required here for the declarations below.
 (require '[skein.spools.guild :as guild])

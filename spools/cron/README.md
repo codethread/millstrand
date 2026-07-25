@@ -48,8 +48,6 @@ Activate it from trusted startup config after syncing approved roots:
 (runtime/module! runtime :cron
   {:ns 'skein.spools.cron
    :spools ['skein.spools/cron]
-   :contribute 'skein.spools.cron/contribute
-   :reconcile 'skein.spools.cron/reconcile
    :required? true})
 ```
 

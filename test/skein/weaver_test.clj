@@ -5133,6 +5133,110 @@
       (finally
         (delete-tree! (io/file workspace ".."))))))
 
+(deftest d3-targeted-refresh-refuses-evaluating-a-retained-pre-cutover-module
+  (let [world (temp-world)
+        workspace (:config-dir world)
+        suffix (str/replace (str (random-uuid)) "-" "")
+        root-lib 'test/module-root
+        legacy-ns (symbol (str "test.module.retained-legacy-" suffix))
+        upstream-ns (symbol (str "test.module.retained-upstream-" suffix))
+        independent-ns (symbol (str "test.module.retained-independent-" suffix))
+        legacy-declaration {:contribute (symbol (str legacy-ns) "contribute")
+                            :reconcile 'skein.weaver-test/module-reconcile}
+        legacy-body (str "(defn contribute [_ctx]"
+                         " {:queries {\"retained-legacy\" [:= [:attr :owner] \"legacy\"]}})\n")
+        published #{"retained-legacy" "retained-upstream" "retained-independent"}]
+    (try
+      (write-local-spool-module!
+       workspace root-lib legacy-ns
+       (str legacy-body
+            "(def spool {:contribute 'contribute"
+            " :reconcile 'skein.weaver-test/module-reconcile})"))
+      (write-local-spool-module!
+       workspace root-lib upstream-ns
+       (str "(defn contribute [_ctx]"
+            " {:queries {\"retained-upstream\" [:= [:attr :owner] \"upstream\"]}})\n"
+            "(def spool {:contribute 'contribute})"))
+      (write-local-spool-module!
+       workspace root-lib independent-ns
+       (str "(defn contribute [_ctx]"
+            " {:queries {\"retained-independent\" [:= [:attr :owner] \"independent\"]}})\n"
+            "(def spool {:contribute 'contribute})"))
+      (spit (io/file workspace "init.clj")
+            (str "(skein.core.weaver.runtime/declare-module! "
+                 "skein.core.weaver.runtime/*runtime* :retained-upstream "
+                 "{:ns '" upstream-ns " :spools ['" root-lib "]})\n"
+                 "(skein.core.weaver.runtime/declare-module! "
+                 "skein.core.weaver.runtime/*runtime* :retained-legacy "
+                 "{:ns '" legacy-ns " :spools ['" root-lib "]"
+                 " :after [:retained-upstream]})\n"
+                 "(skein.core.weaver.runtime/declare-module! "
+                 "skein.core.weaver.runtime/*runtime* :retained-independent "
+                 "{:ns '" independent-ns " :spools ['" root-lib "]})\n"))
+      (let [rt (weaver-runtime/start! nil {:world world :publish? false})
+            refusal (fn [opts]
+                      (try
+                        (weaver-runtime/refresh-modules! rt opts)
+                        nil
+                        (catch clojure.lang.ExceptionInfo e (ex-data e))))]
+        (try
+          (is (= published (set (keys (graph/queries rt))))
+              "all three modules publish before the pickup")
+          ;; Put the world in the state of a coordinator that picked the cutover
+          ;; up with refresh! rather than a restart: the module's entry points
+          ;; are named by its retained graph entry, its source names them
+          ;; nowhere, and its state predates :resolved-entry-points
+          ;; (DELTA-Dsp-004.D3). Dropping the loaded `spool` var alongside the
+          ;; rewritten source is what makes the namespace pre-cutover; a reload
+          ;; alone would leave the var interned.
+          (write-local-spool-module! workspace root-lib legacy-ns legacy-body)
+          (ns-unmap (find-ns legacy-ns) 'spool)
+          (swap! (:module-state rt)
+                 (fn [state]
+                   (-> state
+                       (dissoc :resolved-entry-points)
+                       (update-in [:graph :retained-legacy] merge legacy-declaration))))
+          (reset! module-reconcile-statuses [])
+          (testing "targeting the retained module refuses before anything mutates"
+            (let [data (refusal {:only [:retained-legacy]})]
+              (is (= :retained-legacy-declaration (:reason data)))
+              (is (= [:retained-legacy] (:module/keys data)))
+              (is (= {:retained-legacy legacy-declaration}
+                     (:retained/entry-points data)))))
+          (testing "so does targeting a module it is an affected dependent of"
+            (let [data (refusal {:only [:retained-upstream]})]
+              (is (= [:retained-legacy] (:module/keys data))
+                  "the refusal names the module that must not be evaluated")
+              (is (= [:retained-upstream] (:selected data))
+                  "alongside what was actually targeted")))
+          (testing "a refused targeted refresh leaves the live world untouched"
+            (is (= published (set (keys (graph/queries rt))))
+                "the retained module keeps its published contribution")
+            (is (= {:retained-legacy legacy-declaration}
+                   (:resolved/entry-points (runtime/status rt)))
+                "and its retained resolved entry points")
+            (is (empty? @module-reconcile-statuses)
+                "no reconciler runs on the refused path"))
+          (testing "an unaffected targeted refresh still applies"
+            (let [result (weaver-runtime/refresh-modules!
+                          rt {:only [:retained-independent]})]
+              (is (= :unchanged (:status result)))
+              (is (= legacy-declaration
+                     (get-in result [:resolved/entry-points :retained-legacy]))
+                  "the refusal is narrow: unrelated work keeps the retained set")))
+          (testing "removal by omission still runs the retained reconciler once"
+            (spit (io/file workspace "init.clj") "")
+            (let [result (weaver-runtime/refresh-modules! rt)]
+              (is (= :applied (:status result)))
+              (is (= :removed (get-in result [:modules :retained-legacy :status])))
+              (is (= [[:retained-legacy :removed]] @module-reconcile-statuses))
+              (is (empty? (:resolved/entry-points result)))
+              (is (empty? (graph/queries rt)))))
+          (finally
+            (weaver-runtime/stop! rt))))
+      (finally
+        (delete-tree! (io/file workspace ".."))))))
+
 (deftest fresh-declarations-refuse-entry-point-keys
   (testing "the direct internal declare-module! route refuses either key"
     (with-runtime

@@ -22,7 +22,6 @@
   alpha-qualified."
   (:require [clojure.spec.alpha :as s]
             [skein.api.clock.alpha :as clock-api]
-            [skein.api.format.alpha :as format-alpha]
             [skein.api.runtime.internal.shapes :as shapes]
             [skein.api.runtime.internal.spools-edn :as spools-edn]
             [skein.api.spool.alpha :refer [require-valid!]]
@@ -200,10 +199,10 @@
 ;; `::module-opts` is the named public input grammar `module!` consults: a
 ;; source target plus world policy, with entry points owned by the module
 ;; namespace's `spool` var rather than by opts. The coordinator's
-;; `normalize-declaration` stays the normalizer and the authority for actionable
-;; per-field error prose, so `validate-module-opts!` routes a spec-invalid input
-;; through it — after refusing the withdrawn entry-point keys itself, which no
-;; normalizer prose can name — and refuses whatever this grammar rejects.
+;; `normalize-declaration` stays the normalizer and the single authority for
+;; actionable refusal prose — the withdrawn entry-point keys included — so
+;; `validate-module-opts!` routes a spec-invalid input through it and then
+;; refuses whatever this narrower grammar still rejects.
 (s/def ::module-opts
   (s/and map?
          #(every? #{:ns :file :load :spools :after :required?} (keys %))
@@ -312,8 +311,9 @@
   the same source load collected authoring forms is a loud conflict; a
   `:reconcile`-only `spool` var composes with authoring forms. Opts naming
   `:contribute` or `:reconcile` — qualified or not — are refused with the
-  removed keys named and the `spool`-var remedy; the keys carry no alias and no
-  fallback (DELTA-Dsp-003.CC1).
+  removed keys named, the module key, and a `(def spool …)` remedy, the same
+  refusal a directly authored declaration raises; the keys carry no alias and
+  no fallback (DELTA-Dsp-003.CC1).
 
   `:load :image` (SPEC-004.C45/C46, ADR-003.P4) trusts the
   already-loaded JVM image for the `:ns` target: refresh performs no source
@@ -658,39 +658,18 @@
   (require-valid! ::status-result result "runtime status result has an invalid shape")
   result)
 
-(def ^:private removed-module-opts-keys
-  "Entry-point keys withdrawn from `::module-opts` (DELTA-Dsp-003.CC1)."
-  [:contribute :reconcile])
-
-(def ^:private removed-module-opts-remedy
-  "Remedy prose carried by the refusal of a withdrawn entry-point key."
-  (format-alpha/reflow
-   "|Delete the key from the declaration and declare the module's entry points
-    |in its namespace's public spool var, as
-    |(def spool {:contribute 'contribute :reconcile 'reconcile})."))
-
 (defn- validate-module-opts!
   "Validate public module! opts against the named `::module-opts` grammar.
 
-  A withdrawn entry-point key is refused here first, naming the removed keys and
-  the `spool`-var remedy. The coordinator's `normalize-declaration` owns
-  per-field prose for the declaration grammar it parses and so can never name a
-  key this surface withdrew: probing it with a legacy declaration answers with
-  generic grammar prose, or worse tells the author to qualify a key that no
-  longer exists. Any other spec-invalid input is routed through that normalizer;
-  normalization is pure, so the probe has no effect. This grammar is the
-  narrower surface, so input the parser accepts and the named spec rejects is
-  still refused here, with the spec explain data."
+  The coordinator's `normalize-declaration` owns every declaration refusal, the
+  withdrawn entry-point keys included, so a spec-invalid input is routed
+  through it and this boundary answers with exactly the message and ex-data a
+  directly authored declaration gets — one contract to keep true rather than a
+  second copy here. Normalization is pure, so the probe has no effect. This
+  grammar is the narrower surface, so input the normalizer accepts and the
+  named spec rejects is still refused here, with the spec explain data."
   [key opts]
   (when-not (s/valid? ::module-opts opts)
-    (when (map? opts)
-      (when-let [removed (seq (filter #(contains? opts %) removed-module-opts-keys))]
-        (throw (ex-info (str "module! opts name removed entry-point keys. "
-                             removed-module-opts-remedy)
-                        {:reason :removed-module-opts-keys
-                         :module/key key
-                         :removed (vec removed)
-                         :remedy removed-module-opts-remedy}))))
     (module-graph/normalize-declaration key opts)
     (require-valid! ::module-opts opts
                     "module! opts do not match the module declaration grammar"))

@@ -46,7 +46,10 @@ Each recipe cites the honest source it was distilled from — the spool's own co
   ;; repo-private implementation; the public contract is this fn's shape
   {:gate (:gate-name input) :satisfied false})
 
-(runtime/module! runtime :skein/spools-guild guild/module) ; seat the guild op
+;; Seat the guild op.
+(runtime/module! runtime :skein/spools-guild
+  {:ns 'skein.spools.guild
+   :spools ['skein.spools/guild]})
 (guild/register-op! runtime 'gate.status.v1
   {:doc "Return whether a backend gate is satisfied."
    :input-spec ::gate-status-input}

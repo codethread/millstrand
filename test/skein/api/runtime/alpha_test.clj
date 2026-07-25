@@ -10,6 +10,7 @@
             [skein.api.spool.alpha :as spool]
             [skein.core.specs :as specs]
             [skein.core.weaver.config :as weaver-config]
+            [skein.core.weaver.module-graph :as module-graph]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.core.weaver.spool-sync :as spool-sync]))
 
@@ -401,41 +402,44 @@
                                                           :ns 'demo.ns}))))
         (testing "entry-point keys are refused outright, with no fallback"
           (let [refuse (fn [key opts] (refusal #(runtime/module! rt key opts)))
-                qualified
-                (refuse :legacy-contribute
-                        {:file "modules/demo.clj"
-                         :contribute 'skein.api.runtime.alpha-test/image-contribute})
-                unqualified (refuse :legacy-unqualified
-                                    {:ns ns-sym :contribute 'contribute})
-                reconcile (refuse :legacy-reconcile
-                                  {:ns ns-sym :reconcile 'reconcile})
-                both (refuse :legacy-both
-                             {:ns ns-sym
-                              :contribute 'contribute
-                              :reconcile 'reconcile})]
+                authored (fn [key opts]
+                           (refusal #(module-graph/normalize-declaration key opts)))
+                qualified-opts {:file "modules/demo.clj"
+                                :contribute 'skein.api.runtime.alpha-test/image-contribute}
+                unqualified-opts {:ns ns-sym :contribute 'contribute}
+                reconcile-opts {:ns ns-sym :reconcile 'reconcile}
+                both-opts {:ns ns-sym :contribute 'contribute :reconcile 'reconcile}
+                qualified (refuse :legacy-contribute qualified-opts)
+                unqualified (refuse :legacy-unqualified unqualified-opts)
+                reconcile (refuse :legacy-reconcile reconcile-opts)
+                both (refuse :legacy-both both-opts)]
             (is (= {:reason :removed-module-opts-keys
                     :module/key :legacy-contribute
                     :removed [:contribute]}
                    (select-keys (ex-data qualified)
                                 [:reason :module/key :removed]))
                 "the refusal names the removed key and the module it came from")
-            (is (= (select-keys (ex-data qualified) [:reason :removed])
-                   (select-keys (ex-data unqualified) [:reason :removed]))
-                "an unqualified legacy value is the same removed-key refusal")
             (is (= [:reconcile] (:removed (ex-data reconcile))))
             (is (= [:contribute :reconcile] (:removed (ex-data both)))
                 "a declaration naming both keys names both in its refusal")
-            (doseq [error [qualified unqualified reconcile both]]
-              (is (str/includes? (ex-message error) "removed entry-point keys")
+            (doseq [[module-key opts error] [[:legacy-contribute qualified-opts qualified]
+                                             [:legacy-unqualified unqualified-opts unqualified]
+                                             [:legacy-reconcile reconcile-opts reconcile]
+                                             [:legacy-both both-opts both]]
+                    :let [direct (authored module-key opts)]]
+              (is (some? error) (str "expected a refusal for " module-key))
+              (is (= (ex-message direct) (ex-message error))
+                  "the boundary repeats the coordinator's refusal message verbatim")
+              (is (= (ex-data direct) (ex-data error))
+                  "and its ex-data, so one contract covers every authoring route")
+              (is (str/includes? (ex-message error) "no longer name entry points")
                   "the message classes the failure as a removed key")
-              (is (str/includes? (ex-message error) "(def spool")
-                  "the message shows the spool var that replaces the key")
               (is (str/includes? (:remedy (ex-data error))
                                  "namespace's public spool var")
                   "the remedy directs the author at the namespace's spool var")
               (is (str/includes? (:remedy (ex-data error))
-                                 "{:contribute 'contribute :reconcile 'reconcile}")
-                  "the example stores symbols rather than resolved fn values"))
+                                 "(def spool {:contribute 'contribute :reconcile 'reconcile})")
+                  "and shows a def spool form storing symbols, not resolved fn values"))
             (is (not (str/includes? (ex-message unqualified) "qualified"))
                 "an unqualified value is never told to qualify the removed key")
             (is (empty? (select-keys (:modules (runtime/status rt))

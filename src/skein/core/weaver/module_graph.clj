@@ -51,23 +51,50 @@
              {:field label :value values}))
     (vec (distinct values))))
 
+(def ^:private removed-entry-point-message
+  "Complete refusal message for a declaration that names an entry point."
+  (format/reflow
+   "|Module options no longer name entry points. Delete the key from the
+    |declaration and declare the module's entry points in its namespace's
+    |public spool var, as
+    |(def spool {:contribute 'contribute :reconcile 'reconcile})."))
+
+(def ^:private removed-entry-point-remedy
+  "Actionable clause of that refusal, carried as its `:remedy` datum.
+
+  Refusal data reaches operators through a refresh result's `:remedies`, which
+  carries the directive alone rather than the whole message."
+  (format/reflow
+   "|Delete the key from the declaration and declare the module's entry points
+    |in its namespace's public spool var, as
+    |(def spool {:contribute 'contribute :reconcile 'reconcile})."))
+
 (defn- require-no-entry-points!
   "Refuse a declaration that names an entry point, pointing at `def spool`.
 
   Every freshly authored declaration reaches here — startup collection, the
-  direct `declare-module!` route, and targeted `:declare` alike — so this is
-  the one refusal an author upgrading past the cutover meets. It names the
-  removed keys and the convention that replaced them rather than reporting them
-  as an unknown-key typo (DELTA-Dsp-004.CC1, TEN-003)."
+  direct `declare-module!` route, targeted `:declare`, and the public
+  `runtime/module!` boundary, which routes opts its narrower `::module-opts`
+  grammar rejects straight through this normalizer. So one message and one
+  ex-data contract answer an author whatever surface they came through, and
+  both name the removed keys and the convention that replaced them rather than
+  reporting them as an unknown-key typo (DELTA-Dsp-003.CC1,
+  DELTA-Dsp-004.CC1, TEN-003).
+
+  This refusal is permanent, not a migration hint on a timer: it earns its keep
+  for as long as the keys stay out of the grammar, because it is the only thing
+  that tells an author holding a pre-cutover example where entry points went.
+  Retained pre-cutover state is the part that expires: its reader
+  `legacy-resolved-entry-points` carries that removal trigger
+  (DELTA-Dsp-003.D3, DELTA-Dsp-004.D3a)."
   [key opts]
-  (when-let [removed (seq (filterv #(contains? opts %) entry-point-keys))]
-    (fail! (format/reflow
-            "|Module options no longer name entry points; declare them in the
-             |module namespace's public spool var, as
-             |(def spool {:contribute 'contribute})")
-           {:module/key key
-            :removed (vec removed)
-            :remedy "def spool in the module namespace"})))
+  (let [removed (filterv #(contains? opts %) entry-point-keys)]
+    (when (seq removed)
+      (fail! removed-entry-point-message
+             {:reason :removed-module-opts-keys
+              :module/key key
+              :removed removed
+              :remedy removed-entry-point-remedy}))))
 
 (defn normalize-declaration
   "Validate and normalize one freshly authored module declaration.

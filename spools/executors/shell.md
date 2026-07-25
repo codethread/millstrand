@@ -27,14 +27,10 @@ order the shell module after it:
 
 (def runtime (current/runtime))
 (runtime/module! runtime :skein/spools-workflow
-  {:ns 'skein.spools.workflow
-   :contribute 'skein.spools.workflow/contribute
-   :reconcile 'skein.spools.workflow/reconcile})
+  {:ns 'skein.spools.workflow})
 (runtime/module! runtime :skein/spools-shell
   {:ns 'skein.spools.executors.shell
-   :after [:skein/spools-workflow]
-   :contribute 'skein.spools.executors.shell/contribute
-   :reconcile 'skein.spools.executors.shell/reconcile})
+   :after [:skein/spools-workflow]})
 ```
 
 Reconciliation runs an initial gate scan, so any durable ready `:shell` gate is dispatched at load time. Gate scans serialize on a runtime-owned monitor: independent weaver runtimes in one JVM scan independently and never block each other.
