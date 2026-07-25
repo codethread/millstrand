@@ -68,11 +68,13 @@ The form is a `def` first: loading the namespace defines `build` and nothing els
 
 The value is self-describing, which is the point: `:doc`, `:entrypoints`, `:param-spec`, and `:defaults` travel with the workflow, so a caller can learn what a registered name means without executing anything. `(workflow/resolve-workflow :build)` returns `{:name :build :definition 'my.ns/build :kind :static :value {...} :entrypoints #{...}}`.
 
-- **`:entrypoints`** is a non-empty subset of `#{:start :continue :call}`. `start!` requires `:start`, a registered-name `:next` route requires `:continue`, and a registered-name `call` target requires `:call`. A definition may declare any combination. Refusals fail before any mutation with reason `:workflow/entrypoint-unsupported`.
+- **`:entrypoints`** is a non-empty subset of `#{:start :continue :call}`. A definition may declare any combination. The registry is where it applies: reaching a definition **by registered name** requires `:start` to `start!`, `:continue` for a `:next` route, and `:call` for a `call` target, and a refusal fails before any mutation with reason `:workflow/entrypoint-unsupported`. Trusted Clojure holding the Var or the value directly is already past that boundary and is not checked (TEN-002).
 - **`:param-spec`** names a qualified spec keyword for the complete resolved params map. Registration and publication check that the name resolves to a registered spec; whole-map validation of caller params is not yet enforced.
 - **`:defaults`** is a partial overlay merged *under* caller params at start, route, call, and revision. It is not required to satisfy `:param-spec` — a definition may default some keys and still require the caller to supply the rest — but it must be a keyword-keyed map of JSON-compatible values.
 
 **Legacy constructors.** A registered symbol resolving to a *function* is still supported, and the resolved value is what decides: a map is a static definition, a function is a legacy constructor. A constructor is opaque — it declares no entrypoints, so nothing can be checked before it runs — and it stays available to trusted Clojure while shipped workflows migrate. Its failures are loud and named: a constructor that throws fails as `:workflow/legacy-constructor-failed` (with the original exception as the cause), and one that returns something that is not a workflow fails as `:workflow/legacy-definition-invalid`. Both happen before any pour.
+
+Because it declares nothing, a legacy constructor is exempt from entrypoint checks everywhere they apply: registered-name start, `:next` routing, and `call` targets all still reach one. That exemption is the migration window for the workflows shipped today, not a permanent capability — a constructor cannot say what it may be used for, so nothing can be verified about it in advance.
 
 ### Conditions
 

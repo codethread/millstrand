@@ -1765,7 +1765,11 @@
         (is (= :start (:entrypoint (ex-data thrown))))
         (is (= [:call] (:entrypoints (ex-data thrown)))))
       (is (nil? (workflow/current-root "no-start"))
-          "the run is refused before anything is poured"))))
+          "the run is refused before anything is poured")
+      ;; the registry is the capability boundary; trusted Clojure holding the
+      ;; Var is already past it
+      (workflow/start! "direct-var" #'static-review {})
+      (is (= "Inspect the change" (:title (workflow/ready-step "direct-var")))))))
 
 (deftest registered-name-routing-requires-the-continue-entrypoint
   (with-runtime

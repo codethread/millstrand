@@ -113,14 +113,20 @@
   (= :static (:kind resolved)))
 
 (defn require-entrypoint!
-  "Fail loudly unless static `resolved` declares `entrypoint`.
+  "Fail loudly unless static `resolved`, reached by registered name, declares
+  `entrypoint`.
 
-  A legacy constructor is not checked here. It declares no capability at all, so
-  the trusted Clojure paths that predate entrypoints — constructor start,
+  The registry is where the capability contract applies: a name is reached by
+  callers that only know the name, so what they may do with it has to be
+  declared. Trusted Clojure holding a Var or a workflow value directly is
+  already past that boundary and is not checked (TEN-002).
+
+  A legacy constructor is never checked either. It declares no capability at
+  all, so the trusted paths that predate entrypoints — constructor start,
   raw-symbol routing, direct procedure values — keep working while shipped
   workflows migrate; the generic worker surfaces refuse it outright instead."
   [resolved entrypoint]
-  (when (static? resolved)
+  (when (and (static? resolved) (:name resolved))
     (let [declared (:entrypoints resolved)]
       (when-not (contains? declared entrypoint)
         (fail! "Workflow definition does not declare this entrypoint"
