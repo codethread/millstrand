@@ -55,34 +55,55 @@
       (spool-sync/sync-approved-spools rt)
       (f))))
 
-(defn- load-module-source!
-  "Load one workspace authoring file and publish its complete contribution."
-  [rt module-key file]
-  (let [path (.getCanonicalPath (io/file file))
-        ns-sym (symbol (str/replace (str/replace file #"^\.skein/" "") #"\.clj$" ""))
-        contribution (:contribution
-                      (module-graph/with-contribution-collection
-                        {:module/key module-key :source/file path :source/namespace ns-sym}
-                        #(load-file file)))
-        backends (publication/backends rt)
+(defn- publish-contribution!
+  "Replace one fixture module owner's partitions with `contribution`."
+  [rt module-key contribution]
+  (let [backends (publication/backends rt)
         candidates (publication/stage-owner backends (publication/candidates backends)
                                             module-key contribution)]
     (publication/publish! backends candidates)))
 
+(defn- load-module-source!
+  "Load one workspace authoring file and publish its complete contribution."
+  [rt module-key file]
+  (let [path (.getCanonicalPath (io/file file))
+        ns-sym (symbol (str/replace (str/replace file #"^\.skein/" "") #"\.clj$" ""))]
+    (publish-contribution!
+     rt module-key
+     (:contribution
+      (module-graph/with-contribution-collection
+        {:module/key module-key :source/file path :source/namespace ns-sym}
+        #(load-file file))))))
+
+(defn- load-module-namespace!
+  "Load one synced spool namespace under module-key and publish the authoring
+  forms its load collects.
+
+  The peer-spool twin of `load-module-source!`, for a spool whose whole
+  contribution is top-level authoring forms and which therefore declares no
+  `contribute` entry point: its declarations exist only when the load itself
+  happens inside that module's collection scope, exactly as the real module
+  loader runs it."
+  [rt module-key ns-sym]
+  (publish-contribution!
+   rt module-key
+   (:contribution
+    (module-graph/with-contribution-collection
+      {:module/key module-key
+       :source/file (spool-sync/synced-namespace-file rt ns-sym)
+       :source/namespace ns-sym}
+      #(spool-sync/load-synced-namespace! rt ns-sym module-key)))))
+
 (defn- publish-module-contribution!
   "Replace one fixture module owner from its data-first contribution function."
   [rt module-key contribute]
-  (let [contribution (update-vals
-                      (contribute {:runtime rt :module/key module-key})
-                      (fn [partition]
-                        (if (contains? partition :entries)
-                          partition
-                          {:entries partition :overrides #{}})))
-        backends (publication/backends rt)
-        candidates (publication/stage-owner
-                    backends (publication/candidates backends) module-key
-                    contribution)]
-    (publication/publish! backends candidates)))
+  (publish-contribution!
+   rt module-key
+   (update-vals (contribute {:runtime rt :module/key module-key})
+                (fn [partition]
+                  (if (contains? partition :entries)
+                    partition
+                    {:entries partition :overrides #{}})))))
 
 (defn- with-config-runtime
   "Run f with an isolated runtime and the repo-local .skein config loaded.
@@ -113,11 +134,7 @@
             ((requiring-resolve 'skein.spools.workflow/reconcile)
              {:runtime rt :module/key :skein/spools-workflow
               :module/contribution {:status :applied}})
-            (spool-sync/load-synced-namespace!
-             rt 'ct.spools.devflow :skein/spools-devflow)
-            (publish-module-contribution!
-             rt :skein/spools-devflow
-             (requiring-resolve 'ct.spools.devflow/contribute))
+            (load-module-namespace! rt :skein/spools-devflow 'ct.spools.devflow)
             (load-module-source! rt :config ".skein/config.clj")
             (load-file ".skein/harnesses.clj")
             (publish-module-contribution!
@@ -282,7 +299,15 @@
   devflow-conventions payload is pinned separately by
   `devflow-conventions-op-lists-repo-conventions`. Used both to snapshot the
   pre-refactor baseline and to capture the current converted config for a
-  byte-identical comparison."
+  byte-identical comparison.
+
+  devflow is loaded first, the way init.clj's `:after` ordering loads it before
+  `:config`. Its stages are top-level `defworkflow` forms, so letting
+  config.clj's require pull it in for the first time inside the `:config`
+  collector would file devflow's declarations under `:config` — which the
+  module-graph collection-source guard rightly refuses. It loads outside any
+  collection scope: this world declares only the op and query backends the
+  captured surface reads, so devflow's own declarations have nowhere to publish."
   [config-path]
   (let [db-file (db-test/temp-db-file)
         config-dir (str "/tmp/skein-surface-" (java.util.UUID/randomUUID))]
@@ -294,6 +319,8 @@
         (with-runtime-loader
           rt
           (fn []
+            (spool-sync/load-synced-namespace!
+             rt 'ct.spools.devflow :skein/spools-devflow)
             (load-module-source! rt :config config-path)
             {:op-help (into {} (map (fn [op] [op (portable-source (op! "help" [op]))])) config-op-names)
              :queries (into {} (map (fn [q] [q (get (graph/queries rt) q)])) named-query-names)}))
@@ -1388,11 +1415,10 @@
 (def ^:private sibling-spool-vars
   "The pinned sibling modules `.skein/init.clj` activates, keyed as init.clj keys
   them, each mapped to the released namespace's public `def spool` var. These are
-  every namespace the Phase C pins supply: `codethread/devflow` v6,
-  `codethread/kanban` v10, and the three `ct.spools/agent-run` v14 roots, whose
-  subagent executor gained its `spool` var in the same release."
-  {:skein/spools-devflow 'ct.spools.devflow/spool
-   :skein/spools-kanban 'ct.spools.kanban/spool
+  the pinned namespaces that contribute through an entry point: `codethread/kanban`
+  and the three `ct.spools/agent-run` roots, whose subagent executor carries its
+  own `spool` var."
+  {:skein/spools-kanban 'ct.spools.kanban/spool
    :skein/spools-shuttle 'ct.spools.agent-run/spool
    :skein/spools-delegation 'ct.spools.delegation/spool
    :skein/spools-bench 'ct.spools.bench/spool
@@ -1400,9 +1426,11 @@
 
 (def ^:private forms-only-ns-modules
   "The init.clj `:ns` modules that legally declare no `spool` var: the macro
-  namespaces, whose contribution is empty, and the defp demo, whose contribution
-  is the patterns its source collects."
-  #{:macros/patterns :macros/ops :macros/queries :macros/rules :macros/demo})
+  namespaces, whose contribution is empty, the defp demo, whose contribution is
+  the patterns its source collects, and pinned `codethread/devflow`, whose whole
+  contribution is the stage `defworkflow` entries its load collects."
+  #{:macros/patterns :macros/ops :macros/queries :macros/rules :macros/demo
+    :skein/spools-devflow})
 
 (defn- public-spool-var
   "Resolve a namespace's `spool` var, or nil when it is missing or private."

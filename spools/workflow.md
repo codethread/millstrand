@@ -14,7 +14,7 @@
 
 This is userland spool code, not a separate scheduler or persistence system. Workflows compile into normal strand graphs, and runtime state remains inspectable through the usual Skein REPL/graph helpers. The spool owns no privileged runtime state.
 
-Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `defer`, `bind-defers`, `param`, `compile`, `pour!`, `wisp!`, and `explain`.
+Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `defer`, `bind-defers`, `compile`, `pour!`, `wisp!`, and `explain`.
 
 The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `continue!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see §5), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see §5b). That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`complete`/`choose`/`continue`/`await` over the run lifecycle (see §5c). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
 
@@ -24,7 +24,7 @@ Every run-mutating op (`start!`, `complete!`, `choose!`, `continue!`, `advance!`
 
 Terminology — molecule, wisp, pour, bond, squash, burn, and the proto-like workflow-definition-as-data pattern — borrows heavily from [beads](https://github.com/steveyegge/beads) by Steve Yegge (see `docs/MOLECULES.md` in that repo).
 
-What skein does differently: workflow definitions are Clojure-native data (functions and maps) instead of TOML formulas, and `compile` turns that data into ordinary skein strands and edges rather than a separate issue-tracker schema. There is no proto/template storage layer — a workflow definition *is* the reusable template, expressed as a Clojure function or map.
+What skein does differently: workflow definitions are Clojure-native data instead of TOML formulas, and `compile` turns that data into ordinary skein strands and edges rather than a separate issue-tracker schema. There is no proto/template storage layer — a workflow definition *is* the reusable template, expressed as a Clojure map.
 
 ## 3. Definition layer
 
@@ -32,23 +32,22 @@ What skein does differently: workflow definitions are Clojure-native data (funct
 
 | Builder | Returns |
 |---|---|
-| `(param & opts)` | A param definition map. Supports `:required true` and `:default v`. Deprecated — declare `:param-spec` and `:defaults` on the definition instead. |
 | `(step id title waiter & opts)` | A step definition map. `waiter` must be `:self` — a step is always driven-agent-owned; any other value fails loudly, directing the caller to `gate`. Opts: `:depends-on`, `:attributes`, `:condition`, `:loop`, `:description`, `:state`. |
 | `(gate id title waiter & opts)` | A step marked `workflow/gate <waiter>` as an external wait point. `waiter` is a freeform actor hint (`:ci`, `:human`, `:subagent`, …), not `:self`. Same opts as `step`. See "Gates" below. |
 | `(checkpoint id title & opts)` | A step definition with checkpoint metadata. `:kind` (`:human` or `:agent`, default `:human`), `:choices`. A choice's `:input` names the spec `choose!` validates against — see §5. |
 | `(call id procedure params & opts)` | An inline procedure-reuse step. `:depends-on`, `:title`, `:attributes`. |
 | `(defer id title & opts)` | A named terminal exit whose continuation a worker picks at run time. Opts: `:depends-on`, `:description`, `:attributes`. See §5a. |
 | `(bind-defers definition bindings)` | Returns `definition` with each declared defer bound to the registered workflows it allows. See §5a. |
-| `(workflow name & body)` | A workflow definition: `{:name .. :steps [..]}` plus optional leading opts map (`:params`, `:attributes`, `:state`, `:form`, and the registration contract `:doc`, `:entrypoints`, `:param-spec`, `:defaults`). |
+| `(workflow name & body)` | A workflow definition: `{:name .. :steps [..]}` plus optional leading opts map (`:attributes`, `:state`, `:form`, and the registration contract `:doc`, `:entrypoints`, `:param-spec`, `:defaults`). |
 | `(defworkflow name doc opts definition)` | Defines a static definition Var and collects its registry entry during module contribution. See "Static definitions" below. |
 
-`name`, `title`, `description`, and attribute values may be plain values or functions of the resolved params map — resolution happens once, after `:params` defaults/required-checks and caller `params` are merged.
+`name`, `title`, `description`, and attribute values may be plain values or functions of the resolved params map — resolution happens once, against the map the definition's `:defaults` and the caller's `params` merge into.
 
-Builders reject unknown option keys loudly: passing a mistyped key (`:require`, `:depend-on`, and similar typos) to `param`, `step`, `gate`, `checkpoint`, `call`, a choice map, or the `workflow` leading-opts map fails with the offending keys and the allowed set in the ex-data. `workflow` also validates the complete assembled definition against `::definition`, so a malformed nested step, choice, or call fails at the builder rather than at the pour.
+Builders reject unknown option keys loudly: passing a mistyped key (`:require`, `:depend-on`, and similar typos) to `step`, `gate`, `checkpoint`, `call`, a choice map, or the `workflow` leading-opts map fails with the offending keys and the allowed set in the ex-data. `workflow` also validates the complete assembled definition against `::definition`, so a malformed nested step, choice, or call fails at the builder rather than at the pour.
 
 ### Static definitions
 
-A registered workflow may be a plain value rather than a function that builds one. `defworkflow` defines that value as an ordinary Var and attaches the contract it wants to advertise:
+A registered workflow is a plain value: the symbol behind a registered name must resolve to a definition map, and nothing is executed to find out what it is. `defworkflow` defines that value as an ordinary Var and attaches the contract it advertises:
 
 ```clojure
 (s/def ::scope string?)
@@ -68,23 +67,17 @@ A registered workflow may be a plain value rather than a function that builds on
 
 The form is a `def` first: loading the namespace defines `build` and nothing else, so a code-only reload redefines the Var without touching the live registry. Only while a module contribution collector is active does it also contribute `my.ns/build` under `workflow/definition-kind`, keyed `:build`. That is what makes removal expressible — an owner that stops evaluating the form drops the entry by omission at the next refresh.
 
-The value is self-describing, which is the point: `:doc`, `:entrypoints`, `:param-spec`, and `:defaults` travel with the workflow, so a caller can learn what a registered name means without executing anything. `(workflow/resolve-workflow :build)` returns `{:name :build :definition 'my.ns/build :kind :static :value {...} :entrypoints #{...}}`.
+The value is self-describing, which is the point: `:doc`, `:entrypoints`, `:param-spec`, and `:defaults` travel with the workflow, so a caller can learn what a registered name means without executing anything. `(workflow/resolve-workflow :build)` returns `{:name :build :definition 'my.ns/build :value {...} :entrypoints #{...}}`. A symbol whose Var holds something other than a definition map fails as `:workflow/definition-invalid`, carrying the class it found.
 
 - **`:entrypoints`** is a non-empty subset of `#{:start :continue :call}`. A definition may declare any combination. The registry is where it applies: reaching a definition **by registered name** requires `:start` to `start!`, `:continue` for a `:next` route, and `:call` for a `call` target, and a refusal fails before any mutation with reason `:workflow/entrypoint-unsupported`. Trusted Clojure holding the Var or the value directly is already past that boundary and is not checked (TEN-002).
-- **`:param-spec`** names a qualified spec keyword for the complete resolved params map. Start, named `:next` routing, and `:revise` merge `:defaults` and then validate the whole map against the live spec before anything compiles or pours. The caller's own map is what compiles: validation never substitutes `s/conform` output. A rejected map fails as `:workflow/params-invalid` carrying the spec identity, its current form graph, and `s/explain-str`; a `:param-spec` naming a spec that has since been removed fails as `:workflow/param-spec-missing`. Registration and publication check that the name resolves at declaration time too.
+- **`:param-spec`** names a qualified spec keyword for the complete resolved params map. Start, named `:next` routing, and `:revise` merge `:defaults` and then validate the whole map against the live spec before anything compiles or pours. The caller's own map is what compiles: validation never substitutes `s/conform` output. Both refusals are named: `:workflow/params-invalid` for a map the spec rejects, carrying the spec identity, its current form graph, and `s/explain-str`; `:workflow/param-spec-missing` for a `:param-spec` naming a spec that has since been removed, so a stale identity never reads as an unconstrained workflow. Registration and publication check that the name resolves at declaration time too.
 - **`:defaults`** is a partial overlay merged *under* caller params at start, route, call, and revision. It is not required to satisfy `:param-spec` — a definition may default some keys and still require the caller to supply the rest — but it must be a keyword-keyed map of JSON-compatible values.
 
-A `call` target reached by registered name is judged the same way, at the same boundary that requires its `:call` entrypoint: its defaults merge under the merged parent and call-site params, and its `:param-spec` validates the result before the procedure expands. A raw workflow value or symbol declares nothing, so nothing is checked. Params that round-trip through `workflow/context` come back JSON-shaped — a keyword value was stringified on the way in — so a spec a run starts with must also accept what a later `:revise` or `:next` reads back.
+A `call` target reached by registered name is judged the same way, at the same boundary that requires its `:call` entrypoint: its defaults merge under the merged parent and call-site params, and its `:param-spec` validates the result before the procedure expands. A target written as a raw value, Var, or symbol is trusted past the entrypoint check, though whatever contract its definition map declares still applies. Params that round-trip through `workflow/context` come back JSON-shaped — a keyword value was stringified on the way in — so a spec a run starts with must also accept what a later `:revise` or `:next` reads back.
 
 Whole-map is the whole point. A required-key list cannot say that one key's value constrains another's, and deriving per-key rules out of a spec would be a second schema interpreter that eventually disagrees with the first. `(workflow/spec-forms ::build-params)` returns the ordered form graph documenting one of these specs: the root first, then every registered spec its printed forms name, in qualified-name order and emitted once. A root that is not currently registered fails as `:workflow/spec-missing` rather than returning an empty graph, so a stale identity is never read as a spec with nothing to say. `s/keys` names its key specs rather than inlining them, so a single form is never the whole contract. The walk reads form data and the spec registry and runs no predicate, and a `keyword-reference` relation says only that a qualified keyword in a form also names a registered spec — a set member that happens to be one is reported the same way as a real key reference.
 
 A worker that arrives over JSON crosses the boundary first: `(workflow/json->params obj)` keywordizes object keys recursively, so `"feature"` satisfies an `s/keys :req-un` entry and `"acme.workflows/feature"` addresses a `:req` key, arrays become vectors, and scalars keep their ordinary Clojure values. A non-object top level or a blank key fails loudly. The conversion is total, so a spec that requires string-keyed or mixed-keyed maps is reachable only from trusted Clojure in v1. Rejections carry `s/explain-str` as plain text; raw `s/explain-data` stays in Clojure, where a caller can read Clojure values without a wire normalizer inventing a JSON shape for them.
-
-The legacy per-key `:params` declaration (`(param :required true :default v)`) still works and is deprecated. It resolves during compilation, *after* `:param-spec` has judged the map, so a key defaulted there is not part of what the spec saw. Declare a key in `:defaults` or in `:params`, not both.
-
-**Legacy constructors.** A registered symbol resolving to a *function* is still supported, and the resolved value is what decides: a map is a static definition, a function is a legacy constructor. A constructor is opaque — it declares no entrypoints, so nothing can be checked before it runs — and it stays available to trusted Clojure while shipped workflows migrate. Its failures are loud and named: a constructor that throws fails as `:workflow/legacy-constructor-failed` (with the original exception as the cause), and one that returns something that is not a workflow fails as `:workflow/legacy-definition-invalid`. Both happen before any pour.
-
-Because it declares nothing, a legacy constructor is exempt from entrypoint checks everywhere they apply: registered-name start, `:next` routing, and `call` targets all still reach one. That exemption is the migration window for the workflows shipped today, not a permanent capability — a constructor cannot say what it may be used for, so nothing can be verified about it in advance.
 
 ### Conditions
 
@@ -212,9 +205,9 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
   `{:ready [...] :done boolean}` result. `workflow` may be a pre-built map, a
   definition var (`#'my.ns/flow`), or a registered workflow keyword. Var and
   keyword starts derive `:definition`; a registered name also records
-  `workflow/definition-name` and, for a static definition, must declare the
-  `:start` entrypoint — the refusal happens before anything is poured. A static
-  definition's `:defaults` merge under `params` first, so what the run compiles
+  `workflow/definition-name` and must declare the `:start` entrypoint — the
+  refusal happens before anything is poured. The definition's `:defaults` merge
+  under `params` first, so what the run compiles
   and persists is the resolved map. When `:context` is absent it defaults from
   those resolved params, stringifying keyword values and failing loudly on
   non-JSON-safe values (pass `:context` explicitly for those cases).
@@ -235,10 +228,10 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
 - `(choose! run-id choice)` / `(choose! run-id choice input)` /
   `(choose! run-id choice input opts)` — records a checkpoint decision,
   optionally routes to a continuation (`:next`), and returns the
-  `{:ready [...] :done boolean}` result. When the chosen choice declares
-  required `:input` keys, `choose!` fails loudly before any mutation if they
-  are missing (see §5). Revision loops route `:next` back to the same stage
-  (see §5).
+  `{:ready [...] :done boolean}` result. When the chosen choice declares an
+  `:input` contract, `choose!` validates the input map against it and fails
+  loudly before any mutation (see §5). Revision loops route `:next` back to the
+  same stage (see §5).
 - `(continue! run-id workflow)` / `(continue! run-id workflow params)` / `(continue! run-id workflow params opts)` — fills a ready defer exit by closing the current root and pouring one of the defer's allowed registered workflows under the same run id, returning the same result shape. `opts` takes `:step` (to pick among several ready defers) and `:by`. See §5a.
 - `(advance! run-id)` / `(advance! run-id opts)` — one verb that advances the run regardless of the ready step's kind, returning the same result shape. When the resolved ready step is a checkpoint, `opts` must carry `:choice` (and may carry `:input`, default `{}`, plus pass-through `:by`/`:step`) and it dispatches to `choose!`; when it is a step, `:choice` must be absent and it dispatches to `complete!` with pass-through `:attributes`/`:step`/`:by`. Passing the removed `:notes` fails as `workflow/notes-removed`. Supplying `:choice` on a step, or omitting it on a checkpoint, fails loudly. A ready defer is not advanceable: picking a continuation carries a target and its own params, which `advance!` has no way to express, so it directs the caller to `continue!`.
 
@@ -324,21 +317,21 @@ A checkpoint is a step with `workflow/role "checkpoint"`. Use `choose!`, never `
 {:key :approved
  :label "Approve"
  :description "Continue to implementation."
- :next :next-stage            ; a registered name, or a fn symbol
- :input [{:key :reason :required true :description "Why this decision"}]}
+ :next :next-stage            ; a registered name, or a definition symbol
+ :input ::reason-input}       ; the spec the input map must satisfy
 ```
 
 | Choice map key | Effect |
 |---|---|
 | `:key` | Choice name (required, unique per checkpoint). |
 | `:label`, `:description` | Stored in `workflow/choice-details` for `choice-details`/`choice-detail`. |
-| `:next` | Routing target: a **registered workflow name** (keyword, see "Named workflows" below) or a **symbol** naming a 1-arg fn. Resolved at `choose!` time and called with the merged params (see below); its return is compiled as the **continuation** workflow. Mutually exclusive with `:revise`. |
+| `:next` | Routing target: a **registered workflow name** (keyword, see "Named workflows" below) or a **symbol** naming a definition Var. Resolved at `choose!` time and compiled with the merged params as the **continuation** workflow (see below). Mutually exclusive with `:revise`. |
 | `:revise` | `{:params {...}}` — re-pour the run's **own** `workflow/definition` with authoritative param overrides (see "`:revise`" below). Mutually exclusive with `:next`; supplying both fails loudly at build time. |
-| `:input` | Vector of `{:key :required :description}` maps declaring the choice input this decision expects; unknown declaration keys fail loudly like other builder opts. |
+| `:input` | The whole-map contract the choice input must satisfy: a qualified spec keyword, or `{:spec ::name :doc "…"}` to carry the doc a worker is shown. Unknown declaration keys fail loudly like other builder opts. |
 
 ### Named workflows — the routing registry
 
-`:next` may name a workflow registered under a stable keyword instead of a raw fn symbol:
+`:next` may name a workflow registered under a stable keyword instead of a raw symbol:
 
 ```clojure
 (workflow/register-workflow! :spec-plan 'my.ns/spec-plan)
@@ -353,7 +346,7 @@ Symbols are resolved under the runtime's spool classloader, so a definition livi
 
 `register-workflow!` and `unregister-workflow!` are the trusted-Clojure mutations, both at the direct/REPL layer. Registration is add-or-update and validates the resulting registry the same way module publication validates a staged candidate, so an unresolvable symbol, an invalid definition, or a route to a name that cannot honor it fails before anything changes. Unregistering removes the direct entry only — a name a module owner published disappears by omitting its contribution, not by an ad hoc unregister — and fails loudly when there is no direct entry to remove. Neither touches strands already poured.
 
-**Publication-time validation.** The definition kind declares a candidate validator, so a refresh validates the *complete* staged registry across owners before publishing any of it: every symbol resolves, every static definition is a valid definition with JSON-compatible defaults and a registered param spec, and every registered-name route or call target exists and declares the entrypoint that use requires. Deletion by omission is judged the same way — an owner that drops a definition another owner routes to has its refresh refused, and every affected owner keeps its previous live partition.
+**Publication-time validation.** The definition kind declares a candidate validator, so a refresh validates the *complete* staged registry across owners before publishing any of it: every symbol resolves to a valid definition map with JSON-compatible defaults and a registered param spec, and every registered-name route or call target exists and declares the entrypoint that use requires. Deletion by omission is judged the same way — an owner that drops a definition another owner routes to has its refresh refused, and every affected owner keeps its previous live partition.
 
 ### `:input` — the contract a choice puts on `choose!`
 
@@ -378,22 +371,11 @@ Pouring the checkpoint records the spec's identity, its doc, and its current for
 
 Failures happen before any mutation, so the checkpoint stays ready and the run stays resumable. Input the live spec rejects fails as `:workflow/input-invalid`, carrying the spec identity, its current form graph, and `s/explain-str`; a spec that has since been removed fails as `:workflow/input-spec-missing`. Registration and refresh check up front that every declared input spec is registered, so a name that never existed is caught before a definition goes live rather than at the checkpoint.
 
-`choose!` validates `input` as the caller passed it. Trusted Clojure passes a keyword-keyed map; a JSON worker converts first with `(workflow/json->params obj)`.
-
-**Deprecated per-key form.** A vector of `{:key kw :required bool :description str}` maps still works and is stored as `"input"`. It checks only that required keys are present, whether the caller named them as keywords or strings. Workflows shipped before the spec form migrate on their own schedule; new choices should name a spec.
+`choose!` validates `input` as the caller passed it. Trusted Clojure passes a keyword-keyed map; a JSON worker converts first with `(workflow/json->params obj)`. A choice that declares no `:input` takes any map.
 
 ### `:next` — routing to a continuation
 
-The `:next` fn is called with `call-params = (merge workflow/context choice-input)` and may return either:
-
-- a **workflow map** — compiled with `call-params`, which are also persisted as
-  the continuation root's `workflow/context`; or
-- `{:workflow w :params p}` — `w` is compiled with `p`, and `p` (not
-  `call-params`) becomes the continuation root's persisted `workflow/context`.
-  This makes the continuation authoritative over its own params: a revision
-  round can force `:revision true` regardless of what the caller passed as
-  choice input, and start opts carried in `context` flow into the next round's
-  params instead of resetting to their defaults.
+A `:next` route starts its continuation from `call-params = (merge workflow/context choice-input)`, less the keys the current stage marked stage-local (see "Stage-local override params" below), so leaving a stage sheds its loop state. The target — a registered name resolved through the registry, or a symbol resolved to its definition Var — folds its own `:defaults` under those params, and its `:param-spec` judges the merged map before anything compiles. That merged map is what the continuation compiles with and what persists as the new root's `workflow/context`, alongside the definition identity a later `:revise` re-pours from.
 
 Choosing a `:next` choice applies **one** transactional `batch/apply!` that, atomically:
 
@@ -406,26 +388,32 @@ Choosing a `:next` choice applies **one** transactional `batch/apply!` that, ato
 
 The continuation is compiled once, before any mutation. Folding the checkpoint close, the old-root closes, and the continuation pour into a single transaction means a single active root ever holds the `run-id` (no concurrent `current-root` sees an ambiguous two-root window), and a failed apply commits nothing — the old root and its checkpoint stay active and the run stays resumable rather than being stranded in a false terminal state.
 
-**Warning:** a routed choice closes out the remaining steps of the current workflow. Any step not yet reached when the checkpoint is chosen is abandoned, not paused — routing is a hard cutover to the continuation, not a fork or a merge. If you need work to resume rather than terminate, route to a continuation that re-pours it (see "Loops — revise by routing" below), or design the checkpoint so all prerequisite work is `:depends-on` the checkpoint itself.
+**Warning:** a routed choice closes out the remaining steps of the current workflow. Any step not yet reached when the checkpoint is chosen is abandoned, not paused — routing is a hard cutover to the continuation, not a fork or a merge. If you need work to resume rather than terminate, route to a continuation that re-pours it (see "`:revise`" below), or design the checkpoint so all prerequisite work is `:depends-on` the checkpoint itself.
 
-**Constraint — durability of routing targets.** A **symbol** `:next` persists a stringified symbol resolved via `requiring-resolve` at `choose!` time, not at compile time; renaming or removing that fn after a run has poured but before its checkpoint is chosen breaks the in-flight run. A **registered-name** `:next` persists the keyword and resolves through the registry at `choose!` time, so re-registering the name (a reload) re-points the run without breaking it — the registry is the indirection layer. Treat a raw fn symbol as part of the in-flight run's durability contract; prefer a registered name for anything that may be renamed or reloaded.
+**Constraint — durability of routing targets.** A **symbol** `:next` persists a stringified symbol resolved at `choose!` time, not at compile time; renaming or removing that Var after a run has poured but before its checkpoint is chosen breaks the in-flight run. A **registered-name** `:next` persists the keyword and resolves through the registry at `choose!` time, so re-registering the name (a reload) re-points the run without breaking it — the registry is the indirection layer. Treat a raw symbol as part of the in-flight run's durability contract; prefer a registered name for anything that may be renamed or reloaded.
 
 ### `:revise` — re-pour the run's own definition
 
-A `:revise {:params {...}}` choice is the declarative revision loop: instead of routing to a named continuation, it re-pours the **run's own** definition under the same `run-id`, with params `(merge context choice-input override-params)` where the `:revise` `:params` are authoritative and persist as the new root's `workflow/context`. It needs no hand-written revision wrapper fn. Same single-transaction cutover as `:next` (see below).
+A `:revise {:params {...}}` choice is the declarative revision loop: instead of routing to a named continuation, it re-pours the **run's own** definition under the same `run-id`, with params `(merge context choice-input override-params)` where the `:revise` `:params` are authoritative and persist as the new root's `workflow/context`. It needs no second definition to route to. Same single-transaction cutover as `:next` (see above).
 
 A root poured from a registered name revises through that **name**: the registry is resolved again at `choose!` time, so a coordinator who repointed the name revises into the replacement, and a name that has since been removed fails before any mutation rather than reviving a definition nothing points at. A root that recorded only a symbol — a Var or map start — keeps symbol-based revision. Either way the root must carry a resolvable definition (seed it via start/`opts :definition`, which routed continuations also set for their stage); `:revise` **fails loudly** when it is absent.
 
 There is no reopen/reactivate mechanism: each round is a **fresh** immutable subgraph poured under the same `run-id`, so the whole loop history stays in the graph, squashable, never mutated in place. A `:condition [:!= :revision true]` gates the work that must not repeat; on a revision round the excluded step drops out and condition splicing (§3) reattaches its dependents, so the round is ready at the first genuinely-repeatable step.
 
 ```clojure
-(workflow/register-workflow! :spec-plan 'my.ns/spec-plan-workflow)
+(workflow/register-workflow! :spec-plan 'my.ns/spec-plan)   ; the target declares :continue
 
-(defn proposal-workflow [{:keys [revision] :as _opts}]
+(s/def ::feature string?)
+(s/def ::revision boolean?)
+(s/def ::proposal-params (s/keys :req-un [::feature] :opt-un [::revision]))
+
+(workflow/defworkflow proposal
+  "Draft a proposal and hold it at sign-off."
+  {:entrypoints #{:start :continue}
+   :param-spec ::proposal-params
+   :defaults {:revision false}}
   (workflow/workflow
     "Proposal"
-    {:params {:feature (workflow/param :required true)
-              :revision (workflow/param :default (boolean revision))}}
     (workflow/step :inspect-context "Orient" :self
                    :condition [:!= :revision true])   ; skip on revise rounds
     (workflow/step :write-proposal "Write proposal" :self
@@ -474,7 +462,7 @@ That is the whole reason the two compose cleanly: returning composition stays `c
 
 An unbound defer is a legitimate published template: `describe` reports it, and it can be transformed and re-registered by whoever binds it. It cannot be registered or poured, both `:workflow/defer-unbound` — materializing it would strand the run at an exit with nowhere to go.
 
-Publication validates the bound targets against the complete staged candidate. Every target must be registered and must declare `:continue`, the same capability an authored `:next` route requires; the proposal deliberately gives worker-selected and authored continuations one capability rather than inventing a second. A defer target that resolves to a legacy constructor is refused as `:workflow/legacy-opaque` — that is a new surface with no migration to protect, so it does not inherit the compatibility carve-out `:next` still has.
+Publication validates the bound targets against the complete staged candidate. Every target must be registered and must declare `:continue`, the same capability an authored `:next` route requires; the proposal deliberately gives worker-selected and authored continuations one capability rather than inventing a second.
 
 ### `continue!` transfers the root
 
@@ -484,7 +472,7 @@ Publication validates the bound targets against the complete staged candidate. E
 
 This is a root transfer, not a step transition. `continue!` closes the current root outright and pours the selected workflow as the run's new root under the same run id; it never calls `advance!`, never resumes a caller, and never merges the old root's context. The close and the pour ride one `batch/apply!`, so a failing apply commits nothing and the run stays resumable.
 
-The allowlist is fixed when the defer pours; the name inside it resolves live. A name repointed since then continues into the replacement. A removed name, one that lost `:continue`, an opaque constructor, or params the target's `:param-spec` rejects all fail before anything closes, leaving the defer ready to retry.
+The allowlist is fixed when the defer pours; the name inside it resolves live. A name repointed since then continues into the replacement. A removed name, one that lost `:continue`, or params the target's `:param-spec` rejects all fail before anything closes, leaving the defer ready to retry.
 
 `params` are the target's own. Its `:defaults` merge under exactly what is supplied here and the merged map is validated whole against its `:param-spec` — passing no params and passing `{}` are the same request. Nothing from the parent reaches it, which is what makes a defer the cross-spool isolation boundary; a parent key the target happens to need is simply absent, and the target's spec says so.
 
@@ -494,7 +482,7 @@ The filled exit records what it continued into: `workflow/continued-workflow`, t
 
 Two reads answer what a weaver has registered. `(workflow/catalog)` lists the definitions; `(workflow/definition-view :spike)` reads one in full. Both read the effective registry at the moment you call them, so a refreshed owner partition, a repointed name, and a reloaded definition Var all show up in the next answer.
 
-Neither read runs anything a definition carries. Rendered names, titles, descriptions, and attribute values, loop sources, and spec predicates are reported as declared and never called, and no legacy constructor is invoked. That is what makes a catalogue read safe to ask for at any time, and it is also its limit: what a render function would produce for some future params is not knowable here.
+Neither read runs anything a definition carries. Rendered names, titles, descriptions, and attribute values, loop sources, and spec predicates are reported as declared and never called. That is what makes a catalogue read safe to ask for at any time, and it is also its limit: what a render function would produce for some future params is not knowable here.
 
 ### The `workflow` op is opted into
 
@@ -517,9 +505,7 @@ $ strand workflow list
  "definitions":[{"name":"build","doc":"Build an agreed feature scope.","entrypoints":["start","continue"],"definition":"acme.workflows/build"}]}
 ```
 
-The default lists definitions declaring the `:start` entrypoint, which is the question a worker starting work actually has. `--entrypoint start|continue|call` selects one capability instead, and `--all` drops the filter. Items are ordered by registered name and carry exactly four fields: name, doc, entrypoints, and definition symbol. Everything else is one `show` away, so a catalogue read stays cheap however many workflows a workspace registers.
-
-`--all` is also the only way an opaque legacy constructor appears. A constructor declares no capability, so no capability filter can match it; its catalogue entry carries an empty `entrypoints` vector and a doc saying it declares nothing. `--all` and `--entrypoint` together fail as `workflow/list-request-invalid` — they state two different intents about one read.
+The default lists definitions declaring the `:start` entrypoint, which is the question a worker starting work actually has. `--entrypoint start|continue|call` selects one capability instead. Items are ordered by registered name and carry exactly four fields: name, doc, entrypoints, and definition symbol. Everything else is one `show` away, so a catalogue read stays cheap however many workflows a workspace registers. A definition reachable only by `:continue` or `:call` is therefore absent from every one of these reads until you ask for its capability, or ask for it by name with `show`.
 
 ### `workflow show`
 
@@ -527,8 +513,7 @@ The default lists definitions declaring the `:start` entrypoint, which is the qu
 
 | Field | Contents |
 |---|---|
-| `kind`, `opaque` | `"static"`/`false` for a definition map; `"legacy"`/`true` for a constructor, whose `params` and `declared` are then both `{"kind":"opaque"}`. |
-| `params` | `{"kind":"spec"}` with the `:param-spec` identity, its live `spec-forms` graph, and `defaults`; or `{"kind":"declared"}` with the deprecated per-key declarations; or `{"kind":"none"}`. A per-key default that is a function of params is marked `"rendered": true` rather than resolved. |
+| `params` | `{"kind":"spec"}` with the `:param-spec` identity, its live `spec-forms` graph, and `defaults`; or `{"kind":"none"}` with `defaults` alone, when the definition constrains nothing. |
 | `declared` | `entry` (items waiting for nothing), `loops`, `gates`, `checkpoints` with their choice keys, `calls` with their target and how it is named, `defers` with their bound targets, and `routes` — the registered names checkpoint choices route to. |
 
 The declared summary is exactly that: a summary of what the definition declares. Loops, calls, and continuations are never expanded, because an expansion depends on params that do not exist yet and a deferred exit cannot be described before a worker fills it. Use `describe` (§6a) when you have params and want the shape they would pour.
@@ -651,7 +636,7 @@ These projections let a user (or an agent) inspect a workflow's shape, its contr
                      :input-spec {"spec" "my.ns/revise-input" "doc" "…"}}]}]}
 ```
 
-Each step carries `:id`, `:title`, `:role` (`"step"`/`"checkpoint"`/`"procedure"`, so a `call`'s procedure join shows as `:procedure`), and `:depends-on`; a conditioned step adds `:condition`, a gate adds `:gate`, and a checkpoint adds `:choices`. Each choice carries its `:key` plus any declared `:label`, `:description`, input contract (`:input-spec` with its identity and doc, or the deprecated `:input` declaration vector), and its routing target (`:next` string or `:revise` override-param map). Description stays cheap: the spec's form graph is recorded when the checkpoint pours, not here. A `:condition`-excluded step is **absent** (its dependents splice through it, §3), so the ready frontier reads straight off the description. `(describe workflow)` resolves param defaults and **fails loudly** listing any required params without a default; pass `params` otherwise.
+Each step carries `:id`, `:title`, `:role` (`"step"`/`"checkpoint"`/`"procedure"`, so a `call`'s procedure join shows as `:procedure`), and `:depends-on`; a conditioned step adds `:condition`, a gate adds `:gate`, and a checkpoint adds `:choices`. Each choice carries its `:key` plus any declared `:label`, `:description`, input contract (`:input-spec`, with its identity and doc), and its routing target (`:next` string or `:revise` override-param map). Description stays cheap: the spec's form graph is recorded when the checkpoint pours, not here. A `:condition`-excluded step is **absent** (its dependents splice through it, §3), so the ready frontier reads straight off the description. `(describe workflow)` describes what a definition's `:defaults` alone would pour, so a definition whose `:param-spec` wants more than they supply **fails loudly** against that spec; pass `params` for those.
 
 ### `run-history`
 
@@ -690,7 +675,7 @@ This table is the extension API: spools built on top of `skein.spools.workflow` 
 | `workflow/checkpoint` | Stable checkpoint id (the step's own local id). | `checkpoint` builder. |
 | `workflow/checkpoint-kind` | Decision owner: `"human"` or `"agent"` (unenforced, provenance only — TEN-002). | `checkpoint` builder, from `:kind`. |
 | `workflow/choices` | Vector of allowed choice-name strings. | `checkpoint` builder, from `:choices`. |
-| `workflow/choice-details` | Map of choice name → `{"label" .. "description" .. "next" .. "input-spec" {"spec" .. "doc" .. "spec-forms" [..]} }`. `"input-spec"` holds the whole-map input contract a choice declared, with the form graph recorded at pour; `"input"` holds the deprecated per-key declaration vector. | `checkpoint` builder, from map-form `:choices` entries; `compile` records `"spec-forms"` at pour. |
+| `workflow/choice-details` | Map of choice name → `{"label" .. "description" .. "next" .. "input-spec" {"spec" .. "doc" .. "spec-forms" [..]} }`. `"input-spec"` holds the whole-map input contract a choice declared, with the form graph recorded at pour. | `checkpoint` builder, from map-form `:choices` entries; `compile` records `"spec-forms"` at pour. |
 | `workflow/defer` | Stable defer-exit name (the step's own local id). | `defer` builder. |
 | `workflow/defer-workflows` | Vector of registered workflow names this exit allows, in registered-name order. Fixed for the run once poured; each name still resolves live at `continue!` time. | `bind-defers`. |
 | `workflow/decision-point` | Freeform label naming what the checkpoint decides (devflow convention). | Caller-supplied `:attributes`, e.g. devflow. |

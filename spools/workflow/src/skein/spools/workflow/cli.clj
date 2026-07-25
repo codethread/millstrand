@@ -13,7 +13,7 @@
 
   The op is a thin control surface (TEN-006). Every verb parses declared args
   and hands a request map to the engine function that owns the answer; the
-  semantics — live registry reads, opacity, role-aware frontier resolution,
+  semantics — live registry reads, role-aware frontier resolution,
   concurrency, refusal — belong to the engine and are documented at
   `spools/workflow.md`. Nothing here resolves a step, infers a role, or names an
   operation the engine does not.
@@ -31,13 +31,10 @@
 (defn- list-request
   "Return the engine list request for parsed `args`.
 
-  `--all` and `--entrypoint` are both absent by default, which is what selects
-  the `:start` catalogue; the request spec refuses them together rather than
-  ranking one over the other."
-  [{:keys [entrypoint all]}]
+  When `--entrypoint` is absent, the engine selects the `:start` catalogue."
+  [{:keys [entrypoint]}]
   (cond-> {}
-    entrypoint (assoc :entrypoint (keyword entrypoint))
-    all (assoc :all? true)))
+    entrypoint (assoc :entrypoint (keyword entrypoint))))
 
 (defn- carry
   "Return `request` with `args`' `flag` under `key`, when the worker supplied it.
@@ -193,13 +190,7 @@
                     {:type :string
                      :doc (fmt/reflow
                            "|Select one invocation capability: start (default),
-                            |continue, or call. Mutually exclusive with --all.")}
-                    :all
-                    {:type :boolean
-                     :doc (fmt/reflow
-                           "|Drop the capability filter, including opaque legacy
-                            |constructor entries, which declare no entrypoints
-                            |and so match no filter.")}}
+                            |continue, or call.")}}
             :annotations
             {:notes [(fmt/reflow
                       "|The catalogue is read from the live registry on every
@@ -226,8 +217,8 @@
                      (fmt/reflow
                       "|Topology-lazy and side-effect free: loops, calls, and
                        |continuations are reported as declared, never expanded,
-                       |and no constructor, render function, or spec predicate
-                       |is executed.")]}}
+                       |and no render function or spec predicate is
+                       |executed.")]}}
     "start" {:doc (fmt/reflow
                    "|Pour a registered workflow as a new run and return its
                     |opening ready frontier.")
@@ -386,8 +377,6 @@
                        :doc :string
                        :entrypoints {:type :collection :items :string}
                        :definition :string
-                       :kind :string
-                       :opaque :boolean
                        ;; The param contract and declared summary are owned by
                        ;; the engine's ::definition-view spec, which validates
                        ;; them before emission. Restating that tree in a second

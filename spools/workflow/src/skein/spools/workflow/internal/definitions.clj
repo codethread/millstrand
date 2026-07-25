@@ -5,8 +5,7 @@
   engine may use it (PROP-Wcd-001.S6/S13). A map is a *static definition*: it
   declares its own doc, entrypoints, param spec, and defaults, so the engine can
   answer what a workflow is for and how it may be invoked without executing
-  anything. A function is a *legacy constructor*: opaque, declaring nothing, and
-  usable only by trusted Clojure that already knows what it builds.
+  anything.
 
   Resolution goes through the runtime's spool classloader, because a definition
   living in a synced spool root is not on the base classpath. Resolution is also
@@ -83,20 +82,14 @@
     (or found (unresolvable! (assoc context :definition definition) nil))))
 
 (defn classify
-  "Return `{:kind :static|:legacy :value <v> :definition <sym>}` for a resolved
-  workflow Var, or fail loudly when its value is neither.
+  "Return the static definition resolved from a workflow Var.
 
-  This type dispatch is the whole compatibility story: a map is self-describing
-  and gets generic capabilities, a function is opaque and gets none."
+  Registered and direct Var definitions must resolve to a definition map."
   [definition value]
   (cond
-    (map? value) {:kind :static :value value :definition definition
+    (map? value) {:value value :definition definition
                   :entrypoints (set (:entrypoints value))}
-    ;; An opaque function declares nothing, so its capability set is empty
-    ;; rather than absent: a caller asking what it may do gets a real answer.
-    (ifn? value) {:kind :legacy :value value :definition definition
-                  :entrypoints #{}}
-    :else (fail! "Workflow definition must resolve to a definition map or a constructor function"
+    :else (fail! "Workflow definition must resolve to a static definition map"
                  {:reason :workflow/definition-invalid
                   :definition definition
                   :resolved-class (some-> value class .getName)})))
@@ -104,9 +97,10 @@
 (defn resolve-registered
   "Return the live classification of registered workflow `name`.
 
-  The result carries `:name`, `:definition` (the resolved symbol), `:kind`, and
-  `:value`. An unregistered name, an unresolvable symbol, and a symbol resolving
-  to an unusable value each fail before any caller can act on them."
+  The result carries `:name`, `:definition` (the resolved symbol), `:value`
+  (the definition map itself), and `:entrypoints`. An unregistered name, an
+  unresolvable symbol, and a symbol resolving to anything but a definition map
+  each fail before any caller can act on them."
   [rt name]
   (let [definition (registry/workflow-definition rt name)
         owner (registry/definition-owner rt name)
@@ -121,27 +115,16 @@
   [v]
   (classify (var-symbol v) @v))
 
-(defn static?
-  "True when `resolved` is a static definition map rather than a legacy
-  constructor."
-  [resolved]
-  (= :static (:kind resolved)))
-
 (defn require-entrypoint!
-  "Fail loudly unless static `resolved`, reached by registered name, declares
+  "Fail loudly unless `resolved`, reached by registered name, declares
   `entrypoint`.
 
   The registry is where the capability contract applies: a name is reached by
   callers that only know the name, so what they may do with it has to be
   declared. Trusted Clojure holding a Var or a workflow value directly is
-  already past that boundary and is not checked (TEN-002).
-
-  A legacy constructor is never checked either. It declares no capability at
-  all, so the trusted paths that predate entrypoints — constructor start,
-  raw-symbol routing, direct procedure values — keep working while shipped
-  workflows migrate; the generic worker surfaces refuse it outright instead."
+  already past that boundary and is not checked (TEN-002)."
   [resolved entrypoint]
-  (when (and (static? resolved) (:name resolved))
+  (when (:name resolved)
     (let [declared (:entrypoints resolved)]
       (when-not (contains? declared entrypoint)
         (fail! "Workflow definition does not declare this entrypoint"
@@ -152,40 +135,6 @@
                  (:name resolved) (assoc :name (:name resolved)))))))
   resolved)
 
-(defn- invoke-legacy
-  "Call a legacy constructor with `params` and return `{:workflow w :params p}`.
-
-  A constructor may return a bare workflow map, or `{:workflow w :params p}` to
-  own the params its result compiles with. Both failure modes are the
-  constructor's opacity showing through, so both name the migration to a static
-  definition as the fix: the call itself can throw, and what it returns is only
-  known to be a workflow after the fact."
-  [{:keys [name definition value]} params]
-  (let [result (try
-                 (value params)
-                 (catch Throwable throwable
-                   (fail! "Legacy workflow constructor failed"
-                          (cond-> {:reason :workflow/legacy-constructor-failed
-                                   :definition definition
-                                   :params params
-                                   :alternative "Migrate to a static spec-first definition."}
-                            name (assoc :name name))
-                          throwable)))
-        ;; A workflow map has its own `:params` key (the legacy declaration
-        ;; map), so only `:workflow` can mark the params-owning wrapper form.
-        wrapper? (and (map? result) (contains? result :workflow))
-        built (if wrapper? (:workflow result) result)]
-    (when-not (s/valid? :skein.spools.workflow/workflow built)
-      (fail! "Legacy workflow constructor returned an invalid workflow"
-             (cond-> {:reason :workflow/legacy-definition-invalid
-                      :definition definition
-                      :returned built
-                      :explain (s/explain-str :skein.spools.workflow/workflow built)
-                      :alternative "Migrate to a static spec-first definition."}
-               name (assoc :name name))))
-    {:workflow built
-     :params (if wrapper? (get result :params params) params)}))
-
 (defn definition-params
   "Return the params a static definition compiles with: its `:defaults` under
   the caller's `params`.
@@ -194,22 +143,18 @@
   and require the caller to supply the rest — so they are merged, never treated
   as a complete param map."
   [resolved params]
-  (if (static? resolved)
-    (merge (:defaults (:value resolved)) params)
-    params))
+  (merge (:defaults (:value resolved)) params))
 
 (defn validate-params!
-  "Return `params` when they satisfy static `resolved`'s `:param-spec`.
+  "Return `params` when they satisfy `resolved`'s `:param-spec`.
 
   The spec owns the *complete* merged map — defaults plus what the caller
   supplied — so it is applied after the merge and before anything compiles or
   pours. Resolution is live: a definition naming a spec that has since been
   removed fails here rather than accepting anything, and a redefined spec judges
-  the next invocation. A definition declaring no `:param-spec` is unconstrained,
-  which is what keeps the legacy per-key `:params` declaration working
-  (PROP-Wcd-001.S9)."
+  the next invocation. A definition declaring no `:param-spec` is unconstrained."
   [resolved params]
-  (if-let [param-spec (and (static? resolved) (:param-spec (:value resolved)))]
+  (if-let [param-spec (:param-spec (:value resolved))]
     (let [context (cond-> {:definition (:definition resolved) :params params}
                     (:name resolved) (assoc :name (:name resolved)))]
       (specs/require-spec! param-spec :workflow/param-spec-missing context)
@@ -219,14 +164,11 @@
 (defn build
   "Return `{:workflow w :params p}` for `resolved` and caller `params`.
 
-  A static definition *is* the workflow; only its defaults need folding in,
-  after which its `:param-spec` judges the merged map. A legacy constructor has
-  to be run to find out what it builds, and declares no spec to judge it with."
+  A definition *is* the workflow; its defaults are folded in before its
+  `:param-spec` judges the merged map."
   [resolved params]
-  (if (static? resolved)
-    {:workflow (:value resolved)
-     :params (validate-params! resolved (definition-params resolved params))}
-    (invoke-legacy resolved params)))
+  {:workflow (:value resolved)
+   :params (validate-params! resolved (definition-params resolved params))})
 
 (defn identity-attrs
   "Return the `:definition`/`:definition-name` compile opts identifying
@@ -387,7 +329,7 @@
 
   `checkpoint` stores its choices as strand attributes at build time, and a
   registered-name route is recorded there as a stringified keyword (`\":build\"`)
-  to keep it distinguishable from a raw constructor symbol."
+  to keep it distinguishable from a raw definition symbol."
   [step]
   (into #{}
         (keep (fn [[_ detail]]
@@ -401,8 +343,8 @@
 
   `:continue` and `:defer` both demand the `:continue` capability — the proposal
   deliberately gives a worker-selected exit and an authored route one capability
-  rather than inventing a second one — but they stay separate uses because only a
-  defer refuses an opaque legacy target (PROP-Wcd-001.S6/S13)."
+  rather than inventing a second one — but they stay separate uses so a failure
+  can name which one a caller took (PROP-Wcd-001.S6/S13)."
   {:continue :continue
    :defer :continue
    :call :call})
@@ -470,20 +412,9 @@
                       :target target
                       :entrypoint entrypoint
                       :registered (vec (sort (keys entry-kinds))))))
-      ;; A legacy constructor declares no entrypoints; it stays reachable by
-      ;; name while shipped workflows migrate (PROP-Wcd-001.S13 compatibility).
-      ;; A defer is the exception: nothing is registered against that surface
-      ;; yet, so it enforces the refusal S13 asks for.
-      (when (and (= :defer use) (= :legacy (:kind declared)))
-        (fail! "Workflow defer exit names an opaque legacy constructor"
-               (assoc context :reason :workflow/legacy-opaque
-                      :target target
-                      :definition-symbol (:definition declared)
-                      :alternative "Migrate the target to a static spec-first definition.")))
-      (when (and (= :call use) (= :static (:kind declared)))
+      (when (= :call use)
         (require-no-defers! (:value declared) (assoc context :target target)))
-      (when (and (= :static (:kind declared))
-                 (not (contains? (:entrypoints declared) entrypoint)))
+      (when-not (contains? (:entrypoints declared) entrypoint)
         (fail! "Workflow definition names a workflow that does not declare the required entrypoint"
                (assoc context :reason :workflow/reference-entrypoint-unsupported
                       :target target
@@ -491,25 +422,20 @@
                       :entrypoints (vec (sort (:entrypoints declared)))))))))
 
 (defn- candidate-entry
-  "Resolve one candidate entry into `{:kind … :entrypoints …}`, validating
+  "Resolve one candidate entry into `{:value … :entrypoints …}`, validating
   everything judgeable from the entry alone."
   [rt name definition owner]
   (let [context {:name name :definition definition :owner owner}
-        resolved (classify definition @(resolve-symbol rt definition context))]
-    (if (static? resolved)
-      (let [value (:value resolved)]
-        (require-valid! :skein.spools.workflow/definition value
-                        "Registered workflow definition is invalid")
-        (validate-defaults! context (:defaults value))
-        (validate-param-spec! context (:param-spec value))
-        (validate-input-specs! context value)
-        ;; A registered name is reachable, so its defers must be terminal and
-        ;; bound — the builder already refuses both, but a raw map registered
-        ;; directly never passed through it.
-        (validate-defer-topology! value)
-        (validate-defer-bindings! value context)
-        resolved)
-      resolved)))
+        resolved (classify definition @(resolve-symbol rt definition context))
+        value (:value resolved)]
+    (require-valid! :skein.spools.workflow/definition value
+                    "Registered workflow definition is invalid")
+    (validate-defaults! context (:defaults value))
+    (validate-param-spec! context (:param-spec value))
+    (validate-input-specs! context value)
+    (validate-defer-topology! value)
+    (validate-defer-bindings! value context)
+    resolved))
 
 (defn validate-candidates!
   "Validate the complete staged definition registry before publication.
@@ -530,8 +456,7 @@
                                                                (get owners name))))
                             {}
                             entries)]
-    (doseq [[name {:keys [kind value]}] resolved
-            :when (= :static kind)]
+    (doseq [[name {:keys [value]}] resolved]
       (validate-references! {:name name
                              :definition (get entries name)
                              :owner (get owners name)}

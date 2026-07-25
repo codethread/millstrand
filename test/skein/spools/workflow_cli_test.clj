@@ -65,7 +65,7 @@
    {:next-routine #{:build :fold}}))
 
 (defn legacy-spike
-  "A legacy constructor: opaque to discovery, usable only from trusted Clojure."
+  "Return a raw workflow, which registered names now refuse."
   [{:keys [scope]}]
   (workflow/workflow (str "Legacy " scope)
                      (workflow/step :work "Do the work" :self)))
@@ -95,18 +95,6 @@
    (workflow/step :conditional "Conditional" :self
                   :depends-on [:render]
                   :condition :optional)))
-
-(def per-key-params
-  "A definition declaring params the deprecated per-key way, including a
-  computed default discovery must report rather than resolve."
-  (workflow/workflow
-   "Per-key params"
-   {:doc "Declare params the deprecated per-key way."
-    :entrypoints #{:start}
-    :params {:feature (workflow/param :required true)
-             :owner (workflow/param :default "agent")
-             :stamp (workflow/param :default (fn [_params] "now"))}}
-   (workflow/step :work "Work" :self)))
 
 (defn- definition-module-source
   "Write a module source file declaring `forms` and return its workspace path."
@@ -237,34 +225,26 @@
       (is (= ["review"] (mapv :name (listed {:entrypoint "call"}))))
       (is (= ["build" "review" "spike"] (mapv :name (listed {:entrypoint "start"})))))))
 
-(deftest list-all-drops-the-filter-and-surfaces-opaque-entries
+(deftest list-has-no-all-flag
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
       (register! :fold)
-      (workflow/register-workflow! :legacy 'skein.spools.workflow-cli-test/legacy-spike)
       (is (= [] (listed))
-          "neither a continue-only definition nor an opaque constructor is startable")
+          "a continue-only definition is not startable")
       (is (= [] (listed {:entrypoint "call"}))
-          "a legacy constructor declares no capability, so no filter matches it")
-      (is (= [{:name "fold"
-               :doc "Fold a finished run back into the board."
-               :entrypoints ["continue"]
-               :definition "skein.spools.workflow-cli-test/fold"}
-              {:name "legacy"
-               :doc "Opaque legacy constructor: declares no doc, entrypoints, or param contract."
-               :entrypoints []
-               :definition "skein.spools.workflow-cli-test/legacy-spike"}]
-             (listed {:all true}))))))
+          "no call-only definitions are registered")
+      (let [parse (fn [argv]
+                    (cli-alpha/parse (:arg-spec (weaver/resolve-op rt 'workflow)) argv))]
+        (is (thrown? clojure.lang.ExceptionInfo (parse ["list" "--all"])))))))
 
-(deftest list-refuses-all-together-with-an-entrypoint
+(deftest registered-functions-are-refused-as-invalid-definitions
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (register! :build)
-      (is (= :workflow/list-request-invalid
-             (reason-of #(listed {:all true :entrypoint "start"})))
-          "--all and --entrypoint state two different intents about one read"))))
+      (is (= :workflow/definition-invalid
+             (reason-of #(workflow/register-workflow!
+                          :legacy 'skein.spools.workflow-cli-test/legacy-spike)))))))
 
 (deftest list-reads-the-registry-live
   ;; The catalogue answers from the effective registry at each call: a module
@@ -318,9 +298,7 @@
                 :name "spike"
                 :doc "Reduce uncertainty and recommend the next routine."
                 :entrypoints ["start" "continue"]
-                :definition "skein.spools.workflow-cli-test/spike"
-                :kind "static"
-                :opaque false}
+                :definition "skein.spools.workflow-cli-test/spike"}
                (dissoc view :params :declared)))
         (testing "the param contract is the live spec, its form graph, and the defaults"
           (is (= {:kind "spec"
@@ -375,21 +353,14 @@
               :routes []}
              (:declared (shown :handoff)))))))
 
-(deftest show-marks-an-opaque-legacy-entry-without-inventing-a-contract
+(deftest show-omits-the-removed-kind-and-opaque-fields
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (workflow/register-workflow! :legacy 'skein.spools.workflow-cli-test/legacy-spike)
-      (is (= {:operation "workflow show"
-              :name "legacy"
-              :doc "Opaque legacy constructor: declares no doc, entrypoints, or param contract."
-              :entrypoints []
-              :definition "skein.spools.workflow-cli-test/legacy-spike"
-              :kind "legacy"
-              :opaque true
-              :params {:kind "opaque"}
-              :declared {:kind "opaque"}}
-             (shown :legacy))))))
+      (register! :build)
+      (let [view (shown :build)]
+        (is (not (contains? view :kind)))
+        (is (not (contains? view :opaque)))))))
 
 (deftest show-fails-loudly-on-an-unregistered-name
   (with-runtime
@@ -420,18 +391,15 @@
       (is (s/valid? ::counting-params {:counted-scope "x"}))
       (is (pos? @executions) "validation is what runs a predicate"))))
 
-(deftest deprecated-per-key-params-are-reported-as-declared
+(deftest show-projects-static-defaults-and-whole-map-param-specs
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (workflow/register-workflow! :per-key 'skein.spools.workflow-cli-test/per-key-params)
-      (is (= {:kind "declared"
-              :defaults {}
-              :params {"feature" {:required true}
-                       "owner" {:required false :default "agent"}
-                       "stamp" {:required false :rendered true}}}
-             (:params (shown :per-key)))
-          "a computed default is marked rendered rather than reported as a value"))))
+      ;; :spike routes to :build, and registration validates the whole live
+      ;; registry, so the target has to be registered first
+      (register! :review :build :spike)
+      (is (= {:prototype-targets ["compact queue"]}
+             (get-in (shown :spike) [:params :defaults]))))))
 
 ;; --- op wiring --------------------------------------------------------------
 
@@ -440,12 +408,11 @@
     (fn [rt _]
       (activate-cli! rt)
       (register! :build :review :spike)
-      (workflow/register-workflow! :legacy 'skein.spools.workflow-cli-test/legacy-spike)
-      (let [list-result (cli/workflow-op {:op/args {:subcommand ["list"] :all true}})]
+      (let [list-result (cli/workflow-op {:op/args {:subcommand ["list"]}})]
         (is (= "workflow list" (:operation list-result)))
         (test-alpha/check-op-return! rt 'workflow {:subcommand ["list"]}
                                      (wire-value list-result)))
-      (doseq [target [:spike :legacy]]
+      (doseq [target [:spike]]
         (test-alpha/check-op-return! rt 'workflow {:subcommand ["show"]}
                                      (wire-value (shown target)))))))
 
@@ -460,12 +427,12 @@
             parse (fn [argv] (cli-alpha/parse arg-spec argv))]
         (is (= {:subcommand ["list"]} (parse ["list"])))
         (is (= {:subcommand ["list"] :entrypoint "call"} (parse ["list" "--entrypoint" "call"])))
-        (is (= {:subcommand ["list"] :all true} (parse ["list" "--all"])))
         (is (= {:subcommand ["show"] :workflow "spike"} (parse ["show" "spike"])))
         (is (= ["review"] (mapv :name (listed (parse ["list" "--entrypoint" "call"])))))
         (is (= "spike" (:name (cli/workflow-op {:op/args (parse ["show" "spike"])}))))
         (testing "the parser refuses what the surface does not declare"
           (is (thrown? clojure.lang.ExceptionInfo (parse ["show"])))
+          (is (thrown? clojure.lang.ExceptionInfo (parse ["list" "--all"])))
           (is (thrown? clojure.lang.ExceptionInfo (parse ["list" "--limit" "5"])))
           (is (thrown? clojure.lang.ExceptionInfo (parse ["start" "run-1"]))))))))
 

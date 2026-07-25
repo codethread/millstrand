@@ -29,16 +29,8 @@
 (def definition-kind
   "Kind id for the workflow-name -> definition-symbol registry.
 
-  The id still reads `constructor` because the kind is the same one legacy
-  constructor entries have always used: a registered symbol now resolves to
-  either a static definition map or a legacy constructor fn, and the resolved
-  value decides which (PROP-Wcd-001.S13)."
-  :skein.spools.workflow/constructor)
-
-(def constructor-kind
-  "Deprecated alias for `definition-kind`, retained so in-flight spool
-  contributions naming the old var keep publishing to the same kind."
-  definition-kind)
+  A registered symbol resolves to a static definition map."
+  :skein.spools.workflow/definition)
 
 (def executor-kind
   "Kind id for the gate-waiter -> stall-predicate-symbol registry."
@@ -80,7 +72,7 @@
   "Return `rt`'s workflow registry handle, materializing it on first use.
 
   The handle is a direct `spool-state` value so the refresh kernel discovers its
-  constructor and executor kinds. Realizing it also declares the kinds, so a
+  definition and executor kinds. Realizing it also declares the kinds, so a
   module contribution naming them finds them already declared."
   [rt]
   (runtime/spool-state rt ::registry

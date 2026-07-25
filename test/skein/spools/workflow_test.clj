@@ -48,9 +48,6 @@
                              (str prefix feature)))
             definition (workflow/workflow
                         (with-feature "Ship ")
-                        {:params {:feature (workflow/param :required true)
-                                  :owner (workflow/param :default "agent")
-                                  :include-review (workflow/param :default true)}}
                         (workflow/step :design (with-feature "Design ") :self
                                        :attributes {:owner (fn [{:keys [owner]}] owner)})
                         (workflow/step :implement (with-feature "Implement ") :self
@@ -58,7 +55,9 @@
                         (workflow/step :review (with-feature "Review ") :self
                                        :depends-on [:implement]
                                        :condition :include-review))
-            result (workflow/pour! definition {:feature "workflow spool"})
+            result (workflow/pour! definition {:feature "workflow spool"
+                                               :owner "agent"
+                                               :include-review true})
             root-id (workflow/molecule-id result)
             root (repl/strand root-id)
             subgraph (graph/subgraph rt [root-id])]
@@ -69,15 +68,13 @@
         (is (= 3 (count (filter #(= "parent-of" (:edge_type %)) (:edges subgraph)))))))))
 
 (deftest workflow-spool-inlines-procedure-calls
-  (let [review (fn [_]
-                 (workflow/workflow
-                  "Review"
-                  {:params {:artifact (workflow/param :required true)}}
-                  (workflow/step :inspect
-                                 (fn [{:keys [artifact]}] (str "Inspect " artifact)) :self)
-                  (workflow/step :write-review
-                                 (fn [{:keys [artifact]}] (str "Write review for " artifact)) :self
-                                 :depends-on [:inspect])))
+  (let [review (workflow/workflow
+                "Review"
+                (workflow/step :inspect
+                               (fn [{:keys [artifact]}] (str "Inspect " artifact)) :self)
+                (workflow/step :write-review
+                               (fn [{:keys [artifact]}] (str "Write review for " artifact)) :self
+                               :depends-on [:inspect]))
         definition (workflow/workflow
                     "Procedure demo"
                     (workflow/step :write-artifact "Write artifact" :self)
@@ -97,15 +94,18 @@
     (is (contains? edges [:review-artifact :review-artifact--write-review "depends-on"]))
     (is (contains? edges [:continue :review-artifact "depends-on"]))))
 
-(defn- toastie-quality-workflow [_]
+(workflow/defworkflow toastie-quality-workflow
+  "Check toastie quality."
+  {:entrypoints #{:call}}
   (workflow/workflow
    "Toastie quality check"
    (workflow/step :inspect "Check toastie melt and crunch" :self)))
 
-(defn- toastie-serve-workflow [{:keys [filling]}]
+(workflow/defworkflow toastie-serve-workflow
+  "Serve a toastie."
+  {:entrypoints #{:continue}}
   (workflow/workflow
-   (str "Serve " filling " toastie")
-   {:params {:filling (workflow/param :required true)}}
+   (fn [{:keys [filling]}] (str "Serve " filling " toastie"))
    (workflow/step :plate (fn [{:keys [filling]}] (str "Plate " filling " toastie")) :self)))
 
 (deftest workflow-spool-runtime-drives-toastie-demo
@@ -113,9 +113,8 @@
     (fn [_rt _]
       (let [toastie (workflow/workflow
                      (fn [{:keys [filling]}] (str "Make " filling " toastie"))
-                     {:params {:filling (workflow/param :required true)}}
                      (workflow/step :butter-bread "Butter bread" :self)
-                     (workflow/call :quality toastie-quality-workflow {}
+                     (workflow/call :quality #'toastie-quality-workflow {}
                                     :depends-on [:butter-bread])
                      (workflow/checkpoint :choose-finish "Choose toastie finish"
                                           :depends-on [:quality]
@@ -177,10 +176,10 @@
   {:instruction "workflow/instruction"
    :skills "skills"})
 
-(defn- bind-attrs
-  "Merge the binding for action-ref into canonical step attributes, failing
-  loudly (TEN-003) on an unbound action or a key outside the binding
-  vocabulary — a typo in user bindings must not yield a silently bare step."
+(defn- action-binding
+  "Return the binding for `action-ref`, failing loudly (TEN-003) on an unbound
+  action or a key outside the binding vocabulary — a typo in user bindings must
+  not yield a silently bare step."
   [bindings action-ref]
   (let [bindings (or bindings github-pr-bindings)
         bound (or (get bindings action-ref)
@@ -190,86 +189,105 @@
       (throw (ex-info "Unknown binding keys"
                       {:action-ref action-ref :unknown (vec unknown)
                        :allowed (vec (keys binding-attr-keys))})))
-    (merge {"workflow/action-ref" (name action-ref)}
-           (into {} (map (fn [[k v]] [(binding-attr-keys k) v])) bound))))
+    bound))
 
-(defn- pr-ci-round-workflow [{:keys [bindings] :as _opts}]
+(defn- bound
+  "Return `action-ref`'s step attributes: its semantic name, plus one render fn
+  per binding field.
+
+  The attribute keys are fixed by the vocabulary and the values arrive from the
+  `:bindings` param at render time, which is what lets one static definition
+  serve every forge — nothing about the binding set is decided when the
+  definition is written."
+  [action-ref]
+  (into {"workflow/action-ref" (name action-ref)}
+        (map (fn [[field attr]]
+               [attr (fn [{:keys [bindings]}]
+                       (get (action-binding bindings action-ref) field))]))
+        binding-attr-keys))
+
+(workflow/defworkflow pr-ci-round
+  "Wait for CI, then judge the result."
+  {:entrypoints #{:continue :call} :defaults {}}
   (workflow/workflow
    (fn [{:keys [feature]}] (str "CI round for " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/gate :ci-wait (fn [{:keys [feature]}] (str "Wait for CI on " feature)) :ci
-                  :attributes (bind-attrs bindings :pr.ci.wait))
+                  :attributes (bound :pr.ci.wait))
    (workflow/checkpoint :ci-verdict "Judge CI result"
                         :depends-on [:ci-wait]
                         :kind :agent
                         :choices [{:key :green
                                    :label "CI green"
                                    :description "All checks passed; hand off to review."
-                                   :next 'skein.spools.workflow-test/pr-review-round-workflow}
+                                   :next 'skein.spools.workflow-test/pr-review-round}
                                   {:key :red
                                    :label "CI red"
                                    :description "Checks failed; run the fix-CI loop."
-                                   :next 'skein.spools.workflow-test/pr-fix-ci-workflow}])))
+                                   :next 'skein.spools.workflow-test/pr-fix-ci}])))
 
-(defn- pr-fix-ci-workflow [{:keys [bindings] :as _opts}]
+(workflow/defworkflow pr-fix-ci
+  "Diagnose and push a CI fix, then re-run the CI round."
+  {:entrypoints #{:continue} :defaults {}}
   (workflow/workflow
    (fn [{:keys [feature]}] (str "Fix CI for " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/step :diagnose "Diagnose CI failure" :self
-                  :attributes (bind-attrs bindings :pr.ci.fix))
+                  :attributes (bound :pr.ci.fix))
    (workflow/step :push-fix "Push CI fix" :self :depends-on [:diagnose])
-   (workflow/call :ci-round pr-ci-round-workflow {} :depends-on [:push-fix])))
+   (workflow/call :ci-round #'pr-ci-round {} :depends-on [:push-fix])))
 
-(defn- pr-review-round-workflow [{:keys [bindings] :as _opts}]
+(workflow/defworkflow pr-review-round
+  "Wait for reviewer feedback, then judge the review outcome."
+  {:entrypoints #{:continue} :defaults {}}
   (workflow/workflow
    (fn [{:keys [feature]}] (str "Review round for " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/gate :review-wait
                   (fn [{:keys [feature]}] (str "Wait for reviewer feedback on " feature))
                   :human
-                  :attributes (bind-attrs bindings :pr.review.wait))
+                  :attributes (bound :pr.review.wait))
    (workflow/checkpoint :review-verdict "Judge review outcome"
                         :depends-on [:review-wait]
                         :kind :agent
                         :choices [{:key :approved
                                    :label "Approved"
                                    :description "All green and approved; merge."
-                                   :next 'skein.spools.workflow-test/pr-merge-workflow}
+                                   :next 'skein.spools.workflow-test/pr-merge}
                                   {:key :changes-requested
                                    :label "Changes requested"
                                    :description "Address comments, push, and re-run CI."
-                                   :next 'skein.spools.workflow-test/pr-fix-and-push-workflow}])))
+                                   :next 'skein.spools.workflow-test/pr-fix-and-push}])))
 
-(defn- pr-fix-and-push-workflow [{:keys [bindings] :as _opts}]
+(workflow/defworkflow pr-fix-and-push
+  "Address review comments, then re-run the CI round."
+  {:entrypoints #{:continue} :defaults {}}
   (workflow/workflow
    (fn [{:keys [feature]}] (str "Address review feedback for " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/step :address-comments "Address review comments" :self
-                  :attributes (bind-attrs bindings :pr.review.address))
-   (workflow/call :ci-round pr-ci-round-workflow {} :depends-on [:address-comments])))
+                  :attributes (bound :pr.review.address))
+   (workflow/call :ci-round #'pr-ci-round {} :depends-on [:address-comments])))
 
-(defn- pr-merge-workflow [{:keys [bindings] :as _opts}]
+(workflow/defworkflow pr-merge
+  "Merge the approved change."
+  {:entrypoints #{:continue} :defaults {}}
   (workflow/workflow
    (fn [{:keys [feature]}] (str "Merge " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/step :merge (fn [{:keys [feature]}] (str "Merge " feature)) :self
-                  :attributes (bind-attrs bindings :pr.merge))))
+                  :attributes (bound :pr.merge))))
 
-(defn- pr-dev-workflow [{:keys [bindings] :as _opts}]
+(workflow/defworkflow pr-dev
+  "Implement a change, open it for review, and enter the CI round."
+  {:entrypoints #{:start} :defaults {}}
   (workflow/workflow
    (fn [{:keys [feature]}] (str "Pull request: " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/step :dev (fn [{:keys [feature]}] (str "Implement " feature)) :self)
    (workflow/step :open "Open the change for review" :self :depends-on [:dev]
-                  :attributes (bind-attrs bindings :pr.open))
-   (workflow/call :ci-round pr-ci-round-workflow {} :depends-on [:open])))
+                  :attributes (bound :pr.open))
+   (workflow/call :ci-round #'pr-ci-round {} :depends-on [:open])))
 
 (deftest workflow-models-pull-request-flow-without-conditional-edges
   (with-runtime
     (fn [_rt _]
-      (workflow/start! "pr-flow" (pr-dev-workflow {}) {:feature "pr-42"}
+      (workflow/start! "pr-flow" #'pr-dev {:feature "pr-42"}
                        {:family "pull-request"
-                        :definition 'skein.spools.workflow-test/pr-dev-workflow
                         :context {:feature "pr-42"}})
       (is (= "Implement pr-42" (:title (workflow/ready-step "pr-flow"))))
       (is (= "Open the change for review" (:title (first (:ready (workflow/complete! "pr-flow"))))))
@@ -314,7 +332,7 @@
   (with-runtime
     (fn [_rt _]
       ;; reference run: no bindings passed, the github reference applies
-      (workflow/start! "pr-forge-ref" (pr-dev-workflow {}) {:feature "ref-feat"}
+      (workflow/start! "pr-forge-ref" #'pr-dev {:feature "ref-feat"}
                        {:family "pull-request" :context {:feature "ref-feat"}})
       (workflow/complete! "pr-forge-ref")
       (let [open-step (workflow/ready-step "pr-forge-ref")]
@@ -326,7 +344,7 @@
         (is (= "ci-watch" (:skills gate))))
       ;; gitlab run: the same untouched definitions, driven by user-supplied
       ;; pure-data overrides passed through params and context
-      (workflow/start! "pr-forge-gl" (pr-dev-workflow {:bindings gitlab-pr-bindings})
+      (workflow/start! "pr-forge-gl" #'pr-dev
                        {:feature "gl-feat" :bindings gitlab-pr-bindings}
                        {:family "pull-request"
                         :context {:feature "gl-feat" :bindings gitlab-pr-bindings}})
@@ -558,7 +576,9 @@
           (is (= "closed" (:state closed)))
           (is (= "agent-driver" (get-in closed [:attributes :workflow/outcome-by]))))))))
 
-(defn- empty-continuation-workflow [_]
+(workflow/defworkflow empty-continuation-workflow
+  "Finish a routed run without new work."
+  {:entrypoints #{:continue}}
   (workflow/workflow "Empty continuation"))
 
 (deftest workflow-routed-choice-closes-workless-continuation-run
@@ -575,7 +595,9 @@
         (is (true? (workflow/done? "route-to-empty")))
         (is (nil? (workflow/current-root "route-to-empty")))))))
 
-(defn- routed-continuation-workflow [_]
+(workflow/defworkflow routed-continuation-workflow
+  "Continue a routed run."
+  {:entrypoints #{:continue}}
   (workflow/workflow
    "Continuation"
    (workflow/step :follow-up "Do follow up work" :self)))
@@ -616,10 +638,14 @@
           (is (= "approved" (get-in strand [:attributes :workflow/outcome])))
           (is (= "agent:reviewer" (get-in strand [:attributes :workflow/outcome-by]))))))))
 
-(defn- loopy-workflow [{:keys [revision]}]
+(defn- loopy-body
+  "The shared body of the loopy stage and its revision round.
+
+  Both are the same steps under different defaults, which is what a revision
+  round IS now that a definition carries its own defaults."
+  []
   (workflow/workflow
    "Loopy"
-   {:params {:revision (workflow/param :default (boolean revision))}}
    (workflow/step :orient "Orient" :self :condition [:!= :revision true])
    (workflow/step :work "Do work" :self :depends-on [:orient])
    (workflow/checkpoint :signoff "Sign off"
@@ -628,40 +654,47 @@
                         :choices [{:key :approved :label "Approve"}
                                   {:key :revise
                                    :label "Revise"
-                                   :next 'skein.spools.workflow-test/loopy-revision-workflow}])))
+                                   :next 'skein.spools.workflow-test/loopy-revision}])))
 
-(defn- loopy-revision-workflow [opts]
-  (loopy-workflow (assoc opts :revision true)))
+(workflow/defworkflow loopy
+  "A stage whose sign-off can route into a revision round."
+  {:entrypoints #{:start :continue} :defaults {}}
+  (loopy-body))
+
+(workflow/defworkflow loopy-revision
+  "The revision round of `loopy`: the same steps with :revision already true."
+  {:entrypoints #{:continue} :defaults {:revision true}}
+  (loopy-body))
 
 (deftest workflow-start-accepts-var-and-defaults-durable-context
   (with-runtime
     (fn [_rt _]
-      (workflow/start! "var-start" #'loopy-workflow {:revision :yes})
+      (workflow/start! "var-start" #'loopy {:revision :yes})
       (let [root (workflow/current-root "var-start")]
-        (is (= "skein.spools.workflow-test/loopy-workflow"
+        (is (= "skein.spools.workflow-test/loopy"
                (get-in root [:attributes :workflow/definition])))
         (is (= {:revision "yes"}
                (get-in root [:attributes :workflow/context]))))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"pass :context explicitly"
-                            (workflow/start! "bad-context" #'loopy-workflow {:f identity})))
+                            (workflow/start! "bad-context" #'loopy {:f identity})))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-finite numbers are not JSON-safe"
-                            (workflow/start! "nan-context" #'loopy-workflow {:n ##NaN})))
+                            (workflow/start! "nan-context" #'loopy {:n ##NaN})))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-finite numbers are not JSON-safe"
-                            (workflow/start! "inf-context" #'loopy-workflow {:n ##Inf}))))))
+                            (workflow/start! "inf-context" #'loopy {:n ##Inf}))))))
 
 (deftest workflow-start-accepts-registered-keyword
   (with-runtime
     (fn [_rt _]
-      (workflow/register-workflow! :loopy-test 'skein.spools.workflow-test/loopy-workflow)
+      (workflow/register-workflow! :loopy-test 'skein.spools.workflow-test/loopy)
       (workflow/start! "keyword-start" :loopy-test {})
-      (is (= "skein.spools.workflow-test/loopy-workflow"
+      (is (= "skein.spools.workflow-test/loopy"
              (get-in (workflow/current-root "keyword-start") [:attributes :workflow/definition])))
       (is (= "Orient" (:title (workflow/ready-step "keyword-start")))))))
 
 (deftest workflow-describe-accepts-registered-keyword
   (with-runtime
     (fn [_rt _]
-      (workflow/register-workflow! :loopy-describe 'skein.spools.workflow-test/loopy-workflow)
+      (workflow/register-workflow! :loopy-describe 'skein.spools.workflow-test/loopy)
       (is (= "Loopy" (:name (workflow/describe :loopy-describe {})))))))
 
 (deftest workflow-start-and-describe-reject-unknown-registered-keyword
@@ -679,7 +712,7 @@
     (fn [_rt _]
       (is (= [{:title "Orient" :role "step"}]
              (mapv #(select-keys % [:title :role])
-                   (:ready (workflow/start! "loopy" (loopy-workflow {}) {})))))
+                   (:ready (workflow/start! "loopy" #'loopy {})))))
       (is (= [{:title "Do work" :role "step"}]
              (mapv #(select-keys % [:title :role]) (:ready (workflow/complete! "loopy")))))
       (is (= [{:title "Sign off" :role "checkpoint"}]
@@ -707,7 +740,7 @@
 (deftest workflow-routed-choose-failure-keeps-run-resumable
   (with-runtime
     (fn [_rt _]
-      (workflow/start! "loopy-fail" (loopy-workflow {}) {})
+      (workflow/start! "loopy-fail" #'loopy {})
       (workflow/complete! "loopy-fail")
       (workflow/complete! "loopy-fail")
       (let [old-root-id (:id (workflow/current-root "loopy-fail"))
@@ -801,7 +834,7 @@
 (deftest workflow-builders-reject-unknown-option-keys
   (testing "each builder and the choice map fail loudly on a mistyped option key"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow option keys"
-                          (workflow/param :requird true)))
+                          (workflow/workflow "W" {:param {:x true}} (workflow/step :a "A" :self))))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow option keys"
                           (workflow/step :a "A" :self :depend-on [:b])))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow option keys"
@@ -859,12 +892,14 @@
     (is (= "step" (get-in strand [:attributes "workflow/role"])))
     (is (not (contains? (:attributes strand) "workflow/gate")))))
 
-(defn- cyclic-procedure-workflow [_params]
+(workflow/defworkflow cyclic-procedure
+  "A procedure that calls itself, to prove expansion refuses a cycle."
+  {:entrypoints #{:call}}
   (workflow/workflow "Cyclic procedure"
                      (workflow/step :work "Do work" :self)
                      ;; recursive edge by symbol while the entry call passes the
-                     ;; fn value: both must canonicalize to one identity
-                     (workflow/call :again 'skein.spools.workflow-test/cyclic-procedure-workflow {}
+                     ;; Var: both must canonicalize to one identity
+                     (workflow/call :again 'skein.spools.workflow-test/cyclic-procedure {}
                                     :depends-on [:work])))
 
 (deftest workflow-compile-fails-loudly-on-cyclic-procedure-call
@@ -874,7 +909,7 @@
                         #"Workflow procedure call is cyclic"
                         (workflow/compile
                          (workflow/workflow "Cyclic root"
-                                            (workflow/call :outer cyclic-procedure-workflow {}))))))
+                                            (workflow/call :outer #'cyclic-procedure {}))))))
 
 (deftest workflow-compile-resolves-symbol-procedures
   (let [payload (workflow/compile
@@ -903,12 +938,10 @@
     (is (= keyworded stringed))))
 
 (deftest workflow-spool-fails-loudly-on-bad-definitions
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"required params"
-                        (workflow/compile {:name "Missing" :params {:x {:required true}} :steps []})))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow definition"
-                        (workflow/compile {:name "Bad params" :params {"x" {:required true}} :steps []})))
+                        (workflow/compile {:name "Bad steps" :steps {:not "a vector"}})))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow definition"
-                        (workflow/compile {:name "Bad param def" :params {:x {:required "yes"}} :steps []})))
+                        (workflow/compile {:name "Bad attributes" :attributes [] :steps []})))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow params"
                         (workflow/compile {:name "Bad params" :steps []} {"x" true})))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"step ids must be unique"
@@ -980,60 +1013,57 @@
 (deftest workflow-loop-steps-render-item-index-and-params
   (let [definition (workflow/workflow
                     "Loop render"
-                    {:params {:feature (workflow/param :required true)
-                              :envs (workflow/param :default [:dev :prod])}}
                     (workflow/step :deploy
                                    (fn [{:keys [feature item i]}]
                                      (str "Deploy " feature " to " (name item) " #" i)) :self
                                    :loop {:each :envs}))
-        titles (into {} (map (juxt :ref :title)) (:strands (workflow/compile definition {:feature "checkout"})))]
+        titles (into {} (map (juxt :ref :title)) (:strands (workflow/compile definition {:feature "checkout"
+                                                                                         :envs [:dev :prod]})))]
     (is (= "Deploy checkout to dev #0" (get titles :deploy-1)))
     (is (= "Deploy checkout to prod #1" (get titles :deploy-2)))))
 
 (deftest workflow-loop-each-accepts-param-keyword-and-fn-of-params
   (let [from-keyword (workflow/workflow
                       "Each keyword"
-                      {:params {:regions (workflow/param :default ["us" "eu"])}}
                       (workflow/step :ship (fn [{:keys [item]}] (str "Ship " item)) :self :loop {:each :regions}))
         from-fn (workflow/workflow
                  "Each fn"
-                 {:params {:regions (workflow/param :default ["us" "eu"])}}
                  (workflow/step :ship (fn [{:keys [item]}] (str "Ship " item)) :self
-                                :loop {:each (fn [{:keys [regions]}] (reverse regions))}))]
-    (is (= #{:molecule :ship-1 :ship-2} (set (map :ref (:strands (workflow/compile from-keyword))))))
+                                :loop {:each (fn [{:keys [regions]}] (reverse regions))}))
+        regions {:regions ["us" "eu"]}]
+    (is (= #{:molecule :ship-1 :ship-2}
+           (set (map :ref (:strands (workflow/compile from-keyword regions))))))
     (is (= ["Ship us" "Ship eu"]
-           (mapv :title (rest (:strands (workflow/compile from-keyword))))))
+           (mapv :title (rest (:strands (workflow/compile from-keyword regions))))))
     (is (= ["Ship eu" "Ship us"]
-           (mapv :title (rest (:strands (workflow/compile from-fn))))))))
+           (mapv :title (rest (:strands (workflow/compile from-fn regions))))))))
 
 (deftest workflow-loop-each-fails-loudly-on-non-sequential-param
   (let [definition (workflow/workflow
                     "Bad each"
-                    {:params {:n (workflow/param :default 5)}}
                     (workflow/step :s "S" :self :loop {:each :n}))]
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #":each must resolve to a sequential"
-                          (workflow/compile definition)))))
+                          (workflow/compile definition {:n 5})))))
 
 (deftest workflow-loop-suffix-rules
   (let [count-def (workflow/workflow "Count" (workflow/step :ping "Ping" :self :loop {:count 3}))
         map-def (workflow/workflow
                  "Map ids"
-                 {:params {:tasks (workflow/param :default [{:id "alpha"} {:id "beta"}])}}
                  (workflow/step :run (fn [{:keys [item]}] (str "Run " (:id item))) :self :loop {:each :tasks}))
         position-def (workflow/workflow
                       "Positions"
                       (workflow/step :s (fn [{:keys [item]}] (str "S " item)) :self :loop {:each ["x" "y"]}))]
     (is (= [:molecule :ping-1 :ping-2 :ping-3] (map :ref (:strands (workflow/compile count-def)))))
-    (is (= [:molecule :run-alpha :run-beta] (map :ref (:strands (workflow/compile map-def)))))
+    (is (= [:molecule :run-alpha :run-beta]
+           (map :ref (:strands (workflow/compile map-def {:tasks [{:id "alpha"} {:id "beta"}]})))))
     (is (= [:molecule :s-1 :s-2] (map :ref (:strands (workflow/compile position-def)))))))
 
 (deftest workflow-loop-fans-in-base-id-dependents
   (let [definition (workflow/workflow
                     "Fan in"
-                    {:params {:shards (workflow/param :default ["a" "b" "c"])}}
                     (workflow/step :migrate (fn [{:keys [item]}] (str "Migrate " item)) :self :loop {:each :shards})
                     (workflow/step :verify "Verify migrations" :self :depends-on [:migrate]))
-        payload (workflow/compile definition)
+        payload (workflow/compile definition {:shards ["a" "b" "c"]})
         refs (set (map :ref (:strands payload)))
         edges (set (map (juxt :from :to :type) (:edges payload)))]
     (is (= #{:molecule :migrate-1 :migrate-2 :migrate-3 :verify} refs))
@@ -1046,11 +1076,10 @@
 (deftest workflow-loop-does-not-mask-unknown-depends-on-refs
   (let [definition (workflow/workflow
                     "Loop plus typo"
-                    {:params {:shards (workflow/param :default ["a" "b"])}}
                     (workflow/step :migrate "Migrate" :self :loop {:each :shards})
                     (workflow/step :verify "Verify" :self :depends-on [:migrate :migrat]))]
     (try
-      (workflow/compile definition)
+      (workflow/compile definition {:shards ["a" "b"]})
       (is false "expected compile to throw")
       (catch clojure.lang.ExceptionInfo e
         (is (= :verify (:step (ex-data e))))
@@ -1061,36 +1090,34 @@
   ;; be rejected before it can silently misroute a dependency.
   (let [dup-base (workflow/workflow
                   "Dup base"
-                  {:params {:xs (workflow/param :default ["a" "b"])}}
                   (workflow/step :run "Run once" :self :loop {:each :xs})
                   (workflow/step :run "Run again" :self :loop {:count 3}))
         base-vs-plain (workflow/workflow
                        "Base vs plain"
-                       {:params {:xs (workflow/param :default ["a" "b"])}}
                        (workflow/step :run "Loop" :self :loop {:each :xs})
                        (workflow/step :run "Plain" :self))
         base-vs-root (workflow/workflow
                       "Base vs root"
-                      {:params {:xs (workflow/param :default ["a" "b"])}}
-                      (workflow/step :molecule "Steal root" :self :loop {:each :xs}))]
+                      (workflow/step :molecule "Steal root" :self :loop {:each :xs}))
+        xs {:xs ["a" "b"]}]
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"step ids must be unique"
-                          (workflow/compile dup-base)))
+                          (workflow/compile dup-base xs)))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"step ids must be unique"
-                          (workflow/compile base-vs-plain)))
+                          (workflow/compile base-vs-plain xs)))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"collides with the root ref"
-                          (workflow/compile base-vs-root)))))
+                          (workflow/compile base-vs-root xs)))))
 
 (deftest workflow-loop-chain-depends-through-expansions-and-keeps-base-fan-in
   (let [definition (workflow/workflow
                     "Chain"
-                    {:params {:tasks (workflow/param :default [{:id "a"} {:id "b"} {:id "c"}])}}
                     (workflow/step :prep "Prep" :self)
                     (workflow/step :task (fn [{:keys [item]}] (str "Task " (:id item))) :self
                                    :depends-on [:prep]
                                    :loop {:each :tasks :chain true})
                     (workflow/step :accept "Accept" :self :depends-on [:task]))
-        edges (set (map (juxt :from :to :type) (:edges (workflow/compile definition))))
-        described (into {} (map (juxt :id identity)) (:steps (workflow/describe definition)))]
+        tasks {:tasks [{:id "a"} {:id "b"} {:id "c"}]}
+        edges (set (map (juxt :from :to :type) (:edges (workflow/compile definition tasks))))
+        described (into {} (map (juxt :id identity)) (:steps (workflow/describe definition tasks)))]
     (is (contains? edges [:task-a :prep "depends-on"]))
     (is (contains? edges [:task-b :task-a "depends-on"]))
     (is (contains? edges [:task-c :task-b "depends-on"]))
@@ -1110,11 +1137,9 @@
   ;; through the fanned-in (now excluded) ids onto their own deps.
   (let [definition (workflow/workflow
                     "Loop conditions"
-                    {:params {:shards (workflow/param :default ["a" "b"])
-                              :do-migrate (workflow/param :default false)}}
                     (workflow/step :migrate "Migrate" :self :loop {:each :shards} :condition :do-migrate)
                     (workflow/step :verify "Verify" :self :depends-on [:migrate]))
-        payload (workflow/compile definition)
+        payload (workflow/compile definition {:shards ["a" "b"] :do-migrate false})
         refs (set (map :ref (:strands payload)))
         edges (set (map (juxt :from :to :type) (:edges payload)))]
     (is (= #{:molecule :verify} refs))
@@ -1151,75 +1176,44 @@
                                                  :attributes {"workflow/role" "step"}})
                             :run-id)))))))
 
-(defn- input-checkpoint-workflow [_]
-  (workflow/workflow
-   "Input gate"
-   (workflow/checkpoint :gate "Decide"
-                        :kind :agent
-                        :choices [{:key :abort
-                                   :label "Abort"
-                                   :input [{:key :reason :required true :description "Why abort"}
-                                           {:key :note :required false}]}])))
+(deftest workflow-choice-input-rejects-the-removed-vector-declaration
+  ;; A choice input names one whole-map spec. The per-key vector is gone, so the
+  ;; builder refuses it through the public ::choices grammar with explain data
+  ;; naming both spec-first shapes it would have accepted (TEN-003).
+  (let [data (ex-data (try
+                        (workflow/checkpoint :gate "Decide"
+                                             :choices [{:key :abort
+                                                        :input [{:key :reason :required true}]}])
+                        (catch clojure.lang.ExceptionInfo e e)))
+        paths (set (map :path (::s/problems (:explain data))))]
+    (is (= :skein.spools.workflow/choices (::s/spec (:explain data))))
+    (is (contains? paths [:declaration :input :spec])
+        "the qualified-keyword spec form is offered")
+    (is (contains? paths [:declaration :input :declaration])
+        "the {:spec :doc} declaration form is offered")))
 
-(deftest workflow-choice-input-surfaced-and-enforced
-  (with-runtime
-    (fn [_rt _]
-      (workflow/start! "input-run" (input-checkpoint-workflow {}) {})
-      ;; the declaration is surfaced with the choice details, string-keyed
-      (is (= [{"key" "reason" "required" true "description" "Why abort"}
-              {"key" "note" "required" false}]
-             (get (workflow/choice-detail "input-run" :abort) "input")))
-      (let [gate-id (:id (workflow/ready-step "input-run"))]
-        ;; a missing required key fails loudly before any mutation, carrying the
-        ;; declaration in ex-data, and the checkpoint stays active
-        (try
-          (workflow/choose! "input-run" :abort {})
-          (is false "expected choose! to fail on missing required input")
-          (catch clojure.lang.ExceptionInfo e
-            (is (re-find #"missing required keys" (ex-message e)))
-            (is (= ["reason"] (:missing (ex-data e))))
-            (is (seq (:input-declaration (ex-data e))))))
-        (is (= "active" (:state (repl/strand gate-id))))
-        ;; supplying the required key succeeds and closes the run
-        (is (= {:ready [] :done true}
-               (workflow/choose! "input-run" :abort {:reason "cancelled"})))))))
+(deftest workflow-choice-input-accepts-both-spec-first-shapes
+  (doseq [input [::approval-input {:spec ::approval-input :doc "Why"}]]
+    (is (some? (workflow/checkpoint :gate "Decide"
+                                    :choices [{:key :approve :input input}]))
+        (pr-str input))))
 
-(deftest workflow-choice-input-rejects-unknown-declaration-keys
+(deftest workflow-choice-input-rejects-a-spec-declaration-with-unknown-keys
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow option keys"
                         (workflow/checkpoint :gate "Decide"
                                              :choices [{:key :abort
-                                                        :input [{:key :reason :requird true}]}]))))
+                                                        :input {:spec ::approval-input
+                                                                :doccc "typo"}}]))))
 
-(deftest workflow-choice-input-declaration-validates-required-and-description
-  ;; the public ::choices spec is the grammar the builder enforces, so a
-  ;; malformed field type fails there with explain data (TEN-003)
+(deftest workflow-choice-input-rejects-an-unqualified-spec-name
+  ;; a spec identity must be resolvable, so a bare keyword is not one
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow checkpoint choices"
                         (workflow/checkpoint :gate "Decide"
-                                             :choices [{:key :abort
-                                                        :input [{:key :reason :required "yes"}]}])))
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow checkpoint choices"
-                        (workflow/checkpoint :gate "Decide"
-                                             :choices [{:key :abort
-                                                        :input [{:key :reason :description :nope}]}])))
-  (let [thrown (try (workflow/checkpoint :gate "Decide"
-                                         :choices [{:key :abort
-                                                    :input [{:key :reason :required "yes"}]}])
-                    (catch clojure.lang.ExceptionInfo e e))]
-    (is (some #(= :required (last (:path %)))
-              (::s/problems (:explain (ex-data thrown))))
-        "the explain payload names the field that failed")))
+                                             :choices [{:key :abort :input :reason}]))))
 
-(deftest workflow-choice-input-accepts-string-or-keyword-keys
-  ;; the surfaced declaration uses string key names, so a caller feeding those
-  ;; names straight back (string-keyed) satisfies the requirement just as a
-  ;; keyword-keyed map does
-  (with-runtime
-    (fn [_rt _]
-      (workflow/start! "input-str-run" (input-checkpoint-workflow {}) {})
-      (is (= {:ready [] :done true}
-             (workflow/choose! "input-str-run" :abort {"reason" "cancelled"}))))))
-
-(defn- join-inner-workflow [_]
+(workflow/defworkflow join-inner-workflow
+  "Perform the inner joined procedure."
+  {:entrypoints #{:call}}
   (workflow/workflow
    "Inner"
    (workflow/step :do-inner "Do inner work" :self)))
@@ -1230,7 +1224,7 @@
       (let [definition (workflow/workflow
                         "Join demo"
                         (workflow/step :prep "Prep" :self)
-                        (workflow/call :inner join-inner-workflow {} :depends-on [:prep])
+                        (workflow/call :inner #'join-inner-workflow {} :depends-on [:prep])
                         (workflow/step :after "After" :self :depends-on [:inner]))]
         (workflow/start! "join-run" definition {})
         (is (= "Prep" (:title (workflow/ready-step "join-run"))))
@@ -1283,10 +1277,14 @@
                         :kind :agent
                         :choices [{:key :advance :label "Advance" :next target}])))
 
-(defn- registry-second-stage [_]
+(workflow/defworkflow registry-second-stage
+  "Provide the second registry stage."
+  {:entrypoints #{:continue}}
   (workflow/workflow "Registry second" (workflow/step :do-second "Do second" :self)))
 
-(defn- registry-alt-second-stage [_]
+(workflow/defworkflow registry-alt-second-stage
+  "Provide the alternate second registry stage."
+  {:entrypoints #{:continue}}
   (workflow/workflow "Registry alt" (workflow/step :do-alt "Do alt" :self)))
 
 (deftest workflow-named-next-resolves-and-fails-loudly-on-unknown-name
@@ -1319,10 +1317,11 @@
       (is (= ["Do alt"]
              (mapv :title (:ready (workflow/choose! "rename-run" :advance))))))))
 
-(defn- revise-stage-workflow [{:keys [revision]}]
+(workflow/defworkflow revise-stage-workflow
+  "A stage whose sign-off can re-pour itself with :revision true."
+  {:entrypoints #{:start :continue} :defaults {}}
   (workflow/workflow
    "Revise stage"
-   {:params {:revision (workflow/param :default (boolean revision))}}
    (workflow/step :orient "Orient" :self :condition [:!= :revision true])
    (workflow/checkpoint :signoff "Sign off"
                         :depends-on [:orient]
@@ -1330,16 +1329,16 @@
                         :choices [{:key :revise :label "Revise" :revise {:params {:revision true}}}
                                   {:key :approved :label "Approve" :next :wt-downstream}])))
 
-(defn- downstream-stage-workflow [_]
+(workflow/defworkflow downstream-stage-workflow
+  "Provide the downstream stage."
+  {:entrypoints #{:continue}}
   (workflow/workflow "Downstream stage" (workflow/step :do-downstream "Do downstream" :self)))
 
 (deftest workflow-revise-repours-definition-skipping-condition-gated-steps
   (with-runtime
     (fn [_rt _]
       (workflow/register-workflow! :wt-downstream 'skein.spools.workflow-test/downstream-stage-workflow)
-      (workflow/start! "revise-run" (revise-stage-workflow {}) {}
-                       {:definition 'skein.spools.workflow-test/revise-stage-workflow
-                        :context {}})
+      (workflow/start! "revise-run" #'revise-stage-workflow {} {:context {}})
       (is (= "Orient" (:title (workflow/ready-step "revise-run"))))
       (is (= [{:title "Sign off" :role "checkpoint"}]
              (mapv #(select-keys % [:title :role]) (:ready (workflow/complete! "revise-run")))))
@@ -1364,7 +1363,8 @@
     (fn [_rt _]
       ;; no :definition seeded, so the run's root cannot resolve a workflow to
       ;; re-pour and :revise fails loudly (TEN-003) rather than guessing
-      (workflow/start! "revise-nodef" (revise-stage-workflow {}) {})
+      ;; started from a raw value, so the root records no workflow/definition
+      (workflow/start! "revise-nodef" @#'revise-stage-workflow {})
       (workflow/complete! "revise-nodef")
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"no workflow/definition"
                             (workflow/choose! "revise-nodef" :revise))))))
@@ -1379,16 +1379,24 @@
                         (workflow/checkpoint :c "C"
                                              :choices [{:key :x :revise {:no-params true}}]))))
 
-(defn- introspect-stage-b-workflow [_]
+(workflow/defworkflow introspect-stage-b
+  "The stage an approved introspection round hands off to."
+  {:entrypoints #{:continue}}
   (workflow/workflow
    "Introspect stage B"
    (workflow/step :finish "Finish B" :self)))
 
-(defn- introspect-stage-a-workflow [{:keys [revision]}]
+(s/def ::reason string?)
+(s/def ::revise-reason-input (s/keys :req-un [::reason]))
+(s/def ::introspect-params (s/keys :req-un [::feature]))
+
+(workflow/defworkflow introspect-stage-a
+  "A stage carrying a conditioned step, a routed choice, and a revision round."
+  {:entrypoints #{:start :continue}
+   :param-spec ::introspect-params
+   :defaults {}}
   (workflow/workflow
    "Introspect stage A"
-   {:params {:feature (workflow/param :required true)
-             :revision (workflow/param :default (boolean revision))}}
    (workflow/step :draft (fn [{:keys [feature]}] (str "Draft " feature)) :self
                   :condition [:!= :revision true])
    (workflow/step :refine "Refine draft" :self :depends-on [:draft])
@@ -1398,18 +1406,19 @@
                         :choices [{:key :approve
                                    :label "Approve"
                                    :description "Ship it."
-                                   :next 'skein.spools.workflow-test/introspect-stage-b-workflow}
+                                   :next 'skein.spools.workflow-test/introspect-stage-b}
                                   {:key :revise
                                    :label "Revise"
                                    :description "Send it back."
                                    :revise {:params {:revision true}}
-                                   :input [{:key :reason :required true :description "Why revise"}]}])))
+                                   :input {:spec ::revise-reason-input
+                                           :doc "Why revise"}}])))
 
 (deftest workflow-describe-projects-choices-input-and-condition-filtering
   ;; describe is a compile-time projection: no strands are written, so it needs no
   ;; runtime. On the base pass the conditioned :draft is present with its
   ;; :condition; the checkpoint's choices carry declared :input and routing.
-  (let [desc (workflow/describe (introspect-stage-a-workflow {}) {:feature "widgets"})
+  (let [desc (workflow/describe #'introspect-stage-a {:feature "widgets"})
         by-id (into {} (map (juxt :id identity)) (:steps desc))
         signoff (:signoff by-id)
         choices (into {} (map (juxt :key identity)) (:choices signoff))]
@@ -1419,27 +1428,32 @@
     (is (= [:!= :revision true] (:condition (:draft by-id))))
     (is (= "checkpoint" (:role signoff)))
     (is (= "step" (:role (:refine by-id))))
-    (is (= "skein.spools.workflow-test/introspect-stage-b-workflow"
+    (is (= "skein.spools.workflow-test/introspect-stage-b"
            (:next (get choices "approve"))))
     (is (= {:revision true} (:revise (get choices "revise"))))
-    (is (= [{"key" "reason" "required" true "description" "Why revise"}]
-           (:input (get choices "revise")))))
+    (is (= {"spec" "skein.spools.workflow-test/revise-reason-input"
+            "doc" "Why revise"}
+           (select-keys (:input-spec (get choices "revise")) ["spec" "doc"]))))
   ;; a revision round condition-excludes :draft; its dependent :refine splices to
   ;; become the entry step, so the description matches what would pour
   (is (= #{:refine :signoff}
-         (set (map :id (:steps (workflow/describe (introspect-stage-a-workflow {:revision true})
-                                                  {:feature "widgets"})))))))
+         (set (map :id (:steps (workflow/describe #'introspect-stage-a
+                                                  {:feature "widgets" :revision true})))))))
 
-(deftest workflow-describe-fails-loudly-on-missing-required-params
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"required params are missing"
-                        (workflow/describe (introspect-stage-a-workflow {})))))
+(deftest workflow-describe-fails-loudly-on-params-its-spec-rejects
+  ;; A missing required param is now the definition's own :param-spec refusing
+  ;; the whole map, so describe fails with the spec's identity and explanation
+  ;; rather than a hand-rolled required-key check.
+  (let [data (try (workflow/describe #'introspect-stage-a {})
+                  (catch clojure.lang.ExceptionInfo e (ex-data e)))]
+    (is (= :workflow/params-invalid (:reason data)))
+    (is (= ::introspect-params (:spec data)))))
 
 (deftest workflow-run-history-projects-ordered-molecules-and-events
   (with-runtime
     (fn [_rt _]
-      (workflow/start! "hist" (introspect-stage-a-workflow {}) {:feature "widgets"}
-                       {:definition 'skein.spools.workflow-test/introspect-stage-a-workflow
-                        :context {:feature "widgets"}})
+      (workflow/start! "hist" #'introspect-stage-a {:feature "widgets"}
+                       {:context {:feature "widgets"}})
       (workflow/complete! "hist")                            ; :draft
       (workflow/complete! "hist" {:attributes {"acme/round" "one"}}) ; :refine
       (workflow/choose! "hist" :revise {:reason "needs work"}) ; loop → round 2
@@ -1482,9 +1496,8 @@
 (deftest workflow-squash-run-refuses-active-then-squashes-to-one-digest
   (with-runtime
     (fn [_rt _]
-      (workflow/start! "arch" (introspect-stage-a-workflow {}) {:feature "widgets"}
-                       {:definition 'skein.spools.workflow-test/introspect-stage-a-workflow
-                        :context {:feature "widgets"}})
+      (workflow/start! "arch" #'introspect-stage-a {:feature "widgets"}
+                       {:context {:feature "widgets"}})
       (workflow/complete! "arch")             ; :draft
       (workflow/complete! "arch")             ; :refine
       ;; an active root cannot be archived
@@ -1637,7 +1650,7 @@
         (is (= {:by :a} (snapshot {}))
             "a value captured for an in-flight call keeps its snapshot")))))
 
-(deftest workflow-owner-refresh-removes-omitted-constructors-and-executors
+(deftest workflow-owner-refresh-removes-omitted-definitions-and-executors
   ;; DW2 / kxhd4 R4 per-domain deletion completeness: an owner-complete
   ;; replacement removes any route or executor the new partition omits, and
   ;; removing the owner clears the rest — no global reload.
@@ -1645,27 +1658,27 @@
     (fn [rt _]
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
       (let [handle (wf-registry/registry-handle rt)
-            spools-constructors (fn [entries]
-                                  (registry/replace-owner!
-                                   handle workflow/constructor-kind :spools/pkg
-                                   {:layer :spools :entries entries :overrides #{}}))
+            spools-definitions (fn [entries]
+                                 (registry/replace-owner!
+                                  handle workflow/definition-kind :spools/pkg
+                                  {:layer :spools :entries entries :overrides #{}}))
             spools-executors (fn [entries]
                                (registry/replace-owner!
                                 handle workflow/executor-kind :spools/pkg
                                 {:layer :spools :entries entries :overrides #{}}))]
-        (spools-constructors {:route-a 'skein.spools.workflow-test/registry-second-stage
-                              :route-b 'skein.spools.workflow-test/registry-alt-second-stage})
+        (spools-definitions {:route-a 'skein.spools.workflow-test/registry-second-stage
+                             :route-b 'skein.spools.workflow-test/registry-alt-second-stage})
         (spools-executors {"exec-a" 'skein.spools.workflow-test/exec-detail-a
                            "exec-b" 'skein.spools.workflow-test/exec-detail-b})
         (is (= #{:route-a :route-b} (set (keys (workflow/workflows)))))
         (is (= #{"exec-a" "exec-b"} (set (keys (wf-registry/executor-map rt)))))
         ;; a complete replacement omitting one of each removes only those
-        (spools-constructors {:route-a 'skein.spools.workflow-test/registry-second-stage})
+        (spools-definitions {:route-a 'skein.spools.workflow-test/registry-second-stage})
         (spools-executors {"exec-a" 'skein.spools.workflow-test/exec-detail-a})
         (is (= #{:route-a} (set (keys (workflow/workflows)))) "omitted route removed")
         (is (= #{"exec-a"} (set (keys (wf-registry/executor-map rt)))) "omitted executor removed")
         ;; removing the owner clears the rest
-        (registry/remove-owner! handle workflow/constructor-kind :spools/pkg)
+        (registry/remove-owner! handle workflow/definition-kind :spools/pkg)
         (registry/remove-owner! handle workflow/executor-kind :spools/pkg)
         (is (empty? (workflow/workflows)))
         (is (empty? (wf-registry/executor-map rt)))))))
@@ -1678,7 +1691,7 @@
     (fn [rt _]
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
       (let [handle (wf-registry/registry-handle rt)]
-        (registry/replace-owner! handle workflow/constructor-kind :spools/pkg
+        (registry/replace-owner! handle workflow/definition-kind :spools/pkg
                                  {:layer :spools
                                   :entries {:route-x 'skein.spools.workflow-test/registry-second-stage}
                                   :overrides #{}})
@@ -1690,7 +1703,7 @@
                (workflow/workflow-definition :route-x))
             "the direct layer wins while its override stands")
         ;; removing the direct owner restores the shadowed spools entry
-        (registry/remove-owner! handle workflow/constructor-kind :skein.owner/repl)
+        (registry/remove-owner! handle workflow/definition-kind :skein.owner/repl)
         (is (= 'skein.spools.workflow-test/registry-second-stage
                (workflow/workflow-definition :route-x))
             "the shadowed entry becomes effective again")))))
@@ -1945,25 +1958,24 @@
         (is (= :workflow/param-spec-missing (:reason (ex-data thrown))))
         (is (= ::never-registered (:param-spec (ex-data thrown))))))))
 
-(deftest legacy-constructors-stay-trusted-only-and-fail-loudly
+(deftest a-registered-symbol-must-resolve-to-a-definition-map
+  ;; Constructors are gone: a symbol that resolves to a function, or to any
+  ;; other value, is refused at registration — before it can reach a run.
   (with-runtime
     (fn [rt _]
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
-      (workflow/register-workflow! :wt-boom 'skein.spools.workflow-test/exploding-constructor)
-      (workflow/register-workflow! :wt-malformed 'skein.spools.workflow-test/malformed-constructor)
-      (is (= #{} (:entrypoints (workflow/resolve-workflow :wt-boom)))
-          "an opaque constructor declares no capability")
-      (is (= :legacy (:kind (workflow/resolve-workflow :wt-boom))))
-      (let [thrown (try (workflow/start! "boom-run" :wt-boom {})
-                        (catch clojure.lang.ExceptionInfo e e))]
-        (is (= :workflow/legacy-constructor-failed (:reason (ex-data thrown))))
-        (is (= "constructor blew up" (ex-message (ex-cause thrown)))))
-      (let [thrown (try (workflow/start! "malformed-run" :wt-malformed {})
-                        (catch clojure.lang.ExceptionInfo e e))]
-        (is (= :workflow/legacy-definition-invalid (:reason (ex-data thrown))))
-        (is (string? (:explain (ex-data thrown)))))
-      (is (nil? (workflow/current-root "boom-run")) "both fail before any pour")
-      (is (nil? (workflow/current-root "malformed-run"))))))
+      (doseq [[label sym] [["a function" 'skein.spools.workflow-test/exploding-constructor]
+                           ["a non-workflow value" 'skein.spools.workflow-test/malformed-constructor]]]
+        (let [thrown (try (workflow/register-workflow! :wt-boom sym)
+                          (catch clojure.lang.ExceptionInfo e e))
+              data (ex-data thrown)]
+          (is (= :workflow/definition-invalid (:reason data)) label)
+          (is (= sym (:definition data)) label)
+          (is (string? (:resolved-class data))
+              (str label ": the failure names what it did resolve to"))))
+      (is (empty? (workflow/workflows))
+          "a refused registration leaves the live registry untouched")
+      (is (nil? (workflow/current-root "boom-run")) "nothing poured"))))
 
 (deftest revision-resolves-the-live-registered-name
   (with-runtime
@@ -2046,7 +2058,9 @@
         (is (= :applied (:status (runtime/module! rt :wf-beta {:file beta-source}))))
         (is (= #{:alpha :beta} (set (keys (workflow/workflows)))))
         (is (= 'test.module.wf-alpha/alpha (workflow/workflow-definition :alpha)))
-        (is (= :static (:kind (workflow/resolve-workflow :beta))))))))
+        (is (= 'test.module.wf-beta/beta (:definition (workflow/resolve-workflow :beta))))
+        (is (map? (:value (workflow/resolve-workflow :beta)))
+            "a registered name resolves to the definition map itself")))))
 
 (deftest deleting-a-referenced-definition-by-omission-is-refused-atomically
   ;; The alpha owner's next contribution drops the definition beta routes to.
@@ -2135,13 +2149,13 @@
    (workflow/checkpoint :go "Go" :kind :agent
                         :choices [{:key :approve :input ::never-registered-input}])))
 
-(def ^:private legacy-input-definition
+(def ^:private static-input-definition
   (workflow/workflow
-   "Legacy input"
+   "Static input"
    {:entrypoints #{:start}}
    (workflow/checkpoint :approve-step "Approve" :kind :agent
                         :choices [{:key :approve
-                                   :input [{:key :note :required true}]}])))
+                                   :input ::approval-input}])))
 
 (defn- spec-first-router [{:keys [target]}]
   (workflow/workflow
@@ -2293,17 +2307,14 @@
         (is (= ::never-registered-input (:spec (ex-data thrown))))
         (is (empty? (workflow/workflows)))))))
 
-(deftest deprecated-per-key-choice-input-still-enforces-required-keys
+(deftest static-choice-input-requires-its-whole-map-spec
   (with-runtime
     (fn [rt _]
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
-      (workflow/start! "legacy-input" #'legacy-input-definition {})
-      (let [detail (workflow/choice-detail "legacy-input" :approve)]
-        (is (= [{"key" "note" "required" true}] (get detail "input")))
-        (is (nil? (get detail "input-spec"))))
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"missing required keys"
-                            (workflow/choose! "legacy-input" :approve {})))
-      (is (:done (workflow/choose! "legacy-input" :approve {:note "fine"}))))))
+      (workflow/start! "static-input" static-input-definition {})
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Value does not satisfy the named spec"
+                            (workflow/choose! "static-input" :approve {})))
+      (is (:done (workflow/choose! "static-input" :approve {:approval-note "fine"}))))))
 
 ;; --- s/form documentation graph --------------------------------------------
 
@@ -2511,7 +2522,6 @@
 
 (def ^:private tracked-card (bound-card #{:wt-devflow :wt-spike}))
 (def ^:private call-only-bound-card (bound-card #{:wt-callonly}))
-(def ^:private legacy-bound-card (bound-card #{:wt-legacy}))
 
 (def ^:private defer-caller
   (workflow/workflow
@@ -2625,14 +2635,13 @@
                           (catch clojure.lang.ExceptionInfo e e))]
           (is (= :workflow/reference-entrypoint-unsupported (:reason (ex-data thrown))))
           (is (= :continue (:entrypoint (ex-data thrown))))))
-      (testing "an opaque legacy constructor: a defer is new surface with no migration to protect"
-        (workflow/register-workflow! :wt-legacy 'skein.spools.workflow-test/exploding-constructor)
+      (testing "a target that is not a definition map at all"
         (let [thrown (try (workflow/register-workflow!
-                           :wt-legacy-card
-                           'skein.spools.workflow-test/legacy-bound-card)
+                           :wt-legacy 'skein.spools.workflow-test/exploding-constructor)
                           (catch clojure.lang.ExceptionInfo e e))]
-          (is (= :workflow/legacy-opaque (:reason (ex-data thrown))))
-          (is (= :wt-legacy (:target (ex-data thrown)))))))))
+          (is (= :workflow/definition-invalid (:reason (ex-data thrown))))
+          (is (= 'skein.spools.workflow-test/exploding-constructor
+                 (:definition (ex-data thrown)))))))))
 
 (deftest a-registered-call-target-may-not-hide-a-defer
   (with-runtime
@@ -2749,10 +2758,6 @@
           (check (try (workflow/continue! "live-2" :wt-devflow {})
                       (catch clojure.lang.ExceptionInfo e e))
                  :workflow/entrypoint-unsupported)
-          (workflow/register-workflow! :wt-devflow 'skein.spools.workflow-test/exploding-constructor)
-          (check (try (workflow/continue! "live-2" :wt-devflow {})
-                      (catch clojure.lang.ExceptionInfo e e))
-                 :workflow/legacy-opaque)
           (workflow/unregister-workflow! :wt-devflow)
           (check (try (workflow/continue! "live-2" :wt-devflow {})
                       (catch clojure.lang.ExceptionInfo e e))

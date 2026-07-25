@@ -47,7 +47,7 @@
          explain-step explain-gate explain-checkpoint explain-call explain-workflow
          explain-definition explain-defer
          reject-unknown-keys! step* bind-defer-step
-         param-opt-keys step-opt-keys checkpoint-opt-keys call-opt-keys workflow-opt-keys
+         step-opt-keys checkpoint-opt-keys call-opt-keys workflow-opt-keys
          defer-opt-keys
          choice-name choice-details-attr reject-unknown-choice-keys!
          require-valid-choices!
@@ -108,20 +108,6 @@
   [value]
   (specs/json->params value))
 
-(defn param
-  "Return a workflow param definition. **Deprecated**: declare a whole-map
-  `:param-spec` on the definition instead.
-
-  Per-key `:required`/`:default` declarations are a compatibility form kept
-  while workflows migrate; they cannot express a rule that spans keys. The two
-  run at different moments: `:defaults` merge and `:param-spec` validation
-  happen before anything compiles, while these declarations are resolved during
-  compilation, so a key defaulted here is not part of the map `:param-spec`
-  judged. Declare a key in `:defaults` or here, not both."
-  [& {:as opts}]
-  (reject-unknown-keys! opts param-opt-keys :param)
-  opts)
-
 (defn step
   "Return a workflow step definition — a unit of work the driving agent does
   itself.
@@ -172,9 +158,7 @@
   `:input` is a qualified keyword naming a whole-map spec, or `{:spec ::name
   :doc \"what the worker must supply\"}`. Pouring the checkpoint records that
   identity, doc, and the spec's current form graph; `choose!` resolves the
-  identity again and validates against whatever it names then. A vector of
-  `{:key :required :description}` maps is the deprecated required-key form,
-  which cannot express a rule spanning keys.
+  identity again and validates against whatever it names then.
 
   `:kind` names the decision owner and defaults to `:human`; it is stored as
   `workflow/checkpoint-kind` and is the canonical human-in-the-loop signal."
@@ -267,12 +251,12 @@
 
   The returned map is the same data shape accepted by `compile`, but avoids a
   separate TOML/JSON formula language. An optional leading options map may carry
-  `:params`, `:attributes`, `:state`, and `:form`, plus the registration
-  contract a static definition declares about itself: `:doc`, `:entrypoints`,
-  `:param-spec`, and `:defaults` (see `defworkflow`). Options and the complete
-  assembled definition are both validated here, so a malformed nested step,
-  choice, or call fails at the builder rather than at the pour — as does a step
-  declaring `:depends-on` a `defer` exit, which no shape spec can express."
+  `:attributes`, `:state`, and `:form`, plus the registration contract a static
+  definition declares about itself: `:doc`, `:entrypoints`, `:param-spec`, and
+  `:defaults` (see `defworkflow`). Options and the complete assembled definition
+  are both validated here, so a malformed nested step, choice, or call fails at
+  the builder rather than at the pour — as does a step declaring `:depends-on` a
+  `defer` exit, which no shape spec can express."
   [name & body]
   (let [[opts steps] (if (and (map? (first body))
                               (not (contains? (first body) :id)))
@@ -324,11 +308,10 @@
   each checkpoint's choices carry their declared input contract and their
   `:next`/`:revise` routing. The result is `{:name … :steps [{:id :title :role
   :depends-on :condition :gate :choices [{:key :label :description
-  :input|:input-spec :next|:revise} …]} …]}`.
+  :input-spec :next|:revise} …]} …]}`.
 
-  `(describe workflow)` resolves param defaults and fails loudly listing any
-  required params without a default; pass `params` to describe a definition that
-  needs them."
+  `(describe workflow)` merges defaults under `params` and applies a static
+  definition's `:param-spec` when it declares one."
   ([workflow]
    (describe workflow {}))
   ([workflow params]
@@ -577,10 +560,9 @@
   When the chosen choice declares an `:input` contract, `choose!` fails loudly
   before any mutation unless `input` satisfies it: a whole-map spec is resolved
   live and validated as `:workflow/input-invalid` (or `:workflow/input-spec-missing`
-  when the name no longer resolves), while the deprecated per-key form checks
-  only that required keys are present. `input` is validated as the caller passed
-  it — a JSON worker keywordizes with `json->params` first. A routed choice — one carrying
-  `:next` (a symbol or registered name) or `:revise` (re-pour the run's own
+  when the name no longer resolves). `input` is validated as the caller passed
+  it — a JSON worker keywordizes with `json->params` first. A routed choice — one
+  carrying `:next` (a symbol or registered name) or `:revise` (re-pour the run's own
   definition with override params) — closes out the current workflow's remaining
   steps and pours the continuation under the same run-id, all in one
   transactional `batch/apply!`; a terminal choice that closes the last inner step
@@ -626,9 +608,8 @@
   `workflow` must be one of the registered names the defer's materialized
   allowlist permits, and must advertise the `:continue` entrypoint. It resolves
   live: a name repointed since the defer poured continues into the replacement,
-  while a removed name, one that lost `:continue`, an opaque legacy constructor,
-  or params its `:param-spec` rejects all fail before anything closes, leaving
-  the defer ready to retry.
+  while a removed name, one that lost `:continue`, or params its `:param-spec`
+  rejects all fail before anything closes, leaving the defer ready to retry.
 
   `params` is the target's own — its `:defaults` under exactly what is supplied
   here, validated whole against its `:param-spec`. Passing no params and passing
@@ -805,10 +786,6 @@
   "Owner-partitioned kind id for workflow name -> definition-symbol declarations."
   registry/definition-kind)
 
-(def constructor-kind
-  "Deprecated alias for `definition-kind`."
-  registry/definition-kind)
-
 (defn static-definition
   "Return the static definition value `defworkflow` defines.
 
@@ -856,7 +833,7 @@
   "Register a workflow definition under a stable keyword `name`.
 
   `name` is a keyword; `definition-sym` is a fully qualified symbol resolving to
-  a static definition map or a legacy constructor function. The entry is an
+  a static definition map. The entry is an
   owner-complete declaration at the direct/REPL layer, published through the
   owner-partition registry that survives refresh. A duplicate `name` replaces
   the prior direct entry, so re-pointing a route resolves the new definition at
@@ -931,12 +908,9 @@
 (defn catalog
   "Return the discovery catalogue of registered workflows, in name order.
 
-  `request` is `{:entrypoint :start|:continue|:call, :all? true}`, both optional
-  and mutually exclusive. The default answers a worker's actual question —
+  `request` optionally carries `:entrypoint :start|:continue|:call`. The default answers a worker's actual question —
   which routines can I begin? — by listing only definitions declaring `:start`;
-  `:entrypoint` selects one capability instead, and `:all?` drops the filter and
-  so is the only way opaque legacy entries appear, since they declare no
-  capability for a filter to match.
+  `:entrypoint` selects one capability instead.
 
   Each item carries exactly `:name`, `:doc`, `:entrypoints`, and `:definition`.
   Everything else about a definition — its param contract, its declared shape —
@@ -955,9 +929,8 @@
 
   A point read, so it answers for any definition regardless of entrypoints,
   including a call-only component the default catalogue omits. The view carries
-  the catalogue fields plus `:kind`/`:opaque`, the param contract (`:param-spec`
-  identity with its live `s/form` graph, or the deprecated per-key declarations,
-  plus `:defaults`), and the declared summary: entry items, loops, gates,
+  the catalogue fields, the param contract (`:param-spec` identity with its live
+  `s/form` graph plus `:defaults`), and the declared summary: entry items, loops, gates,
   checkpoint choice keys, calls, defer exits with their bound targets, and the
   registered workflows the definition routes to.
 
@@ -1117,13 +1090,7 @@
                            (await! run-id (select-keys request [:timeout-secs])))))
 
 (defn resolve-workflow
-  "Return the live classification of registered workflow `name`.
-
-  The result is `{:name … :definition <symbol> :kind :static|:legacy :value …}`.
-  `:static` carries the definition map itself — doc, entrypoints, param spec,
-  defaults, and declared steps — so a trusted caller can inspect what a name
-  currently means without pouring anything or executing a constructor. `:legacy`
-  carries only the opaque constructor function it resolved to."
+  "Return the live resolved registered workflow definition for `name`."
   [name]
   (defs/resolve-registered (current/runtime) name))
 
@@ -1226,8 +1193,6 @@
 (s/def ::attributes map?)
 (s/def ::required boolean?)
 (s/def ::default any?)
-(s/def ::param-def (s/keys :opt-un [::required ::default]))
-(s/def ::params (s/map-of keyword? ::param-def))
 ;; caller-supplied param values (compile args, call-site :params); the aux
 ;; namespace keeps the un-namespaced :params key while the shape differs from
 ;; the declaration map above
@@ -1247,13 +1212,13 @@
 (s/def ::condition #(or (keyword? %)
                         (and (vector? %) (#{:= :!=} (first %)) (= 3 (count %)))))
 (s/def ::loop (s/keys :opt-un [::count ::each ::chain]))
-;; A call target is a registered name, a definition Var's symbol, a raw
-;; workflow value, or another complete definition inline — which is what makes
-;; the definition shape recursive.
+;; A call target is a registered name, a definition Var or its symbol, or
+;; another complete definition inline — which is what makes the definition
+;; shape recursive. Each names a definition; none of them is executed.
 (s/def ::procedure (s/or :registered keyword?
                          :symbol symbol?
-                         :definition ::definition
-                         :constructor #(or (fn? %) (var? %))))
+                         :var var?
+                         :definition ::definition))
 (s/def ::call (s/keys :req-un [::id ::procedure]
                       :opt-un [::title :skein.spools.workflow.values/params
                                ::depends-on ::attributes]))
@@ -1270,7 +1235,7 @@
 (s/def ::workflow-item (s/or :defer ::defer-declaration :step ::step :call ::call))
 (s/def ::steps (s/coll-of ::workflow-item :kind vector?))
 (s/def ::workflow (s/keys :req-un [::name ::steps]
-                          :opt-un [::params ::attributes ::state ::form]))
+                          :opt-un [::attributes ::state ::form]))
 
 ;; --- checkpoint choice shapes ---------------------------------------------
 ;;
@@ -1283,19 +1248,13 @@
 (s/def ::next #(or (keyword? %) (symbol? %) (non-blank-string? %)))
 ;; A stored declaration crosses the JSON attribute wire, so its description is
 ;; text — never the render fn a step's own :description may be.
-(s/def :skein.spools.workflow.choice-input/description string?)
-(s/def ::choice-input-declaration
-  (s/keys :req-un [::key]
-          :opt-un [::required :skein.spools.workflow.choice-input/description]))
 (s/def ::spec qualified-keyword?)
 (s/def ::input-spec-declaration (s/keys :req-un [::spec] :opt-un [::doc]))
 ;; A choice declares the whole map `choose!` must accept: one qualified spec
-;; keyword, or that keyword with the doc a worker is shown. The vector of
-;; per-key declarations is the deprecated required-key form it replaces.
+;; keyword, or that keyword with the doc a worker is shown.
 (s/def ::input
   (s/or :spec qualified-keyword?
-        :declaration ::input-spec-declaration
-        :legacy-declarations (s/coll-of ::choice-input-declaration :kind vector?)))
+        :declaration ::input-spec-declaration))
 (s/def ::revise (s/keys :req-un [:skein.spools.workflow.values/params]))
 (s/def ::choice
   (s/or :key ::id-ref
@@ -1322,7 +1281,7 @@
 ;; owns their shape only. The whole merged map answers to `:param-spec`.
 (s/def ::defaults (s/map-of keyword? any?))
 (s/def ::workflow-options
-  (s/keys :opt-un [::params ::attributes ::state ::form
+  (s/keys :opt-un [::attributes ::state ::form
                    ::doc ::entrypoints ::param-spec ::defaults]))
 (s/def ::definition
   (s/merge ::workflow
@@ -1362,29 +1321,20 @@
 ;; --- discovery request and projection shapes ------------------------------
 
 (s/def :skein.spools.workflow.request/entrypoint ::entrypoint)
-(s/def :skein.spools.workflow.request/all? boolean?)
-;; `:all?` is not "every capability at once" — it is the absence of a capability
-;; filter, which is also the only way an opaque legacy entry appears. Naming both
-;; therefore states two different intents about the same read, so the request
-;; shape refuses it rather than silently letting one win.
 (s/def ::list-request
-  (s/and (s/keys :opt-un [:skein.spools.workflow.request/entrypoint
-                          :skein.spools.workflow.request/all?])
-         #(not (and (:all? %) (:entrypoint %)))))
+  (s/keys :opt-un [:skein.spools.workflow.request/entrypoint]))
 (s/def ::show-request (s/keys :req-un [:skein.spools.workflow.request/workflow]))
 
 ;; The projection aux namespace. These describe what discovery *emits* — plain
 ;; JSON-safe strings a worker reads — while the same unqualified keys mean
 ;; authored definition data elsewhere in this namespace (`::name` is renderable,
-;; `::params` is the per-key declaration map). Separate namespaces keep both
-;; contracts exact instead of one bending to fit the other.
+;; `::params` is a caller-supplied map). Separate namespaces keep both contracts
+;; exact instead of one bending to fit the other.
 (s/def :skein.spools.workflow.view/name non-blank-string?)
 (s/def :skein.spools.workflow.view/doc non-blank-string?)
 (s/def :skein.spools.workflow.view/entrypoints
   (s/coll-of (into #{} (map name) defs/entrypoint-order) :kind vector?))
 (s/def :skein.spools.workflow.view/definition non-blank-string?)
-(s/def :skein.spools.workflow.view/kind #{"static" "legacy"})
-(s/def :skein.spools.workflow.view/opaque boolean?)
 (s/def :skein.spools.workflow.view/step non-blank-string?)
 
 ;; The fields both discovery reads share. A catalogue item is exactly these four:
@@ -1401,38 +1351,31 @@
 
 ;; Param contract view. `:spec-forms` is the documentation graph `spec-forms`
 ;; returns, carried verbatim in its string-keyed wire shape.
-(s/def :skein.spools.workflow.view.params/kind #{"spec" "declared" "none" "opaque"})
+(s/def :skein.spools.workflow.view.params/kind #{"spec" "none"})
 (s/def :skein.spools.workflow.view.params/spec non-blank-string?)
 (s/def :skein.spools.workflow.view.params/spec-form
   (s/map-of #{"spec" "relation" "form"} string? :count 3))
 (s/def :skein.spools.workflow.view.params/spec-forms
   (s/coll-of :skein.spools.workflow.view.params/spec-form :kind vector?))
 (s/def :skein.spools.workflow.view.params/defaults (s/map-of keyword? any?))
-(s/def :skein.spools.workflow.view.params/rendered true?)
-(s/def :skein.spools.workflow.view.params/param
-  (s/keys :req-un [::required]
-          :opt-un [::default :skein.spools.workflow.view.params/rendered]))
-(s/def :skein.spools.workflow.view.params/params
-  (s/map-of non-blank-string? :skein.spools.workflow.view.params/param))
 (s/def :skein.spools.workflow.view/params
   (s/keys :req-un [:skein.spools.workflow.view.params/kind]
           :opt-un [:skein.spools.workflow.view.params/spec
                    :skein.spools.workflow.view.params/spec-forms
-                   :skein.spools.workflow.view.params/defaults
-                   :skein.spools.workflow.view.params/params]))
+                   :skein.spools.workflow.view.params/defaults]))
 
 ;; Declared summary, with one nested shape per declared role. Each carries the
 ;; declaration and nothing derived from params: a loop names where its items come
 ;; from, a call names its target and how that target is named, a defer names the
 ;; registered workflows its binding allows.
-(s/def :skein.spools.workflow.view.declared/kind #{"static" "opaque"})
+(s/def :skein.spools.workflow.view.declared/kind #{"static"})
 (s/def :skein.spools.workflow.view.declared/each non-blank-string?)
 (s/def :skein.spools.workflow.view.declared/waiter non-blank-string?)
 (s/def :skein.spools.workflow.view.declared/procedure non-blank-string?)
 ;; How a call names its target, in its own aux namespace so the unqualified
 ;; `:kind` key means one thing per view rather than one thing everywhere.
 (s/def :skein.spools.workflow.view.call/kind
-  #{"registered" "symbol" "var" "inline" "constructor"})
+  #{"registered" "symbol" "var" "inline"})
 (s/def :skein.spools.workflow.view.declared/defer non-blank-string?)
 (s/def :skein.spools.workflow.view.declared/names
   (s/coll-of non-blank-string? :kind vector?))
@@ -1481,15 +1424,13 @@
                    :skein.spools.workflow.view.declared/defers
                    :skein.spools.workflow.view.declared/routes]))
 
-;; A definition view is the catalogue item plus the opacity markers, the param
+;; A definition view is the catalogue item plus the param
 ;; contract, and the declared summary — and, like the item, exactly that.
 (s/def ::definition-view
   (s/and (s/merge ::catalog-fields
-                  (s/keys :req-un [:skein.spools.workflow.view/kind
-                                   :skein.spools.workflow.view/opaque
-                                   :skein.spools.workflow.view/params
+                  (s/keys :req-un [:skein.spools.workflow.view/params
                                    :skein.spools.workflow.view/declared]))
-         #(= #{:name :doc :entrypoints :definition :kind :opaque :params :declared}
+         #(= #{:name :doc :entrypoints :definition :params :declared}
              (set (keys %)))))
 
 ;; --- run lifecycle request and result shapes ------------------------------
@@ -1699,8 +1640,7 @@
                     |whole-map spec, or {:spec ::name :doc \"...\"}. Pouring
                     |records the identity, doc, and current spec form graph;
                     |choose! resolves the identity again and validates against
-                    |the live spec. A vector of {:key :required :description}
-                    |maps is the deprecated required-key form.")
+                    |the live spec.")
             :workflow/checkpoint "Stable checkpoint id, derived from the local step id."
             :workflow/checkpoint-kind "Decision owner stored as a string."
             :workflow/choices "Allowed choices stored as strings."}})
@@ -1758,10 +1698,7 @@
                       |procedure join would continue past the exit. Returning
                       |composition stays call.")
            :entrypoints (fmt/reflow "
-                         |Every bound target must be registered and declare :continue.
-                         |An opaque legacy constructor is refused as
-                         |workflow/legacy-opaque; a defer is a new surface with no
-                         |migration to protect.")
+                         |Every bound target must be registered and declare :continue.")
            :binding (fmt/reflow "
                      |An unbound defer is a publishable template but cannot be
                      |registered or poured (workflow/defer-unbound).")
@@ -1805,12 +1742,11 @@
                        |Partial keyword-keyed overlay merged under caller params. Values
                        |must be JSON-compatible; it need not satisfy :param-spec on its
                        |own, because the caller supplies the rest.")}
-   :compatibility (fmt/reflow "
-                   |A registered symbol resolving to a function is a legacy constructor:
-                   |opaque, declaring no entrypoints, and available to trusted Clojure
-                   |while shipped workflows migrate. A constructor that throws fails as
-                   |workflow/legacy-constructor-failed and one returning a non-workflow as
-                   |workflow/legacy-definition-invalid, both before any pour.")})
+   :resolution (fmt/reflow "
+                |A registered symbol must resolve to a static definition map. One
+                |resolving to anything else — a function, a vector, a string — fails
+                |as workflow/definition-invalid at registration and again at every
+                |use, naming the class it did resolve to.")})
 
 (defn- explain-workflow []
   {:topic :workflow
@@ -1822,22 +1758,17 @@
               'checkpoint 'skein.spools.workflow/checkpoint
               'call 'skein.spools.workflow/call
               'defer 'skein.spools.workflow/defer
-              'bind-defers 'skein.spools.workflow/bind-defers
-              'param 'skein.spools.workflow/param}
+              'bind-defers 'skein.spools.workflow/bind-defers}
    :contract (spec-entry ::workflow
                          "A workflow requires a non-blank :name and vector :steps."
                          '(workflow (fn [{:keys [feature]}] (str "Ship " feature))
-                                    {:params {:feature (param :required true)}}
+                                    {:param-spec :acme.workflows/ship-params
+                                     :defaults {:feature "roadmap"}}
                                     (step :design
                                           (fn [{:keys [feature]}] (str "Design " feature))
                                           :self)
                                     (checkpoint :signoff "Approve design"
                                                 :choices [:approved :revise])))
-   :fields {:params (fmt/reflow "
-                     |Deprecated per-key declaration map: keyword param names to
-                     |definitions supporting boolean :required and optional :default.
-                     |Declare :param-spec and :defaults instead — see the :definition
-                     |topic.")}
    :runtime {:start! (fmt/reflow "
                       |(start! run-id workflow params opts) accepts a workflow map,
                       |a definition var, or a registered workflow keyword. Var/keyword
@@ -1870,9 +1801,8 @@
                                      |owner published disappears by omitting its
                                      |contribution instead.")
               :resolve-workflow (fmt/reflow "
-                                 |Return {:name :definition :kind :value :entrypoints}
-                                 |for a registered name: :static carries the definition
-                                 |map, :legacy the opaque constructor.")
+                                 |Return {:name :definition :value :entrypoints} for a
+                                 |registered name; :value is the definition map itself.")
               :entrypoints (fmt/reflow "
                             |A static definition declares a non-empty subset of
                             |#{:start :continue :call}. Reaching it by registered name
@@ -1906,15 +1836,13 @@
            {:context context :unknown (vec unknown) :allowed allowed}))
   m)
 
-(def ^:private param-opt-keys #{:required :default})
 (def ^:private step-opt-keys #{:description :attributes :state :depends-on :condition :loop})
 (def ^:private checkpoint-opt-keys (into step-opt-keys #{:kind :choices}))
 (def ^:private call-opt-keys #{:title :depends-on :attributes})
 (def ^:private defer-opt-keys #{:description :attributes :depends-on})
 (def ^:private workflow-opt-keys
-  #{:params :attributes :state :form :doc :entrypoints :param-spec :defaults})
+  #{:attributes :state :form :doc :entrypoints :param-spec :defaults})
 (def ^:private choice-opt-keys #{:key :label :description :next :input :revise})
-(def ^:private choice-input-opt-keys #{:key :required :description})
 (def ^:private choice-input-spec-opt-keys #{:spec :doc})
 
 (defn- step*
@@ -1946,13 +1874,6 @@
       (non-blank-string? k) k
       :else (fail! "Workflow checkpoint choices require a non-blank key" {:choice choice}))))
 
-(defn- input-key-name [decl]
-  (let [k (:key decl)]
-    (cond
-      (or (keyword? k) (symbol? k)) (name k)
-      (non-blank-string? k) k
-      :else (fail! "Workflow choice :input entries require a non-blank :key" {:input decl}))))
-
 (defn- choice-input-spec-attr
   "Return the JSON-safe stored form of a spec-first `:input` declaration:
   `{\"spec\" \"ns/name\"}` plus the optional `\"doc\"` the author wrote for the
@@ -1964,19 +1885,6 @@
     (cond-> {"spec" (subs (str (:spec declaration)) 1)}
       (:doc declaration) (assoc "doc" (:doc declaration)))))
 
-(defn- choice-input-declarations-attr
-  "Return the JSON-safe stored form of the deprecated per-key `:input`
-  declaration: a vector of string-keyed maps carrying each input key's name, its
-  required flag, and an optional description. Rejects unknown declaration keys
-  loudly (TEN-003), matching the other builder opts."
-  [input]
-  (mapv (fn [decl]
-          (reject-unknown-keys! decl choice-input-opt-keys :choice-input)
-          (cond-> {"key" (input-key-name decl)
-                   "required" (boolean (:required decl))}
-            (:description decl) (assoc "description" (:description decl))))
-        input))
-
 (defn- revise-params-attr
   "Return the override params stored for a checkpoint choice's `:revise` directive:
   the authoritative overrides re-poured over the run's own definition at
@@ -1987,14 +1895,10 @@
 (defn- choice-input-entry
   "Return the stored entry a choice's `:input` declaration contributes.
 
-  The authored form decides which contract applies: a qualified keyword or a
-  `{:spec … :doc …}` map names one whole-map spec, while a vector of per-key
-  declarations is the deprecated required-key form. They are stored under
-  different keys so a reader never has to guess which one a checkpoint carries."
+  A qualified keyword or a `{:spec … :doc …}` map names one whole-map spec.
+  Its stored key remains `input-spec` for compatibility with poured checkpoints."
   [input]
-  (if (vector? input)
-    ["input" (choice-input-declarations-attr input)]
-    ["input-spec" (choice-input-spec-attr input)]))
+  ["input-spec" (choice-input-spec-attr input)])
 
 (defn- choice-detail-attr [choice]
   (when (map? choice)

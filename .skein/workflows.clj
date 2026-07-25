@@ -168,6 +168,15 @@
          #(or (not (contains? % :cwd)) (s/valid? ::cwd (:cwd %)))
          #(or (not (contains? % :accept)) (s/valid? ::accept (:accept %)))))
 
+;; The compiled pipeline's param contract: one whole-map spec over the params
+;; the workflow renders against, the same shape the land and story definitions
+;; declare. Optional keys are absent rather than nil when the pattern input
+;; omits them, so the spec judges exactly what a run carries.
+(s/def ::run-id ::non-blank-string)
+(s/def ::tasks ::pipeline-tasks)
+(s/def ::delegate-pipeline-params
+  (s/keys :req-un [::run-id ::tasks] :opt-un [::harness ::cwd]))
+
 (defn- task-value
   "Return task field `k`, accepting keyword or string keyed task maps."
   [task k]
@@ -238,14 +247,14 @@
      (workflow/compile
       (apply workflow/workflow
              (str "Delegated pipeline: " run_id)
-             {:params {:run-id (workflow/param :default run_id)
-                       :tasks (workflow/param :default tasks)
-                       :harness (workflow/param :default harness)
-                       :cwd (workflow/param :default cwd)}
+             {:param-spec ::delegate-pipeline-params
+              :defaults {}
               :attributes {"workflow/family" "delegate-pipeline"}}
              (cond-> [task-gate]
                accept (conj accept-checkpoint)))
-      {:run-id run_id :tasks tasks :harness harness :cwd cwd}
+      (cond-> {:run-id run_id :tasks tasks}
+        harness (assoc :harness harness)
+        cwd (assoc :cwd cwd))
       {:run-id run_id :family "delegate-pipeline"}))))
 
 ;; ---------------------------------------------------------------------------
