@@ -57,7 +57,7 @@ The shell executor records the outcome on the gate itself. It **owns** the `shel
 | `shell/output` | gate step | Bounded combined stdout+stderr **tail** (the last 16 KB), for audit. Bounded on purpose so a runaway child cannot exhaust weaver heap; the whole stream is never buffered. Absent where no process ran. |
 | `gate/error` (inherited) | gate step | Durable failure detail (non-zero exit, timeout, spawn error, or invalid argv). Its presence makes the gate a coordinator-visible stalled state and causes the shell executor to **skip** the gate on later scans until the key is removed. |
 
-The **pass** outcome rides the ordinary workflow vocabulary only: the shell executor closes the gate with `workflow/complete!` `:by "shell"` and `:notes` = a short result summary (surfacing as `workflow/outcome-by "shell"` and `workflow/outcome-notes`, mirroring the subagent executor putting its run result in `workflow/outcome-notes`). The shell executor introduces **no** new `workflow/*` attribute. Clearing `shell/running` and stamping the exit code and output happen in the same `complete!` batch, so no observer ever sees a closed gate without its `shell/exit-code` / `shell/output`.
+The **pass** outcome rides the ordinary workflow vocabulary only: the shell executor closes the gate with `workflow/complete!` `:by "shell"` (surfacing as `workflow/outcome-by "shell"`) and records the outcome itself in its own `shell/*` keys. The engine has no outcome-prose field to fill, and the exit code is the outcome, so there is nothing a summary string would add. The shell executor introduces **no** new `workflow/*` attribute. Clearing `shell/running` and stamping the exit code and output happen in the same `complete!` batch, so no observer ever sees a closed gate without its `shell/exit-code` / `shell/output`.
 
 ## Worked example
 
@@ -80,8 +80,8 @@ The **pass** outcome rides the ordinary workflow vocabulary only: the shell exec
 (workflow/complete! "release-1")
 ;; The shell executor observes :verify as a ready :shell gate, runs `test -s target/app.jar`,
 ;; and on exit 0 completes the gate with workflow/outcome-by = "shell" and
-;; workflow/outcome-notes = "shell command exited 0", then :ship becomes ready. A
-;; non-zero exit stamps gate/error instead and leaves :verify ready.
+;; shell/exit-code = 0, then :ship becomes ready. A non-zero exit stamps
+;; gate/error instead and leaves :verify ready.
 ```
 
 ## Failure and recovery

@@ -199,7 +199,12 @@
 
   A continuation's `:outcome` is the registered workflow the worker selected;
   the resolved symbol, fingerprint, and exact target params stay on the strand
-  where `continue!` recorded them."
+  where `continue!` recorded them.
+
+  The projected keys are the engine's own three outcome attributes and nothing
+  else. A caller's outcome vocabulary rides `complete!`'s `:attributes` onto the
+  closed strand, which `show` and the query language already read; projecting a
+  chosen key here would privilege one spool's word for an outcome over another's."
   [strand]
   (let [role (attr strand :workflow/role)
         gate (attr strand :workflow/gate)
@@ -214,8 +219,7 @@
              :at (:updated_at strand)}
       (attr strand :workflow/outcome) (assoc :outcome (attr strand :workflow/outcome))
       (attr strand :workflow/outcome-by) (assoc :by (attr strand :workflow/outcome-by))
-      (attr strand :workflow/outcome-input) (assoc :input (attr strand :workflow/outcome-input))
-      (attr strand :workflow/outcome-notes) (assoc :notes (attr strand :workflow/outcome-notes)))))
+      (attr strand :workflow/outcome-input) (assoc :input (attr strand :workflow/outcome-input)))))
 
 (defn molecule-history
   "Project one molecule root into `{:root {…} :events [event …]}`, its events being

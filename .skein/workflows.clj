@@ -686,14 +686,14 @@
                :purpose (format-alpha/reflow
                          "|Pour and start the land run: land start <feature> --branch
                           |<b> --worktree <path> [--card <id>].")}
-              {:verb "next"
-               :purpose "Show ready land step views, including checkpoint choice input details."}
+              {:verb "ready"
+               :purpose "Show the ready land frontier, including checkpoint choice input details."}
               {:verb "complete"
                :purpose (format-alpha/reflow
-                         "|Close the current non-checkpoint land step, optionally with
-                          |notes and a step=<id> selector. CI shell gates are closed by
-                          |the executor, never by complete. The result includes input
-                          |details when completion reaches a checkpoint.")}
+                         "|Close the current non-checkpoint land step, optionally with a
+                          |step=<id> selector. CI shell gates are closed by the executor,
+                          |never by complete. The result includes input details when
+                          |completion reaches a checkpoint.")}
               {:verb "choose"
                :purpose (format-alpha/reflow
                          "|Decide sign-off: approved requires
@@ -702,7 +702,7 @@
               {:verb "status"
                :purpose (format-alpha/reflow
                          "|Show the land root, ready steps, checkpoint input details,
-                          |done state, run history, and merge lock.")}
+                          |done state, and merge lock.")}
               {:verb "break-lock"
                :purpose "Explicitly break a stale merge lock with a reason."}]
    :discovery {:help "strand help land"
@@ -730,16 +730,15 @@
       "start" (land-result feature
                            (merge {:feature feature}
                                   (land-start! feature (select-keys args [:branch :worktree :card]))))
-      "next" (do (config/require-non-blank! :feature feature)
-                 (land-result feature
-                              {:feature feature
-                               :ready (workflow/ready feature)}))
-      "complete" (let [[rest-tokens step] (config/pop-step-selector "land complete" tail)
-                       notes (first rest-tokens)]
+      "ready" (do (config/require-non-blank! :feature feature)
+                  (land-result feature
+                               {:feature feature
+                                :ready (workflow/ready feature)}))
+      "complete" (let [[rest-tokens step] (config/pop-step-selector "land complete" tail)]
                    (config/require-non-blank! :feature feature)
-                   (when (> (count rest-tokens) 1)
-                     (throw (ex-info "land complete accepts at most one notes argument"
-                                     {:op "land complete" :help "strand help land" :extra (vec (rest rest-tokens))})))
+                   (when (seq rest-tokens)
+                     (throw (ex-info "land complete accepts only a feature and an optional step=<id> selector"
+                                     {:op "land complete" :help "strand help land" :extra (vec rest-tokens)})))
                    (let [ready-before (workflow/ready feature)
                          releasing? (some #(contains? #{"land.cleanup" "land.abort.record"} (:action-ref %)) ready-before)
                          root (workflow/current-root feature)
@@ -752,9 +751,7 @@
                      (when reviewing?
                        (move-card-to-review! card))
                      (try
-                       (let [result (workflow/complete! feature (cond-> {}
-                                                                  notes (assoc :notes notes)
-                                                                  step (assoc :step step)))]
+                       (let [result (workflow/complete! feature (if step {:step step} {}))]
                          (when releasing?
                            (release-merge-lock! feature "land terminal cleanup"))
                          (land-result feature (merge {:feature feature} result)))
@@ -794,7 +791,6 @@
                        :roots (mapv entity-projection (if root [root] []))
                        :done (workflow/done? feature)
                        :ready (workflow/ready feature)
-                       :history (workflow/run-history feature)
                        :merge-lock (inspect-merge-lock)})))
       "break-lock" (let [reason (first tail)]
                      (when (> (count tail) 1)
@@ -820,11 +816,11 @@
              :positionals [{:name :feature
                             :required? true
                             :doc "Feature/branch slug; the land run id."}]}
-    "next" {:doc "Show ready land step views, including checkpoint choice input details."
-            :hook-class :read :deadline-class :standard
-            :positionals [{:name :feature
-                           :required? true
-                           :doc "Land run id (feature/branch slug)."}]}
+    "ready" {:doc "Show the ready land frontier, including checkpoint choice input details."
+             :hook-class :read :deadline-class :standard
+             :positionals [{:name :feature
+                            :required? true
+                            :doc "Land run id (feature/branch slug)."}]}
     "complete" {:doc "Close a land step; checkpoint results include choice input details."
                 :hook-class :mutating :deadline-class :standard
                 :positionals [{:name :feature
@@ -832,7 +828,7 @@
                                :doc "Land run id."}
                               {:name :tail
                                :variadic? true
-                               :doc "Optional notes and a trailing step=<id> selector."}]}
+                               :doc "Optional trailing step=<id> selector."}]}
     "choose" {:doc "Decide sign-off: approved requires a squash subject/body; abort requires a reason."
               :hook-class :mutating :deadline-class :standard
               :positionals [{:name :feature
@@ -1145,7 +1141,11 @@
   The generic driving surface: `start` pours a registered workflow by name
   with a JSON params object; `next`, `complete`, `choose`, and `status` step
   any run by run-id. Registered workflows (story, land continuations, ...)
-  need no op of their own."
+  need no op of their own.
+
+  Superseded by the shipped opt-in `workflow` op and retained only until that
+  adapter covers this op's semantics (PROP-Wcd-001.S14): read a run's history
+  through trusted Clojure, not `flow status`, which reports live state only."
   [ctx]
   (let [{:keys [subcommand run-id workflow choice tail] :as _args} (:op/args ctx)
         verb (first subcommand)
@@ -1172,17 +1172,14 @@
                  (op-result {:run-id run-id
                              :ready (workflow/ready run-id)
                              :done (workflow/done? run-id)}))
-      "complete" (let [[rest-tokens step] (config/pop-step-selector "flow complete" tail)
-                       notes (first rest-tokens)]
+      "complete" (let [[rest-tokens step] (config/pop-step-selector "flow complete" tail)]
                    (config/require-non-blank! :run-id run-id)
-                   (when (> (count rest-tokens) 1)
-                     (throw (ex-info "flow complete accepts at most one notes argument"
-                                     {:op "flow complete" :extra (vec (rest rest-tokens))})))
+                   (when (seq rest-tokens)
+                     (throw (ex-info "flow complete accepts only a run-id and an optional step=<id> selector"
+                                     {:op "flow complete" :extra (vec rest-tokens)})))
                    (op-result
                     (merge {:run-id run-id}
-                           (workflow/complete! run-id (cond-> {}
-                                                        notes (assoc :notes notes)
-                                                        step (assoc :step step))))))
+                           (workflow/complete! run-id (if step {:step step} {})))))
       "choose" (let [[rest-tokens step] (config/pop-step-selector "flow choose" tail)
                      raw-input (first rest-tokens)]
                  (config/require-non-blank! :run-id run-id)
@@ -1199,8 +1196,7 @@
                      (op-result {:run-id run-id
                                  :roots (mapv entity-projection (if root [root] []))
                                  :done (workflow/done? run-id)
-                                 :ready (workflow/ready run-id)
-                                 :history (workflow/run-history run-id)})))
+                                 :ready (workflow/ready run-id)})))
       ;; the declared arg-spec rejects unknown subcommands before dispatch;
       ;; this default is defense in depth, not a reachable CLI path.
       (throw (ex-info "unsupported flow subcommand"
@@ -1230,7 +1226,7 @@
                 :positionals [{:name :run-id :required? true :doc "Workflow run id."}
                               {:name :tail
                                :variadic? true
-                               :doc "Optional notes and a trailing step=<id> selector."}]}
+                               :doc "Optional trailing step=<id> selector."}]}
     "choose" {:doc "Record a checkpoint choice on a run."
               :hook-class :mutating :deadline-class :standard
               :positionals [{:name :run-id :required? true :doc "Workflow run id."}
@@ -1238,7 +1234,7 @@
                             {:name :tail
                              :variadic? true
                              :doc "Optional JSON input and a trailing step=<id> selector."}]}
-    "status" {:doc "Show run state, ready steps, and history."
+    "status" {:doc "Show run state and ready steps."
               :hook-class :read :deadline-class :standard
               :positionals [{:name :run-id :required? true :doc "Workflow run id."}]}}})
 

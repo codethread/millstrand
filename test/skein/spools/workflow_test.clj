@@ -421,16 +421,53 @@
           (is (= [{:title "Do B" :role "step"}]
                  (mapv #(select-keys % [:title :role]) remaining))))))))
 
-(deftest workflow-complete-records-notes-and-attributes
+(deftest workflow-complete-merges-caller-attributes-onto-the-closed-step
   (with-runtime
     (fn [_rt _]
-      (let [definition (workflow/workflow "Notes run" (workflow/step :a "Do A" :self))
-            [step] (:ready (workflow/start! "notes-run" definition {}))]
-        (workflow/complete! "notes-run" {:notes "done via automation" :attributes {"outcome" "ok"}})
+      (let [definition (workflow/workflow "Attrs run" (workflow/step :a "Do A" :self))
+            [step] (:ready (workflow/start! "attrs-run" definition {}))]
+        (workflow/complete! "attrs-run" {:attributes {"acme/outcome" "ok"
+                                                      "acme/exit-code" 7}})
         (let [strand (repl/strand (:id step))]
           (is (= "closed" (:state strand)))
-          (is (= "done via automation" (get-in strand [:attributes :workflow/outcome-notes])))
-          (is (= "ok" (get-in strand [:attributes :outcome]))))))))
+          (is (= "ok" (get-in strand [:attributes :acme/outcome])))
+          ;; a typed value survives the merge as itself, not as its printed form
+          (is (= 7 (get-in strand [:attributes :acme/exit-code]))))))))
+
+(deftest workflow-complete-and-advance-refuse-removed-notes-arg
+  (with-runtime
+    (fn [_rt _]
+      (let [definition (workflow/workflow "No notes run"
+                                          (workflow/step :a "Do A" :self)
+                                          (workflow/step :b "Do B" :self))
+            [step] (:ready (workflow/start! "no-notes-run" definition {}))]
+        (doseq [[label f] [["complete!" #(workflow/complete! "no-notes-run" {:notes "prose"})]
+                           ["advance!" #(workflow/advance! "no-notes-run" {:notes "prose"})]]]
+          (testing label
+            (try
+              (f)
+              (is false (str "expected " label " to refuse :notes"))
+              (catch clojure.lang.ExceptionInfo e
+                (is (re-find #"no longer accepts :notes" (ex-message e)))
+                (is (= :workflow/notes-removed (:reason (ex-data e))))
+                (is (= label (:op (ex-data e))))))))
+        ;; the refusal happens before the guard, so nothing moved
+        (is (= "active" (:state (repl/strand (:id step)))))))))
+
+(deftest workflow-run-history-reads-legacy-outcome-notes-as-an-ordinary-attribute
+  (with-runtime
+    (fn [_rt _]
+      ;; a step closed before the outcome cutover: run-history projects the
+      ;; engine's own outcome keys and leaves the historical row on the strand,
+      ;; where show and the query language read it like any other attribute.
+      (let [definition (workflow/workflow "Legacy run" (workflow/step :a "Do A" :self))
+            [step] (:ready (workflow/start! "legacy-notes-run" definition {}))]
+        (workflow/complete! "legacy-notes-run" {:attributes {"workflow/outcome-notes" "closed in 2026"}})
+        (let [event (first (:events (first (workflow/run-history "legacy-notes-run"))))]
+          (is (= :step-closed (:type event)))
+          (is (not (contains? event :notes))))
+        (is (= "closed in 2026"
+               (get-in (repl/strand (:id step)) [:attributes :workflow/outcome-notes])))))))
 
 (deftest workflow-complete-fails-loudly-on-invalid-step-and-mutates-nothing
   (with-runtime
@@ -471,11 +508,12 @@
                                 (workflow/complete! "gated-run" {:by "  "})))
           (is (= "active" (:state (repl/strand gate-id))))
           ;; an external actor closes the gate with :by; :deploy becomes ready
-          (let [remaining (:ready (workflow/complete! "gated-run" {:by "ci" :notes "green"}))
+          (let [remaining (:ready (workflow/complete! "gated-run" {:by "ci"
+                                                                   :attributes {"ci/result" "green"}}))
                 closed (repl/strand gate-id)]
             (is (= "closed" (:state closed)))
             (is (= "ci" (get-in closed [:attributes :workflow/outcome-by])))
-            (is (= "green" (get-in closed [:attributes :workflow/outcome-notes])))
+            (is (= "green" (get-in closed [:attributes :ci/result])))
             (is (= [{:title "Deploy" :role "step"}]
                    (mapv #(select-keys % [:title :role]) remaining)))))))))
 
@@ -1384,9 +1422,9 @@
                        {:definition 'skein.spools.workflow-test/introspect-stage-a-workflow
                         :context {:feature "widgets"}})
       (workflow/complete! "hist")                            ; :draft
-      (workflow/complete! "hist" {:notes "refined round 1"}) ; :refine
+      (workflow/complete! "hist" {:attributes {"acme/round" "one"}}) ; :refine
       (workflow/choose! "hist" :revise {:reason "needs work"}) ; loop → round 2
-      (workflow/complete! "hist" {:notes "refined round 2"}) ; :refine (draft skipped)
+      (workflow/complete! "hist" {:attributes {"acme/round" "two"}}) ; :refine (draft skipped)
       (workflow/choose! "hist" :approve {})                  ; hand off → stage B
       (workflow/complete! "hist")                            ; :finish → done
       (is (workflow/done? "hist"))
@@ -1396,17 +1434,21 @@
             revise-mol (first (filter #(= "revise" (choice-outcome %)) history))
             approve-mol (first (filter #(= "approve" (choice-outcome %)) history))
             stage-b-mol (first (filter #(= "Introspect stage B" (get-in % [:root :title])) history))
-            note-set (fn [mol] (set (keep :notes (:events mol))))]
+            ;; the engine projects its own outcome keys only, so a caller's
+            ;; vocabulary is read back off the closed strands the events name
+            round-set (fn [mol]
+                        (set (keep #(get-in (repl/strand (:id %)) [:attributes :acme/round])
+                                   (:events mol))))]
         (is (= 3 (count history)))
         ;; molecules are ordered by creation; events within a molecule by :at
         (is (= created (sort created)))
         (is (every? (fn [{:keys [events]}] (= (map :at events) (sort (map :at events)))) history))
-        ;; the revise round recorded the choice input and the first round's notes
+        ;; the revise round recorded the choice input and the first round's attrs
         (is (= "Introspect stage A" (get-in revise-mol [:root :title])))
         (is (= {:reason "needs work"}
                (:input (first (filter #(= :choice (:type %)) (:events revise-mol))))))
-        (is (contains? (note-set revise-mol) "refined round 1"))
-        (is (contains? (note-set approve-mol) "refined round 2"))
+        (is (contains? (round-set revise-mol) "one"))
+        (is (contains? (round-set approve-mol) "two"))
         ;; the conditioned :draft ran only in the first round
         (is (some #(= "Draft widgets" (:title %)) (:events revise-mol)))
         (is (not-any? #(= "Draft widgets" (:title %)) (:events approve-mol)))

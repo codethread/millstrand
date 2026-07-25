@@ -498,11 +498,13 @@
   "Return a read-only, creation-ordered projection of every molecule ever poured
   for run-id (any state) as a vector of
   `{:root {:id :title :state :created_at} :events [{:type :id :title
-  :outcome :by :input :notes :at} …]}` maps.
+  :outcome :by :input :at} …]}` maps.
 
-  `:type` is `:step-closed`, `:choice`, or `:gate-closed`; events are ordered by
-  their strand's `updated_at`. Writes nothing and fails loudly (TEN-003) for a
-  run that never had a root strand."
+  `:type` is `:step-closed`, `:choice`, `:continuation`, or `:gate-closed`;
+  events are ordered by their strand's `updated_at`. An event projects the
+  engine's own outcome attributes only; a caller's `complete!` `:attributes` stay
+  readable on the closed strand itself. Writes nothing and fails loudly
+  (TEN-003) for a run that never had a root strand."
   [run-id]
   (let [rt (current/runtime)
         roots (query/run-molecule-roots rt run-id)]
@@ -515,9 +517,10 @@
   the `{:ready [step-view ...] :done boolean}` result shape.
 
   opts may include `:step` (materialized strand id) to select among multiple
-  ready steps; without it, exactly one step must be ready. opts may also
-  include `:notes` (string, stored as \"workflow/outcome-notes\") and `:attributes`
-  (map merged onto the closed step). A non-blank `:by` is recorded as
+  ready steps; without it, exactly one step must be ready. opts may also include
+  `:attributes`, a map merged onto the closed step in the closing mutation — the
+  engine's one composition point for a caller's own outcome vocabulary, and the
+  reason it publishes none of its own. A non-blank `:by` is recorded as
   \"workflow/outcome-by\" on any step it is supplied for, but is only required
   when closing a gate step (one built with `gate`).
 
@@ -529,6 +532,7 @@
   ([run-id opts]
    (let [rt (current/runtime)]
      (util/require-map! opts [:opts])
+     (routing/refuse-notes! "complete!" opts)
      (guard/with-run!
        rt run-id
        (fn []
@@ -661,7 +665,7 @@
   dispatches to `choose!` with that choice, its `:input` (default `{}`), and the
   pass-through `:by`/`:step` opts. When it is a plain step, `:choice` must be
   absent (fail loudly otherwise); `advance!` dispatches to `complete!` with the
-  pass-through `:notes`/`:attributes`/`:step`/`:by` opts.
+  pass-through `:attributes`/`:step`/`:by` opts.
 
   A ready defer is not advanceable. Selecting a continuation is a root transfer
   with its own target and params, which `advance!`'s one-ready-step vocabulary
@@ -671,6 +675,7 @@
   ([run-id opts]
    (let [rt (current/runtime)]
      (util/require-map! opts [:opts])
+     (routing/refuse-notes! "advance!" opts)
      (guard/with-run!
        rt run-id
        (fn []
@@ -694,7 +699,7 @@
                (when (contains? opts :choice)
                  (fail! "advance! on a step must not supply a :choice"
                         {:run-id run-id :step (query/strand->view step)}))
-               (complete! run-id (select-keys opts [:notes :attributes :step :by]))))))))))
+               (complete! run-id (select-keys opts [:attributes :step :by]))))))))))
 
 (defn choice-details
   "Return choice explanations for run-id's current workflow checkpoint, keyed by
@@ -1027,23 +1032,29 @@
 (defn run-complete!
   "Close the ready ordinary step of `request`'s run and return the run result.
 
-  `request` is `{:run-id … :step … :by …}`, step and actor optional. Without
-  `:step` the sole ready ordinary step is inferred; a checkpoint or defer exit
-  ready alongside it does not make that ambiguous, because neither is a step this
-  verb could act on.
+  `request` is `{:run-id … :step … :by … :attributes {…}}`, all but the run id
+  optional. Without `:step` the sole ready ordinary step is inferred; a checkpoint
+  or defer exit ready alongside it does not make that ambiguous, because neither
+  is a step this verb could act on.
+
+  `:attributes` merges onto the closed step in the closing mutation, so a worker
+  records what it found in its own vocabulary without a second write an observer
+  could see the step closed without. The engine judges the shape and nothing more:
+  what the keys mean belongs to whoever poured the workflow.
 
   A gate is never inferred. Closing one is an assertion that something outside
   the run happened, so it takes both an explicit `:step` and a `:by` recording
   who decided so. `::complete-request` owns the request shape."
   [request]
   (let [rt (current/runtime)
-        {:keys [run-id by]} (require-valid! ::complete-request request
-                                            "Invalid workflow complete request")]
+        {:keys [run-id by attributes]} (require-valid! ::complete-request request
+                                                       "Invalid workflow complete request")]
     (mutate-run! rt "workflow complete" :step request
                  (fn [target]
                    (runs/require-gate-actor! run-id target by)
                    (complete! run-id (cond-> {:step (:id target)}
-                                       by (assoc :by by)))))))
+                                       by (assoc :by by)
+                                       attributes (assoc :attributes attributes)))))))
 
 (defn run-choose!
   "Record `request`'s choice on the ready checkpoint and return the run result.
@@ -1129,13 +1140,15 @@
            "workflow/continued-workflow" "workflow/continued-definition"
            "workflow/continued-fingerprint" "workflow/continued-params"
            "workflow/choice-details" "workflow/procedure" "workflow/outcome"
-           "workflow/outcome-by" "workflow/outcome-notes" "workflow/outcome-input"
+           "workflow/outcome-by" "workflow/outcome-input"
            "workflow/summary" "workflow/stage-params" "workflow/squashed-root"
            "workflow/squashed-count" "workflow/artifact" "workflow/decision-point"
            "workflow/action-ref" "workflow/instruction" "workflow/bond"]
     :doc (fmt/reflow "
           |Workflow molecule/wisp attributes written by the workflow spool's
-          |compile and builders.")}))
+          |compile and builders. A step closed before the outcome cutover may
+          |also carry workflow/outcome-notes, which the engine no longer writes;
+          |it reads back as an ordinary historical attribute.")}))
 
 (defn contribute
   "Module contribution for the workflow spool.
@@ -1329,6 +1342,10 @@
 (s/def :skein.spools.workflow.request/params :skein.spools.workflow.values/params)
 (s/def :skein.spools.workflow.request/step non-blank-string?)
 (s/def :skein.spools.workflow.request/by non-blank-string?)
+;; Attributes a worker merges onto the step it closes. String keys, because these
+;; are strand attribute keys as the wire and the query language spell them, not
+;; the keywordized params a definition's `:param-spec` judges.
+(s/def :skein.spools.workflow.request/attributes (s/map-of non-blank-string? any?))
 (s/def ::continue-request
   (s/keys :req-un [:skein.spools.workflow.request/run-id
                    :skein.spools.workflow.request/workflow]
@@ -1488,7 +1505,8 @@
 (s/def ::complete-request
   (s/keys :req-un [:skein.spools.workflow.request/run-id]
           :opt-un [:skein.spools.workflow.request/step
-                   :skein.spools.workflow.request/by]))
+                   :skein.spools.workflow.request/by
+                   :skein.spools.workflow.request/attributes]))
 (s/def ::choose-request
   (s/keys :req-un [:skein.spools.workflow.request/run-id
                    :skein.spools.workflow.request/choice]

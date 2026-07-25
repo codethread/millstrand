@@ -240,7 +240,7 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
   are missing (see §5). Revision loops route `:next` back to the same stage
   (see §5).
 - `(continue! run-id workflow)` / `(continue! run-id workflow params)` / `(continue! run-id workflow params opts)` — fills a ready defer exit by closing the current root and pouring one of the defer's allowed registered workflows under the same run id, returning the same result shape. `opts` takes `:step` (to pick among several ready defers) and `:by`. See §5a.
-- `(advance! run-id)` / `(advance! run-id opts)` — one verb that advances the run regardless of the ready step's kind, returning the same result shape. When the resolved ready step is a checkpoint, `opts` must carry `:choice` (and may carry `:input`, default `{}`, plus pass-through `:by`/`:step`) and it dispatches to `choose!`; when it is a step, `:choice` must be absent and it dispatches to `complete!` with pass-through `:notes`/`:attributes`/`:step`/`:by`. Supplying `:choice` on a step, or omitting it on a checkpoint, fails loudly. A ready defer is not advanceable: picking a continuation carries a target and its own params, which `advance!` has no way to express, so it directs the caller to `continue!`.
+- `(advance! run-id)` / `(advance! run-id opts)` — one verb that advances the run regardless of the ready step's kind, returning the same result shape. When the resolved ready step is a checkpoint, `opts` must carry `:choice` (and may carry `:input`, default `{}`, plus pass-through `:by`/`:step`) and it dispatches to `choose!`; when it is a step, `:choice` must be absent and it dispatches to `complete!` with pass-through `:attributes`/`:step`/`:by`. Passing the removed `:notes` fails as `workflow/notes-removed`. Supplying `:choice` on a step, or omitting it on a checkpoint, fails loudly. A ready defer is not advanceable: picking a continuation carries a target and its own params, which `advance!` has no way to express, so it directs the caller to `continue!`.
 
 Every run-mutating op holds a per-run guard from the moment it resolves the ready frontier through the batch it applies. Two workers acting on one run are therefore serialized: the second re-resolves against the frontier the first left, and fails loudly on a step that is no longer ready rather than writing over it. The guard is runtime-owned, so it covers one weaver's in-process callers — the same scope as the ambient runtime those ops resolve.
 
@@ -293,9 +293,11 @@ A `call` expands to its inner steps plus a `procedure`-role **join** step that d
 - `:step` — materialized strand id, selects which ready step to complete
   when more than one is ready. Without it, single-ready-step behavior
   applies (fails loudly if ambiguous). Validated before any mutation.
-- `:notes` — recorded on the closed step as `"workflow/outcome-notes"`.
-- `:attributes` — merged onto the closed step's attributes. Molecules exist
-  for the audit trail, so closing a step can record what happened.
+- `:attributes` — merged onto the closed step's attributes in the closing
+  transaction, so no observer sees the step closed without them. Molecules
+  exist for the audit trail, so closing a step can record what happened —
+  in your own namespaced keys. The engine keeps no prose field of its own;
+  passing the removed `:notes` fails as `workflow/notes-removed`.
 - `:by` — actor identity, recorded as `"workflow/outcome-by"`. **Mandatory**
   when closing a `gate` step (see §3 "Gates"); ignored on non-gate steps.
 
@@ -573,6 +575,20 @@ Failures name the role they refused for:
 | `workflow/gate-actor-required` | A gate close arrived without `--by`. |
 | `workflow/frontier-stale` | Another worker moved the run first. |
 | `workflow/run-unknown` | The run id has never had a root strand. |
+| `workflow/attr-key-duplicate` | One `--attr` key was given twice in a single `workflow complete`. |
+| `workflow/attributes-invalid` | `--attributes` was not a JSON object, or carried a blank key. |
+
+### Recording an outcome on `complete`
+
+`complete` takes `strand add`'s attribute pair, and merges it onto the step it closes in the same mutation:
+
+```console
+$ strand workflow complete feat-x --attributes '{"acme/exit":0}' --attr acme/verdict=pass
+```
+
+Repeatable `--attr key=value` carries string values at the highest precedence; `--attributes` carries a typed JSON object underneath it, so a key in both takes the `--attr` value. Both accept `:stdin` and `:payload/<name>` references, and repeating one `--attr` key inside a single call fails as `workflow/attr-key-duplicate` rather than silently taking the last one.
+
+The engine names none of these keys. It has no outcome-prose field for a worker to fill — a step's outcome is whatever vocabulary the spool that poured the workflow decided on, which is why the merge rides the closing transaction: no observer can see the step closed without it. A step closed before this cutover may carry `workflow/outcome-notes`, which nothing writes now and `run-history` no longer projects; it reads back as an ordinary historical attribute.
 
 ### Losing a race
 
@@ -594,7 +610,7 @@ $ strand workflow await feat-x --timeout-secs 600
 
 ### What the worker surface will not do
 
-Params and choice input are JSON objects parsed through the shared declared-arg machinery, so `:stdin` and `:payload/<name>` references work on `--params` and `--input` like every other JSON flag. Beyond that: no run history expansion, no family filter, no pagination, no attribute writes on `complete` yet, and no way to start anything but a registered name. Pouring a workflow map or a definition Var stays trusted Clojure.
+Params and choice input are JSON objects parsed through the shared declared-arg machinery, so `:stdin` and `:payload/<name>` references work on `--params` and `--input` like every other JSON flag. Beyond that: no run history expansion, no family filter, no pagination, and no way to start anything but a registered name. Pouring a workflow map or a definition Var stays trusted Clojure.
 
 ## 6. Molecule ops
 
@@ -645,11 +661,11 @@ Each step carries `:id`, `:title`, `:role` (`"step"`/`"checkpoint"`/`"procedure"
 [{:root {:id "9i9la" :title "Stage A" :state "closed" :created_at "…"}
   :events [{:type :choice :id "bl4pw" :title "Sign off" :at "…"
             :outcome "revise" :input {:reason "needs work"}}
-           {:type :step-closed :id "i1b44" :title "Refine draft" :at "…" :notes "…"}]}
+           {:type :step-closed :id "i1b44" :title "Refine draft" :at "…" :by "agent"}]}
  …]
 ```
 
-Each event is a **closed** `step`, `checkpoint`, or `defer` strand (procedure joins, being engine bookkeeping, are omitted): a checkpoint is `:choice`, a filled defer exit is `:continuation` whose `:outcome` is the workflow the worker selected, a closed gate is `:gate-closed`, any other step is `:step-closed`. An event carries `:type`, `:id`, `:title`, `:at`, and — when present — `:outcome`, `:by`, `:input`, and `:notes`. Events are ordered by their strand's `updated_at` (`:at`); because that timestamp is second-resolution, events closed in the same transaction (e.g. a routed checkpoint and the steps it force-closes) tie and fall back to strand-id order, so treat within-second event order as unordered. `run-history` writes nothing and **fails loudly** for a run that never had a root strand.
+Each event is a **closed** `step`, `checkpoint`, or `defer` strand (procedure joins, being engine bookkeeping, are omitted): a checkpoint is `:choice`, a filled defer exit is `:continuation` whose `:outcome` is the workflow the worker selected, a closed gate is `:gate-closed`, any other step is `:step-closed`. An event carries `:type`, `:id`, `:title`, `:at`, and — when present — `:outcome`, `:by`, and `:input`: the engine's own outcome attributes and nothing else. A caller's `complete!` `:attributes` stay readable on the closed strand itself, where `show` and the query language reach them; privileging one spool's word for an outcome in this projection is exactly what the cutover removed. Events are ordered by their strand's `updated_at` (`:at`); because that timestamp is second-resolution, events closed in the same transaction (e.g. a routed checkpoint and the steps it force-closes) tie and fall back to strand-id order, so treat within-second event order as unordered. `run-history` writes nothing and **fails loudly** for a run that never had a root strand.
 
 ### `squash-run!`
 
@@ -688,7 +704,7 @@ This table is the extension API: spools built on top of `skein.spools.workflow` 
 | `workflow/continued-params` | The exact params the target poured with — its `:defaults` under what the caller supplied, JSON-safe. Matches the new root's `workflow/context`. | `continue!`, on the defer step, at close. |
 | `workflow/outcome-input` | The `input` map passed to `choose!`. | `choose!`, on the checkpoint step, at close. |
 | `workflow/outcome-by` | Actor identity that closed the strand; `"engine"` on an auto-closed procedure join. | `choose!` (checkpoint close, when opts supply `:by`); `continue!` (defer close, when opts supply `:by`); `complete!` (gate close, where `:by` is mandatory); join auto-close (`"engine"`). |
-| `workflow/outcome-notes` | Freeform notes recorded when a step closes. | `complete!`, from `opts :notes`. |
+| `workflow/outcome-notes` | **Historical.** Freeform notes a step close recorded before the outcome cutover. Nothing writes it now; existing rows read back as ordinary attributes, and `run-history` gives them no special projection. | — (was `complete!`, from `opts :notes`). |
 | `workflow/procedure` | Name of the `call` id whose expansion this join step represents. | `expand-call-step`, on the procedure join step. |
 | `workflow/bond` | `"sequential"` — recorded on the bond edge itself, marking a cross-molecule bond. | `bond!`. |
 | `workflow/squashed-root` | Root id of the subgraph a digest strand replaced. | `squash!`. |

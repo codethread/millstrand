@@ -52,8 +52,8 @@ Each recipe cites the honest source it was distilled from — the shell-executor
 (workflow/start! "release-1" release {})
 (workflow/complete! "release-1")            ; finish :build; :verify becomes ready
 ;; the shell executor runs `test -s target/app.jar`; on exit 0 it stamps the gate
-;; workflow/outcome-by = "shell", workflow/outcome-notes = "shell command exited 0",
-;; and :ship becomes ready. A missing/empty jar stamps gate/error instead.
+;; workflow/outcome-by = "shell", shell/exit-code = 0, and :ship becomes ready.
+;; A missing/empty jar stamps gate/error instead.
 ```
 
 **Why this shape.**

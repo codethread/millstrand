@@ -656,7 +656,7 @@
       (is (contains? (:choices (op! "devflow-choices" ["ops-feature"])) "abort"))
       (let [after-worktree (op! "devflow-choose" ["ops-feature" "already-in-worktree"])]
         (is (= "brief" (:artifact (first (:ready after-worktree))))))
-      (let [after-brief (op! "devflow-complete" ["ops-feature" "brief captured"])]
+      (let [after-brief (op! "devflow-complete" ["ops-feature"])]
         (is (= "discuss-scope" (:checkpoint (first (:ready after-brief))))))
       (let [in-proposal (op! "devflow-choose" ["ops-feature" "proposal-ready"])]
         (is (= "proposal" (:stage (first (:ready in-proposal)))))
@@ -680,7 +680,7 @@
         (is (= "devflow-advance" (:operation aborted)))
         (is (= "abort" (:stage (first (:ready aborted)))))
         (is (= "devflow.abort.record" (:action-ref (first (:ready aborted))))))
-      (let [done (op! "devflow-advance" ["squash-feature" "recorded abort"])]
+      (let [done (op! "devflow-advance" ["squash-feature"])]
         (is (true? (:done done)))
         (is (empty? (:ready done))))
       (let [history (op! "devflow-run-history" ["squash-feature"])]
@@ -808,12 +808,12 @@
 
 (defn- shell-gate-complete!
   "Close the ready :shell land gate for feature the way the shell executor
-  does — `complete!` with `:by \"shell\"`. The config fixture loads
-  workflows.clj without installing the shell executor, so tests stand in
-  for its pass path."
-  [feature notes]
+  does — `complete!` with `:by \"shell\"` and the executor's own `shell/*`
+  outcome attributes. The config fixture loads workflows.clj without installing
+  the shell executor, so tests stand in for its pass path."
+  [feature output]
   ((requiring-resolve 'skein.spools.workflow/complete!)
-   feature {:by "shell" :notes notes}))
+   feature {:by "shell" :attributes {"shell/exit-code" 0 "shell/output" output}}))
 
 (defn- write-fake-gh!
   "Write a deterministic `gh` executable for feature-CI watch script tests."
@@ -931,7 +931,7 @@
         (is (not (contains? (first (:ready started)) :choice-details))))
       ;; completing push-draft-pr leaves the machine ci-green shell gate ready,
       ;; carrying the interpolated watch command for the shell executor
-      (let [completed (op! "land" ["complete" "land-x" "pushed; PR #1"])
+      (let [completed (op! "land" ["complete" "land-x"])
             gate (first (:ready completed))
             gate-attrs (:attributes (weaver/show rt (:id gate)))]
         (is (= "land complete" (:operation completed)))
@@ -944,14 +944,14 @@
         (is (= "/tmp/land-x" (:shell/cwd gate-attrs))))
       ;; a coordinator cannot hand-close a CI gate; the shell executor owns it
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Gate steps require a non-blank :by"
-                            (op! "land" ["complete" "land-x" "trying to skip CI"])))
+                            (op! "land" ["complete" "land-x"])))
       (shell-gate-complete! "land-x" "checks green")
       (is (= "land.signoff.review"
-             (:action-ref (first (:ready (op! "land" ["next" "land-x"]))))))
-      (let [at-checkpoint (op! "land" ["complete" "land-x" "roster passed"])
+             (:action-ref (first (:ready (op! "land" ["ready" "land-x"]))))))
+      (let [at-checkpoint (op! "land" ["complete" "land-x"])
             checkpoint (first (:ready at-checkpoint))
             choices ((requiring-resolve 'skein.spools.workflow/choice-details) "land-x")
-            next-checkpoint (first (:ready (op! "land" ["next" "land-x"])))
+            next-checkpoint (first (:ready (op! "land" ["ready" "land-x"])))
             status-checkpoint (first (:ready (op! "land" ["status" "land-x"])))]
         (is (= "checkpoint" (:role checkpoint)))
         (is (= "signoff" (:checkpoint checkpoint)))
@@ -961,7 +961,7 @@
         (is (= choices (:choice-details status-checkpoint))))
       ;; the sign-off checkpoint offers approved + abort; both declare required input
       (let [choices (:choice-details
-                     (first (:ready (op! "land" ["next" "land-x"]))))
+                     (first (:ready (op! "land" ["ready" "land-x"]))))
             approved-input (get-in choices ["approved" "input"])
             abort-input (get-in choices ["abort" "input"])]
         (is (= #{"approved" "abort"} (set (keys choices))))
@@ -996,28 +996,28 @@
                             (op! "land" ["choose" "land-z" "approved"
                                          "{\"subject\":\"feat: land z\",\"body\":\"Squashed commits: def456\"}"])))
       (shell-gate-complete! "land-x" "PR merged")
-      (let [gate (first (:ready (op! "land" ["next" "land-x"])))
+      (let [gate (first (:ready (op! "land" ["ready" "land-x"])))
             gate-attrs (:attributes (weaver/show rt (:id gate)))]
         (is (= "land.main.pull" (:action-ref gate)))
         (is (= "shell" (:gate gate)))
         (is (str/includes? (last (:shell/argv gate-attrs)) "--ff-only")))
       (shell-gate-complete! "land-x" "main fast-forwarded")
-      (let [gate (first (:ready (op! "land" ["next" "land-x"])))
+      (let [gate (first (:ready (op! "land" ["ready" "land-x"])))
             gate-attrs (:attributes (weaver/show rt (:id gate)))]
         (is (= "land.main.ci-green" (:action-ref gate)))
         (is (= "shell" (:gate gate)))
         (is (= "sh" (first (:shell/argv gate-attrs))))
         (is (str/includes? (last (:shell/argv gate-attrs)) "gh run list")))
       (shell-gate-complete! "land-x" "main runs green")
-      (let [ready-cleanup (op! "land" ["next" "land-x"])
+      (let [ready-cleanup (op! "land" ["ready" "land-x"])
             cleanup-step (first (:ready ready-cleanup))]
-        (is (= "land next" (:operation ready-cleanup)))
+        (is (= "land ready" (:operation ready-cleanup)))
         (is (= "land.cleanup" (:action-ref cleanup-step)))
         ;; cardless run: the cleanup instruction must omit kanban-finish
         ;; entirely rather than render a literal "<card>" placeholder
         (is (not (str/includes? (:instruction cleanup-step) "kanban finish")))
         (is (not (str/includes? (:instruction cleanup-step) "<card>"))))
-      (let [done (op! "land" ["complete" "land-x" "cleaned up"])]
+      (let [done (op! "land" ["complete" "land-x"])]
         (is (true? (:done done)))
         (is (empty? (:ready done))))
       (let [status (op! "land" ["status" "land-x"])]
@@ -1025,7 +1025,8 @@
         (is (true? (:done status)))
         (is (empty? (:ready status)))
         (is (nil? (:merge-lock status)))
-        (is (seq (:history status)))))))
+        ;; history is not a land concern: read a run's past through trusted Clojure
+        (is (not (contains? status :history)))))))
 
 (deftest land-signoff-abort-routes-to-record-step
   (with-config-runtime
@@ -1052,7 +1053,7 @@
             context (get-in root [:attributes :workflow/context])
             card-id (or (:card context) (get context "card"))]
         (is (= "claimed" (get-in (weaver/show rt card-id) [:attributes :kanban/lane]))))
-      (let [done (op! "land" ["complete" "land-y" "abort recorded"])]
+      (let [done (op! "land" ["complete" "land-y"])]
         (is (true? (:done done)))
         (is (empty? (:ready done)))))))
 
@@ -1072,7 +1073,7 @@
         (shell-gate-complete! "land-w" "PR merged")                  ; merge-pr
         (shell-gate-complete! "land-w" "main fast-forwarded")       ; pull-main
         (shell-gate-complete! "land-w" "main runs green")           ; main-ci-green
-        (let [ready-cleanup (op! "land" ["next" "land-w"])
+        (let [ready-cleanup (op! "land" ["ready" "land-w"])
               cleanup-step (first (:ready ready-cleanup))]
           (is (= "land.cleanup" (:action-ref cleanup-step)))
           (is (str/includes? (:instruction cleanup-step)
@@ -1136,7 +1137,7 @@
             subs (get-in help [:node :children])
             by-name (into {} (map (juxt :name identity)) subs)]
         (is (= "land about" (:operation (op! "land" ["about"]))))
-        (is (= #{"about" "start" "next" "complete" "choose" "status" "break-lock"}
+        (is (= #{"about" "start" "ready" "complete" "choose" "status" "break-lock"}
                (set (map :name subs))))
         (is (str/starts-with? (get-in help [:node :doc])
                               "Drive the coordinator landing workflow"))

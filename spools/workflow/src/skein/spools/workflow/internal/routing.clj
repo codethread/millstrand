@@ -27,18 +27,31 @@
   the workflow engine's to close."
   #{"root" "step" "checkpoint" "defer" "procedure"})
 
+(defn refuse-notes!
+  "Fail loudly when `opts` carries `:notes`, naming the op that received it.
+
+  The engine records no outcome prose of its own: a caller with something to say
+  about a close says it in its own namespaced attributes, which `:attributes`
+  merges onto the closed step in the same mutation. Silently dropping `:notes`
+  would leave a caller believing it had recorded an outcome it did not, so the
+  removed argument refuses (TEN-003)."
+  [op opts]
+  (when (contains? opts :notes)
+    (fail! (str "Workflow " op " no longer accepts :notes; record outcomes in your own "
+                "namespaced :attributes")
+           {:reason :workflow/notes-removed
+            :op op
+            :notes (:notes opts)
+            :alternative "{:attributes {\"your-spool/outcome\" \"…\"}}"})))
+
 (defn close-attributes!
-  "Return attributes to merge onto a step closed by complete!, from optional
-  `:notes` (string, stored as \"workflow/outcome-notes\") and `:attributes` (map)
-  opts. Returns nil when neither is present."
+  "Return the attribute map to merge onto a step closed by complete!, from its
+  optional `:attributes` opt. Returns nil when the opt is absent or empty."
   [opts]
-  (let [{:keys [notes attributes]} opts]
-    (when (and (contains? opts :notes) (not (string? notes)))
-      (fail! "Workflow :notes must be a string" {:notes notes}))
+  (let [{:keys [attributes]} opts]
     (when (and (contains? opts :attributes) (not (map? attributes)))
       (fail! "Workflow :attributes must be a map" {:attributes attributes}))
-    (not-empty (merge (or attributes {})
-                      (when notes {"workflow/outcome-notes" notes})))))
+    (not-empty attributes)))
 
 (defn- depends-on-edges
   "Return the depends-on adjacency (from-id -> #{to-id ...}) internal to
