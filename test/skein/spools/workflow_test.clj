@@ -1812,7 +1812,7 @@
       (workflow/register-workflow! :wt-review 'skein.spools.workflow-test/static-review)
       (is (= {:wt-review 'skein.spools.workflow-test/static-review}
              (workflow/unregister-workflow! :wt-build))
-             "removal returns what the direct layer still declares")
+          "removal returns what the direct layer still declares")
       (is (= [:wt-review] (vec (keys (workflow/workflows)))))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown registered workflow"
                             (workflow/start! "gone" :wt-build {})))
@@ -1992,9 +1992,9 @@
     (fn [rt config-dir]
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
       (let [source (definition-module-source
-                    config-dir "wf-gone"
-                    (str "(skein.api.runtime.alpha/collect-entry!\n"
-                         "  workflow/definition-kind :gone 'test.module.wf-gone/absent)\n"))
+                     config-dir "wf-gone"
+                     (str "(skein.api.runtime.alpha/collect-entry!\n"
+                          "  workflow/definition-kind :gone 'test.module.wf-gone/absent)\n"))
             result (runtime/module! rt :wf-gone {:file source})]
         (is (= :refused (:status result)))
         (is (= :workflow/definition-unresolvable
