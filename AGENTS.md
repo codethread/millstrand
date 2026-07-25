@@ -8,7 +8,7 @@ Read `./devflow/TENETS.md` and `./devflow/PHILOSOPHY.md` before all work. This f
 
 **Working with the user** — claim a kanban card first; `strand kanban prime` is the board discipline.
 
-**Driving any registered workflow** — `strand workflow list` for the catalogue, `strand workflow show <name>` for one definition's param contract, then `start`/`ready`/`complete`/`choose`/`continue`/`await` for the run. This repo activates that opt-in surface in `.skein/init.clj`.
+**Driving any registered workflow** — this repo activates the shipped worker surface in `.skein/init.clj`: `strand prime workflow` before you start, `strand about workflow` for the manual, `strand help workflow` for exact invocation.
 
 **Starting multi-step work** — `mill strand prime`: the planning/tracking workflow. Feature work runs the devflow lifecycle (`strand devflow-start <feature>`); large module changes pour the registered story workflow — invocation and discipline via `strand devflow-conventions` and `strand about workflow`.
 
