@@ -35,6 +35,7 @@
 
 (declare non-blank-string?
          explain-step explain-gate explain-checkpoint explain-call explain-workflow
+         explain-definition
          reject-unknown-keys! step*
          param-opt-keys step-opt-keys checkpoint-opt-keys call-opt-keys workflow-opt-keys
          choice-name choice-details-attr reject-unknown-choice-keys!
@@ -53,12 +54,14 @@
   ([topic]
    (case topic
      :workflow (explain-workflow)
+     :definition (explain-definition)
      :step (explain-step)
      :gate (explain-gate)
      :checkpoint (explain-checkpoint)
      :call (explain-call)
      (fail! "Unknown workflow explain topic"
-            {:topic topic :topics [:workflow :step :gate :checkpoint :call]}))))
+            {:topic topic
+             :topics [:workflow :definition :step :gate :checkpoint :call]}))))
 
 (defn param
   "Return a workflow param definition.
@@ -1008,10 +1011,49 @@
             :params "Procedure-local params merged with parent workflow params."
             :depends-on "Parent refs that the procedure entry steps wait for."}})
 
+(defn- explain-definition []
+  {:topic :definition
+   :summary (fmt/reflow "
+            |A static definition is a workflow value that describes itself: what it is
+            |for, how it may be invoked, and what params it takes. Register its Var
+            |symbol and callers can learn all of that without running anything.")
+   :contract (spec-entry ::definition
+                         (fmt/reflow "
+                         |A definition is a workflow plus the optional registration
+                         |contract :doc, :entrypoints, :param-spec, and :defaults. The
+                         |same options may be passed to the workflow builder directly;
+                         |defworkflow additionally collects the Var's qualified symbol
+                         |while a module contribution collector is active.")
+                         '(defworkflow build
+                            "Build an agreed feature scope."
+                            {:entrypoints #{:start :continue}
+                             :param-spec :acme.workflows/build-params
+                             :defaults {:reviewer "agent"}}
+                            (workflow "Build accepted scope"
+                                      (step :implement "Implement the scope" :self))))
+   :fields {:doc "What the workflow is for, stored on the value and the Var."
+            :entrypoints (fmt/reflow "
+                          |Non-empty subset of #{:start :continue :call} declaring how a
+                          |registered name may be invoked.")
+            :param-spec (fmt/reflow "
+                         |Qualified keyword naming a registered spec for the complete
+                         |resolved params map.")
+            :defaults (fmt/reflow "
+                       |Partial keyword-keyed overlay merged under caller params. Values
+                       |must be JSON-compatible; it need not satisfy :param-spec on its
+                       |own.")}
+   :compatibility (fmt/reflow "
+                   |A registered symbol resolving to a function is a legacy constructor:
+                   |opaque, declaring no entrypoints, and available to trusted Clojure
+                   |while shipped workflows migrate. A constructor that throws fails as
+                   |workflow/legacy-constructor-failed and one returning a non-workflow as
+                   |workflow/legacy-definition-invalid, both before any pour.")})
+
 (defn- explain-workflow []
   {:topic :workflow
    :summary "Clojure-native workflow data compiled into a Skein molecule or wisp."
    :builders {'workflow 'skein.spools.workflow/workflow
+              'defworkflow 'skein.spools.workflow/defworkflow
               'step 'skein.spools.workflow/step
               'gate 'skein.spools.workflow/gate
               'checkpoint 'skein.spools.workflow/checkpoint
@@ -1031,9 +1073,11 @@
                      |definitions support boolean :required and optional :default.")}
    :runtime {:start! (fmt/reflow "
                       |(start! run-id workflow params opts) accepts a workflow map,
-                      |constructor var, or registered workflow keyword. Var/keyword
-                      |starts derive :definition; absent :context defaults from
-                      |JSON-safe params after keyword values are stringified.")
+                      |a definition var, or a registered workflow keyword. Var/keyword
+                      |starts derive :definition and merge a static definition's
+                      |:defaults under params; a registered name must declare the
+                      |:start entrypoint. Absent :context defaults from JSON-safe
+                      |params after keyword values are stringified.")
              :ready (fmt/reflow "
                      |(ready run-id selector) filters ready views by keys such as :role, :gate,
                      |:checkpoint, or :checkpoint-kind.")
@@ -1044,9 +1088,24 @@
                                 |Returns the single ready checkpoint view, nil when none,
                                 |and fails loudly when ambiguous.")}
    :registry {:register-workflow! (fmt/reflow "
-                                   |Register keyword -> fully-qualified constructor
-                                   |symbol for named :next routes and keyword
-                                   |start!/describe.")}
+                                   |Register keyword -> fully-qualified definition
+                                   |symbol for named :next routes, keyword call
+                                   |targets, and keyword start!/describe. Validates
+                                   |the resulting registry before mutating.")
+              :unregister-workflow! (fmt/reflow "
+                                     |Remove a direct/REPL registration. A name a module
+                                     |owner published disappears by omitting its
+                                     |contribution instead.")
+              :resolve-workflow (fmt/reflow "
+                                 |Return {:name :definition :kind :value :entrypoints}
+                                 |for a registered name: :static carries the definition
+                                 |map, :legacy the opaque constructor.")
+              :entrypoints (fmt/reflow "
+                            |A static definition declares a non-empty subset of
+                            |#{:start :continue :call}. Reaching it by registered name
+                            |requires :start to start!, :continue for a :next route,
+                            |and :call for a call target.")}
+   :definition (explain-definition)
    :step (explain-step)
    :gate (explain-gate)
    :checkpoint (explain-checkpoint)

@@ -33,7 +33,12 @@
     (is (= 'skein.spools.workflow/checkpoint (get-in contract [:builders 'checkpoint])))
     (is (re-find #"skein.spools.workflow/workflow" (get-in contract [:contract :spec])))
     (is (= :step (get-in contract [:step :topic])))
-    (is (= :checkpoint (get-in contract [:checkpoint :topic])))))
+    (is (= :checkpoint (get-in contract [:checkpoint :topic])))
+    (is (= :definition (get-in contract [:definition :topic])))
+    (is (= 'skein.spools.workflow/defworkflow
+           (get-in contract [:builders 'defworkflow])))
+    (is (re-find #"skein.spools.workflow/definition"
+                 (get-in (workflow/explain :definition) [:contract :spec])))))
 
 (deftest workflow-spool-compiles-and-materializes-molecules
   (with-runtime

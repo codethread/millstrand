@@ -521,7 +521,7 @@ The test suite in [`test/skein/spools/workflow_test.clj`](../test/skein/spools/w
   `:revise` choices for its revision loops (§5) rather than dead-ending the run
   or hand-writing revision wrappers. See `devflow.md`.
 - `(skein.spools.workflow/explain)` / `(explain topic)` — machine-readable
-  contracts for `:workflow`, `:step`, `:gate`, `:checkpoint`, and `:call`,
+  contracts for `:workflow`, `:definition`, `:step`, `:gate`, `:checkpoint`, and `:call`,
   intended for agents to call before constructing workflow data instead of
   relying on this document alone.
 - [README.md](./README.md) — shipped spools index and loading notes.
