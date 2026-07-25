@@ -1,6 +1,6 @@
 # Contributing to Skein
 
-Skein is alpha software; the tenets in [`devflow/TENETS.md`](./devflow/TENETS.md) and [`devflow/PHILOSOPHY.md`](./devflow/PHILOSOPHY.md) govern every change.
+Skein is alpha software; the tenets in [`devflow/TENETS.md`](./devflow/TENETS.md) and [`devflow/PHILOSOPHY.md`](./devflow/PHILOSOPHY.md) govern every change. [`devflow/UBIQUITOUS-LANGUAGE.md`](./devflow/UBIQUITOUS-LANGUAGE.md) defines the vocabulary those documents and the rest of the repo use without re-explaining.
 
 This repo is agent-first: most changes are planned, built, reviewed, and landed by coding agents coordinating through the repo's own `.skein` world. The main contributor skill is steering those agents well. [`AGENTS.md`](./AGENTS.md) is the contract the agents follow; this file is the human side.
 

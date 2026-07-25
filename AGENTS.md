@@ -1,6 +1,6 @@
 # Agent Contributor Guide
 
-Read `./devflow/TENETS.md` and `./devflow/PHILOSOPHY.md` before all work. This file holds only what the live surface cannot tell you; everything else is routed by scenario below.
+Read `./devflow/TENETS.md`, `./devflow/PHILOSOPHY.md`, and `./devflow/UBIQUITOUS-LANGUAGE.md` before all work. The first two govern what you may build; the third defines the words this repo uses, and other docs assume you know them. This file holds only what the live surface cannot tell you; everything else is routed by scenario below.
 
 ## What to read, when
 
