@@ -2,10 +2,13 @@
   "Tests for the skein.spools.workflow userland workflow engine: contract
   explain, compile semantics (calls, conditions, loops, splicing), and the
   run-driving surface (start!/complete!/choose!, gates, checkpoints, bonds)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
+            [clojure.test :refer [deftest is testing]]
             [skein.api.batch.alpha :as batch]
             [skein.api.graph.alpha :as graph]
             [skein.api.registry.alpha :as registry]
+            [skein.api.runtime.alpha :as runtime]
             [skein.api.vocab.alpha :as vocab]
             [skein.spools.test-support :as test-support :refer [assert-state-shape with-runtime]]
             [skein.spools.workflow :as workflow]
@@ -1620,3 +1623,381 @@
 
 (deftest executor-fns-state-shape-matches-declared-version
   (assert-state-shape #'wf-registry/new-executor-fns #{:executor-fns}))
+
+;; --- static definitions and the live definition registry --------------------
+
+(s/def ::scope string?)
+(s/def ::static-build-params (s/keys :req-un [::scope]))
+
+(workflow/defworkflow static-build
+  "Build an agreed scope."
+  {:entrypoints #{:start :continue}
+   :param-spec ::static-build-params
+   :defaults {:reviewer "agent"}}
+  (workflow/workflow
+   (fn [{:keys [scope]}] (str "Build " scope))
+   (workflow/step :implement
+                  (fn [{:keys [scope reviewer]}] (str "Implement " scope " for " reviewer))
+                  :self)))
+
+(workflow/defworkflow static-review
+  "Review a completed implementation."
+  {:entrypoints #{:call}}
+  (workflow/workflow
+   "Review"
+   (workflow/step :inspect "Inspect the change" :self)))
+
+(workflow/defworkflow static-spike
+  "Reduce uncertainty and recommend the next routine."
+  {:entrypoints #{:start}}
+  (workflow/workflow
+   "Spike"
+   (workflow/checkpoint :recommendation "Choose what follows the spike"
+                        :kind :agent
+                        :choices [{:key :recommend-build :label "Build" :next :wt-build}
+                                  {:key :stop :label "Stop"}])))
+
+(def ^:private bad-defaults-definition
+  (workflow/workflow
+   "Bad defaults"
+   {:entrypoints #{:start} :defaults {:at (Instant/parse "2026-01-01T00:00:00Z")}}
+   (workflow/step :a "A" :self)))
+
+(def ^:private bad-spec-definition
+  (workflow/workflow
+   "Bad spec"
+   {:entrypoints #{:start} :param-spec ::never-registered}
+   (workflow/step :a "A" :self)))
+
+(defn- revisable [title]
+  (workflow/workflow
+   title
+   {:entrypoints #{:start}}
+   (workflow/checkpoint :again "Revise again"
+                        :kind :agent
+                        :choices [{:key :again :label "Again" :revise {:params {}}}])))
+
+(def ^:private revisable-definition (revisable "Revisable v1"))
+(def ^:private revisable-definition-v2 (revisable "Revisable v2"))
+
+(def ^:private live-var-definition
+  (workflow/workflow
+   "Live v1"
+   {:entrypoints #{:start}}
+   (workflow/step :a "A" :self)))
+
+(defn- exploding-constructor [_]
+  (throw (ex-info "constructor blew up" {:cause :test})))
+
+(defn- malformed-constructor [_]
+  {:not-a "workflow"})
+
+(deftest defworkflow-defines-a-self-describing-var-and-stays-passive
+  ;; PROP-Wcd-001.S5: ordinary def semantics first — loading the namespace
+  ;; defines the Var and publishes nothing.
+  (is (= "Build an agreed scope." (:doc static-build)))
+  (is (= "Build an agreed scope." (:doc (meta #'static-build))))
+  (is (= #{:start :continue} (:entrypoints static-build)))
+  (is (= ::static-build-params (:param-spec static-build)))
+  (is (= {:reviewer "agent"} (:defaults static-build)))
+  (is (= [:implement] (mapv :id (:steps static-build))))
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (is (empty? (workflow/workflows))
+          "this namespace's defworkflow forms were evaluated outside contribution collection"))))
+
+(deftest defworkflow-rejects-an-invalid-declaration
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow options"
+                        (workflow/static-definition
+                         "doc" {:entrypoints #{:teleport}}
+                         (workflow/workflow "W" (workflow/step :a "A" :self)))))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow options"
+                        (workflow/static-definition
+                         "doc" {:entrypoints #{}}
+                         (workflow/workflow "W" (workflow/step :a "A" :self)))))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow option keys"
+                        (workflow/static-definition
+                         "doc" {:entrypoint #{:start}}
+                         (workflow/workflow "W" (workflow/step :a "A" :self)))))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":doc must be a non-blank string"
+                        (workflow/static-definition
+                         "  " {:entrypoints #{:start}}
+                         (workflow/workflow "W" (workflow/step :a "A" :self))))))
+
+(deftest workflow-builder-validates-the-complete-definition
+  ;; The builder owns the whole assembled shape, so a malformed nested step or
+  ;; choice fails at authoring time rather than at the pour.
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow definition"
+                        (workflow/workflow "W" {:id :untitled}))
+      "a step map carrying :id is a step, and a step needs a title")
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow option keys"
+                        (workflow/workflow "W" {:title "no id"}))
+      "a leading map without :id is read as the options map")
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow options"
+                        (workflow/workflow "W" {:defaults [:not :a :map]}
+                                           (workflow/step :a "A" :self)))))
+
+(deftest static-definition-start-merges-defaults-and-records-identity
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-build 'skein.spools.workflow-test/static-build)
+      (workflow/start! "static-run" :wt-build {:scope "compact queue"})
+      (let [root (workflow/current-root "static-run")]
+        (is (= "Build compact queue" (:title root)))
+        (is (= "wt-build" (get-in root [:attributes :workflow/definition-name]))
+            "the registered name is what a later revision resolves against")
+        (is (= "skein.spools.workflow-test/static-build"
+               (get-in root [:attributes :workflow/definition]))
+            "the resolved symbol records which definition this root was built from"))
+      (is (= "Implement compact queue for agent" (:title (workflow/ready-step "static-run")))
+          "declared :defaults merge under the caller's params"))))
+
+(deftest static-definition-start-requires-the-start-entrypoint
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-review 'skein.spools.workflow-test/static-review)
+      (let [thrown (try (workflow/start! "no-start" :wt-review {})
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/entrypoint-unsupported (:reason (ex-data thrown))))
+        (is (= :start (:entrypoint (ex-data thrown))))
+        (is (= [:call] (:entrypoints (ex-data thrown)))))
+      (is (nil? (workflow/current-root "no-start"))
+          "the run is refused before anything is poured"))))
+
+(deftest registered-name-routing-requires-the-continue-entrypoint
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-build 'skein.spools.workflow-test/static-build)
+      (workflow/register-workflow! :wt-review 'skein.spools.workflow-test/static-review)
+      ;; :wt-build declares :continue, so the authored route pours it
+      (workflow/start! "route-ok" (registry-router-stage {:target :wt-build}) {})
+      (is (= ["Implement  for agent"]
+             (mapv :title (:ready (workflow/choose! "route-ok" :advance)))))
+      ;; :wt-review is call-only, so the same route is refused before mutation
+      (workflow/start! "route-bad" (registry-router-stage {:target :wt-review}) {})
+      (let [go-id (:id (workflow/ready-step "route-bad"))
+            thrown (try (workflow/choose! "route-bad" :advance)
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/entrypoint-unsupported (:reason (ex-data thrown))))
+        (is (= :continue (:entrypoint (ex-data thrown))))
+        (is (= "active" (:state (repl/strand go-id))))))))
+
+(deftest registered-call-target-requires-the-call-entrypoint
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-review 'skein.spools.workflow-test/static-review)
+      (workflow/register-workflow! :wt-build 'skein.spools.workflow-test/static-build)
+      (let [caller (fn [target]
+                     (workflow/workflow
+                      "Caller"
+                      (workflow/step :prepare "Prepare" :self)
+                      (workflow/call :sub target {} :depends-on [:prepare])))]
+        (is (= ["Caller" "Prepare" "Inspect the change" "Complete sub"]
+               (mapv :title (:strands (workflow/compile (caller :wt-review))))))
+        (let [thrown (try (workflow/compile (caller :wt-build))
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/entrypoint-unsupported (:reason (ex-data thrown))))
+          (is (= :call (:entrypoint (ex-data thrown)))))))))
+
+(deftest unregister-workflow-removes-the-direct-registration
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-build 'skein.spools.workflow-test/static-build)
+      (workflow/register-workflow! :wt-review 'skein.spools.workflow-test/static-review)
+      (is (= {:wt-review 'skein.spools.workflow-test/static-review}
+             (workflow/unregister-workflow! :wt-build))
+             "removal returns what the direct layer still declares")
+      (is (= [:wt-review] (vec (keys (workflow/workflows)))))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown registered workflow"
+                            (workflow/start! "gone" :wt-build {})))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"no direct registration to remove"
+                            (workflow/unregister-workflow! :wt-build))))))
+
+(deftest register-workflow-rejects-an-unresolvable-symbol-with-repair-context
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (let [thrown (try (workflow/register-workflow!
+                         :wt-missing 'skein.spools.workflow-test/no-such-definition)
+                        (catch clojure.lang.ExceptionInfo e e))
+            data (ex-data thrown)]
+        (is (= :workflow/definition-unresolvable (:reason data)))
+        (is (= :wt-missing (:name data)))
+        (is (= 'skein.spools.workflow-test/no-such-definition (:definition data)))
+        (is (= 'skein.spools.workflow-test (:namespace data)))
+        (is (seq (:repair data))))
+      (is (empty? (workflow/workflows))
+          "a rejected registration leaves the live registry untouched"))))
+
+(deftest register-workflow-rejects-a-route-to-a-missing-target
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (let [thrown (try (workflow/register-workflow!
+                         :wt-spike 'skein.spools.workflow-test/static-spike)
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/reference-unregistered (:reason (ex-data thrown))))
+        (is (= :wt-build (:target (ex-data thrown))))
+        (is (= :continue (:entrypoint (ex-data thrown)))))
+      ;; with the target registered first, the same registration is publishable
+      (workflow/register-workflow! :wt-build 'skein.spools.workflow-test/static-build)
+      (is (= :wt-spike (workflow/register-workflow!
+                        :wt-spike 'skein.spools.workflow-test/static-spike))))))
+
+(deftest register-workflow-rejects-non-json-defaults-and-unknown-param-specs
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (let [thrown (try (workflow/register-workflow!
+                         :wt-bad-defaults 'skein.spools.workflow-test/bad-defaults-definition)
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/defaults-invalid (:reason (ex-data thrown))))
+        (is (= [:at] (:path (ex-data thrown)))))
+      (let [thrown (try (workflow/register-workflow!
+                         :wt-bad-spec 'skein.spools.workflow-test/bad-spec-definition)
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/param-spec-missing (:reason (ex-data thrown))))
+        (is (= ::never-registered (:param-spec (ex-data thrown))))))))
+
+(deftest legacy-constructors-stay-trusted-only-and-fail-loudly
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-boom 'skein.spools.workflow-test/exploding-constructor)
+      (workflow/register-workflow! :wt-malformed 'skein.spools.workflow-test/malformed-constructor)
+      (is (= #{} (:entrypoints (workflow/resolve-workflow :wt-boom)))
+          "an opaque constructor declares no capability")
+      (is (= :legacy (:kind (workflow/resolve-workflow :wt-boom))))
+      (let [thrown (try (workflow/start! "boom-run" :wt-boom {})
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/legacy-constructor-failed (:reason (ex-data thrown))))
+        (is (= "constructor blew up" (ex-message (ex-cause thrown)))))
+      (let [thrown (try (workflow/start! "malformed-run" :wt-malformed {})
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/legacy-definition-invalid (:reason (ex-data thrown))))
+        (is (string? (:explain (ex-data thrown)))))
+      (is (nil? (workflow/current-root "boom-run")) "both fail before any pour")
+      (is (nil? (workflow/current-root "malformed-run"))))))
+
+(deftest revision-resolves-the-live-registered-name
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-revisable 'skein.spools.workflow-test/revisable-definition)
+      (workflow/start! "revise-name-run" :wt-revisable {})
+      (is (= "Revisable v1" (:title (workflow/current-root "revise-name-run"))))
+      ;; repointing the name changes what the next revision pours; the strands
+      ;; already poured are untouched
+      (workflow/register-workflow! :wt-revisable 'skein.spools.workflow-test/revisable-definition-v2)
+      (workflow/choose! "revise-name-run" :again)
+      (is (= "Revisable v2" (:title (workflow/current-root "revise-name-run"))))
+      (is (= "skein.spools.workflow-test/revisable-definition-v2"
+             (get-in (workflow/current-root "revise-name-run")
+                     [:attributes :workflow/definition])))
+      ;; removing the name fails the next revision before any mutation
+      (workflow/unregister-workflow! :wt-revisable)
+      (let [checkpoint (:id (workflow/ready-step "revise-name-run"))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown registered workflow"
+                              (workflow/choose! "revise-name-run" :again)))
+        (is (= "active" (:state (repl/strand checkpoint))))))))
+
+(deftest redefining-a-var-changes-the-next-transition-not-the-current-run
+  ;; PROP-Wcd-001.S8: source load and code reload redefine Vars under a live
+  ;; registry. Resolution is live, so the change lands at the next transition.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (let [original @#'live-var-definition]
+        (try
+          (workflow/register-workflow! :wt-live 'skein.spools.workflow-test/live-var-definition)
+          (workflow/start! "live-run" :wt-live {})
+          (is (= "Live v1" (:title (workflow/current-root "live-run"))))
+          (alter-var-root #'live-var-definition assoc :name "Live v2")
+          (is (= "Live v1" (:title (workflow/current-root "live-run")))
+              "strands already poured keep the definition they were built from")
+          (is (= "Live v2" (:name (:value (workflow/resolve-workflow :wt-live))))
+              "the registered name resolves the redefined Var")
+          (finally
+            (alter-var-root #'live-var-definition (constantly original))))))))
+
+;; --- owner-complete publication of definitions ------------------------------
+
+(defn- definition-module-source
+  "Write a module source file declaring `forms` and return its workspace path."
+  [config-dir label forms]
+  (let [source (str "modules/" label ".clj")
+        file (io/file config-dir source)]
+    (io/make-parents file)
+    (spit file (str "(ns test.module." label "\n"
+                    "  \"Definition module fixture for the workflow candidate tests.\"\n"
+                    "  (:require [skein.spools.workflow :as workflow]))\n"
+                    forms))
+    source))
+
+(def ^:private alpha-definition-form
+  (str "(workflow/defworkflow alpha\n"
+       "  \"Alpha routine.\"\n"
+       "  {:entrypoints #{:start :continue}}\n"
+       "  (workflow/workflow \"Alpha\" (workflow/step :a \"A\" :self)))\n"))
+
+(def ^:private beta-routing-form
+  (str "(workflow/defworkflow beta\n"
+       "  \"Beta routine routing to alpha.\"\n"
+       "  {:entrypoints #{:start}}\n"
+       "  (workflow/workflow \"Beta\"\n"
+       "    (workflow/checkpoint :go \"Go\" :kind :agent\n"
+       "      :choices [{:key :on :label \"On\" :next :alpha}])))\n"))
+
+(deftest module-refresh-publishes-collected-definitions-across-owners
+  ;; PROP-Wcd-001.S5/S6: defworkflow contributes its symbol only under a
+  ;; collector, and a cross-owner route is judged against the complete candidate.
+  (with-runtime
+    (fn [rt config-dir]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (let [alpha-source (definition-module-source config-dir "wf-alpha" alpha-definition-form)
+            beta-source (definition-module-source config-dir "wf-beta" beta-routing-form)]
+        (is (= :applied (:status (runtime/module! rt :wf-alpha {:file alpha-source}))))
+        (is (= :applied (:status (runtime/module! rt :wf-beta {:file beta-source}))))
+        (is (= #{:alpha :beta} (set (keys (workflow/workflows)))))
+        (is (= 'test.module.wf-alpha/alpha (workflow/workflow-definition :alpha)))
+        (is (= :static (:kind (workflow/resolve-workflow :beta))))))))
+
+(deftest deleting-a-referenced-definition-by-omission-is-refused-atomically
+  ;; The alpha owner's next contribution drops the definition beta routes to.
+  ;; Publication is rejected whole, so both owners keep their live partitions.
+  (with-runtime
+    (fn [rt config-dir]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (let [alpha-source (definition-module-source config-dir "wf-alpha2" alpha-definition-form)
+            beta-source (definition-module-source config-dir "wf-beta2" beta-routing-form)]
+        (runtime/module! rt :wf-alpha2 {:file alpha-source})
+        (runtime/module! rt :wf-beta2 {:file beta-source})
+        (is (= #{:alpha :beta} (set (keys (workflow/workflows)))))
+        (definition-module-source config-dir "wf-alpha2" "")
+        (let [result (runtime/module! rt :wf-alpha2 {:file alpha-source})]
+          (is (= :refused (:status result)))
+          (is (= :workflow/reference-unregistered
+                 (get-in result [:conflicts 0 :data :reason]))))
+        (is (= #{:alpha :beta} (set (keys (workflow/workflows))))
+            "every affected owner keeps its previous live partition")))))
+
+(deftest an-unresolvable-contributed-definition-is-refused-with-owner-context
+  (with-runtime
+    (fn [rt config-dir]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (let [source (definition-module-source
+                    config-dir "wf-gone"
+                    (str "(skein.api.runtime.alpha/collect-entry!\n"
+                         "  workflow/definition-kind :gone 'test.module.wf-gone/absent)\n"))
+            result (runtime/module! rt :wf-gone {:file source})]
+        (is (= :refused (:status result)))
+        (is (= :workflow/definition-unresolvable
+               (get-in result [:conflicts 0 :data :reason])))
+        (is (= :wf-gone (get-in result [:conflicts 0 :data :owner])))
+        (is (empty? (workflow/workflows)))))))

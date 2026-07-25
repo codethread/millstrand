@@ -1,7 +1,7 @@
 (ns skein.spools.workflow.internal.registry
   "Owner-partitioned registries for the workflow spool.
 
-  Workflow constructors and executors are replaceable declarations published
+  Workflow definitions and executors are replaceable declarations published
   owner-complete through `skein.api.registry.alpha`: a complete owner partition
   replaces the owner's prior contribution, so a route or executor a refresh
   omits disappears by omission with no global reload (DELTA-OlrDrt-001.CC2/CC4).
@@ -9,7 +9,7 @@
   `spool-state` — never nested — so the refresh kernel discovers its kinds
   alongside the core registries.
 
-  Binding time follows DELTA-OlrDrt-001.CC10. Constructor entries are qualified
+  Binding time follows DELTA-OlrDrt-001.CC10. Definition entries are qualified
   symbols resolved at each named route transition, so devflow's live route
   re-pointing takes effect on the next transition while a run already between
   stages keeps the value it started with. Executor entries are qualified symbols
@@ -26,9 +26,19 @@
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :refer [fail!]]))
 
-(def constructor-kind
-  "Kind id for the workflow-name -> constructor-symbol registry."
+(def definition-kind
+  "Kind id for the workflow-name -> definition-symbol registry.
+
+  The id still reads `constructor` because the kind is the same one legacy
+  constructor entries have always used: a registered symbol now resolves to
+  either a static definition map or a legacy constructor fn, and the resolved
+  value decides which (PROP-Wcd-001.S13)."
   :skein.spools.workflow/constructor)
+
+(def constructor-kind
+  "Deprecated alias for `definition-kind`, retained so in-flight spool
+  contributions naming the old var keep publishing to the same kind."
+  definition-kind)
 
 (def executor-kind
   "Kind id for the gate-waiter -> stall-predicate-symbol registry."
@@ -39,22 +49,29 @@
   (DELTA-OlrDrt-001.CC3), matching the core registries' `:skein.owner/repl`."
   :skein.owner/repl)
 
-;; Entry specs the kinds validate against. Constructors and executors are both
+;; Entry specs the kinds validate against. Definitions and executors are both
 ;; fully qualified symbols; a raw function value never reaches the kind.
-(s/def ::constructor-symbol qualified-symbol?)
+(s/def ::definition-symbol qualified-symbol?)
 (s/def ::executor-symbol qualified-symbol?)
 
 (def ^:private registry-state-version
   "Shape version for the workflow registry handle. Bump when the declared kinds
   change: spool-state survives refresh, so a version mismatch reinitializes
   rather than reuse a stale handle."
-  1)
+  2)
 
 (defn- new-registry-handle []
   (doto (registry/registry)
-    (registry/declare-kind! {:id constructor-kind
-                             :entry-spec ::constructor-symbol
-                             :binding-moment :route-transition})
+    (registry/declare-kind!
+     {:id definition-kind
+      :entry-spec ::definition-symbol
+      :binding-moment :route-transition
+      ;; Whether an entry is publishable depends on the rest of the candidate:
+      ;; a checkpoint route or call target names another registered workflow,
+      ;; and an owner can delete that target by omitting it. Only the complete
+      ;; staged candidate can answer that, so the check runs there.
+      :candidate-validator
+      'skein.spools.workflow.internal.definitions/validate-candidates!})
     (registry/declare-kind! {:id executor-kind
                              :entry-spec ::executor-symbol
                              :binding-moment :gate-evaluation})))
@@ -105,16 +122,46 @@
                        key value)]
     {:layer :direct :entries entries :overrides (set (keys entries))}))
 
-(defn register-constructor!
-  "Register constructor symbol `sym` under keyword `name` at the direct layer.
+(defn register-definition!
+  "Register definition symbol `sym` under keyword `name` at the direct layer.
 
-  Replaces any prior direct entry under `name`; other direct constructors are
+  Replaces any prior direct entry under `name`; other direct definitions are
   retained. Returns `name`."
   [rt name sym]
   (let [handle (registry-handle rt)]
-    (registry/replace-owner! handle constructor-kind repl-owner
-                             (direct-partition handle constructor-kind name sym))
+    (registry/replace-owner! handle definition-kind repl-owner
+                             (direct-partition handle definition-kind name sym))
     name))
+
+(defn direct-definitions
+  "Return the direct/REPL layer's own workflow name -> definition symbol map.
+
+  Only this layer is a trusted coordinator's to remove: a name published by a
+  module owner disappears by omitting its contribution, never by an ad hoc
+  unregister."
+  [rt]
+  (get-in (registry/snapshot (registry-handle rt))
+          [:partitions definition-kind repl-owner :entries]
+          {}))
+
+(defn unregister-definition!
+  "Remove the direct/REPL entry for `name`, returning the remaining direct map.
+
+  Owner-complete publication expresses removal by omission, which a trusted
+  coordinator working at the REPL has no way to state; this is that removal.
+  A name with no direct entry fails loudly (TEN-003) rather than reporting a
+  removal that never happened."
+  [rt name]
+  (let [handle (registry-handle rt)
+        entries (direct-definitions rt)]
+    (when-not (contains? entries name)
+      (fail! "Workflow name has no direct registration to remove"
+             {:name name :direct (vec (keys entries))}))
+    (let [remaining (dissoc entries name)]
+      (registry/replace-owner! handle definition-kind repl-owner
+                               {:layer :direct :entries remaining
+                                :overrides (set (keys remaining))})
+      remaining)))
 
 (defn register-executor-symbol!
   "Register executor predicate symbol `sym` for `waiter` at the direct layer.
@@ -149,22 +196,32 @@
     (swap! (executor-fns rt) assoc key pred)
     (keyword key)))
 
-(defn workflow-constructors
-  "Return the effective workflow name (keyword) -> constructor symbol map."
+(defn workflow-definitions
+  "Return the effective workflow name (keyword) -> definition symbol map."
   [rt]
-  (registry/effective (registry-handle rt) constructor-kind))
+  (registry/effective (registry-handle rt) definition-kind))
 
 (defn workflow-definition
-  "Return the effective constructor symbol registered under keyword `name`,
+  "Return the effective definition symbol registered under keyword `name`,
   failing loudly (TEN-003) when `name` is not registered.
 
   The lookup reads the current effective snapshot, so a re-pointed route
   resolves the replacement at this named transition (DELTA-OlrDrt-001.CC10)."
   [rt name]
-  (let [registry (workflow-constructors rt)]
+  (let [registry (workflow-definitions rt)]
     (or (get registry name)
         (fail! "Unknown registered workflow"
-               {:name name :registered (vec (keys registry))}))))
+               {:reason :workflow/definition-unregistered
+                :name name :registered (vec (keys registry))}))))
+
+(defn definition-owner
+  "Return the owner keyword whose partition currently supplies `name`, or nil.
+
+  Repairing an unresolvable entry means editing whichever owner declared it, so
+  a structured failure names that owner rather than only the symbol."
+  [rt name]
+  (get-in (registry/explain (registry-handle rt) definition-kind)
+          [name :effective :owner]))
 
 (defn executor-for
   "Return the stall predicate for a ready gate's `waiter`, or nil.

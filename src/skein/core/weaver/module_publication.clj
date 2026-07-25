@@ -4,8 +4,14 @@
   Core stores and runtime-owned `registry.alpha` handles use the same
   owner-registry snapshot grammar. This namespace builds every affected
   candidate first, so a malformed entry or collision retains the owner's prior
-  contribution in every kind; publication only begins after validation passes."
+  contribution in every kind; publication only begins after validation passes.
+
+  Per-entry shape is the kind's own `:entry-spec`. Rules spanning entries —
+  cross-owner references, deletion by omission, symbol resolvability — belong to
+  a kind's optional `:candidate-validator`, which `validate-kind-candidates!`
+  runs over the complete staged candidate before any snapshot is swapped."
   (:require [skein.api.registry.alpha :as registry]
+            [skein.core.weaver.access :as access]
             [skein.core.weaver.core-registry :as core-registry]
             [skein.core.weaver.owner-registry :as owner-registry]))
 
@@ -156,6 +162,42 @@
   [backends candidate-map]
   (let [validate! (requiring-resolve 'skein.api.weaver.alpha/validate-op-entry!)]
     (run! validate! (candidate-ops backends candidate-map)))
+  candidate-map)
+
+(defn- candidate-owners
+  "Return `kind-id`'s entry-key to winning-owner map inside one candidate."
+  [candidate kind-id]
+  (into {}
+        (keep (fn [[entry-key contenders]]
+                (when-let [owner (some #(when (:effective? %) (:owner %)) contenders)]
+                  [entry-key owner])))
+        (get-in candidate [:provenance kind-id] {})))
+
+(defn validate-kind-candidates!
+  "Run every declared kind's `:candidate-validator` over the staged candidates.
+
+  A kind declaring one owns cross-entry rules its per-entry spec cannot state,
+  so the validator sees the complete effective entry map the publication would
+  install — including entries other owners contributed and the absences of
+  entries an owner dropped. `:owners` names the winning contributor per entry,
+  which is what a rejection needs to say who must repair it. The symbol resolves
+  under the runtime's spool classloader, because a synced spool root's namespace
+  is only loadable there. A throwing validator aborts the refresh before
+  `publish!`, so every owner retains its previous live partition."
+  [runtime backends candidate-map]
+  (doseq [[kind-id {:keys [storage]}] (sort-by (comp pr-str key) backends)
+          :let [candidate (get candidate-map storage)
+                validator (get-in candidate [:kinds kind-id :candidate-validator])]
+          :when validator]
+    (let [validate! (access/with-spool-classloader
+                      runtime #(requiring-resolve validator))]
+      (when-not validate!
+        (throw (ex-info "Registry kind candidate validator cannot be resolved"
+                        {:kind kind-id :candidate-validator validator})))
+      (validate! {:runtime runtime
+                  :kind kind-id
+                  :entries (owner-registry/effective-values candidate kind-id)
+                  :owners (candidate-owners candidate kind-id)})))
   candidate-map)
 
 (defn validate-op-glossary-refs!

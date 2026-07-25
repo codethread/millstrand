@@ -10,7 +10,7 @@
   (:refer-clojure :exclude [compile])
   (:require [skein.api.current.alpha :as current]
             [skein.api.spool.alpha :refer [fail! require-valid!]]
-            [skein.spools.workflow.internal.registry :as registry]
+            [skein.spools.workflow.internal.definitions :as defs]
             [skein.spools.workflow.internal.util :as util]))
 
 (defn- render [value params]
@@ -130,15 +130,23 @@
             :path (mapv #(if (symbol? %) % (type %)) *procedure-path*)})))
 
 (defn- resolve-procedure
-  ;; Deref so a symbol yields the same canonical value (map or fn) as a direct
-  ;; reference — cycle detection and dispatch must not depend on which form the
-  ;; author used.
+  "Return the call target's classification `{:kind … :value …}`.
+
+  `:value` is the canonical procedure value — a map or a function — so cycle
+  detection and dispatch never depend on whether the author wrote a registered
+  name, a symbol, or the value itself. A registered name must declare `:call`;
+  anything else is a raw trusted value with no capability to check."
   [procedure]
-  (if (symbol? procedure)
+  (cond
+    (keyword? procedure)
+    (defs/require-entrypoint! (defs/resolve-registered (current/runtime) procedure) :call)
+
+    (symbol? procedure)
     (if-let [resolved (requiring-resolve procedure)]
-      @resolved
+      {:kind :raw :value @resolved}
       (fail! "Workflow procedure symbol cannot be resolved" {:procedure procedure}))
-    procedure))
+
+    :else {:kind :raw :value procedure}))
 
 (defn- procedure-workflow [procedure params]
   (cond
@@ -159,9 +167,10 @@
 
 (defn- expand-call-step [call-step params]
   (let [call-id (util/normalize-ref (:id call-step) [:call :id])
-        procedure (resolve-procedure (:procedure call-step))
+        target (resolve-procedure (:procedure call-step))
+        procedure (:value target)
         _ (require-acyclic-procedure! call-id procedure)
-        params (merge params (or (:params call-step) {}))
+        params (defs/definition-params target (merge params (or (:params call-step) {})))
         workflow (procedure-workflow procedure params)
         payload (binding [*procedure-path* (conj *procedure-path* procedure)]
                   (compile workflow params))
@@ -359,7 +368,12 @@
   "Build the root strand for a compiled workflow from the rendered `workflow`,
   its `root-ref`, `form` (`:molecule`/`:wisp`), and `opts`. `opts` supplies the
   run-id/family/definition/context stamped onto the root, plus the
-  `:root-attributes` a routed continuation carries onto its fresh root."
+  `:root-attributes` a routed continuation carries onto its fresh root.
+
+  A root poured from a registered name persists both `:definition-name` and the
+  symbol that name resolved to. The name is what a later revision resolves
+  against, so a repointed registry takes effect; the symbol records which
+  definition this root was actually built from."
   [workflow root-ref form opts]
   {:ref root-ref
    :title (:name workflow)
@@ -374,6 +388,8 @@
                         {"workflow/family" family})
                       (when-let [definition (:definition opts)]
                         {"workflow/definition" (str definition)})
+                      (when-let [definition-name (:definition-name opts)]
+                        {"workflow/definition-name" (name definition-name)})
                       (when-let [context (:context opts)]
                         {"workflow/context" context}))})
 
@@ -451,26 +467,14 @@
     (step-attr step "workflow/gate") (assoc :gate (step-attr step "workflow/gate"))
     (describe-choices step) (assoc :choices (describe-choices step))))
 
-(defn- workflow-var-symbol [v]
-  (let [m (meta v)]
-    (symbol (str (ns-name (:ns m))) (str (:name m)))))
-
-(defn- finite-json-number? [value]
-  (cond
-    (instance? Double value) (Double/isFinite value)
-    (instance? Float value) (Float/isFinite value)
-    :else true))
-
 (defn- json-safe-context-value [value path]
   (cond
-    (nil? value) nil
-    (keyword? value) (name value)
-    (and (number? value) (finite-json-number? value)) value
-    (number? value) (fail! "Workflow params cannot be defaulted into workflow/context; non-finite numbers are not JSON-safe"
-                           {:path path :value value :type (some-> value type str)})
-    (or (string? value) (boolean? value)) value
     (map? value) (into {} (map (fn [[k v]] [k (json-safe-context-value v (conj path k))])) value)
     (sequential? value) (mapv (fn [[idx v]] (json-safe-context-value v (conj path idx))) (map-indexed vector value))
+    (keyword? value) (name value)
+    (util/json-scalar? value) value
+    (number? value) (fail! "Workflow params cannot be defaulted into workflow/context; non-finite numbers are not JSON-safe"
+                           {:path path :value value :type (some-> value type str)})
     :else (fail! "Workflow params cannot be defaulted into workflow/context; pass :context explicitly"
                  {:path path :value value :type (some-> value type str)})))
 
@@ -484,22 +488,3 @@
     (fail! "Workflow context params must be a map" {:params params}))
   (json-safe-context-value params []))
 
-(defn workflow-input-plan
-  "Resolve a workflow input into `{:workflow w}` plus an optional `:definition`.
-
-  A var yields its fully-qualified constructor symbol as `:definition` and calls
-  it with `params`; a registered keyword resolves through the runtime registry
-  the same way; a plain workflow map passes through with no derived definition."
-  [workflow-input params]
-  (cond
-    (var? workflow-input)
-    (let [sym (workflow-var-symbol workflow-input)]
-      {:workflow (@workflow-input params) :definition sym})
-
-    (keyword? workflow-input)
-    (let [sym (registry/workflow-definition (current/runtime) workflow-input)
-          f (or (requiring-resolve sym)
-                (fail! "Registered workflow cannot be resolved" {:name workflow-input :definition sym}))]
-      {:workflow (f params) :definition sym})
-
-    :else {:workflow workflow-input}))
