@@ -171,7 +171,12 @@
         target (resolve-procedure (:procedure call-step))
         procedure (:value target)
         _ (require-acyclic-procedure! call-id procedure)
-        params (defs/definition-params target (merge params (or (:params call-step) {})))
+        ;; A registered call target is reached by name, the same boundary that
+        ;; requires its `:call` entrypoint, so its `:param-spec` judges the
+        ;; params it is expanded with. A raw value or symbol declares nothing.
+        params (->> (merge params (or (:params call-step) {}))
+                    (defs/definition-params target)
+                    (defs/validate-params! target))
         workflow (procedure-workflow procedure params)
         payload (binding [*procedure-path* (conj *procedure-path* procedure)]
                   (compile workflow params))

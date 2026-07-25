@@ -41,6 +41,7 @@
          reject-unknown-keys! step*
          param-opt-keys step-opt-keys checkpoint-opt-keys call-opt-keys workflow-opt-keys
          choice-name choice-details-attr reject-unknown-choice-keys!
+         require-valid-choices!
          reject-next-and-revise! require-unique-choice-keys!
          pour-with-rt! wisp-with-rt! burn-with-rt!
          attention timeout-secs-opt poll-ms-opt)
@@ -76,7 +77,9 @@
 
   This is documentation of what is registered *now*, not an evaluable schema and
   not a dependency graph — the walk reads form data and the spec registry and
-  executes no predicate. An unregistered name yields an empty vector."
+  executes no predicate. A root that is not a currently registered qualified
+  keyword fails loudly as `:workflow/spec-missing`, so a stale identity is never
+  mistaken for a spec with nothing to say."
   [spec-name]
   (specs/spec-forms spec-name))
 
@@ -170,6 +173,7 @@
   (let [kind (or (:kind opts) :human)
         choices (some-> (:choices opts)
                         reject-unknown-choice-keys!
+                        require-valid-choices!
                         reject-next-and-revise!
                         require-unique-choice-keys!)
         details (choice-details-attr choices)]
@@ -915,8 +919,12 @@
 (s/def ::key ::id-ref)
 (s/def ::label string?)
 (s/def ::next #(or (keyword? %) (symbol? %) (non-blank-string? %)))
+;; A stored declaration crosses the JSON attribute wire, so its description is
+;; text — never the render fn a step's own :description may be.
+(s/def :skein.spools.workflow.choice-input/description string?)
 (s/def ::choice-input-declaration
-  (s/keys :req-un [::key] :opt-un [::required ::description]))
+  (s/keys :req-un [::key]
+          :opt-un [::required :skein.spools.workflow.choice-input/description]))
 (s/def ::spec qualified-keyword?)
 (s/def ::input-spec-declaration (s/keys :req-un [::spec] :opt-un [::doc]))
 ;; A choice declares the whole map `choose!` must accept: one qualified spec
@@ -1244,15 +1252,8 @@
   worker. The form graph is added when the checkpoint pours, so history records
   what the worker was shown (PROP-Wcd-001.S10)."
   [input]
-  (when-not (or (qualified-keyword? input) (map? input))
-    (fail! "Workflow choice :input must be a qualified spec keyword, a {:spec … :doc …} map, or a vector of declaration maps"
-           {:input input}))
   (let [declaration (if (qualified-keyword? input) {:spec input} input)]
     (reject-unknown-keys! declaration choice-input-spec-opt-keys :choice-input-spec)
-    (when-not (qualified-keyword? (:spec declaration))
-      (fail! "Workflow choice :input spec must be a qualified keyword" {:input input}))
-    (when (and (contains? declaration :doc) (not (non-blank-string? (:doc declaration))))
-      (fail! "Workflow choice :input :doc must be a non-blank string" {:input input}))
     (cond-> {"spec" (subs (str (:spec declaration)) 1)}
       (:doc declaration) (assoc "doc" (:doc declaration)))))
 
@@ -1263,24 +1264,17 @@
   loudly (TEN-003), matching the other builder opts."
   [input]
   (mapv (fn [decl]
-          (util/require-map! decl [:choice :input])
           (reject-unknown-keys! decl choice-input-opt-keys :choice-input)
-          (when (and (contains? decl :required) (not (boolean? (:required decl))))
-            (fail! "Workflow choice :input :required must be a boolean" {:input decl}))
-          (when (and (contains? decl :description) (not (string? (:description decl))))
-            (fail! "Workflow choice :input :description must be a string" {:input decl}))
           (cond-> {"key" (input-key-name decl)
                    "required" (boolean (:required decl))}
             (:description decl) (assoc "description" (:description decl))))
         input))
 
 (defn- revise-params-attr
-  "Return the override params stored for a checkpoint choice's `:revise` directive.
-  `:revise` must be a map carrying a `:params` map (TEN-003); the params are the
-  authoritative overrides re-poured over the run's own definition at `choose!`."
+  "Return the override params stored for a checkpoint choice's `:revise` directive:
+  the authoritative overrides re-poured over the run's own definition at
+  `choose!`. `::revise` owns the shape."
   [revise]
-  (when-not (and (map? revise) (map? (:params revise)))
-    (fail! "Workflow choice :revise must be a map with a :params map" {:revise revise}))
   (:params revise))
 
 (defn- choice-input-entry
@@ -1307,6 +1301,13 @@
 
 (defn- choice-details-attr [choices]
   (not-empty (into {} (keep choice-detail-attr choices))))
+
+(defn- require-valid-choices!
+  "Validate authored checkpoint choices against the public `::choices` shape, so
+  the advertised spec is the contract a caller meets rather than a description
+  running beside the hand-written checks."
+  [choices]
+  (require-valid! ::choices choices "Invalid workflow checkpoint choices"))
 
 (defn- reject-unknown-choice-keys! [choices]
   (doseq [choice choices :when (map? choice)]

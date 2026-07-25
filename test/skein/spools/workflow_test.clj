@@ -1134,15 +1134,23 @@
                                                         :input [{:key :reason :requird true}]}]))))
 
 (deftest workflow-choice-input-declaration-validates-required-and-description
-  ;; a newly-declared public shape fails loudly on malformed field types (TEN-003)
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":required must be a boolean"
+  ;; the public ::choices spec is the grammar the builder enforces, so a
+  ;; malformed field type fails there with explain data (TEN-003)
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow checkpoint choices"
                         (workflow/checkpoint :gate "Decide"
                                              :choices [{:key :abort
                                                         :input [{:key :reason :required "yes"}]}])))
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":description must be a string"
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow checkpoint choices"
                         (workflow/checkpoint :gate "Decide"
                                              :choices [{:key :abort
-                                                        :input [{:key :reason :description :nope}]}]))))
+                                                        :input [{:key :reason :description :nope}]}])))
+  (let [thrown (try (workflow/checkpoint :gate "Decide"
+                                         :choices [{:key :abort
+                                                    :input [{:key :reason :required "yes"}]}])
+                    (catch clojure.lang.ExceptionInfo e e))]
+    (is (some #(= :required (last (:path %)))
+              (::s/problems (:explain (ex-data thrown))))
+        "the explain payload names the field that failed")))
 
 (deftest workflow-choice-input-accepts-string-or-keyword-keys
   ;; the surfaced declaration uses string key names, so a caller feeding those
@@ -1310,7 +1318,7 @@
                                              :choices [{:key :x :next :foo :revise {:params {}}}]))))
 
 (deftest workflow-checkpoint-rejects-malformed-revise
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":revise must be a map with a :params map"
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow checkpoint choices"
                         (workflow/checkpoint :c "C"
                                              :choices [{:key :x :revise {:no-params true}}]))))
 
@@ -2288,8 +2296,10 @@
           ["skein.spools.workflow-test/draft" "keyword-reference"]]
          (form-graph ::stage-enum))
       "a set member that also names a registered spec is supplementary documentation")
-  (is (= [] (workflow/spec-forms ::never-registered-anywhere))
-      "an unregistered name documents nothing rather than failing"))
+  (let [thrown (try (workflow/spec-forms ::never-registered-anywhere)
+                    (catch clojure.lang.ExceptionInfo e e))]
+    (is (= :workflow/spec-missing (:reason (ex-data thrown)))
+        "a stale or mistyped identity is never mistaken for a spec with no references")))
 
 (deftest spec-forms-executes-no-predicate
   (reset! predicate-calls 0)
@@ -2353,3 +2363,42 @@
             "doc" "Record why this was approved."}
            (:input-spec approve))
         "description stays cheap; the form graph is recorded when the checkpoint pours")))
+
+(def ^:private spec-first-caller
+  (workflow/workflow
+   "Caller"
+   {:entrypoints #{:start}}
+   (workflow/call :build :wt-callable {:scope "called scope"})))
+
+(def ^:private spec-first-bad-caller
+  (workflow/workflow
+   "Bad caller"
+   {:entrypoints #{:start}}
+   (workflow/call :build :wt-callable {:scope 42})))
+
+(workflow/defworkflow spec-first-callable
+  "A call target under a whole-map param contract."
+  {:entrypoints #{:call}
+   :param-spec ::spec-first-params
+   :defaults {:reviewer "agent"}}
+  (workflow/workflow
+   "Callable"
+   (workflow/step :implement
+                  (fn [{:keys [scope reviewer]}] (str "Implement " scope " for " reviewer))
+                  :self)))
+
+(deftest registered-call-targets-validate-their-params
+  ;; a call target reached by registered name meets the same contract boundary
+  ;; that requires its :call entrypoint
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-callable 'skein.spools.workflow-test/spec-first-callable)
+      (workflow/start! "call-ok" #'spec-first-caller {})
+      (is (= "Implement called scope for agent"
+             (:title (workflow/ready-step "call-ok"))))
+      (let [thrown (try (workflow/start! "call-bad" #'spec-first-bad-caller {})
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/params-invalid (:reason (ex-data thrown))))
+        (is (nil? (workflow/current-root "call-bad"))
+            "the caller's own run pours nothing when the target rejects its params")))))

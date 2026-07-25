@@ -123,7 +123,11 @@ Honest source: adapted from the end-to-end example that formerly lived in `workf
 A stage that does not need to build itself from params is better written as a static definition — `defworkflow` gives it a name, a doc, and declared entrypoints, and a module owner contributes it without a registration call at all. The constructor form below stays supported; see "Static definitions" in the [contract doc](./workflow.md) for the newer shape.
 
 ```clojure
-(require '[skein.spools.workflow :as workflow])
+(require '[clojure.spec.alpha :as s]
+         '[skein.spools.workflow :as workflow])
+
+(s/def ::reason (s/and string? (complement clojure.string/blank?)))
+(s/def ::abort-input (s/keys :req-un [::reason]))
 
 ;; Register every stage under a stable name once (devflow does this from its
 ;; module contribution, so a reload re-points in-flight runs).
@@ -175,12 +179,7 @@ A stage that does not need to build itself from params is better written as a st
   remaining step of the current stage in one transaction and pours the
   continuation under the same `run-id`. Any step not yet reached is *abandoned*,
   not paused. Design each stage so nothing important sits past the checkpoint.
-- **`:input` makes a decision self-describing.** Naming a spec (`(s/def
-  ::abort-input (s/keys :req-un [::reason]))`) means `choose!` validates the
-  whole input map against the live spec before any mutation, and a driving agent
-  reads the spec identity, its doc, and its form graph out of `choice-details`
-  before deciding. The spec is resolved again at `choose!` time, so tightening it
-  applies to the next decision without re-pouring anything.
+- **`:input` makes a decision self-describing.** Naming a spec means `choose!` validates the whole input map against the live spec before any mutation, and a driving agent reads the spec identity, its doc, and its form graph out of `choice-details` before deciding. Because the spec is resolved again at `choose!` time, tightening it applies to the next decision without re-pouring anything.
 - **Every mutation returns the same `{:ready [...] :done bool}` shape**, so a
   routed hand-off is visible in-band: the continuation's ready frontier comes
   straight back from `choose!`.

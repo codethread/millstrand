@@ -39,25 +39,9 @@
     (coll? form) (mapcat referenced-keywords form)
     :else nil))
 
-(defn spec-forms
-  "Return the ordered `s/form` documentation graph rooted at `spec-name`.
-
-  Each entry is the JSON-safe `{\"spec\" <qualified-name> \"relation\"
-  \"root\"|\"keyword-reference\" \"form\" <printed form>}`. The root comes first;
-  every other entry is reached because some already-emitted form contains a
-  qualified keyword that itself names a registered spec, visited in
-  qualified-name order and emitted once. `s/keys` names its key specs rather
-  than inlining them, which is why one form is never the whole contract.
-
-  `relation` is deliberately not a dependency claim. The walk does not interpret
-  spec operators, so a keyword literal that happens to name a spec is reported
-  the same way as a real key reference — supplementary documentation, judged by
-  the reader. Nothing here executes a predicate, and a cycle terminates because
-  a spec is emitted at most once.
-
-  An unregistered `spec-name` yields an empty vector: this is documentation of
-  what is registered now, and a caller that needs the name to exist fails on its
-  own terms."
+(defn- form-graph
+  "Return the ordered form graph reachable from `spec-name`, which the caller has
+  already established is registered."
   [spec-name]
   (loop [queue [[spec-name "root"]]
          seen #{}
@@ -80,15 +64,6 @@
           (recur remaining seen out)))
       out)))
 
-(defn explain-str
-  "Return `s/explain-str` for `spec-name` and `value` as plain JSON-safe text.
-
-  The printed explanation is what crosses the wire; raw `s/explain-data` stays
-  available to trusted Clojure, which can read Clojure values without a generic
-  normalizer inventing a JSON shape for them (PROP-Wcd-001.S9)."
-  [spec-name value]
-  (s/explain-str spec-name value))
-
 (defn require-spec!
   "Return the registered spec for `spec-name`, failing loudly with `reason` when
   the name resolves to nothing.
@@ -99,6 +74,39 @@
   (or (s/get-spec spec-name)
       (fail! "Named spec is not registered"
              (assoc context :reason reason :spec spec-name))))
+
+(defn spec-forms
+  "Return the ordered `s/form` documentation graph rooted at `spec-name`.
+
+  Each entry is the JSON-safe `{\"spec\" <qualified-name> \"relation\"
+  \"root\"|\"keyword-reference\" \"form\" <printed form>}`. The root comes first;
+  every other entry is reached because some already-emitted form contains a
+  qualified keyword that itself names a registered spec, visited in
+  qualified-name order and emitted once. `s/keys` names its key specs rather
+  than inlining them, which is why one form is never the whole contract.
+
+  `relation` is deliberately not a dependency claim. The walk does not interpret
+  spec operators, so a keyword literal that happens to name a spec is reported
+  the same way as a real key reference — supplementary documentation, judged by
+  the reader. Nothing here executes a predicate, and a cycle terminates because
+  a spec is emitted at most once.
+
+  A root that is not a currently registered qualified keyword fails loudly as
+  `workflow/spec-missing`: a stale or mistyped identity is the one thing an
+  empty graph must not be confused with. A registered spec with no references
+  documents itself in a single entry."
+  [spec-name]
+  (require-spec! spec-name :workflow/spec-missing {})
+  (form-graph spec-name))
+
+(defn explain-str
+  "Return `s/explain-str` for `spec-name` and `value` as plain JSON-safe text.
+
+  The printed explanation is what crosses the wire; raw `s/explain-data` stays
+  available to trusted Clojure, which can read Clojure values without a generic
+  normalizer inventing a JSON shape for them (PROP-Wcd-001.S9)."
+  [spec-name value]
+  (s/explain-str spec-name value))
 
 (defn require-conformant!
   "Return `value` when it satisfies `spec-name`, else fail loudly with `reason`.
