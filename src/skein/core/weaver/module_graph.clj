@@ -51,22 +51,16 @@
              {:field label :value values}))
     (vec (distinct values))))
 
-(def ^:private removed-entry-point-message
-  "Complete refusal message for a declaration that names an entry point."
+(def ^:private removed-entry-point-refusal
+  "Complete refusal for a declaration that names an entry point.
+
+  The same complete text is the thrown message and the structured `:remedy`
+  carried in conflict data, so operator-facing consumers never have to parse
+  one to recover the other."
   (format/reflow
    "|Module options no longer name entry points. Delete the key from the
     |declaration and declare the module's entry points in its namespace's
     |public spool var, as
-    |(def spool {:contribute 'contribute :reconcile 'reconcile})."))
-
-(def ^:private removed-entry-point-remedy
-  "Actionable clause of that refusal, carried as its `:remedy` datum.
-
-  Refusal data reaches operators through a refresh result's `:remedies`, which
-  carries the directive alone rather than the whole message."
-  (format/reflow
-   "|Delete the key from the declaration and declare the module's entry points
-    |in its namespace's public spool var, as
     |(def spool {:contribute 'contribute :reconcile 'reconcile})."))
 
 (defn- require-no-entry-points!
@@ -90,11 +84,11 @@
   [key opts]
   (let [removed (filterv #(contains? opts %) entry-point-keys)]
     (when (seq removed)
-      (fail! removed-entry-point-message
+      (fail! removed-entry-point-refusal
              {:reason :removed-module-opts-keys
               :module/key key
               :removed removed
-              :remedy removed-entry-point-remedy}))))
+              :remedy removed-entry-point-refusal}))))
 
 (defn normalize-declaration
   "Validate and normalize one freshly authored module declaration.
