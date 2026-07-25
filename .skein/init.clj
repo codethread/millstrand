@@ -74,8 +74,10 @@
                   :spools ['skein.spools/unsafe-text-search]})
 ;; devflow is an external git-distributed spool: activation is gated on the
 ;; approved codethread/devflow coordinate (spools.edn pin or a developer's
-;; spools.local.edn checkout), never on an incidental classpath copy. It
-;; publishes and reconciles through the peer spool's own `spool` var.
+;; spools.local.edn checkout), never on an incidental classpath copy. Its whole
+;; contribution is the stage `defworkflow` entries its load collects, so it
+;; declares no `spool` var — a module may not both collect authoring forms and
+;; supply `:contribute` (SPEC-004.C46).
 (runtime/module! runtime :skein/spools-devflow
                  {:ns 'ct.spools.devflow
                   :spools ['codethread/devflow]
