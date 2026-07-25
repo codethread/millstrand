@@ -33,6 +33,8 @@ Each recipe cites the honest source it was distilled from — a shipped spool, t
 
 **Composition.** Ordinary `step`s chained by `:depends-on`, terminated by a `checkpoint` whose choices are an approve (dead-ends the run) and a `:revise` (re-pours this same definition). A `:condition [:!= :revision true]` marks the steps that must not repeat on a revise round.
 
+The per-key `workflow/param` declarations below are the deprecated form, kept here because the shipped workflows this recipe was distilled from still use them. A definition written today declares `:param-spec` and `:defaults` instead, and the whole merged params map is validated against that spec before anything pours — see "Static definitions" in the [contract doc](./workflow.md).
+
 ```clojure
 (require '[skein.spools.workflow :as workflow])
 
@@ -157,8 +159,8 @@ A stage that does not need to build itself from params is better written as a st
                                     :label "Abort"
                                     :description "Stop this feature intentionally."
                                     :next :abort
-                                    :input [{:key :reason :required true
-                                             :description "Why abort"}]}])))
+                                    :input {:spec ::abort-input
+                                            :doc "Say why this feature stops."}}])))
 ```
 
 **Why this shape.**
@@ -173,10 +175,12 @@ A stage that does not need to build itself from params is better written as a st
   remaining step of the current stage in one transaction and pours the
   continuation under the same `run-id`. Any step not yet reached is *abandoned*,
   not paused. Design each stage so nothing important sits past the checkpoint.
-- **`:input` makes a decision self-describing.** Declaring `:input [{:key :reason
-  :required true ...}]` means `choose!` fails loudly before any mutation if the
-  reason is missing, and a driving agent can read what the decision needs via
-  `choice-details` before making it.
+- **`:input` makes a decision self-describing.** Naming a spec (`(s/def
+  ::abort-input (s/keys :req-un [::reason]))`) means `choose!` validates the
+  whole input map against the live spec before any mutation, and a driving agent
+  reads the spec identity, its doc, and its form graph out of `choice-details`
+  before deciding. The spec is resolved again at `choose!` time, so tightening it
+  applies to the next decision without re-pouring anything.
 - **Every mutation returns the same `{:ready [...] :done bool}` shape**, so a
   routed hand-off is visible in-band: the continuation's ready frontier comes
   straight back from `choose!`.

@@ -11,6 +11,7 @@
   (:require [skein.api.current.alpha :as current]
             [skein.api.spool.alpha :refer [fail! require-valid!]]
             [skein.spools.workflow.internal.definitions :as defs]
+            [skein.spools.workflow.internal.specs :as specs]
             [skein.spools.workflow.internal.util :as util]))
 
 (defn- render [value params]
@@ -316,15 +317,40 @@
 (defn- require-valid-workflow! [workflow]
   (require-valid! :skein.spools.workflow/workflow workflow "Invalid workflow definition"))
 
+(defn- poured-choice-details
+  "Return `details` with each spec-first choice input expanded to the spec's
+  current form graph.
+
+  The graph is recorded when the checkpoint pours, so the run's history holds
+  what the worker was shown at that moment. It is documentation, not a snapshot
+  of meaning: `choose!` resolves the spec identity again and validates against
+  whatever it names then (PROP-Wcd-001.S10)."
+  [details]
+  (reduce-kv (fn [acc choice detail]
+               (assoc acc choice
+                      (if-let [declared (get detail "input-spec")]
+                        (assoc detail "input-spec"
+                               (assoc declared "spec-forms"
+                                      (specs/spec-forms (keyword (get declared "spec")))))
+                        detail)))
+             {}
+             details))
+
+(defn- step-attributes [step form]
+  (let [attributes (merge {"workflow/role" "step"
+                           "workflow/form" (name form)}
+                          (:attributes step)
+                          (when-let [description (:description step)]
+                            {"description" description}))]
+    (cond-> attributes
+      (get attributes "workflow/choice-details")
+      (update "workflow/choice-details" poured-choice-details))))
+
 (defn- step-strand [step form]
   {:ref (util/normalize-ref (:id step) [:steps :id])
    :title (:title step)
    :state (or (:state step) "active")
-   :attributes (merge {"workflow/role" "step"
-                       "workflow/form" (name form)}
-                      (:attributes step)
-                      (when-let [description (:description step)]
-                        {"description" description}))})
+   :attributes (step-attributes step form)})
 
 (defn- dependency-edges [steps]
   (mapcat (fn [step]
@@ -438,14 +464,19 @@
   (get (:attributes step) k))
 
 (defn- describe-choice
-  "Project one checkpoint choice into `{:key … :label … :description … :input …
-  :next|:revise …}` from its stored `workflow/choice-details` entry (`detail`,
-  nil for a bare-keyword choice)."
+  "Project one checkpoint choice into `{:key … :label … :description …
+  :input|:input-spec … :next|:revise …}` from its stored
+  `workflow/choice-details` entry (`detail`, nil for a bare-keyword choice).
+
+  `:input-spec` carries the declared spec identity and doc without its form
+  graph: description stays cheap, and the graph is recorded when the checkpoint
+  pours."
   [name detail]
   (cond-> {:key name}
     (get detail "label") (assoc :label (get detail "label"))
     (get detail "description") (assoc :description (get detail "description"))
     (get detail "input") (assoc :input (get detail "input"))
+    (get detail "input-spec") (assoc :input-spec (get detail "input-spec"))
     (get detail "next") (assoc :next (get detail "next"))
     (get detail "revise") (assoc :revise (get detail "revise"))))
 

@@ -24,6 +24,7 @@
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :refer [fail! require-valid!]]
             [skein.spools.workflow.internal.registry :as registry]
+            [skein.spools.workflow.internal.specs :as specs]
             [skein.spools.workflow.internal.util :as util]))
 
 (def entrypoints
@@ -183,14 +184,34 @@
     (merge (:defaults (:value resolved)) params)
     params))
 
+(defn validate-params!
+  "Return `params` when they satisfy static `resolved`'s `:param-spec`.
+
+  The spec owns the *complete* merged map — defaults plus what the caller
+  supplied — so it is applied after the merge and before anything compiles or
+  pours. Resolution is live: a definition naming a spec that has since been
+  removed fails here rather than accepting anything, and a redefined spec judges
+  the next invocation. A definition declaring no `:param-spec` is unconstrained,
+  which is what keeps the legacy per-key `:params` declaration working
+  (PROP-Wcd-001.S9)."
+  [resolved params]
+  (if-let [param-spec (and (static? resolved) (:param-spec (:value resolved)))]
+    (let [context (cond-> {:definition (:definition resolved) :params params}
+                    (:name resolved) (assoc :name (:name resolved)))]
+      (specs/require-spec! param-spec :workflow/param-spec-missing context)
+      (specs/require-conformant! param-spec params :workflow/params-invalid context))
+    params))
+
 (defn build
   "Return `{:workflow w :params p}` for `resolved` and caller `params`.
 
-  A static definition *is* the workflow; only its defaults need folding in. A
-  legacy constructor has to be run to find out what it builds."
+  A static definition *is* the workflow; only its defaults need folding in,
+  after which its `:param-spec` judges the merged map. A legacy constructor has
+  to be run to find out what it builds, and declares no spec to judge it with."
   [resolved params]
   (if (static? resolved)
-    {:workflow (:value resolved) :params (definition-params resolved params)}
+    {:workflow (:value resolved)
+     :params (validate-params! resolved (definition-params resolved params))}
     (invoke-legacy resolved params)))
 
 (defn identity-attrs
@@ -281,10 +302,32 @@
 
 (defn- validate-param-spec!
   [context param-spec]
-  (when (and param-spec (nil? (s/get-spec param-spec)))
+  (when (and param-spec (not (specs/registered? param-spec)))
     (fail! "Workflow definition :param-spec names no registered spec"
            (assoc context :reason :workflow/param-spec-missing
                   :param-spec param-spec))))
+
+(defn- input-spec-names
+  "Return the checkpoint input specs a static definition's choices declare.
+
+  `checkpoint` stores a spec-first `:input` under its choice's `input-spec`
+  entry at build time, so the declaration is readable here without compiling or
+  pouring anything."
+  [definition]
+  (into #{}
+        (comp (mapcat #(vals (get-in % [:attributes "workflow/choice-details"] {})))
+              (keep #(get % "input-spec"))
+              (keep #(get % "spec"))
+              (map keyword))
+        (:steps definition)))
+
+(defn- validate-input-specs!
+  [context definition]
+  (doseq [spec-name (sort (input-spec-names definition))]
+    (when-not (specs/registered? spec-name)
+      (fail! "Workflow checkpoint choice :input names no registered spec"
+             (assoc context :reason :workflow/input-spec-missing
+                    :spec spec-name)))))
 
 (defn- validate-references!
   [context definition entry-kinds]
@@ -319,6 +362,7 @@
                         "Registered workflow definition is invalid")
         (validate-defaults! context (:defaults value))
         (validate-param-spec! context (:param-spec value))
+        (validate-input-specs! context value)
         resolved)
       resolved)))
 
