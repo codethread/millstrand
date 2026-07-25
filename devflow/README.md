@@ -4,6 +4,8 @@ Active feature work is tracked on the kanban board and as devflow workflow runs 
 
 Always study [TENETS](./TENETS.md) and [PHILOSOPHY](./PHILOSOPHY.md). No code, spec or idea can violate these unless explicitly stated and cited in an agreed RFC first.
 
+[UBIQUITOUS-LANGUAGE](./UBIQUITOUS-LANGUAGE.md) is the repo's dictionary and the definitional source for every term below. Documents here use those words without re-explaining them; where a definition disagrees with the code, the code wins and the dictionary is the bug.
+
 [RFCs](./rfcs/) propose work that then ships; [ADRs](./adrs/) record a decision reached, including a decision to keep a tenet and *not* build something.
 
 ## Root specs
