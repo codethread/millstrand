@@ -55,16 +55,23 @@
                        :allowed ["list" "show"]})))))
 
 (def ^:private workflow-doc
-  "Discover the workflows this weaver has registered: list the catalogue, show one definition.")
+  (fmt/reflow
+   "|Discover the workflows this weaver has registered: list the catalogue,
+    |show one definition."))
 
 (def ^:private workflow-arg-spec
   "Declared command surface for the `workflow` op."
   {:op "workflow"
    :doc workflow-doc
    :annotations
-   {:use-when ["Choosing which registered routine fits a piece of work, or reading one definition's param contract before starting a run."]}
+   {:use-when [(fmt/reflow
+                "|Choosing which registered routine fits a piece of work, or
+                 |reading one definition's param contract before starting a
+                 |run.")]}
    :subcommands
-   {"list" {:doc "List registered workflow definitions: name, doc, entrypoints, and definition symbol."
+   {"list" {:doc (fmt/reflow
+                  "|List registered workflow definitions: name, doc,
+                   |entrypoints, and definition symbol.")
             :hook-class :read
             :deadline-class :standard
             :flags {:entrypoint
@@ -79,9 +86,17 @@
                             |constructor entries, which declare no entrypoints
                             |and so match no filter.")}}
             :annotations
-            {:notes ["The catalogue is read from the live registry on every call, so a refreshed or repointed definition shows up without a restart."
-                     "Items are ordered by registered name and carry only name, doc, entrypoints, and definition; everything else is a workflow show away."]}}
-    "show" {:doc "Show one registered workflow definition in full: params, defaults, spec forms, and declared shape."
+            {:notes [(fmt/reflow
+                      "|The catalogue is read from the live registry on every
+                       |call, so a refreshed or repointed definition shows up
+                       |without a restart.")
+                     (fmt/reflow
+                      "|Items are ordered by registered name and carry only
+                       |name, doc, entrypoints, and definition; everything else
+                       |is a workflow show away.")]}}
+    "show" {:doc (fmt/reflow
+                  "|Show one registered workflow definition in full: params,
+                   |defaults, spec forms, and declared shape.")
             :hook-class :read
             :deadline-class :standard
             :positionals [{:name :workflow
@@ -89,8 +104,15 @@
                            :required? true
                            :doc "Registered workflow name."}]
             :annotations
-            {:notes ["Answers for any registered definition, including the call-only and continue-only components list omits by default."
-                     "Topology-lazy and side-effect free: loops, calls, and continuations are reported as declared, never expanded, and no constructor, render function, or spec predicate is executed."]}}}})
+            {:notes [(fmt/reflow
+                      "|Answers for any registered definition, including the
+                       |call-only and continue-only components list omits by
+                       |default.")
+                     (fmt/reflow
+                      "|Topology-lazy and side-effect free: loops, calls, and
+                       |continuations are reported as declared, never expanded,
+                       |and no constructor, render function, or spec predicate
+                       |is executed.")]}}}})
 
 (def ^:private catalog-item-return
   {:type :map

@@ -929,7 +929,11 @@
   Everything else about a definition — its param contract, its declared shape —
   is one `definition-view` away, which is what keeps a catalogue read cheap
   however many workflows a workspace registers. The registry is read live, and
-  nothing a definition carries is executed."
+  nothing a definition carries is executed.
+
+  `::list-request` owns the request shape and `::catalog-item` each emitted
+  item; the request is validated before any lookup and every item before
+  emission."
   ([] (catalog {}))
   ([request] (discovery/catalog (current/runtime) request)))
 
@@ -946,7 +950,10 @@
 
   It stays topology-lazy. Nothing is expanded, rendered, or evaluated: an
   expansion needs params that do not exist yet, and a deferred exit cannot be
-  described before a worker fills it."
+  described before a worker fills it.
+
+  `::show-request` owns the request shape and `::definition-view` the result,
+  both validated at the boundary."
   [name]
   (discovery/definition-view (current/runtime) name))
 

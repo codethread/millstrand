@@ -197,7 +197,14 @@
   ;; Opting back out is the same publication mechanism as opting in: the module
   ;; contributes the complete op partition, so a workspace that stops declaring
   ;; the module publishes no `workflow` entry at the next refresh.
-  (is (= #{"workflow"} (set (keys (get-in (cli/contribute {}) [:ops :entries]))))))
+  (let [entries (get-in (cli/contribute {}) [:ops :entries])]
+    (is (= #{"workflow"} (set (keys entries))))
+    (testing "the assembled entry answers to the op registry's own validator"
+      ;; The entry shape is a spool mirroring what `register-op!` assembles, so
+      ;; the publication-side validator — closed entry keys, provenance,
+      ;; arg-spec structure and leaf classes, returns alignment — is the spec
+      ;; that owns it, here and at every refresh.
+      (is (= "workflow" (:name (weaver/validate-op-entry! (get entries "workflow"))))))))
 
 ;; --- list: deterministic filtering ------------------------------------------
 
