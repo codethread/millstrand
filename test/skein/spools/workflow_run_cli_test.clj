@@ -21,7 +21,7 @@
 
 (workflow/defworkflow solo
   "One ordinary step and nothing else."
-  {:entrypoints #{:start :continue}}
+  {:entrypoints #{:start :continue :call}}
   (workflow/workflow "Solo" (workflow/step :work "Do the work" :self)))
 
 (workflow/defworkflow twin
@@ -44,6 +44,16 @@
                                    :input {:spec ::sign-off-input
                                            :doc "Record the reviewer's verdict."}}
                                   {:key :rework :label "Send it back" :next :solo}])))
+
+(workflow/defworkflow composed
+  "A definition whose entry frontier spans a spliced call and a loop."
+  {:entrypoints #{:start}
+   :defaults {:rounds ["one" "two"]}}
+  (workflow/workflow
+   "Composed"
+   (workflow/step :brief "Brief the work" :self)
+   (workflow/call :sub :solo {})
+   (workflow/step :round "Run a round" :self :loop {:each :rounds})))
 
 (workflow/defworkflow gated
   "A single external gate: ready, and never inferable."
@@ -177,6 +187,21 @@
              (reason-of #(invoke {:subcommand ["choose"] :run-id "never-poured"
                                   :choice "ship"})))
           "a wrong run id and an empty frontier need different repairs"))))
+
+(deftest the-frontier-orders-spliced-calls-and-loop-rounds-by-definition-position
+  ;; A call's steps arrive carrying the position they held inside their own
+  ;; compile; what orders the frontier is the position they hold in this run.
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo :composed)
+      (let [start (started "run-composed" :composed)]
+        (is (= ["Brief the work" "Do the work" "Run a round" "Run a round"]
+               (mapv :title (:ready start))))
+        (is (= [0 1 3 4]
+               (mapv #(get-in (weaver/show rt (:id %)) [:attributes :workflow/position])
+                     (:ready start)))
+            "the join step at index 2 is engine bookkeeping and never appears")))))
 
 ;; --- start ------------------------------------------------------------------
 
@@ -460,6 +485,9 @@
         (is (true? (:done result)))))))
 
 (deftest await-times-out-rather-than-blocking-on-an-executor-owned-frontier
+  ;; Also the regression guard for `--timeout-secs 0`: a healthy executor-owned
+  ;; frontier is what `await` waits through, so a zero dropped on the way to the
+  ;; engine would block here for the 1800-second default instead of answering.
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
@@ -469,6 +497,35 @@
       (let [result (verb "await" "run-await-timeout" :timeout-secs 0)]
         (is (= :timeout (:reason result)))
         (is (= ["Wait for CI"] (mapv :title (:ready result))))))))
+
+(deftest a-supplied-flag-is-carried-even-when-its-value-is-empty-or-zero
+  ;; Presence, not truthiness: an empty selector and a zero timeout are things
+  ;; the worker said, and the request spec is what judges them. (Clojure counts
+  ;; "" and 0 as true, so a reader coming from another language should not have
+  ;; to take that on trust.)
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo)
+      (started "run-empty-flags" :solo)
+      (is (thrown? clojure.lang.ExceptionInfo (verb "complete" "run-empty-flags" :step ""))
+          "an empty --step is a stated selector the request spec refuses, not inference")
+      (is (thrown? clojure.lang.ExceptionInfo (verb "complete" "run-empty-flags" :by ""))
+          "an empty --by is refused rather than dropped")
+      (is (= ["Do the work"] (mapv :title (:ready (verb "ready" "run-empty-flags"))))
+          "neither refused request mutated the run"))))
+
+(deftest a-run-result-refuses-a-role-outside-the-published-vocabulary
+  ;; A definition may write its own workflow/role (TEN-002); a worker surface
+  ;; that presented one as an ordinary step would be inventing a contract.
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo)
+      (let [start (started "run-odd-role" :solo)
+            step (first (ready-ids start))]
+        (weaver/update! rt step {:attributes {"workflow/role" "improvised"}})
+        (is (= :workflow/run-result-invalid (reason-of #(verb "ready" "run-odd-role"))))))))
 
 ;; --- op wiring --------------------------------------------------------------
 

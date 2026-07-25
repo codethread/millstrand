@@ -24,12 +24,12 @@
   fails as `workflow/frontier-stale` carrying the current frontier rather than
   applying to whatever happens to be ready now. That failure is retryable and
   says so, which is what lets a client tell a lost race apart from bad input."
-  (:require [skein.api.spool.alpha :refer [fail!]]
-            [skein.spools.workflow.internal.guard :as guard]
+  (:require [skein.api.format.alpha :as fmt]
+            [skein.api.spool.alpha :refer [fail!]]
             [skein.spools.workflow.internal.query :as query]
             [skein.spools.workflow.internal.util :as util]))
 
-(declare frontier root-view require-run! selectable resolve-target! stale!)
+(declare frontier root-view selectable)
 
 (def ^:private roles
   "The worker roles, each mapping its verb's compatibility rules to the stable
@@ -58,6 +58,19 @@
              :absent :workflow/ready-defer-absent
              :ambiguous :workflow/ready-defer-ambiguous
              :incompatible :workflow/ready-defer-incompatible}}))
+
+(def ^:private stale-guidance
+  (fmt/reflow
+   "|Another worker wrote to this run. Choose from the current ready frontier or
+    |re-run workflow ready, then retry."))
+
+(def ^:private ambiguous-guidance
+  (fmt/reflow
+   "|Re-run with --step naming one of the compatible items."))
+
+(def ^:private gate-actor-guidance
+  (fmt/reflow
+   "|Re-run with --by naming who closed the gate."))
 
 (defn result
   "Return the shared run result for `run-id`, stamped `operation`.
@@ -113,31 +126,27 @@
             :run-id run-id
             :step (:id item)
             :gate (:gate item)
-            :guidance "Re-run with --by naming who closed the gate."}))
+            :guidance gate-actor-guidance}))
   item)
 
-(defn mutate!
-  "Resolve `role`'s target for `request`, apply `mutate` to it under the run's
-  guard, and return the shared run result stamped `operation`.
+(defn require-fresh-frontier!
+  "Fail loudly unless `role`'s compatible items are the same in `before` and `after`.
 
-  `mutate` receives the resolved ready item view and performs the engine
-  mutation with an explicit step selector, so a worker verb never leaves the
-  engine to re-infer something it could resolve differently. The pre-guard
-  resolution answers an invalid request without blocking; the in-guard
-  comparison turns a concurrent write into `workflow/frontier-stale` instead of
-  a mutation applied to a frontier the caller never saw."
-  [rt operation role request mutate]
-  (let [{:keys [run-id step]} (require-run! rt request)
-        before (frontier rt run-id)
-        target (resolve-target! role run-id before step)]
-    (guard/with-run!
-      rt run-id
-      (fn []
-        (let [ready (frontier rt run-id)]
-          (when (not= (mapv :id (selectable role before)) (mapv :id (selectable role ready)))
-            (stale! operation run-id step ready))
-          (mutate target)
-          (result rt operation run-id))))))
+  The other half of the run guard, called once the guard is held: a difference
+  means another worker wrote to this run between the caller's resolution and its
+  turn, so the request describes a state that no longer exists. Nothing has been
+  mutated at that point, and the failure says so — a stale frontier is worth
+  retrying, unlike an ambiguous or wrong-role request."
+  [operation role run-id step before after]
+  (when (not= (mapv :id (selectable role before)) (mapv :id (selectable role after)))
+    (fail! "Workflow frontier changed before the mutation applied"
+           (cond-> {:reason :workflow/frontier-stale
+                    :operation operation
+                    :run-id run-id
+                    :ready after
+                    :guidance stale-guidance}
+             step (assoc :step step))))
+  after)
 
 ;; --- frontier resolution ------------------------------------------------------
 
@@ -151,7 +160,7 @@
   [role ready]
   (filterv (:selectable? (roles role)) ready))
 
-(defn- require-run!
+(defn require-run!
   "Return `request` once its run id names a run this weaver has poured.
 
   A run that never existed is a different failure from a frontier with nothing
@@ -175,7 +184,7 @@
       (fail! "Unknown workflow run" {:reason :workflow/run-unknown :run-id run-id}))
     {:id (:id root) :title (:title root) :state (:state root)}))
 
-(defn- resolve-target!
+(defn resolve-target!
   "Return the item of ready frontier `ready` that `role`'s verb acts on.
 
   With `step`, the named item must be ready and compatible with this verb; a
@@ -205,20 +214,4 @@
                   :run-id run-id
                   :compatible items
                   :ready ready
-                  :guidance "Re-run with --step naming one of the compatible items."}))))))
-
-(defn- stale!
-  "Fail loudly because another worker changed the frontier `operation` resolved.
-
-  Nothing is mutated. The failure carries the frontier as it is now and says the
-  request is retryable against it, which is what distinguishes a lost race from
-  input the run would have refused anyway."
-  [operation run-id step ready]
-  (fail! "Workflow frontier changed before the mutation applied"
-         (cond-> {:reason :workflow/frontier-stale
-                  :operation operation
-                  :run-id run-id
-                  :ready ready
-                  :guidance (str "Another worker wrote to this run. Choose from the current "
-                                 "ready frontier or re-run workflow ready, then retry.")}
-           step (assoc :step step))))
+                  :guidance ambiguous-guidance}))))))

@@ -968,6 +968,29 @@
 ;; they add is a vocabulary a lower-privilege worker can drive without knowing
 ;; which strand id means what — and stable failures when it cannot.
 
+(defn- mutate-run!
+  "Apply `mutate` to the ready item `role`'s verb resolves for `request`, and
+  return the shared run result stamped `operation`.
+
+  The shape all three worker mutations share. Resolution happens twice on
+  purpose: the pre-guard pass answers an invalid request without queueing behind
+  another worker, and the in-guard pass is what the request actually acts on. If
+  another worker wrote between the two, `require-fresh-frontier!` refuses before
+  anything is mutated. `mutate` then performs the engine operation with an
+  explicit step, so the verb never leaves the engine to re-infer a target it
+  could resolve differently."
+  [rt operation role request mutate]
+  (let [{:keys [run-id step]} (runs/require-run! rt request)
+        before (runs/frontier rt run-id)
+        target (runs/resolve-target! role run-id before step)]
+    (guard/with-run!
+      rt run-id
+      (fn []
+        (runs/require-fresh-frontier! operation role run-id step before
+                                      (runs/frontier rt run-id))
+        (mutate target)
+        (runs/result rt operation run-id)))))
+
 (defn run-start!
   "Start registered workflow `:workflow` as run `:run-id` and return the run result.
 
@@ -1016,11 +1039,11 @@
   (let [rt (current/runtime)
         {:keys [run-id by]} (require-valid! ::complete-request request
                                             "Invalid workflow complete request")]
-    (runs/mutate! rt "workflow complete" :step request
-                  (fn [target]
-                    (runs/require-gate-actor! run-id target by)
-                    (complete! run-id (cond-> {:step (:id target)}
-                                        by (assoc :by by)))))))
+    (mutate-run! rt "workflow complete" :step request
+                 (fn [target]
+                   (runs/require-gate-actor! run-id target by)
+                   (complete! run-id (cond-> {:step (:id target)}
+                                       by (assoc :by by)))))))
 
 (defn run-choose!
   "Record `request`'s choice on the ready checkpoint and return the run result.
@@ -1035,11 +1058,11 @@
   (let [rt (current/runtime)
         {:keys [run-id choice input by]} (require-valid! ::choose-request request
                                                          "Invalid workflow choose request")]
-    (runs/mutate! rt "workflow choose" :checkpoint request
-                  (fn [target]
-                    (choose! run-id choice (or input {})
-                             (cond-> {:step (:id target)}
-                               by (assoc :by by)))))))
+    (mutate-run! rt "workflow choose" :checkpoint request
+                 (fn [target]
+                   (choose! run-id choice (or input {})
+                            (cond-> {:step (:id target)}
+                              by (assoc :by by)))))))
 
 (defn run-continue!
   "Fill the ready defer exit of `request`'s run and return the run result.
@@ -1054,11 +1077,11 @@
   (let [rt (current/runtime)
         {:keys [run-id workflow params by]} (require-valid! ::continue-request request
                                                             "Invalid workflow continue request")]
-    (runs/mutate! rt "workflow continue" :defer request
-                  (fn [target]
-                    (continue! run-id workflow (or params {})
-                               (cond-> {:step (:id target)}
-                                 by (assoc :by by)))))))
+    (mutate-run! rt "workflow continue" :defer request
+                 (fn [target]
+                   (continue! run-id workflow (or params {})
+                              (cond-> {:step (:id target)}
+                                by (assoc :by by)))))))
 
 (defn run-await
   "Block until `request`'s run is done or needs a worker, and return the result.
@@ -1071,11 +1094,10 @@
   call waits through. `::await-request` owns the request shape and
   `::attention-result` the answer."
   [request]
-  (let [{:keys [run-id timeout-secs]} (require-valid! ::await-request request
-                                                      "Invalid workflow await request")]
+  (let [{:keys [run-id]} (require-valid! ::await-request request
+                                         "Invalid workflow await request")]
     (runs/attention-result "workflow await" run-id
-                           (await! run-id (cond-> {}
-                                            timeout-secs (assoc :timeout-secs timeout-secs))))))
+                           (await! run-id (select-keys request [:timeout-secs])))))
 
 (defn resolve-workflow
   "Return the live classification of registered workflow `name`.
@@ -1485,7 +1507,11 @@
 (s/def :skein.spools.workflow.view/id non-blank-string?)
 (s/def :skein.spools.workflow.view/title string?)
 (s/def :skein.spools.workflow.view/state ::state)
-(s/def :skein.spools.workflow.view/role non-blank-string?)
+;; The roles a ready frontier can hold. Root and procedure strands are engine
+;; bookkeeping and never reach it, so a fourth value in a run result means a
+;; definition wrote its own `workflow/role`, and the result says so rather than
+;; presenting it to a worker as an ordinary step.
+(s/def :skein.spools.workflow.view/role #{"step" "checkpoint" "defer"})
 (s/def :skein.spools.workflow.view/run-id non-blank-string?)
 (s/def :skein.spools.workflow.view/operation non-blank-string?)
 (s/def :skein.spools.workflow.view/done boolean?)

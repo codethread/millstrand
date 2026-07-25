@@ -38,23 +38,30 @@
     entrypoint (assoc :entrypoint (keyword entrypoint))
     all (assoc :all? true)))
 
-(defn- run-request
-  "Return the request keys every run verb shares, from parsed `args`.
+(defn- carry
+  "Return `request` with `args`' `flag` under `key`, when the worker supplied it.
 
-  A flag the worker did not pass stays absent rather than becoming an explicit
-  nil: the engine's request specs distinguish \"infer this\" from \"here is the
-  answer\", and a nil selector would say the second while meaning the first."
-  [{:keys [run-id step by]}]
-  (cond-> {:run-id run-id}
-    step (assoc :step step)
-    by (assoc :by by)))
+  Presence, not truthiness: a flag the worker did not pass must stay absent,
+  because the engine's request specs read absence as \"infer this\". A flag
+  supplied as an empty string or a zero is something the worker did say, and the
+  request spec is what judges it."
+  [request args flag key]
+  (cond-> request
+    (contains? args flag) (assoc key (get args flag))))
+
+(defn- run-request
+  "Return the request keys every run verb shares, from parsed `args`."
+  [args]
+  (-> {:run-id (:run-id args)}
+      (carry args :step :step)
+      (carry args :by :by)))
 
 (defn- with-json-object
-  "Return `request` with the JSON object under `flag` added as `key`, if present.
+  "Return `request` with `args`' `flag` parsed into `key` as a params map.
 
-  `contains?` rather than truthiness: `--params null` parses to nil, and treating
-  that as an unsupplied flag would silently default a request the worker stated
-  wrongly. Absent means absent; supplied means `json->params` judges it."
+  The JSON-bearing counterpart of `carry`: a supplied `--params null` parses to
+  nil, and `json->params` refuses it rather than letting an unsupplied flag and a
+  wrongly stated one mean the same thing."
   [request args flag key]
   (cond-> request
     (contains? args flag) (assoc key (workflow/json->params (get args flag)))))
@@ -87,8 +94,7 @@
                   (-> (assoc (run-request args) :workflow (keyword target))
                       (with-json-object args :params :params)))
       "await" (workflow/run-await
-               (cond-> {:run-id (:run-id args)}
-                 (:timeout-secs args) (assoc :timeout-secs (:timeout-secs args))))
+               (carry {:run-id (:run-id args)} args :timeout-secs :timeout-secs))
       (throw (ex-info "Unsupported workflow subcommand"
                       {:subcommand subcommand
                        :allowed ["list" "show" "start" "ready" "complete"

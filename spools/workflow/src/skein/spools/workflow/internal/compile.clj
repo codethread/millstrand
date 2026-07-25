@@ -344,9 +344,13 @@
 
 (defn- step-attributes [step form position]
   (let [attributes (merge {"workflow/role" "step"
-                           "workflow/form" (name form)
-                           "workflow/position" position}
+                           "workflow/form" (name form)}
                           (:attributes step)
+                          ;; Engine-owned, so it merges last: a spliced procedure
+                          ;; step arrives carrying the position it held inside its
+                          ;; own compile, and the position that means anything is
+                          ;; the one it holds in the run being poured.
+                          {"workflow/position" position}
                           (when-let [description (:description step)]
                             {"description" description}))]
     (cond-> attributes
