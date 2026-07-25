@@ -261,10 +261,12 @@ Workflows are plain data, so they compose. A `workflow/call` inlines a reusable 
 The example at the top of this page shows the shape. Here is the workflow from this repo's [`.skein/workflows.clj`](./.skein/workflows.clj), condensed but with its executor kinds, enforcement text, and routing intact.
 
 ```clojure
-(workflow/workflow (fn [{:keys [branch]}] (str "Land: " branch))
-  {:params {:feature   (workflow/param :required true)
-            :branch    (workflow/param :required true)
-            :worktree  (workflow/param :required true)}}
+(workflow/defworkflow land
+  "Drive the coordinator landing workflow for a feature branch."
+  {:entrypoints #{:start}
+   :param-spec ::land-params
+   :defaults {}}
+  (workflow/workflow (fn [{:keys [branch]}] (str "Land: " branch))
 
   ;; A :self step carries its enforcement as plain instruction text — shipped as
   ;; data on the strand, not prose in a file an agent might skip.
