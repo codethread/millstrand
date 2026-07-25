@@ -13,8 +13,9 @@
   history), `routing` (checkpoint choice validation, routing, and cascading
   closes), `registry` (runtime-owned registries), `definitions` (definition
   resolution, entrypoint rules, and pre-publication candidate validation),
-  `discovery` (the catalogue and definition-view projections), and `util`
-  (shared validation/ref-normalization). Specs stay registered here so
+  `discovery` (the catalogue and definition-view projections), `runs` (the
+  generic worker's role-aware frontier resolution and shared run result), and
+  `util` (shared validation/ref-normalization). Specs stay registered here so
   `explain` and `s/explain-data` paths are unchanged.
 
   The worker CLI over this engine lives in `skein.spools.workflow.cli` and is a
@@ -38,6 +39,7 @@
             [skein.spools.workflow.internal.query :as query]
             [skein.spools.workflow.internal.registry :as registry]
             [skein.spools.workflow.internal.routing :as routing]
+            [skein.spools.workflow.internal.runs :as runs]
             [skein.spools.workflow.internal.specs :as specs]
             [skein.spools.workflow.internal.util :as util]))
 
@@ -957,6 +959,124 @@
   [name]
   (discovery/definition-view (current/runtime) name))
 
+;; --- the generic worker run surface ------------------------------------------
+;;
+;; Six request-map verbs over the lifecycle above, sharing one result shape.
+;; They add no engine semantics: each validates its named request spec, narrows
+;; the ready frontier to the role it acts on, and delegates to the trusted-
+;; Clojure operation with an explicit step selector (PROP-Wcd-001.S2/S4). What
+;; they add is a vocabulary a lower-privilege worker can drive without knowing
+;; which strand id means what — and stable failures when it cannot.
+
+(defn run-start!
+  "Start registered workflow `:workflow` as run `:run-id` and return the run result.
+
+  `request` is `{:run-id … :workflow <registered keyword> :params {…}}`, params
+  optional. Unlike `start!`, which trusted Clojure may hand a pre-built workflow
+  map or a definition Var, a worker may only start something the weaver has
+  registered and that declares the `:start` entrypoint — a generic surface that
+  poured caller-supplied topology would not be a worker surface at all.
+
+  Params are the definition's own: its `:defaults` merge underneath and the
+  merged map is judged whole by its `:param-spec`, so omitting `:params` and
+  passing `{}` are the same request. `::start-request` owns the request shape."
+  [request]
+  (let [rt (current/runtime)
+        {:keys [run-id workflow params]} (require-valid! ::start-request request
+                                                         "Invalid workflow start request")]
+    (start! run-id workflow (or params {}))
+    (runs/result rt "workflow start" run-id)))
+
+(defn run-ready
+  "Return the run result for `request`'s run without touching it.
+
+  The frontier read the whole surface is built around: every mutation answers
+  with this same shape, so `run-ready` is what a worker calls to pick up a run it
+  did not start, or to re-read a frontier after losing a race. It reports the
+  complete current frontier — every ready item of every role, in definition and
+  loop order — because a worker filtering for its own role can do so, while one
+  that never saw a sibling item cannot. `::ready-request` owns the request shape."
+  [request]
+  (let [rt (current/runtime)]
+    (require-valid! ::ready-request request "Invalid workflow ready request")
+    (runs/result rt "workflow ready" (:run-id request))))
+
+(defn run-complete!
+  "Close the ready ordinary step of `request`'s run and return the run result.
+
+  `request` is `{:run-id … :step … :by …}`, step and actor optional. Without
+  `:step` the sole ready ordinary step is inferred; a checkpoint or defer exit
+  ready alongside it does not make that ambiguous, because neither is a step this
+  verb could act on.
+
+  A gate is never inferred. Closing one is an assertion that something outside
+  the run happened, so it takes both an explicit `:step` and a `:by` recording
+  who decided so. `::complete-request` owns the request shape."
+  [request]
+  (let [rt (current/runtime)
+        {:keys [run-id by]} (require-valid! ::complete-request request
+                                            "Invalid workflow complete request")]
+    (runs/mutate! rt "workflow complete" :step request
+                  (fn [target]
+                    (runs/require-gate-actor! run-id target by)
+                    (complete! run-id (cond-> {:step (:id target)}
+                                        by (assoc :by by)))))))
+
+(defn run-choose!
+  "Record `request`'s choice on the ready checkpoint and return the run result.
+
+  `request` is `{:run-id … :choice … :input {…} :step … :by …}`, all but the run
+  id and choice optional. Without `:step` the sole ready checkpoint is inferred.
+  `:input` is the choice's own contract — a JSON worker keywordizes it with
+  `json->params` first — and a routed choice pours its continuation in the same
+  mutation, so the returned frontier is already the continuation's.
+  `::choose-request` owns the request shape."
+  [request]
+  (let [rt (current/runtime)
+        {:keys [run-id choice input by]} (require-valid! ::choose-request request
+                                                         "Invalid workflow choose request")]
+    (runs/mutate! rt "workflow choose" :checkpoint request
+                  (fn [target]
+                    (choose! run-id choice (or input {})
+                             (cond-> {:step (:id target)}
+                               by (assoc :by by)))))))
+
+(defn run-continue!
+  "Fill the ready defer exit of `request`'s run and return the run result.
+
+  `request` is `{:run-id … :workflow … :params {…} :step … :by …}`, params, step,
+  and actor optional. Without `:step` the sole ready defer exit is inferred. This
+  is the root transfer `continue!` documents, not a step transition: the target
+  must be one of the names the defer's materialized allowlist permits and must
+  declare `:continue`, and its params are its own. `::continue-request` owns the
+  request shape."
+  [request]
+  (let [rt (current/runtime)
+        {:keys [run-id workflow params by]} (require-valid! ::continue-request request
+                                                            "Invalid workflow continue request")]
+    (runs/mutate! rt "workflow continue" :defer request
+                  (fn [target]
+                    (continue! run-id workflow (or params {})
+                               (cond-> {:step (:id target)}
+                                 by (assoc :by by)))))))
+
+(defn run-await
+  "Block until `request`'s run is done or needs a worker, and return the result.
+
+  `request` is `{:run-id … :timeout-secs …}`, the timeout optional. The polling
+  and the attention vocabulary are `await!`'s unchanged: the reason says which
+  kind of attention the run needs — `:done`, `:checkpoint`, `:defer`, `:step`,
+  `:gate`, `:stalled`, or `:timeout` — and `:waiting` is never returned, because
+  a run whose whole frontier is executor-owned and healthy is exactly what this
+  call waits through. `::await-request` owns the request shape and
+  `::attention-result` the answer."
+  [request]
+  (let [{:keys [run-id timeout-secs]} (require-valid! ::await-request request
+                                                      "Invalid workflow await request")]
+    (runs/attention-result "workflow await" run-id
+                           (await! run-id (cond-> {}
+                                            timeout-secs (assoc :timeout-secs timeout-secs))))))
+
 (defn resolve-workflow
   "Return the live classification of registered workflow `name`.
 
@@ -1180,6 +1300,8 @@
 ;; The `continue!` wire boundary. `:workflow` and `:params` are the target's own
 ;; — never the current run's — so they live in a request-local aux namespace
 ;; rather than reusing the definition-shaped ::workflow and ::params specs.
+;; `:params` is optional because omitting it and passing `{}` are the same
+;; request: the target's `:defaults` are what fill an unsupplied key.
 (s/def :skein.spools.workflow.request/run-id non-blank-string?)
 (s/def :skein.spools.workflow.request/workflow ::registry-name)
 (s/def :skein.spools.workflow.request/params :skein.spools.workflow.values/params)
@@ -1187,9 +1309,9 @@
 (s/def :skein.spools.workflow.request/by non-blank-string?)
 (s/def ::continue-request
   (s/keys :req-un [:skein.spools.workflow.request/run-id
-                   :skein.spools.workflow.request/workflow
-                   :skein.spools.workflow.request/params]
-          :opt-un [:skein.spools.workflow.request/step
+                   :skein.spools.workflow.request/workflow]
+          :opt-un [:skein.spools.workflow.request/params
+                   :skein.spools.workflow.request/step
                    :skein.spools.workflow.request/by]))
 
 ;; --- discovery request and projection shapes ------------------------------
@@ -1324,6 +1446,118 @@
                                    :skein.spools.workflow.view/declared]))
          #(= #{:name :doc :entrypoints :definition :kind :opaque :params :declared}
              (set (keys %)))))
+
+;; --- run lifecycle request and result shapes ------------------------------
+
+(s/def :skein.spools.workflow.request/choice non-blank-string?)
+(s/def :skein.spools.workflow.request/input :skein.spools.workflow.values/params)
+(s/def :skein.spools.workflow.request/timeout-secs ::timeout-secs)
+
+;; One request spec per worker verb, and the whole of what each verb accepts.
+;; `:step` is a disambiguator everywhere it appears, never a required address:
+;; the surface would otherwise oblige a worker to read a frontier before every
+;; mutation, which is the coupling the role-aware inference exists to remove.
+(s/def ::start-request
+  (s/keys :req-un [:skein.spools.workflow.request/run-id
+                   :skein.spools.workflow.request/workflow]
+          :opt-un [:skein.spools.workflow.request/params]))
+(s/def ::ready-request
+  (s/keys :req-un [:skein.spools.workflow.request/run-id]))
+(s/def ::complete-request
+  (s/keys :req-un [:skein.spools.workflow.request/run-id]
+          :opt-un [:skein.spools.workflow.request/step
+                   :skein.spools.workflow.request/by]))
+(s/def ::choose-request
+  (s/keys :req-un [:skein.spools.workflow.request/run-id
+                   :skein.spools.workflow.request/choice]
+          :opt-un [:skein.spools.workflow.request/input
+                   :skein.spools.workflow.request/step
+                   :skein.spools.workflow.request/by]))
+(s/def ::await-request
+  (s/keys :req-un [:skein.spools.workflow.request/run-id]
+          :opt-un [:skein.spools.workflow.request/timeout-secs]))
+
+;; The run projection aux keys. These describe a *live run* — strand ids, titles,
+;; and roles read back from poured molecules — while the definition-shaped
+;; `::name`/`::title`/`::state` specs in this namespace describe authored data,
+;; which is why they share the `view` namespace with the discovery projections
+;; rather than the builder specs.
+(s/def :skein.spools.workflow.view/id non-blank-string?)
+(s/def :skein.spools.workflow.view/title string?)
+(s/def :skein.spools.workflow.view/state ::state)
+(s/def :skein.spools.workflow.view/role non-blank-string?)
+(s/def :skein.spools.workflow.view/run-id non-blank-string?)
+(s/def :skein.spools.workflow.view/operation non-blank-string?)
+(s/def :skein.spools.workflow.view/done boolean?)
+(s/def :skein.spools.workflow.view/gate non-blank-string?)
+(s/def :skein.spools.workflow.view/defer non-blank-string?)
+(s/def :skein.spools.workflow.view/workflows (s/coll-of non-blank-string?))
+(s/def :skein.spools.workflow.view/choices (s/coll-of non-blank-string?))
+
+(s/def ::root-view
+  (s/keys :req-un [:skein.spools.workflow.view/id
+                   :skein.spools.workflow.view/title
+                   :skein.spools.workflow.view/state]))
+
+;; Every ready item names itself the same way; what it *offers* depends on its
+;; role, so the role is the dispatch. A gate is the one branch the stored role
+;; does not name: it is a step carrying an external waiter, and a worker must be
+;; able to tell it apart from a step it may simply complete.
+(s/def ::ready-fields
+  (s/keys :req-un [:skein.spools.workflow.view/id
+                   :skein.spools.workflow.view/role
+                   :skein.spools.workflow.view/title]))
+
+(defn- ready-item-role
+  "Return the branch of `::ready-item` that ready view `item` belongs to."
+  [item]
+  (cond
+    (= "checkpoint" (:role item)) :checkpoint
+    (= "defer" (:role item)) :defer
+    (:gate item) :gate
+    :else :step))
+
+(defmulti ^:private ready-item-branch
+  "Return the `::ready-item` spec for a ready view's role branch."
+  ready-item-role)
+
+(defmethod ready-item-branch :checkpoint [_]
+  (s/merge ::ready-fields (s/keys :req-un [:skein.spools.workflow.view/choices])))
+
+(defmethod ready-item-branch :defer [_]
+  (s/merge ::ready-fields (s/keys :req-un [:skein.spools.workflow.view/defer
+                                           :skein.spools.workflow.view/workflows])))
+
+(defmethod ready-item-branch :gate [_]
+  (s/merge ::ready-fields (s/keys :req-un [:skein.spools.workflow.view/gate])))
+
+(defmethod ready-item-branch :step [_] ::ready-fields)
+
+(s/def ::ready-item (s/multi-spec ready-item-branch ready-item-role))
+
+;; The result every run verb answers with. `:ready` is the complete frontier, not
+;; the part the verb acted on, and `:done` is what makes an empty one readable.
+(s/def :skein.spools.workflow.view/root ::root-view)
+(s/def :skein.spools.workflow.view/ready (s/coll-of ::ready-item :kind vector?))
+(s/def ::run-result
+  (s/keys :req-un [:skein.spools.workflow.view/operation
+                   :skein.spools.workflow.view/run-id
+                   :skein.spools.workflow.view/root
+                   :skein.spools.workflow.view/ready
+                   :skein.spools.workflow.view/done]))
+
+;; `await` answers with the attention vocabulary instead: a run it stopped
+;; blocking on has a reason, and the reason carries the item behind it.
+(s/def :skein.spools.workflow.view/reason
+  #{:done :checkpoint :defer :step :gate :stalled :waiting :timeout})
+(s/def :skein.spools.workflow.view/detail map?)
+(s/def ::attention-result
+  (s/keys :req-un [:skein.spools.workflow.view/operation
+                   :skein.spools.workflow.view/run-id
+                   :skein.spools.workflow.view/reason
+                   :skein.spools.workflow.view/ready
+                   :skein.spools.workflow.view/done]
+          :opt-un [:skein.spools.workflow.view/detail]))
 
 ;; --- explain topic builders -----------------------------------------------
 

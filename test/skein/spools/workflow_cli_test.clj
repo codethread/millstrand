@@ -190,7 +190,7 @@
               (is (= :read (:hook-class leaf)))
               (is (= :standard (:deadline-class leaf))))))
         (testing "op-level narrative stays at the about/prime tier"
-          (is (re-find #"discovery half" (:about entry)))
+          (is (re-find #"worker surface" (:about entry)))
           (is (re-find #"workflow list" (:prime entry))))))))
 
 (deftest the-cli-module-owns-the-whole-workflow-op-partition

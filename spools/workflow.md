@@ -16,7 +16,7 @@ This is userland spool code, not a separate scheduler or persistence system. Wor
 
 Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `defer`, `bind-defers`, `param`, `compile`, `pour!`, `wisp!`, and `explain`.
 
-The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `continue!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see §5), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see §5b). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
+The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `continue!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see §5), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see §5b). That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`complete`/`choose`/`continue`/`await` over the run lifecycle (see §5c). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
 
 Every run-mutating op (`start!`, `complete!`, `choose!`, `continue!`, `advance!`) returns one `{:ready [step-view ...] :done boolean}` map: `:ready` is the run's ready step views (as `ready` would return them) and `:done` is its done-ness, so an empty `:ready` never leaves a caller guessing whether the run finished or merely stalled. The pure queries `ready`/`ready-step` still return step views directly.
 
@@ -219,10 +219,11 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
   those resolved params, stringifying keyword values and failing loudly on
   non-JSON-safe values (pass `:context` explicitly for those cases).
 - `(ready run-id)` / `(ready run-id selector)` — all currently ready,
-  agent-facing step views for the run (vector, possibly empty). Each view carries
-  `:run-id` so a stage cutover is visible in-band; procedure join steps never
-  appear (see below). The optional selector filters by view keys such as `:role`,
-  `:gate`, `:checkpoint`, or `:checkpoint-kind`.
+  agent-facing step views for the run (vector, possibly empty), in definition
+  order: the order the author wrote, with each loop round in its own order. Each
+  view carries `:run-id` so a stage cutover is visible in-band; procedure join
+  steps never appear (see below). The optional selector filters by view keys such
+  as `:role`, `:gate`, `:checkpoint`, or `:checkpoint-kind`.
 - `(ready-step run-id)` — convenience wrapper that throws if more than one
   step is ready; use `ready`, `ready-gates`, or `ready-checkpoint` for workflows with parallel entry points
   or fan-out.
@@ -534,6 +535,67 @@ Failures carry the reason and what to do about it: an unregistered name fails as
 
 There is no family filter, pagination, JSON Schema projection, or registry mutation on this surface. Registration stays a trusted-Clojure and module-publication concern.
 
+## 5c. Driving a run
+
+The same opt-in module publishes six verbs over the lifecycle in §4: `start`, `ready`, `complete`, `choose`, `continue`, and `await`. They add no engine semantics. Each one validates a named request spec, narrows the run's ready frontier to the role it acts on, and calls the trusted-Clojure operation with an explicit step. Their Clojure entry points are `run-start!`, `run-ready`, `run-complete!`, `run-choose!`, `run-continue!`, and `run-await`, each taking one request map.
+
+`advance!` is deliberately absent. A worker naming what it is doing — completing a step, choosing at a checkpoint, continuing into another routine — leaves a record of its intent that one general verb does not, and trusted Clojure still has `advance!` when a wrapper wants it.
+
+### One result shape
+
+```console
+$ strand workflow start feat-x --workflow spike --params '{"scope":"queue"}'
+{"operation":"workflow start",
+ "run-id":"feat-x",
+ "root":{"id":"a1b2c","title":"Spike queue","state":"active"},
+ "ready":[{"id":"d4e5f","title":"Inspect the current board","role":"step","state":"active","run-id":"feat-x"}],
+ "done":false}
+```
+
+`start`, `ready`, `complete`, `choose`, and `continue` all answer with that shape: what you invoked, the run, its current root, its complete ready frontier, and whether it is done. A mutation therefore never needs a read after it to learn what is possible next, and an empty `ready` is never ambiguous — `done` says whether the run finished or stalled.
+
+`ready` reports every ready item of every role, not the subset your verb could act on. A worker that wants only its own role can filter; one that never saw the sibling item cannot know it exists. Items come back in definition order (§4), and a finished run still names the last root it poured, so the shape does not depend on when you asked.
+
+### Inference by role
+
+`complete` acts on an ordinary step, `choose` on a checkpoint, `continue` on a defer exit. Each verb infers the sole ready item of *its* role, so a run with a step and a checkpoint ready at once is unambiguous for both and neither needs a step id. `--step` is for the case where two items of one role are ready; it is never how you address an unambiguous frontier.
+
+A gate is the exception. Closing one asserts that something outside the run happened, so it takes both `--step` and `--by`, and a bare `complete` never picks it — a run whose only ready item is a gate reports `workflow/ready-step-absent` rather than closing it.
+
+Failures name the role they refused for:
+
+| Reason | Meaning |
+|---|---|
+| `workflow/ready-step-absent`, `-checkpoint-absent`, `-defer-absent` | Nothing this verb could act on is ready. The failure carries the frontier. |
+| `workflow/ready-step-ambiguous`, `-checkpoint-ambiguous`, `-defer-ambiguous` | More than one compatible item; the failure carries all of them, and `--step` picks one. |
+| `workflow/ready-step-incompatible`, `-checkpoint-incompatible`, `-defer-incompatible` | `--step` named a ready item of the wrong role; the failure carries the items that would have worked. |
+| `workflow/step-not-ready` | `--step` named something that is not in the frontier at all. |
+| `workflow/gate-actor-required` | A gate close arrived without `--by`. |
+| `workflow/frontier-stale` | Another worker moved the run first. |
+| `workflow/run-unknown` | The run id has never had a root strand. |
+
+### Losing a race
+
+Every mutation resolves the frontier twice: once before taking the run's guard, so a bad request fails without waiting behind another worker, and once after. If the compatible frontier changed in between, the request describes a run state that no longer exists and fails as `workflow/frontier-stale` with the frontier as it is now, having written nothing. Read `workflow ready` and act on what is there.
+
+That is what makes the failure worth distinguishing: a stale frontier is retryable, while an ambiguous or wrong-role request is not going to succeed on a second attempt.
+
+### `workflow await`
+
+`await` blocks until the run is done or needs a worker, with the attention semantics `await!` already has (§4). It answers with the reason that stopped it, the frontier, done state, and the item behind the reason:
+
+```console
+$ strand workflow await feat-x --timeout-secs 600
+{"operation":"workflow await","run-id":"feat-x","reason":"checkpoint","done":false,
+ "ready":[...],"detail":{"id":"g7h8i","title":"Choose what follows the spike","role":"checkpoint","choices":["recommend-build","stop"]}}
+```
+
+`waiting` is never returned: a frontier that is entirely executor-owned and healthy is what the call waits through. Cap blocking awaits at around 50 minutes and re-issue, so a provider's prompt cache does not expire while a worker idles.
+
+### What the worker surface will not do
+
+Params and choice input are JSON objects parsed through the shared declared-arg machinery, so `:stdin` and `:payload/<name>` references work on `--params` and `--input` like every other JSON flag. Beyond that: no run history expansion, no family filter, no pagination, no attribute writes on `complete` yet, and no way to start anything but a registered name. Pouring a workflow map or a definition Var stays trusted Clojure.
+
 ## 6. Molecule ops
 
 | Fn | Effect |
@@ -601,6 +663,7 @@ This table is the extension API: spools built on top of `skein.spools.workflow` 
 |---|---|---|
 | `workflow/role` | `"root"`, `"step"`, `"checkpoint"`, `"defer"`, `"procedure"`, or `"digest"`. Drives which strands count as workflow work. | `compile` (root/step strands), `defer` builder, `expand-call-step` (procedure join step), `squash!` (digest). |
 | `workflow/form` | `"molecule"` or `"wisp"`. | `compile`, from `opts :form` (defaults molecule) or `pour!`/`wisp!`. |
+| `workflow/position` | Integer index of a step in the normalized step order — declaration order with loops expanded and calls spliced. Orders the ready frontier (§4). Steps poured before this attribute existed sort after positioned ones, by id. | `compile` (step strands only). |
 | `workflow/run-id` | Stable run handle used by `start!`/`ready`/`complete!`/`choose!`/`continue!`/`current-root`. | `compile`, from `opts :run-id` (root strand only). |
 | `workflow/family` | Grouping label across related runs (e.g. `"devflow"`). Carried forward into `:next` continuations. | `compile`, from `opts :family` (root strand only). |
 | `workflow/definition` | Stringified symbol naming the definition Var this root was built from. | `compile`, from `opts :definition` (root strand only; set by start, `:revise`, and named/symbol `:next` routing). |
@@ -633,7 +696,7 @@ This table is the extension API: spools built on top of `skein.spools.workflow` 
 | `workflow/summary` | Compact JSON-safe run summary on an `squash-run!` digest: a vector of `{"title" .. "outcomes" [..]}` maps, one per squashed molecule in creation order. | `squash-run!`. |
 | `skills` | Freeform skill/tool hint for a step (not `workflow/`-namespaced; devflow convention, surfaced by `step-view`). | Caller-supplied `:attributes`. |
 
-Other plain (non-`workflow/`-namespaced) attributes pass through from a step's `:attributes` as-is; `step-strand` itself adds only the `workflow/role`/`workflow/form` pair and lifts a step's `:description` field into a plain `"description"` attribute.
+Other plain (non-`workflow/`-namespaced) attributes pass through from a step's `:attributes` as-is; `step-strand` itself adds only `workflow/role`, `workflow/form`, and `workflow/position`, and lifts a step's `:description` field into a plain `"description"` attribute.
 
 ## 8. Worked examples
 

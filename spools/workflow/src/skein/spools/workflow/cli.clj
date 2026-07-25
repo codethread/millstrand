@@ -11,10 +11,12 @@
   workspace that wants exactly that should not have to accept the engine's
   vocabulary by accident.
 
-  The op is a thin control surface (TEN-006). Every verb parses declared args,
-  hands a request map to the engine's Clojure discovery functions, and stamps
-  the answer with its `:operation`; the semantics — live registry reads, opacity,
-  refusal — belong to the engine and are documented at `spools/workflow.md`.
+  The op is a thin control surface (TEN-006). Every verb parses declared args
+  and hands a request map to the engine function that owns the answer; the
+  semantics — live registry reads, opacity, role-aware frontier resolution,
+  concurrency, refusal — belong to the engine and are documented at
+  `spools/workflow.md`. Nothing here resolves a step, infers a role, or names an
+  operation the engine does not.
 
   Activate it beside the engine:
 
@@ -36,28 +38,85 @@
     entrypoint (assoc :entrypoint (keyword entrypoint))
     all (assoc :all? true)))
 
+(defn- run-request
+  "Return the request keys every run verb shares, from parsed `args`.
+
+  A flag the worker did not pass stays absent rather than becoming an explicit
+  nil: the engine's request specs distinguish \"infer this\" from \"here is the
+  answer\", and a nil selector would say the second while meaning the first."
+  [{:keys [run-id step by]}]
+  (cond-> {:run-id run-id}
+    step (assoc :step step)
+    by (assoc :by by)))
+
+(defn- with-json-object
+  "Return `request` with the JSON object under `flag` added as `key`, if present.
+
+  `contains?` rather than truthiness: `--params null` parses to nil, and treating
+  that as an unsupplied flag would silently default a request the worker stated
+  wrongly. Absent means absent; supplied means `json->params` judges it."
+  [request args flag key]
+  (cond-> request
+    (contains? args flag) (assoc key (workflow/json->params (get args flag)))))
+
 (defn workflow-op
-  "Handle `strand workflow <verb>`, routing to the engine's discovery reads.
+  "Handle `strand workflow <verb>`, routing to the engine's worker surface.
 
   The registered op handler; resolved by symbol at dispatch time, so it is public
-  like the other spools' op handlers. The declared arg-spec rejects an unknown
-  verb before dispatch, so the fall-through exists only to keep a direct Clojure
-  caller loud."
+  like the other spools' op handlers. Each verb assembles a request map and hands
+  it to the engine function that owns the semantics — the CLI resolves no step,
+  infers no role, and stamps no outcome of its own. The declared arg-spec rejects
+  an unknown verb before dispatch, so the fall-through exists only to keep a
+  direct Clojure caller loud."
   [{:op/keys [args]}]
-  (let [{:keys [subcommand] target :workflow} args]
+  (let [{:keys [subcommand choice] target :workflow} args]
     (case (first subcommand)
       "list" {:operation "workflow list"
               :definitions (workflow/catalog (list-request args))}
       "show" (assoc (workflow/definition-view (keyword target))
                     :operation "workflow show")
+      "start" (workflow/run-start!
+               (-> {:run-id (:run-id args) :workflow (keyword target)}
+                   (with-json-object args :params :params)))
+      "ready" (workflow/run-ready {:run-id (:run-id args)})
+      "complete" (workflow/run-complete! (run-request args))
+      "choose" (workflow/run-choose!
+                (-> (assoc (run-request args) :choice choice)
+                    (with-json-object args :input :input)))
+      "continue" (workflow/run-continue!
+                  (-> (assoc (run-request args) :workflow (keyword target))
+                      (with-json-object args :params :params)))
+      "await" (workflow/run-await
+               (cond-> {:run-id (:run-id args)}
+                 (:timeout-secs args) (assoc :timeout-secs (:timeout-secs args))))
       (throw (ex-info "Unsupported workflow subcommand"
                       {:subcommand subcommand
-                       :allowed ["list" "show"]})))))
+                       :allowed ["list" "show" "start" "ready" "complete"
+                                 "choose" "continue" "await"]})))))
 
 (def ^:private workflow-doc
   (fmt/reflow
-   "|Discover the workflows this weaver has registered: list the catalogue,
-    |show one definition."))
+   "|Discover and drive the workflows this weaver has registered: list the
+    |catalogue, show one definition, then start a run and move it through its
+    |ready frontier."))
+
+(def ^:private run-id-positional
+  {:name :run-id
+   :type :string
+   :required? true
+   :doc "Workflow run id."})
+
+(def ^:private step-flag
+  {:type :string
+   :doc (fmt/reflow
+         "|Ready step id, to disambiguate a frontier with more than one item
+          |this verb could act on. Required to close a gate.")})
+
+(def ^:private by-flag
+  {:type :string
+   :doc (fmt/reflow
+         "|Who is acting, recorded on the closed item. Required to close a
+          |gate.")})
 
 (def ^:private workflow-arg-spec
   "Declared command surface for the `workflow` op."
@@ -67,7 +126,10 @@
    {:use-when [(fmt/reflow
                 "|Choosing which registered routine fits a piece of work, or
                  |reading one definition's param contract before starting a
-                 |run.")]}
+                 |run.")
+               (fmt/reflow
+                "|Driving a run you own: start it, read what is ready, and
+                 |complete, choose, or continue your way through it.")]}
    :subcommands
    {"list" {:doc (fmt/reflow
                   "|List registered workflow definitions: name, doc,
@@ -112,7 +174,110 @@
                       "|Topology-lazy and side-effect free: loops, calls, and
                        |continuations are reported as declared, never expanded,
                        |and no constructor, render function, or spec predicate
-                       |is executed.")]}}}})
+                       |is executed.")]}}
+    "start" {:doc (fmt/reflow
+                   "|Pour a registered workflow as a new run and return its
+                    |opening ready frontier.")
+             :hook-class :mutating
+             :deadline-class :standard
+             :positionals [run-id-positional]
+             :flags {:workflow
+                     {:type :string
+                      :required? true
+                      :doc "Registered workflow name; it must declare the start entrypoint."}
+                     :params
+                     {:type :string
+                      :parse :json
+                      :doc (fmt/reflow
+                            "|JSON object of the definition's own params. Its
+                             |defaults merge underneath and its param spec judges
+                             |the merged map.")}}
+             :annotations
+             {:notes [(fmt/reflow
+                       "|Only a registered name can be started here. Pouring a
+                        |workflow map or a definition var is trusted Clojure.")]}}
+    "ready" {:doc "Show the complete current ready frontier of a run."
+             :hook-class :read
+             :deadline-class :standard
+             :positionals [run-id-positional]
+             :annotations
+             {:notes [(fmt/reflow
+                       "|Reports every ready item of every role, so a worker can
+                        |see the siblings its own verb would filter out. Every
+                        |mutation returns this same shape.")]}}
+    "complete" {:doc "Close the ready ordinary step of a run."
+                :hook-class :mutating
+                :deadline-class :standard
+                :positionals [run-id-positional]
+                :flags {:step step-flag :by by-flag}
+                :annotations
+                {:notes [(fmt/reflow
+                          "|The sole ready ordinary step is inferred: a
+                           |checkpoint or defer exit ready beside it is not
+                           |ambiguity, because neither is a step this verb could
+                           |close.")
+                         (fmt/reflow
+                          "|A gate is never inferred. Closing one asserts that
+                           |something outside the run happened, so it takes both
+                           |--step and --by.")]}}
+    "choose" {:doc "Record a choice on the ready checkpoint of a run."
+              :hook-class :mutating
+              :deadline-class :standard
+              :positionals [run-id-positional
+                            {:name :choice
+                             :type :string
+                             :required? true
+                             :doc "Choice key declared by the checkpoint."}]
+              :flags {:input
+                      {:type :string
+                       :parse :json
+                       :doc "JSON object satisfying the choice's own input contract."}
+                      :step step-flag
+                      :by by-flag}
+              :annotations
+              {:notes [(fmt/reflow
+                        "|A routed choice pours its continuation in the same
+                         |mutation, so the frontier returned is already the
+                         |continuation's.")]}}
+    "continue" {:doc "Fill the ready defer exit of a run with a registered workflow."
+                :hook-class :mutating
+                :deadline-class :standard
+                :positionals [run-id-positional]
+                :flags {:workflow
+                        {:type :string
+                         :required? true
+                         :doc (fmt/reflow
+                               "|Registered workflow to continue into; the defer's
+                                |allowlist must permit it and it must declare the
+                                |continue entrypoint.")}
+                        :params
+                        {:type :string
+                         :parse :json
+                         :doc "JSON object of the target's own params."}
+                        :step step-flag
+                        :by by-flag}
+                :annotations
+                {:notes [(fmt/reflow
+                          "|A root transfer, not a step transition: the current
+                           |root closes and the target pours under the same run
+                           |id, carrying nothing over.")]}}
+    "await" {:doc "Block until a run is done or needs a worker."
+             :hook-class :read
+             :deadline-class :unbounded
+             :positionals [run-id-positional]
+             :flags {:timeout-secs
+                     {:type :int
+                      :doc (fmt/reflow
+                            "|Seconds to block before answering with the timeout
+                             |reason (default 1800). Cap blocking awaits at ~50
+                             |minutes and re-issue, so provider prompt caches do
+                             |not expire while idle.")}}
+             :annotations
+             {:notes [(fmt/reflow
+                       "|The reason says which attention the run needs: done,
+                        |checkpoint, defer, step, gate, stalled, or timeout. A
+                        |frontier that is entirely executor-owned and healthy is
+                        |what this call waits through.")]}}}})
 
 (def ^:private catalog-item-return
   {:type :map
@@ -120,6 +285,25 @@
               :doc :string
               :entrypoints {:type :collection :items :string}
               :definition :string}})
+
+(def ^:private ready-item-return
+  ;; Every ready item names itself the same way; what it carries beyond that is
+  ;; its role's business, owned by the engine's ::ready-item spec. Restating that
+  ;; dispatch in a second schema language would be a copy free to disagree.
+  {:type :map
+   :required {:id :string
+              :role :string
+              :title :string}
+   :extra :json})
+
+(def ^:private run-result-return
+  {:type :map
+   :required {:operation :string
+              :run-id :string
+              :root {:type :map
+                     :required {:id :string :title :string :state :string}}
+              :ready {:type :collection :items ready-item-return}
+              :done :boolean}})
 
 (def ^:private workflow-returns
   {:subcommands
@@ -139,25 +323,44 @@
                        ;; them before emission. Restating that tree in a second
                        ;; schema language would be a copy free to disagree.
                        :params :json
-                       :declared :json}}}})
+                       :declared :json}}
+    "start" run-result-return
+    "ready" run-result-return
+    "complete" run-result-return
+    "choose" run-result-return
+    "continue" run-result-return
+    "await" {:type :map
+             :required {:operation :string
+                        :run-id :string
+                        :reason :string
+                        :ready {:type :collection :items ready-item-return}
+                        :done :boolean}
+              ;; `detail` is the item behind the reason, so its shape is the
+              ;; reason's; ::attention-result owns it.
+             :optional {:detail :json}}}})
 
 (def ^:private workflow-meta
   "Cross-verb narrative for `workflow`, projected by the `about`/`prime`
   meta-verbs."
   {:about (fmt/reflow
-           "|workflow is the discovery half of the worker surface over Skein's
-            |workflow engine: list answers which registered routines exist and
-            |what each may be used for, and show answers what one of them
-            |expects before you invoke it. Both read the weaver's live registry,
-            |so they describe the definitions this weaver would actually pour,
-            |not a catalogue baked in when Skein was built.")
+           "|workflow is the worker surface over Skein's workflow engine. list
+            |and show answer which registered routines exist and what one of them
+            |expects, both read from the weaver's live registry rather than a
+            |catalogue baked in when Skein was built. start, ready, complete,
+            |choose, continue, and await drive a run: they share one result shape
+            |— the run, its current root, its complete ready frontier, and
+            |whether it is done — so every call tells you what you may do next
+            |without a second read.")
    :prime (fmt/reflow
-           "|Run workflow list before choosing a routine, and workflow show
-            |<name> before supplying params — the param contract it prints is
-            |the one the engine will judge your invocation against. Neither verb
-            |expands topology: a workflow reports the loops, calls, checkpoints,
-            |and deferred exits it declares, and the ready frontier of a live run
-            |is what tells you the next actual step.")})
+           "|Run workflow list before choosing a routine and workflow show
+            |<name> before supplying params; the param contract it prints is the
+            |one the engine will judge your invocation against. Then start the
+            |run and work its frontier: complete a step, choose a checkpoint,
+            |continue a defer exit. Each verb infers the sole ready item of its
+            |own role, so pass --step only when it says the frontier is
+            |ambiguous — and always to close a gate, which also needs --by. If a
+            |mutation fails as workflow/frontier-stale, another worker moved the
+            |run: re-read workflow ready and act on what is there now.")})
 
 (defn contribute
   "Return the workflow CLI module's complete operation contribution.

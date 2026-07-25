@@ -6,8 +6,26 @@
   the keyword/symbol/string step refs the rest of the pipeline threads. Held in
   one leaf namespace so the compile, query, and routing concerns can share them
   without a cycle back through the public story file."
-  (:require [clojure.string :as str]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [skein.api.spool.alpha :refer [fail!]]))
+
+(defn require-shape!
+  "Return `value` once it satisfies `spec`, else fail loudly with `reason`.
+
+  The workflow spool's stamped shape seam: requests validate before any lookup
+  and projections validate before emission, so a malformed worker answer is a
+  loud failure with a stable reason rather than a shape the reader has to
+  defend against. The failure carries `s/explain-str` as plain text, matching
+  the JSON boundary the rest of the spool holds."
+  [spec value reason message context]
+  (when-not (s/valid? spec value)
+    (fail! message
+           (assoc context
+                  :reason reason
+                  :spec (str spec)
+                  :explain (s/explain-str spec value))))
+  value)
 
 (defn non-blank-string?
   "True when `value` is a non-blank string."

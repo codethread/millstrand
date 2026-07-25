@@ -342,9 +342,10 @@
              {}
              details))
 
-(defn- step-attributes [step form]
+(defn- step-attributes [step form position]
   (let [attributes (merge {"workflow/role" "step"
-                           "workflow/form" (name form)}
+                           "workflow/form" (name form)
+                           "workflow/position" position}
                           (:attributes step)
                           (when-let [description (:description step)]
                             {"description" description}))]
@@ -352,11 +353,19 @@
       (get attributes "workflow/choice-details")
       (update "workflow/choice-details" poured-choice-details))))
 
-(defn- step-strand [step form]
+(defn- step-strand
+  "Build one step strand at `position` in the normalized step order.
+
+  `position` is the step's index after loops expanded and calls spliced, which
+  is what gives a ready frontier an order a reader recognizes: the order the
+  author wrote, with each loop round in its own order. Strand ids carry no such
+  meaning, so without it a frontier reads in an arbitrary order that happens to
+  be stable."
+  [step form position]
   {:ref (util/normalize-ref (:id step) [:steps :id])
    :title (:title step)
    :state (or (:state step) "active")
-   :attributes (step-attributes step form)})
+   :attributes (step-attributes step form position)})
 
 (defn- dependency-edges [steps]
   (mapcat (fn [step]
@@ -436,7 +445,7 @@
   run at an exit with nowhere to go."
   [root form steps]
   (defs/validate-defer-bindings! {:steps steps} {:workflow (:title root)})
-  {:strands (into [root] (mapv #(step-strand % form) steps))
+  {:strands (into [root] (map-indexed #(step-strand %2 form %1) steps))
    :edges (vec (concat (parent-edges (:ref root) steps)
                        (dependency-edges steps)))})
 
