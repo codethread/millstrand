@@ -98,9 +98,17 @@
      name (symbol "skein.spools.workflow-run-cli-test" (clojure.core/name name)))))
 
 (defn- invoke
-  "Call the op handler the way the weaver does, with parsed args."
-  [args]
-  (cli/workflow-op {:op/args args}))
+  "Call the op handler the way the weaver does, with parsed args and the argv they
+  were parsed from (which `--attr` duplicate detection is the only reader of)."
+  ([args] (invoke args []))
+  ([args argv] (cli/workflow-op {:op/args args :op/argv argv})))
+
+(defn- from-argv
+  "Parse real argv against the registered arg-spec and invoke the handler with
+  both, the way the weaver reaches the op."
+  [rt argv & [payloads]]
+  (let [arg-spec (:arg-spec (weaver/resolve-op rt 'workflow))]
+    (invoke (cli-alpha/parse arg-spec argv (or payloads {})) argv)))
 
 (defn- verb
   [name run-id & {:as args}]
@@ -254,6 +262,49 @@
         (is (not (contains? (set (ready-ids result)) work)))
         (is (= ["Wait for CI" "Sign the work off"] (mapv :title (:ready result))))
         (is (false? (:done result)))))))
+
+(deftest complete-merges-the-attribute-pair-onto-the-closed-step
+  ;; PROP-Wcd-001.S2: `strand add`'s attribute pair, so a worker records its own
+  ;; outcome vocabulary in the same mutation that closes the step.
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo)
+      (let [work (item-id (started "run-attrs" :solo) "Do the work")
+            result (from-argv rt ["complete" "run-attrs"
+                                  "--attributes" "{\"acme/verdict\":\"stale\",\"acme/exit\":7}"
+                                  "--attr" "acme/verdict=pass"])
+            closed (weaver/show rt work)]
+        (is (true? (:done result)))
+        (is (= "pass" (get-in closed [:attributes :acme/verdict]))
+            "--attr wins key by key, as it does on strand add")
+        (is (= 7 (get-in closed [:attributes :acme/exit]))
+            "--attributes carries typed values through untouched")))))
+
+(deftest complete-refuses-a-duplicate-attr-key-before-mutating
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo)
+      (let [work (item-id (started "run-dup-attr" :solo) "Do the work")
+            data (failure #(from-argv rt ["complete" "run-dup-attr"
+                                          "--attr" "acme/verdict=pass"
+                                          "--attr" "acme/verdict=fail"]))]
+        (is (= :workflow/attr-key-duplicate (:reason data)))
+        (is (= "acme/verdict" (:key data)))
+        (is (= "active" (:state (weaver/show rt work))) "nothing was closed")))))
+
+(deftest complete-refuses-attributes-that-are-not-a-json-object
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo)
+      (started "run-bad-attrs" :solo)
+      (doseq [[label value] [["an array" [1 2]] ["a JSON null" nil] ["a blank key" {"" "x"}]]]
+        (testing label
+          (is (= :workflow/attributes-invalid
+                 (reason-of #(invoke {:subcommand ["complete"] :run-id "run-bad-attrs"
+                                      :attributes value})))))))))
 
 (deftest complete-refuses-an-ambiguous-step-frontier-before-mutating
   (with-runtime
@@ -582,6 +633,10 @@
         (is (= {:subcommand ["ready"] :run-id "r1"} (parse ["ready" "r1"])))
         (is (= {:subcommand ["complete"] :run-id "r1" :step "s-1" :by "agent"}
                (parse ["complete" "r1" "--step" "s-1" "--by" "agent"])))
+        (is (= {:subcommand ["complete"] :run-id "r1"
+                :attr {"acme/verdict" "pass"} :attributes {"acme/exit" 0}}
+               (parse ["complete" "r1" "--attr" "acme/verdict=pass"
+                       "--attributes" "{\"acme/exit\":0}"])))
         (is (= {:subcommand ["choose"] :run-id "r1" :choice "ship" :input {"verdict" "pass"}}
                (parse ["choose" "r1" "ship" "--input" "{\"verdict\":\"pass\"}"])))
         (is (= {:subcommand ["continue"] :run-id "r1" :workflow "follow-on"}
@@ -618,7 +673,14 @@
         (is (thrown? clojure.lang.ExceptionInfo
                      (cli-alpha/parse arg-spec ["start" "r1" "--workflow" "scoped"
                                                 "--params" "not-json"]))
-            "a malformed payload fails at the parser, before the engine")))))
+            "a malformed payload fails at the parser, before the engine")
+        (testing "complete's attribute pair takes the same references"
+          (is (= {"acme/exit" 0}
+                 (:attributes (cli-alpha/parse arg-spec ["complete" "r1" "--attributes" ":stdin"]
+                                               {"stdin" "{\"acme/exit\":0}"}))))
+          (is (= {"acme/log" "tail"}
+                 (:attr (cli-alpha/parse arg-spec ["complete" "r1" "--attr" "acme/log=:payload/log"]
+                                         {"log" "tail"})))))))))
 
 (deftest a-json-flag-that-is-not-an-object-fails-loudly
   (with-runtime

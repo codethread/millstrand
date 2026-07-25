@@ -217,11 +217,13 @@
   cleared claim as `complete!` `:attributes` closes the gate and records its
   outcome atomically, so no observer ever sees a closed gate without its
   `shell/exit-code`/`shell/output`, and leaving the ready frontier atomically
-  stops any concurrent scan re-dispatching the check."
+  stops any concurrent scan re-dispatching the check.
+
+  The whole outcome is this executor's own `shell/*` vocabulary: the engine keeps
+  no prose field a reader would have to consult instead of the exit code."
   [run-id gate-id exit output]
   (workflow/complete! run-id
                       {:step gate-id :by "shell"
-                       :notes (str "shell command exited " exit)
                        :attributes (cond-> {"shell/running" nil "shell/exit-code" exit}
                                      (some? output) (assoc "shell/output" output))}))
 

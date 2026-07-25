@@ -6,7 +6,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 431},
+   :source {:file ".skein/config.clj", :line 409},
    :glossary {},
    :node
    {:children [],
@@ -29,7 +29,7 @@
        :variadic true,
        :parse nil,
        :doc
-       "Optional `[choice] [json-input] [notes]` and a trailing `step=<id>` selector."}]},
+       "Optional `[choice] [json-input]` and a trailing `step=<id>` selector."}]},
     :deadline-class "standard",
     :notes [],
     :hook-class "mutating",
@@ -48,7 +48,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 513},
+   :source {:file ".skein/config.clj", :line 491},
    :glossary {},
    :node
    {:children [],
@@ -81,7 +81,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 479},
+   :source {:file ".skein/config.clj", :line 457},
    :glossary {},
    :node
    {:children [],
@@ -115,7 +115,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 496},
+   :source {:file ".skein/config.clj", :line 474},
    :glossary {},
    :node
    {:children [],
@@ -150,7 +150,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 449},
+   :source {:file ".skein/config.clj", :line 427},
    :glossary {},
    :node
    {:children [],
@@ -205,7 +205,7 @@
        :required false,
        :variadic true,
        :parse nil,
-       :doc "Optional notes and a trailing `step=<id>` selector."}]},
+       :doc "Optional trailing `step=<id>` selector."}]},
     :deadline-class "standard",
     :notes [],
     :hook-class "mutating",
@@ -306,7 +306,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 601},
+   :source {:file ".skein/config.clj", :line 583},
    :glossary {},
    :node
    {:children [],
@@ -332,7 +332,7 @@
        :doc "Workflow run id."}]},
     :deadline-class "unbounded",
     :notes [],
-    :hook-class "mutating",
+    :hook-class "read",
     :use-when [],
     :doc "Block until a workflow run needs coordinator attention.",
     :returns
@@ -344,7 +344,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 652},
+   :source {:file ".skein/config.clj", :line 639},
    :glossary {},
    :node
    {:children [],
@@ -457,7 +457,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 529},
+   :source {:file ".skein/config.clj", :line 511},
    :glossary {},
    :node
    {:children [],
@@ -481,7 +481,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 466},
+   :source {:file ".skein/config.clj", :line 444},
    :glossary {},
    :node
    {:children [],

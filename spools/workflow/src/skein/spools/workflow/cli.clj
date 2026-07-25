@@ -24,7 +24,8 @@
         {:ns 'skein.spools.workflow.cli
          :spools ['skein.spools/workflow]
          :after [:skein/spools-workflow]})"
-  (:require [skein.api.format.alpha :as fmt]
+  (:require [clojure.string :as str]
+            [skein.api.format.alpha :as fmt]
             [skein.spools.workflow :as workflow]))
 
 (defn- list-request
@@ -66,6 +67,52 @@
   (cond-> request
     (contains? args flag) (assoc key (workflow/json->params (get args flag)))))
 
+;; --- complete's attribute pair ---------------------------------------------
+;; `strand add`'s contract, kept verb-for-verb: repeatable `--attr key=value` for
+;; string values, `--attributes` for a typed JSON object underneath it, and a
+;; duplicate key within one `--attr` priority is a mistake rather than a silent
+;; last-wins. The blessed :map parser collapses duplicates before a handler sees
+;; them, so the raw argv is where that check has to read the keys from.
+
+(defn- attr-flag-keys [argv]
+  (keep (fn [[flag token]]
+          (when (= "--attr" flag)
+            (subs token 0 (str/index-of token "="))))
+        (partition 2 1 argv)))
+
+(defn- check-attr-duplicates! [argv]
+  (when-let [dup (some (fn [[k n]] (when (> n 1) k))
+                       (frequencies (attr-flag-keys argv)))]
+    (throw (ex-info (str "Duplicate attribute key in --attr: " dup)
+                    {:reason :workflow/attr-key-duplicate :key dup}))))
+
+(defn- attributes->map
+  "Coerce a supplied `--attributes` value into an attribute map, failing loudly on
+  anything but a JSON object. A JSON null parses to nil and is rejected here
+  rather than read as an empty patch, so a wrongly stated flag and an unsupplied
+  one never mean the same thing."
+  [attributes]
+  (when-not (map? attributes)
+    (throw (ex-info "--attributes must reference a JSON object"
+                    {:reason :workflow/attributes-invalid :value attributes})))
+  (doseq [k (keys attributes)]
+    (when (str/blank? k)
+      (throw (ex-info "--attributes contains a blank attribute key"
+                      {:reason :workflow/attributes-invalid :key k}))))
+  attributes)
+
+(defn- with-attributes
+  "Return `request` carrying the merged `--attr`/`--attributes` map, when either
+  flag was supplied. `--attr` wins key by key, as it does on `strand add`."
+  [request args argv]
+  (if (or (contains? args :attr) (contains? args :attributes))
+    (do (check-attr-duplicates! argv)
+        (assoc request :attributes
+               (merge (when (contains? args :attributes)
+                        (attributes->map (:attributes args)))
+                      (or (:attr args) {}))))
+    request))
+
 (defn workflow-op
   "Handle `strand workflow <verb>`, routing to the engine's worker surface.
 
@@ -75,7 +122,7 @@
   infers no role, and stamps no outcome of its own. The declared arg-spec rejects
   an unknown verb before dispatch, so the fall-through exists only to keep a
   direct Clojure caller loud."
-  [{:op/keys [args]}]
+  [{:op/keys [args argv]}]
   (let [{:keys [subcommand choice] target :workflow} args]
     (case (first subcommand)
       "list" {:operation "workflow list"
@@ -86,7 +133,7 @@
                (-> {:run-id (:run-id args) :workflow (keyword target)}
                    (with-json-object args :params :params)))
       "ready" (workflow/run-ready {:run-id (:run-id args)})
-      "complete" (workflow/run-complete! (run-request args))
+      "complete" (workflow/run-complete! (with-attributes (run-request args) args argv))
       "choose" (workflow/run-choose!
                 (-> (assoc (run-request args) :choice choice)
                     (with-json-object args :input :input)))
@@ -215,7 +262,20 @@
                 :hook-class :mutating
                 :deadline-class :standard
                 :positionals [run-id-positional]
-                :flags {:step step-flag :by by-flag}
+                :flags {:step step-flag
+                        :by by-flag
+                        :attr
+                        {:type :map
+                         :doc (fmt/reflow
+                               "|String attribute key=value merged onto the
+                                |closed step; repeatable, highest precedence.
+                                |Values may be payload references.")}
+                        :attributes
+                        {:type :string
+                         :parse :json
+                         :doc (fmt/reflow
+                               "|JSON object of typed attributes merged onto the
+                                |closed step (lowest precedence).")}}
                 :annotations
                 {:notes [(fmt/reflow
                           "|The sole ready ordinary step is inferred: a
@@ -225,7 +285,11 @@
                          (fmt/reflow
                           "|A gate is never inferred. Closing one asserts that
                            |something outside the run happened, so it takes both
-                           |--step and --by.")]}}
+                           |--step and --by.")
+                         (fmt/reflow
+                          "|Attributes ride the closing mutation, so no observer
+                           |sees the step closed without them. The engine records
+                           |no outcome prose of its own: name your own keys.")]}}
     "choose" {:doc "Record a choice on the ready checkpoint of a run."
               :hook-class :mutating
               :deadline-class :standard

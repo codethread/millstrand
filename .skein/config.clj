@@ -367,56 +367,35 @@
                                                        {:name :tail
                                                         :type :string
                                                         :variadic? true
-                                                        :doc "Optional notes and a trailing `step=<id>` selector."}]}}
+                                                        :doc "Optional trailing `step=<id>` selector."}]}}
   [ctx]
   (let [{:keys [feature tail]} (:op/args ctx)
-        [rest-tokens step] (pop-step-selector "devflow-complete" tail)
-        notes (first rest-tokens)]
-    (when (> (count rest-tokens) 1)
-      (throw (ex-info "devflow-complete accepts at most one notes argument"
-                      {:op "devflow-complete" :help "strand help devflow-complete" :extra (vec (rest rest-tokens))})))
+        [rest-tokens step] (pop-step-selector "devflow-complete" tail)]
+    (when (seq rest-tokens)
+      (throw (ex-info "devflow-complete accepts only a feature and an optional step=<id> selector"
+                      {:op "devflow-complete" :help "strand help devflow-complete" :extra (vec rest-tokens)})))
     (merge {:operation "devflow-complete"
             :feature feature}
-           (devflow/complete! feature (cond-> {}
-                                        notes (assoc :notes notes)
-                                        step (assoc :step step))))))
-
-(defn- checkpoint-ready?
-  "Return true when the selected ready devflow step for feature is a checkpoint."
-  [feature step]
-  (let [ready (devflow/ready feature)
-        selected (if step
-                   (or (first (filter #(= step (:id %)) ready))
-                       (throw (ex-info "step selector did not match a ready devflow step"
-                                       {:feature feature :step step :ready (mapv :id ready)})))
-                   (devflow/ready-step feature))]
-    (= "checkpoint" (:role selected))))
+           (devflow/complete! feature (if step {:step step} {})))))
 
 (defn- parse-advance-tail
   "Parse devflow-advance tail tokens into workflow advance opts.
 
-  The tail carries the optional `[choice] [json-input] [notes]` args plus a
-  position-independent `step=<id>` selector. With one bare optional arg it is a
-  choice when the selected ready step is a checkpoint and notes otherwise; JSON
-  input must be an object starting with `{`."
-  [feature tail]
+  The tail carries the optional `[choice] [json-input]` args plus a
+  position-independent `step=<id>` selector. A bare arg is a choice and JSON
+  input must be an object starting with `{`, so the pair is unambiguous without
+  reading the frontier first."
+  [tail]
   (let [[args step] (pop-step-selector "devflow-advance" tail)
-        _ (when (> (count args) 3)
-            (throw (ex-info "devflow-advance accepts at most a choice, JSON input, and notes"
+        _ (when (> (count args) 2)
+            (throw (ex-info "devflow-advance accepts at most a choice and JSON input"
                             {:op "devflow-advance" :help "strand help devflow-advance" :extra (vec args)})))
-        [choice raw-input notes]
+        [choice raw-input]
         (case (count args)
-          0 [nil nil nil]
+          0 [nil nil]
           1 (let [arg (first args)]
-              (cond
-                (str/starts-with? arg "{") [nil arg nil]
-                (checkpoint-ready? feature step) [arg nil nil]
-                :else [nil nil arg]))
-          2 (let [[a b] args]
-              (if (str/starts-with? a "{")
-                [nil a b]
-                [a b nil]))
-          3 args)
+              (if (str/starts-with? arg "{") [nil arg] [arg nil]))
+          2 args)
         input (when raw-input
                 (when-not (str/starts-with? raw-input "{")
                   (throw (ex-info "devflow-advance JSON input must start with {"
@@ -425,8 +404,7 @@
     (cond-> {}
       step (assoc :step step)
       choice (assoc :choice (keyword choice))
-      input (assoc :input input)
-      notes (assoc :notes notes))))
+      input (assoc :input input))))
 
 (defop devflow-advance
   "Advance the current devflow step or checkpoint for a feature."
@@ -438,13 +416,13 @@
                                                        {:name :tail
                                                         :type :string
                                                         :variadic? true
-                                                        :doc "Optional `[choice] [json-input] [notes]` and a trailing `step=<id>` selector."}]}}
+                                                        :doc "Optional `[choice] [json-input]` and a trailing `step=<id>` selector."}]}}
   [ctx]
   (let [{:keys [feature tail]} (:op/args ctx)]
     (require-non-blank! :feature feature)
     (merge {:operation "devflow-advance"
             :feature feature}
-           (devflow/advance! feature (parse-advance-tail feature tail)))))
+           (devflow/advance! feature (parse-advance-tail tail)))))
 
 (defop devflow-describe
   "Return the devflow cycle or one registered stage description.
@@ -511,7 +489,11 @@
      :ready (devflow/ready feature)}))
 
 (defop workflow-runs
-  "Return active workflow roots, optionally filtered by family."
+  "Return active workflow roots, optionally filtered by family.
+
+  Survives the shipped `workflow` surface rather than folding into it: that
+  surface reads registries and one named run, and deliberately ships no family
+  narrowing (PROP-Wcd-001.NG9), so this is a cross-run read nothing there covers."
   {:returns stamped-op-return :arg-spec {:op "workflow-runs"
                                          :hook-class :read
                                          :deadline-class :standard
@@ -603,9 +585,14 @@
 
   Usage: `strand flow-await <workflow-run-id> [--timeout-secs <n>]`. Workflow
   executor registrations decide which ready gates can stay waiting silently and
-  which stalled gates need coordinator attention."
+  which stalled gates need coordinator attention.
+
+  The shipped `workflow await` verb has these semantics exactly, so this alias is
+  folded away once repo config activates that opt-in surface
+  (PROP-Wcd-001.S14). It is declared `:read` like the shipped verb: awaiting
+  blocks on a run's frontier and writes nothing."
   {:returns unstamped-op-return :arg-spec {:op "flow-await"
-                                           :hook-class :mutating
+                                           :hook-class :read
                                            :deadline-class :unbounded
                                            :doc "Block until a workflow run needs coordinator attention."
                                            :flags {:timeout-secs {:type :int
