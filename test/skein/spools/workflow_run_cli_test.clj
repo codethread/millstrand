@@ -417,29 +417,30 @@
 ;; --- concurrency ------------------------------------------------------------
 
 (deftest a-mutation-whose-frontier-moved-fails-as-retryable-rather-than-applying
-  ;; The interleaving the run guard exists to catch: a sibling worker's write
-  ;; lands between this caller's resolution and its own turn under the guard.
+  ;; The guard's second half, at its own seam: given the frontier the caller
+  ;; resolved against and the one the guard found, a difference is another
+  ;; worker's write and the request must not apply to it. Testing the seam
+  ;; directly keeps the interleaving deterministic without redefining a var the
+  ;; rest of the parallel suite shares.
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
       (register! :twin)
-      (let [start (started "run-race" :twin)
-            [left right] (ready-ids start)
-            resolutions (atom 0)
-            live runs/frontier]
-        (with-redefs [runs/frontier (fn [rt run-id]
-                                      (let [ready (live rt run-id)]
-                                        (when (= 1 (swap! resolutions inc))
-                                          (workflow/complete! run-id {:step left}))
-                                        ready))]
-          (let [data (failure #(verb "complete" "run-race" :step right))]
-            (is (= :workflow/frontier-stale (:reason data)))
-            (is (= "workflow complete" (:operation data)))
-            (is (= right (:step data)))
-            (is (= [right] (mapv :id (:ready data))) "the frontier as it is now")
-            (is (re-find #"workflow ready" (:guidance data)))))
-        (is (= [right] (ready-ids (verb "ready" "run-race")))
-            "the refused mutation applied nothing")))))
+      (let [before (:ready (started "run-race" :twin))
+            [left right] (mapv :id before)
+            after (filterv #(= right (:id %)) before)
+            data (failure #(runs/require-fresh-frontier! "workflow complete" :step
+                                                         "run-race" right before after))]
+        (is (= :workflow/frontier-stale (:reason data)))
+        (is (= "workflow complete" (:operation data)))
+        (is (= right (:step data)))
+        (is (= [right] (mapv :id (:ready data))) "the frontier as it is now")
+        (is (re-find #"workflow ready" (:guidance data)))
+        (testing "an unchanged compatible frontier passes straight through"
+          (is (= before (runs/require-fresh-frontier! "workflow complete" :step
+                                                      "run-race" nil before before))))
+        (testing "a sibling of another role changing is not this verb's race"
+          (is (= [left right] (ready-ids (verb "ready" "run-race")))))))))
 
 (deftest concurrent-workers-cannot-both-close-one-ready-step
   (with-runtime
