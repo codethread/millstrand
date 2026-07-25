@@ -117,8 +117,12 @@ and patterns). The config layout — `.skein/init.clj` activation order and its 
 (`config.clj`, `workflows.clj`, `harnesses.clj`, `reviewers.clj`, `attention.clj`, `nvd_scan.clj`,
 `analytics.clj`) — is documented in the `init.clj` header itself.
 
-`.skein/workflows.clj` registers the **landing workflow** (family `land`) behind the `land` op — the
-coordinator-only discipline for taking a finished branch to landed. It is a single sequential
+`.skein/workflows.clj` authors this repo's workflow definitions as static `defworkflow` Vars: `land` with its `land-merge`/`land-abort` continuations, and `story` with its `story-fold`/`story-keep` continuations. Because they are static, a worker reads them with the shipped generic surface, which `.skein/init.clj` activates as its own module beside the engine: `strand workflow list` for the catalogue, `strand workflow show story` for a definition's param contract, then `start`, `ready`, `complete`, `choose`, `continue`, and `await` to drive a run.
+
+The `land` op survives beside that generic surface because it adds behavior the engine has no business knowing: the singleton merge lock and the kanban lane moves.
+
+The **landing workflow** (family `land`) is the coordinator-only discipline for taking a finished
+branch to landed. It is a single sequential
 `skein.spools.workflow` molecule whose ordering is the enforcement: push the branch and open a draft
 PR, drive CI green at HEAD, then run the declared roster sign-off — sign-off is only valid on a
 pushed branch with a draft PR and green CI. A coordinator sign-off checkpoint (`approved` continues;

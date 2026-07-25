@@ -27,9 +27,6 @@
 (def ^:private stamped-op-return
   {:type :map :required {:operation :string} :extra :json})
 
-(def ^:private unstamped-op-return
-  {:type :map :extra :json})
-
 ;; ---------------------------------------------------------------------------
 ;; Named queries
 ;; ---------------------------------------------------------------------------
@@ -547,19 +544,20 @@
          {:name "feature-costs" :help "strand help feature-costs"
           :purpose "Agent-run cost/usage rollup beneath a work root, as pure data. Registered by .skein/analytics.clj."}
          {:name "agent" :help "strand help agent" :manual "strand about agent"}
-         {:name "flow" :help "strand help flow"
+         {:name "workflow" :help "strand help workflow" :manual "strand about workflow"
           :purpose (format-alpha/reflow
-                    "|Generic driver for any registered workflow: start by name, then
-                     |next/complete/choose by run-id. The registered story workflow is
-                     |the module-shaping discipline: split-first refactor,
-                     |public-surface tests, auto-spawned adversarial review gates,
-                     |measure, fold-back-or-keep-split checkpoint. Pour it for
-                     |substantial module work anywhere; for skein.api.* modules
-                     |SPEC-003.C19a is the binding form contract. Start params
-                     |(JSON): feature, module, worktree required; card and
-                     |reviewer-harness (a seat outside your model family; default
-                     |sol-med) optional. Registered by .skein/workflows.clj.")}
-         {:name "flow-await" :help "strand help flow-await"}
+                    "|Shipped generic worker surface over every registered workflow:
+                     |list/show the catalogue, then start, ready, complete, choose,
+                     |continue, and await a run. Activated by .skein/init.clj. The
+                     |registered story workflow is the module-shaping discipline:
+                     |split-first refactor, public-surface tests, auto-spawned
+                     |adversarial review gates, measure, fold-back-or-keep-split
+                     |checkpoint. Pour it for substantial module work anywhere
+                     |(`strand workflow start <id> --workflow story --params ...`);
+                     |for skein.api.* modules SPEC-003.C19a is the binding form
+                     |contract. `strand workflow show story` prints its param
+                     |contract; the definitions are registered by
+                     |.skein/workflows.clj.")}
          {:name "hitl" :help "strand help hitl" :purpose "Interactive user+agent session with a self-terminating tracking strand."}
          {:name "land" :help "strand help land" :manual "strand about land"
           :purpose (format-alpha/reflow
@@ -579,32 +577,6 @@
              {:name "workflow-runs" :usage "strand list --query workflow-runs"}
              {:name "devflow-runs" :usage "strand list --query devflow-runs"}
              {:name "work" :usage "strand ready --query work"}]})
-
-(defop flow-await
-  "Block until a workflow run is done or needs coordinator attention.
-
-  Usage: `strand flow-await <workflow-run-id> [--timeout-secs <n>]`. Workflow
-  executor registrations decide which ready gates can stay waiting silently and
-  which stalled gates need coordinator attention.
-
-  The shipped `workflow await` verb has these semantics exactly, so this alias is
-  folded away once repo config activates that opt-in surface
-  (PROP-Wcd-001.S14). It is declared `:read` like the shipped verb: awaiting
-  blocks on a run's frontier and writes nothing."
-  {:returns unstamped-op-return :arg-spec {:op "flow-await"
-                                           :hook-class :read
-                                           :deadline-class :unbounded
-                                           :doc "Block until a workflow run needs coordinator attention."
-                                           :flags {:timeout-secs {:type :int
-                                                                  :doc "Optional timeout in seconds. Cap blocking awaits at ~50 minutes and re-issue, so provider prompt caches don't expire while idle."}}
-                                           :positionals [{:name :workflow-run-id
-                                                          :type :string
-                                                          :required? true
-                                                          :doc "Workflow run id."}]}}
-  [ctx]
-  (let [{:keys [workflow-run-id timeout-secs]} (:op/args ctx)]
-    (workflow/await! workflow-run-id (cond-> {}
-                                       timeout-secs (assoc :timeout-secs timeout-secs)))))
 
 ;; ---------------------------------------------------------------------------
 ;; hitl: interactive human-in-the-loop working sessions

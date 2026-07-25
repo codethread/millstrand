@@ -74,21 +74,6 @@
                           (publication/stage-owner backends (publication/candidates backends)
                                                    module-key contribution))))
 
-(defn- publish-contribution!
-  "Publish one module's complete owner partition from its data-first contribution
-  function, normalizing bare partitions to the `{:entries :overrides}` shape."
-  [rt module-key contribute]
-  (let [contribution (update-vals
-                      (contribute {:runtime rt :module/key module-key})
-                      (fn [partition]
-                        (if (contains? partition :entries)
-                          partition
-                          {:entries partition :overrides #{}})))
-        backends (publication/backends rt)]
-    (publication/publish! backends
-                          (publication/stage-owner backends (publication/candidates backends)
-                                                   module-key contribution))))
-
 (defn- return-case-leaves [operation context return-case]
   (if (and (map? return-case) (contains? return-case :stream))
     (set (map (fn [channel] [operation (assoc context :channel channel)])
@@ -121,8 +106,7 @@
      ;; is a declared publication backend before workflows.clj contributes to it
      ((requiring-resolve 'skein.spools.workflow/contribute)
       {:runtime runtime :module/key :skein/spools-workflow})
-     (load-file ".skein/workflows.clj")
-     (publish-contribution! runtime :workflows (requiring-resolve 'workflows/contribute))
+     (publish-authoring! runtime :workflows ".skein/workflows.clj")
      (let [provenances #{'config 'analytics 'workflows}
            checked (atom #{})
            check! (fn [operation context value]
@@ -133,15 +117,12 @@
        (is (seq entries))
        (is (empty? missing) (str "production ops missing :returns: " missing))
        (doseq [[operation context] required]
-         (check! operation context
-                 (if (= "flow-await" operation)
-                   {}
-                   {:operation operation})))
+         (check! operation context {:operation operation}))
        (let [{:keys [unchecked]} (owner-return-coverage runtime provenances @checked)]
          (is (= required @checked))
          (is (empty? unchecked)))
-       (testing "only the flat unstamped flow-await result omits operation"
-         (is (= #{"flow-await"}
+       (testing "every repo op stamps :operation in its declared return"
+         (is (= #{}
                 (into #{}
                       (keep (fn [{:keys [name returns]}]
                               (when (and (= 'config (:provenance

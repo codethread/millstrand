@@ -8,11 +8,13 @@ Read `./devflow/TENETS.md` and `./devflow/PHILOSOPHY.md` before all work. This f
 
 **Working with the user** — claim a kanban card first; `strand kanban prime` is the board discipline.
 
-**Starting multi-step work** — `mill strand prime`: the planning/tracking workflow. Feature work runs the devflow lifecycle (`strand devflow-start <feature>`); large module changes pour the registered story workflow — invocation and discipline via `strand devflow-conventions` and `strand help flow`.
+**Driving any registered workflow** — this repo activates the shipped worker surface in `.skein/init.clj`: `strand prime workflow` before you start, `strand about workflow` for the manual, `strand help workflow` for exact invocation.
+
+**Starting multi-step work** — `mill strand prime`: the planning/tracking workflow. Feature work runs the devflow lifecycle (`strand devflow-start <feature>`); large module changes pour the registered story workflow — invocation and discipline via `strand devflow-conventions` and `strand about workflow`.
 
 **Delegating** — `strand prime agent` first; `strand about agent` is the full verb manual. Delegate real work as tracked agent runs, never harness-native subagents (recon-only). Seats and review rosters: `strand agent harnesses` / `strand agent rosters`, with routing policy beside the definitions in `.skein/harnesses.clj` / `.skein/reviewers.clj`.
 
-**Waiting on or recovering runs** — `strand flow-await <run-id>` blocks until a run needs you (`strand help flow-await` for the await cap); `strand ready --query work` is the default ready view; failures surface via `strand list --query agent-failures` and `strand agent logs <run-id> --tail 80`.
+**Waiting on or recovering runs** — `strand workflow await <run-id>` blocks until a run needs you (`strand help workflow` for the await cap); `strand ready --query work` is the default ready view; failures surface via `strand list --query agent-failures` and `strand agent logs <run-id> --tail 80`.
 
 **Landing a finished branch** — coordinator-only: `strand land about`.
 

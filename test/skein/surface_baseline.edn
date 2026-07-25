@@ -6,7 +6,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 409},
+   :source {:file ".skein/config.clj", :line 406},
    :glossary {},
    :node
    {:children [],
@@ -48,7 +48,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 491},
+   :source {:file ".skein/config.clj", :line 488},
    :glossary {},
    :node
    {:children [],
@@ -81,7 +81,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 457},
+   :source {:file ".skein/config.clj", :line 454},
    :glossary {},
    :node
    {:children [],
@@ -115,7 +115,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 474},
+   :source {:file ".skein/config.clj", :line 471},
    :glossary {},
    :node
    {:children [],
@@ -150,7 +150,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 427},
+   :source {:file ".skein/config.clj", :line 424},
    :glossary {},
    :node
    {:children [],
@@ -183,7 +183,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 360},
+   :source {:file ".skein/config.clj", :line 357},
    :glossary {},
    :node
    {:children [],
@@ -224,7 +224,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 329},
+   :source {:file ".skein/config.clj", :line 326},
    :glossary {},
    :node
    {:children [],
@@ -272,7 +272,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 295},
+   :source {:file ".skein/config.clj", :line 292},
    :glossary {},
    :node
    {:children [],
@@ -299,44 +299,6 @@
      :required {"operation" "string"},
      :optional {},
      :extra "json"}}},
-  "flow-await"
-  {:schema-version 2,
-   :operation
-   {:name "flow-await",
-    :provenance "config",
-    :stream? false,
-    :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 583},
-   :glossary {},
-   :node
-   {:children [],
-    :name "flow-await",
-    :failure-modes [],
-    :invocation
-    {:mode "declared",
-     :flags
-     [{:name "timeout-secs",
-       :flag "--timeout-secs",
-       :type "int",
-       :required false,
-       :repeat false,
-       :parse nil,
-       :doc
-       "Optional timeout in seconds. Cap blocking awaits at ~50 minutes and re-issue, so provider prompt caches don't expire while idle."}],
-     :positionals
-     [{:name "workflow-run-id",
-       :type "string",
-       :required true,
-       :variadic false,
-       :parse nil,
-       :doc "Workflow run id."}]},
-    :deadline-class "unbounded",
-    :notes [],
-    :hook-class "read",
-    :use-when [],
-    :doc "Block until a workflow run needs coordinator attention.",
-    :returns
-    {:type "map", :required {}, :optional {}, :extra "json"}}},
   "hitl"
   {:schema-version 2,
    :operation
@@ -344,7 +306,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 639},
+   :source {:file ".skein/config.clj", :line 611},
    :glossary {},
    :node
    {:children [],
@@ -416,7 +378,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 272},
+   :source {:file ".skein/config.clj", :line 269},
    :glossary {},
    :node
    {:children [],
@@ -457,7 +419,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 511},
+   :source {:file ".skein/config.clj", :line 508},
    :glossary {},
    :node
    {:children [],
@@ -481,7 +443,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 444},
+   :source {:file ".skein/config.clj", :line 441},
    :glossary {},
    :node
    {:children [],
@@ -515,7 +477,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 308},
+   :source {:file ".skein/config.clj", :line 305},
    :glossary {},
    :node
    {:children [],

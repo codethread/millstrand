@@ -1,6 +1,6 @@
 # CLI Surface
 
-**Document ID:** `SPEC-002` **Status:** Implemented **Last Updated:** 2026-07-23 **Related RFCs:** [RFC-019 Op-only CLI](../archive/26-07-04__op-only-cli/rfcs/2026-07-04-op-only-cli.md), [RFC-002 Task Query DSL](../rfcs/2026-06-24-task-query-dsl.md), [RFC-003 Fast JSON Socket CLI](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-fast-json-socket-cli.md), [RFC-004 Go CLI Migration](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-go-cli-migration.md) **Code:** `cli/`, `src/skein/core/weaver`, `src/skein/api/weaver/alpha.clj`, `.skein/workflows.clj`
+**Document ID:** `SPEC-002` **Status:** Implemented **Last Updated:** 2026-07-25 **Related RFCs:** [RFC-019 Op-only CLI](../archive/26-07-04__op-only-cli/rfcs/2026-07-04-op-only-cli.md), [RFC-002 Task Query DSL](../rfcs/2026-06-24-task-query-dsl.md), [RFC-003 Fast JSON Socket CLI](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-fast-json-socket-cli.md), [RFC-004 Go CLI Migration](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-go-cli-migration.md) **Code:** `cli/`, `src/skein/core/weaver`, `src/skein/api/weaver/alpha.clj`, `.skein/workflows.clj`
 
 ## SPEC-002.P1 Purpose
 
@@ -57,7 +57,7 @@ Dispatcher flags: `--workspace <dir>`, `--cwd <dir>`, `--worktree-root <dir>`, `
   checkpoint view in the `:ready` collection returned by `start`, `ready`,
   `complete`, `choose`, and `status` with `:choice-details` beside `:choices`.
   The value is the canonical string-keyed `workflow/choice-details` map for
-  that materialized step, including its input declarations and route. Each
+  that materialized step, including its declared input contract and route. Each
   checkpoint is joined by its own step id; non-checkpoint views omit the field.
   The shared workflow step-view remains unchanged.
 
