@@ -16,7 +16,8 @@
             [skein.api.weaver.alpha :as weaver]
             [skein.spools.workflow.internal.compile :as cmp]
             [skein.spools.workflow.internal.definitions :as defs]
-            [skein.spools.workflow.internal.query :as query]))
+            [skein.spools.workflow.internal.query :as query]
+            [skein.spools.workflow.internal.specs :as specs]))
 
 (defn close-attributes!
   "Return attributes to merge onto a step closed by complete!, from optional
@@ -108,26 +109,55 @@
     (or (get details choice)
         (get details (keyword choice)))))
 
-(defn- require-choice-input!
+(defn- require-declared-input!
   "Fail loudly (TEN-003) before any mutation when a checkpoint choice declares
   required `:input` keys absent from `input`.
 
-  The declaration travels in the checkpoint's stored `workflow/choice-details`
-  (see D1.2) under string key names; a required key counts as supplied whether
-  the caller's `input` map names it as a keyword or a string, so the surfaced
+  The deprecated per-key form: a required key counts as supplied whether the
+  caller's `input` map names it as a keyword or a string, so the surfaced
   declaration round-trips straight back into `choose!`."
+  [run-id choice input decls]
+  (let [required (->> decls (filter #(get % "required")) (map #(get % "key")))
+        supplied? (fn [k] (and (map? input)
+                               (or (contains? input (keyword k))
+                                   (contains? input k))))
+        missing (remove supplied? required)]
+    (when (seq missing)
+      (fail! "Choice input is missing required keys"
+             {:run-id run-id :choice choice
+              :missing (vec missing)
+              :input-declaration decls}))))
+
+(defn- require-spec-input!
+  "Fail loudly (TEN-003) before any mutation when `input` does not satisfy the
+  whole-map spec the choice declared.
+
+  Only the spec *identity* was poured with the checkpoint; the spec itself is
+  resolved again here, so a redefined spec judges this choice and a removed one
+  fails as `workflow/input-spec-missing` rather than accepting anything. The
+  recorded form graph beside the identity is what the worker was shown, and the
+  failure carries the current graph so a stale prompt is visibly stale."
+  [run-id choice input declared]
+  (let [spec-name (keyword (get declared "spec"))
+        context (cond-> {:run-id run-id :choice choice :input input}
+                  (get declared "doc") (assoc :doc (get declared "doc")))]
+    (specs/require-spec! spec-name :workflow/input-spec-missing context)
+    (specs/require-conformant! spec-name input :workflow/input-invalid context)))
+
+(defn- require-choice-input!
+  "Validate `input` against whichever input contract the chosen choice declared,
+  before any mutation.
+
+  The declaration travels in the checkpoint's stored `workflow/choice-details`
+  (see D1.2) under string key names: `input-spec` names one whole-map spec,
+  while `input` is the deprecated vector of required-key declarations. A choice
+  declaring neither takes any map."
   [run-id step choice input]
-  (when-let [decls (some-> (raw-choice-detail step choice) query/detail-view (get "input"))]
-    (let [required (->> decls (filter #(get % "required")) (map #(get % "key")))
-          supplied? (fn [k] (and (map? input)
-                                 (or (contains? input (keyword k))
-                                     (contains? input k))))
-          missing (remove supplied? required)]
-      (when (seq missing)
-        (fail! "Choice input is missing required keys"
-               {:run-id run-id :choice choice
-                :missing (vec missing)
-                :input-declaration decls})))))
+  (let [detail (some-> (raw-choice-detail step choice) query/detail-view)]
+    (if-let [declared (get detail "input-spec")]
+      (require-spec-input! run-id choice input declared)
+      (when-let [decls (get detail "input")]
+        (require-declared-input! run-id choice input decls)))))
 
 (defn- resolve-next-target
   "Resolve a checkpoint choice's stored `:next` value to its live target.

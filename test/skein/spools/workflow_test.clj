@@ -1134,15 +1134,23 @@
                                                         :input [{:key :reason :requird true}]}]))))
 
 (deftest workflow-choice-input-declaration-validates-required-and-description
-  ;; a newly-declared public shape fails loudly on malformed field types (TEN-003)
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":required must be a boolean"
+  ;; the public ::choices spec is the grammar the builder enforces, so a
+  ;; malformed field type fails there with explain data (TEN-003)
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow checkpoint choices"
                         (workflow/checkpoint :gate "Decide"
                                              :choices [{:key :abort
                                                         :input [{:key :reason :required "yes"}]}])))
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":description must be a string"
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow checkpoint choices"
                         (workflow/checkpoint :gate "Decide"
                                              :choices [{:key :abort
-                                                        :input [{:key :reason :description :nope}]}]))))
+                                                        :input [{:key :reason :description :nope}]}])))
+  (let [thrown (try (workflow/checkpoint :gate "Decide"
+                                         :choices [{:key :abort
+                                                    :input [{:key :reason :required "yes"}]}])
+                    (catch clojure.lang.ExceptionInfo e e))]
+    (is (some #(= :required (last (:path %)))
+              (::s/problems (:explain (ex-data thrown))))
+        "the explain payload names the field that failed")))
 
 (deftest workflow-choice-input-accepts-string-or-keyword-keys
   ;; the surfaced declaration uses string key names, so a caller feeding those
@@ -1310,7 +1318,7 @@
                                              :choices [{:key :x :next :foo :revise {:params {}}}]))))
 
 (deftest workflow-checkpoint-rejects-malformed-revise
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":revise must be a map with a :params map"
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow checkpoint choices"
                         (workflow/checkpoint :c "C"
                                              :choices [{:key :x :revise {:no-params true}}]))))
 
@@ -1782,10 +1790,12 @@
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
       (workflow/register-workflow! :wt-build 'skein.spools.workflow-test/static-build)
       (workflow/register-workflow! :wt-review 'skein.spools.workflow-test/static-review)
-      ;; :wt-build declares :continue, so the authored route pours it
+      ;; :wt-build declares :continue, so the authored route pours it — the
+      ;; choice input carries the scope its :param-spec requires
       (workflow/start! "route-ok" (registry-router-stage {:target :wt-build}) {})
-      (is (= ["Implement  for agent"]
-             (mapv :title (:ready (workflow/choose! "route-ok" :advance)))))
+      (is (= ["Implement compact queue for agent"]
+             (mapv :title (:ready (workflow/choose! "route-ok" :advance
+                                                    {:scope "compact queue"})))))
       ;; :wt-review is call-only, so the same route is refused before mutation
       (workflow/start! "route-bad" (registry-router-stage {:target :wt-review}) {})
       (let [go-id (:id (workflow/ready-step "route-bad"))
@@ -2010,3 +2020,385 @@
                (get-in result [:conflicts 0 :data :reason])))
         (is (= :wf-gone (get-in result [:conflicts 0 :data :owner])))
         (is (empty? (workflow/workflows)))))))
+
+;; --- spec-first params, live checkpoint input, and the JSON boundary --------
+
+(s/def ::reviewer string?)
+(s/def ::spec-first-params (s/keys :req-un [::scope ::reviewer]))
+
+(workflow/defworkflow spec-first-build
+  "Build a scope under a whole-map param contract."
+  {:entrypoints #{:start :continue}
+   :param-spec ::spec-first-params
+   :defaults {:reviewer "agent"}}
+  (workflow/workflow
+   (fn [{:keys [scope]}] (str "Build " scope))
+   (workflow/step :implement
+                  (fn [{:keys [scope reviewer]}] (str "Implement " scope " for " reviewer))
+                  :self)))
+
+(s/def ::approval-note string?)
+(s/def ::approval-input (s/keys :req-un [::approval-note]))
+
+(workflow/defworkflow spec-first-signoff
+  "Approve or reject under a live checkpoint input spec."
+  {:entrypoints #{:start}}
+  (workflow/workflow
+   "Sign off"
+   (workflow/checkpoint :signoff "Approve the change"
+                        :kind :agent
+                        :choices [{:key :approve
+                                   :label "Approve"
+                                   :input {:spec ::approval-input
+                                           :doc "Record why this was approved."}}
+                                  {:key :reject :label "Reject"}])))
+
+(workflow/defworkflow spec-first-revisable
+  "Revise its own params under a whole-map contract."
+  {:entrypoints #{:start}
+   :param-spec ::spec-first-params
+   :defaults {:reviewer "agent"}}
+  (workflow/workflow
+   (fn [{:keys [scope]}] (str "Revise " scope))
+   (workflow/checkpoint :again "Revise or stop"
+                        :kind :agent
+                        :choices [{:key :bad :label "Bad" :revise {:params {:scope 42}}}
+                                  {:key :good :label "Good"
+                                   :revise {:params {:scope "second pass"}}}
+                                  {:key :stop :label "Stop"}])))
+
+(def ^:private unknown-input-definition
+  (workflow/workflow
+   "Unknown input"
+   {:entrypoints #{:start}}
+   (workflow/checkpoint :go "Go" :kind :agent
+                        :choices [{:key :approve :input ::never-registered-input}])))
+
+(def ^:private legacy-input-definition
+  (workflow/workflow
+   "Legacy input"
+   {:entrypoints #{:start}}
+   (workflow/checkpoint :approve-step "Approve" :kind :agent
+                        :choices [{:key :approve
+                                   :input [{:key :note :required true}]}])))
+
+(defn- spec-first-router [{:keys [target]}]
+  (workflow/workflow
+   "Router"
+   {:entrypoints #{:start}}
+   (workflow/checkpoint :go "Go"
+                        :kind :agent
+                        :choices [{:key :advance :label "Advance" :next target}])))
+
+(deftest spec-first-params-merge-defaults-before-whole-map-validation
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-spec-build 'skein.spools.workflow-test/spec-first-build)
+      ;; :reviewer is required by the spec and supplied only by :defaults, so a
+      ;; start that omits it proves defaults merge before validation
+      (workflow/start! "spec-ok" :wt-spec-build {:scope "compact queue"})
+      (is (= "Implement compact queue for agent"
+             (:title (workflow/ready-step "spec-ok"))))
+      ;; the caller's own map compiles: validation never substitutes conform output
+      (is (= {:scope "compact queue" :reviewer "agent"}
+             (get-in (workflow/current-root "spec-ok") [:attributes :workflow/context]))))))
+
+(deftest spec-first-params-fail-before-any-mutation
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-spec-build 'skein.spools.workflow-test/spec-first-build)
+      (testing "a missing required key fails with the contract and the violation"
+        (let [thrown (try (workflow/start! "spec-missing" :wt-spec-build {})
+                          (catch clojure.lang.ExceptionInfo e e))
+              data (ex-data thrown)]
+          (is (= :workflow/params-invalid (:reason data)))
+          (is (= ::spec-first-params (:spec data)))
+          (is (= :wt-spec-build (:name data)))
+          (is (re-find #"scope" (:explain data)))
+          (is (= "root" (get-in data [:spec-forms 0 "relation"])))
+          (is (nil? (workflow/current-root "spec-missing"))
+              "nothing pours when params are rejected")))
+      (testing "a wrong-typed value fails the same way"
+        (let [thrown (try (workflow/start! "spec-typed" :wt-spec-build {:scope 42})
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/params-invalid (:reason (ex-data thrown))))
+          (is (nil? (workflow/current-root "spec-typed"))))))))
+
+(deftest spec-first-params-guard-named-routes-and-revisions
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-spec-build 'skein.spools.workflow-test/spec-first-build)
+      (testing "a named route validates the target's merged params"
+        (workflow/start! "route-invalid" (spec-first-router {:target :wt-spec-build}) {})
+        (let [go-id (:id (workflow/ready-step "route-invalid"))
+              thrown (try (workflow/choose! "route-invalid" :advance {:scope 42})
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/params-invalid (:reason (ex-data thrown))))
+          (is (= "active" (:state (repl/strand go-id)))
+              "the checkpoint stays ready, so the run is resumable"))
+        (is (= ["Implement compact queue for agent"]
+               (mapv :title (:ready (workflow/choose! "route-invalid" :advance
+                                                      {:scope "compact queue"})))))))))
+
+(deftest spec-first-revision-validates-its-override-params
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-revisable 'skein.spools.workflow-test/spec-first-revisable)
+      (workflow/start! "revise-run" :wt-revisable {:scope "first pass"})
+      (let [checkpoint-id (:id (workflow/ready-checkpoint "revise-run"))
+            thrown (try (workflow/choose! "revise-run" :bad)
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/params-invalid (:reason (ex-data thrown))))
+        (is (= "active" (:state (repl/strand checkpoint-id)))
+            "the run keeps its stage when the revision is rejected"))
+      (workflow/choose! "revise-run" :good)
+      (is (= "Revise second pass" (:title (workflow/current-root "revise-run"))))
+      (is (:done (workflow/choose! "revise-run" :stop))))))
+
+(deftest checkpoint-input-spec-is-recorded-at-pour-and-validated-live
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/start! "input-run" #'spec-first-signoff {})
+      (testing "the poured checkpoint records identity, doc, and the form graph"
+        (let [detail (workflow/choice-detail "input-run" :approve)
+              declared (get detail "input-spec")]
+          (is (= "skein.spools.workflow-test/approval-input" (get declared "spec")))
+          (is (= "Record why this was approved." (get declared "doc")))
+          (is (= [{"spec" "skein.spools.workflow-test/approval-input"
+                   "relation" "root"
+                   "form" (pr-str (s/form ::approval-input))}
+                  {"spec" "skein.spools.workflow-test/approval-note"
+                   "relation" "keyword-reference"
+                   "form" (pr-str (s/form ::approval-note))}]
+                 (get declared "spec-forms")))))
+      (testing "invalid input fails before mutation with the current contract"
+        (let [step-id (:id (workflow/ready-checkpoint "input-run"))
+              thrown (try (workflow/choose! "input-run" :approve {})
+                          (catch clojure.lang.ExceptionInfo e e))
+              data (ex-data thrown)]
+          (is (= :workflow/input-invalid (:reason data)))
+          (is (= ::approval-input (:spec data)))
+          (is (re-find #"approval-note" (:explain data)))
+          (is (= "active" (:state (repl/strand step-id))))))
+      (testing "a choice declaring no input contract takes any map"
+        (is (:done (workflow/choose! "input-run" :reject {:anything "goes"}))))
+      (testing "valid input records the choice"
+        (workflow/start! "input-ok" #'spec-first-signoff {})
+        (is (:done (workflow/choose! "input-ok" :approve {:approval-note "scope agreed"})))))))
+
+(deftest checkpoint-input-spec-resolves-the-live-spec-not-the-recorded-form
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/start! "live-input" #'spec-first-signoff {})
+      (try
+        ;; redefining a nested spec changes validation while the outer form the
+        ;; worker was shown is unchanged
+        (s/def ::approval-note (s/and string? #(< 10 (count %))))
+        (let [thrown (try (workflow/choose! "live-input" :approve {:approval-note "short"})
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/input-invalid (:reason (ex-data thrown)))))
+        (is (:done (workflow/choose! "live-input" :approve
+                                     {:approval-note "long enough to pass"})))
+        (finally (s/def ::approval-note string?))))))
+
+(deftest checkpoint-input-spec-removal-fails-loudly
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/start! "gone-input" #'spec-first-signoff {})
+      (try
+        (s/def ::approval-input nil)
+        (let [step-id (:id (workflow/ready-checkpoint "gone-input"))
+              thrown (try (workflow/choose! "gone-input" :approve {:approval-note "x"})
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/input-spec-missing (:reason (ex-data thrown))))
+          (is (= "active" (:state (repl/strand step-id)))))
+        (finally (s/def ::approval-input (s/keys :req-un [::approval-note])))))))
+
+(deftest registering-a-definition-with-an-unknown-input-spec-is-refused
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (let [thrown (try (workflow/register-workflow!
+                         :wt-bad-input 'skein.spools.workflow-test/unknown-input-definition)
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/input-spec-missing (:reason (ex-data thrown))))
+        (is (= ::never-registered-input (:spec (ex-data thrown))))
+        (is (empty? (workflow/workflows)))))))
+
+(deftest deprecated-per-key-choice-input-still-enforces-required-keys
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/start! "legacy-input" #'legacy-input-definition {})
+      (let [detail (workflow/choice-detail "legacy-input" :approve)]
+        (is (= [{"key" "note" "required" true}] (get detail "input")))
+        (is (nil? (get detail "input-spec"))))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"missing required keys"
+                            (workflow/choose! "legacy-input" :approve {})))
+      (is (:done (workflow/choose! "legacy-input" :approve {:note "fine"}))))))
+
+;; --- s/form documentation graph --------------------------------------------
+
+(s/def ::label string?)
+(s/def ::children (s/coll-of ::node))
+(s/def ::node (s/keys :req-un [::label] :opt-un [::children]))
+(s/def ::node-alias ::node)
+(s/def ::draft string?)
+(s/def ::stage-enum #{::draft :final})
+
+(def ^:private predicate-calls (atom 0))
+
+(defn- counting-string?
+  "A predicate that records every call, so a discovery walk that stays out of
+  validation is provable rather than asserted."
+  [value]
+  (swap! predicate-calls inc)
+  (string? value))
+
+(s/def ::counted counting-string?)
+(s/def ::counting-params (s/keys :req-un [::counted]))
+
+(defn- form-graph [spec-name]
+  (mapv (juxt #(get % "spec") #(get % "relation")) (workflow/spec-forms spec-name)))
+
+(deftest spec-forms-walks-nested-keys-collections-and-aliases
+  (is (= [["skein.spools.workflow-test/node" "root"]
+          ["skein.spools.workflow-test/children" "keyword-reference"]
+          ["skein.spools.workflow-test/label" "keyword-reference"]]
+         (form-graph ::node))
+      "references are visited in qualified-name order and emitted once")
+  (is (= (pr-str (s/form ::node)) (get (first (workflow/spec-forms ::node)) "form")))
+  ;; `(s/def ::node-alias ::node)` registers the target spec itself, so the
+  ;; alias prints the target's form and its graph is the target's graph — ::node
+  ;; then reappears one level down, through ::children.
+  (is (= [["skein.spools.workflow-test/node-alias" "root"]
+          ["skein.spools.workflow-test/children" "keyword-reference"]
+          ["skein.spools.workflow-test/label" "keyword-reference"]
+          ["skein.spools.workflow-test/node" "keyword-reference"]]
+         (form-graph ::node-alias)))
+  (is (= (pr-str (s/form ::node)) (get (first (workflow/spec-forms ::node-alias)) "form"))))
+
+(deftest spec-forms-is-cycle-safe-and-deterministic
+  ;; ::node -> ::children -> ::node closes the cycle
+  (is (= (form-graph ::node) (form-graph ::node)))
+  (is (= 1 (count (filter #(= "skein.spools.workflow-test/node" (first %))
+                          (form-graph ::node))))))
+
+(deftest spec-forms-reports-keyword-literals-without-claiming-dependency
+  (is (= [["skein.spools.workflow-test/stage-enum" "root"]
+          ["skein.spools.workflow-test/draft" "keyword-reference"]]
+         (form-graph ::stage-enum))
+      "a set member that also names a registered spec is supplementary documentation")
+  (let [thrown (try (workflow/spec-forms ::never-registered-anywhere)
+                    (catch clojure.lang.ExceptionInfo e e))]
+    (is (= :workflow/spec-missing (:reason (ex-data thrown)))
+        "a stale or mistyped identity is never mistaken for a spec with no references")))
+
+(deftest spec-forms-executes-no-predicate
+  (reset! predicate-calls 0)
+  (is (= [["skein.spools.workflow-test/counting-params" "root"]
+          ["skein.spools.workflow-test/counted" "keyword-reference"]]
+         (form-graph ::counting-params)))
+  (is (zero? @predicate-calls) "discovery reads forms and the registry only")
+  (is (s/valid? ::counting-params {:counted "x"}))
+  (is (pos? @predicate-calls) "validation is what runs predicates"))
+
+;; --- the JSON param boundary ------------------------------------------------
+
+(s/def :acme.workflows/feature string?)
+(s/def ::json-params (s/keys :req-un [::scope] :req [:acme.workflows/feature]))
+
+(deftest json-params-keywordize-object-keys-recursively
+  (is (= {:scope "queue"
+          :acme.workflows/feature "cli"
+          :options {:reviewer "agent" :tags ["a" "b"]}
+          :steps [{:id "one"} {:id "two"}]}
+         (workflow/json->params
+          {"scope" "queue"
+           "acme.workflows/feature" "cli"
+           "options" {"reviewer" "agent" "tags" ["a" "b"]}
+           "steps" [{"id" "one"} {"id" "two"}]})))
+  (is (s/valid? ::json-params (workflow/json->params
+                               {"scope" "queue" "acme.workflows/feature" "cli"}))
+      "an unqualified JSON key satisfies :req-un and a qualified one addresses :req"))
+
+(deftest json-params-fail-loudly-outside-the-object-contract
+  (let [thrown (try (workflow/json->params [1 2 3])
+                    (catch clojure.lang.ExceptionInfo e e))]
+    (is (= :workflow/params-not-json (:reason (ex-data thrown)))))
+  (let [thrown (try (workflow/json->params {"" "blank"})
+                    (catch clojure.lang.ExceptionInfo e e))]
+    (is (= :workflow/params-not-json (:reason (ex-data thrown))))))
+
+(deftest json-params-cannot-express-string-keyed-maps
+  ;; PROP-Wcd-001.NG8: conversion is total, so a spec that requires string keys
+  ;; is reachable only from trusted Clojure in v1.
+  (is (= {:a 1} (workflow/json->params {"a" 1})))
+  (is (not (s/valid? (s/map-of string? any?) (workflow/json->params {"a" 1})))))
+
+(deftest param-spec-removed-after-registration-fails-live
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-spec-build 'skein.spools.workflow-test/spec-first-build)
+      (try
+        (s/def ::spec-first-params nil)
+        (let [thrown (try (workflow/start! "spec-gone" :wt-spec-build {:scope "queue"})
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/param-spec-missing (:reason (ex-data thrown))))
+          (is (nil? (workflow/current-root "spec-gone"))))
+        (finally (s/def ::spec-first-params (s/keys :req-un [::scope ::reviewer])))))))
+
+(deftest describe-surfaces-the-declared-input-contract-without-its-form-graph
+  (let [choices (-> (workflow/describe #'spec-first-signoff) :steps first :choices)
+        approve (first (filter #(= "approve" (:key %)) choices))]
+    (is (= {"spec" "skein.spools.workflow-test/approval-input"
+            "doc" "Record why this was approved."}
+           (:input-spec approve))
+        "description stays cheap; the form graph is recorded when the checkpoint pours")))
+
+(def ^:private spec-first-caller
+  (workflow/workflow
+   "Caller"
+   {:entrypoints #{:start}}
+   (workflow/call :build :wt-callable {:scope "called scope"})))
+
+(def ^:private spec-first-bad-caller
+  (workflow/workflow
+   "Bad caller"
+   {:entrypoints #{:start}}
+   (workflow/call :build :wt-callable {:scope 42})))
+
+(workflow/defworkflow spec-first-callable
+  "A call target under a whole-map param contract."
+  {:entrypoints #{:call}
+   :param-spec ::spec-first-params
+   :defaults {:reviewer "agent"}}
+  (workflow/workflow
+   "Callable"
+   (workflow/step :implement
+                  (fn [{:keys [scope reviewer]}] (str "Implement " scope " for " reviewer))
+                  :self)))
+
+(deftest registered-call-targets-validate-their-params
+  ;; a call target reached by registered name meets the same contract boundary
+  ;; that requires its :call entrypoint
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-callable 'skein.spools.workflow-test/spec-first-callable)
+      (workflow/start! "call-ok" #'spec-first-caller {})
+      (is (= "Implement called scope for agent"
+             (:title (workflow/ready-step "call-ok"))))
+      (let [thrown (try (workflow/start! "call-bad" #'spec-first-bad-caller {})
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/params-invalid (:reason (ex-data thrown))))
+        (is (nil? (workflow/current-root "call-bad"))
+            "the caller's own run pours nothing when the target rejects its params")))))

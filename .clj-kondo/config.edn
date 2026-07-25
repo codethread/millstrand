@@ -44,6 +44,7 @@
                       skein.spools.workflow-test/introspect-stage-b-workflow
                       skein.spools.workflow-test/bad-defaults-definition
                       skein.spools.workflow-test/bad-spec-definition
+                      skein.spools.workflow-test/unknown-input-definition
                       skein.spools.workflow-test/revisable-definition
                       skein.spools.workflow-test/revisable-definition-v2
                       skein.spools.workflow-test/live-var-definition

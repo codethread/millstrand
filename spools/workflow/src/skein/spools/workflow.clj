@@ -32,6 +32,7 @@
             [skein.spools.workflow.internal.query :as query]
             [skein.spools.workflow.internal.registry :as registry]
             [skein.spools.workflow.internal.routing :as routing]
+            [skein.spools.workflow.internal.specs :as specs]
             [skein.spools.workflow.internal.util :as util]))
 
 (declare non-blank-string?
@@ -40,6 +41,7 @@
          reject-unknown-keys! step*
          param-opt-keys step-opt-keys checkpoint-opt-keys call-opt-keys workflow-opt-keys
          choice-name choice-details-attr reject-unknown-choice-keys!
+         require-valid-choices!
          reject-next-and-revise! require-unique-choice-keys!
          pour-with-rt! wisp-with-rt! burn-with-rt!
          attention timeout-secs-opt poll-ms-opt)
@@ -64,12 +66,48 @@
             {:topic topic
              :topics [:workflow :definition :step :gate :checkpoint :call]}))))
 
-(defn param
-  "Return a workflow param definition.
+(defn spec-forms
+  "Return the ordered `s/form` documentation graph rooted at `spec-name`.
 
-  This is a Clojure-native replacement for Beads' TOML variable blocks.
-  For example, pass `:required true` or `:default` values; the result is plain
-  data that `compile` consumes."
+  Entries are JSON-safe `{\"spec\" … \"relation\" \"root\"|\"keyword-reference\"
+  \"form\" …}` maps: the named spec first, then every qualified keyword reachable
+  through the printed forms that also names a registered spec, in qualified-name
+  order and emitted once. `s/keys` names its key specs rather than inlining
+  them, so one form is never the whole contract.
+
+  This is documentation of what is registered *now*, not an evaluable schema and
+  not a dependency graph — the walk reads form data and the spec registry and
+  executes no predicate. A root that is not a currently registered qualified
+  keyword fails loudly as `:workflow/spec-missing`, so a stale identity is never
+  mistaken for a spec with nothing to say."
+  [spec-name]
+  (specs/spec-forms spec-name))
+
+(defn json->params
+  "Return the params map for a decoded JSON object `value`.
+
+  Object keys become keywords recursively, so `\"feature\"` satisfies an
+  `s/keys :req-un` entry and `\"acme.workflows/feature\"` addresses a `:req`
+  key; arrays become vectors and scalars keep their ordinary Clojure values. A
+  non-object top level or a blank key fails loudly.
+
+  This is the JSON boundary a generic worker surface crosses before defaults
+  merge and `:param-spec` validation. Conversion is total, so a spec requiring
+  string-keyed or mixed-keyed maps stays reachable only from trusted Clojure in
+  v1 (PROP-Wcd-001.NG8)."
+  [value]
+  (specs/json->params value))
+
+(defn param
+  "Return a workflow param definition. **Deprecated**: declare a whole-map
+  `:param-spec` on the definition instead.
+
+  Per-key `:required`/`:default` declarations are a compatibility form kept
+  while workflows migrate; they cannot express a rule that spans keys. The two
+  run at different moments: `:defaults` merge and `:param-spec` validation
+  happen before anything compiles, while these declarations are resolved during
+  compilation, so a key defaulted here is not part of the map `:param-spec`
+  judged. Declare a key in `:defaults` or here, not both."
   [& {:as opts}]
   (reject-unknown-keys! opts param-opt-keys :param)
   opts)
@@ -119,8 +157,14 @@
   or a registered workflow name — see `register-workflow!`), an optional
   `:revise {:params {...}}` directive (mutually exclusive with `:next`) that
   re-pours the run's own definition with authoritative param overrides, and an
-  optional `:input` declaration (a vector of `{:key :required :description}` maps
-  surfaced with the choice and enforced by `choose!`).
+  optional `:input` contract for the map `choose!` must accept.
+
+  `:input` is a qualified keyword naming a whole-map spec, or `{:spec ::name
+  :doc \"what the worker must supply\"}`. Pouring the checkpoint records that
+  identity, doc, and the spec's current form graph; `choose!` resolves the
+  identity again and validates against whatever it names then. A vector of
+  `{:key :required :description}` maps is the deprecated required-key form,
+  which cannot express a rule spanning keys.
 
   `:kind` names the decision owner and defaults to `:human`; it is stored as
   `workflow/checkpoint-kind` and is the canonical human-in-the-loop signal."
@@ -129,6 +173,7 @@
   (let [kind (or (:kind opts) :human)
         choices (some-> (:choices opts)
                         reject-unknown-choice-keys!
+                        require-valid-choices!
                         reject-next-and-revise!
                         require-unique-choice-keys!)
         details (choice-details-attr choices)]
@@ -209,10 +254,10 @@
   call expansion and condition filtering apply exactly as
   `compile` runs them, so the description matches what would pour for `params`:
   excluded steps are absent, procedure joins appear as `:procedure` steps, and
-  each checkpoint's choices carry their declared `:input` and their
+  each checkpoint's choices carry their declared input contract and their
   `:next`/`:revise` routing. The result is `{:name … :steps [{:id :title :role
-  :depends-on :condition :gate :choices [{:key :label :description :input
-  :next|:revise} …]} …]}`.
+  :depends-on :condition :gate :choices [{:key :label :description
+  :input|:input-spec :next|:revise} …]} …]}`.
 
   `(describe workflow)` resolves param defaults and fails loudly listing any
   required params without a default; pass `params` to describe a definition that
@@ -442,8 +487,12 @@
   checkpoint alongside \"workflow/outcome\"/\"workflow/outcome-input\" to
   persist who made the choice (unenforced per TEN-002).
 
-  When the chosen choice declares required `:input` keys, `choose!` fails loudly
-  before any mutation if `input` omits them. A routed choice — one carrying
+  When the chosen choice declares an `:input` contract, `choose!` fails loudly
+  before any mutation unless `input` satisfies it: a whole-map spec is resolved
+  live and validated as `:workflow/input-invalid` (or `:workflow/input-spec-missing`
+  when the name no longer resolves), while the deprecated per-key form checks
+  only that required keys are present. `input` is validated as the caller passed
+  it — a JSON worker keywordizes with `json->params` first. A routed choice — one carrying
   `:next` (a symbol or registered name) or `:revise` (re-pour the run's own
   definition with override params) — closes out the current workflow's remaining
   steps and pours the continuation under the same run-id, all in one
@@ -870,9 +919,21 @@
 (s/def ::key ::id-ref)
 (s/def ::label string?)
 (s/def ::next #(or (keyword? %) (symbol? %) (non-blank-string? %)))
+;; A stored declaration crosses the JSON attribute wire, so its description is
+;; text — never the render fn a step's own :description may be.
+(s/def :skein.spools.workflow.choice-input/description string?)
 (s/def ::choice-input-declaration
-  (s/keys :req-un [::key] :opt-un [::required ::description]))
-(s/def ::input (s/coll-of ::choice-input-declaration :kind vector?))
+  (s/keys :req-un [::key]
+          :opt-un [::required :skein.spools.workflow.choice-input/description]))
+(s/def ::spec qualified-keyword?)
+(s/def ::input-spec-declaration (s/keys :req-un [::spec] :opt-un [::doc]))
+;; A choice declares the whole map `choose!` must accept: one qualified spec
+;; keyword, or that keyword with the doc a worker is shown. The vector of
+;; per-key declarations is the deprecated required-key form it replaces.
+(s/def ::input
+  (s/or :spec qualified-keyword?
+        :declaration ::input-spec-declaration
+        :legacy-declarations (s/coll-of ::choice-input-declaration :kind vector?)))
 (s/def ::revise (s/keys :req-un [:skein.spools.workflow.values/params]))
 (s/def ::choice
   (s/or :key ::id-ref
@@ -986,9 +1047,19 @@
                          |optional workflow/choices.")
                          '(checkpoint :route "Choose next path"
                                       :kind :agent
-                                      :choices [:tasks :direct]))
+                                      :choices [{:key :tasks
+                                                 :input {:spec :acme.workflows/task-input
+                                                         :doc "Name the tasks to plan."}}
+                                                :direct]))
    :fields {:kind "Decision owner such as :human or :agent."
             :choices "Allowed outcomes, stored as strings."
+            :input (fmt/reflow "
+                    |A choice's input contract: a qualified keyword naming a
+                    |whole-map spec, or {:spec ::name :doc \"...\"}. Pouring
+                    |records the identity, doc, and current spec form graph;
+                    |choose! resolves the identity again and validates against
+                    |the live spec. A vector of {:key :required :description}
+                    |maps is the deprecated required-key form.")
             :workflow/checkpoint "Stable checkpoint id, derived from the local step id."
             :workflow/checkpoint-kind "Decision owner stored as a string."
             :workflow/choices "Allowed choices stored as strings."}})
@@ -1039,11 +1110,15 @@
                           |registered name may be invoked.")
             :param-spec (fmt/reflow "
                          |Qualified keyword naming a registered spec for the complete
-                         |resolved params map.")
+                         |resolved params map. Start, named routing, and revision merge
+                         |:defaults, then validate the whole map against the live spec
+                         |before compiling; the caller's own map is what compiles, never
+                         |s/conform output. A failure carries the spec identity, its
+                         |current form graph, and s/explain-str.")
             :defaults (fmt/reflow "
                        |Partial keyword-keyed overlay merged under caller params. Values
                        |must be JSON-compatible; it need not satisfy :param-spec on its
-                       |own.")}
+                       |own, because the caller supplies the rest.")}
    :compatibility (fmt/reflow "
                    |A registered symbol resolving to a function is a legacy constructor:
                    |opaque, declaring no entrypoints, and available to trusted Clojure
@@ -1071,8 +1146,10 @@
                                     (checkpoint :signoff "Approve design"
                                                 :choices [:approved :revise])))
    :fields {:params (fmt/reflow "
-                     |Workflow-level map of keyword param names to param definitions. Param
-                     |definitions support boolean :required and optional :default.")}
+                     |Deprecated per-key declaration map: keyword param names to
+                     |definitions supporting boolean :required and optional :default.
+                     |Declare :param-spec and :defaults instead — see the :definition
+                     |topic.")}
    :runtime {:start! (fmt/reflow "
                       |(start! run-id workflow params opts) accepts a workflow map,
                       |a definition var, or a registered workflow keyword. Var/keyword
@@ -1107,6 +1184,15 @@
                             |#{:start :continue :call}. Reaching it by registered name
                             |requires :start to start!, :continue for a :next route,
                             |and :call for a call target.")}
+   :contracts {:spec-forms (fmt/reflow "
+                            |(spec-forms ::spec) returns the ordered JSON-safe form graph
+                            |documenting a param or checkpoint input spec: the root first,
+                            |then every registered spec its printed forms name. Executes no
+                            |predicate.")
+               :json->params (fmt/reflow "
+                              |(json->params obj) recursively keywordizes a decoded JSON
+                              |object's keys into a params or choice-input map. Specs
+                              |needing string-keyed maps stay trusted-Clojure-only.")}
    :definition (explain-definition)
    :step (explain-step)
    :gate (explain-gate)
@@ -1133,6 +1219,7 @@
   #{:params :attributes :state :form :doc :entrypoints :param-spec :defaults})
 (def ^:private choice-opt-keys #{:key :label :description :next :input :revise})
 (def ^:private choice-input-opt-keys #{:key :required :description})
+(def ^:private choice-input-spec-opt-keys #{:spec :doc})
 
 (defn- step*
   [id title opts]
@@ -1159,34 +1246,48 @@
       (non-blank-string? k) k
       :else (fail! "Workflow choice :input entries require a non-blank :key" {:input decl}))))
 
-(defn- choice-input-attr
-  "Return the JSON-safe stored form of a checkpoint choice's `:input` declaration:
-  a vector of string-keyed maps carrying each input key's name, its required flag,
-  and an optional description. Rejects unknown declaration keys loudly (TEN-003),
-  matching the other builder opts."
+(defn- choice-input-spec-attr
+  "Return the JSON-safe stored form of a spec-first `:input` declaration:
+  `{\"spec\" \"ns/name\"}` plus the optional `\"doc\"` the author wrote for the
+  worker. The form graph is added when the checkpoint pours, so history records
+  what the worker was shown (PROP-Wcd-001.S10)."
   [input]
-  (when-not (vector? input)
-    (fail! "Workflow choice :input must be a vector of declaration maps" {:input input}))
+  (let [declaration (if (qualified-keyword? input) {:spec input} input)]
+    (reject-unknown-keys! declaration choice-input-spec-opt-keys :choice-input-spec)
+    (cond-> {"spec" (subs (str (:spec declaration)) 1)}
+      (:doc declaration) (assoc "doc" (:doc declaration)))))
+
+(defn- choice-input-declarations-attr
+  "Return the JSON-safe stored form of the deprecated per-key `:input`
+  declaration: a vector of string-keyed maps carrying each input key's name, its
+  required flag, and an optional description. Rejects unknown declaration keys
+  loudly (TEN-003), matching the other builder opts."
+  [input]
   (mapv (fn [decl]
-          (util/require-map! decl [:choice :input])
           (reject-unknown-keys! decl choice-input-opt-keys :choice-input)
-          (when (and (contains? decl :required) (not (boolean? (:required decl))))
-            (fail! "Workflow choice :input :required must be a boolean" {:input decl}))
-          (when (and (contains? decl :description) (not (string? (:description decl))))
-            (fail! "Workflow choice :input :description must be a string" {:input decl}))
           (cond-> {"key" (input-key-name decl)
                    "required" (boolean (:required decl))}
             (:description decl) (assoc "description" (:description decl))))
         input))
 
 (defn- revise-params-attr
-  "Return the override params stored for a checkpoint choice's `:revise` directive.
-  `:revise` must be a map carrying a `:params` map (TEN-003); the params are the
-  authoritative overrides re-poured over the run's own definition at `choose!`."
+  "Return the override params stored for a checkpoint choice's `:revise` directive:
+  the authoritative overrides re-poured over the run's own definition at
+  `choose!`. `::revise` owns the shape."
   [revise]
-  (when-not (and (map? revise) (map? (:params revise)))
-    (fail! "Workflow choice :revise must be a map with a :params map" {:revise revise}))
   (:params revise))
+
+(defn- choice-input-entry
+  "Return the stored entry a choice's `:input` declaration contributes.
+
+  The authored form decides which contract applies: a qualified keyword or a
+  `{:spec … :doc …}` map names one whole-map spec, while a vector of per-key
+  declarations is the deprecated required-key form. They are stored under
+  different keys so a reader never has to guess which one a checkpoint carries."
+  [input]
+  (if (vector? input)
+    ["input" (choice-input-declarations-attr input)]
+    ["input-spec" (choice-input-spec-attr input)]))
 
 (defn- choice-detail-attr [choice]
   (when (map? choice)
@@ -1196,10 +1297,17 @@
            (:description choice) (assoc "description" (:description choice))
            (:next choice) (assoc "next" (str (:next choice)))
            (:revise choice) (assoc "revise" (revise-params-attr (:revise choice)))
-           (:input choice) (assoc "input" (choice-input-attr (:input choice))))])))
+           (:input choice) (conj (choice-input-entry (:input choice))))])))
 
 (defn- choice-details-attr [choices]
   (not-empty (into {} (keep choice-detail-attr choices))))
+
+(defn- require-valid-choices!
+  "Validate authored checkpoint choices against the public `::choices` shape, so
+  the advertised spec is the contract a caller meets rather than a description
+  running beside the hand-written checks."
+  [choices]
+  (require-valid! ::choices choices "Invalid workflow checkpoint choices"))
 
 (defn- reject-unknown-choice-keys! [choices]
   (doseq [choice choices :when (map? choice)]

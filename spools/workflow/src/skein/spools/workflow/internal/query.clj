@@ -222,13 +222,26 @@
 (defn- string-keyed [m]
   (into {} (map (fn [[k v]] [(attr-key->str k) v])) m))
 
+(defn- string-keyed-input-spec
+  "Return a stored `input-spec` entry with string keys, including each entry of
+  its recorded `spec-forms` graph."
+  [declaration]
+  (let [declaration (string-keyed declaration)]
+    (cond-> declaration
+      (get declaration "spec-forms")
+      (update "spec-forms" #(mapv string-keyed %)))))
+
 (defn detail-view
   "Return a checkpoint choice's stored detail map with string keys. The nested
-  `input` declaration (a vector of maps) is string-keyed too, because the JSON
+  `input` declaration (a vector of maps) and `input-spec` declaration (a map
+  carrying its own `spec-forms` vector) are string-keyed too, because the JSON
   round-trip keywordizes nested map keys on read (`skein.core.db/<-json`)."
   [detail]
   (reduce-kv (fn [acc k v]
                (let [k (attr-key->str k)]
-                 (assoc acc k (if (= k "input") (mapv string-keyed v) v))))
+                 (assoc acc k (case k
+                                "input" (mapv string-keyed v)
+                                "input-spec" (string-keyed-input-spec v)
+                                v))))
              {}
              detail))
