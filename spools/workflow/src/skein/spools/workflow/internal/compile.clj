@@ -177,7 +177,8 @@
         params (->> (merge params (or (:params call-step) {}))
                     (defs/definition-params target)
                     (defs/validate-params! target))
-        workflow (procedure-workflow procedure params)
+        workflow (defs/require-no-defers! (procedure-workflow procedure params)
+                                          {:call call-id :procedure (:procedure call-step)})
         payload (binding [*procedure-path* (conj *procedure-path* procedure)]
                   (compile workflow params))
         steps (mapv (fn [strand]
@@ -427,8 +428,14 @@
 (defn payload
   "Assemble the batch payload from a compiled `root` strand and its normalized
   `steps` for `form`: `root` followed by one `step-strand` per step, and the
-  parent-of + depends-on edges under `root`'s ref."
+  parent-of + depends-on edges under `root`'s ref.
+
+  This is where every pour passes and `describe` does not, so it is where an
+  unbound defer is refused: a published template may name an exit point nobody
+  has bound yet and still describe itself, but materializing it would strand the
+  run at an exit with nowhere to go."
   [root form steps]
+  (defs/validate-defer-bindings! {:steps steps} {:workflow (:title root)})
   {:strands (into [root] (mapv #(step-strand % form) steps))
    :edges (vec (concat (parent-edges (:ref root) steps)
                        (dependency-edges steps)))})
@@ -501,6 +508,9 @@
            :depends-on (:depends-on step)}
     (:condition step) (assoc :condition (:condition step))
     (step-attr step "workflow/gate") (assoc :gate (step-attr step "workflow/gate"))
+    (step-attr step "workflow/defer") (assoc :defer (step-attr step "workflow/defer"))
+    (step-attr step "workflow/defer-workflows")
+    (assoc :workflows (step-attr step "workflow/defer-workflows"))
     (describe-choices step) (assoc :choices (describe-choices step))))
 
 (defn- json-safe-context-value [value path]

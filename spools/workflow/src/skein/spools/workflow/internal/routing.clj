@@ -19,6 +19,14 @@
             [skein.spools.workflow.internal.query :as query]
             [skein.spools.workflow.internal.specs :as specs]))
 
+(def ^:private closeable-roles
+  "The workflow roles a cutover force-closes when it leaves a root behind.
+
+  Everything the engine poured under the root, so no strand of an abandoned
+  stage stays active; a strand some other spool attached to the graph is not
+  the workflow engine's to close."
+  #{"root" "step" "checkpoint" "defer" "procedure"})
+
 (defn close-attributes!
   "Return attributes to merge onto a step closed by complete!, from optional
   `:notes` (string, stored as \"workflow/outcome-notes\") and `:attributes` (map)
@@ -92,7 +100,7 @@
 (defn- close-workflow-root! [rt root]
   (doseq [strand (:strands (graph/subgraph rt [(:id root)]))]
     (when (and (= "active" (:state strand))
-               (contains? #{"root" "step" "checkpoint" "procedure"}
+               (contains? closeable-roles
                           (query/attr strand :workflow/role)))
       (weaver/update! rt (:id strand) {:state "closed"}))))
 
@@ -291,7 +299,7 @@
   (let [checkpoint-id (:id step)
         closeable (filter (fn [strand]
                             (and (= "active" (:state strand))
-                                 (contains? #{"root" "step" "checkpoint" "procedure"}
+                                 (contains? closeable-roles
                                             (query/attr strand :workflow/role))))
                           (:strands (graph/subgraph rt [(:id (:old-root route))])))
         close-strands (mapv (fn [strand]
@@ -343,3 +351,88 @@
   [rt run-id step outcome]
   (close-batch (:id step) outcome
                (cascade-join-ids rt (:id (query/current-root-with-rt rt run-id)) #{(:id step)})))
+
+;; --- deferred continuation ---------------------------------------------------
+
+(defn resolve-defer!
+  "Resolve run-id's ready defer exit, honoring an optional `:step` selector in
+  `opts`, and fail loudly when the resolved step is not one."
+  [rt run-id opts]
+  (let [step (or (query/resolve-ready-step rt run-id opts)
+                 (fail! "No ready workflow defer"
+                        {:reason :workflow/defer-not-ready :run-id run-id}))]
+    (when-not (= "defer" (query/attr step :workflow/role))
+      (fail! "Current workflow step is not a defer"
+             {:reason :workflow/step-not-defer
+              :run-id run-id
+              :step (query/strand->view step)}))
+    step))
+
+(defn continue-target
+  "Resolve the live continuation `target-name` a ready defer `step` allows.
+
+  Two boundaries meet here. The allowlist was materialized when the defer poured
+  and is the user's authority over where this run may go, so a name outside it is
+  refused before anything resolves. The name itself resolves *now*, against the
+  live registry: a compatible repoint continues into the replacement, while a
+  removal, a lost `:continue`, or an opaque constructor fails with the defer
+  still ready (PROP-Wcd-001.S7)."
+  [rt step target-name]
+  (let [allowed (set (query/attr step :workflow/defer-workflows))
+        defer (query/attr step :workflow/defer)]
+    (when-not (contains? allowed (name target-name))
+      (fail! "Workflow is not an allowed continuation for this defer"
+             {:reason :workflow/defer-target-not-allowed
+              :defer defer
+              :workflow target-name
+              :allowed (vec (sort allowed))}))
+    (let [resolved (defs/resolve-registered rt target-name)]
+      (when-not (defs/static? resolved)
+        (fail! "Deferred continuation target is an opaque legacy constructor"
+               {:reason :workflow/legacy-opaque
+                :defer defer
+                :workflow target-name
+                :definition (:definition resolved)
+                :alternative "Migrate the target to a static spec-first definition."}))
+      (defs/require-entrypoint! resolved :continue))))
+
+(defn continue-plan
+  "Return the cutover plan for a deferred continuation: `{:old-root … :payload …
+  :params …}` for `target` poured under the same run-id.
+
+  No parent context is merged. A defer is the cross-spool isolation boundary, so
+  the target sees its own `:defaults` under only the params explicitly supplied,
+  and its `:param-spec` judges that merged map — omitting `params` and passing an
+  empty map are therefore the same request (PROP-Wcd-001.S7/S9).
+
+  `:params` is the JSON-safe projection of the resolved params — the same value
+  the new root persists as `workflow/context` and the closed defer records as the
+  params it continued with, so the two never disagree. It is converted the way a
+  fresh `start!` converts them, because this pour begins a root rather than
+  carrying a stage forward."
+  [rt run-id target params]
+  (let [root (query/current-root-with-rt rt run-id)
+        built (defs/build target params)
+        context (cmp/default-context (:params built))
+        payload (cmp/compile (:workflow built) (:params built)
+                             (merge (defs/identity-attrs target)
+                                    {:run-id run-id
+                                     :family (query/attr root :workflow/family)
+                                     :context context
+                                     :form :molecule}))]
+    {:old-root root :payload payload :params context}))
+
+(defn continuation-outcome
+  "Build the attributes recorded on the defer exit a continuation fills.
+
+  `workflow/outcome` carries the selected name so history reads a continuation
+  the same way it reads a choice; beside it go the resolved symbol and
+  fingerprint that say *which* definition poured, and the exact params it poured
+  with, so a later reader can tell a repoint from the original."
+  [target params opts]
+  (cond-> {"workflow/outcome" (name (:name target))
+           "workflow/continued-workflow" (name (:name target))
+           "workflow/continued-definition" (str (:definition target))
+           "workflow/continued-fingerprint" (defs/fingerprint target)
+           "workflow/continued-params" params}
+    (contains? opts :by) (assoc "workflow/outcome-by" (:by opts))))

@@ -50,5 +50,8 @@
                       skein.spools.workflow-test/live-var-definition
                       skein.spools.workflow-test/exploding-constructor
                       skein.spools.workflow-test/malformed-constructor
+                      skein.spools.workflow-test/call-only-bound-card
+                      skein.spools.workflow-test/legacy-bound-card
+                      skein.spools.workflow-test/defer-caller
                       skein.chime-test/throwing-rule
                       skein.chime-test/invalid-notification-rule]}}}

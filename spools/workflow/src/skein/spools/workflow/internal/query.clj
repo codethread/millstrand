@@ -97,6 +97,9 @@
              :state (:state step)
              :role (attr step :workflow/role)}
       (attr step :workflow/gate) (assoc :gate (attr step :workflow/gate))
+      (attr step :workflow/defer) (assoc :defer (attr step :workflow/defer))
+      (attr step :workflow/defer-workflows)
+      (assoc :workflows (attr step :workflow/defer-workflows))
       (attr step :workflow/checkpoint) (assoc :checkpoint (attr step :workflow/checkpoint))
       (attr step :workflow/checkpoint-kind) (assoc :checkpoint-kind (attr step :workflow/checkpoint-kind))
       (attr step :workflow/choices) (assoc :choices (attr step :workflow/choices))
@@ -118,7 +121,7 @@
          (filter matches?)
          vec)))
 
-(def ^:private workflow-work-roles #{"step" "checkpoint" "procedure"})
+(def ^:private workflow-work-roles #{"step" "checkpoint" "defer" "procedure"})
 
 (defn- workflow-role [strand]
   (attr strand :workflow/role))
@@ -170,18 +173,25 @@
 
 (def ^:private history-event-roles
   ;; Procedure joins (role "procedure") are engine bookkeeping with no
-  ;; user-facing outcome, so run-history projects only step/checkpoint closes.
-  #{"step" "checkpoint"})
+  ;; user-facing outcome, so run-history projects only the roles a worker acted
+  ;; on: step, checkpoint, and defer closes.
+  #{"step" "checkpoint" "defer"})
 
 (defn- history-event
-  "Project one closed step/checkpoint strand into a history event. A checkpoint is
-  a `:choice`, a closed gate is a `:gate-closed`, and any other step is a
-  `:step-closed`; `:at` is the strand's `updated_at`, used for event ordering."
+  "Project one closed step/checkpoint/defer strand into a history event. A
+  checkpoint is a `:choice`, a filled defer exit is a `:continuation`, a closed
+  gate is a `:gate-closed`, and any other step is a `:step-closed`; `:at` is the
+  strand's `updated_at`, used for event ordering.
+
+  A continuation's `:outcome` is the registered workflow the worker selected;
+  the resolved symbol, fingerprint, and exact target params stay on the strand
+  where `continue!` recorded them."
   [strand]
   (let [role (attr strand :workflow/role)
         gate (attr strand :workflow/gate)
         type (cond
                (= "checkpoint" role) :choice
+               (= "defer" role) :continuation
                gate :gate-closed
                :else :step-closed)]
     (cond-> {:type type

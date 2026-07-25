@@ -42,6 +42,16 @@
     (fail! "Workflow value must be a keyword" {:path path :value value}))
   value)
 
+(defn defer-step?
+  "True when `step` is a declared defer exit.
+
+  Builders write the `workflow/*` vocabulary string-keyed onto a step's
+  `:attributes`, so this reads the authored declaration without compiling or
+  pouring anything — which is what lets the topology rules judge a defer
+  \"regardless of params\" (PROP-Wcd-001.S7)."
+  [step]
+  (and (map? step) (= "defer" (get-in step [:attributes "workflow/role"]))))
+
 (defn json-scalar?
   "True when `value` is a leaf that survives the JSON attribute wire.
 

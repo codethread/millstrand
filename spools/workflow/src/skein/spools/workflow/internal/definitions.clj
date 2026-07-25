@@ -17,15 +17,20 @@
   `validate-candidates!` is the pre-publication seam the definition kind
   declares. It sees the complete staged candidate registry, which is the only
   place cross-entry rules can be judged: a checkpoint route naming another
-  registered workflow, a call target, and the deletions an owner expressed by
-  omitting an entry it used to contribute."
+  registered workflow, a call target, a defer's bound target set, and the
+  deletions an owner expressed by omitting an entry it used to contribute.
+
+  The defer topology rules live here too. They read the authored `:steps` rather
+  than a compiled graph, so a defer is judged terminal before any params exist,
+  and one predicate answers for the builder, the pour, and publication alike."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :refer [fail! require-valid!]]
             [skein.spools.workflow.internal.registry :as registry]
             [skein.spools.workflow.internal.specs :as specs]
-            [skein.spools.workflow.internal.util :as util]))
+            [skein.spools.workflow.internal.util :as util])
+  (:import [java.security MessageDigest]))
 
 (def entrypoints
   "The invocation capabilities a static definition may declare.
@@ -221,6 +226,108 @@
   (cond-> {:definition (:definition resolved)}
     (:name resolved) (assoc :definition-name (:name resolved))))
 
+(defn fingerprint
+  "Return a short hex digest of the definition value `resolved` carries.
+
+  A run that continued into a registered name records this beside the symbol, so
+  a reader can tell a later repoint or edit apart from the definition that
+  actually poured. It digests the *printed* value, which is exactly as much as it
+  claims: two definitions printing identically fingerprint identically, and
+  behavior hidden behind a render or predicate function is not fingerprinted at
+  all (the same limit `spec-forms` states for live specs)."
+  [resolved]
+  (let [digest (.digest (MessageDigest/getInstance "SHA-256")
+                        (.getBytes (pr-str (:value resolved)) "UTF-8"))]
+    (str/join (map #(format "%02x" %) (take 8 digest)))))
+
+;; --- defer exits --------------------------------------------------------------
+
+(defn defer-steps
+  "Return the declared defer exit steps of `definition`, in declaration order."
+  [definition]
+  (filterv util/defer-step? (:steps definition)))
+
+(defn defer-name
+  "Return the declared name of defer `step` as a keyword."
+  [step]
+  (keyword (get-in step [:attributes "workflow/defer"])))
+
+(defn defer-targets
+  "Return the registered workflow names `step`'s defer binding allows, as a set
+  of keywords. Empty for an unbound defer in a published template."
+  [step]
+  (into #{} (map keyword) (get-in step [:attributes "workflow/defer-workflows"] [])))
+
+(defn validate-defer-topology!
+  "Return `definition` once its defer exits are terminal and unconditional.
+
+  A defer is a terminal cross-spool exit: `continue!` closes the whole root and
+  pours an independently registered one, so there is nothing for a successor to
+  resume into. Every way a definition can continue past a step — a direct
+  successor, a conditional or looping step, a procedure call — says so with
+  `:depends-on`, which is why one check covers them all, and why it reads the
+  declaration rather than an expansion: the answer must not depend on params
+  (PROP-Wcd-001.S7).
+
+  The exit itself carries no `:condition` or `:loop` for the same reason. The
+  `defer` builder rejects both as unknown opts; this is the check a raw
+  definition map registered directly still has to pass."
+  [definition]
+  (let [defers (into #{} (map #(util/normalize-ref (:id %) [:steps :id]))
+                     (defer-steps definition))]
+    (when (seq defers)
+      (doseq [step (defer-steps definition)
+              key [:condition :loop]
+              :when (contains? step key)]
+        (fail! "A workflow defer exit carries no :condition or :loop"
+               {:reason :workflow/defer-not-static
+                :defer (defer-name step)
+                :key key}))
+      (doseq [step (:steps definition)
+              dep (:depends-on step)
+              :let [ref (util/normalize-ref dep [:steps (:id step) :depends-on])]
+              :when (contains? defers ref)]
+        (fail! "Workflow steps cannot depend on a defer exit"
+               {:reason :workflow/defer-not-terminal
+                :defer ref
+                :step (util/normalize-ref (:id step) [:steps :id])}))))
+  definition)
+
+(defn require-no-defers!
+  "Return `definition` once it declares no defer exit, for the procedure-call
+  path that must refuse one.
+
+  A `call` join depends on its expansion's exit steps, so an enclosing workflow
+  always continues past whatever it calls. That is precisely what a defer cannot
+  do, and the two compose into a contradiction rather than a useful topology:
+  returning composition stays `call`, and a cross-spool exit stays `defer`."
+  [definition context]
+  (when-let [defer (first (defer-steps definition))]
+    (fail! "A workflow called as a procedure cannot declare a defer exit"
+           (assoc context
+                  :reason :workflow/defer-in-procedure
+                  :defer (defer-name defer)
+                  :alternative "Reach the continuation with a defer on the calling workflow.")))
+  definition)
+
+(defn validate-defer-bindings!
+  "Return `definition` once every defer exit it declares is bound to a non-empty
+  target set.
+
+  An unbound defer is a legitimate published *template* — a spool naming an exit
+  point without naming another spool's workflows — but it is not something a run
+  can reach, so it may not be registered or poured. `bind-defers` is what turns
+  the template into a complete definition."
+  [definition context]
+  (doseq [step (defer-steps definition)
+          :when (empty? (defer-targets step))]
+    (fail! "Workflow defer exit is not bound to any registered workflow"
+           (assoc context
+                  :reason :workflow/defer-unbound
+                  :defer (defer-name step)
+                  :alternative "Bind the exit with bind-defers before registering or pouring.")))
+  definition)
+
 (defn registry-input?
   "True when `input` names a workflow the registry must resolve.
 
@@ -280,15 +387,28 @@
                     (keyword (subs next-str 1))))))
         (get-in step [:attributes "workflow/choice-details"] {})))
 
+(def use-entrypoint
+  "The entrypoint each way of naming another registered workflow requires.
+
+  `:continue` and `:defer` both demand the `:continue` capability — the proposal
+  deliberately gives a worker-selected exit and an authored route one capability
+  rather than inventing a second one — but they stay separate uses because only a
+  defer refuses an opaque legacy target (PROP-Wcd-001.S6/S13)."
+  {:continue :continue
+   :defer :continue
+   :call :call})
+
 (defn references
-  "Return `{:continue #{names} :call #{names}}` — the registered workflows a
-  static definition names, grouped by the entrypoint each use requires."
+  "Return `{:continue #{names} :defer #{names} :call #{names}}` — the registered
+  workflows a static definition names, grouped by how it names them."
   [definition]
   (reduce (fn [acc step]
-            (cond-> (update acc :continue into (choice-next-names step))
+            (cond-> (-> acc
+                        (update :continue into (choice-next-names step))
+                        (update :defer into (defer-targets step)))
               (keyword? (:procedure step))
               (update :call conj (:procedure step))))
-          {:continue #{} :call #{}}
+          {:continue #{} :defer #{} :call #{}}
           (:steps definition)))
 
 (defn- validate-defaults!
@@ -331,9 +451,10 @@
 
 (defn- validate-references!
   [context definition entry-kinds]
-  (doseq [[entrypoint names] (references definition)
-          target names]
-    (let [declared (get entry-kinds target)]
+  (doseq [[use names] (references definition)
+          target (sort names)]
+    (let [entrypoint (get use-entrypoint use)
+          declared (get entry-kinds target)]
       (when-not declared
         (fail! "Workflow definition names an unregistered workflow"
                (assoc context :reason :workflow/reference-unregistered
@@ -342,6 +463,16 @@
                       :registered (vec (sort (keys entry-kinds))))))
       ;; A legacy constructor declares no entrypoints; it stays reachable by
       ;; name while shipped workflows migrate (PROP-Wcd-001.S13 compatibility).
+      ;; A defer is the exception: nothing is registered against that surface
+      ;; yet, so it enforces the refusal S13 asks for.
+      (when (and (= :defer use) (= :legacy (:kind declared)))
+        (fail! "Workflow defer exit names an opaque legacy constructor"
+               (assoc context :reason :workflow/legacy-opaque
+                      :target target
+                      :definition-symbol (:definition declared)
+                      :alternative "Migrate the target to a static spec-first definition.")))
+      (when (and (= :call use) (= :static (:kind declared)))
+        (require-no-defers! (:value declared) (assoc context :target target)))
       (when (and (= :static (:kind declared))
                  (not (contains? (:entrypoints declared) entrypoint)))
         (fail! "Workflow definition names a workflow that does not declare the required entrypoint"
@@ -363,6 +494,11 @@
         (validate-defaults! context (:defaults value))
         (validate-param-spec! context (:param-spec value))
         (validate-input-specs! context value)
+        ;; A registered name is reachable, so its defers must be terminal and
+        ;; bound — the builder already refuses both, but a raw map registered
+        ;; directly never passed through it.
+        (validate-defer-topology! value)
+        (validate-defer-bindings! value context)
         resolved)
       resolved)))
 

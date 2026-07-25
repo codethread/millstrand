@@ -236,6 +236,53 @@ Honest source: the `call` inlining test in `test/skein/spools/workflow_test.clj`
 
 ---
 
+## Recipe: Handing off to a workflow your spool cannot name
+
+**Situation.** Your spool tracks something — a card, a ticket, an intake form — and at some point the work has to be *done*, by a routine that lives in a spool you have no business depending on. You know where the hand-off is; you don't know, and shouldn't decide, what is on the other side.
+
+**Composition.** Publish a template with a `defer` exit naming the hand-off point. Whoever installs both spools binds that name to the registered workflows it may reach, with `bind-defers`, and registers the complete definition. A worker fills the exit with `continue!`.
+
+```clojure
+(require '[skein.spools.workflow :as workflow])
+
+;; in the kanban spool — no mention of any other spool
+(def general
+  (workflow/workflow
+    "Track a card"
+    (workflow/step :prepare "Prepare the card" :self)
+    (workflow/defer :perform-work "Choose how this work will be performed"
+      :depends-on [:prepare])))
+
+;; in user config, which can see both spools
+(workflow/defworkflow tracked-card
+  "Track a card and select its delivery routine."
+  {:entrypoints #{:start}}
+  (workflow/bind-defers general {:perform-work #{:spike :devflow}}))
+```
+
+Driving it: `:prepare` completes as usual, then the ready frontier is the exit, carrying its allowlist.
+
+```clojure
+(workflow/ready "card-123")
+;; => [{:id "step-d71" :role "defer" :defer "perform-work"
+;;      :title "Choose how this work will be performed"
+;;      :workflows ["devflow" "spike"] :run-id "card-123"}]
+
+(workflow/continue! "card-123" :devflow {:feature "kanban-web-ui"} {:by "worker-1"})
+;; closes the card root, pours devflow under the same run id
+```
+
+**Why this shape.**
+
+- **Neither `call` nor a checkpoint fits.** `call` returns to its caller, so the card would resume after devflow finished — but there is nothing left to do, and the card is not the owner of what follows. A checkpoint's `:next` has to name its routes where the workflow is authored, which is exactly the dependency the kanban spool is avoiding.
+- **The bind is the authority boundary.** The template says *where* a worker chooses; the person who installed both spools says *what they may choose from*. Neither spool acquires a dependency on the other, and the allowlist is a deliberate decision rather than "any registered workflow".
+- **The target keeps its own params.** `continue!` merges no parent context, so devflow sees its own `:defaults` under exactly the params supplied for it and validates them whole. A card param that happens to share a name with a devflow param cannot leak in and quietly mean the wrong thing.
+- **The exit is terminal, and the engine holds you to it.** Nothing may `:depends-on` a defer, and a workflow declaring one cannot be `call`-ed. If you find yourself wanting a step after the exit, you want a checkpoint route or a `call` instead — the hand-off is not really a hand-off.
+
+Honest source: PROP-Wcd-001.EX7 in `devflow/feat/s9i26-flow-cli/proposal.md`, and the defer suite in `test/skein/spools/workflow_test.clj` (`continue-transfers-the-root-and-records-the-cutover`, `continue-isolates-the-target-from-the-parent-context`).
+
+---
+
 ## Recipe: External wait points with gates
 
 **Situation.** Some steps aren't the driving agent's to *do* — they're waits: CI must go green, a sub-agent must finish, a human must weigh in. The agent should be told to poll or hand off, not to try the work itself.
