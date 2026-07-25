@@ -14,11 +14,11 @@
 
 This is userland spool code, not a separate scheduler or persistence system. Workflows compile into normal strand graphs, and runtime state remains inspectable through the usual Skein REPL/graph helpers. The spool owns no privileged runtime state.
 
-Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `param`, `compile`, `pour!`, `wisp!`, and `explain`.
+Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `defer`, `bind-defers`, `param`, `compile`, `pour!`, `wisp!`, and `explain`.
 
-The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see §5). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
+The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `continue!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see §5). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
 
-Every run-mutating op (`start!`, `complete!`, `choose!`, `advance!`) returns one `{:ready [step-view ...] :done boolean}` map: `:ready` is the run's ready step views (as `ready` would return them) and `:done` is its done-ness, so an empty `:ready` never leaves a caller guessing whether the run finished or merely stalled. The pure queries `ready`/`ready-step` still return step views directly.
+Every run-mutating op (`start!`, `complete!`, `choose!`, `continue!`, `advance!`) returns one `{:ready [step-view ...] :done boolean}` map: `:ready` is the run's ready step views (as `ready` would return them) and `:done` is its done-ness, so an empty `:ready` never leaves a caller guessing whether the run finished or merely stalled. The pure queries `ready`/`ready-step` still return step views directly.
 
 ## 2. Credit
 
@@ -37,6 +37,8 @@ What skein does differently: workflow definitions are Clojure-native data (funct
 | `(gate id title waiter & opts)` | A step marked `workflow/gate <waiter>` as an external wait point. `waiter` is a freeform actor hint (`:ci`, `:human`, `:subagent`, …), not `:self`. Same opts as `step`. See "Gates" below. |
 | `(checkpoint id title & opts)` | A step definition with checkpoint metadata. `:kind` (`:human` or `:agent`, default `:human`), `:choices`. A choice's `:input` names the spec `choose!` validates against — see §5. |
 | `(call id procedure params & opts)` | An inline procedure-reuse step. `:depends-on`, `:title`, `:attributes`. |
+| `(defer id title & opts)` | A named terminal exit whose continuation a worker picks at run time. Opts: `:depends-on`, `:description`, `:attributes`. See §5a. |
+| `(bind-defers definition bindings)` | Returns `definition` with each declared defer bound to the registered workflows it allows. See §5a. |
 | `(workflow name & body)` | A workflow definition: `{:name .. :steps [..]}` plus optional leading opts map (`:params`, `:attributes`, `:state`, `:form`, and the registration contract `:doc`, `:entrypoints`, `:param-spec`, `:defaults`). |
 | `(defworkflow name doc opts definition)` | Defines a static definition Var and collects its registry entry during module contribution. See "Static definitions" below. |
 
@@ -228,8 +230,9 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
   optionally restricted to one waiter string/keyword such as `:subagent`.
 - `(ready-checkpoint run-id)` — the single ready checkpoint view, nil if none,
   or a loud ambiguity failure if more than one checkpoint is ready.
-- `(complete! run-id)` / `(complete! run-id opts)` — closes a non-checkpoint
-  ready step and returns the `{:ready [...] :done boolean}` result.
+- `(complete! run-id)` / `(complete! run-id opts)` — closes a ready step that is
+  neither a checkpoint nor a defer, and returns the
+  `{:ready [...] :done boolean}` result.
 - `(choose! run-id choice)` / `(choose! run-id choice input)` /
   `(choose! run-id choice input opts)` — records a checkpoint decision,
   optionally routes to a continuation (`:next`), and returns the
@@ -237,13 +240,28 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
   required `:input` keys, `choose!` fails loudly before any mutation if they
   are missing (see §5). Revision loops route `:next` back to the same stage
   (see §5).
+- `(continue! run-id workflow)` / `(continue! run-id workflow params)` /
+  `(continue! run-id workflow params opts)` — fills a ready defer exit by
+  closing the current root and pouring one of the defer's allowed registered
+  workflows under the same run id, returning the same result shape. `opts` takes
+  `:step` (to pick among several ready defers) and `:by`. See §5a.
 - `(advance! run-id)` / `(advance! run-id opts)` — one verb that advances the
   run regardless of the ready step's kind, returning the same result shape.
   When the resolved ready step is a checkpoint, `opts` must carry `:choice`
   (and may carry `:input`, default `{}`, plus pass-through `:by`/`:step`) and it
   dispatches to `choose!`; when it is a step, `:choice` must be absent and it
   dispatches to `complete!` with pass-through `:notes`/`:attributes`/`:step`/`:by`.
-  Supplying `:choice` on a step, or omitting it on a checkpoint, fails loudly.
+  Supplying `:choice` on a step, or omitting it on a checkpoint, fails loudly. A
+  ready defer is not advanceable: picking a continuation carries a target and its
+  own params, which `advance!` has no way to express, so it directs the caller to
+  `continue!`.
+
+Every run-mutating op holds a per-run guard from the moment it resolves the ready
+frontier through the batch it applies. Two workers acting on one run are
+therefore serialized: the second re-resolves against the frontier the first left,
+and fails loudly on a step that is no longer ready rather than writing over it.
+The guard is runtime-owned, so it covers one weaver's in-process callers — the
+same scope as the ambient runtime those ops resolve.
 
 ### Awaiting attention
 
@@ -256,7 +274,7 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
 
 The three-arg `(runtime run-id opts)` arity threads the target runtime explicitly; the shorter arities resolve the ambient `current/runtime` as the ergonomic default.
 
-It returns `{:reason :done|:checkpoint|:step|:gate|:stalled|:timeout :ready [...] :done boolean :detail ...}`. `opts` takes non-negative `:timeout-secs` (default 1800) and positive `:poll-ms` (default 250, matching the agent-run await surface) — there is no predicate to name, because `await!` resolves attention purely from the ready frontier and the executor registry. The wait uses the supplied runtime's Clock, so a manual Clock makes timeout tests deterministic. Malformed values fail at the caller boundary:
+It returns `{:reason :done|:checkpoint|:defer|:step|:gate|:stalled|:timeout :ready [...] :done boolean :detail ...}`. `opts` takes non-negative `:timeout-secs` (default 1800) and positive `:poll-ms` (default 250, matching the agent-run await surface) — there is no predicate to name, because `await!` resolves attention purely from the ready frontier and the executor registry. The wait uses the supplied runtime's Clock, so a manual Clock makes timeout tests deterministic. Malformed values fail at the caller boundary:
 
 - `:done` — the run is finished.
 - `:checkpoint` — a checkpoint is ready (any kind wakes the caller).
@@ -440,6 +458,54 @@ There is no reopen/reactivate mechanism: each round is a **fresh** immutable sub
 
 A routed `:revise` is an ordinary transactional continuation, so the same "closes out the remaining steps" warning above applies unchanged.
 
+## 5a. Deferred continuation — an exit someone else fills
+
+A checkpoint's `:next` is decided where the workflow is authored, and a `call` always returns to its caller. Neither can express the case this section covers: a spool that knows it has an exit point but has no business knowing what lies beyond it. `defer` names that exit; user Clojure that can see both spools says what may be chosen there.
+
+```clojure
+;; the kanban spool publishes a template, naming no other spool
+(def general
+  (workflow/workflow
+   "Track a card"
+   (workflow/step :prepare "Prepare the card" :self)
+   (workflow/defer :perform-work "Choose how this work will be performed"
+     :depends-on [:prepare])))
+
+;; user code that has both spools binds the exit and registers the result
+(workflow/defworkflow tracked-card
+  "Track a card and select its delivery routine."
+  {:entrypoints #{:start}}
+  (workflow/bind-defers general {:perform-work #{:spike :devflow}}))
+```
+
+### A defer is terminal
+
+Nothing may declare `:depends-on` a defer — not a step, a conditional step, a loop, a call, or a checkpoint — and a workflow declaring one may not be used as a `call` procedure, because the procedure join would continue past the exit. Both refusals are `:workflow/defer-not-terminal` and `:workflow/defer-in-procedure`, raised at the builder and again at registration for a raw map that never went through it. The rule reads the declared steps rather than an expansion, so params cannot change the answer.
+
+That is the whole reason the two compose cleanly: returning composition stays `call`, and a cross-spool exit stays `defer`.
+
+### Binding is the authority boundary
+
+`bind-defers` maps each declared defer name to a non-empty set of registered workflow keywords. Binding a name the definition does not declare fails as `:workflow/defer-unknown` rather than inventing an exit nobody can reach, and an empty set fails the `::defer-bindings` spec. Targets are stored in registered-name order, so the allowlist a worker reads is stable whatever order the author wrote the set in.
+
+An unbound defer is a legitimate published template: `describe` reports it, and it can be transformed and re-registered by whoever binds it. It cannot be registered or poured, both `:workflow/defer-unbound` — materializing it would strand the run at an exit with nowhere to go.
+
+Publication validates the bound targets against the complete staged candidate. Every target must be registered and must declare `:continue`, the same capability an authored `:next` route requires; the proposal deliberately gives worker-selected and authored continuations one capability rather than inventing a second. A defer target that resolves to a legacy constructor is refused as `:workflow/legacy-opaque` — that is a new surface with no migration to protect, so it does not inherit the compatibility carve-out `:next` still has.
+
+### `continue!` transfers the root
+
+```clojure
+(workflow/continue! "card-123" :devflow {:feature "kanban-web-ui"} {:by "worker-1"})
+```
+
+This is a root transfer, not a step transition. `continue!` closes the current root outright and pours the selected workflow as the run's new root under the same run id; it never calls `advance!`, never resumes a caller, and never merges the old root's context. The close and the pour ride one `batch/apply!`, so a failing apply commits nothing and the run stays resumable.
+
+The allowlist is fixed when the defer pours; the name inside it resolves live. A name repointed since then continues into the replacement. A removed name, one that lost `:continue`, an opaque constructor, or params the target's `:param-spec` rejects all fail before anything closes, leaving the defer ready to retry.
+
+`params` are the target's own. Its `:defaults` merge under exactly what is supplied here and the merged map is validated whole against its `:param-spec` — passing no params and passing `{}` are the same request. Nothing from the parent reaches it, which is what makes a defer the cross-spool isolation boundary; a parent key the target happens to need is simply absent, and the target's spec says so.
+
+The filled exit records what it continued into: `workflow/continued-workflow`, the symbol that name resolved to, a fingerprint of the resolved definition, and the exact params it poured with. `run-history` projects it as a `:continuation` event whose `:outcome` is the selected name. The fingerprint digests the printed definition, so two definitions printing identically fingerprint identically and behavior behind a render function is not fingerprinted at all — the same limit `spec-forms` states for live specs.
+
 ## 6. Molecule ops
 
 | Fn | Effect |
@@ -493,7 +559,7 @@ Each step carries `:id`, `:title`, `:role` (`"step"`/`"checkpoint"`/`"procedure"
  …]
 ```
 
-Each event is a **closed** `step` or `checkpoint` strand (procedure joins, being engine bookkeeping, are omitted): a checkpoint is `:choice`, a closed gate is `:gate-closed`, any other step is `:step-closed`. An event carries `:type`, `:id`, `:title`, `:at`, and — when present — `:outcome`, `:by`, `:input`, and `:notes`. Events are ordered by their strand's `updated_at` (`:at`); because that timestamp is second-resolution, events closed in the same transaction (e.g. a routed checkpoint and the steps it force-closes) tie and fall back to strand-id order, so treat within-second event order as unordered. `run-history` writes nothing and **fails loudly** for a run that never had a root strand.
+Each event is a **closed** `step`, `checkpoint`, or `defer` strand (procedure joins, being engine bookkeeping, are omitted): a checkpoint is `:choice`, a filled defer exit is `:continuation` whose `:outcome` is the workflow the worker selected, a closed gate is `:gate-closed`, any other step is `:step-closed`. An event carries `:type`, `:id`, `:title`, `:at`, and — when present — `:outcome`, `:by`, `:input`, and `:notes`. Events are ordered by their strand's `updated_at` (`:at`); because that timestamp is second-resolution, events closed in the same transaction (e.g. a routed checkpoint and the steps it force-closes) tie and fall back to strand-id order, so treat within-second event order as unordered. `run-history` writes nothing and **fails loudly** for a run that never had a root strand.
 
 ### `squash-run!`
 
@@ -505,7 +571,7 @@ This table is the extension API: spools built on top of `skein.spools.workflow` 
 
 | Attribute | Meaning | Set by |
 |---|---|---|
-| `workflow/role` | `"root"`, `"step"`, `"checkpoint"`, `"procedure"`, or `"digest"`. Drives which strands count as workflow work. | `compile` (root/step strands), `expand-call-step` (procedure join step), `squash!` (digest). |
+| `workflow/role` | `"root"`, `"step"`, `"checkpoint"`, `"defer"`, `"procedure"`, or `"digest"`. Drives which strands count as workflow work. | `compile` (root/step strands), `defer` builder, `expand-call-step` (procedure join step), `squash!` (digest). |
 | `workflow/form` | `"molecule"` or `"wisp"`. | `compile`, from `opts :form` (defaults molecule) or `pour!`/`wisp!`. |
 | `workflow/run-id` | Stable run handle used by `start!`/`ready`/`complete!`/`choose!`/`current-root`. | `compile`, from `opts :run-id` (root strand only). |
 | `workflow/family` | Grouping label across related runs (e.g. `"devflow"`). Carried forward into `:next` continuations. | `compile`, from `opts :family` (root strand only). |
@@ -518,11 +584,17 @@ This table is the extension API: spools built on top of `skein.spools.workflow` 
 | `workflow/checkpoint-kind` | Decision owner: `"human"` or `"agent"` (unenforced, provenance only — TEN-002). | `checkpoint` builder, from `:kind`. |
 | `workflow/choices` | Vector of allowed choice-name strings. | `checkpoint` builder, from `:choices`. |
 | `workflow/choice-details` | Map of choice name → `{"label" .. "description" .. "next" .. "input-spec" {"spec" .. "doc" .. "spec-forms" [..]} }`. `"input-spec"` holds the whole-map input contract a choice declared, with the form graph recorded at pour; `"input"` holds the deprecated per-key declaration vector. | `checkpoint` builder, from map-form `:choices` entries; `compile` records `"spec-forms"` at pour. |
+| `workflow/defer` | Stable defer-exit name (the step's own local id). | `defer` builder. |
+| `workflow/defer-workflows` | Vector of registered workflow names this exit allows, in registered-name order. Fixed for the run once poured; each name still resolves live at `continue!` time. | `bind-defers`. |
 | `workflow/decision-point` | Freeform label naming what the checkpoint decides (devflow convention). | Caller-supplied `:attributes`, e.g. devflow. |
 | `workflow/action-ref` | Semantic name of the action an agent should perform for this step (`"devflow.worktree.ensure"`, `"pr.ci.wait"`); the tool-binding key for forge-agnostic definitions (see "Tool bindings"). | Caller-supplied `:attributes`. |
 | `workflow/instruction` | Freeform instruction text surfaced in `step-view`. | Caller-supplied `:attributes`. |
 | `workflow/artifact` | Pointer to the artifact a step produces, surfaced in `step-view`. | Caller-supplied `:attributes`. |
-| `workflow/outcome` | The choice name recorded when a checkpoint closes via a `:next`-routed or plain choice. | `choose!`, on the checkpoint step, at close. |
+| `workflow/outcome` | The choice name recorded when a checkpoint closes via a `:next`-routed or plain choice; the selected workflow name when a defer exit closes. | `choose!` (checkpoint close); `continue!` (defer close). |
+| `workflow/continued-workflow` | Registered name the worker selected at a defer exit. | `continue!`, on the defer step, at close. |
+| `workflow/continued-definition` | Stringified symbol that name resolved to at continuation time. | `continue!`, on the defer step, at close. |
+| `workflow/continued-fingerprint` | Short hex digest of the printed definition value that poured, so a later repoint or edit is distinguishable from the original. | `continue!`, on the defer step, at close. |
+| `workflow/continued-params` | The exact params the target poured with — its `:defaults` under what the caller supplied, JSON-safe. Matches the new root's `workflow/context`. | `continue!`, on the defer step, at close. |
 | `workflow/outcome-input` | The `input` map passed to `choose!`. | `choose!`, on the checkpoint step, at close. |
 | `workflow/outcome-by` | Actor identity that closed the strand; `"engine"` on an auto-closed procedure join. | `choose!` (checkpoint close, when opts supply `:by`); `complete!` (gate close, where `:by` is mandatory); join auto-close (`"engine"`). |
 | `workflow/outcome-notes` | Freeform notes recorded when a step closes. | `complete!`, from `opts :notes`. |
