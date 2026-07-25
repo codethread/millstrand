@@ -123,9 +123,7 @@
             (publish-module-contribution!
              rt :harnesses (requiring-resolve 'harnesses/contribute))
             ((requiring-resolve 'harnesses/reconcile) {:runtime rt})
-            (load-file ".skein/workflows.clj")
-            (publish-module-contribution!
-             rt :workflows (requiring-resolve 'workflows/contribute))
+            (load-module-source! rt :workflows ".skein/workflows.clj")
             (load-module-source! rt :analytics ".skein/analytics.clj")
             (f rt)))
         (finally
@@ -172,28 +170,28 @@
   "Write the F16 regression probe file into config-dir.
 
   When present? is true it contributes one harness seat and one workflow
-  constructor; otherwise it contributes empty partitions — the file-edit a
+  definition entry; otherwise it contributes empty partitions — the file-edit a
   developer makes to remove an entry."
   [config-dir present?]
   (spit (io/file config-dir "f16_probe.clj")
         (str "(ns f16-probe\n"
-             "  \"F16 regression probe: contributes an alias and a workflow constructor.\"\n"
+             "  \"F16 regression probe: contributes an alias and a workflow definition.\"\n"
              "  (:require [ct.spools.agent-run :as shuttle]\n"
              "            [skein.spools.workflow :as workflow]))\n"
              "(defn contribute [_]\n"
              "  {shuttle/alias-kind "
              (if present? "{:f16-probe-seat {:alias-of :codex}}" "{}") "\n"
-             "   workflow/constructor-kind "
-             (if present? "{:f16-probe-flow 'workflows/story-workflow}" "{}") "})\n"
+             "   workflow/definition-kind "
+             (if present? "{:f16-probe-flow 'workflows/story}" "{}") "})\n"
              "(def spool {:contribute 'contribute})\n")))
 
 (deftest f16-workspace-partition-refresh-deletes-omitted-seats-and-constructors
   ;; F16 regression: the .skein policy files publish their harness seats, reviewer
-  ;; rosters, and workflow constructors as :workspace-layer partitions, so removing
+  ;; rosters, and workflow definitions as :workspace-layer partitions, so removing
   ;; an entry from the file and refreshing must DELETE it from the live registry.
   ;; The reconcile->install! path this replaced upserted into a shared REPL owner,
   ;; where a deleted entry stayed silently effective. A probe module contributes an
-  ;; alias-kind seat and a constructor-kind entry, then drops both and refreshes.
+  ;; alias-kind seat and a definition-kind entry, then drops both and refreshes.
   (let [db-file (db-test/temp-db-file)
         config-dir (str "/tmp/skein-f16-probe-" (java.util.UUID/randomUUID))]
     (copy-config-dir! config-dir)
@@ -219,8 +217,8 @@
                   workflow-definition (requiring-resolve 'skein.spools.workflow/workflow-definition)]
               (is (= :codex (:name (resolve-harness :f16-probe-seat)))
                   "the probe seat resolves through its :alias-of tool after startup")
-              (is (= 'workflows/story-workflow (workflow-definition :f16-probe-flow))
-                  "the probe workflow constructor is registered after startup")
+              (is (= 'workflows/story (workflow-definition :f16-probe-flow))
+                  "the probe workflow definition is registered after startup")
               (write-f16-probe! config-dir false)
               (is (contains? #{:applied :unchanged} (:status (runtime/refresh! rt))))
               (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Harness not found"
@@ -228,7 +226,7 @@
                   "omitting the seat and refreshing deletes it from the alias registry")
               (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown registered workflow"
                                     (workflow-definition :f16-probe-flow))
-                  "omitting the constructor and refreshing deletes it from the registry"))))
+                  "omitting the definition and refreshing deletes it from the registry"))))
         (finally
           (weaver-runtime/stop! rt)
           (db-test/delete-sqlite-family! db-file)
@@ -248,7 +246,7 @@
   ["devflow-start" "devflow-ready" "devflow-choices" "devflow-choose"
    "devflow-complete" "devflow-advance"
    "devflow-describe" "devflow-run-history" "devflow-squash-run" "devflow-status"
-   "workflow-runs" "devflow-conventions" "flow-await" "hitl"])
+   "workflow-runs" "devflow-conventions" "hitl"])
 
 (def ^:private named-query-names
   "The config-owned named queries whose registered definitions the refactor must
@@ -315,7 +313,7 @@
                    "devflow-choose" "devflow-complete" "devflow-advance"
                    "devflow-describe" "devflow-run-history" "devflow-squash-run"
                    "devflow-status" "workflow-runs" "devflow-conventions"
-                   "flow-await" "hitl" "land" "flow" "agent" "bench"]]
+                   "hitl" "land" "workflow" "agent" "bench"]]
     (is (some #(= op-name (:name %)) (weaver/ops rt)) op-name))
   (is (some #(= "delegate-pipeline" (:name %)) (patterns/patterns rt)))
   ;; agent-plan is spool-owned now; a real startup wires the agents spool in
@@ -372,19 +370,20 @@
                     {:name "feature-costs" :help "strand help feature-costs"
                      :purpose "Agent-run cost/usage rollup beneath a work root, as pure data. Registered by .skein/analytics.clj."}
                     {:name "agent" :help "strand help agent" :manual "strand about agent"}
-                    {:name "flow" :help "strand help flow"
+                    {:name "workflow" :help "strand help workflow" :manual "strand about workflow"
                      :purpose (format-alpha/reflow
-                               "|Generic driver for any registered workflow: start by name, then
-                                |next/complete/choose by run-id. The registered story workflow is
-                                |the module-shaping discipline: split-first refactor,
-                                |public-surface tests, auto-spawned adversarial review gates,
-                                |measure, fold-back-or-keep-split checkpoint. Pour it for
-                                |substantial module work anywhere; for skein.api.* modules
-                                |SPEC-003.C19a is the binding form contract. Start params
-                                |(JSON): feature, module, worktree required; card and
-                                |reviewer-harness (a seat outside your model family; default
-                                |sol-med) optional. Registered by .skein/workflows.clj.")}
-                    {:name "flow-await" :help "strand help flow-await"}
+                               "|Shipped generic worker surface over every registered workflow:
+                                |list/show the catalogue, then start, ready, complete, choose,
+                                |continue, and await a run. Activated by .skein/init.clj. The
+                                |registered story workflow is the module-shaping discipline:
+                                |split-first refactor, public-surface tests, auto-spawned
+                                |adversarial review gates, measure, fold-back-or-keep-split
+                                |checkpoint. Pour it for substantial module work anywhere
+                                |(`strand workflow start <id> --workflow story --params ...`);
+                                |for skein.api.* modules SPEC-003.C19a is the binding form
+                                |contract. `strand workflow show story` prints its param
+                                |contract; the definitions are registered by
+                                |.skein/workflows.clj.")}
                     {:name "hitl" :help "strand help hitl" :purpose "Interactive user+agent session with a self-terminating tracking strand."}
                     {:name "land" :help "strand help land" :manual "strand about land"
                      :purpose (format-alpha/reflow
@@ -959,17 +958,20 @@
         (is (= choices (:choice-details checkpoint)))
         (is (= choices (:choice-details next-checkpoint)))
         (is (= choices (:choice-details status-checkpoint))))
-      ;; the sign-off checkpoint offers approved + abort; both declare required input
+      ;; the sign-off checkpoint offers approved + abort; each names one
+      ;; whole-map input spec, poured with the form graph the worker is shown
       (let [choices (:choice-details
                      (first (:ready (op! "land" ["ready" "land-x"]))))
-            approved-input (get-in choices ["approved" "input"])
-            abort-input (get-in choices ["abort" "input"])]
+            approved-input (get-in choices ["approved" "input-spec"])
+            abort-input (get-in choices ["abort" "input-spec"])]
         (is (= #{"approved" "abort"} (set (keys choices))))
-        (is (= #{"subject" "body"} (set (map #(get % "key") approved-input))))
-        (is (every? #(true? (get % "required")) approved-input))
-        (is (= "reason" (get (first abort-input) "key")))
-        (is (true? (get (first abort-input) "required"))))
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"missing required keys"
+        (is (= "workflows/land-merge-input" (get approved-input "spec")))
+        (is (= "workflows/land-abort-input" (get abort-input "spec")))
+        (is (= "(clojure.spec.alpha/keys :req-un [:workflows/subject :workflows/body])"
+               (get (first (get approved-input "spec-forms")) "form")))
+        (is (= "(clojure.spec.alpha/keys :req-un [:workflows/reason])"
+               (get (first (get abort-input "spec-forms")) "form"))))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Value does not satisfy the named spec"
                             (op! "land" ["choose" "land-x" "approved"])))
       ;; approval routes to the mechanical merge continuation. Subject and body
       ;; remain argv elements rather than being interpolated into shell source.
@@ -1172,18 +1174,20 @@
   "Assert repo startup guards every module that relies on the workflow coordinate."
   [rt]
   (let [modules (:modules (runtime/status rt))]
-    (doseq [id [:skein/spools-workflow :skein/spools-shell]]
+    (doseq [id [:skein/spools-workflow :skein/spools-workflow-cli :skein/spools-shell]]
       (is (= ['skein.spools/workflow] (:spools (get modules id)))
           (str id " must opt into skein.spools/workflow")))
+    (is (= [:skein/spools-workflow] (:after (get modules :skein/spools-workflow-cli)))
+        "the opt-in worker CLI orders after the engine module it contributes beside")
     (is (= ['skein.spools/workflow 'ct.spools/agent-run
             'codethread/devflow 'skein.macros/macros]
            (:spools (get modules :config)))
         ":config must guard every spool coordinate its config.clj ns requires")
     (is (true? (:required? (get modules :config)))
         ":config is required — a guarded but non-required module skips silently, dropping the op/query surface")
-    (is (= ['skein.spools/workflow 'ct.spools/delegation]
+    (is (= ['skein.spools/workflow 'ct.spools/delegation 'skein.macros/macros]
            (:spools (get modules :workflows)))
-        ":workflows must opt into skein.spools/workflow and ct.spools/delegation")))
+        ":workflows must opt into skein.spools/workflow, ct.spools/delegation, and the authoring macros")))
 
 (defn- assert-kanban-tracker-installed
   "Assert startup declared the required devflow tracker binding and it is live."
@@ -1375,6 +1379,7 @@
   Guild ships in-tree but is not activated in this workspace."
   {:skein/spools-batteries 'skein.spools.batteries/spool
    :skein/spools-workflow 'skein.spools.workflow/spool
+   :skein/spools-workflow-cli 'skein.spools.workflow.cli/spool
    :skein/spools-shell 'skein.spools.executors.shell/spool
    :skein/spools-unsafe-text-search 'skein.spools.unsafe-text-search/spool
    :skein/spools-chime 'skein.spools.chime/spool

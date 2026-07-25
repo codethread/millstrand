@@ -121,8 +121,7 @@
      ;; is a declared publication backend before workflows.clj contributes to it
      ((requiring-resolve 'skein.spools.workflow/contribute)
       {:runtime runtime :module/key :skein/spools-workflow})
-     (load-file ".skein/workflows.clj")
-     (publish-contribution! runtime :workflows (requiring-resolve 'workflows/contribute))
+     (publish-authoring! runtime :workflows ".skein/workflows.clj")
      (let [provenances #{'config 'analytics 'workflows}
            checked (atom #{})
            check! (fn [operation context value]
@@ -133,15 +132,12 @@
        (is (seq entries))
        (is (empty? missing) (str "production ops missing :returns: " missing))
        (doseq [[operation context] required]
-         (check! operation context
-                 (if (= "flow-await" operation)
-                   {}
-                   {:operation operation})))
+         (check! operation context {:operation operation}))
        (let [{:keys [unchecked]} (owner-return-coverage runtime provenances @checked)]
          (is (= required @checked))
          (is (empty? unchecked)))
-       (testing "only the flat unstamped flow-await result omits operation"
-         (is (= #{"flow-await"}
+       (testing "every repo op stamps :operation in its declared return"
+         (is (= #{}
                 (into #{}
                       (keep (fn [{:keys [name returns]}]
                               (when (and (= 'config (:provenance

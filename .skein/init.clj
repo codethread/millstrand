@@ -14,7 +14,7 @@
 ;;
 ;; File-per-concern map (each is one module):
 ;;   config.clj        — named queries + the devflow/kanban/hitl CLI op surface
-;;   workflows.clj     — hand-authored land/story workflows and their ops
+;;   workflows.clj     — hand-authored land/story workflow definitions + the land op
 ;;   harnesses.clj     — harness seats + routing policy
 ;;   reviewers.clj     — reviewer rosters
 ;;   attention.clj     — chime attention rules
@@ -48,6 +48,14 @@
 (runtime/module! runtime :skein/spools-workflow
                  {:ns 'skein.spools.workflow
                   :spools ['skein.spools/workflow]})
+;; The generic worker CLI is a separate, opt-in module of the same spool: the
+;; engine ships no verbs, and this declaration is what puts the root `workflow`
+;; op (list/show/start/ready/complete/choose/continue/await) on the surface for
+;; every registered definition. Dropping it and refreshing removes the verb.
+(runtime/module! runtime :skein/spools-workflow-cli
+                 {:ns 'skein.spools.workflow.cli
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow]})
 ;; The shell executor ships in the workflow spool root and fulfils :shell gates
 ;; by running the gate command directly. It contributes the :shell executor
 ;; symbol and its query, and its reconcile owns the worker pool + initial scan;
@@ -201,14 +209,17 @@
                   :spools ['skein.macros/macros]
                   :after [:macros/ops]
                   :required? true})
-;; workflows.clj contributes the land/story workflow constructors, the land/flow
-;; ops, and the delegate-pipeline pattern as its workspace-owned partitions, and
-;; references config.clj's public CLI-tail helpers at load time, so it orders
-;; after :config as well as the workflow/delegation spools.
+;; workflows.clj authors the land/story workflow definitions with defworkflow,
+;; the land op with defop, and the delegate-pipeline pattern with defpattern, so
+;; its contribution is those collected entries. It references config.clj's
+;; public CLI-tail helpers at load time, so it orders after :config as well as
+;; the workflow/delegation spools and the authoring macros.
 (runtime/module! runtime :workflows
                  {:file "workflows.clj"
-                  :spools ['skein.spools/workflow 'ct.spools/delegation]
-                  :after [:skein/spools-workflow :skein/spools-delegation :config]
+                  :spools ['skein.spools/workflow 'ct.spools/delegation
+                           'skein.macros/macros]
+                  :after [:skein/spools-workflow :skein/spools-delegation
+                          :macros/ops :macros/patterns :config]
                   :required? true})
 
 ;; The subagent gate executor reconciles last: its reconcile runs an initial gate

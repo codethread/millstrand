@@ -1,7 +1,16 @@
 (ns workflows
   "This repo's hand-authored coordination workflows and their command surface:
-  the coordinator `land` workflow (family \"land\") with its `land` op, and the
-  `delegate-pipeline` weave pattern for sequential delegated subagent gates.
+  the coordinator `land` workflow (family \"land\") with its `land` op, the
+  module-shaping `story` workflow, and the `delegate-pipeline` weave pattern for
+  sequential delegated subagent gates.
+
+  Every workflow here is a static `defworkflow` Var: a definition a worker can
+  read through `strand workflow show <name>` before starting a run, with its
+  param contract owned by a spec rather than by a constructor's argument list
+  (PROP-Wcd-001.S12). The generic driving surface is the shipped `workflow` op
+  activated in init.clj; the `land` op survives because it adds domain behavior
+  the engine has no business knowing — the singleton merge lock and the kanban
+  lane moves.
 
   The devflow lifecycle itself is the external `ct.spools.devflow` spool;
   its thin CLI wrapper ops live in config.clj. This file is loaded after
@@ -9,6 +18,8 @@
   and friends) so the `step=<id>` tail convention has one definition."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [skein.macros.ops :refer [defop]]
+            [skein.macros.patterns :refer [defpattern]]
             [skein.api.current.alpha :as current]
             [skein.api.format.alpha :as format-alpha]
             [skein.api.weaver.alpha :as weaver]
@@ -189,8 +200,10 @@
                 (seq edge-specs) (assoc :edges edge-specs))))
           strands)))
 
-(defn delegate-pipeline
-  "Create a chain-loop workflow for sequential delegated pipeline gates."
+(defpattern delegate-pipeline
+  "Create a sequential chain-loop workflow of subagent gates. Input:
+  {run_id,tasks:[{id,title,body?,harness?,cwd?,max-attempts?}],harness?,cwd?,accept?}."
+  {:spec ::delegate-pipeline-input}
   [{:keys [input]}]
   (let [{:keys [run_id tasks harness cwd accept]} input
         task-gate (workflow/gate
@@ -331,19 +344,37 @@
        "done\n"
        "echo \"all $1 workflow runs at $sha completed successfully\"\n"))
 
+;; The land family's param and choice-input contracts. Each workflow names one
+;; whole-map spec, so `strand workflow show land` prints the contract a run is
+;; judged against and `choose!` re-resolves the live spec before it mutates.
+(s/def ::feature ::non-blank-string)
+(s/def ::branch ::non-blank-string)
+(s/def ::worktree ::non-blank-string)
+(s/def ::card ::non-blank-string)
+(s/def ::subject ::non-blank-string)
+(s/def ::reason ::non-blank-string)
+
+(s/def ::land-params (s/keys :req-un [::feature ::branch ::worktree]
+                             :opt-un [::card]))
+(s/def ::land-merge-params (s/keys :req-un [::feature ::branch ::worktree
+                                            ::subject ::body]
+                                   :opt-un [::card]))
+(s/def ::land-abort-params (s/keys :req-un [::branch ::reason]))
+
+(s/def ::land-abort-input (s/keys :req-un [::reason]))
+(s/def ::land-merge-input (s/keys :req-un [::subject ::body]))
+
 (def ^:private land-abort-reason-input
   "Declared choice input for the land sign-off abort choice: a required
   `:reason` recorded on the abort step (workflow.md §5). `choose!` fails loudly
   before any mutation when it is omitted."
-  [{:key :reason :required true
-    :description "Why landing is being aborted; recorded on the abort step."}])
+  {:spec ::land-abort-input
+   :doc "Why landing is being aborted; recorded on the abort step."})
 
 (def ^:private land-merge-input
   "Declare the squash subject and body required by the approved choice."
-  [{:key :subject :required true
-    :description "Semantic squash subject for gh pr merge."}
-   {:key :body :required true
-    :description "Squashed commits body for gh pr merge."}])
+  {:spec ::land-merge-input
+   :doc "Semantic squash subject and Squashed commits body for gh pr merge."})
 
 (def ^:private land-merge-script
   "Idempotently ready and squash-merge the feature PR."
@@ -374,18 +405,18 @@
        "fi\n"
        "git -C \"$root\" pull --ff-only origin main\n"))
 
-(defn land-abort-workflow
-  "Return the continuation that records an intentional abort of a land run.
+(workflow/defworkflow land-abort
+  "Record an intentional abort of a land run.
 
   Routed to by the sign-off checkpoint's `abort` choice: a hard cutover that
   force-closes the remaining land steps and pours this single record step.
   Nothing merges or pushes; the branch and worktree stay for follow-up."
-  [_opts]
+  {:entrypoints #{:continue}
+   :param-spec ::land-abort-params
+   :defaults {}}
   (workflow/workflow
    (fn [{:keys [branch]}] (str "Abort land: " branch))
-   {:params {:branch (workflow/param :required true)
-             :reason (workflow/param :required true)}
-    :attributes {"workflow/family" "land"
+   {:attributes {"workflow/family" "land"
                  "land/stage" "abort"}}
    (workflow/step :record-abort
                   (fn [{:keys [branch reason]}] (str "Record land abort for " branch ": " reason))
@@ -398,22 +429,18 @@
                                  |task plus its latest note. Do NOT merge or push — nothing has landed;
                                  |the branch and worktree stay for follow-up.")})))
 
-(defn land-merge-workflow
-  "Return the mechanical merge continuation for an approved land run.
+(workflow/defworkflow land-merge
+  "Run the mechanical merge continuation for an approved land run.
 
   The shell gates squash-merge the PR, fast-forward canonical main, and watch
   main CI. Cleanup remains coordinator-owned and releases the merge lock when
   completed."
-  [_opts]
+  {:entrypoints #{:continue}
+   :param-spec ::land-merge-params
+   :defaults {}}
   (workflow/workflow
    (fn [{:keys [branch]}] (str "Merge land: " branch))
-   {:params {:feature (workflow/param :required true)
-             :branch (workflow/param :required true)
-             :worktree (workflow/param :required true)
-             :card (workflow/param :default nil)
-             :subject (workflow/param :required true)
-             :body (workflow/param :required true)}
-    :attributes {"workflow/family" "land"
+   {:attributes {"workflow/family" "land"
                  "land/stage" "merge"}}
    (workflow/gate :merge-pr
                   (fn [{:keys [branch]}] (str "Merge the PR for " branch " via gh"))
@@ -492,8 +519,8 @@
                                         "")
                                       " Then close this land run's root to complete it."))})))
 
-(defn land-workflow
-  "Return the coordinator LANDING workflow for a feature branch (family \"land\").
+(workflow/defworkflow land
+  "Drive the coordinator LANDING workflow for a feature branch (family \"land\").
 
   COORDINATOR-ONLY: worker agents never land. This stage pushes the branch,
   opens a draft PR, watches CI at HEAD, runs roster review, and ends at the
@@ -501,15 +528,14 @@
   the singleton merge lock, and routes to the mechanical `:land-merge`
   continuation. Abort routes to `:land-abort`. Card-backed runs move the card
   to `in_review` when push-draft-pr completes and back to `claimed` on abort.
-  `params` carry `:feature`, `:branch`, `:worktree`, and optional `:card`."
-  [_opts]
+  Start it through `strand land start`, which owns the lock and lane behavior
+  the engine has no business knowing."
+  {:entrypoints #{:start}
+   :param-spec ::land-params
+   :defaults {}}
   (workflow/workflow
    (fn [{:keys [branch]}] (str "Land: " branch))
-   {:params {:feature (workflow/param :required true)
-             :branch (workflow/param :required true)
-             :worktree (workflow/param :required true)
-             :card (workflow/param :default nil)}
-    :attributes {"workflow/family" "land"
+   {:attributes {"workflow/family" "land"
                  "land/branch" (fn [{:keys [branch]}] branch)}}
    (workflow/step :push-draft-pr
                   (fn [{:keys [branch]}] (str "Push " branch " and open a draft PR"))
@@ -611,12 +637,9 @@
                     {:argument :card :value card})))
   (let [context (cond-> {:feature feature :branch branch :worktree worktree}
                   (non-blank-string? card) (assoc :card card))]
-    (workflow/start! feature
-                     (land-workflow context)
-                     context
-                     {:family "land"
-                      :definition 'workflows/land-workflow
-                      :context context})))
+    ;; Started by registered name: the run records `:land` and its resolved
+    ;; symbol, so a repointed definition is visible in the run's own history.
+    (workflow/start! feature :land context {:family "land" :context context})))
 
 (defn land-about
   "Return the coordinator landing discipline manual."
@@ -720,8 +743,81 @@
                       view))
                   ready))))
 
-(defn land-op
-  "Dispatch parsed `strand land ...` subcommands over the land workflow."
+(def ^:private land-arg-spec
+  "Declared command surface for the `land` op (one level of subcommands; the
+  handler dispatches on the first routed subcommand, never a hand-written usage)."
+  {:op "land"
+   :doc "Drive the coordinator landing workflow for a feature branch. Run `strand land about` for the discipline manual."
+   :subcommands
+   {"about" {:doc "Return the landing discipline manual: purpose, step map, and coordinator-only note."
+             :hook-class :read :deadline-class :standard}
+    "start" {:doc "Pour and start the land run for a feature branch."
+             :hook-class :mutating :deadline-class :standard
+             :flags {:branch {:required? true
+                              :doc "Feature branch to land."}
+                     :worktree {:required? true
+                                :doc "Worktree path for the branch."}
+                     :card {:doc "Optional kanban card id to finish at cleanup."}}
+             :positionals [{:name :feature
+                            :required? true
+                            :doc "Feature/branch slug; the land run id."}]}
+    "ready" {:doc "Show the ready land frontier, including checkpoint choice input details."
+             :hook-class :read :deadline-class :standard
+             :positionals [{:name :feature
+                            :required? true
+                            :doc "Land run id (feature/branch slug)."}]}
+    "complete" {:doc "Close a land step; checkpoint results include choice input details."
+                :hook-class :mutating :deadline-class :standard
+                :positionals [{:name :feature
+                               :required? true
+                               :doc "Land run id."}
+                              {:name :tail
+                               :variadic? true
+                               :doc "Optional trailing step=<id> selector."}]}
+    "choose" {:doc "Decide sign-off: approved requires a squash subject/body; abort requires a reason."
+              :hook-class :mutating :deadline-class :standard
+              :positionals [{:name :feature
+                             :required? true
+                             :doc "Land run id."}
+                            {:name :choice
+                             :required? true
+                             :doc "Checkpoint choice: approved or abort."}
+                            {:name :tail
+                             :variadic? true
+                             :doc (format-alpha/reflow
+                                   "|JSON input: approved requires
+                                    |{\"subject\":\"...\",\"body\":\"...\"}; abort
+                                    |requires {\"reason\":\"...\"}. A trailing
+                                    |step=<id> selector is optional.")}]}
+    "status" {:doc "Show land state and ready steps, including checkpoint choice input details."
+              :hook-class :read :deadline-class :standard
+              :positionals [{:name :feature
+                             :required? true
+                             :doc "Land run id."}]}
+    "break-lock" {:doc "Explicitly break a stale merge lock with a reason."
+                  :hook-class :mutating :deadline-class :standard
+                  :positionals [{:name :tail
+                                 :required? true
+                                 :variadic? true
+                                 :doc "Reason text."}]}}})
+
+(def ^:private land-returns
+  {:subcommands
+   (into {}
+         (map (fn [subcommand]
+                [subcommand {:type :map
+                             :required {:operation :string}
+                             :extra :json}]))
+         (keys (:subcommands land-arg-spec)))})
+
+(defop land
+  "Drive the coordinator landing workflow for a feature branch.
+
+  Dispatches the parsed `strand land ...` subcommands over the `land` workflow
+  and its continuations, adding the domain behavior the engine does not own: the
+  singleton merge lock and the kanban lane moves. Run `strand land about` for
+  the discipline manual."
+  {:returns land-returns :arg-spec land-arg-spec}
   [ctx]
   (let [{:keys [subcommand feature choice tail] :as args} (:op/args ctx)
         verb (first subcommand)]
@@ -798,86 +894,30 @@
                                        {:op "land break-lock" :extra (vec (rest tail))})))
                      (break-merge-lock! reason)))))
 
-(def ^:private land-arg-spec
-  "Declared command surface for the `land` op (one level of subcommands; the
-  handler dispatches on the first routed subcommand, never a hand-written usage)."
-  {:op "land"
-   :doc "Drive the coordinator landing workflow for a feature branch. Run `strand land about` for the discipline manual."
-   :subcommands
-   {"about" {:doc "Return the landing discipline manual: purpose, step map, and coordinator-only note."
-             :hook-class :read :deadline-class :standard}
-    "start" {:doc "Pour and start the land run for a feature branch."
-             :hook-class :mutating :deadline-class :standard
-             :flags {:branch {:required? true
-                              :doc "Feature branch to land."}
-                     :worktree {:required? true
-                                :doc "Worktree path for the branch."}
-                     :card {:doc "Optional kanban card id to finish at cleanup."}}
-             :positionals [{:name :feature
-                            :required? true
-                            :doc "Feature/branch slug; the land run id."}]}
-    "ready" {:doc "Show the ready land frontier, including checkpoint choice input details."
-             :hook-class :read :deadline-class :standard
-             :positionals [{:name :feature
-                            :required? true
-                            :doc "Land run id (feature/branch slug)."}]}
-    "complete" {:doc "Close a land step; checkpoint results include choice input details."
-                :hook-class :mutating :deadline-class :standard
-                :positionals [{:name :feature
-                               :required? true
-                               :doc "Land run id."}
-                              {:name :tail
-                               :variadic? true
-                               :doc "Optional trailing step=<id> selector."}]}
-    "choose" {:doc "Decide sign-off: approved requires a squash subject/body; abort requires a reason."
-              :hook-class :mutating :deadline-class :standard
-              :positionals [{:name :feature
-                             :required? true
-                             :doc "Land run id."}
-                            {:name :choice
-                             :required? true
-                             :doc "Checkpoint choice: approved or abort."}
-                            {:name :tail
-                             :variadic? true
-                             :doc (format-alpha/reflow
-                                   "|JSON input: approved requires
-                                    |{\"subject\":\"...\",\"body\":\"...\"}; abort
-                                    |requires {\"reason\":\"...\"}. A trailing
-                                    |step=<id> selector is optional.")}]}
-    "status" {:doc "Show land state and ready steps, including checkpoint choice input details."
-              :hook-class :read :deadline-class :standard
-              :positionals [{:name :feature
-                             :required? true
-                             :doc "Land run id."}]}
-    "break-lock" {:doc "Explicitly break a stale merge lock with a reason."
-                  :hook-class :mutating :deadline-class :standard
-                  :positionals [{:name :tail
-                                 :required? true
-                                 :variadic? true
-                                 :doc "Reason text."}]}}})
-
-(def ^:private land-returns
-  {:subcommands
-   (into {}
-         (map (fn [subcommand]
-                [subcommand {:type :map
-                             :required {:operation :string}
-                             :extra :json}]))
-         (keys (:subcommands land-arg-spec)))})
-
 ;; ---------------------------------------------------------------------------
 ;; story: the module-form refactor workflow (family "story")
 ;; ---------------------------------------------------------------------------
 
-(defn story-fold-workflow
-  "Continuation after :fold-back: merge the split into one story-ordered file."
-  [_opts]
+;; The story family's param contract. The continuations inherit the story run's
+;; context, so they name the same required keys the parent does.
+(s/def ::module ::non-blank-string)
+(s/def ::reviewer-harness ::non-blank-string)
+
+(s/def ::story-params (s/keys :req-un [::feature ::module ::worktree]
+                              :opt-un [::card ::reviewer-harness]))
+(s/def ::story-continuation-params (s/keys :req-un [::feature ::module ::worktree]
+                                           :opt-un [::card ::reviewer-harness]))
+
+(workflow/defworkflow story-fold
+  "Fold a story split back into one story-ordered file.
+
+  The continuation after the fold-decision checkpoint's `:fold-back` choice."
+  {:entrypoints #{:continue}
+   :param-spec ::story-continuation-params
+   :defaults {}}
   (workflow/workflow
    (fn [{:keys [module]}] (str "Story fold: " module))
-   {:params {:feature (workflow/param :required true)
-             :module (workflow/param :required true)
-             :worktree (workflow/param :required true)}
-    :attributes {"workflow/family" "story"}}
+   {:attributes {"workflow/family" "story"}}
    (workflow/step :fold
                   (fn [{:keys [module]}] (str "Fold " module " into one story-ordered file"))
                   :self
@@ -912,15 +952,16 @@
                                         |--branch <b> --worktree <path> [--card <id>]`. Then
                                         |close this run.")))})))
 
-(defn story-keep-workflow
-  "Continuation after :keep-split: the per-concern split is the deliverable."
-  [_opts]
+(workflow/defworkflow story-keep
+  "Keep a story split: the per-concern files are the deliverable.
+
+  The continuation after the fold-decision checkpoint's `:keep-split` choice."
+  {:entrypoints #{:continue}
+   :param-spec ::story-continuation-params
+   :defaults {}}
   (workflow/workflow
    (fn [{:keys [module]}] (str "Story keep-split: " module))
-   {:params {:feature (workflow/param :required true)
-             :module (workflow/param :required true)
-             :worktree (workflow/param :required true)}
-    :attributes {"workflow/family" "story"}}
+   {:attributes {"workflow/family" "story"}}
    (workflow/step :finish-validate
                   (fn [{:keys [module]}] (str "Validate the split and hand " module " to landing"))
                   :self
@@ -942,8 +983,8 @@
                                         |--branch <b> --worktree <path> [--card <id>]`. Then
                                         |close this run.")))})))
 
-(defn story-workflow
-  "Return the module-form STORY workflow (family \"story\").
+(workflow/defworkflow story
+  "Run the module-form STORY workflow (family \"story\").
 
   The forcing function for writing module code: identify the changed
   modules, make the overall changes, take an adversarial intent review
@@ -954,18 +995,15 @@
   story-ordered file (roughly 500 lines or less) or keep the split.
   Either branch validates and hands off to the land roster. One run
   covers one module wave; extra large modules take their own runs."
-  [_opts]
+  {:entrypoints #{:start}
+   :param-spec ::story-params
+   ;; The engine cannot know which agent is driving, so the cross-vendor
+   ;; invariant lives here: the pourer names a review seat OUTSIDE its own
+   ;; model family, and this default is the one it overrides.
+   :defaults {:reviewer-harness "sol-med"}}
   (workflow/workflow
    (fn [{:keys [module]}] (str "Story: " module))
-   {:params {:feature (workflow/param :required true)
-             :module (workflow/param :required true)
-             :worktree (workflow/param :required true)
-             :card (workflow/param :default nil)
-             ;; The engine cannot know which agent is driving, so the
-             ;; cross-vendor invariant lives here: the pourer names a
-             ;; review seat OUTSIDE its own model family.
-             :reviewer-harness (workflow/param :default "sol-med")}
-    :attributes {"workflow/family" "story"
+   {:attributes {"workflow/family" "story"
                  "story/module" (fn [{:keys [module]}] module)}}
    (workflow/step :identify-modules
                   (fn [{:keys [feature]}] (str "Identify modules " feature " changes"))
@@ -1039,9 +1077,9 @@
                                         |large ones earn a wave. This run's wave covers")
                                       " `" module "`; "
                                       (format-alpha/reflow
-                                       "|start one further `strand flow start <id> --workflow
-                                        |story` run per additional large module. Record the
-                                        |classification.")))})
+                                       "|start one further `strand workflow start <id>
+                                        |--workflow story` run per additional large module.
+                                        |Record the classification.")))})
    (workflow/step :split-refactor
                   (fn [{:keys [module]}] (str "Write the per-concern split for " module))
                   :self
@@ -1134,160 +1172,3 @@
                                      |internal/<concern> files are the deliverable.")
                                    :next :story-keep}]
                         :attributes {"workflow/decision-point" "story-fold-decided"})))
-
-(defn flow-op
-  "Dispatch parsed `strand flow ...` subcommands over any registered workflow.
-
-  The generic driving surface: `start` pours a registered workflow by name
-  with a JSON params object; `next`, `complete`, `choose`, and `status` step
-  any run by run-id. Registered workflows (story, land continuations, ...)
-  need no op of their own.
-
-  Superseded by the shipped opt-in `workflow` op and retained only until that
-  adapter covers this op's semantics (PROP-Wcd-001.S14): read a run's history
-  through trusted Clojure, not `flow status`, which reports live state only."
-  [ctx]
-  (let [{:keys [subcommand run-id workflow choice tail] :as _args} (:op/args ctx)
-        verb (first subcommand)
-        op-result (fn [m] (assoc m :operation (str "flow " verb)))]
-    (condp = verb
-      "start" (let [raw-params (first tail)
-                    _ (when (> (count tail) 1)
-                        (throw (ex-info "flow start accepts at most one JSON params argument"
-                                        {:op "flow start" :extra (vec (rest tail))})))
-                    params (if raw-params
-                             (config/parse-json-object-arg "flow start" raw-params)
-                             {})]
-                (config/require-non-blank! :run-id run-id)
-                (config/require-non-blank! :workflow workflow)
-                (op-result
-                 (merge {:run-id run-id :workflow workflow}
-                        (workflow/start! run-id
-                                         (keyword workflow)
-                                         params
-                                         {:family workflow
-                                          :definition (keyword workflow)
-                                          :context params}))))
-      "next" (do (config/require-non-blank! :run-id run-id)
-                 (op-result {:run-id run-id
-                             :ready (workflow/ready run-id)
-                             :done (workflow/done? run-id)}))
-      "complete" (let [[rest-tokens step] (config/pop-step-selector "flow complete" tail)]
-                   (config/require-non-blank! :run-id run-id)
-                   (when (seq rest-tokens)
-                     (throw (ex-info "flow complete accepts only a run-id and an optional step=<id> selector"
-                                     {:op "flow complete" :extra (vec rest-tokens)})))
-                   (op-result
-                    (merge {:run-id run-id}
-                           (workflow/complete! run-id (if step {:step step} {})))))
-      "choose" (let [[rest-tokens step] (config/pop-step-selector "flow choose" tail)
-                     raw-input (first rest-tokens)]
-                 (config/require-non-blank! :run-id run-id)
-                 (when (> (count rest-tokens) 1)
-                   (throw (ex-info "flow choose accepts at most one JSON-input argument"
-                                   {:op "flow choose" :extra (vec (rest rest-tokens))})))
-                 (let [input (if raw-input (config/parse-json-object-arg "flow choose" raw-input) {})]
-                   (op-result
-                    (merge {:run-id run-id :choice choice}
-                           (workflow/choose! run-id (keyword choice) input
-                                             (if step {:step step} {}))))))
-      "status" (do (config/require-non-blank! :run-id run-id)
-                   (let [root (workflow/current-root run-id)]
-                     (op-result {:run-id run-id
-                                 :roots (mapv entity-projection (if root [root] []))
-                                 :done (workflow/done? run-id)
-                                 :ready (workflow/ready run-id)})))
-      ;; the declared arg-spec rejects unknown subcommands before dispatch;
-      ;; this default is defense in depth, not a reachable CLI path.
-      (throw (ex-info "unsupported flow subcommand"
-                      {:subcommand subcommand
-                       :allowed ["start" "next" "complete" "choose" "status"]})))))
-
-(def ^:private flow-arg-spec
-  "Declared command surface for the generic `flow` op."
-  {:op "flow"
-   :doc "Drive any registered workflow: start by name, then next/complete/choose/status by run-id."
-   :subcommands
-   {"start" {:doc "Pour and start a registered workflow for a run-id with JSON params."
-             :hook-class :mutating :deadline-class :standard
-             :flags {:workflow {:required? true
-                                :doc "Registered workflow name (e.g. story)."}}
-             :positionals [{:name :run-id
-                            :required? true
-                            :doc "Run id for the new workflow run."}
-                           {:name :tail
-                            :variadic? true
-                            :doc "One JSON object of workflow params."}]}
-    "next" {:doc "Show ready step views and done state for a run."
-            :hook-class :read :deadline-class :standard
-            :positionals [{:name :run-id :required? true :doc "Workflow run id."}]}
-    "complete" {:doc "Close the current non-checkpoint step of a run."
-                :hook-class :mutating :deadline-class :standard
-                :positionals [{:name :run-id :required? true :doc "Workflow run id."}
-                              {:name :tail
-                               :variadic? true
-                               :doc "Optional trailing step=<id> selector."}]}
-    "choose" {:doc "Record a checkpoint choice on a run."
-              :hook-class :mutating :deadline-class :standard
-              :positionals [{:name :run-id :required? true :doc "Workflow run id."}
-                            {:name :choice :required? true :doc "Checkpoint choice key."}
-                            {:name :tail
-                             :variadic? true
-                             :doc "Optional JSON input and a trailing step=<id> selector."}]}
-    "status" {:doc "Show run state and ready steps."
-              :hook-class :read :deadline-class :standard
-              :positionals [{:name :run-id :required? true :doc "Workflow run id."}]}}})
-
-(def ^:private flow-returns
-  {:subcommands
-   (into {}
-         (map (fn [subcommand]
-                [subcommand {:type :map
-                             :required {:operation :string}
-                             :extra :json}]))
-         (keys (:subcommands flow-arg-spec)))})
-
-(defn contribute
-  "Contribute this repo's hand-authored workflows as workspace-owned partitions:
-  the `land` and `flow` CLI ops, the `delegate-pipeline` weave pattern, and the
-  land/story workflow constructors.
-
-  Owning each kind's partition is what makes deletion-by-omission work: dropping
-  an op, the pattern, or a constructor here and refreshing removes it from the
-  live registry, because publication replaces this module's complete partition
-  rather than upserting into a shared REPL/direct owner. The op and pattern
-  entries mirror the canonical registry shapes (the same maps
-  `weaver/register-op!` and `patterns/register-pattern!` assemble), so the
-  published surface is identical to the imperative path they replace."
-  [_]
-  {:ops {"land" {:name "land"
-                 :fn 'workflows/land-op
-                 :stream? false
-                 :provenance 'workflows
-                 :doc (:doc land-arg-spec)
-                 :arg-spec land-arg-spec
-                 :returns land-returns}
-         "flow" {:name "flow"
-                 :fn 'workflows/flow-op
-                 :stream? false
-                 :provenance 'workflows
-                 :doc (:doc flow-arg-spec)
-                 :arg-spec flow-arg-spec
-                 :returns flow-returns}}
-   :patterns {"delegate-pipeline"
-              {:name "delegate-pipeline"
-               :fn 'workflows/delegate-pipeline
-               :input-spec ::delegate-pipeline-input
-               :doc "Create a sequential chain-loop workflow of subagent gates. Input: {run_id,tasks:[{id,title,body?,harness?,cwd?,max-attempts?}],harness?,cwd?,accept?}."}}
-   workflow/constructor-kind {:land-merge 'workflows/land-merge-workflow
-                              :land-abort 'workflows/land-abort-workflow
-                              :story 'workflows/story-workflow
-                              :story-fold 'workflows/story-fold-workflow
-                              :story-keep 'workflows/story-keep-workflow}})
-
-(def spool
-  "Entry-point declaration for the workflows file module.
-
-  The workflow constructors and ops publish through `contribute`. Unqualified
-  symbols resolve against this namespace (PROP-Dsp-001.G1/Q4)."
-  {:contribute 'contribute})
