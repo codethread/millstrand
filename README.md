@@ -290,7 +290,7 @@ The example at the top of this page shows the shape. Here is the workflow from t
                        :depends-on [:signoff-review]
                        :kind :agent
                        :choices [{:key :approved :label "Approve" :next :land-merge}
-                                 {:key :abort    :label "Abort"   :next :land-abort}]))
+                                 {:key :abort    :label "Abort"   :next :land-abort}])))
 ```
 
 </details>
