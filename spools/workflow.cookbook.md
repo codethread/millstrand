@@ -116,7 +116,9 @@ Honest source: adapted from the end-to-end example that formerly lived in `workf
 
 **Situation.** Your process is several stages long — propose, then spec+plan, then implement — and each stage ends with a decision that hands off to the *next* stage rather than looping. You want the stages to be independently reloadable.
 
-**Composition.** Register each stage constructor under a stable keyword with `register-workflow!`, then route forward from a checkpoint with `:next :that-keyword`. The registry is the indirection layer.
+**Composition.** Register each stage under a stable keyword with `register-workflow!`, then route forward from a checkpoint with `:next :that-keyword`. The registry is the indirection layer.
+
+A stage that does not need to build itself from params is better written as a static definition — `defworkflow` gives it a name, a doc, and declared entrypoints, and a module owner contributes it without a registration call at all. The constructor form below stays supported; see "Static definitions" in the [contract doc](./workflow.md) for the newer shape.
 
 ```clojure
 (require '[skein.spools.workflow :as workflow])

@@ -224,7 +224,7 @@
   ([rt input params] (plan rt input params {}))
   ([rt input params opts]
    (let [resolved (cond
-                    (keyword? input) (resolve-registered rt input)
+                    (registry-input? input) (resolve-registered rt input)
                     (var? input) (resolve-var-input input)
                     :else nil)]
      (if (nil? resolved)
