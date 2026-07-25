@@ -274,23 +274,10 @@ Driving it: `:prepare` completes as usual, then the ready frontier is the exit, 
 
 **Why this shape.**
 
-- **Neither `call` nor a checkpoint fits.** `call` returns to its caller, so the
-  card would resume after devflow finished — but there is nothing left to do, and
-  the card is not the owner of what follows. A checkpoint's `:next` has to name
-  its routes where the workflow is authored, which is exactly the dependency the
-  kanban spool is avoiding.
-- **The bind is the authority boundary.** The template says *where* a worker
-  chooses; the person who installed both spools says *what they may choose from*.
-  Neither spool acquires a dependency on the other, and the allowlist is a
-  deliberate decision rather than "any registered workflow".
-- **The target keeps its own params.** `continue!` merges no parent context, so
-  devflow sees its own `:defaults` under exactly the params supplied for it and
-  validates them whole. A card param that happens to share a name with a devflow
-  param cannot leak in and quietly mean the wrong thing.
-- **The exit is terminal, and the engine holds you to it.** Nothing may
-  `:depends-on` a defer, and a workflow declaring one cannot be `call`-ed. If you
-  find yourself wanting a step after the exit, you want a checkpoint route or a
-  `call` instead — the hand-off is not really a hand-off.
+- **Neither `call` nor a checkpoint fits.** `call` returns to its caller, so the card would resume after devflow finished — but there is nothing left to do, and the card is not the owner of what follows. A checkpoint's `:next` has to name its routes where the workflow is authored, which is exactly the dependency the kanban spool is avoiding.
+- **The bind is the authority boundary.** The template says *where* a worker chooses; the person who installed both spools says *what they may choose from*. Neither spool acquires a dependency on the other, and the allowlist is a deliberate decision rather than "any registered workflow".
+- **The target keeps its own params.** `continue!` merges no parent context, so devflow sees its own `:defaults` under exactly the params supplied for it and validates them whole. A card param that happens to share a name with a devflow param cannot leak in and quietly mean the wrong thing.
+- **The exit is terminal, and the engine holds you to it.** Nothing may `:depends-on` a defer, and a workflow declaring one cannot be `call`-ed. If you find yourself wanting a step after the exit, you want a checkpoint route or a `call` instead — the hand-off is not really a hand-off.
 
 Honest source: PROP-Wcd-001.EX7 in `devflow/feat/s9i26-flow-cli/proposal.md`, and the defer suite in `test/skein/spools/workflow_test.clj` (`continue-transfers-the-root-and-records-the-cutover`, `continue-isolates-the-target-from-the-parent-context`).
 

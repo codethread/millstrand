@@ -2755,9 +2755,18 @@
                                (try {:ok (workflow/continue! "race-1" target {:feature "raced"})}
                                     (catch clojure.lang.ExceptionInfo e {:err e}))))
                            [:wt-devflow :wt-spike])
-            results (mapv deref attempts)
+            ;; bounded: a regression that deadlocks the guard must fail this test
+            ;; rather than hang the suite, so the deref gives up and cancels
+            results (mapv (fn [attempt]
+                            (let [result (deref attempt (test-support/await-budget-ms) ::timeout)]
+                              (when (= ::timeout result)
+                                (future-cancel attempt))
+                              result))
+                          attempts)
             winners (filter :ok results)
             losers (filter :err results)]
+        (is (not-any? #(= ::timeout %) results)
+            "both continuations returned; a timeout here means the guard deadlocked")
         (is (= 1 (count winners)) "exactly one continuation pours")
         (is (= 1 (count losers)))
         (is (= :workflow/step-not-defer (:reason (ex-data (:err (first losers)))))
