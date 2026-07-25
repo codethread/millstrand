@@ -55,6 +55,14 @@
        runtime
        #(do
           (spool-sync/sync-approved-spools runtime)
+          ;; devflow loads under its own module key first, the way init.clj's
+          ;; `:after` ordering loads it before `:config`. Its stages are
+          ;; top-level `defworkflow` forms, so letting config.clj's require pull
+          ;; it in for the first time inside the `:config` collector would file
+          ;; devflow's declarations under `:config`, which the module-graph
+          ;; collection-source guard rightly refuses.
+          (spool-sync/load-synced-namespace!
+           runtime 'ct.spools.devflow :skein/spools-devflow)
           (f runtime))))))
 
 (defn- publish-authoring!
