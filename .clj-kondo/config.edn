@@ -3,7 +3,10 @@
  ;; binding forms as let to resolve the bound symbols.
  :lint-as {clojure.test.check.clojure-test/defspec clojure.test/deftest
            skein.test.alpha/with-weaver-world clojure.core/let
-           skein.userland-test/with-runtimes clojure.core/let}
+           skein.userland-test/with-runtimes clojure.core/let
+           ;; defworkflow defines a Var from (name doc opts definition); def's
+           ;; shape resolves the name without kondo expanding the macro.
+           skein.spools.workflow/defworkflow clojure.core/def}
  :hooks {:analyze-call {clojure.core/ns hooks.project-rules/ns-docstring
                         ns hooks.project-rules/ns-docstring
                         clojure.core/def hooks.project-rules/no-spool-module-atom
@@ -39,5 +42,12 @@
                       skein.spools.workflow-test/registry-alt-second-stage
                       skein.spools.workflow-test/downstream-stage-workflow
                       skein.spools.workflow-test/introspect-stage-b-workflow
+                      skein.spools.workflow-test/bad-defaults-definition
+                      skein.spools.workflow-test/bad-spec-definition
+                      skein.spools.workflow-test/revisable-definition
+                      skein.spools.workflow-test/revisable-definition-v2
+                      skein.spools.workflow-test/live-var-definition
+                      skein.spools.workflow-test/exploding-constructor
+                      skein.spools.workflow-test/malformed-constructor
                       skein.chime-test/throwing-rule
                       skein.chime-test/invalid-notification-rule]}}}

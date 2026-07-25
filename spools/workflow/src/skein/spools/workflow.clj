@@ -11,9 +11,10 @@
   here; the mechanics they compose live in `skein.spools.workflow.internal.*`:
   `compile` (compile/normalize/expand pipeline), `query` (run views/ready/done/
   history), `routing` (checkpoint choice validation, routing, and cascading
-  closes), `registry` (runtime-owned registries), and `util` (shared validation/
-  ref-normalization). Specs stay registered here so `explain` and
-  `s/explain-data` paths are unchanged."
+  closes), `registry` (runtime-owned registries), `definitions` (definition
+  resolution, entrypoint rules, and pre-publication candidate validation), and
+  `util` (shared validation/ref-normalization). Specs stay registered here so
+  `explain` and `s/explain-data` paths are unchanged."
   (:refer-clojure :exclude [compile])
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -27,6 +28,7 @@
             [skein.api.vocab.alpha :as vocab]
             [skein.api.weaver.alpha :as weaver]
             [skein.spools.workflow.internal.compile :as cmp]
+            [skein.spools.workflow.internal.definitions :as defs]
             [skein.spools.workflow.internal.query :as query]
             [skein.spools.workflow.internal.registry :as registry]
             [skein.spools.workflow.internal.routing :as routing]
@@ -34,6 +36,7 @@
 
 (declare non-blank-string?
          explain-step explain-gate explain-checkpoint explain-call explain-workflow
+         explain-definition
          reject-unknown-keys! step*
          param-opt-keys step-opt-keys checkpoint-opt-keys call-opt-keys workflow-opt-keys
          choice-name choice-details-attr reject-unknown-choice-keys!
@@ -52,12 +55,14 @@
   ([topic]
    (case topic
      :workflow (explain-workflow)
+     :definition (explain-definition)
      :step (explain-step)
      :gate (explain-gate)
      :checkpoint (explain-checkpoint)
      :call (explain-call)
      (fail! "Unknown workflow explain topic"
-            {:topic topic :topics [:workflow :step :gate :checkpoint :call]}))))
+            {:topic topic
+             :topics [:workflow :definition :step :gate :checkpoint :call]}))))
 
 (defn param
   "Return a workflow param definition.
@@ -151,14 +156,21 @@
   "Return a Clojure-native workflow definition.
 
   The returned map is the same data shape accepted by `compile`, but avoids a
-  separate TOML/JSON formula language."
+  separate TOML/JSON formula language. An optional leading options map may carry
+  `:params`, `:attributes`, `:state`, and `:form`, plus the registration
+  contract a static definition declares about itself: `:doc`, `:entrypoints`,
+  `:param-spec`, and `:defaults` (see `defworkflow`). Options and the complete
+  assembled definition are both validated here, so a malformed nested step,
+  choice, or call fails at the builder rather than at the pour."
   [name & body]
   (let [[opts steps] (if (and (map? (first body))
                               (not (contains? (first body) :id)))
                        [(first body) (rest body)]
                        [{} body])]
     (reject-unknown-keys! opts workflow-opt-keys :workflow)
-    (merge opts {:name name :steps (vec steps)})))
+    (require-valid! ::workflow-options opts "Invalid workflow options")
+    (require-valid! ::definition (merge opts {:name name :steps (vec steps)})
+                    "Invalid workflow definition")))
 
 (defn compile
   "Return a batch payload for a workflow molecule or wisp.
@@ -192,8 +204,9 @@
 (defn describe
   "Return a compile-time projection of `workflow` without materializing any strand.
 
-  `workflow` may be a workflow map, a constructor var, or a registered workflow
-  keyword. Loop/call expansion and condition filtering apply exactly as
+  `workflow` may be a workflow map, a definition var, or a registered workflow
+  keyword; a static definition's `:defaults` merge under `params` first. Loop and
+  call expansion and condition filtering apply exactly as
   `compile` runs them, so the description matches what would pour for `params`:
   excluded steps are absent, procedure joins appear as `:procedure` steps, and
   each checkpoint's choices carry their declared `:input` and their
@@ -207,8 +220,9 @@
   ([workflow]
    (describe workflow {}))
   ([workflow params]
-   (let [{workflow :workflow} (cmp/workflow-input-plan workflow params)
-         [rendered _ _ steps] (cmp/resolve-and-normalize workflow params {})]
+   (let [rt (when (defs/registry-input? workflow) (current/runtime))
+         plan (defs/plan rt workflow params)
+         [rendered _ _ steps] (cmp/resolve-and-normalize (:workflow plan) (:params plan) {})]
      {:name (:name rendered)
       :steps (mapv cmp/describe-step steps)})))
 
@@ -276,11 +290,14 @@
   result shape.
 
   `run-id` is the stable active workflow instance handle. `workflow` may be a
-  pre-built workflow map, a constructor var, or a registered workflow keyword.
-  Var/keyword starts derive `:definition`; when `:context` is absent, params are
-  persisted as context after keyword values are stringified and non-JSON-safe
-  values are rejected loudly. `opts` may include :family, :definition, :context,
-  and :root-attributes. `:ready` is empty when the run has no ready workflow work
+  pre-built workflow map, a definition var, or a registered workflow keyword.
+  A registered static definition must declare the `:start` entrypoint. Var and
+  keyword starts derive `:definition` (and, for a registered name,
+  `workflow/definition-name`); a static definition's `:defaults` merge under
+  `params`. When `:context` is absent, the resolved params are persisted as
+  context after keyword values are stringified and non-JSON-safe values are
+  rejected loudly. `opts` may include :family, :definition, :context, and
+  :root-attributes. `:ready` is empty when the run has no ready workflow work
   (e.g. an empty workflow, which also reports `:done true`)."
   ([run-id workflow params]
    (start! run-id workflow params {}))
@@ -288,14 +305,16 @@
    (let [rt (current/runtime)]
      (when (query/current-root-with-rt rt run-id)
        (fail! "Active workflow run already exists" {:run-id run-id}))
-     (let [{resolved-workflow :workflow derived-definition :definition}
-           (cmp/workflow-input-plan workflow params)
+     (let [plan (defs/plan rt workflow params {:entrypoint :start})
+           resolved-params (:params plan)
            opts (cond-> opts
-                  (and derived-definition (not (contains? opts :definition)))
-                  (assoc :definition derived-definition)
+                  (and (:definition plan) (not (contains? opts :definition)))
+                  (assoc :definition (:definition plan))
+                  (:definition-name plan)
+                  (assoc :definition-name (:definition-name plan))
                   (not (contains? opts :context))
-                  (assoc :context (cmp/default-context params)))]
-       (pour-with-rt! rt resolved-workflow params (merge opts {:run-id run-id})))
+                  (assoc :context (cmp/default-context resolved-params)))]
+       (pour-with-rt! rt (:workflow plan) resolved-params (merge opts {:run-id run-id})))
      (routing/close-run-if-done! rt run-id)
      (query/run-result rt run-id))))
 
@@ -578,30 +597,92 @@
          (burn-with-rt! rt (:id root)))
        digest))))
 
+(def definition-kind
+  "Owner-partitioned kind id for workflow name -> definition-symbol declarations."
+  registry/definition-kind)
+
 (def constructor-kind
-  "Owner-partitioned kind id for workflow name -> constructor-symbol declarations."
-  registry/constructor-kind)
+  "Deprecated alias for `definition-kind`."
+  registry/definition-kind)
+
+(defn static-definition
+  "Return the static definition value `defworkflow` defines.
+
+  Splits `defworkflow`'s three declaration surfaces — the docstring, the
+  registration options, and the built workflow — into one self-describing value,
+  which is the whole point of a static definition: `:doc`, `:entrypoints`,
+  `:param-spec`, and `:defaults` travel with the workflow instead of living in a
+  registry entry beside it."
+  [doc options definition]
+  (require-valid! ::doc doc "Workflow definition :doc must be a non-blank string")
+  (reject-unknown-keys! options workflow-opt-keys :defworkflow)
+  (require-valid! ::workflow-options options "Invalid workflow options")
+  (require-valid! ::definition (merge definition options {:doc doc})
+                  "Invalid workflow definition"))
+
+(defmacro defworkflow
+  "Define a static workflow definition Var and collect its registry entry.
+
+  Ordinary Clojure semantics first: this is a `def`, so loading the namespace
+  defines `name` and nothing else — a code-only reload redefines the Var without
+  touching the live registry. `options` carries the registration contract
+  (`:entrypoints`, `:param-spec`, `:defaults`) and merges into the built
+  `definition`, so the Var alone answers what the workflow is for and how it may
+  be invoked.
+
+  Only while a module contribution collector is active does the form also
+  contribute `name`'s qualified symbol under `definition-kind`, keyed by
+  `(keyword name)`. That is what makes removal expressible: an owner that stops
+  evaluating a `defworkflow` form drops the entry by omission at the next
+  refresh."
+  [name doc options definition]
+  (let [qualified (symbol (str (ns-name *ns*)) (str name))]
+    `(do
+       (def ~name (static-definition ~doc ~options ~definition))
+       (alter-meta! (var ~name) assoc :doc ~doc)
+       (runtime/collect-entry! definition-kind ~(keyword name) '~qualified)
+       (var ~name))))
 
 (def executor-kind
   "Owner-partitioned kind id for gate-waiter -> stall-predicate-symbol declarations."
   registry/executor-kind)
 
 (defn register-workflow!
-  "Register a workflow constructor under a stable keyword `name`.
+  "Register a workflow definition under a stable keyword `name`.
 
-  `name` is a keyword; `constructor-sym` is a fully qualified symbol resolving to
-  a workflow constructor. The entry is an owner-complete declaration at the
-  direct/REPL layer, published through the owner-partition registry that survives
-  refresh. A duplicate `name` replaces the prior direct entry, so re-pointing a
-  route resolves the new constructor at each in-flight run's next named `:next`
-  transition (DELTA-OlrDrt-001.CC10). Returns `name`."
-  [name constructor-sym]
-  (when-not (keyword? name)
-    (fail! "Workflow registry name must be a keyword" {:name name}))
-  (when-not (qualified-symbol? constructor-sym)
-    (fail! "Workflow registry constructor must be a fully qualified symbol"
-           {:name name :constructor constructor-sym}))
-  (registry/register-constructor! (current/runtime) name constructor-sym))
+  `name` is a keyword; `definition-sym` is a fully qualified symbol resolving to
+  a static definition map or a legacy constructor function. The entry is an
+  owner-complete declaration at the direct/REPL layer, published through the
+  owner-partition registry that survives refresh. A duplicate `name` replaces
+  the prior direct entry, so re-pointing a route resolves the new definition at
+  each in-flight run's next named transition (DELTA-OlrDrt-001.CC10).
+
+  Add-or-update is the whole mutation: registration validates the resulting live
+  registry the same way module publication validates a staged candidate, so a
+  symbol that will not resolve, a definition that is not a valid definition, or a
+  route to a name that cannot honor it fails before anything changes. Returns
+  `name`."
+  [name definition-sym]
+  (require-valid! ::registry-name name "Workflow registry name must be a keyword")
+  (require-valid! ::definition-symbol definition-sym
+                  "Workflow registry definition must be a fully qualified symbol")
+  (let [rt (current/runtime)]
+    (defs/validate-candidates!
+     {:runtime rt
+      :entries (assoc (registry/workflow-definitions rt) name definition-sym)})
+    (registry/register-definition! rt name definition-sym)))
+
+(defn unregister-workflow!
+  "Remove the direct/REPL registration of workflow `name`.
+
+  Owner-complete publication removes an entry by omitting it from the owner's
+  next contribution, which a coordinator working at the REPL has no way to say;
+  this is that removal. Later starts, routes, and registered-name revisions fail
+  before mutation, while strands already poured from the definition are left
+  exactly as they are. Returns the remaining direct registrations."
+  [name]
+  (require-valid! ::registry-name name "Workflow registry name must be a keyword")
+  (registry/unregister-definition! (current/runtime) name))
 
 (defn register-executor!
   "Register a stall predicate for gate waiter `waiter` (a keyword/symbol/string
@@ -632,15 +713,26 @@
         (registry/executor-map (current/runtime))))
 
 (defn workflow-definition
-  "Return the constructor symbol registered under keyword `name`, failing loudly
+  "Return the definition symbol registered under keyword `name`, failing loudly
   (TEN-003) when `name` is not registered."
   [name]
   (registry/workflow-definition (current/runtime) name))
 
 (defn workflows
-  "Return the current registry map of workflow name (keyword) -> constructor symbol."
+  "Return the current registry map of workflow name (keyword) -> definition symbol."
   []
-  (registry/workflow-constructors (current/runtime)))
+  (registry/workflow-definitions (current/runtime)))
+
+(defn resolve-workflow
+  "Return the live classification of registered workflow `name`.
+
+  The result is `{:name … :definition <symbol> :kind :static|:legacy :value …}`.
+  `:static` carries the definition map itself — doc, entrypoints, param spec,
+  defaults, and declared steps — so a trusted caller can inspect what a name
+  currently means without pouring anything or executing a constructor. `:legacy`
+  carries only the opaque constructor function it resolved to."
+  [name]
+  (defs/resolve-registered (current/runtime) name))
 
 (defn- declare-workflow-vocab!
   "Seed the `workflow/*` attribute namespace into `rt`'s vocabulary registry,
@@ -653,7 +745,8 @@
     :name "workflow"
     :owner :skein/spools-workflow
     :keys ["workflow/role" "workflow/form" "workflow/run-id"
-           "workflow/family" "workflow/definition" "workflow/context"
+           "workflow/family" "workflow/definition" "workflow/definition-name"
+           "workflow/context"
            "workflow/gate" "workflow/checkpoint"
            "workflow/checkpoint-kind" "workflow/choices"
            "workflow/choice-details" "workflow/procedure" "workflow/outcome"
@@ -668,7 +761,7 @@
 (defn contribute
   "Module contribution for the workflow spool.
 
-  The workflow spool supplies no constructors or executors of its own — those
+  The workflow spool supplies no definitions or executors of its own — those
   are contributed by the workflows that pour them and by the executors that
   register — so it contributes no declarative entries. It materializes the
   registry handle so a dependent module contributing to the workflow kinds finds
@@ -750,7 +843,13 @@
 (s/def ::condition #(or (keyword? %)
                         (and (vector? %) (#{:= :!=} (first %)) (= 3 (count %)))))
 (s/def ::loop (s/keys :opt-un [::count ::each ::chain]))
-(s/def ::procedure any?)
+;; A call target is a registered name, a definition Var's symbol, a raw
+;; workflow value, or another complete definition inline — which is what makes
+;; the definition shape recursive.
+(s/def ::procedure (s/or :registered keyword?
+                         :symbol symbol?
+                         :definition ::definition
+                         :constructor #(or (fn? %) (var? %))))
 (s/def ::call (s/keys :req-un [::id ::procedure]
                       :opt-un [::title :skein.spools.workflow.values/params
                                ::depends-on ::attributes]))
@@ -761,6 +860,52 @@
 (s/def ::steps (s/coll-of ::workflow-item :kind vector?))
 (s/def ::workflow (s/keys :req-un [::name ::steps]
                           :opt-un [::params ::attributes ::state ::form]))
+
+;; --- checkpoint choice shapes ---------------------------------------------
+;;
+;; Choices are builder input: `checkpoint` folds them into the strand
+;; attributes a poured checkpoint carries, so these specs own the authored form
+;; rather than the stored one.
+
+(s/def ::key ::id-ref)
+(s/def ::label string?)
+(s/def ::next #(or (keyword? %) (symbol? %) (non-blank-string? %)))
+(s/def ::choice-input-declaration
+  (s/keys :req-un [::key] :opt-un [::required ::description]))
+(s/def ::input (s/coll-of ::choice-input-declaration :kind vector?))
+(s/def ::revise (s/keys :req-un [:skein.spools.workflow.values/params]))
+(s/def ::choice
+  (s/or :key ::id-ref
+        :declaration (s/keys :req-un [::key]
+                             :opt-un [::label ::description ::next ::input
+                                      ::revise])))
+(s/def ::choices (s/coll-of ::choice :kind vector?))
+(s/def ::kind ::id-ref)
+(s/def ::checkpoint
+  (s/keys :opt-un [::description ::attributes ::state ::depends-on ::condition
+                   ::loop ::kind ::choices]))
+(s/def ::gate
+  (s/keys :opt-un [::description ::attributes ::state ::depends-on ::condition
+                   ::loop]))
+
+;; --- registered definition shapes -----------------------------------------
+
+(s/def ::doc non-blank-string?)
+(s/def ::entrypoint defs/entrypoints)
+(s/def ::entrypoints (s/coll-of ::entrypoint :kind set? :min-count 1))
+(s/def ::param-spec qualified-keyword?)
+;; Defaults are a partial overlay, not a complete param map: a definition may
+;; default some keys and still require the caller to supply the rest, so this
+;; owns their shape only. The whole merged map answers to `:param-spec`.
+(s/def ::defaults (s/map-of keyword? any?))
+(s/def ::workflow-options
+  (s/keys :opt-un [::params ::attributes ::state ::form
+                   ::doc ::entrypoints ::param-spec ::defaults]))
+(s/def ::definition
+  (s/merge ::workflow
+           (s/keys :opt-un [::doc ::entrypoints ::param-spec ::defaults])))
+(s/def ::registry-name keyword?)
+(s/def ::definition-symbol qualified-symbol?)
 
 ;; --- explain topic builders -----------------------------------------------
 
@@ -868,10 +1013,49 @@
             :params "Procedure-local params merged with parent workflow params."
             :depends-on "Parent refs that the procedure entry steps wait for."}})
 
+(defn- explain-definition []
+  {:topic :definition
+   :summary (fmt/reflow "
+            |A static definition is a workflow value that describes itself: what it is
+            |for, how it may be invoked, and what params it takes. Register its Var
+            |symbol and callers can learn all of that without running anything.")
+   :contract (spec-entry ::definition
+                         (fmt/reflow "
+                         |A definition is a workflow plus the optional registration
+                         |contract :doc, :entrypoints, :param-spec, and :defaults. The
+                         |same options may be passed to the workflow builder directly;
+                         |defworkflow additionally collects the Var's qualified symbol
+                         |while a module contribution collector is active.")
+                         '(defworkflow build
+                            "Build an agreed feature scope."
+                            {:entrypoints #{:start :continue}
+                             :param-spec :acme.workflows/build-params
+                             :defaults {:reviewer "agent"}}
+                            (workflow "Build accepted scope"
+                                      (step :implement "Implement the scope" :self))))
+   :fields {:doc "What the workflow is for, stored on the value and the Var."
+            :entrypoints (fmt/reflow "
+                          |Non-empty subset of #{:start :continue :call} declaring how a
+                          |registered name may be invoked.")
+            :param-spec (fmt/reflow "
+                         |Qualified keyword naming a registered spec for the complete
+                         |resolved params map.")
+            :defaults (fmt/reflow "
+                       |Partial keyword-keyed overlay merged under caller params. Values
+                       |must be JSON-compatible; it need not satisfy :param-spec on its
+                       |own.")}
+   :compatibility (fmt/reflow "
+                   |A registered symbol resolving to a function is a legacy constructor:
+                   |opaque, declaring no entrypoints, and available to trusted Clojure
+                   |while shipped workflows migrate. A constructor that throws fails as
+                   |workflow/legacy-constructor-failed and one returning a non-workflow as
+                   |workflow/legacy-definition-invalid, both before any pour.")})
+
 (defn- explain-workflow []
   {:topic :workflow
    :summary "Clojure-native workflow data compiled into a Skein molecule or wisp."
    :builders {'workflow 'skein.spools.workflow/workflow
+              'defworkflow 'skein.spools.workflow/defworkflow
               'step 'skein.spools.workflow/step
               'gate 'skein.spools.workflow/gate
               'checkpoint 'skein.spools.workflow/checkpoint
@@ -891,9 +1075,11 @@
                      |definitions support boolean :required and optional :default.")}
    :runtime {:start! (fmt/reflow "
                       |(start! run-id workflow params opts) accepts a workflow map,
-                      |constructor var, or registered workflow keyword. Var/keyword
-                      |starts derive :definition; absent :context defaults from
-                      |JSON-safe params after keyword values are stringified.")
+                      |a definition var, or a registered workflow keyword. Var/keyword
+                      |starts derive :definition and merge a static definition's
+                      |:defaults under params; a registered name must declare the
+                      |:start entrypoint. Absent :context defaults from JSON-safe
+                      |params after keyword values are stringified.")
              :ready (fmt/reflow "
                      |(ready run-id selector) filters ready views by keys such as :role, :gate,
                      |:checkpoint, or :checkpoint-kind.")
@@ -904,9 +1090,24 @@
                                 |Returns the single ready checkpoint view, nil when none,
                                 |and fails loudly when ambiguous.")}
    :registry {:register-workflow! (fmt/reflow "
-                                   |Register keyword -> fully-qualified constructor
-                                   |symbol for named :next routes and keyword
-                                   |start!/describe.")}
+                                   |Register keyword -> fully-qualified definition
+                                   |symbol for named :next routes, keyword call
+                                   |targets, and keyword start!/describe. Validates
+                                   |the resulting registry before mutating.")
+              :unregister-workflow! (fmt/reflow "
+                                     |Remove a direct/REPL registration. A name a module
+                                     |owner published disappears by omitting its
+                                     |contribution instead.")
+              :resolve-workflow (fmt/reflow "
+                                 |Return {:name :definition :kind :value :entrypoints}
+                                 |for a registered name: :static carries the definition
+                                 |map, :legacy the opaque constructor.")
+              :entrypoints (fmt/reflow "
+                            |A static definition declares a non-empty subset of
+                            |#{:start :continue :call}. Reaching it by registered name
+                            |requires :start to start!, :continue for a :next route,
+                            |and :call for a call target.")}
+   :definition (explain-definition)
    :step (explain-step)
    :gate (explain-gate)
    :checkpoint (explain-checkpoint)
@@ -928,7 +1129,8 @@
 (def ^:private step-opt-keys #{:description :attributes :state :depends-on :condition :loop})
 (def ^:private checkpoint-opt-keys (into step-opt-keys #{:kind :choices}))
 (def ^:private call-opt-keys #{:title :depends-on :attributes})
-(def ^:private workflow-opt-keys #{:params :attributes :state :form})
+(def ^:private workflow-opt-keys
+  #{:params :attributes :state :form :doc :entrypoints :param-spec :defaults})
 (def ^:private choice-opt-keys #{:key :label :description :next :input :revise})
 (def ^:private choice-input-opt-keys #{:key :required :description})
 

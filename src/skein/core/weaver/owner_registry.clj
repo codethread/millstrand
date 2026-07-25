@@ -18,7 +18,7 @@
   #{:kinds :partitions :effective :owners :provenance})
 
 (def ^:private kind-declaration-keys
-  #{:id :entry-spec :binding-moment :layer-policy})
+  #{:id :entry-spec :binding-moment :layer-policy :candidate-validator})
 
 (def ^:private partition-keys
   #{:layer :entries :overrides})
@@ -56,8 +56,10 @@
 (s/def ::entry-spec registered-spec-keyword?)
 (s/def ::binding-moment any?)
 (s/def ::layer-policy #(= layer-precedence %))
+(s/def ::candidate-validator qualified-symbol?)
 (s/def ::kind-declaration
-  (s/keys :req-un [::id ::entry-spec ::binding-moment ::layer-policy]))
+  (s/keys :req-un [::id ::entry-spec ::binding-moment ::layer-policy]
+          :opt-un [::candidate-validator]))
 (s/def ::entries (s/map-of ::entry-key any?))
 (s/def ::override-declarations (s/coll-of ::entry-key :kind set?))
 (s/def ::overrides ::override-declarations)

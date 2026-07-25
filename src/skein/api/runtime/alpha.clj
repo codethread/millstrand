@@ -12,7 +12,8 @@
   (`collect-entry!`), reconcile the running image against them (`refresh!`,
   with `plan` its effect-free dry-run), inspect the joined offline picture
   (`status`), reach for the advanced code-only seam (`reload-code!`), and serve
-  runtime-owned state and time to trusted spools (`spool-state`, `clock`, `now`).
+  runtime-owned state, symbol resolution, and time to trusted spools
+  (`spool-state`, `resolve-var`, `clock`, `now`).
 
   `module!`/`refresh!`/`plan`/`status`/`reload-code!` are the lifecycle surface:
   declarations are data, refresh replaces owner-complete contributions and
@@ -482,6 +483,8 @@
 
 ;; --- runtime-owned services for trusted spools ------------------------------
 
+(s/def ::resolvable-symbol qualified-symbol?)
+
 (defn clock
   "Return `runtime`'s installed `skein.api.clock.alpha/Clock`."
   [runtime]
@@ -502,6 +505,23 @@
 (s/fdef now
   :args (s/cat :runtime map?)
   :ret inst?)
+
+(defn resolve-var
+  "Resolve fully qualified `sym` to its Var under `runtime`'s spool classloader.
+
+  Declarations name behavior by symbol, and a symbol living in a synced spool
+  root only loads under that classloader — a bare `requiring-resolve` is blind
+  to it. Returns the Var, or nil when its namespace loads but defines nothing
+  under that name; a namespace that cannot be loaded at all throws, carrying the
+  load error as its cause."
+  [runtime sym]
+  (require-valid! ::resolvable-symbol sym
+                  "resolve-var symbol must be fully qualified")
+  (access/with-spool-classloader runtime #(requiring-resolve sym)))
+
+(s/fdef resolve-var
+  :args (s/cat :runtime map? :sym ::resolvable-symbol)
+  :ret (s/nilable var?))
 
 (def ^:private spool-state-opt-keys #{:version :migrate-fn})
 

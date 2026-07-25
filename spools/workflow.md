@@ -14,9 +14,9 @@
 
 This is userland spool code, not a separate scheduler or persistence system. Workflows compile into normal strand graphs, and runtime state remains inspectable through the usual Skein REPL/graph helpers. The spool owns no privileged runtime state.
 
-Core primitives: `workflow`, `step`, `gate`, `checkpoint`, `call`, `param`, `compile`, `pour!`, `wisp!`, and `explain`.
+Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `param`, `compile`, `pour!`, `wisp!`, and `explain`.
 
-The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Routing targets can be registered under stable names with `register-workflow!`/`workflow-definition`/`workflows` (see §5). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
+The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see §5). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
 
 Every run-mutating op (`start!`, `complete!`, `choose!`, `advance!`) returns one `{:ready [step-view ...] :done boolean}` map: `:ready` is the run's ready step views (as `ready` would return them) and `:done` is its done-ness, so an empty `:ready` never leaves a caller guessing whether the run finished or merely stalled. The pure queries `ready`/`ready-step` still return step views directly.
 
@@ -37,11 +37,44 @@ What skein does differently: workflow definitions are Clojure-native data (funct
 | `(gate id title waiter & opts)` | A step marked `workflow/gate <waiter>` as an external wait point. `waiter` is a freeform actor hint (`:ci`, `:human`, `:subagent`, …), not `:self`. Same opts as `step`. See "Gates" below. |
 | `(checkpoint id title & opts)` | A step definition with checkpoint metadata. `:kind` (`:human` or `:agent`, default `:human`), `:choices`. |
 | `(call id procedure params & opts)` | An inline procedure-reuse step. `:depends-on`, `:title`, `:attributes`. |
-| `(workflow name & body)` | A workflow definition: `{:name .. :steps [..]}` plus optional leading opts map (`:params`, `:attributes`, `:state`, `:phase`). |
+| `(workflow name & body)` | A workflow definition: `{:name .. :steps [..]}` plus optional leading opts map (`:params`, `:attributes`, `:state`, `:form`, and the registration contract `:doc`, `:entrypoints`, `:param-spec`, `:defaults`). |
+| `(defworkflow name doc opts definition)` | Defines a static definition Var and collects its registry entry during module contribution. See "Static definitions" below. |
 
 `name`, `title`, `description`, and attribute values may be plain values or functions of the resolved params map — resolution happens once, after `:params` defaults/required-checks and caller `params` are merged.
 
-Builders reject unknown option keys loudly: passing a mistyped key (`:require`, `:depend-on`, and similar typos) to `param`, `step`, `gate`, `checkpoint`, `call`, a choice map, or the `workflow` leading-opts map fails with the offending keys and the allowed set in the ex-data.
+Builders reject unknown option keys loudly: passing a mistyped key (`:require`, `:depend-on`, and similar typos) to `param`, `step`, `gate`, `checkpoint`, `call`, a choice map, or the `workflow` leading-opts map fails with the offending keys and the allowed set in the ex-data. `workflow` also validates the complete assembled definition against `::definition`, so a malformed nested step, choice, or call fails at the builder rather than at the pour.
+
+### Static definitions
+
+A registered workflow may be a plain value rather than a function that builds one. `defworkflow` defines that value as an ordinary Var and attaches the contract it wants to advertise:
+
+```clojure
+(s/def ::scope string?)
+(s/def ::build-params (s/keys :req-un [::scope]))
+
+(workflow/defworkflow build
+  "Build an agreed feature scope."
+  {:entrypoints #{:start :continue}
+   :param-spec ::build-params
+   :defaults {:reviewer "agent"}}
+  (workflow/workflow
+    "Build accepted scope"
+    (workflow/step :implement
+                   (fn [{:keys [scope]}] (str "Implement " scope))
+                   :self)))
+```
+
+The form is a `def` first: loading the namespace defines `build` and nothing else, so a code-only reload redefines the Var without touching the live registry. Only while a module contribution collector is active does it also contribute `my.ns/build` under `workflow/definition-kind`, keyed `:build`. That is what makes removal expressible — an owner that stops evaluating the form drops the entry by omission at the next refresh.
+
+The value is self-describing, which is the point: `:doc`, `:entrypoints`, `:param-spec`, and `:defaults` travel with the workflow, so a caller can learn what a registered name means without executing anything. `(workflow/resolve-workflow :build)` returns `{:name :build :definition 'my.ns/build :kind :static :value {...} :entrypoints #{...}}`.
+
+- **`:entrypoints`** is a non-empty subset of `#{:start :continue :call}`. A definition may declare any combination. The registry is where it applies: reaching a definition **by registered name** requires `:start` to `start!`, `:continue` for a `:next` route, and `:call` for a `call` target, and a refusal fails before any mutation with reason `:workflow/entrypoint-unsupported`. Trusted Clojure holding the Var or the value directly is already past that boundary and is not checked (TEN-002).
+- **`:param-spec`** names a qualified spec keyword for the complete resolved params map. Registration and publication check that the name resolves to a registered spec; whole-map validation of caller params is not yet enforced.
+- **`:defaults`** is a partial overlay merged *under* caller params at start, route, call, and revision. It is not required to satisfy `:param-spec` — a definition may default some keys and still require the caller to supply the rest — but it must be a keyword-keyed map of JSON-compatible values.
+
+**Legacy constructors.** A registered symbol resolving to a *function* is still supported, and the resolved value is what decides: a map is a static definition, a function is a legacy constructor. A constructor is opaque — it declares no entrypoints, so nothing can be checked before it runs — and it stays available to trusted Clojure while shipped workflows migrate. Its failures are loud and named: a constructor that throws fails as `:workflow/legacy-constructor-failed` (with the original exception as the cause), and one that returns something that is not a workflow fails as `:workflow/legacy-definition-invalid`. Both happen before any pour.
+
+Because it declares nothing, a legacy constructor is exempt from entrypoint checks everywhere they apply: registered-name start, `:next` routing, and `call` targets all still reach one. That exemption is the migration window for the workflows shipped today, not a permanent capability — a constructor cannot say what it may be used for, so nothing can be verified about it in advance.
 
 ### Conditions
 
@@ -167,10 +200,14 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
 - `(start! run-id workflow params opts)` — fails if `run-id` already has an
   active root; pours the workflow with `workflow/run-id run-id`; returns the
   `{:ready [...] :done boolean}` result. `workflow` may be a pre-built map, a
-  constructor var (`#'my.ns/flow`), or a registered workflow keyword. Var/keyword
-  starts derive `:definition`; when `:context` is absent they default it from
-  `params`, stringifying keyword values and failing loudly on non-JSON-safe
-  values (pass `:context` explicitly for those cases).
+  definition var (`#'my.ns/flow`), or a registered workflow keyword. Var and
+  keyword starts derive `:definition`; a registered name also records
+  `workflow/definition-name` and, for a static definition, must declare the
+  `:start` entrypoint — the refusal happens before anything is poured. A static
+  definition's `:defaults` merge under `params` first, so what the run compiles
+  and persists is the resolved map. When `:context` is absent it defaults from
+  those resolved params, stringifying keyword values and failing loudly on
+  non-JSON-safe values (pass `:context` explicitly for those cases).
 - `(ready run-id)` / `(ready run-id selector)` — all currently ready,
   agent-facing step views for the run (vector, possibly empty). Each view carries
   `:run-id` so a stage cutover is visible in-band; procedure join steps never
@@ -294,18 +331,19 @@ A checkpoint is a step with `workflow/role "checkpoint"`. Use `choose!`, never `
 `:next` may name a workflow registered under a stable keyword instead of a raw fn symbol:
 
 ```clojure
-(workflow/register-workflow! :spec-plan 'my.ns/spec-plan-workflow)
-(workflow/workflow-definition :spec-plan)   ; => 'my.ns/spec-plan-workflow (fails loudly if unknown)
-(workflow/workflows)             ; => {:spec-plan 'my.ns/spec-plan-workflow ...}
+(workflow/register-workflow! :spec-plan 'my.ns/spec-plan)
+(workflow/workflow-definition :spec-plan)   ; => 'my.ns/spec-plan (fails loudly if unknown)
+(workflow/workflows)                        ; => {:spec-plan 'my.ns/spec-plan ...}
+(workflow/unregister-workflow! :spec-plan)  ; => the remaining direct registrations
 ```
 
-The registry is runtime-owned with no durable storage. Owner-complete module
-refresh replaces its declarations without disturbing other owners, and a
-weaver restart reconstructs it from startup modules. A `:next` keyword is
-resolved through the registry at `choose!` time and **fails loudly on an
-unregistered name**, before any mutation. A routed continuation records the
-resolved constructor symbol as its own `workflow/definition`, so a later
-`:revise` at that stage can re-pour it.
+Entries are always qualified symbols; the registry never holds a definition value or a function. The registry is runtime-owned with no durable storage. Owner-complete module refresh replaces its declarations without disturbing other owners, and a weaver restart reconstructs it from startup modules. A `:next` keyword is resolved through the registry at `choose!` time and **fails loudly on an unregistered name**, before any mutation. A routed continuation records both the registered name and the symbol it resolved to (`workflow/definition-name` and `workflow/definition`), so a later `:revise` at that stage can re-pour it.
+
+Symbols are resolved under the runtime's spool classloader, so a definition living in a synced spool root resolves the same way as one on the base classpath. A symbol that names nothing fails as `:workflow/definition-unresolvable`, carrying the registered name, the symbol, the owner whose partition supplied it, and the three ways to repair it: restore the Var, drop the entry from that owner's contribution, or repoint the name from trusted Clojure.
+
+`register-workflow!` and `unregister-workflow!` are the trusted-Clojure mutations, both at the direct/REPL layer. Registration is add-or-update and validates the resulting registry the same way module publication validates a staged candidate, so an unresolvable symbol, an invalid definition, or a route to a name that cannot honor it fails before anything changes. Unregistering removes the direct entry only — a name a module owner published disappears by omitting its contribution, not by an ad hoc unregister — and fails loudly when there is no direct entry to remove. Neither touches strands already poured.
+
+**Publication-time validation.** The definition kind declares a candidate validator, so a refresh validates the *complete* staged registry across owners before publishing any of it: every symbol resolves, every static definition is a valid definition with JSON-compatible defaults and a registered param spec, and every registered-name route or call target exists and declares the entrypoint that use requires. Deletion by omission is judged the same way — an owner that drops a definition another owner routes to has its refresh refused, and every affected owner keeps its previous live partition.
 
 ### `:input` — declared choice input
 
@@ -341,7 +379,9 @@ The continuation is compiled once, before any mutation. Folding the checkpoint c
 
 ### `:revise` — re-pour the run's own definition
 
-A `:revise {:params {...}}` choice is the declarative revision loop: instead of routing to a named continuation, it re-pours the **run's own** `workflow/definition` under the same `run-id`, with params `(merge context choice-input override-params)` where the `:revise` `:params` are authoritative and persist as the new root's `workflow/context`. It needs no hand-written revision wrapper fn. The run's root must carry a resolvable `workflow/definition` (seed it via start/`opts :definition`, which routed continuations also set for their stage); `:revise` **fails loudly** when it is absent. Same single-transaction cutover as `:next` (see below).
+A `:revise {:params {...}}` choice is the declarative revision loop: instead of routing to a named continuation, it re-pours the **run's own** definition under the same `run-id`, with params `(merge context choice-input override-params)` where the `:revise` `:params` are authoritative and persist as the new root's `workflow/context`. It needs no hand-written revision wrapper fn. Same single-transaction cutover as `:next` (see below).
+
+A root poured from a registered name revises through that **name**: the registry is resolved again at `choose!` time, so a coordinator who repointed the name revises into the replacement, and a name that has since been removed fails before any mutation rather than reviving a definition nothing points at. A root that recorded only a symbol — a Var or map start — keeps symbol-based revision. Either way the root must carry a resolvable definition (seed it via start/`opts :definition`, which routed continuations also set for their stage); `:revise` **fails loudly** when it is absent.
 
 There is no reopen/reactivate mechanism: each round is a **fresh** immutable subgraph poured under the same `run-id`, so the whole loop history stays in the graph, squashable, never mutated in place. A `:condition [:!= :revision true]` gates the work that must not repeat; on a revision round the excluded step drops out and condition splicing (§3) reattaches its dependents, so the round is ready at the first genuinely-repeatable step.
 
@@ -436,7 +476,8 @@ This table is the extension API: spools built on top of `skein.spools.workflow` 
 | `workflow/form` | `"molecule"` or `"wisp"`. | `compile`, from `opts :form` (defaults molecule) or `pour!`/`wisp!`. |
 | `workflow/run-id` | Stable run handle used by `start!`/`ready`/`complete!`/`choose!`/`current-root`. | `compile`, from `opts :run-id` (root strand only). |
 | `workflow/family` | Grouping label across related runs (e.g. `"devflow"`). Carried forward into `:next` continuations. | `compile`, from `opts :family` (root strand only). |
-| `workflow/definition` | Stringified symbol naming the workflow definition fn/var; the constructor `:revise` re-pours and that routed continuations record for their stage. | `compile`, from `opts :definition` (root strand only; set by start, `:revise`, and named/symbol `:next` routing). |
+| `workflow/definition` | Stringified symbol naming the definition Var this root was built from. | `compile`, from `opts :definition` (root strand only; set by start, `:revise`, and named/symbol `:next` routing). |
+| `workflow/definition-name` | Registered name this root was poured from, when it came from the registry. `:revise` resolves this name live, so a repointed registry revises into the replacement. | `compile`, from `opts :definition-name` (root strand only). |
 | `workflow/context` | Map merged with checkpoint choice input to build `:next`/`:revise` continuation params (also carries revision-loop state forward). | `compile`, from `opts :context` (root strand only); read back by `route-plan`. |
 | `workflow/stage-params` | Vector of the stage-local override key names a `:revise` round set; dropped from continuation params when a later `:next` route leaves the stage. | `route-plan` (`:revise`), root strand only. |
 | `workflow/gate` | Freeform waiter/actor hint marking a step an external wait point (`"ci"`, `"human"`, `"subagent"`, …). Surfaced by `step-view` as `:gate`; makes `complete!` require `:by`. | `gate` builder. |
@@ -484,7 +525,7 @@ The test suite in [`test/skein/spools/workflow_test.clj`](../test/skein/spools/w
   `:revise` choices for its revision loops (§5) rather than dead-ending the run
   or hand-writing revision wrappers. See `devflow.md`.
 - `(skein.spools.workflow/explain)` / `(explain topic)` — machine-readable
-  contracts for `:workflow`, `:step`, `:gate`, `:checkpoint`, and `:call`,
+  contracts for `:workflow`, `:definition`, `:step`, `:gate`, `:checkpoint`, and `:call`,
   intended for agents to call before constructing workflow data instead of
   relying on this document alone.
 - [README.md](./README.md) — shipped spools index and loading notes.

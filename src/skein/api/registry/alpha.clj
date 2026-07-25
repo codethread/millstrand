@@ -2,7 +2,7 @@
   "Blessed owner-partitioned registry primitive for spool domains.
 
   A spool domain with its own replaceable declarations — chime rules,
-  workflow constructors, harness aliases, and the like — declares each
+  workflow definitions, harness aliases, and the like — declares each
   definition family as a *kind* and then publishes complete owner
   partitions under it. Declaring a kind (id, entry spec, binding-moment
   datum, and the fixed layer policy) makes it a valid contribution-map key
@@ -59,8 +59,20 @@
   an omitted layer policy is filled with `layer-precedence`. A declared kind
   becomes a valid contribution-map key — owner partitions may then publish
   under it — and existing partitions are revalidated against a changed
-  declaration before publication. Returns a `::declaration-result`; a
-  malformed declaration fails loudly and leaves the registry unchanged."
+  declaration before publication.
+
+  An optional `:candidate-validator` names a fully qualified symbol the module
+  refresh coordinator resolves under the runtime's spool classloader and calls
+  with `{:runtime <rt> :kind <kind-id> :entries <effective candidate entries>
+  :owners <entry-key to winning owner>}` once every owner's contribution is
+  staged and before any publication. It is
+  the seam for cross-entry rules the per-entry `:entry-spec` cannot express —
+  references between entries contributed by different owners, deletion by
+  omission, resolvability of the symbols an entry names. Throwing rejects the
+  whole refresh, so every affected owner keeps its previous live partition.
+
+  Returns a `::declaration-result`; a malformed declaration fails loudly and
+  leaves the registry unchanged."
   [handle declaration]
   (let [declaration (with-layer-policy declaration)]
     (require-valid! ::kind-declaration declaration

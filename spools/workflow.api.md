@@ -15,9 +15,10 @@ Alpha workflow spool for molecule and wisp-style strand graphs.
   here; the mechanics they compose live in `skein.spools.workflow.internal.*`:
   `compile` (compile/normalize/expand pipeline), `query` (run views/ready/done/
   history), `routing` (checkpoint choice validation, routing, and cascading
-  closes), `registry` (runtime-owned registries), and `util` (shared validation/
-  ref-normalization). Specs stay registered here so `explain` and
-  `s/explain-data` paths are unchanged.
+  closes), `registry` (runtime-owned registries), `definitions` (definition
+  resolution, entrypoint rules, and pre-publication candidate validation), and
+  `util` (shared validation/ref-normalization). Specs stay registered here so
+  `explain` and `s/explain-data` paths are unchanged.
 
 
 
@@ -30,7 +31,7 @@ Alpha workflow spool for molecule and wisp-style strand graphs.
 Function.
 
 Return active workflow root strands, optionally filtered by family.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L302-L307">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L321-L326">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/advance!">`advance!`</a>
 ``` clojure
@@ -48,7 +49,7 @@ Advance run-id by one ready step regardless of its kind, returning the
   pass-through `:by`/`:step` opts. When it is a plain step, `:choice` must be
   absent (fail loudly otherwise); `advance!` dispatches to `complete!` with the
   pass-through `:notes`/`:attributes`/`:step`/`:by` opts.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L458-L486">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L477-L505">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/await!">`await!`</a>
 ``` clojure
@@ -69,7 +70,7 @@ Block until workflow run-id is done, at a checkpoint, at a ready `:self`
   The three-arg `(runtime run-id opts)` arity threads the target runtime
   explicitly; the shorter arities resolve `current/runtime` as the ergonomic
   default for trusted in-process callers.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L521-L546">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L540-L565">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/bond!">`bond!`</a>
 ``` clojure
@@ -81,7 +82,7 @@ Bond two materialized molecules: `right-id` depends on `left-id`.
 
   The `workflow/bond` edge attribute distinguishes a cross-molecule bond from
   the intra-molecule dependency edges `compile` emits.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L244-L252">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L258-L266">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/burn!">`burn!`</a>
 ``` clojure
@@ -90,7 +91,7 @@ Bond two materialized molecules: `right-id` depends on `left-id`.
 Function.
 
 Burn a materialized molecule or wisp subgraph rooted at `root-id`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L254-L257">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L268-L271">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/call">`call`</a>
 ``` clojure
@@ -103,7 +104,7 @@ Return a procedure-style workflow call.
   The callee workflow is expanded inline at compile time. Downstream parent
   steps depend on the call id, which represents completion of the expanded
   procedure's exit steps.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L140-L148">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L145-L153">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/checkpoint">`checkpoint`</a>
 ``` clojure
@@ -124,7 +125,7 @@ Return a workflow checkpoint step definition.
 
   `:kind` names the decision owner and defaults to `:human`; it is stored as
   `workflow/checkpoint-kind` and is the canonical human-in-the-loop signal.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L108-L138">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L113-L143">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/choice-detail">`choice-detail`</a>
 ``` clojure
@@ -137,7 +138,7 @@ Return one choice explanation for run-id's current workflow checkpoint.
 
   opts may include `:step` (materialized strand id) to select among multiple
   ready checkpoints; without it, exactly one checkpoint must be ready.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L508-L519">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L527-L538">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/choice-details">`choice-details`</a>
 ``` clojure
@@ -152,7 +153,7 @@ Return choice explanations for run-id's current workflow checkpoint, keyed by
 
   opts may include `:step` (materialized strand id) to select among multiple
   ready checkpoints; without it, exactly one checkpoint must be ready.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L488-L506">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L507-L525">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/choose!">`choose!`</a>
 ``` clojure
@@ -182,7 +183,7 @@ Record a checkpoint choice for run-id, optionally pour its continuation,
   nothing and the run stays resumable. Validation, routing, and batch-building
   mechanics live in `skein.spools.workflow.internal.routing`; all validation
   happens before any mutation.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L416-L456">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L435-L475">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/compile">`compile`</a>
 ``` clojure
@@ -210,7 +211,7 @@ Return a batch payload for a workflow molecule or wisp.
   strand, then assemble the strands + edges payload. The expansion mechanics
   live in `skein.spools.workflow.internal.compile`, which re-enters its own
   `compile` for inline procedure calls.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L163-L190">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L175-L202">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/complete!">`complete!`</a>
 ``` clojure
@@ -232,15 +233,15 @@ Close the current ready non-checkpoint workflow step for run-id and return
   When the closed step is the last active inner step beneath a `procedure`
   join, the join closes in the same transaction (see `cascade-join-ids`). All
   validation happens before any mutation.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L379-L414">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L398-L433">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/constructor-kind">`constructor-kind`</a>
 
 
 
 
-Owner-partitioned kind id for workflow name -> constructor-symbol declarations.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L581-L583">Source</a></sub></p>
+Deprecated alias for `definition-kind`.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L604-L606">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/contribute">`contribute`</a>
 ``` clojure
@@ -250,12 +251,12 @@ Function.
 
 Module contribution for the workflow spool.
 
-  The workflow spool supplies no constructors or executors of its own — those
+  The workflow spool supplies no definitions or executors of its own — those
   are contributed by the workflows that pour them and by the executors that
   register — so it contributes no declarative entries. It materializes the
   registry handle so a dependent module contributing to the workflow kinds finds
   them already declared (DELTA-OlrDrt-001.CC4).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L668-L678">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L761-L771">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/current-root">`current-root`</a>
 ``` clojure
@@ -264,7 +265,37 @@ Module contribution for the workflow spool.
 Function.
 
 Return the single active workflow root for run-id, nil when absent, or fail if ambiguous.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L309-L312">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L328-L331">Source</a></sub></p>
+
+## <a name="skein.spools.workflow/definition-kind">`definition-kind`</a>
+
+
+
+
+Owner-partitioned kind id for workflow name -> definition-symbol declarations.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L600-L602">Source</a></sub></p>
+
+## <a name="skein.spools.workflow/defworkflow">`defworkflow`</a>
+``` clojure
+(defworkflow name doc options definition)
+```
+Macro.
+
+Define a static workflow definition Var and collect its registry entry.
+
+  Ordinary Clojure semantics first: this is a `def`, so loading the namespace
+  defines `name` and nothing else — a code-only reload redefines the Var without
+  touching the live registry. `options` carries the registration contract
+  (`:entrypoints`, `:param-spec`, `:defaults`) and merges into the built
+  `definition`, so the Var alone answers what the workflow is for and how it may
+  be invoked.
+
+  Only while a module contribution collector is active does the form also
+  contribute `name`'s qualified symbol under `definition-kind`, keyed by
+  `(keyword name)`. That is what makes removal expressible: an owner that stops
+  evaluating a `defworkflow` form drops the entry by omission at the next
+  refresh.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L623-L644">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/describe">`describe`</a>
 ``` clojure
@@ -275,8 +306,9 @@ Function.
 
 Return a compile-time projection of `workflow` without materializing any strand.
 
-  `workflow` may be a workflow map, a constructor var, or a registered workflow
-  keyword. Loop/call expansion and condition filtering apply exactly as
+  `workflow` may be a workflow map, a definition var, or a registered workflow
+  keyword; a static definition's `:defaults` merge under `params` first. Loop and
+  call expansion and condition filtering apply exactly as
   `compile` runs them, so the description matches what would pour for `params`:
   excluded steps are absent, procedure joins appear as `:procedure` steps, and
   each checkpoint's choices carry their declared `:input` and their
@@ -287,7 +319,7 @@ Return a compile-time projection of `workflow` without materializing any strand.
   `(describe workflow)` resolves param defaults and fails loudly listing any
   required params without a default; pass `params` to describe a definition that
   needs them.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L192-L213">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L204-L227">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/done?">`done?`</a>
 ``` clojure
@@ -299,7 +331,7 @@ Return true when run-id has no active workflow root, or its active root's
   step, checkpoint, and procedure strands are all closed.
 
   Fails loudly for a run-id that has never had a root strand.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L355-L361">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L374-L380">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/executor-kind">`executor-kind`</a>
 
@@ -307,7 +339,7 @@ Return true when run-id has no active workflow root, or its active root's
 
 
 Owner-partitioned kind id for gate-waiter -> stall-predicate-symbol declarations.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L585-L587">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L646-L648">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/executors">`executors`</a>
 ``` clojure
@@ -316,7 +348,7 @@ Owner-partitioned kind id for gate-waiter -> stall-predicate-symbol declarations
 Function.
 
 Return the current registry map of gate waiter name (keyword) -> stall predicate.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L628-L632">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L709-L713">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/explain">`explain`</a>
 ``` clojure
@@ -330,7 +362,7 @@ Return self-documenting workflow spool input contracts.
   Agents can call this before constructing workflow data. It reports the stable
   public builders, valid step/checkpoint fields, and concrete examples without
   exposing batch payload internals.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L44-L60">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L47-L65">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/gate">`gate`</a>
 ``` clojure
@@ -349,7 +381,7 @@ Return a workflow gate step definition — a step whose completion belongs to
   do. `register-executor!` keys a stall predicate by this same waiter name, so
   `await!` can stay silent on a healthy executor-owned gate. Accepts the same
   opts as `step`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L88-L106">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L93-L111">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/molecule-id">`molecule-id`</a>
 ``` clojure
@@ -358,7 +390,7 @@ Return a workflow gate step definition — a step whose completion belongs to
 Function.
 
 Return the materialized root molecule id from a `pour!` or `wisp!` result.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L236-L242">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L250-L256">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/param">`param`</a>
 ``` clojure
@@ -371,7 +403,7 @@ Return a workflow param definition.
   This is a Clojure-native replacement for Beads' TOML variable blocks.
   For example, pass `:required true` or `:default` values; the result is plain
   data that `compile` consumes.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L62-L70">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L67-L75">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/pour!">`pour!`</a>
 ``` clojure
@@ -382,7 +414,7 @@ Return a workflow param definition.
 Function.
 
 Materialize `workflow` as a persistent molecule strand graph.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L215-L222">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L229-L236">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/ready">`ready`</a>
 ``` clojure
@@ -397,7 +429,7 @@ Return agent-facing ready workflow steps for run-id.
   `step-view` on a strand without run context stays unchanged. An optional
   selector map filters by `:role`, `:gate`, `:checkpoint`, or
   `:checkpoint-kind`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L319-L329">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L338-L348">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/ready-checkpoint">`ready-checkpoint`</a>
 ``` clojure
@@ -406,7 +438,7 @@ Return agent-facing ready workflow steps for run-id.
 Function.
 
 Return the single ready checkpoint view for run-id, nil if none, or fail if ambiguous.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L338-L345">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L357-L364">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/ready-gates">`ready-gates`</a>
 ``` clojure
@@ -416,7 +448,7 @@ Return the single ready checkpoint view for run-id, nil if none, or fail if ambi
 Function.
 
 Return ready gate step views for run-id, optionally filtered by waiter.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L331-L336">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L350-L355">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/ready-step">`ready-step`</a>
 ``` clojure
@@ -427,7 +459,7 @@ Function.
 Return the single ready workflow step for run-id, or fail if ambiguous.
 
   The view carries `:run-id` (see `ready`).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L347-L353">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L366-L372">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/reconcile">`reconcile`</a>
 ``` clojure
@@ -442,7 +474,7 @@ Reconcile the workflow spool's resources per the module contract.
   API — declarations are process-lifetime seeds (SPEC-004.C46b,
   DELTA-Itr-001) — and re-declaring on removal is the defect the contract
   names. Any other status is a direct-call error and fails loudly.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L680-L698">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L773-L791">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/register-executor!">`register-executor!`</a>
 ``` clojure
@@ -461,23 +493,44 @@ Register a stall predicate for gate waiter `waiter` (a keyword/symbol/string
   resolvable symbol — is held as runtime-owned resource state instead of
   owner-partition declaration data (DELTA-OlrDrt-001.CC8). Returns the registered
   waiter as a keyword.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L606-L626">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L687-L707">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/register-workflow!">`register-workflow!`</a>
 ``` clojure
-(register-workflow! name constructor-sym)
+(register-workflow! name definition-sym)
 ```
 Function.
 
-Register a workflow constructor under a stable keyword `name`.
+Register a workflow definition under a stable keyword `name`.
 
-  `name` is a keyword; `constructor-sym` is a fully qualified symbol resolving to
-  a workflow constructor. The entry is an owner-complete declaration at the
-  direct/REPL layer, published through the owner-partition registry that survives
-  refresh. A duplicate `name` replaces the prior direct entry, so re-pointing a
-  route resolves the new constructor at each in-flight run's next named `:next`
-  transition (DELTA-OlrDrt-001.CC10). Returns `name`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L589-L604">Source</a></sub></p>
+  `name` is a keyword; `definition-sym` is a fully qualified symbol resolving to
+  a static definition map or a legacy constructor function. The entry is an
+  owner-complete declaration at the direct/REPL layer, published through the
+  owner-partition registry that survives refresh. A duplicate `name` replaces
+  the prior direct entry, so re-pointing a route resolves the new definition at
+  each in-flight run's next named transition (DELTA-OlrDrt-001.CC10).
+
+  Add-or-update is the whole mutation: registration validates the resulting live
+  registry the same way module publication validates a staged candidate, so a
+  symbol that will not resolve, a definition that is not a valid definition, or a
+  route to a name that cannot honor it fails before anything changes. Returns
+  `name`.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L650-L673">Source</a></sub></p>
+
+## <a name="skein.spools.workflow/resolve-workflow">`resolve-workflow`</a>
+``` clojure
+(resolve-workflow name)
+```
+Function.
+
+Return the live classification of registered workflow `name`.
+
+  The result is `{:name … :definition <symbol> :kind :static|:legacy :value …}`.
+  `:static` carries the definition map itself — doc, entrypoints, param spec,
+  defaults, and declared steps — so a trusted caller can inspect what a name
+  currently means without pouring anything or executing a constructor. `:legacy`
+  carries only the opaque constructor function it resolved to.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L726-L735">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/run-history">`run-history`</a>
 ``` clojure
@@ -493,7 +546,7 @@ Return a read-only, creation-ordered projection of every molecule ever poured
   `:type` is `:step-closed`, `:choice`, or `:gate-closed`; events are ordered by
   their strand's `updated_at`. Writes nothing and fails loudly (TEN-003) for a
   run that never had a root strand.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L363-L377">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L382-L396">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/spool">`spool`</a>
 
@@ -508,7 +561,7 @@ Entry-point declaration for the workflow spool (PROP-Dsp-001 `def spool`
   and world policy (`{:ns 'skein.spools.workflow :spools [...]}`) and never
   mirrors the pair. Unqualified symbols resolve against this namespace; fn
   values are rejected (ADR-002.O1).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L700-L710">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L793-L803">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/squash!">`squash!`</a>
 ``` clojure
@@ -518,7 +571,7 @@ Entry-point declaration for the workflow spool (PROP-Dsp-001 `def spool`
 Function.
 
 Replace a materialized wisp/molecule with one digest strand, then burn its graph.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L259-L272">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L273-L286">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/squash-run!">`squash-run!`</a>
 ``` clojure
@@ -536,7 +589,7 @@ Squash a finished run's molecules into one closed digest strand and return it.
   `workflow/run-id`, `workflow/squashed-count`, and a compact JSON-safe
   `workflow/summary` of the history (molecule titles + checkpoint outcomes).
   opts may override the digest `:title` and merge extra `:attributes`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L548-L579">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L567-L598">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/start!">`start!`</a>
 ``` clojure
@@ -549,13 +602,31 @@ Start a workflow run and return the `{:ready [step-view ...] :done boolean}`
   result shape.
 
   `run-id` is the stable active workflow instance handle. `workflow` may be a
-  pre-built workflow map, a constructor var, or a registered workflow keyword.
-  Var/keyword starts derive `:definition`; when `:context` is absent, params are
-  persisted as context after keyword values are stringified and non-JSON-safe
-  values are rejected loudly. `opts` may include :family, :definition, :context,
-  and :root-attributes. `:ready` is empty when the run has no ready workflow work
+  pre-built workflow map, a definition var, or a registered workflow keyword.
+  A registered static definition must declare the `:start` entrypoint. Var and
+  keyword starts derive `:definition` (and, for a registered name,
+  `workflow/definition-name`); a static definition's `:defaults` merge under
+  `params`. When `:context` is absent, the resolved params are persisted as
+  context after keyword values are stringified and non-JSON-safe values are
+  rejected loudly. `opts` may include :family, :definition, :context, and
+  :root-attributes. `:ready` is empty when the run has no ready workflow work
   (e.g. an empty workflow, which also reports `:done true`).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L274-L300">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L288-L319">Source</a></sub></p>
+
+## <a name="skein.spools.workflow/static-definition">`static-definition`</a>
+``` clojure
+(static-definition doc options definition)
+```
+Function.
+
+Return the static definition value `defworkflow` defines.
+
+  Splits `defworkflow`'s three declaration surfaces — the docstring, the
+  registration options, and the built workflow — into one self-describing value,
+  which is the whole point of a static definition: `:doc`, `:entrypoints`,
+  `:param-spec`, and `:defaults` travel with the workflow instead of living in a
+  registry entry beside it.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L608-L621">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/step">`step`</a>
 ``` clojure
@@ -571,7 +642,7 @@ Return a workflow step definition — a unit of work the driving agent does
   no `workflow/gate` attribute, so its compiled output is identical to a bare
   step. The result is plain data and may be passed to `workflow` or
   transformed by user code before compilation.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L72-L86">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L77-L91">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/step-view">`step-view`</a>
 ``` clojure
@@ -580,7 +651,22 @@ Return a workflow step definition — a unit of work the driving agent does
 Function.
 
 Return the agent-facing view of a workflow step.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L314-L317">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L333-L336">Source</a></sub></p>
+
+## <a name="skein.spools.workflow/unregister-workflow!">`unregister-workflow!`</a>
+``` clojure
+(unregister-workflow! name)
+```
+Function.
+
+Remove the direct/REPL registration of workflow `name`.
+
+  Owner-complete publication removes an entry by omitting it from the owner's
+  next contribution, which a coordinator working at the REPL has no way to say;
+  this is that removal. Later starts, routes, and registered-name revisions fail
+  before mutation, while strands already poured from the definition are left
+  exactly as they are. Returns the remaining direct registrations.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L675-L685">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/wisp!">`wisp!`</a>
 ``` clojure
@@ -594,7 +680,7 @@ Materialize `workflow` as an ephemeral wisp strand graph.
 
   Wisps are normal Skein strands marked with workflow attributes so userland can
   burn or squash them explicitly.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L224-L234">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L238-L248">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/workflow">`workflow`</a>
 ``` clojure
@@ -605,8 +691,13 @@ Function.
 Return a Clojure-native workflow definition.
 
   The returned map is the same data shape accepted by `compile`, but avoids a
-  separate TOML/JSON formula language.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L150-L161">Source</a></sub></p>
+  separate TOML/JSON formula language. An optional leading options map may carry
+  `:params`, `:attributes`, `:state`, and `:form`, plus the registration
+  contract a static definition declares about itself: `:doc`, `:entrypoints`,
+  `:param-spec`, and `:defaults` (see `defworkflow`). Options and the complete
+  assembled definition are both validated here, so a malformed nested step,
+  choice, or call fails at the builder rather than at the pour.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L155-L173">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/workflow-definition">`workflow-definition`</a>
 ``` clojure
@@ -614,9 +705,9 @@ Return a Clojure-native workflow definition.
 ```
 Function.
 
-Return the constructor symbol registered under keyword `name`, failing loudly
+Return the definition symbol registered under keyword `name`, failing loudly
   (TEN-003) when `name` is not registered.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L634-L638">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L715-L719">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/workflows">`workflows`</a>
 ``` clojure
@@ -624,5 +715,5 @@ Return the constructor symbol registered under keyword `name`, failing loudly
 ```
 Function.
 
-Return the current registry map of workflow name (keyword) -> constructor symbol.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L640-L643">Source</a></sub></p>
+Return the current registry map of workflow name (keyword) -> definition symbol.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L721-L724">Source</a></sub></p>

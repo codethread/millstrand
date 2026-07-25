@@ -944,6 +944,8 @@
                     staged (stage-publications backends base-candidates graph order raw
                                                previous-contributions previous-sources)
                     _ (publication/validate-op-candidates! backends (:candidates staged))
+                    _ (publication/validate-kind-candidates!
+                       runtime backends (:candidates staged))
                     provisional (provisional-result mode (:roots sync-result)
                                                     (:conflicts sync-result)
                                                     (:remedies sync-result)

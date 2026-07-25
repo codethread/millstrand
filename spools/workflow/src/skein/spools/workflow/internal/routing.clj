@@ -15,8 +15,8 @@
             [skein.api.spool.alpha :refer [fail!]]
             [skein.api.weaver.alpha :as weaver]
             [skein.spools.workflow.internal.compile :as cmp]
-            [skein.spools.workflow.internal.query :as query]
-            [skein.spools.workflow.internal.registry :as registry]))
+            [skein.spools.workflow.internal.definitions :as defs]
+            [skein.spools.workflow.internal.query :as query]))
 
 (defn close-attributes!
   "Return attributes to merge onto a step closed by complete!, from optional
@@ -129,30 +129,20 @@
                 :missing (vec missing)
                 :input-declaration decls})))))
 
-(defn- resolve-next-symbol
-  "Resolve a checkpoint choice's stored `:next` target to a workflow constructor
-  symbol. A stored keyword name (`\":proposal\"`) resolves through the
-  weaver-lifetime registry (failing loudly on an unregistered name); any other
-  value is read as a fully qualified fn symbol directly."
+(defn- resolve-next-target
+  "Resolve a checkpoint choice's stored `:next` value to its live target.
+
+  A stored keyword name (`\":proposal\"`) resolves through the registry, so the
+  transition binds whatever that name means now and a registered static
+  definition must declare `:continue`. Any other value is read as a fully
+  qualified symbol and resolved directly — the raw trusted form that predates
+  the registry."
   [rt next-str]
   (if (str/starts-with? next-str ":")
-    (registry/workflow-definition rt (keyword (subs next-str 1)))
-    (symbol next-str)))
-
-(defn- continuation-plan
-  "Interpret a `:next` fn's return value into the continuation workflow and its
-  authoritative params.
-
-  A `:next` fn may return a workflow map (compiled with the merged
-  context+input `call-params`, as before) or `{:workflow w :params p}` to own
-  its own params — `p` then compiles the continuation and becomes the new
-  root's persisted `workflow/context`. This lets a continuation (e.g. a
-  revision round) control its own loop/param state instead of inheriting whatever
-  the caller happened to pass as choice input."
-  [result call-params]
-  (if (and (map? result) (contains? result :workflow))
-    {:workflow (:workflow result) :params (get result :params call-params)}
-    {:workflow result :params call-params}))
+    (let [name (keyword (subs next-str 1))]
+      (defs/require-entrypoint! (defs/resolve-registered rt name) :continue))
+    (let [sym (symbol next-str)]
+      (defs/classify sym @(defs/resolve-symbol rt sym {})))))
 
 (defn- stage-param-keys
   "Return the stage-local override param keys recorded on `root` (as keywords).
@@ -172,58 +162,70 @@
 
 (defn- next-plan
   "Return the routing plan for a `:next` continuation (a symbol or registered
-  name). Continuation params come from the `:next` fn: either the merged
-  context+input (workflow-map return) or the fn's own `:params`
-  (`{:workflow w :params p}` return, see `continuation-plan`). The current root's
-  stage-local override keys (see `stage-param-keys`) are dropped from those
-  params so leaving the stage sheds its loop state. Params persist as the new
-  root's `workflow/context`, and the resolved constructor symbol as its
-  `workflow/definition` so a later `:revise` can re-pour the stage."
+  name).
+
+  The continuation starts from the merged context+input, minus the current
+  root's stage-local override keys (see `stage-param-keys`) so leaving the stage
+  sheds its loop state. A static definition folds its defaults under those
+  params; a legacy constructor may instead own them outright by returning
+  `{:workflow w :params p}`, which lets a revision round control its own loop
+  state rather than inherit whatever the caller passed as choice input. The
+  resulting params persist as the new root's `workflow/context`, alongside the
+  definition identity a later `:revise` re-pours from."
   [rt run-id _step next-str input]
-  (let [next-sym (resolve-next-symbol rt next-str)
-        workflow-fn (or (requiring-resolve next-sym)
-                        (fail! "Choice next workflow cannot be resolved"
-                               {:run-id run-id :next next-sym}))
+  (let [target (resolve-next-target rt next-str)
         root (query/current-root-with-rt rt run-id)
         context (or (query/attr root :workflow/context) {})
         call-params (apply dissoc (merge context input) (stage-param-keys root))
-        {:keys [workflow params]} (continuation-plan (workflow-fn call-params) call-params)
+        {:keys [workflow params]} (defs/build target call-params)
         payload (cmp/compile workflow params
-                             {:run-id run-id
-                              :family (query/attr root :workflow/family)
-                              :definition next-sym
-                              :context params
-                              :form :molecule})]
+                             (merge (defs/identity-attrs target)
+                                    {:run-id run-id
+                                     :family (query/attr root :workflow/family)
+                                     :context params
+                                     :form :molecule}))]
     {:old-root root :payload payload}))
+
+(defn- revision-target
+  "Resolve what a `:revise` choice re-pours for the current `root`.
+
+  A root poured from a registered name revises through that *name*, so a
+  coordinator who repointed it revises into the replacement; the name being gone
+  fails before any mutation rather than reviving a definition nothing points at
+  any more. A root that recorded only a symbol — a Var or map start — keeps
+  symbol-based revision."
+  [rt run-id choice root]
+  (if-let [registered (query/attr root :workflow/definition-name)]
+    (defs/resolve-registered rt (keyword registered))
+    (let [def-str (or (query/attr root :workflow/definition)
+                      (fail! "Cannot revise a run whose root has no workflow/definition"
+                             {:run-id run-id :choice choice}))
+          sym (symbol def-str)]
+      (defs/classify sym @(defs/resolve-symbol rt sym {})))))
 
 (defn- revise-plan
   "Return the routing plan for a `:revise` choice: re-pour the current root's own
-  `workflow/definition` under the same run-id with authoritative override params.
+  definition under the same run-id with authoritative override params.
 
   Params are `(merge context choice-input override-params)`, the `:revise`
-  overrides winning, and persist as the new root's `workflow/context`; the
-  overridden keys are recorded as stage-local (see `stage-params-attrs`). Fails
-  loudly (TEN-003) when the root has no resolvable `workflow/definition`."
+  overrides winning over the definition's defaults and over any params a legacy
+  constructor claims for itself, and persist as the new root's
+  `workflow/context`; the overridden keys are recorded as stage-local (see
+  `stage-params-attrs`)."
   [rt run-id _step choice input override-params]
   (let [root (query/current-root-with-rt rt run-id)
-        def-str (or (query/attr root :workflow/definition)
-                    (fail! "Cannot revise a run whose root has no workflow/definition"
-                           {:run-id run-id :choice choice}))
-        definition-sym (symbol def-str)
-        definition-fn (or (requiring-resolve definition-sym)
-                          (fail! "Root workflow/definition cannot be resolved"
-                                 {:run-id run-id :definition definition-sym}))
+        target (revision-target rt run-id choice root)
         context (or (query/attr root :workflow/context) {})
-        params (merge context input override-params)
-        result (definition-fn params)
-        workflow (if (and (map? result) (contains? result :workflow)) (:workflow result) result)
+        built (defs/build target (merge context input override-params))
+        workflow (:workflow built)
+        params (merge (:params built) override-params)
         payload (cmp/compile workflow params
-                             {:run-id run-id
-                              :family (query/attr root :workflow/family)
-                              :definition definition-sym
-                              :context params
-                              :root-attributes (stage-params-attrs override-params)
-                              :form :molecule})]
+                             (merge (defs/identity-attrs target)
+                                    {:run-id run-id
+                                     :family (query/attr root :workflow/family)
+                                     :context params
+                                     :root-attributes (stage-params-attrs override-params)
+                                     :form :molecule}))]
     {:old-root root :payload payload}))
 
 (defn route-plan
