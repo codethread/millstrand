@@ -2,9 +2,11 @@
   "Tests for the generic worker run surface of the `workflow` op: start, ready,
   complete, choose, continue, and await over the engine's published lifecycle."
   (:require [clojure.data.json :as json]
+            [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is testing]]
             [skein.api.cli.alpha :as cli-alpha]
+            [skein.api.runtime.alpha :as runtime]
             [skein.api.weaver.alpha :as weaver]
             [skein.spools.test-support :as test-support :refer [with-runtime]]
             [skein.spools.workflow :as workflow]
@@ -695,3 +697,100 @@
       (is (thrown? clojure.lang.ExceptionInfo
                    (invoke {:subcommand ["choose"] :run-id "run-json-input" :choice "ship"
                             :input "pass"}))))))
+
+;; --- the cross-spool composition fixture ------------------------------------
+;;
+;; PROP-Wcd-001.S7/EX7 end to end, through module publication rather than
+;; imperative registration: three owners that never name each other's code. A
+;; kanban-style spool publishes a template with a named exit, a devflow-style
+;; spool registers a routine that advertises `:continue`, and the workspace —
+;; the only place that can see both — binds one to the other and registers the
+;; result. A worker then drives the composite through the shipped verbs alone.
+
+(defn- module-source!
+  "Write module source `forms` under `config-dir` and return its workspace path."
+  [config-dir label requires forms]
+  (let [source (str "modules/" label ".clj")
+        file (io/file config-dir source)]
+    (io/make-parents file)
+    (spit file (str "(ns test.compose." label "\n"
+                    "  \"Cross-spool composition fixture module.\"\n"
+                    "  (:require [skein.spools.workflow :as workflow]" requires "))\n"
+                    forms))
+    source))
+
+(def ^:private kanban-template-form
+  ;; The template names where a worker chooses, and nothing about who they may
+  ;; choose. It is a plain `def`, so this owner registers nothing at all.
+  (str "(def general\n"
+       "  (workflow/workflow\n"
+       "    \"Track a card\"\n"
+       "    (workflow/step :prepare \"Prepare the card\" :self)\n"
+       "    (workflow/defer :perform-work \"Choose how this work will be performed\"\n"
+       "                    :depends-on [:prepare])))\n"))
+
+(def ^:private devflow-routine-form
+  (str "(clojure.spec.alpha/def ::feature clojure.core/string?)\n"
+       "(clojure.spec.alpha/def ::devflow-params\n"
+       "  (clojure.spec.alpha/keys :req-un [::feature]))\n"
+       "(workflow/defworkflow devflow\n"
+       "  \"Plan and build a feature.\"\n"
+       "  {:entrypoints #{:start :continue}\n"
+       "   :param-spec ::devflow-params}\n"
+       "  (workflow/workflow\n"
+       "    (fn [{:keys [feature]}] (str \"Plan and build \" feature))\n"
+       "    (workflow/step :inspect \"Inspect feature context\" :self)))\n"))
+
+(def ^:private workspace-binding-form
+  ;; The workspace is the authority boundary: it can see both spools, so it says
+  ;; which registered routines the kanban exit allows.
+  (str "(workflow/defworkflow tracked-card\n"
+       "  \"Track a card and select its delivery routine.\"\n"
+       "  {:entrypoints #{:start}}\n"
+       "  (workflow/bind-defers template/general {:perform-work #{:devflow}}))\n"))
+
+(deftest a-workspace-binds-one-spools-defer-exit-to-anothers-registered-routine
+  (with-runtime
+    (fn [rt config-dir]
+      (activate-cli! rt)
+      (let [template (module-source! config-dir "template" "" kanban-template-form)
+            routine (module-source! config-dir "routine" "" devflow-routine-form)
+            binding (module-source! config-dir "binding"
+                                    "\n            [test.compose.template :as template]"
+                                    workspace-binding-form)]
+        (is (= :applied (:status (runtime/module! rt :compose/template {:file template}))))
+        (is (= :applied (:status (runtime/module! rt :compose/routine {:file routine}))))
+        (is (= :applied (:status (runtime/module!
+                                  rt :compose/binding
+                                  {:file binding :after [:compose/template :compose/routine]}))))
+        (testing "the template owner registered nothing; the workspace registered the composite"
+          (is (= #{:devflow :tracked-card} (set (keys (workflow/workflows)))))
+          (is (= 'test.compose.binding/tracked-card
+                 (workflow/workflow-definition :tracked-card))))
+        (testing "both startable routines are catalogued, with the exit's allowlist on show"
+          (is (= ["devflow" "tracked-card"]
+                 (mapv :name (:definitions (invoke {:subcommand ["list"]})))))
+          (is (= [{:defer "perform-work" :workflows ["devflow"]}]
+                 (mapv #(select-keys % [:defer :workflows])
+                       (:defers (:declared (invoke {:subcommand ["show"]
+                                                    :workflow "tracked-card"})))))))
+        (let [started (started "card-123" :tracked-card)
+              _ (verb "complete" "card-123")
+              at-exit (verb "ready" "card-123")
+              exit (first (:ready at-exit))]
+          (is (= ["Prepare the card"] (mapv :title (:ready started))))
+          (testing "the poured exit carries the allowed names, in registered order"
+            (is (= "defer" (:role exit)))
+            (is (= "perform-work" (:defer exit)))
+            (is (= ["devflow"] (:workflows exit))))
+          (testing "continue transfers the root and carries only the target's params"
+            (let [continued (invoke {:subcommand ["continue"] :run-id "card-123"
+                                     :workflow "devflow"
+                                     :params {"feature" "kanban-web-ui"}})]
+              (is (= "workflow continue" (:operation continued)))
+              (is (= "Plan and build kanban-web-ui" (:title (:root continued))))
+              (is (not= (:id (:root started)) (:id (:root continued))))
+              (is (= ["Inspect feature context"] (mapv :title (:ready continued))))
+              (is (false? (:done continued)))))
+          (testing "the transferred run finishes under the same run id"
+            (is (true? (:done (verb "complete" "card-123"))))))))))
