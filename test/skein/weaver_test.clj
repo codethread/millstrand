@@ -4066,6 +4066,16 @@
               "redeclaring as :load :image drops the recorded source stamp")
           (is (= [:= [:attr :v] 1] (get (graph/queries rt) "stamp-q"))))))))
 
+(defn- names-both-image-remedies?
+  "True when an image contribution failure states both remedies (SPEC-004.C46).
+
+  Either requirement can be the missing one, so both branches promise one
+  message naming the namespace load and the public `spool` var alike."
+  [message]
+  (boolean (and message
+                (re-find #"load or require" message)
+                (re-find #"public spool var" message))))
+
 (deftest image-module-unloaded-namespace-fails-as-module-outcome
   (with-runtime
     (fn [rt _db-file]
@@ -4080,7 +4090,9 @@
         (is (= :image-unloaded (get-in outcome [:error :data :module/key])))
         (is (= ns-sym (get-in outcome [:error :data :ns]))
             "the failure names the unloaded namespace")
-        (is (= :image (get-in outcome [:error :data :load])))))))
+        (is (= :image (get-in outcome [:error :data :load])))
+        (is (names-both-image-remedies? (get-in outcome [:error :message]))
+            "the unloaded branch states both the load and the spool-var remedy")))))
 
 (deftest source-module-resolves-both-entry-points-from-the-public-spool-var
   (with-runtime
@@ -4164,6 +4176,8 @@
             (is (= :failed (:status outcome)))
             (is (= :image-bare (get-in outcome [:error :data :module/key])))
             (is (= :image (get-in outcome [:error :data :load])))
+            (is (names-both-image-remedies? (get-in outcome [:error :message]))
+                "the loaded-but-contribution-less branch states the same two remedies")
             (is (not (contains? (graph/queries rt) "image-bare-q")))))))))
 
 (deftest spool-declaration-loud-failures-and-legal-reconcile-forms-composition
@@ -5057,7 +5071,10 @@
         workspace (:config-dir world)
         suffix (str/replace (str (random-uuid)) "-" "")
         root-lib 'test/module-root
-        module-ns (symbol (str "test.module.live-upgrade-" suffix))]
+        module-ns (symbol (str "test.module.live-upgrade-" suffix))
+        legacy-declaration {:contribute (symbol (str module-ns) "contribute")
+                            :reconcile 'skein.weaver-test/module-reconcile}
+        legacy-resolved {:live-upgrade legacy-declaration}]
     (try
       (write-local-spool-module!
        workspace root-lib module-ns
@@ -5066,43 +5083,105 @@
       (spit (io/file workspace "init.clj")
             (str "(skein.core.weaver.runtime/declare-module! "
                  "skein.core.weaver.runtime/*runtime* :live-upgrade "
-                 "{:ns '" module-ns " :spools ['" root-lib "] "
-                 ":contribute '" module-ns "/contribute "
-                 ":reconcile 'skein.weaver-test/module-reconcile})\n"))
+                 "{:ns '" module-ns " :spools ['" root-lib "]})\n"))
       (let [rt (weaver-runtime/start! nil {:world world :publish? false})]
         (try
           (reset! module-reconcile-statuses [])
-          ;; Simulate a coordinator state recorded before Phase A was loaded.
-          (swap! (:module-state rt) dissoc :resolved-entry-points)
-          (let [legacy-resolved
-                {:live-upgrade
-                 {:contribute (symbol (str module-ns) "contribute")
-                  :reconcile 'skein.weaver-test/module-reconcile}}]
+          ;; A coordinator picked up with refresh! rather than a restart: its
+          ;; graph entry was collected before the cutover, so it carries the
+          ;; entry-point keys no authoring route accepts any more, and its state
+          ;; predates :resolved-entry-points (DELTA-Dsp-004.D3).
+          (swap! (:module-state rt)
+                 (fn [state]
+                   (-> state
+                       (dissoc :resolved-entry-points)
+                       (update-in [:graph :live-upgrade] merge legacy-declaration))))
+          (is (= legacy-resolved
+                 (:resolved/entry-points (runtime/status rt)))
+              "status bootstraps the projection before the first refresh")
+          (spit (io/file workspace "init.clj")
+                (str "(skein.core.weaver.runtime/declare-module! "
+                     "skein.core.weaver.runtime/*runtime* :cycle-a "
+                     "{:ns '" module-ns " :after [:cycle-b]})\n"
+                     "(skein.core.weaver.runtime/declare-module! "
+                     "skein.core.weaver.runtime/*runtime* :cycle-b "
+                     "{:ns '" module-ns " :after [:cycle-a]})\n"))
+          (let [refused (weaver-runtime/refresh-modules! rt)]
+            (is (= :refused (:status refused)))
             (is (= legacy-resolved
                    (:resolved/entry-points (runtime/status rt)))
-                "status bootstraps the projection before the first refresh")
-            (spit (io/file workspace "init.clj")
-                  (str "(skein.core.weaver.runtime/declare-module! "
-                       "skein.core.weaver.runtime/*runtime* :cycle-a "
-                       "{:ns '" module-ns " :after [:cycle-b] "
-                       ":contribute '" module-ns "/contribute})\n"
-                       "(skein.core.weaver.runtime/declare-module! "
-                       "skein.core.weaver.runtime/*runtime* :cycle-b "
-                       "{:ns '" module-ns " :after [:cycle-a] "
-                       ":contribute '" module-ns "/contribute})\n"))
-            (let [refused (weaver-runtime/refresh-modules! rt)]
-              (is (= :refused (:status refused)))
-              (is (= legacy-resolved
-                     (:resolved/entry-points (runtime/status rt)))
-                  "a refused first refresh leaves live-pickup status valid")))
+                "a refused first refresh leaves live-pickup status valid"))
+          (let [declared (weaver-runtime/declare-module!
+                          rt :post-cutover {:ns module-ns :spools [root-lib]})]
+            (is (not= :refused (:status declared))
+                "a fresh declaration joins the retained graph without re-normalizing it")
+            (is (contains? (:modules (weaver-runtime/module-status rt)) :post-cutover))
+            (is (= legacy-declaration
+                   (select-keys (get-in (weaver-runtime/module-status rt)
+                                        [:modules :live-upgrade])
+                                [:contribute :reconcile]))
+                "and leaves the pre-cutover entry readable"))
           (spit (io/file workspace "init.clj") "")
           (let [result (weaver-runtime/refresh-modules! rt)]
             (is (= :applied (:status result)))
             (is (= :removed (get-in result [:modules :live-upgrade :status])))
             (is (= [[:live-upgrade :removed]] @module-reconcile-statuses)
-                "the legacy explicit reconciler survives the first removal refresh")
+                "the retained reconciler runs exactly once, on removal")
             (is (empty? (:resolved/entry-points result))))
           (finally
             (weaver-runtime/stop! rt))))
       (finally
         (delete-tree! (io/file workspace ".."))))))
+
+(deftest fresh-declarations-refuse-entry-point-keys
+  (testing "the direct internal declare-module! route refuses either key"
+    (with-runtime
+      (fn [rt _db-file]
+        (let [workspace (get-in rt [:metadata :config-dir])
+              suffix (str/replace (str (random-uuid)) "-" "")
+              source "modules/fresh-legacy.clj"]
+          (module-source! workspace source
+                          (symbol (str "test.module.fresh-legacy-" suffix))
+                          contribute-spool)
+          (doseq [field [:contribute :reconcile]]
+            (let [failure (try
+                            (weaver-runtime/declare-module!
+                             rt :fresh-legacy
+                             {:file source field 'skein.weaver-test/module-contribute})
+                            nil
+                            (catch clojure.lang.ExceptionInfo e e))]
+              (is failure (str "expected a refusal for " field))
+              (is (= [field] (:removed (ex-data failure)))
+                  "the refusal names the offending key")
+              (is (= :fresh-legacy (:module/key (ex-data failure))))
+              (is (re-find #"public spool var" (ex-message failure))
+                  "and points at the convention that replaced it")))
+          (is (not (contains? (:modules (weaver-runtime/module-status rt))
+                              :fresh-legacy))
+              "a refused declaration is not recorded")))))
+  (testing "startup collection refuses a legacy declaration before any module runs"
+    (let [world (temp-world)
+          workspace (:config-dir world)
+          suffix (str/replace (str (random-uuid)) "-" "")
+          rt (atom nil)]
+      (try
+        (module-source! workspace "modules/startup-legacy.clj"
+                        (symbol (str "test.module.startup-legacy-" suffix))
+                        contribute-spool)
+        (spit (io/file workspace "init.clj")
+              (str "(skein.core.weaver.runtime/declare-module! "
+                   "skein.core.weaver.runtime/*runtime* :startup-legacy "
+                   "{:file \"modules/startup-legacy.clj\" "
+                   ":contribute 'skein.weaver-test/module-contribute})\n"))
+        (let [failure (try
+                        (reset! rt (weaver-runtime/start!
+                                    nil {:world world :publish? false}))
+                        nil
+                        (catch clojure.lang.ExceptionInfo e e))]
+          (is failure "expected startup to fail loudly")
+          (is (some #(re-find #"no longer name entry points" %)
+                    (remove nil? (throwable-messages failure)))
+              "the startup failure carries the declaration refusal"))
+        (finally
+          (when @rt (weaver-runtime/stop! @rt))
+          (delete-tree! (io/file workspace "..")))))))

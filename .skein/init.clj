@@ -4,11 +4,13 @@
 ;; re-reads this file to recollect the whole graph. Startup-file collection only
 ;; STAGES declarations — no source load, publication, or reconcile runs here — so
 ;; this file holds no imperative effects; each concern's registrations live in its
-;; module's contribution (authoring forms or its namespace's `def spool` entry
-;; point) or that var's reconcile entry point. Every module here — in-tree spool,
-;; pinned sibling, and workspace file alike — resolves its entry points from that
-;; public `spool` var by convention (PROP-Dsp-001), so a declaration names only a
-;; source target and world policy.
+;; module's contribution (the authoring forms its source collects, its namespace's
+;; public `def spool` entry point, or both) or that var's reconcile entry point.
+;; No declaration here names an entry point: where a module has one, the
+;; coordinator resolves it from the public `spool` var by convention
+;; (PROP-Dsp-001), so a declaration carries only a source target and world policy.
+;; A module whose whole contribution is collected authoring forms declares no
+;; `spool` var and needs none.
 ;;
 ;; File-per-concern map (each is one module):
 ;;   config.clj        — named queries + the devflow/kanban/hitl CLI op surface

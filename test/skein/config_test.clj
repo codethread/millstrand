@@ -1379,6 +1379,31 @@
    :skein/spools-chime 'skein.spools.chime/spool
    :skein/spools-cron 'skein.spools.cron/spool})
 
+(def ^:private sibling-spool-vars
+  "The pinned sibling modules `.skein/init.clj` activates, keyed as init.clj keys
+  them, each mapped to the released namespace's public `def spool` var. These are
+  every namespace the Phase C pins supply: `codethread/devflow` v6,
+  `codethread/kanban` v10, and the three `ct.spools/agent-run` v14 roots, whose
+  subagent executor gained its `spool` var in the same release."
+  {:skein/spools-devflow 'ct.spools.devflow/spool
+   :skein/spools-kanban 'ct.spools.kanban/spool
+   :skein/spools-shuttle 'ct.spools.agent-run/spool
+   :skein/spools-delegation 'ct.spools.delegation/spool
+   :skein/spools-bench 'ct.spools.bench/spool
+   :skein/spools-treadle 'ct.spools.executors.subagent/spool})
+
+(def ^:private forms-only-ns-modules
+  "The init.clj `:ns` modules that legally declare no `spool` var: the macro
+  namespaces, whose contribution is empty, and the defp demo, whose contribution
+  is the patterns its source collects."
+  #{:macros/patterns :macros/ops :macros/queries :macros/rules :macros/demo})
+
+(defn- public-spool-var
+  "Resolve a namespace's `spool` var, or nil when it is missing or private."
+  [spool-sym]
+  (when-let [spool-var (requiring-resolve spool-sym)]
+    (when-not (:private (meta spool-var)) spool-var)))
+
 (deftest init-modules-resolve-entry-points-by-convention
   ;; PROP-Dsp-001.G7/P7.1: the literal-mirror triples are retired outright —
   ;; init.clj names only a source target and world policy, and the coordinator
@@ -1386,29 +1411,44 @@
   ;; var. This guards that conversion from both sides. First, NO init.clj module
   ;; — in-tree spool, pinned sibling, or workspace file — declares an explicit
   ;; `:contribute`/`:reconcile`; that is the invariant the retired sibling parity
-  ;; test used to police from the other direction. Second, each in-tree spool's
-  ;; backing `spool` var is a valid `::spool-api/spool` carrying at least a
-  ;; `:contribute` entry point. Cardinality is asserted first, so a deleted,
-  ;; duplicated, or re-keyed declaration fails before any per-module comparison.
-  (let [declarations (->> (read-all-forms ".skein/init.clj")
-                          (filter module-form?)
-                          (map parse-module-form))
-        by-key (->> declarations
-                    (filter #(some-> (:ns %) str (str/starts-with? "skein.spools.")))
-                    (group-by :key))]
-    (is (seq declarations) "parsed at least one init.clj module! form")
-    (doseq [{:keys [key contribute reconcile]} declarations]
-      (is (and (nil? contribute) (nil? reconcile))
-          (str key " still declares an explicit entry-point key in init.clj")))
-    (is (= (set (keys in-tree-spool-vars)) (set (keys by-key)))
-        "init.clj's in-tree spool module keys drifted from the expected set")
-    (is (every? #(= 1 (count %)) (vals by-key))
-        "an in-tree module key is declared more than once in init.clj")
-    (doseq [[key spool-sym] in-tree-spool-vars]
-      (let [spool-var (requiring-resolve spool-sym)]
-        (is (s/valid? ::spool-api/spool @spool-var)
-            (str key " backing " spool-sym " is not a valid ::spool: "
-                 (s/explain-str ::spool-api/spool @spool-var)))
-        (is (contains? @spool-var :contribute)
-            (str key " backing " spool-sym
-                 " declares no :contribute entry point"))))))
+  ;; test used to police from the other direction. Second, every `:ns` module
+  ;; expected to contribute — in-tree spool AND pinned sibling — resolves a public
+  ;; `spool` var that is a valid `::spool-api/spool` carrying at least a
+  ;; `:contribute` entry point. Without that second half a pin bump to a sibling
+  ;; that renamed, privatised, or malformed its var lands as a silently empty
+  ;; contribution and then a startup failure of the coordination world, not a test
+  ;; failure. It runs inside a started world so the pinned sibling roots are on
+  ;; the classpath and their vars resolve. Cardinality is asserted first, so a
+  ;; deleted, duplicated, or re-keyed declaration fails before any per-module
+  ;; check, and an added `:ns` module must be classified as contributing or as
+  ;; forms-only before it can pass. Workspace `:file` modules are deliberately
+  ;; outside the var requirement: a file's whole contribution may be the authoring
+  ;; forms its load collects.
+  (with-startup-config-runtime
+    (fn [_rt]
+      (let [declarations (->> (read-all-forms ".skein/init.clj")
+                              (filter module-form?)
+                              (map parse-module-form))
+            expected-vars (merge in-tree-spool-vars sibling-spool-vars)
+            ns-keys (->> declarations (filter :ns) (map :key))]
+        (is (seq declarations) "parsed at least one init.clj module! form")
+        (is (every? #(= 1 (count %)) (vals (group-by :key declarations)))
+            "a module key is declared more than once in init.clj")
+        (is (= (into (set (keys expected-vars)) forms-only-ns-modules)
+               (set ns-keys))
+            "init.clj's :ns module keys drifted from the expected set")
+        (doseq [{:keys [key contribute reconcile]} declarations]
+          (is (and (nil? contribute) (nil? reconcile))
+              (str key " still declares an explicit entry-point key in init.clj")))
+        (doseq [[key spool-sym] expected-vars]
+          (if-let [spool-var (public-spool-var spool-sym)]
+            (do
+              (is (s/valid? ::spool-api/spool @spool-var)
+                  (str key " backing " spool-sym " is not a valid ::spool: "
+                       (s/explain-str ::spool-api/spool @spool-var)))
+              (is (contains? @spool-var :contribute)
+                  (str key " backing " spool-sym
+                       " declares no :contribute entry point")))
+            (is false
+                (str key " resolves no public " spool-sym
+                     " var, so it contributes nothing by convention"))))))))

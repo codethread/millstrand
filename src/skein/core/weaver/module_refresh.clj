@@ -416,6 +416,17 @@
                      [role (entry-points/resolve-fn! key role callable)])))
            [:contribute :reconcile])))
 
+(def ^:private image-contribution-remedy
+  "The message both image-mode contribution failures state (SPEC-004.C46).
+
+  Image mode collects no authoring forms, so its `:contribute` has exactly two
+  requirements and either can be the missing one; naming both in one message
+  keeps the remedy actionable without the reader knowing which branch failed."
+  (format/reflow
+   "|Image module resolves no :contribute entry point; load or require its
+    |namespace into the JVM image, and define a public spool var carrying
+    |:contribute in that namespace"))
+
 (defn- evaluate-image-module
   "Evaluate a `:load :image` module: trust the already-loaded JVM image for its
   `:ns` target with no source load and no contribution-collection scope. Entry
@@ -426,18 +437,15 @@
   [runtime with-loader key declaration]
   (let [ns-sym (:ns declaration)]
     (when-not (find-ns ns-sym)
-      (fail! (format/reflow
-              "|Image module namespace is not loaded in the JVM image; load or
-               |require it before the module activates")
-             {:module/key key :ns ns-sym :load :image}))
-    (let [resolved (entry-points/resolve-entry-points key declaration ns-sym)
+      (fail! image-contribution-remedy
+             {:module/key key :ns ns-sym :load :image
+              :reason :namespace-not-loaded}))
+    (let [resolved (entry-points/resolve-entry-points key ns-sym)
           contribute (:contribute resolved)]
       (when-not contribute
-        (fail! (format/reflow
-                "|Image module resolves no :contribute entry point; its namespace
-                 |needs a public spool var because image mode collects no
-                 |authoring forms")
-               {:module/key key :ns ns-sym :load :image}))
+        (fail! image-contribution-remedy
+               {:module/key key :ns ns-sym :load :image
+                :reason :no-spool-contribution}))
       (let [resolved-fns (resolve-entry-point-fns! with-loader key resolved)
             contribution
             (with-loader
@@ -466,17 +474,13 @@
                             :unchanged
                             :loaded)
             module-ns (entry-points/module-namespace declaration context)
-            resolved (entry-points/resolve-entry-points key declaration module-ns)
+            resolved (entry-points/resolve-entry-points key module-ns)
             resolved-fns (resolve-entry-point-fns! with-loader key resolved)
             contribute-fn (:contribute resolved-fns)
             contribution (cond
                            contribute-fn
                            (do
-                             ;; Scoped to a spool-var :contribute: a declaration
-                             ;; carrying its own reaches here only through a live
-                             ;; pickup, and keeps its precedence (DELTA-Dsp-004.D3).
-                             (when (and (seq collected)
-                                        (not (contains? declaration :contribute)))
+                             (when (seq collected)
                                (fail! (format/reflow
                                        "|Module's spool var supplies a :contribute entry
                                         |point yet its source collected authoring forms; the
@@ -783,7 +787,11 @@
       (let [[key declaration] (:declare opts)
             declaration (module-graph/normalize-declaration key declaration)
             graph (assoc (:graph state) key declaration)
-            {:keys [order]} (module-graph/validate-graph graph)]
+            ;; Only the declaration being authored is normalized. The graph it
+            ;; joins was normalized when it was collected, and on a coordinator
+            ;; picked up without a restart it may still hold pre-cutover
+            ;; entries a fresh normalization would now refuse (DELTA-Dsp-004.D3).
+            order (module-graph/dependency-order graph)]
         {:mode :targeted
          :collection (assoc (select-keys state [:layers :shadows :startup/files])
                             :files (:startup/files state)

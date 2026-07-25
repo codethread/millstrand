@@ -22,6 +22,7 @@
   alpha-qualified."
   (:require [clojure.spec.alpha :as s]
             [skein.api.clock.alpha :as clock-api]
+            [skein.api.format.alpha :as format-alpha]
             [skein.api.runtime.internal.shapes :as shapes]
             [skein.api.runtime.internal.spools-edn :as spools-edn]
             [skein.api.spool.alpha :refer [require-valid!]]
@@ -201,7 +202,8 @@
 ;; namespace's `spool` var rather than by opts. The coordinator's
 ;; `normalize-declaration` stays the normalizer and the authority for actionable
 ;; per-field error prose, so `validate-module-opts!` routes a spec-invalid input
-;; through it and refuses whatever this grammar rejects.
+;; through it — after refusing the withdrawn entry-point keys itself, which no
+;; normalizer prose can name — and refuses whatever this grammar rejects.
 (s/def ::module-opts
   (s/and map?
          #(every? #{:ns :file :load :spools :after :required?} (keys %))
@@ -217,24 +219,17 @@
          #(or (not (contains? % :required?)) (boolean? (:required? %)))))
 
 ;; This result shape owns the closed normalized declaration returned by
-;; `module!`; `::module-opts` owns the less-normalized public input grammar. It
-;; stays wider than that grammar in one respect: entry-point fields are readable
-;; here because a coordinator picked up without a restart can still hold graph
-;; declarations carrying them, and their retained reconcilers must keep tearing
-;; down.
+;; `module!`; `::module-opts` owns the less-normalized public input grammar.
+;; Retained pre-cutover graph state is an internal coordinator concern and never
+;; passes through this staged-result spec (DELTA-Dsp-004.D3).
 (s/def ::module-declaration
   (s/and map?
-         #(every? #{:ns :file :load :spools :after :contribute :reconcile
-                    :required?}
+         #(every? #{:ns :file :load :spools :after :required?}
                   (keys %))
          #(not= (contains? % :ns) (contains? % :file))
          #(or (not (contains? % :ns)) (symbol? (:ns %)))
          #(or (not (contains? % :file)) (string? (:file %)))
          #(or (not (contains? % :load)) (= :image (:load %)))
-         #(or (not (contains? % :contribute))
-              (qualified-symbol? (:contribute %)))
-         #(or (not (contains? % :reconcile))
-              (qualified-symbol? (:reconcile %)))
          #(and (vector? (:spools %)) (every? symbol? (:spools %)))
          #(and (vector? (:after %)) (every? keyword? (:after %)))
          #(boolean? (:required? %))))
@@ -309,13 +304,16 @@
   none: the module's namespace declares a public
   `(def spool {:contribute … :reconcile …})` var, and a public `spool` var in a
   module-loadable namespace unconditionally is that module's entry-point
-  declaration. Every resolved symbol is resolved and root-value-validated at
+  declaration. Every effective symbol is resolved and root-value-validated at
   every module evaluation. When no `:contribute` resolves, the module's
   contribution is the declaration data collected from the authoring forms
   evaluated in its source, so a plain file of authoring forms is a complete
   module (DELTA-OlrRepl-001.CC3). A `spool` var supplying `:contribute` while
   the same source load collected authoring forms is a loud conflict; a
-  `:reconcile`-only `spool` var composes with authoring forms.
+  `:reconcile`-only `spool` var composes with authoring forms. Opts naming
+  `:contribute` or `:reconcile` — qualified or not — are refused with the
+  removed keys named and the `spool`-var remedy; the keys carry no alias and no
+  fallback (DELTA-Dsp-003.CC1).
 
   `:load :image` (SPEC-004.C45/C46, ADR-003.P4) trusts the
   already-loaded JVM image for the `:ns` target: refresh performs no source
@@ -660,17 +658,39 @@
   (require-valid! ::status-result result "runtime status result has an invalid shape")
   result)
 
+(def ^:private removed-module-opts-keys
+  "Entry-point keys withdrawn from `::module-opts` (DELTA-Dsp-003.CC1)."
+  [:contribute :reconcile])
+
+(def ^:private removed-module-opts-remedy
+  "Remedy prose carried by the refusal of a withdrawn entry-point key."
+  (format-alpha/reflow
+   "|Delete the key from the declaration and declare the module's entry points
+    |in its namespace's public spool var, as
+    |(def spool {:contribute 'contribute :reconcile 'reconcile})."))
+
 (defn- validate-module-opts!
   "Validate public module! opts against the named `::module-opts` grammar.
 
-  A spec-invalid input is routed through the coordinator's
-  `normalize-declaration`, which owns the actionable per-field error prose;
+  A withdrawn entry-point key is refused here first, naming the removed keys and
+  the `spool`-var remedy. The coordinator's `normalize-declaration` owns
+  per-field prose for the declaration grammar it parses and so can never name a
+  key this surface withdrew: probing it with a legacy declaration answers with
+  generic grammar prose, or worse tells the author to qualify a key that no
+  longer exists. Any other spec-invalid input is routed through that normalizer;
   normalization is pure, so the probe has no effect. This grammar is the
-  narrower surface — entry points belong to the module namespace's `spool` var,
-  not to opts — so input the parser accepts and the named spec rejects is still
-  refused here, with the spec explain data."
+  narrower surface, so input the parser accepts and the named spec rejects is
+  still refused here, with the spec explain data."
   [key opts]
   (when-not (s/valid? ::module-opts opts)
+    (when (map? opts)
+      (when-let [removed (seq (filter #(contains? opts %) removed-module-opts-keys))]
+        (throw (ex-info (str "module! opts name removed entry-point keys. "
+                             removed-module-opts-remedy)
+                        {:reason :removed-module-opts-keys
+                         :module/key key
+                         :removed (vec removed)
+                         :remedy removed-module-opts-remedy}))))
     (module-graph/normalize-declaration key opts)
     (require-valid! ::module-opts opts
                     "module! opts do not match the module declaration grammar"))

@@ -277,15 +277,18 @@
     (is (not (s/valid? ::runtime/module-result {:staged? false}))))
   (testing "module-declaration accepts only :image for the optional :load key"
     (let [image-declaration {:ns 'skein.api.runtime.alpha-test :load :image
-                             :contribute 'skein.api.runtime.alpha-test/image-contribute
                              :spools [] :after [] :required? false}]
       (is (s/valid? ::runtime/module-declaration image-declaration))
       (is (not (s/valid? ::runtime/module-declaration
                          (assoc image-declaration :load :classpath))))
       (is (not (s/valid? ::runtime/module-declaration
-                         (assoc image-declaration :contribute 'unqualified))))
+                         (assoc image-declaration
+                                :contribute
+                                'skein.api.runtime.alpha-test/image-contribute))))
       (is (not (s/valid? ::runtime/module-declaration
-                         (assoc image-declaration :reconcile :not-a-symbol))))
+                         (assoc image-declaration
+                                :reconcile
+                                'skein.api.runtime.alpha-test/image-contribute))))
       (is (not (s/valid? ::runtime/module-declaration
                          (assoc image-declaration :extra :unsupported))))
       (is (not (s/valid? ::runtime/module-declaration
@@ -329,17 +332,14 @@
     (is (not (s/valid? ::runtime/collect-entry-opts {:override? :yes})))
     (is (not (s/valid? ::runtime/collect-entry-opts {:unknown true})))))
 
-(defn- refusal-data
-  "Return the `ex-data` of the loud refusal `f` throws, or nil when it returns.
-
-  Assertions read the refusal payload rather than its prose so they hold for
-  whichever validation seam names the offending key first."
+(defn- refusal
+  "Return the loud refusal `f` throws, or nil when it returns."
   [f]
   (try
     (f)
     nil
     (catch clojure.lang.ExceptionInfo error
-      (ex-data error))))
+      error)))
 
 (defn- write-module-source! [config-dir relative-path ns-sym body]
   (let [file (io/file config-dir relative-path)]
@@ -400,22 +400,47 @@
                                 (runtime/module! rt :bad {:file "modules/demo.clj"
                                                           :ns 'demo.ns}))))
         (testing "entry-point keys are refused outright, with no fallback"
-          (let [contribute-refusal
-                (refusal-data
-                 #(runtime/module! rt :legacy-contribute
-                                   {:file "modules/demo.clj"
-                                    :contribute 'skein.api.runtime.alpha-test/image-contribute}))
-                reconcile-refusal
-                (refusal-data
-                 #(runtime/module! rt :legacy-reconcile
-                                   {:ns ns-sym
-                                    :reconcile 'skein.api.runtime.alpha-test/image-contribute}))]
-            (is (str/includes? (pr-str contribute-refusal) ":contribute")
-                "a declared :contribute is refused loudly, naming the offending key")
-            (is (str/includes? (pr-str reconcile-refusal) ":reconcile")
-                "a declared :reconcile is refused loudly, naming the offending key")
+          (let [refuse (fn [key opts] (refusal #(runtime/module! rt key opts)))
+                qualified
+                (refuse :legacy-contribute
+                        {:file "modules/demo.clj"
+                         :contribute 'skein.api.runtime.alpha-test/image-contribute})
+                unqualified (refuse :legacy-unqualified
+                                    {:ns ns-sym :contribute 'contribute})
+                reconcile (refuse :legacy-reconcile
+                                  {:ns ns-sym :reconcile 'reconcile})
+                both (refuse :legacy-both
+                             {:ns ns-sym
+                              :contribute 'contribute
+                              :reconcile 'reconcile})]
+            (is (= {:reason :removed-module-opts-keys
+                    :module/key :legacy-contribute
+                    :removed [:contribute]}
+                   (select-keys (ex-data qualified)
+                                [:reason :module/key :removed]))
+                "the refusal names the removed key and the module it came from")
+            (is (= (select-keys (ex-data qualified) [:reason :removed])
+                   (select-keys (ex-data unqualified) [:reason :removed]))
+                "an unqualified legacy value is the same removed-key refusal")
+            (is (= [:reconcile] (:removed (ex-data reconcile))))
+            (is (= [:contribute :reconcile] (:removed (ex-data both)))
+                "a declaration naming both keys names both in its refusal")
+            (doseq [error [qualified unqualified reconcile both]]
+              (is (str/includes? (ex-message error) "removed entry-point keys")
+                  "the message classes the failure as a removed key")
+              (is (str/includes? (ex-message error) "(def spool")
+                  "the message shows the spool var that replaces the key")
+              (is (str/includes? (:remedy (ex-data error))
+                                 "namespace's public spool var")
+                  "the remedy directs the author at the namespace's spool var")
+              (is (str/includes? (:remedy (ex-data error))
+                                 "{:contribute 'contribute :reconcile 'reconcile}")
+                  "the example stores symbols rather than resolved fn values"))
+            (is (not (str/includes? (ex-message unqualified) "qualified"))
+                "an unqualified value is never told to qualify the removed key")
             (is (empty? (select-keys (:modules (runtime/status rt))
-                                     [:legacy-contribute :legacy-reconcile]))
+                                     [:legacy-contribute :legacy-unqualified
+                                      :legacy-reconcile :legacy-both]))
                 "a refused declaration is not recorded")))))))
 
 (deftest spool-spec-owns-the-def-spool-convention-shape
