@@ -16,7 +16,7 @@ This is userland spool code, not a separate scheduler or persistence system. Wor
 
 Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `defer`, `bind-defers`, `param`, `compile`, `pour!`, `wisp!`, and `explain`.
 
-The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `continue!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see §5). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
+The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `continue!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see §5), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see §5b). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
 
 Every run-mutating op (`start!`, `complete!`, `choose!`, `continue!`, `advance!`) returns one `{:ready [step-view ...] :done boolean}` map: `:ready` is the run's ready step views (as `ready` would return them) and `:done` is its done-ness, so an empty `:ready` never leaves a caller guessing whether the run finished or merely stalled. The pure queries `ready`/`ready-step` still return step views directly.
 
@@ -486,6 +486,53 @@ The allowlist is fixed when the defer pours; the name inside it resolves live. A
 `params` are the target's own. Its `:defaults` merge under exactly what is supplied here and the merged map is validated whole against its `:param-spec` — passing no params and passing `{}` are the same request. Nothing from the parent reaches it, which is what makes a defer the cross-spool isolation boundary; a parent key the target happens to need is simply absent, and the target's spec says so.
 
 The filled exit records what it continued into: `workflow/continued-workflow`, the symbol that name resolved to, a fingerprint of the resolved definition, and the exact params it poured with. `run-history` projects it as a `:continuation` event whose `:outcome` is the selected name. The fingerprint digests the printed definition, so two definitions printing identically fingerprint identically and behavior behind a render function is not fingerprinted at all — the same limit `spec-forms` states for live specs.
+
+## 5b. Registry discovery
+
+Two reads answer what a weaver has registered. `(workflow/catalog)` lists the definitions; `(workflow/definition-view :spike)` reads one in full. Both read the effective registry at the moment you call them, so a refreshed owner partition, a repointed name, and a reloaded definition Var all show up in the next answer.
+
+Neither read runs anything a definition carries. Rendered names, titles, descriptions, and attribute values, loop sources, and spec predicates are reported as declared and never called, and no legacy constructor is invoked. That is what makes a catalogue read safe to ask for at any time, and it is also its limit: what a render function would produce for some future params is not knowable here.
+
+### The `workflow` op is opted into
+
+The CLI over these reads is a module of its own. Activating `skein.spools.workflow` gives you the engine, its registries, and its Clojure API — and no CLI verbs. The `workflow` op appears only when startup config also declares the CLI module:
+
+```clojure
+(runtime/module! runtime :skein/spools-workflow-cli
+                 {:ns 'skein.spools.workflow.cli
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow]})
+```
+
+A spool that pours workflows for its own domain surface should not thereby hand every worker a generic way to drive those runs, so the engine never publishes the verbs by itself. Dropping the module from startup config removes the op again: the module owns that op partition, and publication replaces it whole.
+
+### `workflow list`
+
+```console
+$ strand workflow list
+{"operation":"workflow list",
+ "definitions":[{"name":"build","doc":"Build an agreed feature scope.","entrypoints":["start","continue"],"definition":"acme.workflows/build"}]}
+```
+
+The default lists definitions declaring the `:start` entrypoint, which is the question a worker starting work actually has. `--entrypoint start|continue|call` selects one capability instead, and `--all` drops the filter. Items are ordered by registered name and carry exactly four fields: name, doc, entrypoints, and definition symbol. Everything else is one `show` away, so a catalogue read stays cheap however many workflows a workspace registers.
+
+`--all` is also the only way an opaque legacy constructor appears. A constructor declares no capability, so no capability filter can match it; its catalogue entry carries an empty `entrypoints` vector and a doc saying it declares nothing. `--all` and `--entrypoint` together fail as `workflow/list-request-invalid` — they state two different intents about one read.
+
+### `workflow show`
+
+`show` is a point read, so it answers for any registered name, including the call-only and continue-only components `list` hides by default. It returns the catalogue fields plus:
+
+| Field | Contents |
+|---|---|
+| `kind`, `opaque` | `"static"`/`false` for a definition map; `"legacy"`/`true` for a constructor, whose `params` and `declared` are then both `{"kind":"opaque"}`. |
+| `params` | `{"kind":"spec"}` with the `:param-spec` identity, its live `spec-forms` graph, and `defaults`; or `{"kind":"declared"}` with the deprecated per-key declarations; or `{"kind":"none"}`. A per-key default that is a function of params is marked `"rendered": true` rather than resolved. |
+| `declared` | `entry` (items waiting for nothing), `loops`, `gates`, `checkpoints` with their choice keys, `calls` with their target and how it is named, `defers` with their bound targets, and `routes` — the registered names checkpoint choices route to. |
+
+The declared summary is exactly that: a summary of what the definition declares. Loops, calls, and continuations are never expanded, because an expansion depends on params that do not exist yet and a deferred exit cannot be described before a worker fills it. Use `describe` (§6a) when you have params and want the shape they would pour.
+
+Failures carry the reason and what to do about it: an unregistered name fails as `workflow/definition-unregistered` listing the registered names, and a definition whose Var has vanished since publication fails as `workflow/definition-unresolvable` with the owner and the three repair choices (§5). A `list` read fails the same way rather than quietly returning one workflow fewer.
+
+There is no family filter, pagination, JSON Schema projection, or registry mutation on this surface. Registration stays a trusted-Clojure and module-publication concern.
 
 ## 6. Molecule ops
 
