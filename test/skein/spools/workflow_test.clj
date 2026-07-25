@@ -72,7 +72,6 @@
   (let [review (fn [_]
                  (workflow/workflow
                   "Review"
-                  {:params {:artifact (workflow/param :required true)}}
                   (workflow/step :inspect
                                  (fn [{:keys [artifact]}] (str "Inspect " artifact)) :self)
                   (workflow/step :write-review
@@ -105,7 +104,6 @@
 (defn- toastie-serve-workflow [{:keys [filling]}]
   (workflow/workflow
    (str "Serve " filling " toastie")
-   {:params {:filling (workflow/param :required true)}}
    (workflow/step :plate (fn [{:keys [filling]}] (str "Plate " filling " toastie")) :self)))
 
 (deftest workflow-spool-runtime-drives-toastie-demo
@@ -113,7 +111,6 @@
     (fn [_rt _]
       (let [toastie (workflow/workflow
                      (fn [{:keys [filling]}] (str "Make " filling " toastie"))
-                     {:params {:filling (workflow/param :required true)}}
                      (workflow/step :butter-bread "Butter bread" :self)
                      (workflow/call :quality toastie-quality-workflow {}
                                     :depends-on [:butter-bread])
@@ -196,7 +193,6 @@
 (defn- pr-ci-round-workflow [{:keys [bindings] :as _opts}]
   (workflow/workflow
    (fn [{:keys [feature]}] (str "CI round for " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/gate :ci-wait (fn [{:keys [feature]}] (str "Wait for CI on " feature)) :ci
                   :attributes (bind-attrs bindings :pr.ci.wait))
    (workflow/checkpoint :ci-verdict "Judge CI result"
@@ -214,7 +210,6 @@
 (defn- pr-fix-ci-workflow [{:keys [bindings] :as _opts}]
   (workflow/workflow
    (fn [{:keys [feature]}] (str "Fix CI for " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/step :diagnose "Diagnose CI failure" :self
                   :attributes (bind-attrs bindings :pr.ci.fix))
    (workflow/step :push-fix "Push CI fix" :self :depends-on [:diagnose])
@@ -223,7 +218,6 @@
 (defn- pr-review-round-workflow [{:keys [bindings] :as _opts}]
   (workflow/workflow
    (fn [{:keys [feature]}] (str "Review round for " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/gate :review-wait
                   (fn [{:keys [feature]}] (str "Wait for reviewer feedback on " feature))
                   :human
@@ -243,7 +237,6 @@
 (defn- pr-fix-and-push-workflow [{:keys [bindings] :as _opts}]
   (workflow/workflow
    (fn [{:keys [feature]}] (str "Address review feedback for " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/step :address-comments "Address review comments" :self
                   :attributes (bind-attrs bindings :pr.review.address))
    (workflow/call :ci-round pr-ci-round-workflow {} :depends-on [:address-comments])))
@@ -251,14 +244,12 @@
 (defn- pr-merge-workflow [{:keys [bindings] :as _opts}]
   (workflow/workflow
    (fn [{:keys [feature]}] (str "Merge " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/step :merge (fn [{:keys [feature]}] (str "Merge " feature)) :self
                   :attributes (bind-attrs bindings :pr.merge))))
 
 (defn- pr-dev-workflow [{:keys [bindings] :as _opts}]
   (workflow/workflow
    (fn [{:keys [feature]}] (str "Pull request: " feature))
-   {:params {:feature (workflow/param :required true)}}
    (workflow/step :dev (fn [{:keys [feature]}] (str "Implement " feature)) :self)
    (workflow/step :open "Open the change for review" :self :depends-on [:dev]
                   :attributes (bind-attrs bindings :pr.open))
@@ -980,60 +971,57 @@
 (deftest workflow-loop-steps-render-item-index-and-params
   (let [definition (workflow/workflow
                     "Loop render"
-                    {:params {:feature (workflow/param :required true)
-                              :envs (workflow/param :default [:dev :prod])}}
                     (workflow/step :deploy
                                    (fn [{:keys [feature item i]}]
                                      (str "Deploy " feature " to " (name item) " #" i)) :self
                                    :loop {:each :envs}))
-        titles (into {} (map (juxt :ref :title)) (:strands (workflow/compile definition {:feature "checkout"})))]
+        titles (into {} (map (juxt :ref :title)) (:strands (workflow/compile definition {:feature "checkout"
+                                                                                         :envs [:dev :prod]})))]
     (is (= "Deploy checkout to dev #0" (get titles :deploy-1)))
     (is (= "Deploy checkout to prod #1" (get titles :deploy-2)))))
 
 (deftest workflow-loop-each-accepts-param-keyword-and-fn-of-params
   (let [from-keyword (workflow/workflow
                       "Each keyword"
-                      {:params {:regions (workflow/param :default ["us" "eu"])}}
                       (workflow/step :ship (fn [{:keys [item]}] (str "Ship " item)) :self :loop {:each :regions}))
         from-fn (workflow/workflow
                  "Each fn"
-                 {:params {:regions (workflow/param :default ["us" "eu"])}}
                  (workflow/step :ship (fn [{:keys [item]}] (str "Ship " item)) :self
-                                :loop {:each (fn [{:keys [regions]}] (reverse regions))}))]
-    (is (= #{:molecule :ship-1 :ship-2} (set (map :ref (:strands (workflow/compile from-keyword))))))
+                                :loop {:each (fn [{:keys [regions]}] (reverse regions))}))
+        regions {:regions ["us" "eu"]}]
+    (is (= #{:molecule :ship-1 :ship-2}
+           (set (map :ref (:strands (workflow/compile from-keyword regions))))))
     (is (= ["Ship us" "Ship eu"]
-           (mapv :title (rest (:strands (workflow/compile from-keyword))))))
+           (mapv :title (rest (:strands (workflow/compile from-keyword regions))))))
     (is (= ["Ship eu" "Ship us"]
-           (mapv :title (rest (:strands (workflow/compile from-fn))))))))
+           (mapv :title (rest (:strands (workflow/compile from-fn regions))))))))
 
 (deftest workflow-loop-each-fails-loudly-on-non-sequential-param
   (let [definition (workflow/workflow
                     "Bad each"
-                    {:params {:n (workflow/param :default 5)}}
                     (workflow/step :s "S" :self :loop {:each :n}))]
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #":each must resolve to a sequential"
-                          (workflow/compile definition)))))
+                          (workflow/compile definition {:n 5})))))
 
 (deftest workflow-loop-suffix-rules
   (let [count-def (workflow/workflow "Count" (workflow/step :ping "Ping" :self :loop {:count 3}))
         map-def (workflow/workflow
                  "Map ids"
-                 {:params {:tasks (workflow/param :default [{:id "alpha"} {:id "beta"}])}}
                  (workflow/step :run (fn [{:keys [item]}] (str "Run " (:id item))) :self :loop {:each :tasks}))
         position-def (workflow/workflow
                       "Positions"
                       (workflow/step :s (fn [{:keys [item]}] (str "S " item)) :self :loop {:each ["x" "y"]}))]
     (is (= [:molecule :ping-1 :ping-2 :ping-3] (map :ref (:strands (workflow/compile count-def)))))
-    (is (= [:molecule :run-alpha :run-beta] (map :ref (:strands (workflow/compile map-def)))))
+    (is (= [:molecule :run-alpha :run-beta]
+           (map :ref (:strands (workflow/compile map-def {:tasks [{:id "alpha"} {:id "beta"}]})))))
     (is (= [:molecule :s-1 :s-2] (map :ref (:strands (workflow/compile position-def)))))))
 
 (deftest workflow-loop-fans-in-base-id-dependents
   (let [definition (workflow/workflow
                     "Fan in"
-                    {:params {:shards (workflow/param :default ["a" "b" "c"])}}
                     (workflow/step :migrate (fn [{:keys [item]}] (str "Migrate " item)) :self :loop {:each :shards})
                     (workflow/step :verify "Verify migrations" :self :depends-on [:migrate]))
-        payload (workflow/compile definition)
+        payload (workflow/compile definition {:shards ["a" "b" "c"]})
         refs (set (map :ref (:strands payload)))
         edges (set (map (juxt :from :to :type) (:edges payload)))]
     (is (= #{:molecule :migrate-1 :migrate-2 :migrate-3 :verify} refs))
@@ -1046,11 +1034,10 @@
 (deftest workflow-loop-does-not-mask-unknown-depends-on-refs
   (let [definition (workflow/workflow
                     "Loop plus typo"
-                    {:params {:shards (workflow/param :default ["a" "b"])}}
                     (workflow/step :migrate "Migrate" :self :loop {:each :shards})
                     (workflow/step :verify "Verify" :self :depends-on [:migrate :migrat]))]
     (try
-      (workflow/compile definition)
+      (workflow/compile definition {:shards ["a" "b"]})
       (is false "expected compile to throw")
       (catch clojure.lang.ExceptionInfo e
         (is (= :verify (:step (ex-data e))))
@@ -1061,36 +1048,34 @@
   ;; be rejected before it can silently misroute a dependency.
   (let [dup-base (workflow/workflow
                   "Dup base"
-                  {:params {:xs (workflow/param :default ["a" "b"])}}
                   (workflow/step :run "Run once" :self :loop {:each :xs})
                   (workflow/step :run "Run again" :self :loop {:count 3}))
         base-vs-plain (workflow/workflow
                        "Base vs plain"
-                       {:params {:xs (workflow/param :default ["a" "b"])}}
                        (workflow/step :run "Loop" :self :loop {:each :xs})
                        (workflow/step :run "Plain" :self))
         base-vs-root (workflow/workflow
                       "Base vs root"
-                      {:params {:xs (workflow/param :default ["a" "b"])}}
-                      (workflow/step :molecule "Steal root" :self :loop {:each :xs}))]
+                      (workflow/step :molecule "Steal root" :self :loop {:each :xs}))
+        xs {:xs ["a" "b"]}]
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"step ids must be unique"
-                          (workflow/compile dup-base)))
+                          (workflow/compile dup-base xs)))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"step ids must be unique"
-                          (workflow/compile base-vs-plain)))
+                          (workflow/compile base-vs-plain xs)))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"collides with the root ref"
-                          (workflow/compile base-vs-root)))))
+                          (workflow/compile base-vs-root xs)))))
 
 (deftest workflow-loop-chain-depends-through-expansions-and-keeps-base-fan-in
   (let [definition (workflow/workflow
                     "Chain"
-                    {:params {:tasks (workflow/param :default [{:id "a"} {:id "b"} {:id "c"}])}}
                     (workflow/step :prep "Prep" :self)
                     (workflow/step :task (fn [{:keys [item]}] (str "Task " (:id item))) :self
                                    :depends-on [:prep]
                                    :loop {:each :tasks :chain true})
                     (workflow/step :accept "Accept" :self :depends-on [:task]))
-        edges (set (map (juxt :from :to :type) (:edges (workflow/compile definition))))
-        described (into {} (map (juxt :id identity)) (:steps (workflow/describe definition)))]
+        tasks {:tasks [{:id "a"} {:id "b"} {:id "c"}]}
+        edges (set (map (juxt :from :to :type) (:edges (workflow/compile definition tasks))))
+        described (into {} (map (juxt :id identity)) (:steps (workflow/describe definition tasks)))]
     (is (contains? edges [:task-a :prep "depends-on"]))
     (is (contains? edges [:task-b :task-a "depends-on"]))
     (is (contains? edges [:task-c :task-b "depends-on"]))
@@ -1110,11 +1095,9 @@
   ;; through the fanned-in (now excluded) ids onto their own deps.
   (let [definition (workflow/workflow
                     "Loop conditions"
-                    {:params {:shards (workflow/param :default ["a" "b"])
-                              :do-migrate (workflow/param :default false)}}
                     (workflow/step :migrate "Migrate" :self :loop {:each :shards} :condition :do-migrate)
                     (workflow/step :verify "Verify" :self :depends-on [:migrate]))
-        payload (workflow/compile definition)
+        payload (workflow/compile definition {:shards ["a" "b"] :do-migrate false})
         refs (set (map :ref (:strands payload)))
         edges (set (map (juxt :from :to :type) (:edges payload)))]
     (is (= #{:molecule :verify} refs))

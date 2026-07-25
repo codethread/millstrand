@@ -5,7 +5,7 @@
   Both read the live registry at the moment they are called, so a repointed
   name, a refreshed owner partition, and a reloaded definition Var are visible
   to the next call without a restart. Neither executes anything a definition
-  carries: no constructor is invoked, no render function for a name/title/
+  carries: no render function for a name/title/
   attribute is called, no `:condition` is evaluated, and no spec predicate runs.
   Every value emitted here is read from declaration data or from the `s/form`
   documentation graph, which is what makes a catalogue safe to ask for at any
@@ -17,26 +17,14 @@
   expansion depends on params that do not exist yet, and a deferred exit cannot
   be honestly described before a worker fills it.
 
-  Definitions that declare nothing are reported as such rather than hidden. A
-  legacy constructor is opaque: it gets an empty entrypoint vector, a stated
-  opacity marker, and no invented contract, so a reader can tell \"declares no
-  params\" apart from \"is a function nobody can inspect\"."
+  Definitions that declare nothing are reported as such rather than hidden."
   (:require [skein.spools.workflow.internal.definitions :as defs]
             [skein.spools.workflow.internal.registry :as registry]
             [skein.spools.workflow.internal.specs :as specs]
             [skein.spools.workflow.internal.util :as util :refer [require-shape!]]))
 
-(def ^:private legacy-doc
-  "The doc reported for an opaque legacy constructor entry.
-
-  A constructor declares nothing about itself, so there is no authored doc to
-  report. Stating the opacity in the field every entry carries keeps the
-  catalogue one uniform shape instead of a nullable field every reader has to
-  branch on."
-  "Opaque legacy constructor: declares no doc, entrypoints, or param contract.")
-
 (def ^:private undeclared-doc
-  "The doc reported for a static definition that declares none.
+  "The doc reported for a definition that declares none.
 
   `defworkflow` requires a doc, but a raw definition map registered directly may
   omit it; the catalogue says so rather than dropping the field."
@@ -54,9 +42,7 @@
 
 (defn- definition-doc
   [resolved]
-  (if (defs/static? resolved)
-    (or (:doc (:value resolved)) undeclared-doc)
-    legacy-doc))
+  (or (:doc (:value resolved)) undeclared-doc))
 
 (defn- catalog-item
   "Return the compact catalogue entry for `resolved`.
@@ -139,8 +125,7 @@
     (keyword? procedure) {:procedure (name procedure) :kind "registered"}
     (symbol? procedure) {:procedure (str procedure) :kind "symbol"}
     (var? procedure) {:procedure (str (symbol procedure)) :kind "var"}
-    (map? procedure) {:procedure (str (:name procedure)) :kind "inline"}
-    :else {:procedure "fn" :kind "constructor"}))
+    :else {:procedure (str (:name procedure)) :kind "inline"}))
 
 (defn- call-view
   [item]
@@ -177,43 +162,21 @@
 
 ;; --- param contract views -----------------------------------------------------
 
-(defn- param-view
-  "Return the view of one deprecated per-key param declaration.
-
-  A per-key `:default` may be a function of the params resolved at compile time.
-  Discovery never calls one, so a computed default is reported as `:rendered`
-  rather than as a value that does not exist yet."
-  [declaration]
-  (let [declared? (contains? declaration :default)
-        computed? (and declared?
-                       (some? (util/json-incompatible-path (:default declaration))))]
-    (cond-> {:required (boolean (:required declaration))}
-      (and declared? (not computed?)) (assoc :default (:default declaration))
-      computed? (assoc :rendered true))))
-
-(defn- declared-params-view
-  [definition]
-  (into {} (map (fn [[key declaration]] [(name key) (param-view declaration)]))
-        (:params definition)))
-
 (defn- params-view
-  "Return the param contract view of static `definition`.
+  "Return the param contract view of `definition`.
 
-  `:kind` says which contract judges an invocation: `\"spec\"` when the
-  definition names a whole-map `:param-spec`, `\"declared\"` when it carries only
-  the deprecated per-key declarations, and `\"none\"` when it constrains nothing.
+  `:kind` is `\"spec\"` when the definition names a whole-map `:param-spec`, and
+  `\"none\"` when it constrains nothing.
   The spec is resolved live and reported through its current `s/form` graph, so a
   spec redefined since the definition was authored documents itself as it is
   now — and one that has since been deleted fails loudly instead of reading as an
   unconstrained workflow."
   [definition]
-  (let [param-spec (:param-spec definition)
-        declared (declared-params-view definition)]
-    (cond-> {:kind (cond param-spec "spec" (seq declared) "declared" :else "none")
+  (let [param-spec (:param-spec definition)]
+    (cond-> {:kind (if param-spec "spec" "none")
              :defaults (or (:defaults definition) {})}
       param-spec (assoc :spec (subs (str param-spec) 1)
-                        :spec-forms (specs/spec-forms param-spec))
-      (seq declared) (assoc :params declared))))
+                        :spec-forms (specs/spec-forms param-spec)))))
 
 ;; --- discovery reads ----------------------------------------------------------
 
@@ -232,12 +195,8 @@
 (defn catalog
   "Return the ordered discovery catalogue for `request`.
 
-  `request` is `{:entrypoint :start|:continue|:call, :all? boolean}`, both
-  optional. The default answers the question a worker actually has — which
-  routines can I begin? — by listing only definitions declaring `:start`.
-  `:entrypoint` selects one capability instead, and `:all?` drops the filter
-  entirely, which is also the only way opaque legacy entries appear: they declare
-  no capability, so no capability filter can match them.
+  `request` optionally selects `:entrypoint`; by default it lists definitions
+  declaring `:start`.
 
   The result is deterministic: entries are in registered-name order, and each
   item is exactly the four `::catalog-item` fields."
@@ -246,8 +205,7 @@
                   :workflow/list-request-invalid
                   "Workflow list request is invalid"
                   {})
-  (let [{:keys [entrypoint all?]} request
-        wanted (when-not all? (or entrypoint :start))]
+  (let [wanted (or (:entrypoint request) :start)]
     (mapv catalog-item
           (cond->> (resolved-entries rt)
             wanted (filterv #(contains? (:entrypoints %) wanted))))))
@@ -257,8 +215,8 @@
 
   One definition, whatever its entrypoints: `show` is a point read, so a
   call-only component answers here even though the default catalogue omits it.
-  The view carries the catalogue fields plus `:kind`/`:opaque` opacity markers,
-  the param contract, and the declared summary. An unregistered name fails as
+  The view carries the catalogue fields, the param contract, and the declared
+  summary. An unregistered name fails as
   `:workflow/definition-unregistered` and an unresolvable symbol as
   `:workflow/definition-unresolvable`, each carrying what a reader needs to
   repair it."
@@ -268,14 +226,11 @@
                   "Workflow show request is invalid"
                   {})
   (let [resolved (defs/resolve-registered rt name)
-        static? (defs/static? resolved)
         definition (:value resolved)]
     (require-shape! :skein.spools.workflow/definition-view
                     (assoc (catalog-item resolved)
-                           :kind (if static? "static" "legacy")
-                           :opaque (not static?)
-                           :params (if static? (params-view definition) {:kind "opaque"})
-                           :declared (if static? (declared-view definition) {:kind "opaque"}))
+                           :params (params-view definition)
+                           :declared (declared-view definition))
                     :workflow/definition-view-invalid
                     "Workflow definition view is invalid"
                     {:name name})))

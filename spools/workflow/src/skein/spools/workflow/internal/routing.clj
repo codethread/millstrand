@@ -134,25 +134,6 @@
     (or (get details choice)
         (get details (keyword choice)))))
 
-(defn- require-declared-input!
-  "Fail loudly (TEN-003) before any mutation when a checkpoint choice declares
-  required `:input` keys absent from `input`.
-
-  The deprecated per-key form: a required key counts as supplied whether the
-  caller's `input` map names it as a keyword or a string, so the surfaced
-  declaration round-trips straight back into `choose!`."
-  [run-id choice input decls]
-  (let [required (->> decls (filter #(get % "required")) (map #(get % "key")))
-        supplied? (fn [k] (and (map? input)
-                               (or (contains? input (keyword k))
-                                   (contains? input k))))
-        missing (remove supplied? required)]
-    (when (seq missing)
-      (fail! "Choice input is missing required keys"
-             {:run-id run-id :choice choice
-              :missing (vec missing)
-              :input-declaration decls}))))
-
 (defn- require-spec-input!
   "Fail loudly (TEN-003) before any mutation when `input` does not satisfy the
   whole-map spec the choice declared.
@@ -170,19 +151,11 @@
     (specs/require-conformant! spec-name input :workflow/input-invalid context)))
 
 (defn- require-choice-input!
-  "Validate `input` against whichever input contract the chosen choice declared,
-  before any mutation.
-
-  The declaration travels in the checkpoint's stored `workflow/choice-details`
-  (see D1.2) under string key names: `input-spec` names one whole-map spec,
-  while `input` is the deprecated vector of required-key declarations. A choice
-  declaring neither takes any map."
+  "Validate `input` against the chosen choice's whole-map spec before mutation."
   [run-id step choice input]
   (let [detail (some-> (raw-choice-detail step choice) query/detail-view)]
-    (if-let [declared (get detail "input-spec")]
-      (require-spec-input! run-id choice input declared)
-      (when-let [decls (get detail "input")]
-        (require-declared-input! run-id choice input decls)))))
+    (when-let [declared (get detail "input-spec")]
+      (require-spec-input! run-id choice input declared))))
 
 (defn- resolve-next-target
   "Resolve a checkpoint choice's stored `:next` value to its live target.
@@ -221,12 +194,9 @@
 
   The continuation starts from the merged context+input, minus the current
   root's stage-local override keys (see `stage-param-keys`) so leaving the stage
-  sheds its loop state. A static definition folds its defaults under those
-  params; a legacy constructor may instead own them outright by returning
-  `{:workflow w :params p}`, which lets a revision round control its own loop
-  state rather than inherit whatever the caller passed as choice input. The
-  resulting params persist as the new root's `workflow/context`, alongside the
-  definition identity a later `:revise` re-pours from."
+  sheds its loop state. The target folds its own defaults under those params.
+  The resulting params persist as the new root's `workflow/context`, alongside
+  the definition identity a later `:revise` re-pours from."
   [rt run-id _step next-str input]
   (let [target (resolve-next-target rt next-str)
         root (query/current-root-with-rt rt run-id)
@@ -263,10 +233,9 @@
   definition under the same run-id with authoritative override params.
 
   Params are `(merge context choice-input override-params)`, the `:revise`
-  overrides winning over the definition's defaults and over any params a legacy
-  constructor claims for itself, and persist as the new root's
-  `workflow/context`; the overridden keys are recorded as stage-local (see
-  `stage-params-attrs`)."
+  overrides winning over the definition's defaults, and persist as the new
+  root's `workflow/context`; the overridden keys are recorded as stage-local
+  (see `stage-params-attrs`)."
   [rt run-id _step choice input override-params]
   (let [root (query/current-root-with-rt rt run-id)
         target (revision-target rt run-id choice root)
@@ -392,8 +361,8 @@
   and is the user's authority over where this run may go, so a name outside it is
   refused before anything resolves. The name itself resolves *now*, against the
   live registry: a compatible repoint continues into the replacement, while a
-  removal, a lost `:continue`, or an opaque constructor fails with the defer
-  still ready (PROP-Wcd-001.S7)."
+  removal or a lost `:continue` fails with the defer still ready
+  (PROP-Wcd-001.S7)."
   [rt step target-name]
   (let [allowed (set (query/attr step :workflow/defer-workflows))
         defer (query/attr step :workflow/defer)]
@@ -403,15 +372,7 @@
               :defer defer
               :workflow target-name
               :allowed (vec (sort allowed))}))
-    (let [resolved (defs/resolve-registered rt target-name)]
-      (when-not (defs/static? resolved)
-        (fail! "Deferred continuation target is an opaque legacy constructor"
-               {:reason :workflow/legacy-opaque
-                :defer defer
-                :workflow target-name
-                :definition (:definition resolved)
-                :alternative "Migrate the target to a static spec-first definition."}))
-      (defs/require-entrypoint! resolved :continue))))
+    (defs/require-entrypoint! (defs/resolve-registered rt target-name) :continue)))
 
 (defn continue-plan
   "Return the cutover plan for a deferred continuation: `{:old-root … :payload …

@@ -21,28 +21,6 @@
     (sequential? value) (mapv #(render % params) value)
     :else value))
 
-(defn- param-defaults [declared]
-  (reduce-kv (fn [acc k spec]
-               (util/require-keyword! k [:params k])
-               (if (and (map? spec) (contains? spec :default))
-                 (assoc acc k (:default spec))
-                 acc))
-             {}
-             (or declared {})))
-
-(defn- required-params [declared]
-  (->> (or declared {})
-       (keep (fn [[k spec]] (when (and (map? spec) (:required spec)) k)))
-       set))
-
-(defn- resolve-params [workflow params]
-  (let [declared (:params workflow)
-        resolved (merge (param-defaults declared) params)
-        missing (seq (remove #(contains? resolved %) (required-params declared)))]
-    (when missing
-      (fail! "Workflow required params are missing" {:missing (vec missing)}))
-    resolved))
-
 (defn- include-step? [step params]
   (let [condition (:condition step)]
     (cond
@@ -390,19 +368,19 @@
         steps))
 
 (defn resolve-and-normalize
-  "Return `[rendered-workflow resolved-params root-ref normalized-steps]` — the
+  "Return `[rendered-workflow params root-ref normalized-steps]` — the
   materialization-free front half shared by `compile` and `describe`.
 
-  Validates the workflow and params, resolves params (defaults + required
-  checks), renders workflow-level fields (step render fns stay live so
-  `normalize-steps` can render loop steps against per-item params), and
-  expands/condition-filters/splices the steps. Materializes nothing."
+  Validates the workflow and params, renders workflow-level fields (step render
+  fns stay live so `normalize-steps` can render loop steps against per-item
+  params), and expands/condition-filters/splices the steps. The params arrive
+  already resolved: a definition's `:defaults` merge and its `:param-spec`
+  judges the whole map before anything reaches here. Materializes nothing."
   [workflow params opts]
   (util/require-map! workflow [:workflow])
   (require-valid! :skein.spools.workflow.values/params params "Invalid workflow params")
   (require-valid-workflow! workflow)
-  (let [params (resolve-params workflow params)
-        rendered (assoc (render (dissoc workflow :steps) params)
+  (let [rendered (assoc (render (dissoc workflow :steps) params)
                         :steps (:steps workflow))
         _ (util/require-non-blank! (:name rendered) [:name])
         root-ref (util/normalize-ref (or (:root-ref opts) :molecule) [:root-ref])
@@ -500,7 +478,6 @@
   (cond-> {:key name}
     (get detail "label") (assoc :label (get detail "label"))
     (get detail "description") (assoc :description (get detail "description"))
-    (get detail "input") (assoc :input (get detail "input"))
     (get detail "input-spec") (assoc :input-spec (get detail "input-spec"))
     (get detail "next") (assoc :next (get detail "next"))
     (get detail "revise") (assoc :revise (get detail "revise"))))
@@ -546,4 +523,3 @@
   (when-not (map? params)
     (fail! "Workflow context params must be a map" {:params params}))
   (json-safe-context-value params []))
-
