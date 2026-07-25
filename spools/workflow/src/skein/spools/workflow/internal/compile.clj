@@ -114,7 +114,8 @@
   `:value` is the canonical procedure definition map, so cycle detection and
   dispatch never depend on whether the author wrote a registered name, a
   symbol, a Var, or the definition itself. A registered name must declare
-  `:call`; the other forms are trusted values with no capability to check."
+  `:call`; raw targets skip that entrypoint check but still supply their
+  `:defaults` and `:param-spec` when they are definition maps."
   [procedure]
   (cond
     (keyword? procedure)
@@ -152,8 +153,9 @@
         procedure (:value target)
         _ (require-acyclic-procedure! call-id procedure)
         ;; A registered call target is reached by name, the same boundary that
-        ;; requires its `:call` entrypoint, so its `:param-spec` judges the
-        ;; params it is expanded with. A raw value or symbol declares nothing.
+        ;; requires its `:call` entrypoint. Every definition map, including one
+        ;; reached through a raw value or symbol, applies its `:defaults` and
+        ;; judges the params it is expanded with through `:param-spec`.
         params (->> (merge params (or (:params call-step) {}))
                     (defs/definition-params target)
                     (defs/validate-params! target))
@@ -470,7 +472,7 @@
 
 (defn- describe-choice
   "Project one checkpoint choice into `{:key … :label … :description …
-  :input|:input-spec … :next|:revise …}` from its stored
+  :input-spec … :next|:revise …}` from its stored
   `workflow/choice-details` entry (`detail`, nil for a bare-keyword choice).
 
   `:input-spec` carries the declared spec identity and doc without its form

@@ -158,9 +158,7 @@
   `:input` is a qualified keyword naming a whole-map spec, or `{:spec ::name
   :doc \"what the worker must supply\"}`. Pouring the checkpoint records that
   identity, doc, and the spec's current form graph; `choose!` resolves the
-  identity again and validates against whatever it names then. A vector of
-  `{:key :required :description}` maps is the deprecated required-key form,
-  which cannot express a rule spanning keys.
+  identity again and validates against whatever it names then.
 
   `:kind` names the decision owner and defaults to `:human`; it is stored as
   `workflow/checkpoint-kind` and is the canonical human-in-the-loop signal."
@@ -253,12 +251,12 @@
 
   The returned map is the same data shape accepted by `compile`, but avoids a
   separate TOML/JSON formula language. An optional leading options map may carry
-  `:params`, `:attributes`, `:state`, and `:form`, plus the registration
-  contract a static definition declares about itself: `:doc`, `:entrypoints`,
-  `:param-spec`, and `:defaults` (see `defworkflow`). Options and the complete
-  assembled definition are both validated here, so a malformed nested step,
-  choice, or call fails at the builder rather than at the pour — as does a step
-  declaring `:depends-on` a `defer` exit, which no shape spec can express."
+  `:attributes`, `:state`, and `:form`, plus the registration contract a static
+  definition declares about itself: `:doc`, `:entrypoints`, `:param-spec`, and
+  `:defaults` (see `defworkflow`). Options and the complete assembled definition
+  are both validated here, so a malformed nested step, choice, or call fails at
+  the builder rather than at the pour — as does a step declaring `:depends-on` a
+  `defer` exit, which no shape spec can express."
   [name & body]
   (let [[opts steps] (if (and (map? (first body))
                               (not (contains? (first body) :id)))
@@ -310,11 +308,10 @@
   each checkpoint's choices carry their declared input contract and their
   `:next`/`:revise` routing. The result is `{:name … :steps [{:id :title :role
   :depends-on :condition :gate :choices [{:key :label :description
-  :input|:input-spec :next|:revise} …]} …]}`.
+  :input-spec :next|:revise} …]} …]}`.
 
-  `(describe workflow)` resolves param defaults and fails loudly listing any
-  required params without a default; pass `params` to describe a definition that
-  needs them."
+  `(describe workflow)` merges defaults under `params` and applies a static
+  definition's `:param-spec` when it declares one."
   ([workflow]
    (describe workflow {}))
   ([workflow params]
@@ -563,10 +560,9 @@
   When the chosen choice declares an `:input` contract, `choose!` fails loudly
   before any mutation unless `input` satisfies it: a whole-map spec is resolved
   live and validated as `:workflow/input-invalid` (or `:workflow/input-spec-missing`
-  when the name no longer resolves), while the deprecated per-key form checks
-  only that required keys are present. `input` is validated as the caller passed
-  it — a JSON worker keywordizes with `json->params` first. A routed choice — one carrying
-  `:next` (a symbol or registered name) or `:revise` (re-pour the run's own
+  when the name no longer resolves). `input` is validated as the caller passed
+  it — a JSON worker keywordizes with `json->params` first. A routed choice — one
+  carrying `:next` (a symbol or registered name) or `:revise` (re-pour the run's own
   definition with override params) — closes out the current workflow's remaining
   steps and pours the continuation under the same run-id, all in one
   transactional `batch/apply!`; a terminal choice that closes the last inner step
@@ -1332,8 +1328,8 @@
 ;; The projection aux namespace. These describe what discovery *emits* — plain
 ;; JSON-safe strings a worker reads — while the same unqualified keys mean
 ;; authored definition data elsewhere in this namespace (`::name` is renderable,
-;; `::params` is the per-key declaration map). Separate namespaces keep both
-;; contracts exact instead of one bending to fit the other.
+;; `::params` is a caller-supplied map). Separate namespaces keep both contracts
+;; exact instead of one bending to fit the other.
 (s/def :skein.spools.workflow.view/name non-blank-string?)
 (s/def :skein.spools.workflow.view/doc non-blank-string?)
 (s/def :skein.spools.workflow.view/entrypoints
@@ -1644,8 +1640,7 @@
                     |whole-map spec, or {:spec ::name :doc \"...\"}. Pouring
                     |records the identity, doc, and current spec form graph;
                     |choose! resolves the identity again and validates against
-                    |the live spec. A vector of {:key :required :description}
-                    |maps is the deprecated required-key form.")
+                    |the live spec.")
             :workflow/checkpoint "Stable checkpoint id, derived from the local step id."
             :workflow/checkpoint-kind "Decision owner stored as a string."
             :workflow/choices "Allowed choices stored as strings."}})
@@ -1763,22 +1758,17 @@
               'checkpoint 'skein.spools.workflow/checkpoint
               'call 'skein.spools.workflow/call
               'defer 'skein.spools.workflow/defer
-              'bind-defers 'skein.spools.workflow/bind-defers
-              'param 'skein.spools.workflow/param}
+              'bind-defers 'skein.spools.workflow/bind-defers}
    :contract (spec-entry ::workflow
                          "A workflow requires a non-blank :name and vector :steps."
                          '(workflow (fn [{:keys [feature]}] (str "Ship " feature))
-                                    {:params {:feature (param :required true)}}
+                                    {:param-spec :acme.workflows/ship-params
+                                     :defaults {:feature "roadmap"}}
                                     (step :design
                                           (fn [{:keys [feature]}] (str "Design " feature))
                                           :self)
                                     (checkpoint :signoff "Approve design"
                                                 :choices [:approved :revise])))
-   :fields {:params (fmt/reflow "
-                     |Deprecated per-key declaration map: keyword param names to
-                     |definitions supporting boolean :required and optional :default.
-                     |Declare :param-spec and :defaults instead — see the :definition
-                     |topic.")}
    :runtime {:start! (fmt/reflow "
                       |(start! run-id workflow params opts) accepts a workflow map,
                       |a definition var, or a registered workflow keyword. Var/keyword
