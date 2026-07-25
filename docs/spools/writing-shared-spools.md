@@ -635,6 +635,8 @@ A workspace-relative `:file` module can use the same convention when the loaded 
 
 A file that declares no namespace remains authoring-forms-only: its collected forms may contribute, but it gets no `spool` convention lookup. Keep a convention-backed file to one declared namespace so the public var has one unambiguous owner.
 
+**One source of contribution per module.** A module either collects authoring forms (`defop`, `defquery`, `defpattern`, `defrule`, `defjob`, `defworkflow`) or resolves a `:contribute` function, never both: `contribute` returns the owner's complete partition, so entries the same source collected would be silently discarded. Refresh refuses that combination loudly, naming the module and the kinds it collected (SPEC-004.C46). The conflict is scoped to `:contribute` — a `:reconcile`-only `spool` var composes with collected forms perfectly well. When a file grows a `defworkflow` beside a hand-written `contribute`, the fix is to author the rest of its surface too: `.skein/workflows.clj` in this repo is the worked example, with `defworkflow` for its definitions, `defop` for its one op, `defpattern` for its one pattern, and no `spool` var at all.
+
 ### Maven dependencies in a spool root
 
 A spool root may declare ordinary JVM library dependencies in its top-level `deps.edn :deps`. Those

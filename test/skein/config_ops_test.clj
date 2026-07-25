@@ -74,21 +74,6 @@
                           (publication/stage-owner backends (publication/candidates backends)
                                                    module-key contribution))))
 
-(defn- publish-contribution!
-  "Publish one module's complete owner partition from its data-first contribution
-  function, normalizing bare partitions to the `{:entries :overrides}` shape."
-  [rt module-key contribute]
-  (let [contribution (update-vals
-                      (contribute {:runtime rt :module/key module-key})
-                      (fn [partition]
-                        (if (contains? partition :entries)
-                          partition
-                          {:entries partition :overrides #{}})))
-        backends (publication/backends rt)]
-    (publication/publish! backends
-                          (publication/stage-owner backends (publication/candidates backends)
-                                                   module-key contribution))))
-
 (defn- return-case-leaves [operation context return-case]
   (if (and (map? return-case) (contains? return-case :stream))
     (set (map (fn [channel] [operation (assoc context :channel channel)])

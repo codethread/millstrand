@@ -755,14 +755,14 @@
       (activate-cli! rt)
       (let [template (module-source! config-dir "template" "" kanban-template-form)
             routine (module-source! config-dir "routine" "" devflow-routine-form)
-            binding (module-source! config-dir "binding"
-                                    "\n            [test.compose.template :as template]"
-                                    workspace-binding-form)]
+            workspace (module-source! config-dir "binding"
+                                      "\n            [test.compose.template :as template]"
+                                      workspace-binding-form)]
         (is (= :applied (:status (runtime/module! rt :compose/template {:file template}))))
         (is (= :applied (:status (runtime/module! rt :compose/routine {:file routine}))))
         (is (= :applied (:status (runtime/module!
                                   rt :compose/binding
-                                  {:file binding :after [:compose/template :compose/routine]}))))
+                                  {:file workspace :after [:compose/template :compose/routine]}))))
         (testing "the template owner registered nothing; the workspace registered the composite"
           (is (= #{:devflow :tracked-card} (set (keys (workflow/workflows)))))
           (is (= 'test.compose.binding/tracked-card
