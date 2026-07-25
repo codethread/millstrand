@@ -33,16 +33,24 @@ Each recipe cites the honest source it was distilled from — a shipped spool, t
 
 **Composition.** Ordinary `step`s chained by `:depends-on`, terminated by a `checkpoint` whose choices are an approve (dead-ends the run) and a `:revise` (re-pours this same definition). A `:condition [:!= :revision true]` marks the steps that must not repeat on a revise round.
 
-The per-key `workflow/param` declarations below are the deprecated form, kept here because the shipped workflows this recipe was distilled from still use them. A definition written today declares `:param-spec` and `:defaults` instead, and the whole merged params map is validated against that spec before anything pours — see "Static definitions" in the [contract doc](./workflow.md).
+`:feature` is supplied by whoever starts the run. `:revision` is an ordinary supplied param too — the definition's `:defaults` set it to `false`, and the `:revise` choice overrides it to `true` for the next round. `:param-spec` judges the whole merged map, defaults under supplied params, before anything compiles.
 
 ```clojure
-(require '[skein.spools.workflow :as workflow])
+(require '[clojure.spec.alpha :as s]
+         '[clojure.string :as str]
+         '[skein.spools.workflow :as workflow])
 
-(defn ship-workflow [{:keys [revision] :as _params}]
+(s/def ::feature (s/and string? (complement str/blank?)))
+(s/def ::revision boolean?)
+(s/def ::ship-params (s/keys :req-un [::feature] :opt-un [::revision]))
+
+(workflow/defworkflow ship
+  "Design and implement a feature, then stop for human sign-off."
+  {:entrypoints #{:start}
+   :param-spec ::ship-params
+   :defaults {:revision false}}
   (workflow/workflow
     (fn [{:keys [feature]}] (str "Ship " feature))
-    {:params {:feature (workflow/param :required true)
-              :revision (workflow/param :default (boolean revision))}}
     (workflow/step :design
                    (fn [{:keys [feature]}] (str "Design " feature))
                    :self
@@ -63,12 +71,11 @@ The per-key `workflow/param` declarations below are the deprecated form, kept he
                                     :description "Send implementation back and re-run the stage."
                                     :revise {:params {:revision true}}}])))
 
-;; run — seed :definition so :revise can re-pour ship-workflow, and :context so
-;; the revise loop carries :feature forward. Every mutation returns
+;; run — starting from the Var records its symbol on the root, which is what
+;; :revise re-pours from, and persists the resolved params as the run's context,
+;; so :feature carries into every later round. Every mutation returns
 ;; {:ready [...] :done bool}; each ready view also carries :run-id "ship-feature-x".
-(workflow/start! "ship-feature-x" (ship-workflow {:feature "feature x"})
-                 {:feature "feature x"}
-                 {:definition 'my.ns/ship-workflow :context {:feature "feature x"}})
+(workflow/start! "ship-feature-x" #'ship {:feature "feature x"})
 ;; => {:ready [{:id :design ...}] :done false}
 
 (workflow/complete! "ship-feature-x")
@@ -96,11 +103,7 @@ The per-key `workflow/param` declarations below are the deprecated form, kept he
 
 **Why this shape.**
 
-- **`:revise` over a hand-written wrapper.** A `:revise {:params {...}}` choice
-  re-pours the run's *own* `workflow/definition` under the same `run-id`, so you
-  never write a "revision" variant of the workflow. That is also why `start!`
-  seeds `:definition` — `:revise` fails loudly without a resolvable definition on
-  the root (contract [§5, "`:revise`"](./workflow.md#5-checkpoints-and-routing)).
+- **`:revise` over a hand-written wrapper.** A `:revise {:params {...}}` choice re-pours the run's *own* `workflow/definition` under the same `run-id`, so you never write a "revision" variant of the workflow. It needs a definition on the root to re-pour, which a Var or registered-name start records for you; a run poured from a bare workflow map has none, and `:revise` fails loudly (contract [§5, "`:revise`"](./workflow.md#5-checkpoints-and-routing)).
 - **`:condition` + splicing, not a manual branch.** `:condition [:!= :revision
   true]` drops `:design` from the compiled graph on a revise round; condition
   splicing reattaches `:implement` (which depended on `:design`) to the round's
@@ -120,33 +123,43 @@ Honest source: adapted from the end-to-end example that formerly lived in `workf
 
 **Composition.** Register each stage under a stable keyword with `register-workflow!`, then route forward from a checkpoint with `:next :that-keyword`. The registry is the indirection layer.
 
-A stage that does not need to build itself from params is better written as a static definition — `defworkflow` gives it a name, a doc, and declared entrypoints, and a module owner contributes it without a registration call at all. The constructor form below stays supported; see "Static definitions" in the [contract doc](./workflow.md) for the newer shape.
+Each stage is a `defworkflow` Var: a name, a doc, its declared entrypoints, and its param contract, all readable before anything runs. A stage reached by a `:next` route declares `:continue`; only the stage a run starts at declares `:start`. The params a stage needs arrive from the run — the context the previous stage handed on, or what `start!` was given — with `:defaults` filling the keys the caller has no opinion about.
 
 ```clojure
 (require '[clojure.spec.alpha :as s]
+         '[clojure.string :as str]
          '[skein.spools.workflow :as workflow])
 
-(s/def ::reason (s/and string? (complement clojure.string/blank?)))
+(s/def ::feature (s/and string? (complement str/blank?)))
+(s/def ::revision boolean?)
+(s/def ::reason (s/and string? (complement str/blank?)))
+(s/def ::proposal-params (s/keys :req-un [::feature] :opt-un [::revision]))
 (s/def ::abort-input (s/keys :req-un [::reason]))
 
-;; Register every stage under a stable name once (devflow does this from its
-;; module contribution, so a reload re-points in-flight runs).
+;; Register every stage under a stable name. A module owner gets this for free:
+;; a defworkflow form evaluated under the contribution collector declares its own
+;; entry, and dropping the form drops the entry. Direct and REPL code registers
+;; the Var's symbol itself, which is what this shows.
 (def stage-workflows
-  {:proposal  'my.ns/proposal-workflow
-   :spec-plan 'my.ns/spec-plan-workflow
-   :abort     'my.ns/abort-workflow})
+  {:proposal  'my.ns/proposal
+   :spec-plan 'my.ns/spec-plan
+   :abort     'my.ns/abort})
 
 (defn register-stages! []
   (into {} (map (fn [[name sym]] [name (workflow/register-workflow! name sym)]))
         stage-workflows))
 
-(defn proposal-workflow [{:keys [revision] :as _opts}]
+(workflow/defworkflow proposal
+  "Write a proposal for a feature and stop for human sign-off."
+  {:entrypoints #{:continue}
+   :param-spec ::proposal-params
+   :defaults {:revision false}}
   (workflow/workflow
     (fn [{:keys [feature]}] (str "Proposal: " feature))
-    {:params {:feature (workflow/param :required true)
-              :revision (workflow/param :default (boolean revision))}}
+    (workflow/step :inspect-context (fn [{:keys [feature]}] (str "Inspect prior art for " feature)) :self
+                   :condition [:!= :revision true])       ; orientation, once per stage
     (workflow/step :write-proposal (fn [{:keys [feature]}] (str "Write proposal for " feature)) :self
-                   :condition [:!= :revision true])
+                   :depends-on [:inspect-context])
     (workflow/checkpoint :human-signoff
                          "Human sign-off for the proposal"
                          :depends-on [:write-proposal]
@@ -169,12 +182,7 @@ A stage that does not need to build itself from params is better written as a st
 
 **Why this shape.**
 
-- **Registered names survive reloads; raw symbols don't.** A `:next` *keyword* is
-  resolved through the registry at `choose!` time, so re-registering a stage (a
-  reload) re-points every in-flight run's not-yet-chosen route at the new
-  constructor. A `:next` *symbol* is part of the run's durability contract —
-  rename the fn and you break the in-flight run. Prefer the keyword for anything
-  that may be reloaded (contract [§5, "Named workflows"](./workflow.md#5-checkpoints-and-routing)).
+- **A registered name can be re-pointed; a symbol cannot.** A `:next` *keyword* is resolved through the registry at `choose!` time, so re-registering that name sends every in-flight run's not-yet-chosen route to whatever the name now means — and the registry is where the entrypoint check applies, so the target must declare `:continue`. A `:next` *symbol* is resolved straight to the Var it names, which makes the symbol itself part of the run's durability contract: editing the definition in place is picked up, but renaming or moving the Var breaks the in-flight run. Prefer the keyword for anything that may be reloaded (contract [§5, "Named workflows"](./workflow.md#5-checkpoints-and-routing)).
 - **Routing is a hard cutover, not a fork.** Choosing `:next` closes out every
   remaining step of the current stage in one transaction and pours the
   continuation under the same `run-id`. Any step not yet reached is *abandoned*,
@@ -184,7 +192,7 @@ A stage that does not need to build itself from params is better written as a st
   routed hand-off is visible in-band: the continuation's ready frontier comes
   straight back from `choose!`.
 
-Honest source: `ct.spools.devflow`'s `stage-workflows` registry and `proposal-workflow` (proposal → `:spec-plan` forward route, self `:revise` loop, `:abort` with declared reason input).
+Honest source: `ct.spools.devflow`'s `stage-workflows` and its `proposal` stage (proposal → `:spec-plan` forward route, self `:revise` loop, `:abort` with declared reason input).
 
 ---
 
@@ -192,24 +200,34 @@ Honest source: `ct.spools.devflow`'s `stage-workflows` registry and `proposal-wo
 
 **Situation.** The same sub-procedure — a review pass, a CI round, a quality check — needs to run inside several different stages, and you don't want to copy its steps into each one.
 
-**Composition.** Define the sub-flow as an ordinary workflow constructor, then splice it into a parent with `call`. Each `call` inlines the sub-flow's steps and adds a `procedure`-role join that downstream steps depend on.
+**Composition.** Define the sub-flow as a static definition of its own, declaring the `:call` entrypoint, then splice it into a parent with `call`. Each `call` inlines the sub-flow's steps and adds a `procedure`-role join that downstream steps depend on. The call site names the target — a Var here, or a registered keyword — and supplies its params over the parent's; the sub-flow's own `:defaults` and `:param-spec` then judge the result, so a sub-flow keeps its param contract wherever it is spliced.
 
 ```clojure
-(require '[skein.spools.workflow :as workflow])
+(require '[clojure.spec.alpha :as s]
+         '[clojure.string :as str]
+         '[skein.spools.workflow :as workflow])
 
-(defn review-workflow [_]
+(s/def ::artifact (s/and string? (complement str/blank?)))
+(s/def ::review-params (s/keys :req-un [::artifact]))
+
+(workflow/defworkflow review
+  "Inspect an artifact and write a review of it."
+  {:entrypoints #{:call}
+   :param-spec ::review-params
+   :defaults {}}
   (workflow/workflow
     "Review"
-    {:params {:artifact (workflow/param :required true)}}
     (workflow/step :inspect      (fn [{:keys [artifact]}] (str "Inspect " artifact)) :self)
     (workflow/step :write-review (fn [{:keys [artifact]}] (str "Write review for " artifact)) :self
                    :depends-on [:inspect])))
 
-(def demo
+(workflow/defworkflow demo
+  "Write an artifact, have it reviewed, then carry on."
+  {:entrypoints #{:start}}
   (workflow/workflow
     "Procedure demo"
     (workflow/step :write-artifact "Write artifact" :self)
-    (workflow/call :review-artifact review-workflow {:artifact "proposal.md"}
+    (workflow/call :review-artifact #'review {:artifact "proposal.md"}
                    :depends-on [:write-artifact])
     (workflow/step :continue "Continue" :self
                    :depends-on [:review-artifact])))       ; waits on the whole call
@@ -227,10 +245,7 @@ Honest source: `ct.spools.devflow`'s `stage-workflows` registry and `proposal-wo
   transaction (stamped `workflow/outcome-by "engine"`). Joins never surface as
   ready work, so an agent driving the run sees the parent's next step, not a
   bookkeeping strand (contract [§4, "Procedure join auto-close"](./workflow.md#4-run-lifecycle)).
-- **One definition, many call sites.** The same `review-workflow` can be
-  `call`-ed by a proposal stage and a spec stage with different `:artifact`
-  params; a CI-round sub-flow can be recomposed by every stage that pushes
-  commits. That is the point of `call` over duplication.
+- **One definition, many call sites.** The same `review` can be `call`-ed by a proposal stage and a spec stage with different `:artifact` params; a CI-round sub-flow can be recomposed by every stage that pushes commits. That is the point of `call` over duplication.
 
 Honest source: the `call` inlining test in `test/skein/spools/workflow_test.clj` (`workflow-spool-inlines-procedure-calls`), the toastie demo's `:quality` call, and `ct.spools.devflow`'s `:agent-review-proposal` call.
 
@@ -287,15 +302,23 @@ Honest source: PROP-Wcd-001.EX7 in `devflow/feat/s9i26-flow-cli/proposal.md`, an
 
 **Situation.** Some steps aren't the driving agent's to *do* — they're waits: CI must go green, a sub-agent must finish, a human must weigh in. The agent should be told to poll or hand off, not to try the work itself.
 
-**Composition.** Model each wait as a `gate` with a freeform waiter hint (`:ci`, `:subagent`, `:human`). The external actor closes it via `complete!` with a mandatory `:by`. Optionally register an executor for a waiter class so `await!` stays quiet while an adapter is healthy.
+**Composition.** Model each wait as a `gate` with a freeform waiter hint (`:ci`, `:subagent`, `:human`). The external actor closes it via `complete!` with a mandatory `:by`. Optionally register an executor for a waiter class so `await!` stays quiet while an adapter is healthy. The verdict routes here use the symbol form, so each one must name a Var holding a definition of its own.
 
 ```clojure
-(require '[skein.spools.workflow :as workflow])
+(require '[clojure.spec.alpha :as s]
+         '[clojure.string :as str]
+         '[skein.spools.workflow :as workflow])
 
-(defn pr-ci-round-workflow [{:keys [bindings] :as _opts}]
+(s/def ::feature (s/and string? (complement str/blank?)))
+(s/def ::ci-round-params (s/keys :req-un [::feature]))
+
+(workflow/defworkflow pr-ci-round
+  "Wait for CI on a pull request, then judge the result."
+  {:entrypoints #{:start :continue}
+   :param-spec ::ci-round-params
+   :defaults {}}
   (workflow/workflow
     (fn [{:keys [feature]}] (str "CI round for " feature))
-    {:params {:feature (workflow/param :required true)}}
     (workflow/gate :ci-wait
                    (fn [{:keys [feature]}] (str "Wait for CI on " feature))
                    :ci)                                     ; waiter hint: not :self
@@ -303,9 +326,9 @@ Honest source: PROP-Wcd-001.EX7 in `devflow/feat/s9i26-flow-cli/proposal.md`, an
                          :depends-on [:ci-wait]
                          :kind :agent
                          :choices [{:key :green :label "CI green"
-                                    :next 'my.ns/pr-review-round-workflow}
+                                    :next 'my.ns/pr-review-round}
                                    {:key :red :label "CI red"
-                                    :next 'my.ns/pr-fix-ci-workflow}])))
+                                    :next 'my.ns/pr-fix-ci}])))
 
 ;; the external actor (or an adapter) closes the gate — :by is mandatory
 (workflow/complete! "pr-flow" {:step ci-wait-id :by "ci-bot"})
@@ -341,10 +364,11 @@ Honest source: the forge-agnostic PR flow in `test/skein/spools/workflow_test.cl
 
 **Situation.** A workflow touches an external tool — a git forge, CI, a deploy target — but you want the *same* definition to run against GitHub for one user and GitLab for another, with no edit to the workflow.
 
-**Composition.** Steps name only a semantic `workflow/action-ref` (`"pr.ci.wait"`). The concrete command arrives through a **bindings map** (action-ref → attribute map) passed as pure data. Ship one forge's bindings as the default; a user deep-merges an override from trusted config.
+**Composition.** Steps name only a semantic `workflow/action-ref` (`"pr.ci.wait"`). The concrete command arrives through a **bindings map** (action-ref → attribute map) passed as pure data. An ordinary function builds the workflow from one bindings map, and `defworkflow` freezes a choice of bindings into a named Var. The definition each Var holds is still static — a reader sees the bound commands in `workflow show` — and a user who wants a different forge deep-merges an override and defines their own Var from the same builder.
 
 ```clojure
-(require '[skein.spools.workflow :as workflow])
+(require '[clojure.spec.alpha :as s]
+         '[skein.spools.workflow :as workflow])
 
 ;; Reference bindings shipped as the default; a user rebinds any subset.
 (def github-pr-bindings
@@ -367,18 +391,34 @@ Honest source: the forge-agnostic PR flow in `test/skein/spools/workflow_test.cl
     (merge {"workflow/action-ref" (name action-ref)}
            (into {} (map (fn [[k v]] [(binding-attr-keys k) v])) bound))))
 
-(defn ci-round [{:keys [bindings] :as _opts}]
+;; ::ci-round-params is the param contract from the gates recipe above.
+(defn ci-round-definition
+  "Return the CI-round workflow built against one forge's bindings."
+  [bindings]
   (workflow/workflow
     (fn [{:keys [feature]}] (str "CI round for " feature))
-    {:params {:feature (workflow/param :required true)}}
     (workflow/gate :ci-wait (fn [{:keys [feature]}] (str "Wait for CI on " feature)) :ci
                    :attributes (bind-attrs bindings :pr.ci.wait))))
 
+(workflow/defworkflow ci-round
+  "Wait for CI on a pull request, against the reference forge."
+  {:entrypoints #{:start :continue}
+   :param-spec ::ci-round-params
+   :defaults {}}
+  (ci-round-definition github-pr-bindings))
+
 ;; A GitLab user overrides only the fields that differ, deep-merging over the
-;; reference — no change to ci-round:
-(def gitlab-overrides
+;; reference, and names the result themselves — no change to ci-round-definition:
+(def gitlab-pr-bindings
   (merge-with merge github-pr-bindings
               {:pr.ci.wait {:instruction "glab ci status --live"}}))
+
+(workflow/defworkflow gitlab-ci-round
+  "Wait for CI on a pull request, against GitLab."
+  {:entrypoints #{:start :continue}
+   :param-spec ::ci-round-params
+   :defaults {}}
+  (ci-round-definition gitlab-pr-bindings))
 ```
 
 **Why this shape.**
@@ -387,9 +427,7 @@ Honest source: the forge-agnostic PR flow in `test/skein/spools/workflow_test.cl
   a forge. Keeping steps at `action-ref` and pushing commands into a data
   bindings map means the definition is forge-agnostic and the *binding* is the
   only thing that varies.
-- **Deep-merge gives per-field granularity.** `(merge-with merge reference
-  overrides)` lets a user rebind one action's `:instruction` while inheriting the
-  rest — the definition never changes and the user touches only what differs.
+- **Deep-merge gives per-field granularity.** `(merge-with merge reference overrides)` lets a user rebind one action's `:instruction` while inheriting the rest — the builder never changes and the user touches only what differs.
 - **The binding vocabulary is the author's, and it fails loudly.** `bind-attrs`
   rejects an unbound action and any key outside `binding-attr-keys`, so a typo in
   user bindings surfaces immediately instead of yielding a silently bare step.
@@ -407,19 +445,32 @@ Honest source: the `github-pr-bindings` / `bind-attrs` reference in `test/skein/
 
 **Situation.** You have N items — delegated tasks, target hosts, files — and want one step per item, run in sequence, with per-item instructions computed from the item. A downstream step should wait for the whole batch.
 
-**Composition.** One `step` or `gate` with `:loop {:each :items :chain true}`. Fn-valued `:attributes` render per iteration against the item; `:chain true` serializes the expansions; a later step depending on the *base* loop id fans in over all expansions.
+**Composition.** One `step` or `gate` with `:loop {:each :items :chain true}`. Fn-valued `:attributes` render per iteration against the item; `:chain true` serializes the expansions; a later step depending on the *base* loop id fans in over all expansions. The collection is an ordinary param: whoever starts the run supplies `:tasks`, and `:param-spec` checks the items before a single gate is poured.
 
 ```clojure
-(require '[skein.spools.workflow :as workflow])
+(require '[clojure.spec.alpha :as s]
+         '[clojure.string :as str]
+         '[skein.spools.workflow :as workflow])
 
-(defn delegate-pipeline [{:keys [run-id tasks harness cwd]}]
+(s/def ::non-blank (s/and string? (complement str/blank?)))
+(s/def ::id ::non-blank)
+(s/def ::title ::non-blank)
+(s/def ::body ::non-blank)
+(s/def ::harness ::non-blank)
+(s/def ::cwd ::non-blank)
+(s/def ::run-id ::non-blank)
+(s/def ::task (s/keys :req-un [::id ::title] :opt-un [::body ::harness ::cwd]))
+(s/def ::tasks (s/coll-of ::task :kind vector? :min-count 1))
+(s/def ::pipeline-params (s/keys :req-un [::run-id ::tasks] :opt-un [::harness ::cwd]))
+
+(workflow/defworkflow delegate-pipeline
+  "Delegate a list of tasks to subagents one at a time, then accept the batch."
+  {:entrypoints #{:start}
+   :param-spec ::pipeline-params
+   :defaults {:harness "opus"}}                            ; used when a task names none
   (workflow/workflow
-    (str "Delegated pipeline: " run-id)
-    {:params {:run-id  (workflow/param :default run-id)
-              :tasks   (workflow/param :default tasks)
-              :harness (workflow/param :default harness)
-              :cwd     (workflow/param :default cwd)}
-     :attributes {"workflow/family" "delegate-pipeline"}}
+    (fn [{:keys [run-id]}] (str "Delegated pipeline: " run-id))
+    {:attributes {"workflow/family" "delegate-pipeline"}}
     ;; one :subagent gate per task, chained so task i waits on task i-1
     (workflow/gate :task
                    (fn [{:keys [item]}] (str "Delegate pipeline task " (:id item)))
@@ -440,10 +491,7 @@ Honest source: the `github-pr-bindings` / `bind-attrs` reference in `test/skein/
 
 **Why this shape.**
 
-- **`:loop` expands after params resolve**, so each copy's fn-valued
-  `title`/`attributes` render against `(merge params {:item item :i idx})` — the
-  per-task `:harness`/`:cwd`/`:body` fall out of the item, with a workflow-level
-  default when the item omits them (contract [§3, "Loops"](./workflow.md#3-definition-layer)).
+- **`:loop` expands after params resolve**, so each copy's fn-valued `title`/`attributes` render against `(merge params {:item item :i idx})` — the per-task `:harness`/`:cwd`/`:body` fall out of the item, falling back to the run-level param, which `:defaults` supplies when the caller gave none (contract [§3, "Loops"](./workflow.md#3-definition-layer)).
 - **`:chain true` serializes; edge absence would parallelize.** Chaining makes
   task *i* depend on task *i-1*, which is what a *pipeline* needs. Drop `:chain`
   and every expansion is independently ready — a fan-out, not a sequence.
@@ -456,7 +504,7 @@ Honest source: the `github-pr-bindings` / `bind-attrs` reference in `test/skein/
   fulfill it by spawning an agent-run run and closing the gate with the result — the
   workflow definition never names the run engine.
 
-Honest source: the `delegate-pipeline` weave pattern in this repo's [`.skein/config.clj`](../.skein/config.clj) (chained `:subagent` gate loop with fn-valued `agent-run/*` attributes and a base-id fan-in to the accept checkpoint).
+Honest source: the `delegate-pipeline` weave pattern in this repo's [`.skein/workflows.clj`](../.skein/workflows.clj) (chained `:subagent` gate loop with fn-valued `agent-run/*` attributes and a base-id fan-in to the accept checkpoint).
 
 ---
 
