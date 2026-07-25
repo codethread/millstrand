@@ -196,22 +196,21 @@
 (s/def ::module-key keyword?)
 (s/def ::root-lib symbol?)
 
-;; `::module-opts` is the named public input grammar `module!` consults; the
-;; coordinator's `normalize-declaration` stays the normalizer and the authority
-;; for actionable per-field error prose, so `validate-module-opts!` routes a
-;; spec-invalid input through it and treats any disagreement as loud drift.
+;; `::module-opts` is the named public input grammar `module!` consults: a
+;; source target plus world policy, with entry points owned by the module
+;; namespace's `spool` var rather than by opts. The coordinator's
+;; `normalize-declaration` stays the normalizer and the single authority for
+;; actionable refusal prose — the withdrawn entry-point keys included — so
+;; `validate-module-opts!` routes a spec-invalid input through it and then
+;; refuses whatever this narrower grammar still rejects.
 (s/def ::module-opts
   (s/and map?
-         #(every? #{:ns :file :load :spools :after :contribute :reconcile
-                    :required?}
-                  (keys %))
+         #(every? #{:ns :file :load :spools :after :required?} (keys %))
          #(not= (contains? % :ns) (contains? % :file))
          #(or (not (contains? % :ns)) (symbol? (:ns %)))
          #(or (not (contains? % :file)) (string? (:file %)))
          #(or (not (contains? % :load)) (= :image (:load %)))
          #(or (not (contains? % :load)) (not (contains? % :file)))
-         #(or (not (contains? % :contribute)) (qualified-symbol? (:contribute %)))
-         #(or (not (contains? % :reconcile)) (qualified-symbol? (:reconcile %)))
          #(or (not (contains? % :spools))
               (and (coll? (:spools %)) (every? symbol? (:spools %))))
          #(or (not (contains? % :after))
@@ -220,19 +219,16 @@
 
 ;; This result shape owns the closed normalized declaration returned by
 ;; `module!`; `::module-opts` owns the less-normalized public input grammar.
+;; Retained pre-cutover graph state is an internal coordinator concern and never
+;; passes through this staged-result spec (DELTA-Dsp-004.D3).
 (s/def ::module-declaration
   (s/and map?
-         #(every? #{:ns :file :load :spools :after :contribute :reconcile
-                    :required?}
+         #(every? #{:ns :file :load :spools :after :required?}
                   (keys %))
          #(not= (contains? % :ns) (contains? % :file))
          #(or (not (contains? % :ns)) (symbol? (:ns %)))
          #(or (not (contains? % :file)) (string? (:file %)))
          #(or (not (contains? % :load)) (= :image (:load %)))
-         #(or (not (contains? % :contribute))
-              (qualified-symbol? (:contribute %)))
-         #(or (not (contains? % :reconcile))
-              (qualified-symbol? (:reconcile %)))
          #(and (vector? (:spools %)) (every? symbol? (:spools %)))
          #(and (vector? (:after %)) (every? keyword? (:after %)))
          #(boolean? (:required? %))))
@@ -303,34 +299,32 @@
   optional module-key `:after` dependencies, and an optional boolean
   `:required?`.
 
-  Entry points follow the `def spool` convention (PROP-Dsp-001): the module's
-  namespace declares a public `(def spool {:contribute … :reconcile …})` var
-  whose symbols the coordinator uses for fields absent from the module
+  Entry points are declared by convention alone (PROP-Dsp-001) and `opts` names
+  none: the module's namespace declares a public
+  `(def spool {:contribute … :reconcile …})` var, and a public `spool` var in a
+  module-loadable namespace unconditionally is that module's entry-point
   declaration. Every effective symbol is resolved and root-value-validated at
-  every module evaluation. During Phase A the legacy explicit
-  `:contribute`/`:reconcile` opt keys remain accepted and win per key over the
-  `spool` var; when both are explicit, the transitional path does not consult
-  or validate `spool`. A target with no `spool` var therefore works from a
-  complete explicit declaration. When neither the resolved
-  `:contribute` nor an explicit one is present, the module's contribution is the
-  declaration data collected from the authoring forms evaluated in its source,
-  so a plain file of authoring forms is a complete module
-  (DELTA-OlrRepl-001.CC3). A `spool` var supplying `:contribute` while the same
-  source load collected authoring forms is a loud conflict; a legacy explicit
-  `:contribute` retains its Phase A behavior, and a `:reconcile`-only `spool`
-  var composes with authoring forms.
+  every module evaluation. When no `:contribute` resolves, the module's
+  contribution is the declaration data collected from the authoring forms
+  evaluated in its source, so a plain file of authoring forms is a complete
+  module (DELTA-OlrRepl-001.CC3). A `spool` var supplying `:contribute` while
+  the same source load collected authoring forms is a loud conflict; a
+  `:reconcile`-only `spool` var composes with authoring forms. Opts naming
+  `:contribute` or `:reconcile` — qualified or not — are refused with the
+  removed keys named, the module key, and a `(def spool …)` remedy, the same
+  refusal a directly authored declaration raises; the keys carry no alias and
+  no fallback (DELTA-Dsp-003.CC1).
 
   `:load :image` (SPEC-004.C45/C46, ADR-003.P4) trusts the
   already-loaded JVM image for the `:ns` target: refresh performs no source
   load for that module, and it accepts no `:file` target — that violation is
   refused at declaration time. Its entry points resolve from the namespace's
-  `spool` var (or an explicit `:contribute`) in the image; a declared namespace
-  not loaded in the image, or one with no resolvable `:contribute`, is that
-  module's `:failed` outcome at evaluation. The outcome reports
-  `:source/status :image` and carries no source stamp. Image mode never loads
-  the declared target namespace's source; an entry-point symbol deliberately
-  qualified to a different namespace follows ordinary symbol resolution and may
-  require that callable namespace.
+  `spool` var in the image; a declared namespace not loaded in the image, or one
+  with no resolvable `:contribute`, is that module's `:failed` outcome at
+  evaluation. The outcome reports `:source/status :image` and carries no source
+  stamp. Image mode never loads the declared target namespace's source; an
+  entry-point symbol deliberately qualified to a different namespace follows
+  ordinary symbol resolution and may require that callable namespace.
 
   A `:reconcile` fn receives the contribution status under
   `[:module/contribution :status]` and branches: `:applied` ensures its live
@@ -667,11 +661,13 @@
 (defn- validate-module-opts!
   "Validate public module! opts against the named `::module-opts` grammar.
 
-  A spec-invalid input is routed through the coordinator's
-  `normalize-declaration`, which owns the actionable per-field error prose;
-  normalization is pure, so the probe has no effect. When the parser accepts
-  what the named spec rejects the two have drifted, and that disagreement
-  fails loudly here with the spec explain data."
+  The coordinator's `normalize-declaration` owns every declaration refusal, the
+  withdrawn entry-point keys included, so a spec-invalid input is routed
+  through it and this boundary answers with exactly the message and ex-data a
+  directly authored declaration gets — one contract to keep true rather than a
+  second copy here. Normalization is pure, so the probe has no effect. This
+  grammar is the narrower surface, so input the normalizer accepts and the
+  named spec rejects is still refused here, with the spec explain data."
   [key opts]
   (when-not (s/valid? ::module-opts opts)
     (module-graph/normalize-declaration key opts)

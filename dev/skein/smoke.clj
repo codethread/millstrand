@@ -361,10 +361,13 @@
       (let [init-contents (slurp init-file)]
         (doseq [needle ["(runtime/module! runtime :skein/spools-batteries"
                         ":ns 'skein.spools.batteries"
-                        ":spools ['skein.spools/batteries]"
-                        "skein.spools.batteries/contribute"
-                        "skein.spools.batteries/reconcile"]]
+                        ":spools ['skein.spools/batteries]"]]
           (assert-contains init-contents needle "clean bootstrap creates the guarded batteries module init.clj template"))
+        ;; The seeded declaration carries a source target and world policy only:
+        ;; entry points resolve from the batteries namespace's public `spool` var.
+        (doseq [removed [":contribute" ":reconcile"]]
+          (assert (not (clojure.string/includes? init-contents removed))
+                  (str "clean bootstrap seeds no removed entry-point key\nfound: " removed "\nin: " init-contents)))
         (assert (not (clojure.string/includes? init-contents "(require 'skein.spools.batteries)"))
                 "clean bootstrap does not create a bare batteries require"))
       (assert (.isDirectory (java.io.File. workspace "spools")) "clean bootstrap creates spools directory")
@@ -384,6 +387,9 @@
         init-path (java.io.File. workspace "init.clj")
         original-config "{\"configFormat\":\"alpha\"}\n"
         original-spools "{:spools {skein.spools/batteries {:skein/source-root \"spools/batteries\"}}}\n;; user comment\n"
+        ;; A hand-authored init.clj that already differs from the seeded
+        ;; template: `mill init` must leave it byte-for-byte alone, and the
+        ;; weaver must start on it, so its declaration is the convention form.
         original-init (source-file/render-forms
                        ['(require '[skein.api.current.alpha :as current]
                                   '[skein.api.runtime.alpha :as runtime]
@@ -391,9 +397,7 @@
                         '(def runtime (current/runtime))
                         '(runtime/module! runtime :skein/spools-batteries
                                           {:ns 'skein.spools.batteries
-                                           :spools ['skein.spools/batteries]
-                                           :contribute 'skein.spools.batteries/contribute
-                                           :reconcile 'skein.spools.batteries/reconcile})
+                                           :spools ['skein.spools/batteries]})
                         '(graph/register-query! runtime 'dirty [:= [:attr :owner] "dirty"])])]
     (delete-tree! (smoke-workspace (str db-file ".bootstrap-dirty")))
     (.mkdirs (java.io.File. workspace))
@@ -432,9 +436,7 @@
    '(def runtime (current/runtime))
    '(runtime/module! runtime :skein/spools-batteries
                      {:ns 'skein.spools.batteries
-                      :spools ['skein.spools/batteries]
-                      :contribute 'skein.spools.batteries/contribute
-                      :reconcile 'skein.spools.batteries/reconcile})
+                      :spools ['skein.spools/batteries]})
    '(graph/register-query! runtime 'smoke-owned [:= [:attr :owner] "smoke"])
    '(graph/register-query! runtime 'smoke-owner {:params [:owner] :where [:= [:attr :owner] [:param :owner]]})
    '(s/def :smoke.startup/title string?)

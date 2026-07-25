@@ -21,9 +21,9 @@
   This namespace also owns `::spool`, the shape of the `def spool` module
   declaration convention (PROP-Dsp-001): authors validate their `spool` var with
   `s/valid?`/`s/explain-data` against it, and the refresh coordinator enforces
-  the same spec whenever convention lookup consults the var. During Phase A, a
-  complete legacy explicit declaration bypasses that lookup; Phase C removes
-  the legacy keys and makes the reservation unconditional."
+  the same spec every time it resolves a module's entry points. The public name
+  is reserved unconditionally: no declaration key supplies an entry point
+  instead of the var."
   (:require [clojure.spec.alpha :as s]
             [skein.api.clock.alpha :as clock]
             [skein.api.format.alpha :as format-alpha]
@@ -93,9 +93,9 @@
 ;; qualified by the coordinator against the declaring namespace at resolution
 ;; time, and fully qualified symbols pass through. This one spec is both the
 ;; author validation surface (plain `s/valid?`/`s/explain-data`) and the shape
-;; the runtime enforces whenever convention lookup consults the var. A complete
-;; legacy explicit declaration bypasses lookup only during Phase A; Phase C
-;; removes those keys and makes the reservation unconditional.
+;; the runtime enforces every time it resolves a module's entry points: a public
+;; `spool` var in a module-loadable namespace is that module's entry-point
+;; declaration, and no declaration key bypasses it.
 (s/def ::spool
   (s/and map?
          #(every? #{:contribute :reconcile} (keys %))

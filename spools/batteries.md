@@ -41,9 +41,7 @@ Its generated `init.clj` activates the approved root through the ordinary guarde
 ```clojure
 (runtime/module! runtime :skein/spools-batteries
   {:ns 'skein.spools.batteries
-   :spools ['skein.spools/batteries]
-   :contribute 'skein.spools.batteries/contribute
-   :reconcile 'skein.spools.batteries/reconcile})
+   :spools ['skein.spools/batteries]})
 ```
 
 The relative coordinate resolves against the mill-selected Skein checkout and persists no absolute checkout path. Delete the seeded `spools.edn` entry to opt out; a workspace without it has no batteries ops.

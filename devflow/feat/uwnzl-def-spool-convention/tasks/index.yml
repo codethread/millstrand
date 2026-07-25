@@ -32,12 +32,12 @@ tasks:
   - id: 7
     description: Prepare sibling spool conversions
     task_file: tasks/007-prepare-sibling-conversions.md
-    status: pending
+    status: complete
     blocked_by: [5]
   - id: 8
     description: Publish reviewed pre-v1 sibling releases
     task_file: tasks/008-publish-sibling-releases.md
-    status: pending
+    status: complete
     blocked_by: [6, 7]
   - id: 9
     description: Phase C pin bump and legacy-key cutover

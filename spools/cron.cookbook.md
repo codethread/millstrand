@@ -105,8 +105,6 @@ own module.
 ;; init.clj — cron owns the registry kind before the job contributes.
 (runtime/module! runtime :skein/spools-cron
   {:ns 'skein.spools.cron :spools ['skein.spools/cron]
-   :contribute 'skein.spools.cron/contribute
-   :reconcile 'skein.spools.cron/reconcile
    :required? true})
 (runtime/module! runtime :report-job
   {:file "report_job.clj" :after [:skein/spools-cron]

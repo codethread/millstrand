@@ -121,9 +121,16 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 	}
 	initPath := filepath.Join(cfg, "init.clj")
 	got := string(mustReadFile(t, initPath))
-	for _, want := range []string{"(runtime/module! runtime :skein/spools-batteries", ":ns 'skein.spools.batteries", ":spools ['skein.spools/batteries]", "skein.spools.batteries/contribute", "skein.spools.batteries/reconcile"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("init.clj missing %q, got:\n%s", want, got)
+	// The seeded declaration carries a source target and world policy only: the
+	// coordinator resolves entry points from the batteries namespace's public
+	// spool var, so the removed keys must appear nowhere in the file.
+	declaration := "(runtime/module! runtime :skein/spools-batteries\n                 {:ns 'skein.spools.batteries\n                  :spools ['skein.spools/batteries]})"
+	if !strings.Contains(got, declaration) {
+		t.Fatalf("init.clj missing the source/world-policy declaration %q, got:\n%s", declaration, got)
+	}
+	for _, removed := range []string{":contribute", ":reconcile"} {
+		if strings.Contains(got, removed) {
+			t.Fatalf("init.clj seeds removed entry-point key %q, got:\n%s", removed, got)
 		}
 	}
 	if strings.Contains(got, "(require 'skein.spools.batteries)") {

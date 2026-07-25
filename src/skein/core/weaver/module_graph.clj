@@ -7,10 +7,13 @@
   perform source loads, registry publication, or resource reconciliation."
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [skein.core.format :as format]))
 
 (def ^:private declaration-keys
-  #{:ns :file :load :spools :after :contribute :reconcile :required?})
+  #{:ns :file :load :spools :after :required?})
+
+(def ^:private entry-point-keys [:contribute :reconcile])
 
 (def ^:private startup-layer-rank
   {:init 0 :init-local 1 :direct 2})
@@ -48,25 +51,66 @@
              {:field label :value values}))
     (vec (distinct values))))
 
-(defn- require-qualified-symbol! [label value]
-  (when-not (and (symbol? value) (namespace value))
-    (fail! (str "Module " label " must be a fully qualified symbol")
-           {:field label :value value})))
+(def ^:private removed-entry-point-refusal
+  "Complete refusal for a declaration that names an entry point.
+
+  The same complete text is the thrown message and the structured `:remedy`
+  carried in conflict data, so operator-facing consumers never have to parse
+  one to recover the other."
+  (format/reflow
+   "|Module options no longer name entry points. Delete the key from the
+    |declaration and declare the module's entry points in its namespace's
+    |public spool var, as
+    |(def spool {:contribute 'contribute :reconcile 'reconcile})."))
+
+(defn- require-no-entry-points!
+  "Refuse a declaration that names an entry point, pointing at `def spool`.
+
+  Every freshly authored declaration reaches here — startup collection, the
+  direct `declare-module!` route, targeted `:declare`, and the public
+  `runtime/module!` boundary, which routes opts its narrower `::module-opts`
+  grammar rejects straight through this normalizer. So one message and one
+  ex-data contract answer an author whatever surface they came through, and
+  both name the removed keys and the convention that replaced them rather than
+  reporting them as an unknown-key typo (DELTA-Dsp-003.CC1,
+  DELTA-Dsp-004.CC1, TEN-003).
+
+  This refusal is permanent, not a migration hint on a timer: it earns its keep
+  for as long as the keys stay out of the grammar, because it is the only thing
+  that tells an author holding a pre-cutover example where entry points went.
+  Retained pre-cutover state is the part that expires: its reader
+  `legacy-resolved-entry-points` carries that removal trigger
+  (DELTA-Dsp-003.D3, DELTA-Dsp-004.D3a)."
+  [key opts]
+  (let [removed (filterv #(contains? opts %) entry-point-keys)]
+    (when (seq removed)
+      (fail! removed-entry-point-refusal
+             {:reason :removed-module-opts-keys
+              :module/key key
+              :removed removed
+              :remedy removed-entry-point-refusal}))))
 
 (defn normalize-declaration
-  "Validate and normalize one stable module declaration.
+  "Validate and normalize one freshly authored module declaration.
 
   The key is independent of source identity. Options are closed, name exactly
   one `:ns` or workspace-relative `:file`, and carry normalized `:spools`,
   `:after`, and `:required?` values. `:load :image` (the only accepted `:load`
   value) trusts the already-loaded JVM image: it requires an `:ns` target and
   refresh never source-loads that module, so its entry points resolve from the
-  namespace's `spool` var (or an explicit Phase A `:contribute`) at evaluation."
+  namespace's `spool` var at evaluation.
+
+  Entry-point keys are refused here, so no newly authored declaration reaches
+  the coordinator carrying one. Declarations a live coordinator collected
+  before the cutover are never re-normalized: they stay readable in retained
+  state, where `legacy-resolved-entry-points` alone reads their entry points
+  (DELTA-Dsp-004.CC1/D3)."
   [key opts]
   (when-not (keyword? key)
     (fail! "Module key must be a keyword" {:module/key key}))
   (when-not (map? opts)
     (fail! "Module options must be a map" {:module/key key :opts opts}))
+  (require-no-entry-points! key opts)
   (when-let [unknown (seq (remove declaration-keys (keys opts)))]
     (fail! "Module options contain unknown keys"
            {:module/key key :unknown (vec (sort-by pr-str unknown))}))
@@ -83,9 +127,6 @@
                    (not (.isAbsolute (java.io.File. ^String file))))
       (fail! "Module :file must be a non-blank workspace-relative path"
              {:module/key key :file file})))
-  (doseq [field [:contribute :reconcile]
-          :when (contains? opts field)]
-    (require-qualified-symbol! (name field) (get opts field)))
   (when (contains? opts :load)
     (when-not (= :image (:load opts))
       (fail! "Module :load accepts only :image"
@@ -185,7 +226,11 @@
           (recur (apply dissoc remaining ready) (into resolved ready)))))))
 
 (defn validate-graph
-  "Validate a complete module graph and return it with dependency order."
+  "Validate a complete freshly authored graph, returning it with its order.
+
+  Every declaration is re-normalized, so this is a collection-time gate only: a
+  graph a live coordinator retains from before the cutover keeps its
+  entry-point keys and is ordered with `dependency-order` instead."
   [graph]
   (when-not (map? graph)
     (fail! "Module graph must be a map" {:graph graph}))

@@ -159,11 +159,9 @@
      (let [result (runtime/module!
                    runtime :kanban
                    {:ns 'ct.spools.kanban
-                    :load :image
-                    :contribute 'ct.spools.kanban/contribute
-                    :reconcile 'ct.spools.kanban/reconcile})]
+                    :load :image})]
        (is (= :applied (get-in result [:modules :kanban :status]))
-           "the Phase A pinned sibling remains valid through explicit keys"))
+           "the pinned sibling activates from its own public spool var"))
      (publish-authoring! runtime :config ".skein/config.clj")
      (let [card (weaver/add! runtime
                              {:title "Feature"

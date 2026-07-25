@@ -184,7 +184,8 @@
              "  {shuttle/alias-kind "
              (if present? "{:f16-probe-seat {:alias-of :codex}}" "{}") "\n"
              "   workflow/constructor-kind "
-             (if present? "{:f16-probe-flow 'workflows/story-workflow}" "{}") "})\n")))
+             (if present? "{:f16-probe-flow 'workflows/story-workflow}" "{}") "})\n"
+             "(def spool {:contribute 'contribute})\n")))
 
 (deftest f16-workspace-partition-refresh-deletes-omitted-seats-and-constructors
   ;; F16 regression: the .skein policy files publish their harness seats, reviewer
@@ -206,8 +207,7 @@
                        (runtime/module! (current/runtime) :f16-probe
                                         {:file "f16_probe.clj"
                                          :spools ['ct.spools/agent-run 'skein.spools/workflow]
-                                         :after [:skein/spools-shuttle :skein/spools-workflow]
-                                         :contribute 'f16-probe/contribute}))))
+                                         :after [:skein/spools-shuttle :skein/spools-workflow]}))))
     (write-f16-probe! config-dir true)
     (let [rt (weaver-runtime/start! db-file {:world (test-world config-dir)
                                              :publish? false})]
@@ -1283,7 +1283,7 @@
 
 (defn- parse-module-form
   "Project a `(runtime/module! runtime <key> <opts>)` form into its guard- and
-  parity-relevant data."
+  convention-relevant data."
   [form]
   (let [opts (nth form 3)]
     {:key (nth form 2)
@@ -1379,62 +1379,76 @@
    :skein/spools-chime 'skein.spools.chime/spool
    :skein/spools-cron 'skein.spools.cron/spool})
 
-(deftest init-in-tree-modules-resolve-entry-points-by-convention
-  ;; PROP-Dsp-001.G7/P7.1 (Phase A): the in-tree literal-mirror triples are
-  ;; retired — init.clj names only a source target and world policy, and the
-  ;; coordinator resolves each in-tree module's entry points from its namespace's
-  ;; public `def spool` var. This guards that conversion from both sides: every
-  ;; in-tree spool init.clj activates declares no `:contribute`/`:reconcile`
-  ;; (relying on the convention), and each backing `spool` var is a valid
-  ;; `::spool-api/spool` carrying at least a `:contribute` entry point. The
-  ;; narrowed sibling mirror below still polices the remaining literal triples
-  ;; until Phase C. Cardinality is asserted first, so a deleted, duplicated, or
-  ;; re-keyed declaration fails before any per-module comparison.
-  (let [by-key (->> (read-all-forms ".skein/init.clj")
-                    (filter module-form?)
-                    (map parse-module-form)
-                    (filter #(some-> (:ns %) str (str/starts-with? "skein.spools.")))
-                    (group-by :key))]
-    (is (= (set (keys in-tree-spool-vars)) (set (keys by-key)))
-        "init.clj's in-tree spool module keys drifted from the expected set")
-    (is (every? #(= 1 (count %)) (vals by-key))
-        "an in-tree module key is declared more than once in init.clj")
-    (doseq [[key spool-sym] in-tree-spool-vars]
-      (let [decl (first (get by-key key))
-            spool-var (requiring-resolve spool-sym)]
-        (is (and (nil? (:contribute decl)) (nil? (:reconcile decl)))
-            (str key " still declares an explicit entry-point key in init.clj"))
-        (is (s/valid? ::spool-api/spool @spool-var)
-            (str key " backing " spool-sym " is not a valid ::spool: "
-                 (s/explain-str ::spool-api/spool @spool-var)))
-        (is (contains? @spool-var :contribute)
-            (str key " backing " spool-sym
-                 " declares no :contribute entry point"))))))
+(def ^:private sibling-spool-vars
+  "The pinned sibling modules `.skein/init.clj` activates, keyed as init.clj keys
+  them, each mapped to the released namespace's public `def spool` var. These are
+  every namespace the Phase C pins supply: `codethread/devflow` v6,
+  `codethread/kanban` v10, and the three `ct.spools/agent-run` v14 roots, whose
+  subagent executor gained its `spool` var in the same release."
+  {:skein/spools-devflow 'ct.spools.devflow/spool
+   :skein/spools-kanban 'ct.spools.kanban/spool
+   :skein/spools-shuttle 'ct.spools.agent-run/spool
+   :skein/spools-delegation 'ct.spools.delegation/spool
+   :skein/spools-bench 'ct.spools.bench/spool
+   :skein/spools-treadle 'ct.spools.executors.subagent/spool})
 
-(def ^:private sibling-spool-datum-modules
-  "The sibling-backed init.clj modules that still mirror a peer spool's exported
-  `module` base datum in Phase A. Only devflow and kanban export such a datum;
-  the agent-harness peers declare their entry points solely in init.clj, so they
-  never had a datum to mirror. These literal triples drop in Phase C."
-  {:skein/spools-devflow 'ct.spools.devflow/module
-   :skein/spools-kanban 'ct.spools.kanban/module})
+(def ^:private forms-only-ns-modules
+  "The init.clj `:ns` modules that legally declare no `spool` var: the macro
+  namespaces, whose contribution is empty, and the defp demo, whose contribution
+  is the patterns its source collects."
+  #{:macros/patterns :macros/ops :macros/queries :macros/rules :macros/demo})
 
-(deftest init-sibling-declarations-match-exported-spool-datums
-  ;; PROP-Dsp-001.P7.1: the literal-mirror parity test, narrowed to the sibling
-  ;; modules whose peer namespace still exports a `module` base datum init.clj
-  ;; duplicates (precedence hides drift, so mirroring still needs its guard). It
-  ;; runs inside a started world so the pinned sibling roots are on the classpath
-  ;; and their datums resolve; it dies in Phase C with the literals it polices.
+(defn- public-spool-var
+  "Resolve a namespace's `spool` var, or nil when it is missing or private."
+  [spool-sym]
+  (when-let [spool-var (requiring-resolve spool-sym)]
+    (when-not (:private (meta spool-var)) spool-var)))
+
+(deftest init-modules-resolve-entry-points-by-convention
+  ;; PROP-Dsp-001.G7/P7.1: the literal-mirror triples are retired outright —
+  ;; init.clj names only a source target and world policy, and the coordinator
+  ;; resolves every module's entry points from its namespace's public `def spool`
+  ;; var. This guards that conversion from both sides. First, NO init.clj module
+  ;; — in-tree spool, pinned sibling, or workspace file — declares an explicit
+  ;; `:contribute`/`:reconcile`; that is the invariant the retired sibling parity
+  ;; test used to police from the other direction. Second, every `:ns` module
+  ;; expected to contribute — in-tree spool AND pinned sibling — resolves a public
+  ;; `spool` var that is a valid `::spool-api/spool` carrying at least a
+  ;; `:contribute` entry point. Without that second half a pin bump to a sibling
+  ;; that renamed, privatised, or malformed its var lands as a silently empty
+  ;; contribution and then a startup failure of the coordination world, not a test
+  ;; failure. It runs inside a started world so the pinned sibling roots are on
+  ;; the classpath and their vars resolve. Cardinality is asserted first, so a
+  ;; deleted, duplicated, or re-keyed declaration fails before any per-module
+  ;; check, and an added `:ns` module must be classified as contributing or as
+  ;; forms-only before it can pass. Workspace `:file` modules are deliberately
+  ;; outside the var requirement: a file's whole contribution may be the authoring
+  ;; forms its load collects.
   (with-startup-config-runtime
     (fn [_rt]
-      (let [by-key (->> (read-all-forms ".skein/init.clj")
-                        (filter module-form?)
-                        (map parse-module-form)
-                        (group-by :key))]
-        (doseq [[key datum-sym] sibling-spool-datum-modules]
-          (let [decl (first (get by-key key))
-                datum @(requiring-resolve datum-sym)]
-            (is (some? decl) (str key " is no longer declared in init.clj"))
-            (is (= {:contribute (:contribute datum) :reconcile (:reconcile datum)}
-                   {:contribute (:contribute decl) :reconcile (:reconcile decl)})
-                (str key " init.clj literal drifted from " datum-sym))))))))
+      (let [declarations (->> (read-all-forms ".skein/init.clj")
+                              (filter module-form?)
+                              (map parse-module-form))
+            expected-vars (merge in-tree-spool-vars sibling-spool-vars)
+            ns-keys (->> declarations (filter :ns) (map :key))]
+        (is (seq declarations) "parsed at least one init.clj module! form")
+        (is (every? #(= 1 (count %)) (vals (group-by :key declarations)))
+            "a module key is declared more than once in init.clj")
+        (is (= (into (set (keys expected-vars)) forms-only-ns-modules)
+               (set ns-keys))
+            "init.clj's :ns module keys drifted from the expected set")
+        (doseq [{:keys [key contribute reconcile]} declarations]
+          (is (and (nil? contribute) (nil? reconcile))
+              (str key " still declares an explicit entry-point key in init.clj")))
+        (doseq [[key spool-sym] expected-vars]
+          (if-let [spool-var (public-spool-var spool-sym)]
+            (do
+              (is (s/valid? ::spool-api/spool @spool-var)
+                  (str key " backing " spool-sym " is not a valid ::spool: "
+                       (s/explain-str ::spool-api/spool @spool-var)))
+              (is (contains? @spool-var :contribute)
+                  (str key " backing " spool-sym
+                       " declares no :contribute entry point")))
+            (is false
+                (str key " resolves no public " spool-sym
+                     " var, so it contributes nothing by convention"))))))))

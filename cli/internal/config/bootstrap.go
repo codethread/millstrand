@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	DefaultInitCLJ        = "(require '[skein.api.current.alpha :as current]\n         '[skein.api.runtime.alpha :as runtime])\n\n(def runtime (current/runtime))\n\n;; batteries is approved as a shipped source-root spool by default. The module\n;; guard keeps source loading behind that visible approval; contribute publishes\n;; its CLI ops and reconcile seeds the glossary outcomes they reference.\n(runtime/module! runtime :skein/spools-batteries\n                 {:ns 'skein.spools.batteries\n                  :spools ['skein.spools/batteries]\n                  :contribute 'skein.spools.batteries/contribute\n                  :reconcile 'skein.spools.batteries/reconcile})\n"
+	DefaultInitCLJ        = "(require '[skein.api.current.alpha :as current]\n         '[skein.api.runtime.alpha :as runtime])\n\n(def runtime (current/runtime))\n\n;; batteries is approved as a shipped source-root spool by default. The module\n;; guard keeps source loading behind that visible approval. The coordinator\n;; resolves the entry points from the namespace's public `spool` var, so this\n;; declaration carries only a source target and world policy: contribute\n;; publishes the CLI ops and reconcile seeds the glossary outcomes they\n;; reference.\n(runtime/module! runtime :skein/spools-batteries\n                 {:ns 'skein.spools.batteries\n                  :spools ['skein.spools/batteries]})\n"
 	DefaultSkeinGitignore = "config.local.json\ninit.local.clj\nspools.local.edn\nstate/\ndata/\nweaver.*\n*.sqlite\n*.sqlite-*\n"
 )
 

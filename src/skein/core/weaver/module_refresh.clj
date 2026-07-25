@@ -398,9 +398,9 @@
                           :collection/reload? true
                           :classpath-binding classpath-binding}))
           ;; No reachable on-disk source: the namespace is already live in the
-          ;; image, so its Vars come from the inherited/classpath image and any
-          ;; declaration contribution from an explicit :contribute. Report an
-          ;; unchanged source rather than reloading.
+          ;; image, so its Vars, its `spool` var included, come from the
+          ;; inherited/classpath image. Report an unchanged source rather than
+          ;; reloading.
           {:ns ns-sym :classpath-binding classpath-binding})
 
         :else
@@ -416,28 +416,36 @@
                      [role (entry-points/resolve-fn! key role callable)])))
            [:contribute :reconcile])))
 
+(def ^:private image-contribution-remedy
+  "The message both image-mode contribution failures state (SPEC-004.C46).
+
+  Image mode collects no authoring forms, so its `:contribute` has exactly two
+  requirements and either can be the missing one; naming both in one message
+  keeps the remedy actionable without the reader knowing which branch failed."
+  (format/reflow
+   "|Image module resolves no :contribute entry point; load or require its
+    |namespace into the JVM image, and define a public spool var carrying
+    |:contribute in that namespace"))
+
 (defn- evaluate-image-module
   "Evaluate a `:load :image` module: trust the already-loaded JVM image for its
   `:ns` target with no source load and no contribution-collection scope. Entry
-  points resolve from the namespace's `spool` var (or an explicit Phase A
-  `:contribute`); image mode collects no authoring forms, so a namespace with no
-  resolvable `:contribute` fails loudly (PROP-Dsp-001.G4/G5). The outcome carries
-  `:source/status :image`, its resolved entry points, and no source stamp."
+  points resolve from the namespace's `spool` var; image mode collects no
+  authoring forms, so a namespace with no resolvable `:contribute` fails loudly
+  (PROP-Dsp-001.G4/G5). The outcome carries `:source/status :image`, its
+  resolved entry points, and no source stamp."
   [runtime with-loader key declaration]
   (let [ns-sym (:ns declaration)]
     (when-not (find-ns ns-sym)
-      (fail! (format/reflow
-              "|Image module namespace is not loaded in the JVM image; load or
-               |require it before the module activates")
-             {:module/key key :ns ns-sym :load :image}))
-    (let [resolved (entry-points/resolve-entry-points key declaration ns-sym)
+      (fail! image-contribution-remedy
+             {:module/key key :ns ns-sym :load :image
+              :reason :namespace-not-loaded}))
+    (let [resolved (entry-points/resolve-entry-points key ns-sym)
           contribute (:contribute resolved)]
       (when-not contribute
-        (fail! (format/reflow
-                "|Image module resolves no :contribute entry point; its namespace
-                 |needs a public spool var (or an explicit :contribute) because
-                 |image mode collects no authoring forms")
-               {:module/key key :ns ns-sym :load :image}))
+        (fail! image-contribution-remedy
+               {:module/key key :ns ns-sym :load :image
+                :reason :no-spool-contribution}))
       (let [resolved-fns (resolve-entry-point-fns! with-loader key resolved)
             contribution
             (with-loader
@@ -466,14 +474,13 @@
                             :unchanged
                             :loaded)
             module-ns (entry-points/module-namespace declaration context)
-            resolved (entry-points/resolve-entry-points key declaration module-ns)
+            resolved (entry-points/resolve-entry-points key module-ns)
             resolved-fns (resolve-entry-point-fns! with-loader key resolved)
             contribute-fn (:contribute resolved-fns)
             contribution (cond
                            contribute-fn
                            (do
-                             (when (and (seq collected)
-                                        (not (contains? declaration :contribute)))
+                             (when (seq collected)
                                (fail! (format/reflow
                                        "|Module's spool var supplies a :contribute entry
                                         |point yet its source collected authoring forms; the
@@ -532,6 +539,43 @@
       seeded
       order)
      order)))
+
+(defn- retained-legacy-modules
+  "Return the affected pre-cutover declarations, keyed by module.
+
+  A declaration carrying `:contribute`/`:reconcile` can only be graph state a
+  live coordinator held before it picked the cutover up, because no authoring
+  seam accepts the keys (DELTA-Dsp-004.D3). `legacy-resolved-entry-points` stays
+  the single reader of them."
+  [graph order]
+  (select-keys (entry-points/legacy-resolved-entry-points {:graph graph}) order))
+
+(defn- refuse-retained-legacy-evaluation!
+  "Refuse a targeted refresh that would evaluate a retained pre-cutover module.
+
+  Convention-only resolution reads such a declaration as a post-cutover one with
+  no entry points, which would retract its published contribution and replace
+  its retained resolved set with an empty one, dropping the reconciler its
+  removal still has to run. The refusal precedes synchronization, evaluation,
+  and publication, so the graph, contributions, retained resolved entry points,
+  resources, and live registrations all stay as they were. A full refresh is the
+  migration path: it removes an omitted pre-cutover module through that retained
+  reconciler (DELTA-Dsp-004.D3/D3a, SPEC-004.C46b)."
+  [mode graph order selected]
+  (when (= :targeted mode)
+    (when-let [retained (not-empty (retained-legacy-modules graph order))]
+      (fail! (format/reflow
+              "|Targeted refresh would evaluate a module declared before the
+               |def-spool cutover, whose entry points live in retained
+               |coordinator state rather than a public spool var; evaluating it
+               |would retract its live contribution and lose its reconciler. Run
+               |a full refresh, which migrates or removes it through that
+               |retained state")
+             {:reason :retained-legacy-declaration
+              :mode mode
+              :module/keys (vec (keys retained))
+              :retained/entry-points retained
+              :selected (vec (sort-by pr-str selected))}))))
 
 (defn- previous-module [state key]
   {:module/declaration (get-in state [:graph key])
@@ -780,7 +824,11 @@
       (let [[key declaration] (:declare opts)
             declaration (module-graph/normalize-declaration key declaration)
             graph (assoc (:graph state) key declaration)
-            {:keys [order]} (module-graph/validate-graph graph)]
+            ;; Only the declaration being authored is normalized. The graph it
+            ;; joins was normalized when it was collected, and on a coordinator
+            ;; picked up without a restart it may still hold pre-cutover
+            ;; entries a fresh normalization would now refuse (DELTA-Dsp-004.D3).
+            order (module-graph/dependency-order graph)]
         {:mode :targeted
          :collection (assoc (select-keys state [:layers :shadows :startup/files])
                             :files (:startup/files state)
@@ -816,7 +864,11 @@
   `:only` for targeted refresh, or internal `:declare` for module declaration
   outside startup collection. `:dry-run? true` uses the current synchronized
   roots, then runs collection, source-load, and staging without synchronizing,
-  publishing, reconciling, or recording coordinator state (CC14)."
+  publishing, reconciling, or recording coordinator state (CC14).
+
+  A targeted refresh that would evaluate a retained pre-cutover declaration —
+  directly or as an affected dependent — throws before anything mutates, leaving
+  the live world untouched (DELTA-Dsp-004.D3)."
   [runtime {:keys [load-startup-files! with-loader]} opts]
   ;; The runtime slot is one dedicated Object monitor. Splint cannot see the
   ;; stable object behind the map lookup; refreshes serialize so two collectors
@@ -846,6 +898,7 @@
                         #{})
               selected (or selected (set (keys graph)))
               order (module-graph/affected-modules graph selected)
+              _ (refuse-retained-legacy-evaluation! mode graph order selected)
               ;; An empty graph needs no acquisition pass. Any desired or current
               ;; module graph owns synchronization through this coordinator.
               sync-result (if (:dry-run? opts)

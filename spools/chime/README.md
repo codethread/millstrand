@@ -28,8 +28,6 @@ Activate it from trusted startup config after syncing approved roots:
 (runtime/module! runtime :chime
   {:ns 'skein.spools.chime
    :spools ['skein.spools/chime]
-   :contribute 'skein.spools.chime/contribute
-   :reconcile 'skein.spools.chime/reconcile
    :required? true})
 ```
 
