@@ -15,4 +15,4 @@ scripts/ralph-codex <epic-id> "Work every feature and close the epic"
 
 Both loops expect the canonical coordination weaver to be running. They read the epic lifecycle between iterations, while the agent run claims and closes kanban work.
 
-`ralph-codex` exits 0 when the epic is already finished or the loop observes it close, 2 for invalid invocation or environment values, and 3 when the agent pulls the emergency brake. Missing dependencies, invalid strand data, harness failures, transcript failures, and iteration exhaustion exit 1.
+`ralph-codex` exits 0 when the epic is already inactive (`closed` or `replaced`) or the loop observes it become inactive, 2 for invalid invocation or environment values, and 3 when the agent pulls the emergency brake. Missing dependencies, invalid strand data, harness failures, transcript failures, and iteration exhaustion exit 1.

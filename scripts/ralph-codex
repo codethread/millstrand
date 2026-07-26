@@ -128,18 +128,25 @@ EOF
 render_stream() {
   jq --unbuffered -rj '
     if .type == "item.completed" and .item.type == "agent_message" then
-      .item.text + "\n"
+      ((.item.text | strings) // error("agent_message missing text: " + (. | tojson))) + "\n"
     elif .type == "item.started" and .item.type == "command_execution" then
-      "⏺ command " + (.item.command // "?") + "\n"
+      "⏺ command "
+      + ((.item.command | strings) // error("command_execution missing command: " + (. | tojson)))
+      + "\n"
     elif .type == "item.started" and (.item.type == "mcp_tool_call" or .item.type == "web_search") then
       "⏺ " + .item.type + " " + ((.item | tojson)[0:200]) + "\n"
     elif .type == "turn.completed" then
       "\n[ralph-codex] run finished"
-      + " | input " + ((.usage.input_tokens // 0) | tostring)
-      + " | cached " + ((.usage.cached_input_tokens // 0) | tostring)
-      + " | output " + ((.usage.output_tokens // 0) | tostring) + "\n"
+      + " | input " + (((.usage.input_tokens | numbers)
+                        // error("turn.completed missing input_tokens: " + (. | tojson))) | tostring)
+      + " | cached " + (((.usage.cached_input_tokens | numbers)
+                         // error("turn.completed missing cached_input_tokens: " + (. | tojson))) | tostring)
+      + " | output " + (((.usage.output_tokens | numbers)
+                         // error("turn.completed missing output_tokens: " + (. | tojson))) | tostring) + "\n"
     elif .type == "turn.failed" then
-      "\n[ralph-codex] turn failed: " + ((.error.message // .error // "unknown error") | tostring) + "\n"
+      "\n[ralph-codex] turn failed: "
+      + ((.error.message | strings) // error("turn.failed missing error message: " + (. | tojson)))
+      + "\n"
     else empty end'
 }
 
