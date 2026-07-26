@@ -566,6 +566,7 @@ Failures name the role they refused for:
 | `workflow/run-unknown` | The run id has never had a root strand. |
 | `workflow/attr-key-duplicate` | One `--attr` key was given twice in a single `workflow complete`. |
 | `workflow/attributes-invalid` | `--attributes` was not a JSON object, or carried a blank key. |
+| `workflow/context-invalid` | The persisted run root has a malformed `workflow/context` value. The failure names the run, root, offending value, and expected map shape. |
 
 ### Recording an outcome on `complete`
 
@@ -586,6 +587,8 @@ $ strand workflow complete feat-x --context '{"pr-number":412}'
 ```
 
 An existing key is replaced whole. Nested maps are values, not recursive merge targets. The updated context is available to later checkpoint `:next` and `:revise` routing; defer targets still take only the params supplied to `defer!`.
+
+`--context` must resolve to a JSON object whose values can be stored as JSON. An invalid request fails before the closing batch, and a malformed persisted root context fails as `workflow/context-invalid`; in either case, the step stays active and the root context is unchanged.
 
 ### Losing a race
 
