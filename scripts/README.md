@@ -14,3 +14,5 @@ scripts/ralph-codex <epic-id> "Work every feature and close the epic"
 `ralph-codex` defaults `RALPH_MODEL` to `sol-low`, which selects `gpt-5.6-sol` with low reasoning effort. Set `RALPH_EFFORT` to override the effort or set `RALPH_MODEL` to another Codex model ID. It uses Codex's approval and sandbox bypass by default because a headless run cannot answer permission prompts; set `RALPH_SKIP_PERMISSIONS=0` to keep the configured Codex restrictions.
 
 Both loops expect the canonical coordination weaver to be running. They read the epic lifecycle between iterations, while the agent run claims and closes kanban work.
+
+`ralph-codex` exits 0 when the epic is already finished or the loop observes it close, 2 for invalid invocation or environment values, and 3 when the agent pulls the emergency brake. Missing dependencies, invalid strand data, harness failures, transcript failures, and iteration exhaustion exit 1.

@@ -77,6 +77,14 @@ epic_state() {
 
 epic_json="$("$strand" show "$epic" 2>/dev/null)" \
   || { echo "ralph-codex: epic $epic not found (strand show failed)" >&2; exit 1; }
+if ! jq -e --arg epic "$epic" '
+  .id == $epic
+  and (.title | type == "string" and length > 0)
+  and (.state | type == "string" and length > 0)
+' <<<"$epic_json" >/dev/null; then
+  echo "ralph-codex: strand show returned an invalid epic payload for $epic" >&2
+  exit 1
+fi
 epic_title="$(jq -r '.title' <<<"$epic_json")"
 initial_state="$(jq -r '.state' <<<"$epic_json")"
 case "$initial_state" in
@@ -186,12 +194,13 @@ while true; do
     consecutive_failures=0
     [ -f "$final_message" ] \
       || { echo "[ralph-codex] codex exited successfully without a final message" >&2; exit 1; }
-    # Anchor to line start so the agent quoting the instruction mid-sentence
-    # cannot trip the brake by accident.
-    if grep -q '^RALPH-STOP:' "$final_message"; then
+    # Only the final line is a brake, so quoting the instruction earlier in the
+    # response cannot stop the loop.
+    brake_line="$(tail -n 1 "$final_message")"
+    if [[ "$brake_line" == "RALPH-STOP: "* ]]; then
       echo
       echo "[ralph-codex] agent pulled the emergency brake:" >&2
-      grep '^RALPH-STOP:' "$final_message" >&2
+      echo "$brake_line" >&2
       exit 3
     fi
   fi
