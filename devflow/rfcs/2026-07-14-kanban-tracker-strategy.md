@@ -173,14 +173,14 @@ The projection copes because workflow roots already carry a family (devflow's
 intake seeds `:family "devflow"`), so a repo's bound fn can dispatch on it:
 
 ```clojure
-(fn [run-id]
-  (let [root (first (workflow/current-root run-id))
+(fn [runtime run-id]
+  (let [root (first (workflow/current-root runtime run-id))
         family (attr-value root :workflow/family)]
     {:status (case family
                "devflow" (attr-value root :devflow/stage)
                "spike"   (attr-value root :spike/phase)
                family)
-     :next-steps (workflow/next-steps run-id)}))
+     :next-steps (workflow/next-steps runtime run-id)}))
 ```
 
 This is the RFC-022.NG2 multiplex clause in the concrete: one binding, N
