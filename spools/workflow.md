@@ -70,7 +70,7 @@ The form is a `def` first: loading the namespace defines `build` and nothing els
 
 The value is self-describing, which is the point: `:doc`, `:entrypoints`, `:param-spec`, and `:defaults` travel with the workflow, so a caller can learn what a registered name means without executing anything. `(workflow/resolve-workflow :build)` returns `{:name :build :definition 'my.ns/build :value {...} :entrypoints #{...}}`. A symbol whose Var holds something other than a definition map fails as `:workflow/definition-invalid`, carrying the class it found.
 
-- **`:entrypoints`** is a non-empty subset of `#{:start :continue :call}`. A definition may declare any combination. The registry is where it applies: reaching a definition **by registered name** requires `:start` to `start!`, `:continue` for a `:next` route, and `:call` for a `call` target, and a refusal fails before any mutation with reason `:workflow/entrypoint-unsupported`. Trusted Clojure holding the Var or the value directly is already past that boundary and is not checked (TEN-002).
+- **`:entrypoints`** is a non-empty subset of `#{:start :continue :call}`. A definition may declare any combination. The registry is where it applies: reaching a definition **by registered name** requires `:start` to `start!`, `:continue` for a `:next` route, and `:call` for a `call` or `dispatch` target, and a refusal fails before any mutation with reason `:workflow/entrypoint-unsupported`. Trusted Clojure holding the Var or the value directly is already past that boundary and is not checked (TEN-002).
 - **`:param-spec`** names a qualified spec keyword for the complete resolved params map. Start, named `:next` routing, and `:revise` merge `:defaults` and then validate the whole map against the live spec before anything compiles or pours. The caller's own map is what compiles: validation never substitutes `s/conform` output. Both refusals are named: `:workflow/params-invalid` for a map the spec rejects, carrying the spec identity, its current form graph, and `s/explain-str`; `:workflow/param-spec-missing` for a `:param-spec` naming a spec that has since been removed, so a stale identity never reads as an unconstrained workflow. Registration and publication check that the name resolves at declaration time too.
 - **`:defaults`** is a partial overlay merged *under* caller params at start, route, call, and revision. It is not required to satisfy `:param-spec` — a definition may default some keys and still require the caller to supply the rest — but it must be a keyword-keyed map of JSON-compatible values.
 
@@ -457,7 +457,7 @@ A checkpoint's `:next` is decided where the workflow is authored, and a `call` a
 
 Nothing may declare `:depends-on` a defer — not a step, a conditional step, a loop, a call, or a checkpoint — and a workflow declaring one may not be used as a `call` procedure, because the procedure join would continue past the exit. Both refusals are `:workflow/defer-not-terminal` and `:workflow/defer-in-procedure`, raised at the builder and again at registration for a raw map that never went through it. The rule reads the declared steps rather than an expansion, so params cannot change the answer.
 
-That is the whole reason the two compose cleanly: returning composition stays `call`, and a cross-spool exit stays `defer`.
+That is the whole reason the two compose cleanly: fixed-target returning composition stays `call`, runtime-selected returning composition uses `dispatch`, and a cross-spool exit stays `defer`.
 
 ### Binding is the authority boundary
 

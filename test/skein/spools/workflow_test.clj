@@ -3400,8 +3400,7 @@
                                            :attributes {"workflow/dispatch-path" []})
                         (catch clojure.lang.ExceptionInfo e e))]
         (is (= :workflow/dispatch-path-reserved (:reason (ex-data thrown)))
-            "an authored path is refused at the builder, so it can never be mistaken
-             for a nested compile's already-correct stamping")))))
+            "an authored path cannot replace compile-owned lineage")))))
 
 (deftest dispatch-refuses-a-malformed-persisted-path
   ;; Persisted attributes are an I/O boundary. Missing lineage must fail before
