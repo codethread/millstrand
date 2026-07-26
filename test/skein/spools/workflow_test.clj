@@ -13,7 +13,6 @@
             [skein.api.vocab.alpha :as vocab]
             [skein.spools.test-support :as test-support :refer [assert-state-shape with-runtime]]
             [skein.spools.workflow :as workflow]
-            [skein.spools.workflow.internal.definitions :as definitions]
             [skein.spools.workflow.internal.registry :as wf-registry]
             [skein.repl :as repl]
             [skein.test.alpha :as test-alpha])
@@ -3002,12 +3001,12 @@
         payload (workflow/compile outer {} {:definition 'skein.spools.workflow-test/outer})
         path (get-in (first (filter #(= "defer" (get-in % [:attributes "workflow/role"]))
                                     (:strands payload)))
-                     [:attributes "workflow/defer-path"])
-        expected [{"fingerprint" (definitions/fingerprint {:value outer})
-                   "definition" "skein.spools.workflow-test/outer"}
-                  {"fingerprint" (definitions/fingerprint {:value callee})
-                   "definition" nil}]]
-    (is (= expected path))
+                     [:attributes "workflow/defer-path"])]
+    (is (= ["skein.spools.workflow-test/outer" nil] (mapv #(get % "definition") path))
+        "the enclosing definition, then the procedure it fixed-called into")
+    (is (every? #(re-matches #"[0-9a-f]{16}" (get % "fingerprint")) path))
+    (is (apply not= (map #(get % "fingerprint") path))
+        "each ancestor is digested as itself, not as the root over again")
     (let [anonymous (workflow/compile
                      (workflow/bind-defers
                       (workflow/workflow "Anonymous" (workflow/defer :pick "Pick"))
@@ -3058,10 +3057,9 @@
                                         {:definition 'skein.spools.workflow-test/forged})
               path (get-in (second (:strands payload))
                            [:attributes "workflow/defer-path"])]
-          (is (= [{"fingerprint" (definitions/fingerprint
-                                  {:value {:name "Forged" :steps [forged]}})
-                   "definition" "skein.spools.workflow-test/forged"}]
-                 path)))))))
+          (is (= ["skein.spools.workflow-test/forged"] (mapv #(get % "definition") path))
+              "the authored empty ancestry was replaced, not merged into")
+          (is (re-matches #"[0-9a-f]{16}" (get-in path [0 "fingerprint"]))))))))
 
 (deftest defer-refuses-a-malformed-persisted-path
   ;; Persisted attributes are an I/O boundary. Missing lineage must fail before
