@@ -26,7 +26,7 @@ singleton.
 
 This doc is the standing contract. It is written against the old public-CLI clauses in
 [`devflow/specs/cli.md`](../devflow/specs/cli.md) §SPEC-002.C6–C13 so behavior equivalences and
-deliberate differences are explicit; §5 is the clause-by-clause map. Stable ids here use the `BAT-`
+deliberate differences are explicit; [§5](#5-equivalence-with-the-old-public-cli) is the clause-by-clause map. Stable ids here use the `BAT-`
 prefix.
 
 `mill init` approves batteries as a shipped source-root spool:
