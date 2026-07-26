@@ -627,7 +627,8 @@
   This is a root transfer, not a step transition. `continue!` closes the current
   root outright and pours the selected workflow as the run's new root; it never
   calls `advance!`, never resumes a caller, and never merges the old root's
-  context. Returning composition stays `call`, and authored routing stays a
+  context. Fixed-target returning composition stays `call`, runtime-selected
+  returning composition uses `dispatch!`, and authored routing stays a
   checkpoint's `:next`.
 
   `workflow` must be one of the registered names the defer's materialized
@@ -988,9 +989,9 @@
   A point read, so it answers for any definition regardless of entrypoints,
   including a call-only component the default catalogue omits. The view carries
   the catalogue fields, the param contract (`:param-spec` identity with its live
-  `s/form` graph plus `:defaults`), and the declared summary: entry items, loops, gates,
-  checkpoint choice keys, calls, defer exits with their bound targets, and the
-  registered workflows the definition routes to.
+  `s/form` graph plus `:defaults`), and the declared summary: entry items, loops,
+  gates, checkpoint choice keys, calls, defer exits and dispatches with their
+  bound targets, and the registered workflows the definition routes to.
 
   It stays topology-lazy. Nothing is expanded, rendered, or evaluated: an
   expansion needs params that do not exist yet, and a deferred exit cannot be
@@ -1071,8 +1072,8 @@
 
   `request` is `{:run-id … :step … :by … :attributes {…}}`, all but the run id
   optional. Without `:step` the sole ready ordinary step is inferred; a checkpoint
-  or defer exit ready alongside it does not make that ambiguous, because neither
-  is a step this verb could act on.
+  defer exit, or dispatch ready alongside it does not make that ambiguous,
+  because none is a step this verb could act on.
 
   `:attributes` merges onto the closed step in the closing mutation, so a worker
   records what it found in its own vocabulary without a second write an observer
@@ -1970,7 +1971,8 @@
    :gate (explain-gate)
    :checkpoint (explain-checkpoint)
    :call (explain-call)
-   :defer (explain-defer)})
+   :defer (explain-defer)
+   :dispatch (explain-dispatch)})
 
 ;; --- builder option validation --------------------------------------------
 
