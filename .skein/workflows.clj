@@ -451,11 +451,12 @@
 (s/def ::card ::non-blank-string)
 (s/def ::subject ::non-blank-string)
 (s/def ::reason ::non-blank-string)
+(s/def ::pr-number pos-int?)
 
 (s/def ::land-params (s/keys :req-un [::feature ::branch ::worktree]
                              :opt-un [::card]))
 (s/def ::land-merge-params (s/keys :req-un [::feature ::branch ::worktree
-                                            ::subject ::body]
+                                            ::subject ::body ::pr-number]
                                    :opt-un [::card]))
 (s/def ::land-abort-params (s/keys :req-un [::branch ::reason]))
 
@@ -473,6 +474,18 @@
   "Declare the squash subject and body required by the approved choice."
   {:spec ::land-merge-input
    :doc "Semantic squash subject and Squashed commits body for gh pr merge."})
+
+(defn- require-pr-number!
+  "Return pr-number when it satisfies the land PR-number boundary spec."
+  [feature pr-number]
+  (when-not (s/valid? ::pr-number pr-number)
+    (throw (ex-info "push-draft-pr completion requires a positive --pr-number"
+                    {:argument :pr-number
+                     :feature feature
+                     :value pr-number
+                     :spec ::pr-number
+                     :explain (s/explain-data ::pr-number pr-number)})))
+  pr-number)
 
 (def ^:private land-merge-script
   "Idempotently ready and squash-merge the feature PR."
@@ -537,9 +550,9 @@
                   (fn [{:keys [branch]}] (str "Merge the PR for " branch " via gh"))
                   :shell
                   :attributes {"workflow/action-ref" "land.pr.merge"
-                               "shell/argv" (fn [{:keys [branch subject body]}]
+                               "shell/argv" (fn [{:keys [pr-number subject body]}]
                                               (sh-gate land-merge-script
-                                                       "land-merge" branch subject body))
+                                                       "land-merge" (str pr-number) subject body))
                                "shell/cwd" (fn [{:keys [worktree]}] worktree)
                                "shell/timeout-secs" 300
                                "workflow/instruction"
@@ -667,13 +680,16 @@
                   :attributes {"workflow/action-ref" "land.pr.open"
                                "workflow/instruction"
                                (fn [{:keys [branch]}]
-                                 (str "Push the branch to origin: `git push -u origin " branch "`."
-                                      " Open a draft PR against main: `gh pr create --draft --title <semantic subject> --body <summary>`."
-                                      " If an open PR for " branch " already exists, reuse it instead"
-                                      " (`gh pr view " branch " --json url,number,state`). Record the PR url"
-                                      " and number in this step's notes before completing. Completing this"
-                                      " step starts the automated ci-green shell gate and, for card-backed"
-                                      " runs, moves the kanban card to in_review."))})
+                                 (format-alpha/reflow
+                                  (format
+                                   "|Push the branch to origin: `git push -u origin %s`. Open a draft PR
+                                    |against main: `gh pr create --draft --title <semantic subject>
+                                    |--body <summary>`. If an open PR for %s already exists, reuse it
+                                    |instead (`gh pr view %s --json url,number,state`). Complete this step
+                                    |with `land complete <run-id> --pr-number <number>`. Completing it
+                                    |starts the automated ci-green shell gate and, for card-backed runs,
+                                    |moves the kanban card to in_review."
+                                   branch branch branch)))})
    (workflow/gate :ci-green
                   (fn [{:keys [branch]}] (str "Watch CI to green at " branch " HEAD"))
                   :shell
@@ -743,6 +759,14 @@
                                      |sign-off authority.")
                                    :next :land-merge
                                    :input land-merge-input}
+                                  {:key :revise
+                                   :label "Revise"
+                                   :description
+                                   (format-alpha/reflow
+                                    "|Re-pour the land run from its current context. Use after refreshing
+                                     |a corrected gate script; the pull request number and other run
+                                     |context carry into the new root.")
+                                   :revise {:params {}}}
                                   {:key :abort
                                    :label "Abort"
                                    :description "Stop landing intentionally; nothing merges. Records the reason and leaves the branch/worktree for follow-up."
@@ -786,6 +810,17 @@
      |concurrently while only one coordinator lands a branch — and the kanban
      |lane moves: a card-backed run moves its card to in_review when
      |push-draft-pr completes, and back to claimed on abort.")
+   :pr-context
+   (format-alpha/reflow
+    "|Complete push-draft-pr with `land complete <run-id> --pr-number <number>`.
+     |The positive number enters run context atomically with the step close, and
+     |the merge continuation uses it to address the exact PR. Later land steps
+     |reject the flag.")
+   :revision
+   (format-alpha/reflow
+    "|At sign-off, `revise` re-pours the land definition from its saved context
+     |without taking the merge lock. Use it after refreshing a corrected gate
+     |script; runs created before PR context existed must restart.")
    :discovery {:definition "strand workflow show land"
                :continuations ["strand workflow show land-merge"
                                "strand workflow show land-abort"]
@@ -830,27 +865,32 @@
                             :doc "Land run id (feature/branch slug)."}]}
     "complete" {:doc "Close a land step; checkpoint results include choice input details."
                 :hook-class :mutating :deadline-class :standard
+                :flags {:pr-number {:type :int
+                                    :doc (format-alpha/reflow
+                                          "|Positive GitHub pull request number. Required when
+                                           |completing push-draft-pr and rejected for later steps.")}}
                 :positionals [{:name :feature
                                :required? true
                                :doc "Land run id."}
                               {:name :tail
                                :variadic? true
                                :doc "Optional trailing step=<id> selector."}]}
-    "choose" {:doc "Decide sign-off: approved requires a squash subject/body; abort requires a reason."
+    "choose" {:doc "Decide sign-off: approved merges, revise re-pours, and abort stops landing."
               :hook-class :mutating :deadline-class :standard
               :positionals [{:name :feature
                              :required? true
                              :doc "Land run id."}
                             {:name :choice
                              :required? true
-                             :doc "Checkpoint choice: approved or abort."}
+                             :doc "Checkpoint choice: approved, revise, or abort."}
                             {:name :tail
                              :variadic? true
                              :doc (format-alpha/reflow
                                    "|JSON input: approved requires
-                                    |{\"subject\":\"...\",\"body\":\"...\"}; abort
-                                    |requires {\"reason\":\"...\"}. A trailing
-                                    |step=<id> selector is optional.")}]}
+                                    |{\"subject\":\"...\",\"body\":\"...\"}; revise
+                                    |takes no input; abort requires
+                                    |{\"reason\":\"...\"}. A trailing step=<id>
+                                    |selector is optional.")}]}
     "status" {:doc "Show land state and ready steps, including checkpoint choice input details."
               :hook-class :read :deadline-class :standard
               :positionals [{:name :feature
@@ -881,7 +921,7 @@
   the runbook context."
   {:returns land-returns :arg-spec land-arg-spec}
   [ctx]
-  (let [{:keys [subcommand feature choice tail] :as args} (:op/args ctx)
+  (let [{:keys [subcommand feature choice tail pr-number] :as args} (:op/args ctx)
         verb (first subcommand)]
     (condp = verb
       "about" (land-about)
@@ -909,7 +949,17 @@
                      (when reviewing?
                        (move-card-to-review! card))
                      (try
-                       (let [result (workflow/complete! feature (if step {:step step} {}))]
+                       (when (and (not reviewing?) (contains? args :pr-number))
+                         (throw (ex-info "--pr-number is only accepted when completing push-draft-pr"
+                                         {:argument :pr-number
+                                          :feature feature
+                                          :value pr-number})))
+                       (when reviewing?
+                         (require-pr-number! feature pr-number))
+                       (let [complete-opts (cond-> {}
+                                             step (assoc :step step)
+                                             reviewing? (assoc :context {:pr-number pr-number}))
+                             result (workflow/complete! feature complete-opts)]
                          (when releasing?
                            (release-merge-lock! feature "land terminal cleanup"))
                          (land-result feature (merge {:feature feature} result)))

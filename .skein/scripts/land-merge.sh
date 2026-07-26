@@ -5,7 +5,7 @@ state=$(gh pr view "$1" --json state --jq .state)
 case "$state" in
   MERGED) echo "already merged: $1"; exit 0 ;;
   OPEN) ;;
-  *) echo "cannot merge PR for $1: state is $state" >&2; exit 1 ;;
+  *) echo "cannot merge PR $1: state is $state; expected OPEN or MERGED" >&2; exit 1 ;;
 esac
 
 if ! gh pr ready "$1"; then
