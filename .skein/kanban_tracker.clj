@@ -2,7 +2,6 @@
   "Bind this repo's kanban card projection to devflow."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [skein.api.current.alpha :as current]
             [skein.api.spool.alpha :as spool]
             [ct.spools.devflow :as devflow]
             [ct.spools.kanban :as kanban]))
@@ -12,8 +11,8 @@
 
 (defn- active-stage
   "Return the active root's non-blank stage, or nil when no root is active."
-  [run-id]
-  (when-let [root (devflow/current-root run-id)]
+  [runtime run-id]
+  (when-let [root (devflow/current-root runtime run-id)]
     (let [stage (spool/attr-get root :devflow/stage)]
       (when-not (and (string? stage) (not (str/blank? stage)))
         (spool/fail! "Active devflow root must carry a non-blank devflow/stage"
@@ -25,17 +24,17 @@
 
   An absent active root is the accepted no-active-run state: nil status and no
   steps. Kanban validates the same projection again at its strategy boundary."
-  [run-id]
+  [runtime run-id]
   (spool/require-valid! ::run-id run-id "Devflow tracker run id must be a non-blank string")
-  (let [stage (active-stage run-id)]
+  (let [stage (active-stage runtime run-id)]
     (spool/require-valid!
      ::projection
      {:status stage
-      :ready (if stage (devflow/ready run-id) [])}
+      :ready (if stage (devflow/ready runtime run-id) [])}
      "Devflow tracker projection must match its owning spec")))
 
 (s/fdef devflow-projection
-  :args (s/cat :run-id ::run-id)
+  :args (s/cat :runtime any? :run-id ::run-id)
   :ret ::projection)
 
 ;; The devflow<->kanban tracker binding is a singleton slot, not a partitioned
@@ -45,10 +44,9 @@
 (defn reconcile
   "Bind devflow as this runtime's required kanban tracker."
   [{:keys [runtime]}]
-  (current/with-runtime
-    runtime
-    (kanban/set-tracker! {:name "devflow"
-                          :project 'kanban-tracker/devflow-projection}))
+  (kanban/set-tracker! runtime
+                       {:name "devflow"
+                        :project 'kanban-tracker/devflow-projection})
   {:reconciled :kanban-tracker})
 
 (def spool

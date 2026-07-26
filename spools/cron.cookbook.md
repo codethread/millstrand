@@ -161,9 +161,9 @@ any later external call.
   (run-scan!
     {:run-cmd run-command
      :raise-card! (fn [card]
-                    (current/with-runtime runtime
-                      ((requiring-resolve 'ct.spools.kanban/add!)
-                       (:title card) {"--body" (:body card) "--priority" "p1"})))}))
+                    ((requiring-resolve 'ct.spools.kanban/add!)
+                     runtime (:title card)
+                     {"--body" (:body card) "--priority" "p1"}))}))
 ```
 
 **Why this shape.**

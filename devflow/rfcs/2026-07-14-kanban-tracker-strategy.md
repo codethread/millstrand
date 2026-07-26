@@ -66,6 +66,7 @@ Kanban mirrors it:
 
 ```clojure
 (kanban/set-tracker!
+  runtime
   {:name "devflow"
    :project 'kanban-tracker/devflow-projection})
 ```
@@ -74,7 +75,7 @@ Kanban mirrors it:
   cold agent knows which convention the projected steps come from.
 - `:project` — a fully-qualified symbol (resolved with `requiring-resolve` at call
   time, so config reload rebinds cleanly) or a fn. Contract:
-  `(project run-id) -> {:status <string|nil> :next-steps [step ...]}` where each
+  `(project runtime run-id) -> {:status <string|nil> :next-steps [step ...]}` where each
   step is selected to the closed key set `#{:id :title :kind :stage :checkpoint}`
   by kanban itself, keeping the output shape kanban-owned (RFC-022.G3).
 - Validation is loud on a malformed binding (`reject-unknown-keys!`, blank name),
@@ -258,14 +259,15 @@ the test classpath, and `kanban.md` documents the binding contract.
 - `.skein/kanban_tracker.clj` — new module, essentially:
 
   ```clojure
-  (defn devflow-projection [run-id]
-    (let [stage (some-> (devflow/feature-roots run-id) first
+  (defn devflow-projection [runtime run-id]
+    (let [stage (some-> (devflow/feature-roots runtime run-id) first
                         (attr-value :devflow/stage))]
       {:status stage
-       :next-steps (if stage (devflow/next-steps run-id) [])}))
+       :next-steps (if stage (devflow/next-steps runtime run-id) [])}))
 
-  (defn install! []
-    (kanban/set-tracker! {:name "devflow"
+  (defn install! [runtime]
+    (kanban/set-tracker! runtime
+                         {:name "devflow"
                           :project 'kanban-tracker/devflow-projection}))
   ```
 

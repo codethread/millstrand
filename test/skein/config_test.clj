@@ -1231,7 +1231,7 @@
 
 (deftest kanban-tracker-devflow-projection-contract
   (with-config-runtime
-    (fn [_rt]
+    (fn [rt]
       (load-file ".skein/kanban_tracker.clj")
       (let [project (requiring-resolve 'kanban-tracker/devflow-projection)
             current-root (requiring-resolve 'ct.spools.devflow/current-root)
@@ -1241,24 +1241,24 @@
                            ready (constantly [{:id "next" :title "Do next" :role "step"}])}
             #(is (= {:status "tasks"
                      :ready [{:id "next" :title "Do next" :role "step"}]}
-                    (project "active-run")))))
+                    (project rt "active-run")))))
         (testing "no active root is the accepted nil-status projection"
           (with-redefs-fn {current-root (constantly nil)
                            ready (fn [_] (throw (ex-info "must not read steps" {})))}
             #(is (= {:status nil :ready []}
-                    (project "inactive-run")))))
+                    (project rt "inactive-run")))))
         (testing "a malformed run id fails at the adapter boundary"
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-blank string"
-                                (project ""))))
+                                (project rt ""))))
         (testing "an active root without a stage fails loudly"
           (with-redefs-fn {current-root (constantly {:attributes {}})}
             #(is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-blank devflow/stage"
-                                   (project "missing-stage")))))
+                                   (project rt "missing-stage")))))
         (testing "malformed ready steps fail the owning kanban projection spec"
           (with-redefs-fn {current-root (constantly {:attributes {:devflow/stage "tasks"}})
                            ready (constantly [{}])}
             #(is (thrown-with-msg? clojure.lang.ExceptionInfo #"projection must match"
-                                   (project "malformed-step")))))))))
+                                   (project rt "malformed-step")))))))))
 
 (deftest repo-local-startup-and-refresh-preserve-registrations
   (with-startup-config-runtime

@@ -112,7 +112,7 @@
       (when-not (= "true" (attr-value strand :kanban/card))
         (throw (ex-info "land card is not a kanban card" {:card card})))
       (case (attr-value strand :kanban/lane)
-        "claimed" ((requiring-resolve 'ct.spools.kanban/review!) card)
+        "claimed" ((requiring-resolve 'ct.spools.kanban/review!) (current/runtime) card)
         "in_review" nil
         (throw (ex-info "land card must be claimed before review"
                         {:card card :lane (attr-value strand :kanban/lane)}))))))
@@ -133,7 +133,7 @@
       (when-not (= "true" (attr-value strand :kanban/card))
         (throw (ex-info "land card is not a kanban card" {:card card})))
       (case (attr-value strand :kanban/lane)
-        "in_review" ((requiring-resolve 'ct.spools.kanban/rework!) card)
+        "in_review" ((requiring-resolve 'ct.spools.kanban/rework!) (current/runtime) card)
         "claimed" nil
         (throw (ex-info "land card must be in_review before abort rework"
                         {:card card :lane (attr-value strand :kanban/lane)}))))))
