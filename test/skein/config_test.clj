@@ -1138,6 +1138,8 @@
         (is (= ["land-cleanup" "land-x" "/tmp/land-x"]
                (drop 3 (:shell/argv gate-attrs))))
         (is (str/includes? (nth (:shell/argv gate-attrs) 2) "fetch origin --prune"))
+        (is (str/includes? (nth (:shell/argv gate-attrs) 2) "pwd -P"))
+        (is (str/includes? (nth (:shell/argv gate-attrs) 2) "failed to inspect remote branch"))
         (is (str/includes? (nth (:shell/argv gate-attrs) 2) "git -C \"$canonical\" worktree remove"))
         (is (str/includes? (nth (:shell/argv gate-attrs) 2) "git -C \"$canonical\" branch -D"))
         (is (not (str/includes? (nth (:shell/argv gate-attrs) 2) "wktree"))))

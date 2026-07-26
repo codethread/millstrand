@@ -9,8 +9,9 @@ if [ -z "$branch" ] || [ -z "$worktree" ]; then
   exit 2
 fi
 
+worktree=$(cd "$worktree" && pwd -P)
 git_dir=$(git -C "$worktree" rev-parse --path-format=absolute --git-common-dir)
-canonical=$(dirname "$git_dir")
+canonical=$(cd "$(dirname "$git_dir")" && pwd -P)
 
 if [ "$canonical" = "$worktree" ]; then
   echo "refusing to remove the canonical worktree: $worktree" >&2
@@ -29,9 +30,16 @@ fi
 
 git -C "$canonical" fetch origin --prune
 
-if git -C "$canonical" ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
-  git -C "$canonical" push origin --delete "$branch"
-fi
+set +e
+git -C "$canonical" ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null
+remote_status=$?
+set -e
+
+case "$remote_status" in
+  0) git -C "$canonical" push origin --delete "$branch" ;;
+  2) ;;
+  *) echo "failed to inspect remote branch: $branch" >&2; exit "$remote_status" ;;
+esac
 
 git -C "$canonical" worktree remove --force "$worktree"
 git -C "$canonical" branch -D "$branch"
