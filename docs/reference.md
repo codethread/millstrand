@@ -122,8 +122,8 @@ and patterns). The config layout — `.skein/init.clj` activation order and its 
 The `land` op survives beside that generic surface because it adds behavior the engine has no business knowing: the singleton merge lock and the kanban lane moves.
 
 The **landing workflow** (family `land`) is the coordinator-only discipline for taking a finished
-branch to landed. It is a single sequential
-`skein.spools.workflow` molecule whose ordering is the enforcement: push the branch and open a draft
+branch to landed. It is three `defworkflow` definitions — `land` with its `land-merge` and
+`land-abort` continuations — whose ordering is the enforcement: push the branch and open a draft
 PR, drive CI green at HEAD, then run the declared roster sign-off — sign-off is only valid on a
 pushed branch with a draft PR and green CI. A coordinator sign-off checkpoint (`approved` continues;
 `abort` records a required reason and leaves the branch untouched) carries the approved squash
@@ -279,7 +279,7 @@ truth:
 | Tier | Source | Question it answers | Examples |
 | --- | --- | --- | --- |
 | `help` | **Generated** from registered arg-spec data | "What can I type?" — verbs, flags, positionals, types | `strand help`, `strand help <op>`, `strand help <op> <verb>` |
-| `about` | **Authored** per-op prose | "What does this op mean?" — semantics, contracts, attribute conventions | `strand about agent` |
+| `about` | **Authored** per-op prose | "What does this op mean?" — runbook context: purpose, who drives it, contracts the live surface cannot state | `strand about agent` |
 | `prime` | **Authored** prose orientation | "How do we work here?" — run **before** starting work | `mill skein prime`, `mill strand prime`, `strand prime agent` |
 
 The meta-verb goes first. The old `<op> help` / `<op> about` / `<op> prime` sole-token sugar is retired: a bare `help`, `about`, or `prime` in verb position now fails with a loud redirect to `strand help <op>`, unless the op declares a real subcommand by that name (several spool ops do, noted below). A trailing `--help` or `-h` flag still works on any op, so `strand agent --help` rewrites to `strand help agent`.
@@ -287,7 +287,7 @@ The meta-verb goes first. The old `<op> help` / `<op> about` / `<op> prime` sole
 **`help` is never hand-written.** It is one declared, versioned schema, uniformly projected; renderings are transforms over it. `strand help` lists every registered op; `strand help <op>` renders one op's detail from its arg-spec; `strand help <op> <verb> [<verb> ...]` slices to any declared node, including an interior node with further verbs.
 A detail response is a canonical envelope, `{schema-version, operation, source, glossary, node}`, verbose by default, where `node` is a self-similar shape that recurses into subcommands, `source` points at the handler's `file:line` when it resolves, and `glossary` defines the named failure outcomes a node references. With no help transform registered, that raw envelope JSON is the output. A workspace can register one default help transform to render it as friendlier text instead; `--json` is the sole opt-out, always returning the raw envelope, so a failing transform can never brick help. Missing or unknown subcommands at any depth fail with structured parser errors carrying the path walked and the available names. No spool ever writes its own usage strings or dispatch errors. Contracts: SPEC-002.C39 and the discovery-tier deltas.
 
-**`about` is the op's manual.** `strand about <op>` returns the op's authored `:about` prose: purpose, conventions, attribute contracts, and how it relates to its sibling verbs, as a small JSON object. Think man page, machine-readable, distinct from the arg-spec facts `help` already carries. An op that declares no `:about` prose returns a loud `discovery/unavailable` rather than empty success; purely structural ops (batteries `add`/`list`/...) need none, since their arg-spec already says everything. Some spool ops instead declare their own `about` subcommand, and for those the resolving form is `strand <op> about`: `strand kanban about`, `strand land about`, `strand spool about`.
+**`about` is the op's runbook context.** `strand about <op>` returns the op's authored `:about` prose as a small JSON object: what the op is for, who drives it, and the contracts and attribute conventions a caller cannot read off the live surface. It stays short, and it points at whatever owns the detail: `help` for invocation, and for an op that drives a definition, the definition itself (`strand workflow show <name>`). A step map, a verb list, or a flag table restated here is a second copy that drifts from the first. An op that declares no `:about` prose returns a loud `discovery/unavailable` rather than empty success; purely structural ops (batteries `add`/`list`/...) need none, since their arg-spec already says everything. Some spool ops instead declare their own `about` subcommand, and for those the resolving form is `strand <op> about`: `strand kanban about`, `strand land about`, `strand spool about`.
 
 **`prime` is run-first context priming for agents.** A `prime` command prints the working discipline
 for an area: the conventions an agent must load *before* acting, with pointers to deeper docs. `mill

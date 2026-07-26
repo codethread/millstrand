@@ -1,0 +1,238 @@
+#!/usr/bin/env bash
+# ralph-codex — foreground epic loop: repeatedly hand an epic to a fresh
+# headless Codex run until the epic strand is closed or the agent pulls the
+# brake.
+#
+# Usage: scripts/ralph-codex <epic-id> "<prompt>" [-- <extra codex exec args>]
+#
+# Environment:
+#   RALPH_MODEL             model for each run (default: sol-low, shorthand
+#                           for gpt-5.6-sol at low reasoning effort)
+#   RALPH_EFFORT            reasoning effort override
+#   RALPH_MAX_ITERATIONS    safety cap; 0 means unlimited (default: 30)
+#   RALPH_SKIP_PERMISSIONS  set to 0 to keep Codex sandboxing and approvals
+#                           (default on: headless runs cannot answer prompts)
+#   RALPH_LOG_DIR           transcript dir (default: $TMPDIR/ralph/<epic>-<ts>)
+set -euo pipefail
+
+usage() {
+  echo "usage: scripts/ralph-codex <epic-id> \"<prompt>\" [-- <extra codex exec args>]" >&2
+  exit 2
+}
+
+[ $# -ge 2 ] || usage
+epic="$1"
+prompt="$2"
+shift 2
+extra_args=()
+if [ $# -gt 0 ]; then
+  [ "$1" = "--" ] || usage
+  shift
+  extra_args=("$@")
+fi
+
+for dep in codex jq; do
+  command -v "$dep" >/dev/null || { echo "ralph-codex: $dep not found on PATH" >&2; exit 1; }
+done
+
+# Prefer the repo-local strand next to this script so the loop works from any
+# cwd and never depends on a globally installed binary.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+strand="$script_dir/../bin/strand"
+[ -x "$strand" ] || { echo "ralph-codex: repo-local bin/strand not found (run make build)" >&2; exit 1; }
+
+model="${RALPH_MODEL-sol-low}"
+[ -n "$model" ] || { echo "ralph-codex: RALPH_MODEL must not be empty" >&2; exit 2; }
+case "$model" in
+  sol-low)
+    codex_model="gpt-5.6-sol"
+    default_effort="low"
+    ;;
+  *)
+    codex_model="$model"
+    default_effort="high"
+    ;;
+esac
+effort="${RALPH_EFFORT-$default_effort}"
+[ -n "$effort" ] || { echo "ralph-codex: RALPH_EFFORT must not be empty" >&2; exit 2; }
+max_iterations="${RALPH_MAX_ITERATIONS-30}"
+[[ "$max_iterations" =~ ^[0-9]+$ ]] \
+  || { echo "ralph-codex: RALPH_MAX_ITERATIONS must be a non-negative integer, got: $max_iterations" >&2; exit 2; }
+tmp_dir="${TMPDIR-/tmp}"
+[ -n "$tmp_dir" ] || { echo "ralph-codex: TMPDIR must not be empty" >&2; exit 2; }
+if [ "${RALPH_LOG_DIR+x}" = x ]; then
+  [ -n "$RALPH_LOG_DIR" ] || { echo "ralph-codex: RALPH_LOG_DIR must not be empty" >&2; exit 2; }
+  log_dir="$RALPH_LOG_DIR"
+else
+  log_dir="$tmp_dir/ralph/${epic}-$(date +%Y%m%d-%H%M%S)"
+fi
+mkdir -p "$log_dir"
+
+codex_flags=(
+  --json
+  --skip-git-repo-check
+  --model "$codex_model"
+  -c "model_reasoning_effort=\"$effort\""
+  -c shell_environment_policy.inherit=all
+)
+case "${RALPH_SKIP_PERMISSIONS-1}" in
+  0) ;;
+  1) codex_flags+=(--dangerously-bypass-approvals-and-sandbox) ;;
+  *)
+    echo "ralph-codex: RALPH_SKIP_PERMISSIONS must be 0 or 1" >&2
+    exit 2
+    ;;
+esac
+
+# The strand lifecycle (active|closed|replaced) is the loop condition; anything
+# other than active means the epic is finished and the loop is done.
+epic_state() {
+  "$strand" show "$epic" | jq -r '.state'
+}
+
+epic_json="$("$strand" show "$epic" 2>/dev/null)" \
+  || { echo "ralph-codex: epic $epic not found (strand show failed)" >&2; exit 1; }
+if ! jq -e --arg epic "$epic" '
+  .id == $epic
+  and (.title | type == "string" and length > 0)
+  and (.state | type == "string" and length > 0)
+' <<<"$epic_json" >/dev/null; then
+  echo "ralph-codex: strand show returned an invalid epic payload for $epic" >&2
+  exit 1
+fi
+epic_title="$(jq -r '.title' <<<"$epic_json")"
+initial_state="$(jq -r '.state' <<<"$epic_json")"
+case "$initial_state" in
+  active) ;;
+  closed|replaced)
+    echo "ralph-codex: epic $epic ($epic_title) is already $initial_state; nothing to do"
+    exit 0
+    ;;
+  *)
+    echo "ralph-codex: epic $epic ($epic_title) has unexpected state: $initial_state" >&2
+    exit 1
+    ;;
+esac
+
+harness_prompt() {
+  cat <<EOF
+$prompt
+
+--- ralph harness (scripts/ralph-codex, iteration $1) ---
+You are one iteration of "ralph", a foreground loop driving epic $epic ("$epic_title").
+Every iteration starts with fresh context: orient from live state first
+(strand show $epic, strand kanban card $epic, strand kanban board), not from memory.
+The loop re-invokes you until the epic strand is closed, so:
+- CRITICAL: work through every active feature under the epic. Claim actionable
+  feature cards before working on them and finish each one with the correct
+  kanban outcome.
+- CRITICAL: when every feature under the epic is complete, close the epic with
+  \`strand kanban finish $epic --outcome done\` — the loop runs forever otherwise.
+  (Kanban finish is the right close: it records the outcome and leaves clean
+  board semantics; a bare state update does not.)
+- Leave the world resumable before you finish: notes on the doing task, work
+  committed and pushed. The next iteration knows only what the strands say.
+- EMERGENCY BRAKE: if you hit a blocker you cannot work around, end your reply
+  with a final line of exactly: RALPH-STOP: <one-line reason>
+  Use it only for hard blockers; it halts the loop immediately.
+EOF
+}
+
+# Render Codex's JSONL transcript live: agent text verbatim, work items as
+# one-line markers, and closing token counts. Raw events remain in the log.
+render_stream() {
+  jq --unbuffered -rj '
+    if .type == "item.completed" and .item.type == "agent_message" then
+      ((.item.text | strings) // error("agent_message missing text: " + (. | tojson))) + "\n"
+    elif .type == "item.started" and .item.type == "command_execution" then
+      "⏺ command "
+      + ((.item.command | strings) // error("command_execution missing command: " + (. | tojson)))
+      + "\n"
+    elif .type == "item.started" and (.item.type == "mcp_tool_call" or .item.type == "web_search") then
+      "⏺ " + .item.type + " " + ((.item | tojson)[0:200]) + "\n"
+    elif .type == "turn.completed" then
+      "\n[ralph-codex] run finished"
+      + " | input " + (((.usage.input_tokens | numbers)
+                        // error("turn.completed missing input_tokens: " + (. | tojson))) | tostring)
+      + " | cached " + (((.usage.cached_input_tokens | numbers)
+                         // error("turn.completed missing cached_input_tokens: " + (. | tojson))) | tostring)
+      + " | output " + (((.usage.output_tokens | numbers)
+                         // error("turn.completed missing output_tokens: " + (. | tojson))) | tostring) + "\n"
+    elif .type == "turn.failed" then
+      "\n[ralph-codex] turn failed: "
+      + ((.error.message | strings) // error("turn.failed missing error message: " + (. | tojson)))
+      + "\n"
+    else empty end'
+}
+
+iteration=0
+consecutive_failures=0
+while true; do
+  state="$(epic_state)" || { echo "[ralph-codex] cannot read epic state (weaver down?); stopping" >&2; exit 1; }
+  case "$state" in
+    active) ;;
+    closed|replaced)
+      echo "[ralph-codex] epic $epic is $state — loop complete after $iteration iteration(s)"
+      exit 0
+      ;;
+    *)
+      echo "[ralph-codex] epic $epic has unexpected state: $state" >&2
+      exit 1
+      ;;
+  esac
+  if [ "$max_iterations" -ne 0 ] && [ "$iteration" -ge "$max_iterations" ]; then
+    echo "[ralph-codex] hit RALPH_MAX_ITERATIONS=$max_iterations with epic still active; stopping" >&2
+    exit 1
+  fi
+  iteration=$((iteration + 1))
+
+  raw_log="$log_dir/iter-$iteration.jsonl"
+  final_message="$log_dir/iter-$iteration-final.txt"
+  echo
+  echo "[ralph-codex] iteration $iteration — epic $epic ($epic_title) | transcript: $raw_log"
+  echo
+
+  pipe_status=(0 0 0)
+  codex exec "${codex_flags[@]}" --output-last-message "$final_message" \
+    "${extra_args[@]}" "$(harness_prompt "$iteration")" \
+    | tee "$raw_log" | render_stream || pipe_status=("${PIPESTATUS[@]}")
+  codex_status="${pipe_status[0]}"
+  tee_status="${pipe_status[1]}"
+  render_status="${pipe_status[2]}"
+
+  if [ "$tee_status" -ne 0 ] || [ "$render_status" -ne 0 ]; then
+    echo "[ralph-codex] transcript pipeline failed (tee=$tee_status renderer=$render_status); stopping" >&2
+    exit 1
+  fi
+
+  if [ "$codex_status" -ne 0 ]; then
+    consecutive_failures=$((consecutive_failures + 1))
+    echo "[ralph-codex] codex exited $codex_status (failure $consecutive_failures/3)" >&2
+    if [ "$consecutive_failures" -ge 3 ]; then
+      echo "[ralph-codex] three consecutive failed runs; stopping" >&2
+      exit 1
+    fi
+  else
+    consecutive_failures=0
+    [ -r "$final_message" ] && [ -s "$final_message" ] \
+      || { echo "[ralph-codex] codex exited successfully without a readable, non-empty final message" >&2; exit 1; }
+    # Only the final line is a brake, so quoting the instruction earlier in the
+    # response cannot stop the loop.
+    brake_line="$(tail -n 1 "$final_message")"
+    if [[ "$brake_line" == RALPH-STOP:* ]]; then
+      brake_reason="${brake_line#RALPH-STOP: }"
+      if [[ "$brake_line" != "RALPH-STOP: "* ]] || [ -z "$brake_reason" ]; then
+        echo "[ralph-codex] malformed emergency brake; expected RALPH-STOP: <reason>" >&2
+        exit 1
+      fi
+      echo
+      echo "[ralph-codex] agent pulled the emergency brake:" >&2
+      echo "$brake_line" >&2
+      exit 3
+    fi
+  fi
+
+  # A breather between runs keeps ctrl-c easy and avoids hot-looping when a
+  # run dies instantly.
+  sleep 3
+done

@@ -306,7 +306,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 611},
+   :source {:file ".skein/config.clj", :line 615},
    :glossary {},
    :node
    {:children [],

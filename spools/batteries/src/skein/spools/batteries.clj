@@ -129,11 +129,13 @@
   (s/and (s/keys :req-un [::operation ::families ::requirements ::pending-generation ::release-marker])
          #(exact-keys? #{:operation :families :requirements :pending-generation :release-marker} %)))
 (s/def ::purpose ::non-blank-string)
-(s/def ::form ::non-blank-string)
+(s/def ::verb ::non-blank-string)
 (s/def ::behavior ::non-blank-string)
+;; Keyed by bare verb, never an invocation form: `strand help spool` owns the
+;; flags and positionals, and a second copy here drifts from it.
 (s/def ::spool-command
-  (s/and (s/keys :req-un [::form ::behavior])
-         #(exact-keys? #{:form :behavior} %)))
+  (s/and (s/keys :req-un [::verb ::behavior])
+         #(exact-keys? #{:verb :behavior} %)))
 (s/def ::commands (s/coll-of ::spool-command :kind vector? :min-count 1))
 (s/def ::conventions (s/coll-of ::non-blank-string :kind vector? :min-count 1))
 (s/def ::spool-about-result
@@ -583,17 +585,17 @@
               |comment-preserving runtime write verb. Status joins declared,
               |overlay, sync, use, pending-generation, and release-marker state.")
    :commands
-   [{:form "strand spool add <git-url> [--tag vN] [--lib family]"
+   [{:verb "add"
      :behavior (format-alpha/reflow
                 "|Queries remote annotated tags, fetches the optional advisory
                  |spool.edn at the selected peeled commit, then atomically writes
                  |the validated tag and commit pin to the workspace spools.edn.")}
-    {:form "strand spool bump <family> [--to vN]"
+    {:verb "bump"
      :behavior (format-alpha/reflow
                 "|Queries remote annotated tags, selects a requested, floor-driven,
                  |or latest release, then atomically rewrites its tag and peeled
                  |commit pin together.")}
-    {:form "strand spool status"
+    {:verb "status"
      :behavior (format-alpha/reflow
                 "|Reads runtime and workspace state only. It performs no network,
                  |file write, sync, reload, or other adoption action.")}]
@@ -1202,7 +1204,7 @@
                                 :purpose :string
                                 :commands {:type :collection
                                            :items {:type :map
-                                                   :required {:form :string :behavior :string}}}
+                                                   :required {:verb :string :behavior :string}}}
                                 :conventions {:type :collection :items :string}}}
             "add" {:type :map
                    :required {:operation :string :status :string :family :string
