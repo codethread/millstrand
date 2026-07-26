@@ -68,7 +68,13 @@ else
 fi
 mkdir -p "$log_dir"
 
-codex_flags=(--json --model "$codex_model" -c "model_reasoning_effort=\"$effort\"")
+codex_flags=(
+  --json
+  --skip-git-repo-check
+  --model "$codex_model"
+  -c "model_reasoning_effort=\"$effort\""
+  -c shell_environment_policy.inherit=all
+)
 case "${RALPH_SKIP_PERMISSIONS-1}" in
   0) ;;
   1) codex_flags+=(--dangerously-bypass-approvals-and-sandbox) ;;
