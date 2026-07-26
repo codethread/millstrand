@@ -101,6 +101,18 @@
   ;; (TEN-003) instead of overflowing the stack.
   [])
 
+(def ^:private ^:dynamic *dispatch-path*
+  ;; A dispatch records the lexical definition ancestry that encloses it. Unlike
+  ;; `*procedure-path*`, which exists solely to reject recursive fixed calls,
+  ;; this holds the durable wire values written on every poured dispatch.
+  [])
+
+(defn- dispatch-identity
+  "Return the persisted identity entry for a definition being compiled."
+  [workflow definition]
+  {"fingerprint" (defs/fingerprint {:value workflow})
+   "definition" (some-> definition str)})
+
 (defn- require-acyclic-procedure! [call-id procedure]
   (when (some #(= % procedure) *procedure-path*)
     (fail! "Workflow procedure call is cyclic"
@@ -119,14 +131,15 @@
   [procedure]
   (cond
     (keyword? procedure)
-    (defs/require-entrypoint! (defs/resolve-registered (current/runtime) procedure) :call)
+    (assoc (defs/require-entrypoint! (defs/resolve-registered (current/runtime) procedure) :call)
+           :kind :registered)
 
     (symbol? procedure)
     (if-let [resolved (requiring-resolve procedure)]
-      {:kind :raw :value @resolved}
+      (assoc (defs/classify procedure @resolved) :kind :raw)
       (fail! "Workflow procedure symbol cannot be resolved" {:procedure procedure}))
 
-    (var? procedure) {:kind :raw :value @procedure}
+    (var? procedure) (assoc (defs/resolve-var-input procedure) :kind :raw)
 
     :else {:kind :raw :value procedure}))
 
@@ -137,15 +150,45 @@
            {:procedure procedure
             :resolved-class (some-> procedure class .getName)})))
 
-(defn- prefixed-ref [call-id ref]
+(defn- prefixed-ref
+  [call-id ref]
   (keyword (str (name call-id) "--" (name (util/normalize-ref ref [:procedure :ref])))))
 
-(defn- entry-refs [steps]
+(defn- entry-refs
+  [steps]
   (->> steps (remove #(seq (:depends-on %))) (map :id) vec))
 
-(defn- exit-refs [steps]
+(defn- exit-refs
+  [steps]
   (let [depended (set (mapcat :depends-on steps))]
     (->> steps (map :id) (remove depended) vec)))
+
+(defn procedure-expansion
+  "Return a rootless prefixed expansion of compiled procedure `payload`.
+
+  Entry strands inherit `entry-deps`; callers use the returned `:entries`,
+  `:exits`, and `:dependencies` to wire their own parent and join shapes."
+  [call-id payload entry-deps]
+  (let [steps (mapv (fn [strand]
+                      {:id (:ref strand) :title (:title strand) :state (:state strand)
+                       :attributes (:attributes strand)})
+                    (rest (:strands payload)))
+        internal (reduce (fn [acc {:keys [from to type]}]
+                           (if (= "depends-on" type) (update acc from (fnil conj []) to) acc))
+                         {} (:edges payload))
+        steps (mapv #(assoc % :depends-on (get internal (:id %) [])) steps)
+        entries (entry-refs steps)
+        exits (exit-refs steps)
+        strands (mapv (fn [step]
+                        (let [id (:id step)]
+                          (assoc step :id (prefixed-ref call-id id)
+                                 :depends-on (vec (concat (map #(prefixed-ref call-id %)
+                                                               (get internal id []))
+                                                          (when (some #{id} entries) entry-deps))))))
+                      steps)]
+    {:strands strands
+     :entries (mapv #(prefixed-ref call-id %) entries)
+     :exits (mapv #(prefixed-ref call-id %) exits)}))
 
 (defn- expand-call-step [call-step params]
   (let [call-id (util/normalize-ref (:id call-step) [:call :id])
@@ -162,35 +205,15 @@
         workflow (defs/require-no-defers! (procedure-workflow procedure params)
                                           {:call call-id :procedure (:procedure call-step)})
         payload (binding [*procedure-path* (conj *procedure-path* procedure)]
-                  (compile workflow params))
-        steps (mapv (fn [strand]
-                      {:id (:ref strand)
-                       :title (:title strand)
-                       :state (:state strand)
-                       :attributes (:attributes strand)})
-                    (rest (:strands payload)))
-        edges (:edges payload)
-        internal-deps (reduce (fn [acc {:keys [from to type]}]
-                                (if (= "depends-on" type)
-                                  (update acc from (fnil conj []) to)
-                                  acc))
-                              {}
-                              edges)
-        steps-with-deps (mapv #(assoc % :depends-on (get internal-deps (:id %) [])) steps)
-        entries (entry-refs steps-with-deps)
-        exits (exit-refs steps-with-deps)
-        prefixed (mapv (fn [step]
-                         (let [id (:id step)
-                               internal (mapv #(prefixed-ref call-id %) (get internal-deps id []))
-                               entry-extra (when (some #{id} entries) (:depends-on call-step))]
-                           (-> step
-                               (assoc :id (prefixed-ref call-id id))
-                               (assoc :depends-on (vec (concat internal entry-extra))))))
-                       steps)
+                  (compile workflow params
+                           (assoc (select-keys target [:definition])
+                                  :dispatch-path *dispatch-path*)))
+        expansion (procedure-expansion call-id payload (:depends-on call-step))
+        prefixed (:strands expansion)
         join-title (or (:title call-step) (str "Complete " (name call-id)))]
     (conj prefixed {:id call-id
                     :title join-title
-                    :depends-on (mapv #(prefixed-ref call-id %) exits)
+                    :depends-on (:exits expansion)
                     :attributes (merge {"workflow/role" "procedure"
                                         "workflow/procedure" (name call-id)}
                                        (:attributes call-step))})))
@@ -336,6 +359,14 @@
                           (when-let [description (:description step)]
                             {"description" description}))]
     (cond-> attributes
+      ;; A step spliced in from a nested compile already carries the deeper
+      ;; ancestry that compile computed for it, and that value is the correct
+      ;; one — re-stamping it here would flatten the nesting away. An *authored*
+      ;; path can never reach this point: the `dispatch` builder refuses the key
+      ;; outright (DELTA-Dyc-001.CC7), so absence means "not yet stamped".
+      (and (= "dispatch" (get attributes "workflow/role"))
+           (not (contains? attributes "workflow/dispatch-path")))
+      (assoc "workflow/dispatch-path" (vec *dispatch-path*))
       (get attributes "workflow/choice-details")
       (update "workflow/choice-details" poured-choice-details))))
 
@@ -430,10 +461,21 @@
   has bound yet and still describe itself, but materializing it would strand the
   run at an exit with nowhere to go."
   [root form steps]
-  (defs/validate-defer-bindings! {:steps steps} {:workflow (:title root)})
+  (defs/validate-handoff-bindings! {:steps steps} {:workflow (:title root)})
   {:strands (into [root] (map-indexed #(step-strand %2 form %1) steps))
    :edges (vec (concat (parent-edges (:ref root) steps)
                        (dependency-edges steps)))})
+
+(defn with-dispatch-path
+  "Call `f` with the lexical dispatch path for compiling `workflow` and `opts`.
+
+  The public compile story and recursive inline-call compiler share this small
+  dynamic-context seam; the named compilation stages stay independently visible."
+  [workflow opts f]
+  (let [path (conj (or (:dispatch-path opts) *dispatch-path*)
+                   (dispatch-identity workflow (:definition opts)))]
+    (binding [*dispatch-path* path]
+      (f))))
 
 (defn compile
   "Return a batch payload for a workflow molecule or wisp.
@@ -460,9 +502,12 @@
   ([workflow params]
    (compile workflow params {}))
   ([workflow params opts]
-   (let [form (or (:form opts) (:form workflow) :molecule)
-         [workflow _params root-ref steps] (resolve-and-normalize workflow params opts)]
-     (payload (root-strand workflow root-ref form opts) form steps))))
+   (with-dispatch-path
+     workflow opts
+     (fn []
+       (let [form (or (:form opts) (:form workflow) :molecule)
+             [workflow _params root-ref steps] (resolve-and-normalize workflow params opts)]
+         (payload (root-strand workflow root-ref form opts) form steps))))))
 
 (defn- step-attr
   "Read string-keyed workflow attribute `k` off a normalized step's `:attributes`

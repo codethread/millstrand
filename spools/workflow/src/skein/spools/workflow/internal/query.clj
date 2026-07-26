@@ -114,6 +114,9 @@
       (attr step :workflow/defer) (assoc :defer (attr step :workflow/defer))
       (attr step :workflow/defer-workflows)
       (assoc :workflows (attr step :workflow/defer-workflows))
+      (attr step :workflow/dispatch) (assoc :dispatch (attr step :workflow/dispatch))
+      (attr step :workflow/dispatch-workflows)
+      (assoc :workflows (attr step :workflow/dispatch-workflows))
       (attr step :workflow/checkpoint) (assoc :checkpoint (attr step :workflow/checkpoint))
       (attr step :workflow/checkpoint-kind) (assoc :checkpoint-kind (attr step :workflow/checkpoint-kind))
       (attr step :workflow/choices) (assoc :choices (attr step :workflow/choices))
@@ -135,7 +138,7 @@
          (filter matches?)
          vec)))
 
-(def ^:private workflow-work-roles #{"step" "checkpoint" "defer" "procedure"})
+(def ^:private workflow-work-roles #{"step" "checkpoint" "defer" "dispatch" "procedure"})
 
 (defn- workflow-role [strand]
   (attr strand :workflow/role))

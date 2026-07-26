@@ -57,12 +57,21 @@
 (workflow/defworkflow handoff
   "Hand a finished run to whichever routine the worker picks."
   {:entrypoints #{:start}}
-  (workflow/bind-defers
+  (workflow/bind-handoffs
    (workflow/workflow
     "Hand off"
     (workflow/step :summarize "Summarize what happened" :self)
     (workflow/defer :next-routine "Choose the next routine" :depends-on [:summarize]))
    {:next-routine #{:build :fold}}))
+
+(workflow/defworkflow dispatched
+  "Select a returning workflow at run time."
+  {:entrypoints #{:start}}
+  (workflow/bind-handoffs
+   (workflow/workflow
+    "Dispatched"
+    (workflow/dispatch :perform-work "Choose work"))
+   {:perform-work #{:review}}))
 
 (defn legacy-spike
   "Return a raw workflow, which registered names now refuse."
@@ -322,6 +331,7 @@
                   :checkpoints [{:step "recommendation" :choices ["recommend-build" "stop"]}]
                   :calls [{:step "assess" :procedure "review" :kind "registered"}]
                   :defers []
+                  :dispatches []
                   :routes ["build"]}
                  (:declared view))))))))
 
@@ -350,8 +360,20 @@
               :defers [{:step "next-routine"
                         :defer "next-routine"
                         :workflows ["build" "fold"]}]
+              :dispatches []
               :routes []}
              (:declared (shown :handoff)))))))
+
+(deftest show-reports-a-dispatch-with-its-allowlist-and-entrypoint
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :review :dispatched)
+      (is (= [{:step "perform-work"
+               :dispatch "perform-work"
+               :workflows ["review"]
+               :entrypoint "call"}]
+             (:dispatches (:declared (shown :dispatched))))))))
 
 (deftest show-omits-the-removed-kind-and-opaque-fields
   (with-runtime

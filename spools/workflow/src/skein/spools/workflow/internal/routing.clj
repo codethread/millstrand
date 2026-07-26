@@ -10,7 +10,8 @@
   `batch/apply!`, so two active roots never share a run-id; because the closes
   and the pour ride one batch, a failing apply commits nothing and the run stays
   resumable."
-  (:require [clojure.string :as str]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [skein.api.format.alpha :as fmt]
             [skein.api.graph.alpha :as graph]
             [skein.api.spool.alpha :refer [fail!]]
@@ -26,7 +27,7 @@
   Everything the engine poured under the root, so no strand of an abandoned
   stage stays active; a strand some other spool attached to the graph is not
   the workflow engine's to close."
-  #{"root" "step" "checkpoint" "defer" "procedure"})
+  #{"root" "step" "checkpoint" "defer" "dispatch" "procedure"})
 
 (def ^:private notes-removed-guidance
   (fmt/reflow
@@ -373,6 +374,125 @@
               :workflow target-name
               :allowed (vec (sort allowed))}))
     (defs/require-entrypoint! (defs/resolve-registered rt target-name) :continue)))
+
+(defn resolve-dispatch!
+  "Resolve run-id's ready dispatch, failing when the selected step is another role."
+  [rt run-id opts]
+  (let [step (or (query/resolve-ready-step rt run-id opts)
+                 (fail! "No ready workflow dispatch"
+                        {:reason :workflow/dispatch-not-ready :run-id run-id}))]
+    (when-not (= "dispatch" (query/attr step :workflow/role))
+      (fail! "Current workflow step is not a dispatch"
+             {:reason :workflow/step-not-dispatch :run-id run-id
+              :step (query/strand->view step)}))
+    step))
+
+(defn dispatch-target
+  "Resolve the live `:call` target allowed by materialized dispatch `step`."
+  [rt step target-name]
+  (let [allowed (set (query/attr step :workflow/dispatch-workflows))]
+    (when-not (contains? allowed (name target-name))
+      (fail! "Workflow is not an allowed dispatch target"
+             {:reason :workflow/dispatch-target-not-allowed
+              :dispatch (query/attr step :workflow/dispatch)
+              :workflow target-name :allowed (vec (sort allowed))}))
+    (defs/require-entrypoint! (defs/resolve-registered rt target-name) :call)))
+
+(defn- dispatch-dependency-refs
+  [rt step]
+  (let [edges (:edges (graph/subgraph rt [(:id step)] {:type "depends-on"}))]
+    (mapv (comp keyword :to_strand_id)
+          (filter #(= (:id step) (:from_strand_id %)) edges))))
+
+(defn- path-entry
+  "Return one `workflow/dispatch-path` entry in its canonical string-keyed wire
+  shape (DELTA-Dyc-001.CC7).
+
+  A path written by `compile` is string-keyed JSON, but reading it back off a
+  persisted strand keywordizes it. Normalizing on read keeps the comparison and
+  the extended path both honest; comparing the two shapes directly is a silent
+  no-op that lets every cycle through."
+  [entry]
+  (if (contains? entry "fingerprint")
+    {"fingerprint" (get entry "fingerprint")
+     "definition" (get entry "definition")}
+    {"fingerprint" (get entry :fingerprint)
+     "definition" (get entry :definition)}))
+
+(defn- dispatch-path!
+  [step]
+  (let [raw (query/attr step :workflow/dispatch-path)
+        invalid-entry (when (vector? raw)
+                        (first (remove #(s/valid? ::specs/dispatch-path-entry %) raw)))]
+    (when-not (s/valid? ::specs/dispatch-path raw)
+      (fail! "Workflow dispatch path is malformed"
+             {:reason :workflow/dispatch-path-invalid
+              :run-id (query/attr step :workflow/run-id)
+              :step (:id step)
+              :path raw
+              :value (or invalid-entry raw)
+              :problems (::s/problems (s/explain-data ::specs/dispatch-path raw))
+              :expected [{:fingerprint "non-blank string"
+                          :definition "non-blank string or null"}]}))
+    (mapv path-entry raw)))
+
+(defn dispatch-plan
+  "Build the one transactional fill payload for dispatch `step` and `target`."
+  [rt run-id step target params opts]
+  (let [root (query/current-root-with-rt rt run-id)
+        built (defs/build target params)
+        path (dispatch-path! step)
+        identity {"fingerprint" (defs/fingerprint target)
+                  "definition" (some-> (:definition target) str)}
+        _ (when (some #(= (get % "fingerprint") (get identity "fingerprint")) path)
+            (fail! "Workflow dispatch is cyclic"
+                   {:reason :workflow/dispatch-cyclic :path path
+                    :offending identity :dispatch (:id step)}))
+        ;; compile appends the target's own identity to this base and threads the
+        ;; result through every nested fixed call, so a dispatch inside a called
+        ;; procedure keeps that procedure in its ancestry. Re-stamping the
+        ;; expansion afterwards would flatten exactly that nesting away.
+        compiled (cmp/compile (defs/require-no-defers! (:workflow built)
+                                                       {:dispatch (:id step)})
+                              (:params built)
+                              {:definition (:definition target)
+                               :dispatch-path path})
+        deps (dispatch-dependency-refs rt step)
+        expansion (cmp/procedure-expansion (keyword (:id step)) compiled deps)
+        expansion-strands (mapv (fn [strand]
+                                  (-> strand
+                                      (assoc :ref (:id strand))
+                                      (dissoc :id :depends-on)))
+                                (:strands expansion))
+        refs (into {:root (:id root) :dispatch (:id step)}
+                   (map (fn [ref] [ref (name ref)]) deps))
+        parent-edges (mapv (fn [strand] {:op :upsert :from :root :to (:ref strand)
+                                         :type "parent-of"}) expansion-strands)
+        ;; A target may materialize nothing — an empty definition, or one whose
+        ;; every step is conditioned out. There are then no exits for the join to
+        ;; wait on, and no inner step whose close would cascade it shut, so the
+        ;; join would sit active and invisible (procedures are hidden from the
+        ;; ready frontier) and the run would never finish. Close it with the fill.
+        empty-expansion? (empty? (:exits expansion))
+        outcome (cond-> {"workflow/role" "procedure"
+                         "workflow/procedure" (:id step)
+                         "workflow/dispatched-workflow" (name (:name target))
+                         "workflow/dispatched-definition" (str (:definition target))
+                         "workflow/dispatched-fingerprint" (defs/fingerprint target)
+                         "workflow/dispatched-params" (:params built)}
+                  (contains? opts :by) (assoc "workflow/dispatched-by" (:by opts))
+                  empty-expansion? (assoc "workflow/outcome-by" "engine"))]
+    {:refs refs
+     :strands (conj expansion-strands
+                    (cond-> {:ref :dispatch :attributes outcome}
+                      empty-expansion? (assoc :state "closed")))
+     :edges (vec (concat parent-edges
+                         (mapcat (fn [{:keys [id depends-on]}]
+                                   (map (fn [to] {:op :upsert :from id :to to :type "depends-on"})
+                                        depends-on))
+                                 (:strands expansion))
+                         (map (fn [exit] {:op :upsert :from :dispatch :to exit :type "depends-on"})
+                              (:exits expansion))))}))
 
 (defn continue-plan
   "Return the cutover plan for a deferred continuation: `{:old-root … :payload …

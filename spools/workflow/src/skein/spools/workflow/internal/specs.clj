@@ -20,6 +20,23 @@
             [clojure.string :as str]
             [skein.api.spool.alpha :refer [fail!]]))
 
+(defn- non-blank-string?
+  [value]
+  (and (string? value) (not (str/blank? value))))
+
+(defn- dispatch-path-entry?
+  [entry]
+  (let [string-keys? (= #{"fingerprint" "definition"} (set (keys entry)))
+        keyword-keys? (= #{:fingerprint :definition} (set (keys entry)))
+        fingerprint (get entry (if string-keys? "fingerprint" :fingerprint))
+        definition (get entry (if string-keys? "definition" :definition))]
+    (and (or string-keys? keyword-keys?)
+         (non-blank-string? fingerprint)
+         (or (nil? definition) (non-blank-string? definition)))))
+
+(s/def ::dispatch-path-entry (s/and map? dispatch-path-entry?))
+(s/def ::dispatch-path (s/coll-of ::dispatch-path-entry :kind vector?))
+
 (defn registered?
   "True when `spec-name` currently resolves to a registered spec."
   [spec-name]

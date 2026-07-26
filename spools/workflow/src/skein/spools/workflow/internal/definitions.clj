@@ -191,7 +191,7 @@
                         (.getBytes (pr-str (:value resolved)) "UTF-8"))]
     (str/join (map #(format "%02x" %) (take 8 digest)))))
 
-;; --- defer exits --------------------------------------------------------------
+;; --- hand-offs ----------------------------------------------------------------
 
 (defn defer-steps
   "Return the declared defer exit steps of `definition`, in declaration order."
@@ -208,6 +208,23 @@
   of keywords. Empty for an unbound defer in a published template."
   [step]
   (into #{} (map keyword) (get-in step [:attributes "workflow/defer-workflows"] [])))
+
+(defn handoff-steps
+  "Return every declared defer or dispatch step in declaration order."
+  [definition]
+  (filterv #(or (util/defer-step? %) (util/dispatch-step? %)) (:steps definition)))
+
+(defn handoff-name
+  "Return the declared name of hand-off `step` as a keyword."
+  [step]
+  (keyword (get-in step [:attributes (if (util/defer-step? step)
+                                       "workflow/defer"
+                                       "workflow/dispatch")])))
+
+(defn dispatch-targets
+  "Return the registered workflow names `step`'s dispatch binding allows."
+  [step]
+  (into #{} (map keyword) (get-in step [:attributes "workflow/dispatch-workflows"] [])))
 
 (defn validate-defer-topology!
   "Return `definition` once its defer exits are terminal and unconditional.
@@ -261,22 +278,27 @@
                   :alternative "Reach the continuation with a defer on the calling workflow.")))
   definition)
 
-(defn validate-defer-bindings!
-  "Return `definition` once every defer exit it declares is bound to a non-empty
+(defn validate-handoff-bindings!
+  "Return `definition` once every hand-off it declares is bound to a non-empty
   target set.
 
-  An unbound defer is a legitimate published *template* — a spool naming an exit
-  point without naming another spool's workflows — but it is not something a run
-  can reach, so it may not be registered or poured. `bind-defers` is what turns
-  the template into a complete definition."
+  An unbound hand-off is a legitimate published *template* — a spool naming an
+  exit point without naming another spool's workflows — but it is not something a
+  run can reach, so it may not be registered or poured. `bind-handoffs` is what
+  turns the template into a complete definition."
   [definition context]
-  (doseq [step (defer-steps definition)
-          :when (empty? (defer-targets step))]
-    (fail! "Workflow defer exit is not bound to any registered workflow"
+  (doseq [step (handoff-steps definition)
+          :let [dispatch? (util/dispatch-step? step)
+                targets (if dispatch? (dispatch-targets step) (defer-targets step))]
+          :when (empty? targets)]
+    (fail! "Workflow hand-off is not bound to any registered workflow"
            (assoc context
-                  :reason :workflow/defer-unbound
-                  :defer (defer-name step)
-                  :alternative "Bind the exit with bind-defers before registering or pouring.")))
+                  :reason (if dispatch? :workflow/handoff-unbound :workflow/defer-unbound)
+                  (if dispatch? :handoff :defer) (handoff-name step)
+                  :kind (if dispatch? :dispatch :defer)
+                  :alternative (if dispatch?
+                                 "Bind the hand-off with bind-handoffs before registering or pouring."
+                                 "Bind the exit with bind-handoffs before registering or pouring."))))
   definition)
 
 (defn registry-input?
@@ -347,19 +369,22 @@
   can name which one a caller took (PROP-Wcd-001.S6/S13)."
   {:continue :continue
    :defer :continue
+   :dispatch :call
    :call :call})
 
 (defn references
-  "Return `{:continue #{names} :defer #{names} :call #{names}}` — the registered
-  workflows a static definition names, grouped by how it names them."
+  "Return `{:continue #{names} :defer #{names} :dispatch #{names} :call #{names}}`
+  — the registered workflows a static definition names, grouped by how it names
+  them."
   [definition]
   (reduce (fn [acc step]
             (cond-> (-> acc
                         (update :continue into (choice-next-names step))
-                        (update :defer into (defer-targets step)))
+                        (update :defer into (defer-targets step))
+                        (update :dispatch into (dispatch-targets step)))
               (keyword? (:procedure step))
               (update :call conj (:procedure step))))
-          {:continue #{} :defer #{} :call #{}}
+          {:continue #{} :defer #{} :dispatch #{} :call #{}}
           (:steps definition)))
 
 (defn- validate-defaults!
@@ -412,13 +437,15 @@
                       :target target
                       :entrypoint entrypoint
                       :registered (vec (sort (keys entry-kinds))))))
-      (when (= :call use)
-        (require-no-defers! (:value declared) (assoc context :target target)))
+      (when (contains? #{:call :dispatch} use)
+        (require-no-defers! (:value declared) (assoc context :target target
+                                                     :declaring-kind use)))
       (when-not (contains? (:entrypoints declared) entrypoint)
         (fail! "Workflow definition names a workflow that does not declare the required entrypoint"
                (assoc context :reason :workflow/reference-entrypoint-unsupported
                       :target target
                       :entrypoint entrypoint
+                      :declaring-kind use
                       :entrypoints (vec (sort (:entrypoints declared)))))))))
 
 (defn- candidate-entry
@@ -434,7 +461,7 @@
     (validate-param-spec! context (:param-spec value))
     (validate-input-specs! context value)
     (validate-defer-topology! value)
-    (validate-defer-bindings! value context)
+    (validate-handoff-bindings! value context)
     resolved))
 
 (defn validate-candidates!

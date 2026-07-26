@@ -1,0 +1,29 @@
+# These slices share workflow.clj, compile.clj, routing.clj, discovery.clj and the test
+# namespaces. They are STRICTLY SERIAL: never delegate two concurrently, and never run one
+# out of blocked_by order.
+tasks:
+  - id: 1
+    description: Dispatch declaration and generalised hand-off binding
+    task_file: tasks/001-declaration-and-binding.md
+    status: complete
+    blocked_by: []
+  - id: 2
+    description: Pending dispatch state, pour, and every role site
+    task_file: tasks/002-pending-state-and-roles.md
+    status: complete
+    blocked_by: [1]
+  - id: 3
+    description: dispatch! fills a hand-off in place
+    task_file: tasks/003-dispatch-fill.md
+    status: complete
+    blocked_by: [2]
+  - id: 4
+    description: Worker CLI verb and discovery
+    task_file: tasks/004-worker-surface.md
+    status: complete
+    blocked_by: [3]
+  - id: 5
+    description: Contract docs, cookbook recipes, README, and folding in PR 199
+    task_file: tasks/005-docs-and-fold-in.md
+    status: complete
+    blocked_by: [4]

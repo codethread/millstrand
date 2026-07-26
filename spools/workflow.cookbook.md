@@ -89,7 +89,8 @@ Each recipe cites the honest source it was distilled from — a shipped spool, t
 (workflow/choose! "ship-feature-x" :revise {})
 ;; => {:ready [{:id :implement ...}] :done false}
 
-;; advance! also drives the run one step regardless of kind
+;; advance! also drives the run one step — ordinary steps and checkpoints;
+;; a ready defer or dispatch is refused, since each needs its own target
 (workflow/advance! "ship-feature-x")
 ;; => {:ready [{:id :signoff ...}] :done false}
 
@@ -255,7 +256,7 @@ Honest source: the `call` inlining test in `test/skein/spools/workflow_test.clj`
 
 **Situation.** Your spool tracks something — a card, a ticket, an intake form — and at some point the work has to be *done*, by a routine that lives in a spool you have no business depending on. You know where the hand-off is; you don't know, and shouldn't decide, what is on the other side.
 
-**Composition.** Publish a template with a `defer` exit naming the hand-off point. Whoever installs both spools binds that name to the registered workflows it may reach, with `bind-defers`, and registers the complete definition. A worker fills the exit with `continue!`.
+**Composition.** Publish a template with a `defer` exit naming the hand-off point. Whoever installs both spools binds that name to the registered workflows it may reach, with `bind-handoffs`, and registers the complete definition. A worker fills the exit with `continue!`.
 
 ```clojure
 (require '[skein.spools.workflow :as workflow])
@@ -272,7 +273,7 @@ Honest source: the `call` inlining test in `test/skein/spools/workflow_test.clj`
 (workflow/defworkflow tracked-card
   "Track a card and select its delivery routine."
   {:entrypoints #{:start}}
-  (workflow/bind-defers general {:perform-work #{:spike :devflow}}))
+  (workflow/bind-handoffs general {:perform-work #{:spike :devflow}}))
 ```
 
 Driving it: `:prepare` completes as usual, then the ready frontier is the exit, carrying its allowlist.
@@ -292,9 +293,72 @@ Driving it: `:prepare` completes as usual, then the ready frontier is the exit, 
 - **Neither `call` nor a checkpoint fits.** `call` returns to its caller, so the card would resume after devflow finished — but there is nothing left to do, and the card is not the owner of what follows. A checkpoint's `:next` has to name its routes where the workflow is authored, which is exactly the dependency the kanban spool is avoiding.
 - **The bind is the authority boundary.** The template says *where* a worker chooses; the person who installed both spools says *what they may choose from*. Neither spool acquires a dependency on the other, and the allowlist is a deliberate decision rather than "any registered workflow".
 - **The target keeps its own params.** `continue!` merges no parent context, so devflow sees its own `:defaults` under exactly the params supplied for it and validates them whole. A card param that happens to share a name with a devflow param cannot leak in and quietly mean the wrong thing.
-- **The exit is terminal, and the engine holds you to it.** Nothing may `:depends-on` a defer, and a workflow declaring one cannot be `call`-ed. If you find yourself wanting a step after the exit, you want a checkpoint route or a `call` instead — the hand-off is not really a hand-off.
+- **The exit is terminal, and the engine holds you to it.** Nothing may `:depends-on` a defer, and a workflow declaring one cannot be `call`-ed. If you find yourself wanting a step after the exit, use a checkpoint route for authored routing, `call` for a fixed target, or the dispatch recipe below for a target selected by a worker. The hand-off is not really an exit.
 
 Honest source: PROP-Wcd-001.EX7 in `devflow/feat/s9i26-flow-cli/proposal.md`, and the defer suite in `test/skein/spools/workflow_test.clj` (`continue-transfers-the-root-and-records-the-cutover`, `continue-isolates-the-target-from-the-parent-context`).
+
+---
+
+## Recipe: Choosing a routine and keeping the workflow
+
+**Situation.** A tracker needs a worker to select a routine it cannot name, then needs to record, notify, or otherwise continue after that routine finishes. The tracker still owns the work.
+
+**Composition.** Use `dispatch`. Bind the dispatch point in user code with `bind-handoffs`; every target declares `:call`, because it returns into the tracker's molecule. A worker fills the point with `dispatch!`.
+
+```clojure
+(def intake
+  (workflow/workflow
+    "Handle an intake"
+    (workflow/step :prepare "Prepare the intake" :self)
+    (workflow/dispatch :perform-work "Choose the routine" :depends-on [:prepare])
+    (workflow/step :record "Record the result" :self :depends-on [:perform-work])))
+
+(workflow/defworkflow handled-intake
+  "Handle an intake and record its result."
+  {:entrypoints #{:start}}
+  (workflow/bind-handoffs intake {:perform-work #{:spike :devflow}}))
+
+(workflow/dispatch! "intake-123" :devflow {:feature "kanban-web-ui"} {:by "worker-1"})
+```
+
+`dispatch!` leaves the current root in place. It pours the selected workflow below that root and changes the dispatch into a procedure join. When the selected routine finishes, the join closes and `:record` becomes ready. The target receives only its defaults plus the explicit params passed to `dispatch!`; the tracker's context does not cross the boundary.
+
+Use this shape when the tracker keeps ownership and the work after the routine belongs in the same molecule. A pending dispatch is ready work, blocks the run from finishing, and must be filled with `dispatch!`; `complete!` and `advance!` cannot close it.
+
+---
+
+## Recipe: Returning through a user-owned adapter
+
+**Situation.** Ownership genuinely transfers at the tracker boundary, but user config still needs to select a routine and then run tracker-owned wrap-up. The tracker does not need one molecule spanning both sides.
+
+**Composition.** Keep the tracker's terminal `defer`. Bind it to a user-owned adapter workflow. The adapter fixed-calls the routine, then uses its own terminal defer to transfer to the wrap-up workflow. The adapter owns both bindings and supplies explicit params at each boundary.
+
+```clojure
+;; tracker spool: no dependency on the routine or adapter
+(def track-card
+  (workflow/workflow "Track a card"
+    (workflow/step :prepare "Prepare the card" :self)
+    (workflow/defer :perform-work "Choose the routine" :depends-on [:prepare])))
+
+;; user config: the adapter can see every participant
+(workflow/defworkflow selected-routine
+  "Run the selected routine, then return to wrap-up."
+  {:entrypoints #{:continue}}
+  (workflow/bind-handoffs
+   (workflow/workflow "Selected routine"
+     (workflow/call :routine :devflow {:feature "kanban-web-ui"})
+     (workflow/defer :wrap-up "Run tracker wrap-up" :depends-on [:routine]))
+   {:wrap-up #{:card-wrap-up}}))
+
+(workflow/defworkflow tracked-card
+  "Track a card through a user-owned adapter."
+  {:entrypoints #{:start}}
+  (workflow/bind-handoffs track-card {:perform-work #{:selected-routine}}))
+```
+
+The tracker continues into `:selected-routine`; the adapter calls `:devflow`; then the adapter continues into `:card-wrap-up`. The routine declares `:call`; the adapter and wrap-up declare `:continue`. Each `continue!` changes the current root but preserves the run id. No caller context crosses either transfer unless the adapter supplies it explicitly.
+
+Use this shape when the hand-off really changes ownership. Use `dispatch` instead when the original workflow must remain the owner and resume in the same molecule. The regression `adapter-composition-transfers-through-a-user-owned-returning-workflow` exercises this composition.
 
 ---
 

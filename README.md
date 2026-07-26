@@ -237,7 +237,7 @@ Skein is built for agents, and its own repository is written for them to read. P
 
 Everything on this page is a few small primitives — `add`, `weave`, `pattern` — over one graph. Around them Skein ships shared libraries called [spools](./spools/README.md), the durable workspace config you saw `mill init` create, an event and hooks system inside the weaver, and a testing library (`skein.test.alpha`) that spins up disposable weaver worlds. They go a long way: this repository coordinates its own development (a kanban board, a feature lifecycle, delegated agent runs, and a landing workflow) entirely in userland code built from those parts.
 
-Workflows are plain data, so they compose. A `workflow/call` inlines a reusable procedure into its parent's graph; a dependency on the call waits for the whole procedure to finish. A `workflow/defer` goes the other way: a terminal exit a spool can name without naming what fills it.
+Workflows are plain data, so they compose. A `workflow/call` inlines a reusable procedure into its parent's graph; a dependency on the call waits for the whole procedure to finish. A `workflow/defer` is a terminal exit a spool can name without naming what fills it. A `workflow/dispatch` selects such a routine at run time but returns to the workflow that declared it.
 
 <details markdown>
 <summary>One workflow calling another</summary>
@@ -332,10 +332,10 @@ The checkpoint above names its routes where the workflow is written, which is fi
 (workflow/defworkflow tracked-card
   "Track a card and select its delivery routine."
   {:entrypoints #{:start}}
-  (workflow/bind-defers track-card {:perform-work #{:spike :devflow}}))
+  (workflow/bind-handoffs track-card {:perform-work #{:spike :devflow}}))
 ```
 
-Nothing marks `spike` and `devflow` as continuations beyond the `:continue` they declare — they are the same `step`/`gate`/`defworkflow` pieces as everything above, and either can still be started on its own. The spool says where a worker chooses; `bind-defers` says what they may choose from. Once `:prepare` closes, the exit is the ready frontier and carries that allowlist. A worker fills it:
+Nothing marks `spike` and `devflow` as continuations beyond the `:continue` they declare — they are the same `step`/`gate`/`defworkflow` pieces as everything above, and either can still be started on its own. The spool says where a worker chooses; `bind-handoffs` says what they may choose from. Once `:prepare` closes, the exit is the ready frontier and carries that allowlist. A worker fills it:
 
 ```clojure
 (workflow/continue! "card-123" :devflow {:feature "kanban-web-ui"} {:by "worker-1"})
@@ -352,6 +352,6 @@ A defer never returns, so there is no closing step to write. Trying anyway fails
 
 The card is already closed by then. `continue!` is a root transfer: it closes the card's root and pours devflow as the run's new root in one batch, so a failing pour commits nothing and leaves the exit ready to retry. It merges none of the card's context either, so devflow validates its own params whole. For the same reason a workflow declaring a defer cannot be `call`-ed — a procedure join would continue past the exit.
 
-If you do want work after the routine finishes, you want the returning form. That is `call`, above: the sub-flow inlines into the caller's graph and the caller stays the owner of what follows.
+If you do want work after a worker-selected routine finishes, use `workflow/dispatch`: it fills in place, keeps the current root, and makes the next step ready after the routine's procedure join closes. Its targets declare `:call`, and user code binds its allowlist with `bind-handoffs`. Use `call` when the target is known while authoring the workflow. The cookbook also shows a user-owned adapter for cases where the terminal hand-off genuinely transfers ownership but must later reach a wrap-up workflow.
 
 </details>

@@ -7,11 +7,13 @@
             [clojure.test :refer [deftest is testing]]
             [skein.api.batch.alpha :as batch]
             [skein.api.graph.alpha :as graph]
+            [skein.api.hooks.alpha :as hooks]
             [skein.api.registry.alpha :as registry]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.vocab.alpha :as vocab]
             [skein.spools.test-support :as test-support :refer [assert-state-shape with-runtime]]
             [skein.spools.workflow :as workflow]
+            [skein.spools.workflow.internal.definitions :as definitions]
             [skein.spools.workflow.internal.registry :as wf-registry]
             [skein.repl :as repl]
             [skein.test.alpha :as test-alpha])
@@ -34,6 +36,7 @@
     (is (re-find #"skein.spools.workflow/workflow" (get-in contract [:contract :spec])))
     (is (= :step (get-in contract [:step :topic])))
     (is (= :checkpoint (get-in contract [:checkpoint :topic])))
+    (is (= :dispatch (:topic (workflow/explain :dispatch))))
     (is (= :definition (get-in contract [:definition :topic])))
     (is (= 'skein.spools.workflow/defworkflow
            (get-in contract [:builders 'defworkflow])))
@@ -93,6 +96,61 @@
     (is (contains? edges [:review-artifact--write-review :review-artifact--inspect "depends-on"]))
     (is (contains? edges [:review-artifact :review-artifact--write-review "depends-on"]))
     (is (contains? edges [:continue :review-artifact "depends-on"]))))
+
+(deftest workflow-call-compilation-preserves-expanded-payload-shape
+  (let [procedure (workflow/workflow
+                   "Multi entry"
+                   (workflow/step :first "First" :self)
+                   (workflow/step :second "Second" :self)
+                   (workflow/step :finish-first "Finish first" :self :depends-on [:first])
+                   (workflow/step :finish-second "Finish second" :self :depends-on [:second]))
+        payload (workflow/compile
+                 (workflow/workflow
+                  "Caller"
+                  (workflow/step :before "Before" :self)
+                  (workflow/call :procedure procedure {} :depends-on [:before])))
+        strands (into {} (map (juxt :ref identity)) (:strands payload))
+        edges (set (map (juxt :from :to :type) (:edges payload)))
+        procedure-deps (->> (:edges payload)
+                            (filter #(= "depends-on" (:type %)))
+                            (filter #(= :procedure (:from %)))
+                            (map :to)
+                            set)]
+    (is (= #{:molecule :before :procedure--first :procedure--second
+             :procedure--finish-first :procedure--finish-second :procedure}
+           (set (keys strands))))
+    (is (contains? edges [:procedure--first :before "depends-on"]))
+    (is (contains? edges [:procedure--second :before "depends-on"]))
+    (is (contains? edges [:procedure--finish-first :procedure--first "depends-on"]))
+    (is (contains? edges [:procedure--finish-second :procedure--second "depends-on"]))
+    (is (= #{:procedure--finish-first :procedure--finish-second} procedure-deps))))
+
+(deftest workflow-call-compilation-prefixes-nested-procedures-twice
+  (let [inner (workflow/workflow "Inner" (workflow/step :work "Work" :self))
+        outer (workflow/workflow "Outer" (workflow/call :inner inner {}))
+        payload (workflow/compile
+                 (workflow/workflow "Caller" (workflow/call :outer outer {})))
+        refs (set (map :ref (:strands payload)))
+        edges (set (map (juxt :from :to :type) (:edges payload)))]
+    (is (= #{:molecule :outer--inner--work :outer--inner :outer} refs))
+    (is (contains? edges [:outer--inner :outer--inner--work "depends-on"]))
+    (is (contains? edges [:outer :outer--inner "depends-on"]))))
+
+(deftest workflow-call-compilation-preserves-call-title-and-attributes
+  (let [payload (workflow/compile
+                 (workflow/workflow
+                  "Caller"
+                  (workflow/call :procedure
+                                 (workflow/workflow "Callee" (workflow/step :work "Work" :self))
+                                 {}
+                                 :title "Review procedure"
+                                 :attributes {:owner "reviewer" :priority "high"})))
+        join (some #(when (= :procedure (:ref %)) %) (:strands payload))]
+    (is (= "Review procedure" (:title join)))
+    (is (= "procedure" (get-in join [:attributes "workflow/role"])))
+    (is (= "procedure" (get-in join [:attributes "workflow/procedure"])))
+    (is (= "reviewer" (get-in join [:attributes :owner])))
+    (is (= "high" (get-in join [:attributes :priority])))))
 
 (workflow/defworkflow toastie-quality-workflow
   "Check toastie quality."
@@ -2506,6 +2564,11 @@
    "Call only"
    (workflow/step :inner "Inner" :self)))
 
+(workflow/defworkflow dispatch-call-target
+  "A call-capable routine a dispatch may select."
+  {:entrypoints #{:call}}
+  (workflow/workflow "Dispatch call target" (workflow/step :work "Work" :self)))
+
 (def ^:private card-template
   "The unregistered template a spool publishes: it names its exit point without
   naming anyone else's workflow."
@@ -2518,10 +2581,25 @@
 (defn- bound-card
   "Return the template bound to `targets`, as user code with both spools would."
   [targets]
-  (workflow/bind-defers card-template {:perform-work targets}))
+  (workflow/bind-handoffs card-template {:perform-work targets}))
 
 (def ^:private tracked-card (bound-card #{:wt-devflow :wt-spike}))
 (def ^:private call-only-bound-card (bound-card #{:wt-callonly}))
+
+(def ^:private dispatch-template
+  (workflow/workflow "Dispatch" (workflow/dispatch :perform-work "Choose work")))
+
+(def ^:private dispatch-continue-bound
+  (workflow/bind-handoffs dispatch-template {:perform-work #{:wt-devflow}}))
+(def ^:private dispatch-defer-bound
+  (workflow/bind-handoffs dispatch-template {:perform-work #{:wt-card}}))
+
+(workflow/defworkflow nested-dispatch-target
+  "A dispatch target which may itself dispatch."
+  {:entrypoints #{:call}}
+  (workflow/bind-handoffs
+   (workflow/workflow "Nested dispatch" (workflow/dispatch :another "Choose more work"))
+   {:another #{:wt-dispatch-call-target}}))
 
 (def ^:private defer-caller
   (workflow/workflow
@@ -2529,9 +2607,33 @@
    {:entrypoints #{:start}}
    (workflow/call :sub :wt-card {})))
 
+(workflow/defworkflow adapter-routine
+  "A call-only routine selected by a user-owned adapter."
+  {:entrypoints #{:call}}
+  (workflow/workflow "Adapter routine" (workflow/step :work "Do the routine" :self)))
+
+(workflow/defworkflow adapter-wrap-up
+  "The tracker-owned work that follows an adapter transfer."
+  {:entrypoints #{:continue}}
+  (workflow/workflow "Adapter wrap-up" (workflow/step :record "Record the result" :self)))
+
+(def ^:private adapter-template
+  (workflow/workflow
+   "User-owned adapter"
+   {:entrypoints #{:continue}}
+   (workflow/call :routine :wt-adapter-routine {})
+   (workflow/defer :wrap-up "Run tracker wrap-up" :depends-on [:routine])))
+
+(def ^:private bound-adapter
+  (workflow/bind-handoffs adapter-template {:wrap-up #{:wt-adapter-wrap-up}}))
+
 (defn- register-defer-targets! []
   (workflow/register-workflow! :wt-devflow 'skein.spools.workflow-test/defer-devflow)
   (workflow/register-workflow! :wt-spike 'skein.spools.workflow-test/defer-spike))
+
+(defn- definition-symbol [v]
+  (let [{ns-sym :ns name-sym :name} (meta v)]
+    (symbol (str (ns-name ns-sym)) (str name-sym))))
 
 (defn- start-at-defer!
   "Start `run-id` on the bound card and complete its first step, leaving the
@@ -2582,19 +2684,19 @@
       (is (= :workflow/defer-in-procedure (:reason (ex-data thrown))))
       (is (= :perform-work (:defer (ex-data thrown)))))))
 
-(deftest bind-defers-owns-the-user-authority-boundary
+(deftest bind-handoffs-owns-the-user-authority-boundary
   (testing "targets materialize in registered-name order whatever the author wrote"
     (is (= ["wt-devflow" "wt-spike"]
            (get-in (second (:steps (bound-card #{:wt-spike :wt-devflow})))
                    [:attributes "workflow/defer-workflows"]))))
   (testing "binding a name the definition never declared is a defect, not a new exit"
-    (let [thrown (try (workflow/bind-defers card-template {:nope #{:wt-spike}})
+    (let [thrown (try (workflow/bind-handoffs card-template {:nope #{:wt-spike}})
                       (catch clojure.lang.ExceptionInfo e e))]
-      (is (= :workflow/defer-unknown (:reason (ex-data thrown))))
+      (is (= :workflow/handoff-unknown (:reason (ex-data thrown))))
       (is (= [:perform-work] (:declared (ex-data thrown))))))
   (testing "an empty target set is an exit no worker can fill"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow defer bindings"
-                          (workflow/bind-defers card-template {:perform-work #{}}))))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow hand-off bindings"
+                          (workflow/bind-handoffs card-template {:perform-work #{}}))))
   (testing "an unbound template describes itself but cannot pour"
     (is (= [nil ["wt-devflow" "wt-spike"]]
            [(:workflows (second (:steps (workflow/describe card-template))))
@@ -2603,6 +2705,87 @@
                       (catch clojure.lang.ExceptionInfo e e))]
       (is (= :workflow/defer-unbound (:reason (ex-data thrown))))
       (is (= :perform-work (:defer (ex-data thrown)))))))
+
+(deftest dispatch-declares-a-returning-hand-off
+  (let [definition (workflow/workflow
+                    "Dispatch"
+                    (workflow/dispatch :perform-work "Choose work")
+                    (workflow/step :record "Record outcome" :self
+                                   :depends-on [:perform-work]))]
+    (is (= {:id :perform-work
+            :title "Choose work"
+            :attributes {"workflow/role" "dispatch"
+                         "workflow/dispatch" "perform-work"}}
+           (first (:steps definition))))
+    (is (s/valid? ::workflow/dispatch-declaration (first (:steps definition))))
+    (is (not (s/valid? ::workflow/dispatch-declaration
+                       {:id :bad :title "Bad"})))
+    (doseq [key [:condition :loop]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow option keys"
+                            (workflow/dispatch :perform-work "Choose" key :flag))))))
+
+(deftest bind-handoffs-binds-each-declared-kind
+  (let [template (workflow/workflow
+                  "Both"
+                  (workflow/defer :continue "Continue")
+                  (workflow/dispatch :call "Call"))
+        bound (workflow/bind-handoffs template {:continue #{:wt-devflow}
+                                                :call #{:wt-callonly}})]
+    (is (= [["wt-devflow"] ["wt-callonly"]]
+           (mapv #(get-in % [:attributes (if (= "defer" (get-in % [:attributes "workflow/role"]))
+                                           "workflow/defer-workflows"
+                                           "workflow/dispatch-workflows")])
+                 (:steps bound))))
+    (is (s/valid? ::workflow/handoff-bindings {:continue #{:wt-devflow}}))
+    (is (not (s/valid? ::workflow/handoff-bindings {:continue #{}})))
+    (let [thrown (try (workflow/bind-handoffs template {:unknown #{:wt-devflow}})
+                      (catch clojure.lang.ExceptionInfo e e))]
+      (is (= :workflow/handoff-unknown (:reason (ex-data thrown))))
+      (is (= [:call :continue] (:declared (ex-data thrown)))))))
+
+(deftest unbound-dispatch-is-refused-at-pour
+  (let [template (workflow/workflow "Dispatch" (workflow/dispatch :perform-work "Choose work"))
+        thrown (try (workflow/compile template)
+                    (catch clojure.lang.ExceptionInfo e e))]
+    (is (= :workflow/handoff-unbound (:reason (ex-data thrown))))
+    (is (= :perform-work (:handoff (ex-data thrown))))))
+
+(deftest dispatch-targets-require-call-and-cannot-defer
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-dispatch-call-target
+                                   'skein.spools.workflow-test/dispatch-call-target)
+      (is (= :wt-nested-dispatch
+             (workflow/register-workflow! :wt-nested-dispatch
+                                          'skein.spools.workflow-test/nested-dispatch-target)))
+      (testing "a dispatch target requires :call rather than :continue"
+        (workflow/register-workflow! :wt-devflow 'skein.spools.workflow-test/defer-devflow)
+        (let [thrown (try (workflow/register-workflow! :wt-dispatch-continue
+                                                       (definition-symbol #'dispatch-continue-bound))
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/reference-entrypoint-unsupported (:reason (ex-data thrown))))
+          (is (= :call (:entrypoint (ex-data thrown))))
+          (is (= :dispatch (:declaring-kind (ex-data thrown))))))
+      (testing "a dispatch target may not declare a terminal defer"
+        (workflow/register-workflow! :wt-spike 'skein.spools.workflow-test/defer-spike)
+        (workflow/register-workflow! :wt-card 'skein.spools.workflow-test/tracked-card)
+        (let [thrown (try (workflow/register-workflow! :wt-dispatch-defer
+                                                       (definition-symbol #'dispatch-defer-bound))
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/defer-in-procedure (:reason (ex-data thrown))))
+          (is (= :dispatch (:declaring-kind (ex-data thrown)))))))))
+
+(deftest registering-a-definition-with-an-unbound-dispatch-is-refused
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (let [thrown (try (workflow/register-workflow!
+                         :wt-dispatch-template
+                         'skein.spools.workflow-test/dispatch-template)
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/handoff-unbound (:reason (ex-data thrown))))
+        (is (= :perform-work (:handoff (ex-data thrown))))))))
 
 (deftest registering-a-definition-with-an-unbound-defer-is-refused
   (with-runtime
@@ -2726,6 +2909,30 @@
         (is (= (mapv :title (workflow/ready "iso-2"))
                (mapv :title (workflow/ready "iso-3"))))))))
 
+(deftest adapter-composition-transfers-through-a-user-owned-returning-workflow
+  ;; Scope A: the tracker hands ownership to an adapter. The adapter calls the
+  ;; selected routine, then hands ownership to tracker-owned wrap-up work.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-adapter-routine
+                                   'skein.spools.workflow-test/adapter-routine)
+      (workflow/register-workflow! :wt-adapter-wrap-up
+                                   'skein.spools.workflow-test/adapter-wrap-up)
+      (workflow/register-workflow! :wt-adapter
+                                   (definition-symbol #'bound-adapter))
+      (let [tracker (bound-card #{:wt-adapter})]
+        (workflow/start! "adapter-1" tracker {})
+        (workflow/complete! "adapter-1")
+        (workflow/continue! "adapter-1" :wt-adapter {})
+        (is (= "Do the routine" (:title (workflow/ready-step "adapter-1"))))
+        (workflow/complete! "adapter-1")
+        (let [defer (workflow/ready-step "adapter-1")]
+          (is (= "defer" (:role defer)))
+          (is (= "wrap-up" (:defer defer)))
+          (workflow/continue! "adapter-1" :wt-adapter-wrap-up {}))
+        (is (= "Record the result" (:title (workflow/ready-step "adapter-1"))))))))
+
 (deftest continue-resolves-its-target-live-and-fails-with-the-defer-still-ready
   (with-runtime
     (fn [rt _]
@@ -2806,6 +3013,444 @@
             "a defer is a decision, so it must not surface as a :self step to do")
         (is (= "perform-work" (:defer (:detail state))))
         (is (= ["wt-devflow" "wt-spike"] (:workflows (:detail state))))))))
+
+(deftest a-pending-dispatch-is-ready-but-not-completable
+  ;; PLAN-Dyc-001.V2: cascade-join-ids closes only procedure joins. If dispatch
+  ;; used that role while unfilled, completing its sibling would close it over
+  ;; an empty dependency set.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-dispatch-call-target
+                                   'skein.spools.workflow-test/dispatch-call-target)
+      (let [definition (workflow/bind-handoffs
+                        (workflow/workflow
+                         "Pending dispatch"
+                         (workflow/step :sibling "Sibling" :self)
+                         (workflow/dispatch :perform-work "Choose work"))
+                        {:perform-work #{:wt-dispatch-call-target}})
+            result (workflow/start! "dispatch-pending" definition {})
+            root (workflow/current-root "dispatch-pending")
+            dispatch (first (filter #(= "dispatch" (:role %)) (:ready result)))]
+        (is (= "perform-work" (:dispatch dispatch)))
+        (is (= ["wt-dispatch-call-target"] (:workflows dispatch)))
+        (is (false? (:done result)))
+        (is (= "active" (:state root)))
+        (workflow/complete! "dispatch-pending" {:step (first (map :id (filter #(= "step" (:role %))
+                                                                              (:ready result))))})
+        (is (= "active" (:state (repl/strand (:id dispatch)))))
+        (doseq [call [#(workflow/complete! "dispatch-pending")
+                      #(workflow/advance! "dispatch-pending")]]
+          (let [thrown (try (call) (catch clojure.lang.ExceptionInfo e e))]
+            (is (= :workflow/step-not-completable (:reason (ex-data thrown))))
+            (is (re-find #"dispatch!" (ex-message thrown)))))
+        ;; the run is already settled, so the first evaluation decides; a zero
+        ;; budget keeps a wrong answer an immediate failure rather than a wait.
+        (let [attention (workflow/await! "dispatch-pending" {:timeout-secs 0 :poll-ms 1})]
+          (is (= :dispatch (:reason attention)))
+          (is (= (:id dispatch) (get-in attention [:detail :id]))))
+        (is (not-any? #(= (:id dispatch) (:id %))
+                      (mapcat :events (workflow/run-history "dispatch-pending")))
+            "CC4c: an unfilled dispatch emits no history event")))))
+
+(deftest compile-stamps-each-dispatch-with-its-lexical-path
+  (let [callee (workflow/bind-handoffs
+                (workflow/workflow "C" (workflow/dispatch :pick "Pick"))
+                {:pick #{:wt-dispatch-call-target}})
+        outer (workflow/workflow "Outer" (workflow/call :c callee {}))
+        payload (workflow/compile outer {} {:definition 'skein.spools.workflow-test/outer})
+        path (get-in (first (filter #(= "dispatch" (get-in % [:attributes "workflow/role"]))
+                                    (:strands payload)))
+                     [:attributes "workflow/dispatch-path"])
+        expected [{"fingerprint" (definitions/fingerprint {:value outer})
+                   "definition" "skein.spools.workflow-test/outer"}
+                  {"fingerprint" (definitions/fingerprint {:value callee})
+                   "definition" nil}]]
+    (is (= expected path))
+    (let [anonymous (workflow/compile
+                     (workflow/bind-handoffs
+                      (workflow/workflow "Anonymous" (workflow/dispatch :pick "Pick"))
+                      {:pick #{:wt-dispatch-call-target}}))
+          anonymous-path (get-in (second (:strands anonymous))
+                                 [:attributes "workflow/dispatch-path"])]
+      (is (nil? (get-in anonymous-path [0 "definition"])))
+      (is (re-matches #"[0-9a-f]{16}" (get-in anonymous-path [0 "fingerprint"]))))))
+
+(deftest a-cutover-closes-an-unfilled-sibling-dispatch
+  ;; DELTA-Dyc-001.CC4b: closeable-roles is every strand the engine poured under
+  ;; an abandoned root. Omitting dispatch would leave a pending hand-off active
+  ;; beneath a root that has already been replaced.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-dispatch-call-target
+                                   'skein.spools.workflow-test/dispatch-call-target)
+      (workflow/register-workflow! :wt-second
+                                   'skein.spools.workflow-test/registry-second-stage)
+      (let [definition (workflow/bind-handoffs
+                        (workflow/workflow
+                         "Router with a pending dispatch"
+                         (workflow/checkpoint :go "Go"
+                                              :kind :agent
+                                              :choices [{:key :advance :label "Advance"
+                                                         :next :wt-second}])
+                         (workflow/dispatch :perform-work "Choose work"))
+                        {:perform-work #{:wt-dispatch-call-target}})
+            result (workflow/start! "dispatch-cutover" definition {})
+            dispatch-id (:id (first (filter #(= "dispatch" (:role %)) (:ready result))))
+            go-id (:id (first (filter #(= "checkpoint" (:role %)) (:ready result))))]
+        (is (= "active" (:state (repl/strand dispatch-id))))
+        ;; the selector is required because a pending dispatch is ready beside the
+        ;; checkpoint, and trusted choose! resolves the sole ready step by id
+        ;; rather than filtering by role — the CLI is where roles partition.
+        (workflow/choose! "dispatch-cutover" :advance {} {:step go-id})
+        (is (= "closed" (:state (repl/strand dispatch-id)))
+            "the route's cutover force-closes the pending dispatch with the old root")))))
+
+(deftest sibling-dispatches-carry-independent-paths
+  ;; DELTA-Dyc-001.D4: the path is per dispatch strand, never a shared root
+  ;; record, which is what lets two siblings later select the same target.
+  (let [definition (workflow/bind-handoffs
+                    (workflow/workflow
+                     "Two hand-offs"
+                     (workflow/dispatch :first-pick "First")
+                     (workflow/dispatch :second-pick "Second"))
+                    {:first-pick #{:wt-dispatch-call-target}
+                     :second-pick #{:wt-dispatch-call-target}})
+        payload (workflow/compile definition {})
+        paths (mapv #(get-in % [:attributes "workflow/dispatch-path"])
+                    (filter #(= "dispatch" (get-in % [:attributes "workflow/role"]))
+                            (:strands payload)))]
+    (is (= 2 (count paths)))
+    (is (every? some? paths) "each sibling carries its own path, not a shared one")
+    (is (apply = paths) "siblings at the same lexical depth share a path value")))
+
+(s/def ::dispatch-scope string?)
+(s/def ::dispatch-target-params (s/keys :req-un [::dispatch-scope]))
+
+(workflow/defworkflow dispatch-two-step-target
+  "A call-capable routine with an entry and an exit."
+  {:entrypoints #{:call}
+   :param-spec ::dispatch-target-params
+   :defaults {:dispatch-scope "default"}}
+  (workflow/workflow
+   (fn [{:keys [dispatch-scope]}] (str "Deliver " dispatch-scope))
+   (workflow/step :plan (fn [{:keys [dispatch-scope]}] (str "Plan " dispatch-scope)) :self)
+   (workflow/step :ship "Ship it" :self :depends-on [:plan])))
+
+(workflow/defworkflow dispatch-self-target
+  "A routine whose own hand-off may select it, which must be refused."
+  {:entrypoints #{:start :call}}
+  (workflow/bind-handoffs
+   (workflow/workflow "Self" (workflow/dispatch :again "Choose again"))
+   {:again #{:wt-self}}))
+
+(defn- dispatch-sandwich
+  "step a -> dispatch -> step c, the shape the whole feature exists for."
+  [targets]
+  (workflow/bind-handoffs
+   (workflow/workflow
+    "Sandwich"
+    (workflow/step :a "Step a" :self)
+    (workflow/dispatch :perform-work "Choose work" :depends-on [:a])
+    (workflow/step :c "Step c" :self :depends-on [:perform-work]))
+   {:perform-work targets}))
+
+(deftest dispatch-returns-to-the-declaring-workflow
+  ;; PLAN-Dyc-001.V1. This is the feature: a routine chosen at run time, run
+  ;; inside the caller's own molecule, with the caller's next step waiting on it.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-two-step
+                                   'skein.spools.workflow-test/dispatch-two-step-target)
+      (let [root-id (do (workflow/start! "sandwich" (dispatch-sandwich #{:wt-two-step}) {})
+                        (:id (workflow/current-root "sandwich")))]
+        (is (= ["Step a"] (mapv :title (workflow/ready "sandwich"))))
+        (let [after-a (workflow/complete! "sandwich")
+              pending (first (:ready after-a))]
+          (is (= "dispatch" (:role pending)))
+          (let [filled (workflow/dispatch! "sandwich" :wt-two-step
+                                           {:dispatch-scope "the thing"} {:by "worker-1"})
+                join (repl/strand (:id pending))]
+            (is (= ["Plan the thing"] (mapv :title (:ready filled)))
+                "the expansion is ready; step c is not")
+            (is (= "procedure" (get-in join [:attributes :workflow/role]))
+                "CC5: the dispatch became an ordinary procedure join in the same batch")
+            (is (= "active" (:state join)))
+            (testing "CC5: the expansion hangs under the caller's own root, not a new one"
+              (is (= root-id (:id (workflow/current-root "sandwich"))))
+              (is (some #(= "Plan the thing" (:title %))
+                        (:strands (graph/subgraph rt [root-id])))))
+            (testing "CC11: the fill record"
+              (let [attrs (:attributes join)]
+                (is (= "wt-two-step" (:workflow/dispatched-workflow attrs)))
+                (is (= "skein.spools.workflow-test/dispatch-two-step-target"
+                       (:workflow/dispatched-definition attrs)))
+                (is (re-matches #"[0-9a-f]{16}" (:workflow/dispatched-fingerprint attrs)))
+                (is (= {:dispatch-scope "the thing"} (:workflow/dispatched-params attrs)))
+                (is (= "worker-1" (:workflow/dispatched-by attrs)))))
+            (workflow/complete! "sandwich")
+            (let [after-ship (workflow/complete! "sandwich")]
+              (is (= ["Step c"] (mapv :title (:ready after-ship)))
+                  "step c becomes ready only once the expansion's exits close")
+              (is (= "closed" (:state (repl/strand (:id pending))))
+                  "DW2: the join auto-closed through the existing cascade"))
+            (is (true? (:done (workflow/complete! "sandwich"))))))))))
+
+(deftest dispatch-isolates-the-target-from-caller-params
+  ;; DELTA-Dyc-001.CC6: the publishing spool never saw the filling spool, so its
+  ;; context must not reach the target.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-two-step
+                                   'skein.spools.workflow-test/dispatch-two-step-target)
+      (workflow/start! "isolated" (dispatch-sandwich #{:wt-two-step})
+                       {:dispatch-scope "caller value"})
+      (workflow/complete! "isolated")
+      (is (= ["Plan default"] (mapv :title (:ready (workflow/dispatch! "isolated" :wt-two-step))))
+          "an omitted param falls to the target's own default, never the caller's key"))))
+
+(deftest dispatch-refuses-a-target-outside-the-allowlist
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-two-step
+                                   'skein.spools.workflow-test/dispatch-two-step-target)
+      (workflow/register-workflow! :wt-dispatch-call-target
+                                   'skein.spools.workflow-test/dispatch-call-target)
+      (workflow/start! "allowlist" (dispatch-sandwich #{:wt-two-step}) {})
+      (workflow/complete! "allowlist")
+      (let [pending (workflow/ready-step "allowlist")
+            thrown (try (workflow/dispatch! "allowlist" :wt-dispatch-call-target)
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (some? (ex-data thrown)))
+        (is (= "active" (:state (repl/strand (:id pending))))
+            "a refused fill leaves the hand-off ready to retry")))))
+
+(deftest dispatch-refuses-a-cycle-and-permits-siblings
+  ;; DELTA-Dyc-001.CC7/D4: the path is the lexical ancestry of one dispatch, so a
+  ;; self-selection is refused while two siblings may both pick the same target.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-two-step
+                                   'skein.spools.workflow-test/dispatch-two-step-target)
+      (workflow/register-workflow! :wt-self 'skein.spools.workflow-test/dispatch-self-target)
+      (testing "a dispatch may not select the definition it is declared in"
+        (workflow/start! "cyclic" #'dispatch-self-target {})
+        (let [pending (workflow/ready-step "cyclic")
+              thrown (try (workflow/dispatch! "cyclic" :wt-self)
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/dispatch-cyclic (:reason (ex-data thrown))))
+          (is (= "active" (:state (repl/strand (:id pending))))
+              "nothing mutated: the hand-off is still fillable with something else")))
+      (testing "two sibling dispatches may both select the same target"
+        (let [definition (workflow/bind-handoffs
+                          (workflow/workflow
+                           "Two hand-offs"
+                           (workflow/dispatch :first-pick "First")
+                           (workflow/dispatch :second-pick "Second"))
+                          {:first-pick #{:wt-two-step} :second-pick #{:wt-two-step}})
+              result (workflow/start! "siblings" definition {})
+              ids (mapv :id (filter #(= "dispatch" (:role %)) (:ready result)))]
+          (workflow/dispatch! "siblings" :wt-two-step {} {:step (first ids)})
+          (workflow/dispatch! "siblings" :wt-two-step {} {:step (second ids)})
+          (is (every? #(= "procedure" (get-in (repl/strand %) [:attributes :workflow/role])) ids)
+              "neither sibling is in the other's ancestry, so neither is a cycle"))))))
+
+(deftest a-filled-dispatch-cannot-be-filled-again
+  ;; DELTA-Dyc-001.CC10.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-two-step
+                                   'skein.spools.workflow-test/dispatch-two-step-target)
+      (workflow/start! "double" (dispatch-sandwich #{:wt-two-step}) {})
+      (workflow/complete! "double")
+      (let [pending-id (:id (workflow/ready-step "double"))]
+        (workflow/dispatch! "double" :wt-two-step)
+        (testing "a filled dispatch is no longer ready, so naming it is not-ready"
+          (let [thrown (try (workflow/dispatch! "double" :wt-two-step {} {:step pending-id})
+                            (catch clojure.lang.ExceptionInfo e e))]
+            (is (re-find #"not ready" (ex-message thrown)))
+            (is (= pending-id (:step (ex-data thrown))))))
+        (testing "naming a ready strand of another role is the step-not-dispatch failure"
+          (let [ready-step-id (:id (workflow/ready-step "double"))
+                thrown (try (workflow/dispatch! "double" :wt-two-step {} {:step ready-step-id})
+                            (catch clojure.lang.ExceptionInfo e e))]
+            (is (= :workflow/step-not-dispatch (:reason (ex-data thrown))))))))))
+
+(deftest dispatch-validates-its-request-shape-before-touching-the-run
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-two-step
+                                   'skein.spools.workflow-test/dispatch-two-step-target)
+      (workflow/start! "shape" (dispatch-sandwich #{:wt-two-step}) {})
+      (workflow/complete! "shape")
+      (let [pending (workflow/ready-step "shape")]
+        (doseq [bad [["" {}] [:wt-two-step "not-a-map"]]]
+          (let [thrown (try (workflow/dispatch! "shape" (first bad) (second bad))
+                            (catch clojure.lang.ExceptionInfo e e))]
+            (is (some? (ex-data thrown)))))
+        (is (= "active" (:state (repl/strand (:id pending)))))))))
+
+(workflow/defworkflow dispatch-fanout-target
+  "A call-capable routine with a fan-out and colliding step ids."
+  {:entrypoints #{:call}}
+  (workflow/workflow
+   "Fanout"
+   (workflow/step :a "Target a" :self)
+   (workflow/step :left "Target left" :self :depends-on [:a])
+   (workflow/step :right "Target right" :self :depends-on [:a])
+   (workflow/step :c "Target c" :self :depends-on [:left :right])))
+
+(workflow/defworkflow dispatch-empty-target
+  "A call-capable routine that materializes no steps."
+  {:entrypoints #{:call}}
+  (workflow/workflow "Empty"))
+
+(deftest dispatch-materializes-a-multi-step-expansion-with-colliding-ids
+  ;; PLAN-Dyc-001.A6 / R4: prefixing is what keeps a target whose step ids are
+  ;; :a and :c disjoint from a caller that already uses :a and :c, and the
+  ;; expansion's entry must inherit the dispatch's own depends-on.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-fanout 'skein.spools.workflow-test/dispatch-fanout-target)
+      (workflow/start! "fanout" (dispatch-sandwich #{:wt-fanout}) {})
+      (workflow/complete! "fanout")
+      (let [pending (workflow/ready-step "fanout")
+            filled (workflow/dispatch! "fanout" :wt-fanout)
+            root-id (:id (workflow/current-root "fanout"))
+            strands (:strands (graph/subgraph rt [root-id]))
+            titles (set (map :title strands))]
+        (is (= ["Target a"] (mapv :title (:ready filled)))
+            "only the expansion's entry is ready; the caller's own :a and :c are untouched")
+        (is (every? titles ["Step a" "Step c" "Target a" "Target left" "Target right" "Target c"])
+            "colliding ids materialize as distinct prefixed strands")
+        (testing "the whole fan-out runs and returns to the caller"
+          (workflow/complete! "fanout")
+          (let [after-a (workflow/ready "fanout")]
+            (is (= #{"Target left" "Target right"} (set (map :title after-a)))))
+          (workflow/complete! "fanout" {:step (:id (first (workflow/ready "fanout")))})
+          (workflow/complete! "fanout" {:step (:id (first (workflow/ready "fanout")))})
+          (is (= ["Target c"] (mapv :title (workflow/ready "fanout"))))
+          (let [after-c (workflow/complete! "fanout")]
+            (is (= ["Step c"] (mapv :title (:ready after-c)))
+                "step c waits for the whole expansion, then becomes ready")
+            (is (= "closed" (:state (repl/strand (:id pending)))))))))))
+
+(deftest dispatch-into-an-empty-target-does-not-stall-the-run
+  ;; An empty or fully-conditioned-out target yields no exits, so the join must
+  ;; still close rather than leaving an invisible active procedure forever.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-empty 'skein.spools.workflow-test/dispatch-empty-target)
+      (workflow/start! "empty-target" (dispatch-sandwich #{:wt-empty}) {})
+      (workflow/complete! "empty-target")
+      (let [pending (workflow/ready-step "empty-target")
+            filled (workflow/dispatch! "empty-target" :wt-empty)]
+        (is (= "closed" (:state (repl/strand (:id pending))))
+            "a join with no expansion to wait for closes immediately")
+        (is (= ["Step c"] (mapv :title (:ready filled)))
+            "the declaring workflow continues instead of stalling")))))
+
+(workflow/defworkflow dispatch-nested-inner
+  "A routine whose own dispatch must not be able to select it again."
+  {:entrypoints #{:start :call}}
+  (workflow/bind-handoffs
+   (workflow/workflow "Inner" (workflow/dispatch :again "Choose again"))
+   {:again #{:wt-nested-inner}}))
+
+(workflow/defworkflow dispatch-nested-outer
+  "A dispatch target that fixed-calls a routine declaring its own dispatch."
+  {:entrypoints #{:call}}
+  (workflow/workflow "Outer" (workflow/call :inner :wt-nested-inner {})))
+
+(deftest a-poured-expansion-keeps-its-fixed-call-ancestry
+  ;; DELTA-Dyc-001.CC7/D4 and PLAN-Dyc-001.V10. A dispatches to B; B fixed-calls
+  ;; C; C declares a dispatch. C must be in that dispatch's path, or it can
+  ;; select itself.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-nested-inner 'skein.spools.workflow-test/dispatch-nested-inner)
+      (workflow/register-workflow! :wt-nested-outer 'skein.spools.workflow-test/dispatch-nested-outer)
+      (workflow/start! "nested" (dispatch-sandwich #{:wt-nested-outer}) {})
+      (workflow/complete! "nested")
+      (workflow/dispatch! "nested" :wt-nested-outer)
+      (let [inner (first (filter #(= "dispatch" (:role %)) (workflow/ready "nested")))
+            thrown (try (workflow/dispatch! "nested" :wt-nested-inner {} {:step (:id inner)})
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/dispatch-cyclic (:reason (ex-data thrown)))
+            "the poured path kept the fixed-call ancestor, so selecting it is a cycle")))))
+
+(deftest an-authored-dispatch-path-cannot-forge-lineage
+  ;; CC7: compile owns the path. An author who supplies one must not be able to
+  ;; blank it and walk past the cycle check.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-self 'skein.spools.workflow-test/dispatch-self-target)
+      (let [thrown (try (workflow/dispatch :again "Choose again"
+                                           :attributes {"workflow/dispatch-path" []})
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/dispatch-path-reserved (:reason (ex-data thrown)))
+            "an authored path cannot replace compile-owned lineage")))))
+
+(deftest dispatch-refuses-a-malformed-persisted-path
+  ;; Persisted attributes are an I/O boundary. Missing lineage must fail before
+  ;; mutation instead of becoming an empty ancestry that lets a cycle through.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-two-step
+                                   'skein.spools.workflow-test/dispatch-two-step-target)
+      (doseq [[run-id bad-path] [["bad-path-shape" {}]
+                                 ["bad-path-entry" [{"definition" nil}]]]]
+        (workflow/start! run-id (dispatch-sandwich #{:wt-two-step}) {})
+        (workflow/complete! run-id)
+        (let [pending (workflow/ready-step run-id)]
+          (repl/update! (:id pending) {:attributes {"workflow/dispatch-path" bad-path}})
+          (let [thrown (try (workflow/dispatch! run-id :wt-two-step)
+                            (catch clojure.lang.ExceptionInfo e e))]
+            (is (= :workflow/dispatch-path-invalid (:reason (ex-data thrown))))
+            (is (contains? (ex-data thrown) :path))
+            (is (= "active" (:state (repl/strand (:id pending))))
+                "a malformed path fails before the fill mutates the dispatch")))))))
+
+(defn reject-dispatch-batch-hook [ctx]
+  (throw (ex-info "dispatch batch rejected" {:code "policy/rejected" :ctx ctx})))
+
+(deftest a-failing-dispatch-apply-commits-nothing
+  ;; DELTA-Dyc-001.CC5: the fill is one batch. A rejected apply must leave the
+  ;; hand-off ready and pour no part of the expansion, not a half-materialized
+  ;; run somebody has to unpick by hand.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-two-step
+                                   'skein.spools.workflow-test/dispatch-two-step-target)
+      (workflow/start! "atomic" (dispatch-sandwich #{:wt-two-step}) {})
+      (workflow/complete! "atomic")
+      (let [pending (workflow/ready-step "atomic")
+            root-id (:id (workflow/current-root "atomic"))
+            before (count (:strands (graph/subgraph rt [root-id])))]
+        (hooks/register-hook! rt :reject-dispatch #{:batch/apply-before-commit}
+                              'skein.spools.workflow-test/reject-dispatch-batch-hook {})
+        (let [thrown (try (workflow/dispatch! "atomic" :wt-two-step)
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (some? (ex-data thrown)) "the rejected apply surfaces as a failure"))
+        (is (= before (count (:strands (graph/subgraph rt [root-id]))))
+            "no expansion strand was poured")
+        (let [still (repl/strand (:id pending))]
+          (is (= "active" (:state still)))
+          (is (= "dispatch" (get-in still [:attributes :workflow/role]))
+              "the hand-off was not converted to a join by the failed batch"))))))
 
 (deftest concurrent-choose-and-continue-serialize-under-the-run-guard
   ;; Both verbs resolve their frontier inside the guard, so one wins the cutover
