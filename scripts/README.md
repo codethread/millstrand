@@ -11,7 +11,9 @@ scripts/ralph <epic-id> "Work every feature and close the epic"
 scripts/ralph-codex <epic-id> "Work every feature and close the epic"
 ```
 
-`ralph-codex` defaults `RALPH_MODEL` to `sol-low`, which selects `gpt-5.6-sol` with low reasoning effort. Set `RALPH_EFFORT` to override the effort or set `RALPH_MODEL` to another Codex model ID. It uses Codex's approval and sandbox bypass by default because a headless run cannot answer permission prompts; set `RALPH_SKIP_PERMISSIONS=0` to keep the configured Codex restrictions.
+Append `--` and any extra harness arguments after the prompt to pass them to `claude` or `codex exec`.
+
+`ralph-codex` defaults `RALPH_MODEL` to `sol-low`, which selects `gpt-5.6-sol` with low reasoning effort. Set `RALPH_EFFORT` to override the effort or set `RALPH_MODEL` to another Codex model ID. It uses Codex's approval and sandbox bypass by default because a headless run cannot answer permission prompts; set `RALPH_SKIP_PERMISSIONS=0` to keep the configured Codex restrictions. `RALPH_LOG_DIR` overrides the transcript directory; by default each run writes to `$TMPDIR/ralph/<epic>-<timestamp>`.
 
 Both loops expect the canonical coordination weaver to be running. They read the epic lifecycle between iterations, while the agent run claims and closes kanban work.
 
