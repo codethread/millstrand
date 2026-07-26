@@ -53,6 +53,31 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 ```
 
+## clojure-lsp project root
+
+Every spool in this repo is its own directory with its own `deps.edn` — `spools/*/deps.edn`, plus `.skein/spools/*/deps.edn`. nvim-lspconfig's default `root_markers` for `clojure_lsp` list `deps.edn` and `.git` at equal priority, so the nearest marker wins: opening `spools/workflow/src/skein/spools/workflow.clj` roots the server at `spools/workflow`. That directory's `deps.edn` is only `{:paths ["src"]}`, so Skein core never reaches the classpath and go-to-definition into `skein.core.*` silently fails.
+
+Give `.git` its own higher-priority tier so the repo root always wins:
+
+```lua
+vim.lsp.config("clojure_lsp", {
+  root_markers = {
+    { ".git" },
+    { "deps.edn", "project.clj", "build.boot", "shadow-cljs.edn", "bb.edn" },
+  },
+})
+```
+
+Nested tables are priority tiers, so the second one still roots checkouts that have no `.git`. From the repo root, clojure-lsp runs `clojure -A:test:dev -Spath`, and the `:test` alias in the top-level `deps.edn` carries every spool source directory — that is what puts the whole repo on one classpath.
+
+A server that already started in the wrong place leaves a cache behind that survives the config change. Delete those once, then reopen a Clojure file:
+
+```sh
+rm -rf spools/*/.lsp spools/*/.clj-kondo .skein/spools/*/.lsp .skein/spools/*/.clj-kondo
+```
+
+The first open after that rebuilds the repo-root cache, which takes a while on a classpath this size.
+
 ## Usage
 
 1. Ensure `mill` is on `$PATH` and running:
