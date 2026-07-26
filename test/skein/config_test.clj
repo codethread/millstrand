@@ -988,7 +988,8 @@
                "      unknown-status)\n"
                "        printf '[{\"status\":\"mysterious\",\"conclusion\":null}]\\n' ;;\n"
                "      blocking)\n"
-               "        printf '%s\\n' \"$$\" > \"$FAKE_MAIN_CI_PID\"\n"
+               "        printf '%s\\n' \"$$\" > \"$FAKE_MAIN_CI_PID.tmp\"\n"
+               "        mv \"$FAKE_MAIN_CI_PID.tmp\" \"$FAKE_MAIN_CI_PID\"\n"
                "        read _ < \"$FAKE_MAIN_CI_RELEASE\" ;;\n"
                "    esac ;;\n"
                "  'run list --commit '*) printf 'failing workflow listing\\n' ;;\n"
@@ -1117,16 +1118,16 @@
           (let [call (future
                        (watch {:worktree (.getAbsolutePath worktree)
                                :poll-interval-ms 0
-                               :env (main-ci-env worktree bin-dir "blocking")}))]
-            (is (loop []
-                  (if (.exists pid-file)
-                    true
-                    (let [key (.take watcher)]
-                      (.reset key)
-                      (recur))))
-                "the fake gh child started before interruption")
-            (let [pid (parse-long (str/trim (slurp pid-file)))
-                  handle (.orElseThrow (java.lang.ProcessHandle/of pid))]
+                               :env (main-ci-env worktree bin-dir "blocking")}))
+                pid (loop []
+                      (if-let [pid (when (.exists pid-file)
+                                     (parse-long (str/trim (slurp pid-file))))]
+                        pid
+                        (let [key (.take watcher)]
+                          (.reset key)
+                          (recur))))]
+            (is (pos-int? pid) "the fake gh child published its pid")
+            (let [handle (.orElseThrow (java.lang.ProcessHandle/of pid))]
               (future-cancel call)
               (is (thrown? java.util.concurrent.CancellationException @call))
               (.get (.onExit handle))
