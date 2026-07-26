@@ -497,8 +497,10 @@
       (register! :solo :dispatched)
       (started "run-dispatch" :dispatched)
       (verb "complete" "run-dispatch")
-      (let [filled (invoke {:subcommand ["dispatch"] :run-id "run-dispatch"
-                            :workflow "solo" :by "worker"})]
+      ;; through real argv, so the declared arg-spec — subcommand, positional, and
+      ;; every flag — is what the verb is reached by, not a hand-built arg map.
+      (let [filled (from-argv rt ["dispatch" "run-dispatch"
+                                  "--workflow" "solo" "--by" "worker"])]
         (is (= "workflow dispatch" (:operation filled)))
         (is (= ["Do the work"] (mapv :title (:ready filled))))
         (verb "complete" "run-dispatch")

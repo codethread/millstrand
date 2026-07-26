@@ -7,6 +7,7 @@
             [clojure.test :refer [deftest is testing]]
             [skein.api.batch.alpha :as batch]
             [skein.api.graph.alpha :as graph]
+            [skein.api.hooks.alpha :as hooks]
             [skein.api.registry.alpha :as registry]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.vocab.alpha :as vocab]
@@ -3401,6 +3402,35 @@
         (is (= :workflow/dispatch-path-reserved (:reason (ex-data thrown)))
             "an authored path is refused at the builder, so it can never be mistaken
              for a nested compile's already-correct stamping")))))
+
+(defn reject-dispatch-batch-hook [ctx]
+  (throw (ex-info "dispatch batch rejected" {:code "policy/rejected" :ctx ctx})))
+
+(deftest a-failing-dispatch-apply-commits-nothing
+  ;; DELTA-Dyc-001.CC5: the fill is one batch. A rejected apply must leave the
+  ;; hand-off ready and pour no part of the expansion, not a half-materialized
+  ;; run somebody has to unpick by hand.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-two-step
+                                   'skein.spools.workflow-test/dispatch-two-step-target)
+      (workflow/start! "atomic" (dispatch-sandwich #{:wt-two-step}) {})
+      (workflow/complete! "atomic")
+      (let [pending (workflow/ready-step "atomic")
+            root-id (:id (workflow/current-root "atomic"))
+            before (count (:strands (graph/subgraph rt [root-id])))]
+        (hooks/register-hook! rt :reject-dispatch #{:batch/apply-before-commit}
+                              'skein.spools.workflow-test/reject-dispatch-batch-hook {})
+        (let [thrown (try (workflow/dispatch! "atomic" :wt-two-step)
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (some? (ex-data thrown)) "the rejected apply surfaces as a failure"))
+        (is (= before (count (:strands (graph/subgraph rt [root-id]))))
+            "no expansion strand was poured")
+        (let [still (repl/strand (:id pending))]
+          (is (= "active" (:state still)))
+          (is (= "dispatch" (get-in still [:attributes :workflow/role]))
+              "the hand-off was not converted to a join by the failed batch"))))))
 
 (deftest concurrent-choose-and-continue-serialize-under-the-run-guard
   ;; Both verbs resolve their frontier inside the guard, so one wins the cutover
