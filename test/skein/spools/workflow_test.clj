@@ -2606,6 +2606,26 @@
    {:entrypoints #{:start}}
    (workflow/call :sub :wt-card {})))
 
+(workflow/defworkflow adapter-routine
+  "A call-only routine selected by a user-owned adapter."
+  {:entrypoints #{:call}}
+  (workflow/workflow "Adapter routine" (workflow/step :work "Do the routine" :self)))
+
+(workflow/defworkflow adapter-wrap-up
+  "The tracker-owned work that follows an adapter transfer."
+  {:entrypoints #{:continue}}
+  (workflow/workflow "Adapter wrap-up" (workflow/step :record "Record the result" :self)))
+
+(def ^:private adapter-template
+  (workflow/workflow
+   "User-owned adapter"
+   {:entrypoints #{:continue}}
+   (workflow/call :routine :wt-adapter-routine {})
+   (workflow/defer :wrap-up "Run tracker wrap-up" :depends-on [:routine])))
+
+(def ^:private bound-adapter
+  (workflow/bind-handoffs adapter-template {:wrap-up #{:wt-adapter-wrap-up}}))
+
 (defn- register-defer-targets! []
   (workflow/register-workflow! :wt-devflow 'skein.spools.workflow-test/defer-devflow)
   (workflow/register-workflow! :wt-spike 'skein.spools.workflow-test/defer-spike))
@@ -2887,6 +2907,30 @@
         (is (= ["Probe the unknown"] (mapv :title (workflow/ready "iso-2"))))
         (is (= (mapv :title (workflow/ready "iso-2"))
                (mapv :title (workflow/ready "iso-3"))))))))
+
+(deftest adapter-composition-transfers-through-a-user-owned-returning-workflow
+  ;; Scope A: the tracker hands ownership to an adapter. The adapter calls the
+  ;; selected routine, then hands ownership to tracker-owned wrap-up work.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-adapter-routine
+                                   'skein.spools.workflow-test/adapter-routine)
+      (workflow/register-workflow! :wt-adapter-wrap-up
+                                   'skein.spools.workflow-test/adapter-wrap-up)
+      (workflow/register-workflow! :wt-adapter
+                                   (definition-symbol #'bound-adapter))
+      (let [tracker (bound-card #{:wt-adapter})]
+        (workflow/start! "adapter-1" tracker {})
+        (workflow/complete! "adapter-1")
+        (workflow/continue! "adapter-1" :wt-adapter {})
+        (is (= "Do the routine" (:title (workflow/ready-step "adapter-1"))))
+        (workflow/complete! "adapter-1")
+        (let [defer (workflow/ready-step "adapter-1")]
+          (is (= "defer" (:role defer)))
+          (is (= "wrap-up" (:defer defer)))
+          (workflow/continue! "adapter-1" :wt-adapter-wrap-up {}))
+        (is (= "Record the result" (:title (workflow/ready-step "adapter-1"))))))))
 
 (deftest continue-resolves-its-target-live-and-fails-with-the-defer-still-ready
   (with-runtime

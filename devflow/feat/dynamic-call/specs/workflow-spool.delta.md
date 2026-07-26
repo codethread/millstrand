@@ -1,6 +1,6 @@
 # Workflow spool delta for runtime-selected returning composition
 
-**Document ID:** `DELTA-Dyc-001` **Contract doc:** [spools/workflow.md](../../../../spools/workflow.md) **Feature:** [../proposal.md](../proposal.md) (`PROP-Dyc-001`) **RFC:** [RFC-Dyc-001](../../../rfcs/2026-07-26-runtime-selected-returning-composition.md) **Status:** Draft **Last Updated:** 2026-07-26 **Configuration identification:** Document IDs order as document type, short name, sequential id, then optional version: `DELTA-Dyc-001` for v1 and `DELTA-Dyc-001@2` for v2. Omit `@1`. Prefix every nested point ID with the full document ID, for example `DELTA-Dyc-001.CC1`, so references are globally grepable and do not clash across documents.
+**Document ID:** `DELTA-Dyc-001` **Contract doc:** [spools/workflow.md](../../../../spools/workflow.md) **Feature:** [../proposal.md](../proposal.md) (`PROP-Dyc-001`) **RFC:** [RFC-Dyc-001](../../../rfcs/2026-07-26-runtime-selected-returning-composition.md) **Status:** Merged **Last Updated:** 2026-07-26 **Configuration identification:** Document IDs order as document type, short name, sequential id, then optional version: `DELTA-Dyc-001` for v1 and `DELTA-Dyc-001@2` for v2. Omit `@1`. Prefix every nested point ID with the full document ID, for example `DELTA-Dyc-001.CC1`, so references are globally grepable and do not clash across documents.
 
 ## DELTA-Dyc-001.P1 Summary
 

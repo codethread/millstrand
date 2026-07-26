@@ -25,5 +25,5 @@ tasks:
   - id: 5
     description: Contract docs, cookbook recipes, README, and folding in PR 199
     task_file: tasks/005-docs-and-fold-in.md
-    status: pending
+    status: complete
     blocked_by: [4]
