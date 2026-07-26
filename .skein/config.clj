@@ -270,7 +270,10 @@
   "Start the devflow lifecycle for a feature.
 
   The feature name is the workflow run-id for all other devflow ops;
-  worktree-check is `required` (default) or `already-in-worktree-ok`."
+  worktree-check is `required` (default) or `already-in-worktree-ok`. Fresh
+  feature work starts by creating an isolated branch worktree with
+  `wktree add --branch <name> --json`; substantive work continues there so the
+  main checkout stays clean."
   {:returns stamped-op-return :arg-spec {:op "devflow-start"
                                          :hook-class :mutating
                                          :deadline-class :standard
@@ -278,7 +281,7 @@
                                          :positionals [feature-positional
                                                        {:name :worktree-check
                                                         :type :string
-                                                        :doc "Worktree policy: required (default) or already-in-worktree-ok."}]}}
+                                                        :doc "Worktree policy: required (default; create with wktree add) or already-in-worktree-ok."}]}}
   [ctx]
   (let [{:keys [feature worktree-check]} (:op/args ctx)]
     (require-non-blank! :feature feature)

@@ -6,7 +6,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 406},
+   :source {:file ".skein/config.clj", :line 409},
    :glossary {},
    :node
    {:children [],
@@ -48,7 +48,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 488},
+   :source {:file ".skein/config.clj", :line 491},
    :glossary {},
    :node
    {:children [],
@@ -81,7 +81,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 454},
+   :source {:file ".skein/config.clj", :line 457},
    :glossary {},
    :node
    {:children [],
@@ -115,7 +115,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 471},
+   :source {:file ".skein/config.clj", :line 474},
    :glossary {},
    :node
    {:children [],
@@ -150,7 +150,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 424},
+   :source {:file ".skein/config.clj", :line 427},
    :glossary {},
    :node
    {:children [],
@@ -183,7 +183,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 357},
+   :source {:file ".skein/config.clj", :line 360},
    :glossary {},
    :node
    {:children [],
@@ -224,7 +224,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 326},
+   :source {:file ".skein/config.clj", :line 329},
    :glossary {},
    :node
    {:children [],
@@ -272,7 +272,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 292},
+   :source {:file ".skein/config.clj", :line 295},
    :glossary {},
    :node
    {:children [],
@@ -306,7 +306,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 615},
+   :source {:file ".skein/config.clj", :line 618},
    :glossary {},
    :node
    {:children [],
@@ -401,7 +401,7 @@
        :variadic false,
        :parse nil,
        :doc
-       "Worktree policy: required (default) or already-in-worktree-ok."}]},
+       "Worktree policy: required (default; create with wktree add) or already-in-worktree-ok."}]},
     :deadline-class "standard",
     :notes [],
     :hook-class "mutating",
@@ -419,7 +419,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 508},
+   :source {:file ".skein/config.clj", :line 511},
    :glossary {},
    :node
    {:children [],
@@ -443,7 +443,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 441},
+   :source {:file ".skein/config.clj", :line 444},
    :glossary {},
    :node
    {:children [],
@@ -477,7 +477,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 305},
+   :source {:file ".skein/config.clj", :line 308},
    :glossary {},
    :node
    {:children [],

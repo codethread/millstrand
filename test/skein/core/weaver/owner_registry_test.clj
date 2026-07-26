@@ -274,7 +274,8 @@
 (def ^:private entry-map-gen
   (gen/map (gen/fmap keyword (gen/not-empty gen/string-alphanumeric))
            (gen/let [name gen/string-alphanumeric
-                     payload gen/int]
+                     payload (gen/large-integer* {:min Integer/MIN_VALUE
+                                                  :max Integer/MAX_VALUE})]
              (entry name payload))
            {:max-elements 12}))
 

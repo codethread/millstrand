@@ -158,7 +158,7 @@
     (io/copy (io/file ".skein" name) (io/file target name)))
   (let [scripts-target (io/file target "scripts")]
     (.mkdirs scripts-target)
-    (doseq [name ["feature-ci-watch.sh" "land-merge.sh"]]
+    (doseq [name ["feature-ci-watch.sh" "land-cleanup.sh" "land-merge.sh"]]
       (io/copy (io/file ".skein/scripts" name) (io/file scripts-target name))))
   ;; The copied config dir would reinterpret repo-relative local roots. Git
   ;; families remain byte-for-byte sourced from the checked-in approvals.
@@ -1131,6 +1131,25 @@
         (is (= "sh" (first (:shell/argv gate-attrs))))
         (is (str/includes? (last (:shell/argv gate-attrs)) "gh run list")))
       (shell-gate-complete! "land-x" "main runs green")
+      (let [gate (first (:ready (op! "land" ["ready" "land-x"])))
+            gate-attrs (:attributes (weaver/show rt (:id gate)))]
+        (is (= "land.branch-worktree.cleanup" (:action-ref gate)))
+        (is (= "shell" (:gate gate)))
+        (is (= ["land-cleanup" "land-x" "/tmp/land-x"]
+               (drop 3 (:shell/argv gate-attrs))))
+        (is (str/includes? (nth (:shell/argv gate-attrs) 2) "fetch origin --prune"))
+        (is (str/includes? (nth (:shell/argv gate-attrs) 2) "pwd -P"))
+        (is (str/includes? (nth (:shell/argv gate-attrs) 2) "failed to inspect remote branch"))
+        (is (str/includes? (nth (:shell/argv gate-attrs) 2) "git -C \"$canonical\" worktree remove"))
+        (is (str/includes? (nth (:shell/argv gate-attrs) 2) "git -C \"$canonical\" branch -D"))
+        (is (not (str/includes? (nth (:shell/argv gate-attrs) 2) "wktree"))))
+      (shell-gate-complete! "land-x" "branch and worktree removed")
+      (let [ready-tidy (op! "land" ["ready" "land-x"])
+            tidy-step (first (:ready ready-tidy))]
+        (is (= "land.resources.tidy" (:action-ref tidy-step)))
+        (is (str/includes? (:instruction tidy-step) "tmux sessions"))
+        (is (str/includes? (:instruction tidy-step) "recorded PID")))
+      (op! "land" ["complete" "land-x"])
       (let [ready-cleanup (op! "land" ["ready" "land-x"])
             cleanup-step (first (:ready ready-cleanup))]
         (is (= "land ready" (:operation ready-cleanup)))
@@ -1195,6 +1214,8 @@
         (shell-gate-complete! "land-w" "PR merged")                  ; merge-pr
         (shell-gate-complete! "land-w" "main fast-forwarded")       ; pull-main
         (shell-gate-complete! "land-w" "main runs green")           ; main-ci-green
+        (shell-gate-complete! "land-w" "branch and worktree removed") ; remove-branch-worktree
+        (op! "land" ["complete" "land-w"])                           ; tidy-created-resources
         (let [ready-cleanup (op! "land" ["ready" "land-w"])
               cleanup-step (first (:ready ready-cleanup))]
           (is (= "land.cleanup" (:action-ref cleanup-step)))

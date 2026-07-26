@@ -381,6 +381,10 @@
        "fi\n"
        "git -C \"$root\" pull --ff-only origin main\n"))
 
+(def ^:private land-cleanup-script
+  "Clean up the landed feature branch and worktree."
+  (script "land-cleanup.sh"))
+
 (workflow/defworkflow land-abort
   "Record an intentional abort of a land run.
 
@@ -408,9 +412,9 @@
 (workflow/defworkflow land-merge
   "Run the mechanical merge continuation for an approved land run.
 
-  The shell gates squash-merge the PR, fast-forward canonical main, and watch
-  main CI. Cleanup remains coordinator-owned and releases the merge lock when
-  completed."
+  The shell gates squash-merge the PR, fast-forward canonical main, watch main
+  CI, and remove the landed branch and worktree. Final bookkeeping remains
+  coordinator-owned and releases the merge lock when completed."
   {:entrypoints #{:continue}
    :param-spec ::land-merge-params
    :defaults {}}
@@ -475,25 +479,56 @@
                                  |(`strand update <gate-id> --attributes '{\"gate/error\":null}'`) to re-watch. The
                                  |gate closing asserts green CI on the main sha; run output is
                                  |recorded on the gate.")})
-   (workflow/step :cleanup
-                  (fn [{:keys [branch]}] (str "Clean up " branch " and close the land run"))
-                  :self
+   (workflow/gate :remove-branch-worktree
+                  (fn [{:keys [branch]}] (str "Remove landed branch and worktree for " branch))
+                  :shell
                   :depends-on [:main-ci-green]
+                  :attributes {"workflow/action-ref" "land.branch-worktree.cleanup"
+                               "shell/argv" (fn [{:keys [branch worktree]}]
+                                              (sh-gate land-cleanup-script
+                                                       "land-cleanup" branch worktree))
+                               "shell/cwd" (fn [{:keys [worktree]}] worktree)
+                               "shell/timeout-secs" 600
+                               "workflow/instruction"
+                               (format-alpha/reflow
+                                "|Machine gate: after merged-main CI is green, stop any recorded warm
+                                 |test REPL by PID, fetch and prune origin, delete the remote feature
+                                 |branch when it still exists, then run precise `git worktree remove
+                                 |--force`, `git branch -D`, and `git worktree prune` commands. A final
+                                 |fetch/prune clears the deleted remote-tracking ref. The script
+                                 |refuses the canonical worktree or a worktree checked out on a
+                                 |different branch. On failure, fix the cause and remove `gate/error`
+                                 |to retry.")})
+   (workflow/step :tidy-created-resources
+                  (fn [{:keys [branch]}] (str "Tidy resources created while working on " branch))
+                  :self
+                  :depends-on [:remove-branch-worktree]
+                  :attributes {"workflow/action-ref" "land.resources.tidy"
+                               "workflow/instruction"
+                               (format-alpha/reflow
+                                "|Tidy resources this feature created and should not leave behind:
+                                 |repo-local scratch files or generated runtime metadata, recorded
+                                 |background processes, interactive shells, tmux sessions, and similar
+                                 |named handles. Stop processes by recorded PID and sessions by exact
+                                 |name; never use broad pattern kills. Remove only resources owned by
+                                 |this feature, leave shared or uncertain resources alone, and ignore
+                                 |OS-managed temporary files outside the repository. Record anything
+                                 |intentionally retained in the doing-task handover.")})
+   (workflow/step :cleanup
+                  (fn [{:keys [branch]}] (str "Finish bookkeeping for " branch " and close the land run"))
+                  :self
+                  :depends-on [:tidy-created-resources]
                   :attributes {"workflow/action-ref" "land.cleanup"
                                "workflow/instruction"
-                               (fn [{:keys [branch card worktree]}]
-                                 (str "Stop the worktree's warm test REPL before removing it: run `make test-warm-stop`"
-                                      " in " worktree " — it reaps the recorded PID from `.test-repl.pid` (by PID only,"
-                                      " never `pkill -f`) and clears the `.test-repl-port`/`.test-repl.pid` files, so no"
-                                      " orphaned warm JVM outlives the worktree."
-                                      " Delete the remote branch (`git push origin --delete " branch "`); the PR is"
-                                      " already merged and closed. Remove the worktree and local branch"
-                                      " (`wktree remove --branch " branch " --force`; force is expected after the"
-                                      " squash-merge)."
-                                      (if (non-blank-string? card)
-                                        (str " Finish the kanban card (`strand kanban finish " card " --outcome done`).")
-                                        "")
-                                      " Then close this land run's root to complete it."))})))
+                               (fn [{:keys [card]}]
+                                 (if (non-blank-string? card)
+                                   (format-alpha/reflow
+                                    (format
+                                     "|Finish the kanban card (`strand kanban finish %s --outcome
+                                      |done`). Then close this land run's root to complete it."
+                                     card))
+                                   (format-alpha/reflow
+                                    "|Close this land run's root to complete it.")))})))
 
 (workflow/defworkflow land
   "Drive the coordinator LANDING workflow for a feature branch (family \"land\").
