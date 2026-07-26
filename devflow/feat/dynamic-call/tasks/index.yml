@@ -1,3 +1,6 @@
+# These slices share workflow.clj, compile.clj, routing.clj, discovery.clj and the test
+# namespaces. They are STRICTLY SERIAL: never delegate two concurrently, and never run one
+# out of blocked_by order.
 tasks:
   - id: 1
     description: Dispatch declaration and generalised hand-off binding

@@ -11,6 +11,9 @@ Every human-facing surface, plus the full validation sweep.
 
 ## TASK-Dyc-005.P2 Must implement exactly
 
+- **TASK-Dyc-005.MI0:** This task owns every remaining `bind-defers` mention in prose, which task 1
+  deliberately left: `README.md:335, 338`, `spools/workflow.md:17, 40, 450, 461, 680`,
+  `spools/workflow.cookbook.md:258, 275`. Line numbers are pre-edit; grep to confirm.
 - **TASK-Dyc-005.MI1:** `spools/workflow.md`: a section for `dispatch` beside §5a's defer section,
   covering the builder, `bind-handoffs`, the `:call` entrypoint rule, explicit params, the pending
   state and what cannot close it, `dispatch!`, the cycle rule, and the fill record. Update §7's
@@ -21,14 +24,17 @@ Every human-facing surface, plus the full validation sweep.
   probe in note `9d4yx` as its shape. Say when each is right: dispatch when the tracker keeps
   ownership, the adapter when ownership genuinely transfers.
 - **TASK-Dyc-005.MI3:** A regression test for the adapter composition, so the recipe stays true.
-- **TASK-Dyc-005.MI4:** `README.md`: the defer block gains the returning form. **Fold in PR #199**
-  (branch `docs/readme-defer-terminal`, unmerged, CI green) — take its content, integrate it with the
-  dispatch story, and close the PR as superseded rather than merging it separately.
+- **TASK-Dyc-005.MI4:** `README.md`: the defer block gains the returning form, integrating the content
+  of PR #199 (branch `docs/readme-defer-terminal`, unmerged, CI green) with the dispatch story. Read
+  that branch's README diff and fold it in. **Closing PR #199 is the coordinator's action, not this
+  task's** — it needs authenticated GitHub access an unattended worker is not assumed to hold.
 - **TASK-Dyc-005.MI5:** `docs/spools/writing-shared-spools.md`: record `dispatch` as the third narrow
   workflow exception to the shared-spool CLI style contract, beside `ready` and `continue`.
 - **TASK-Dyc-005.MI6:** `make api-docs` to regenerate `spools/workflow.api.md`.
 - **TASK-Dyc-005.MI7:** Mark `DELTA-Dyc-001` Status: Merged and `PLAN-Dyc-001` Status: Shipped, and
-  append a Developer Notes entry for anything a later reader would need.
+  append one `PLAN-Dyc-001.DN*` Developer Notes entry per completed task, each naming the task id, the
+  date, and any deviation from the task contract. A task that ran exactly to contract still gets an
+  entry saying so.
 
 ## TASK-Dyc-005.P3 Done when
 
@@ -39,6 +45,8 @@ Every human-facing surface, plus the full validation sweep.
 - **TASK-Dyc-005.DW3:** `git status --short` shows no generated SQLite or runtime metadata artifacts.
 - **TASK-Dyc-005.DW4:** The docs-style gate applies to every prose change — load the `docs-style`
   skill and sweep before committing.
+- **TASK-Dyc-005.DW6:** `grep -rn "bind-defers" .` returns hits only under `devflow/` (historical
+  design documents, which are correct to leave).
 - **TASK-Dyc-005.DW5:** Committed.
 
 ## TASK-Dyc-005.P4 Out of scope

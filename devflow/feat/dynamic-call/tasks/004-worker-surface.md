@@ -19,18 +19,30 @@ Expose the construct through the generic workflow worker CLI and the discovery r
   ready. `complete`, `choose`, and `continue` each keep inferring only their own role; `continue`
   refuses a dispatch with `:reason :workflow/step-not-dispatch` and guidance naming `dispatch`.
 - **TASK-Dyc-004.MI3:** `workflow show` reports a declared dispatch with point name, allowlist, and
-  required entrypoint, beside declared defers and calls (CC13, discovery half).
+  required entrypoint, beside declared defers and calls (CC13, discovery half). This task owns **all**
+  `internal/discovery.clj` projection work for dispatch (PLAN-Dyc-001.AA6) — add a parallel dispatch
+  predicate rather than broadening the defer one.
 - **TASK-Dyc-004.MI4:** Glossary entries for every new reason, in the op's declared glossary.
 
 ## TASK-Dyc-004.P3 Done when
 
-- **TASK-Dyc-004.DW1:** A run is driven end to end from the CLI: start, complete, dispatch, complete,
-  done — against a disposable `--workspace` world from `mktemp -d`, never the repo's `.skein`.
-- **TASK-Dyc-004.DW2:** Ambiguity, wrong-role `--step`, and each live-resolution failure return
-  structured errors with their documented reasons.
+- **TASK-Dyc-004.DW1:** A run is driven end to end through the CLI surface: start, complete, dispatch,
+  complete, done — as an assertion-bearing test in the existing CLI test namespaces, not a manual
+  transcript. Any live-CLI exercise uses a disposable `--workspace` world from `mktemp -d`, guarded
+  with `${ws:?}`, never the repo's `.skein`.
+- **TASK-Dyc-004.DW2:** Reason-keyed error assertions, each naming the verb and the reason:
+  two ready dispatches + `workflow dispatch` → `:workflow/ready-dispatch-ambiguous`;
+  `workflow continue` at a dispatch → `:workflow/step-not-dispatch`;
+  `workflow complete` at a dispatch → `:workflow/step-not-completable` (PLAN-Dyc-001.V9, CLI half);
+  `workflow dispatch` at a defer or checkpoint → its wrong-role reason;
+  removed target / lost `:call` / rejected params → each with the dispatch still ready.
 - **TASK-Dyc-004.DW3:** `workflow show` output includes the dispatch declaration.
-- **TASK-Dyc-004.DW4:** `clojure -M:test skein.spools.workflow-test` cold, `clojure -M:smoke`, and
-  `(cd cli && go test ./...)` all pass; `make fmt-check lint reflect-check` clean; committed.
+- **TASK-Dyc-004.DW4:** Cold run of every namespace this task touches:
+  `clojure -M:test skein.spools.workflow-test skein.spools.workflow-cli-test skein.spools.workflow-run-cli-test`.
+  `workflow-test` alone does not load either CLI surface and is not sufficient.
+- **TASK-Dyc-004.DW5:** `clojure -M:smoke` and `(cd cli && go test ./...)` pass;
+  `make fmt-check lint reflect-check` clean; `make api-docs` run and committed if any public docstring
+  changed; committed.
 
 ## TASK-Dyc-004.P4 Out of scope
 
@@ -44,5 +56,8 @@ Expose the construct through the generic workflow worker CLI and the discovery r
 - **TASK-Dyc-004.REF2:** `PLAN-Dyc-001` PH4, AA6, AA7.
 - **TASK-Dyc-004.REF3:** `spools/workflow/src/skein/spools/workflow/cli.clj` — the `continue` verb is
   the template.
-- **TASK-Dyc-004.REF4:** Disposable-workspace rule: `CLAUDE.md` hard rules. Guard every expansion with
-  `${ws:?}`.
+- **TASK-Dyc-004.REF4:** Disposable-workspace and validation rules: `AGENTS.md` (hard rules and the
+  commands table). Guard every workspace-path expansion with `${ws:?}`.
+- **TASK-Dyc-004.REF5:** CLI test scaffolding: `test/skein/spools/workflow_cli_test.clj` (discovery
+  surface) and `test/skein/spools/workflow_run_cli_test.clj` (run verbs) — the `continue` verb's tests
+  are the template.

@@ -126,6 +126,12 @@ required entrypoint branched by declaration kind. No shipped or pinned external 
     **not** cycles: neither is in the other's lexical ancestry. A `:revise` re-pour is a new root and
     gets a fresh path (`internal/routing.clj:231-253`), inheriting no sibling's fills.
 
+  **Wire shape.** `workflow/dispatch-path` is a JSON array of objects, outermost first. Each entry has
+  exactly two keys: `"fingerprint"` (the short hex digest string, always present) and `"definition"`
+  (the stringified symbol, or JSON `null` for an anonymous definition). Cycle comparison reads
+  `"fingerprint"` only; `"definition"` is for human reading and never participates in the check. An
+  empty array is legal and means a dispatch declared directly in an anonymous root.
+
   **Identity is the definition fingerprint** — the short hex digest of the printed definition value
   already computed for the `continue!` cutover record — with the resolved symbol recorded alongside
   for readability. Fingerprint, not symbol, because `start!` accepts a plain anonymous workflow map

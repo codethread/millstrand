@@ -12,10 +12,17 @@ the dispatch strand into an ordinary procedure join, in one transaction.
 
 ## TASK-Dyc-003.P2 Must implement exactly
 
+- **TASK-Dyc-003.MI0 (characterization first):** Before refactoring anything, add fixed-call
+  characterization tests that assert the **compiled payload** for: a callee with multiple entry steps
+  and multiple exit steps; a nested call (call inside a called procedure, exercising double
+  prefixing); and a call carrying its own `:title` and `:attributes`. The existing suite covers only a
+  single two-step callee with one entry and one exit (`test/skein/spools/workflow_test.clj:70-95`),
+  which is too weak to catch a regression in prefixing or entry/exit computation. These tests must
+  pass before and after MI1, unchanged.
 - **TASK-Dyc-003.MI1:** Extract the shared expansion helpers from `expand-call-step` — ref-prefixing,
   internal dependency wiring, entry/exit ref computation — so both compile time and run time use them.
-  `expand-call-step`'s own signature and behavior must stay byte-identical (PLAN-Dyc-001.R2); the
-  existing call suite is the gate.
+  `expand-call-step` keeps its signature, and MI0's payload assertions are the mechanical proof that
+  its output is unchanged.
 - **TASK-Dyc-003.MI2:** `workflow/dispatch!` per CC5, with arities mirroring `continue!`
   (`run-id workflow`, `+params`, `+opts`). Resolves the run's ready dispatch, honours `:step`,
   resolves the target live against the materialized allowlist, requires the `:call` entrypoint.
@@ -55,8 +62,15 @@ the dispatch strand into an ordinary procedure join, in one transaction.
   prefixing.
 - **TASK-Dyc-003.DW6:** Live resolution failures — removed target, lost `:call`, rejected params —
   each fail with the dispatch still ready and nothing mutated.
-- **TASK-Dyc-003.DW7:** Existing call suite and defer suite pass unchanged.
-  `clojure -M:test skein.spools.workflow-test` cold; `make fmt-check lint reflect-check` clean;
+- **TASK-Dyc-003.DW7:** Outside-allowlist target refused; omitted params and `{}` behave identically;
+  the fill record carries all five `workflow/dispatched-*` attributes with the exact values poured;
+  `::dispatch-request` rejects a malformed request before any mutation; a second `dispatch!` at a
+  filled hand-off fails `:reason :workflow/step-not-dispatch`; a lost race fails
+  `workflow/frontier-stale`.
+- **TASK-Dyc-003.DW8:** MI0's characterization assertions pass unchanged after the extraction — this
+  is the regression gate for `expand-call-step` (PLAN-Dyc-001.R2, V6).
+- **TASK-Dyc-003.DW9:** `clojure -M:test skein.spools.workflow-test` cold; `make fmt-check lint
+  reflect-check` clean; `make api-docs` run and committed (this task adds public functions);
   committed.
 
 ## TASK-Dyc-003.P4 Out of scope
