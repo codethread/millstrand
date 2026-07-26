@@ -342,6 +342,16 @@ Nothing marks `spike` and `devflow` as continuations beyond the `:continue` they
 ;; closes the card's root and pours devflow under the same run id
 ```
 
-A defer is terminal: nothing may depend on it, and a workflow declaring one cannot be `call`-ed, because a procedure join would continue past the exit. `continue!` merges none of the card's context either, so devflow validates its own params whole.
+A defer never returns, so there is no closing step to write. Trying anyway fails at the builder rather than at the pour:
+
+```clojure
+(workflow/step :close-card "Close the card" :self :depends-on [:perform-work])
+;; Workflow steps cannot depend on a defer exit
+;; {:reason :workflow/defer-not-terminal :step :close-card :defer :perform-work}
+```
+
+The card is already closed by then. `continue!` is a root transfer: it closes the card's root and pours devflow as the run's new root in one batch, so a failing pour commits nothing and leaves the exit ready to retry. It merges none of the card's context either, so devflow validates its own params whole. For the same reason a workflow declaring a defer cannot be `call`-ed — a procedure join would continue past the exit.
+
+If you do want work after the routine finishes, you want the returning form. That is `call`, above: the sub-flow inlines into the caller's graph and the caller stays the owner of what follows.
 
 </details>
