@@ -10,7 +10,7 @@ tasks:
   - id: 2
     description: Pending dispatch state, pour, and every role site
     task_file: tasks/002-pending-state-and-roles.md
-    status: pending
+    status: complete
     blocked_by: [1]
   - id: 3
     description: dispatch! fills a hand-off in place

@@ -12,6 +12,7 @@
             [skein.api.vocab.alpha :as vocab]
             [skein.spools.test-support :as test-support :refer [assert-state-shape with-runtime]]
             [skein.spools.workflow :as workflow]
+            [skein.spools.workflow.internal.definitions :as definitions]
             [skein.spools.workflow.internal.registry :as wf-registry]
             [skein.repl :as repl]
             [skein.test.alpha :as test-alpha])
@@ -2912,6 +2913,66 @@
             "a defer is a decision, so it must not surface as a :self step to do")
         (is (= "perform-work" (:defer (:detail state))))
         (is (= ["wt-devflow" "wt-spike"] (:workflows (:detail state))))))))
+
+(deftest a-pending-dispatch-is-ready-but-not-completable
+  ;; PLAN-Dyc-001.V2: cascade-join-ids closes only procedure joins. If dispatch
+  ;; used that role while unfilled, completing its sibling would close it over
+  ;; an empty dependency set.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-dispatch-call-target
+                                   'skein.spools.workflow-test/dispatch-call-target)
+      (let [definition (workflow/bind-handoffs
+                        (workflow/workflow
+                         "Pending dispatch"
+                         (workflow/step :sibling "Sibling" :self)
+                         (workflow/dispatch :perform-work "Choose work"))
+                        {:perform-work #{:wt-dispatch-call-target}})
+            result (workflow/start! "dispatch-pending" definition {})
+            root (workflow/current-root "dispatch-pending")
+            dispatch (first (filter #(= "dispatch" (:role %)) (:ready result)))]
+        (is (= "perform-work" (:dispatch dispatch)))
+        (is (= ["wt-dispatch-call-target"] (:workflows dispatch)))
+        (is (false? (:done result)))
+        (is (= "active" (:state root)))
+        (workflow/complete! "dispatch-pending" {:step (first (map :id (filter #(= "step" (:role %))
+                                                                              (:ready result))))})
+        (is (= "active" (:state (repl/strand (:id dispatch)))))
+        (doseq [call [#(workflow/complete! "dispatch-pending")
+                      #(workflow/advance! "dispatch-pending")]]
+          (let [thrown (try (call) (catch clojure.lang.ExceptionInfo e e))]
+            (is (= :workflow/step-not-completable (:reason (ex-data thrown))))
+            (is (re-find #"dispatch!" (ex-message thrown)))))
+        (let [attention (workflow/await! "dispatch-pending" {:timeout-secs 5 :poll-ms 10})]
+          (is (= :dispatch-ready (:reason attention)))
+          (is (= (:id dispatch) (get-in attention [:detail :id]))))
+        (is (not-any? #(= (:id dispatch) (:id %))
+                      (mapcat :events (workflow/run-history "dispatch-pending")))
+            "CC4c: an unfilled dispatch emits no history event")))))
+
+(deftest compile-stamps-each-dispatch-with-its-lexical-path
+  (let [callee (workflow/bind-handoffs
+                (workflow/workflow "C" (workflow/dispatch :pick "Pick"))
+                {:pick #{:wt-dispatch-call-target}})
+        outer (workflow/workflow "Outer" (workflow/call :c callee {}))
+        payload (workflow/compile outer {} {:definition 'skein.spools.workflow-test/outer})
+        path (get-in (first (filter #(= "dispatch" (get-in % [:attributes "workflow/role"]))
+                                    (:strands payload)))
+                     [:attributes "workflow/dispatch-path"])
+        expected [{"fingerprint" (definitions/fingerprint {:value outer})
+                   "definition" "skein.spools.workflow-test/outer"}
+                  {"fingerprint" (definitions/fingerprint {:value callee})
+                   "definition" nil}]]
+    (is (= expected path))
+    (let [anonymous (workflow/compile
+                     (workflow/bind-handoffs
+                      (workflow/workflow "Anonymous" (workflow/dispatch :pick "Pick"))
+                      {:pick #{:wt-dispatch-call-target}}))
+          anonymous-path (get-in (second (:strands anonymous))
+                                 [:attributes "workflow/dispatch-path"])]
+      (is (nil? (get-in anonymous-path [0 "definition"])))
+      (is (re-matches #"[0-9a-f]{16}" (get-in anonymous-path [0 "fingerprint"]))))))
 
 (deftest concurrent-choose-and-continue-serialize-under-the-run-guard
   ;; Both verbs resolve their frontier inside the guard, so one wins the cutover

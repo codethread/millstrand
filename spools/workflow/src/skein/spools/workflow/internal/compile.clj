@@ -101,6 +101,18 @@
   ;; (TEN-003) instead of overflowing the stack.
   [])
 
+(def ^:private ^:dynamic *dispatch-path*
+  ;; A dispatch records the lexical definition ancestry that encloses it. Unlike
+  ;; `*procedure-path*`, which exists solely to reject recursive fixed calls,
+  ;; this holds the durable wire values written on every poured dispatch.
+  [])
+
+(defn- dispatch-identity
+  "Return the persisted identity entry for a definition being compiled."
+  [workflow definition]
+  {"fingerprint" (defs/fingerprint {:value workflow})
+   "definition" (some-> definition str)})
+
 (defn- require-acyclic-procedure! [call-id procedure]
   (when (some #(= % procedure) *procedure-path*)
     (fail! "Workflow procedure call is cyclic"
@@ -119,14 +131,15 @@
   [procedure]
   (cond
     (keyword? procedure)
-    (defs/require-entrypoint! (defs/resolve-registered (current/runtime) procedure) :call)
+    (assoc (defs/require-entrypoint! (defs/resolve-registered (current/runtime) procedure) :call)
+           :kind :registered)
 
     (symbol? procedure)
     (if-let [resolved (requiring-resolve procedure)]
-      {:kind :raw :value @resolved}
+      (assoc (defs/classify procedure @resolved) :kind :raw)
       (fail! "Workflow procedure symbol cannot be resolved" {:procedure procedure}))
 
-    (var? procedure) {:kind :raw :value @procedure}
+    (var? procedure) (assoc (defs/resolve-var-input procedure) :kind :raw)
 
     :else {:kind :raw :value procedure}))
 
@@ -162,7 +175,9 @@
         workflow (defs/require-no-defers! (procedure-workflow procedure params)
                                           {:call call-id :procedure (:procedure call-step)})
         payload (binding [*procedure-path* (conj *procedure-path* procedure)]
-                  (compile workflow params))
+                  (compile workflow params
+                           (assoc (select-keys target [:definition])
+                                  :dispatch-path *dispatch-path*)))
         steps (mapv (fn [strand]
                       {:id (:ref strand)
                        :title (:title strand)
@@ -336,6 +351,9 @@
                           (when-let [description (:description step)]
                             {"description" description}))]
     (cond-> attributes
+      (and (= "dispatch" (get attributes "workflow/role"))
+           (not (contains? attributes "workflow/dispatch-path")))
+      (assoc "workflow/dispatch-path" (vec *dispatch-path*))
       (get attributes "workflow/choice-details")
       (update "workflow/choice-details" poured-choice-details))))
 
@@ -461,8 +479,11 @@
    (compile workflow params {}))
   ([workflow params opts]
    (let [form (or (:form opts) (:form workflow) :molecule)
-         [workflow _params root-ref steps] (resolve-and-normalize workflow params opts)]
-     (payload (root-strand workflow root-ref form opts) form steps))))
+         path (conj (or (:dispatch-path opts) *dispatch-path*)
+                    (dispatch-identity workflow (:definition opts)))]
+     (binding [*dispatch-path* path]
+       (let [[workflow _params root-ref steps] (resolve-and-normalize workflow params opts)]
+         (payload (root-strand workflow root-ref form opts) form steps))))))
 
 (defn- step-attr
   "Read string-keyed workflow attribute `k` off a normalized step's `:attributes`

@@ -38,7 +38,7 @@
   `:selectable?` is what an explicit step selector may name and `:inferable?`
   what a bare verb may pick. They differ for exactly one item: a gate is a step
   a worker may close by naming it, never one the engine picks for them."
-  (let [ordinary? (fn [item] (not (contains? #{"checkpoint" "defer"} (:role item))))
+  (let [ordinary? (fn [item] (not (contains? #{"checkpoint" "defer" "dispatch"} (:role item))))
         role? (fn [role] (fn [item] (= role (:role item))))]
     {:step {:noun "step"
             :selectable? ordinary?

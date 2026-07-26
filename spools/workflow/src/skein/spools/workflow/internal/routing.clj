@@ -26,7 +26,7 @@
   Everything the engine poured under the root, so no strand of an abandoned
   stage stays active; a strand some other spool attached to the graph is not
   the workflow engine's to close."
-  #{"root" "step" "checkpoint" "defer" "procedure"})
+  #{"root" "step" "checkpoint" "defer" "dispatch" "procedure"})
 
 (def ^:private notes-removed-guidance
   (fmt/reflow

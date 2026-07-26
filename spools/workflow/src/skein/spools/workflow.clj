@@ -307,10 +307,7 @@
   ([workflow params]
    (compile workflow params {}))
   ([workflow params opts]
-   (let [form (or (:form opts) (:form workflow) :molecule)
-         [workflow _params root-ref steps] (cmp/resolve-and-normalize workflow params opts)
-         root (cmp/root-strand workflow root-ref form opts)]
-     (cmp/payload root form steps))))
+   (cmp/compile workflow params opts)))
 
 (defn describe
   "Return a compile-time projection of `workflow` without materializing any strand.
@@ -549,6 +546,10 @@
              (fail! "Cannot complete a defer exit; use continue!"
                     {:reason :workflow/step-is-defer
                      :run-id run-id :step (query/strand->view step)}))
+           (when (= "dispatch" (query/attr step :workflow/role))
+             (fail! "Cannot complete a dispatch; use dispatch!"
+                    {:reason :workflow/step-not-completable
+                     :run-id run-id :step (query/strand->view step)}))
            (let [gate (query/attr step :workflow/gate)
                  by (:by opts)]
              (when (and gate (not (non-blank-string? by)))
@@ -687,6 +688,11 @@
              "defer"
              (fail! "Cannot advance a defer exit; use continue!"
                     {:reason :workflow/step-is-defer
+                     :run-id run-id :step (query/strand->view step)})
+
+             "dispatch"
+             (fail! "Cannot advance a dispatch; use dispatch!"
+                    {:reason :workflow/step-not-completable
                      :run-id run-id :step (query/strand->view step)})
 
              "checkpoint"
@@ -1125,7 +1131,7 @@
            "workflow/gate" "workflow/checkpoint"
            "workflow/checkpoint-kind" "workflow/choices"
            "workflow/defer" "workflow/defer-workflows"
-           "workflow/dispatch" "workflow/dispatch-workflows"
+           "workflow/dispatch" "workflow/dispatch-workflows" "workflow/dispatch-path"
            "workflow/continued-workflow" "workflow/continued-definition"
            "workflow/continued-fingerprint" "workflow/continued-params"
            "workflow/choice-details" "workflow/procedure" "workflow/outcome"
@@ -1501,12 +1507,13 @@
 ;; bookkeeping and never reach it, so a fourth value in a run result means a
 ;; definition wrote its own `workflow/role`, and the result says so rather than
 ;; presenting it to a worker as an ordinary step.
-(s/def :skein.spools.workflow.view/role #{"step" "checkpoint" "defer"})
+(s/def :skein.spools.workflow.view/role #{"step" "checkpoint" "defer" "dispatch"})
 (s/def :skein.spools.workflow.view/run-id non-blank-string?)
 (s/def :skein.spools.workflow.view/operation non-blank-string?)
 (s/def :skein.spools.workflow.view/done boolean?)
 (s/def :skein.spools.workflow.view/gate non-blank-string?)
 (s/def :skein.spools.workflow.view/defer non-blank-string?)
+(s/def :skein.spools.workflow.view/dispatch non-blank-string?)
 (s/def :skein.spools.workflow.view/workflows (s/coll-of non-blank-string?))
 (s/def :skein.spools.workflow.view/choices (s/coll-of non-blank-string?))
 
@@ -1530,6 +1537,7 @@
   (cond
     (= "checkpoint" (:role item)) :checkpoint
     (= "defer" (:role item)) :defer
+    (= "dispatch" (:role item)) :dispatch
     (:gate item) :gate
     :else :step))
 
@@ -1542,6 +1550,10 @@
 
 (defmethod ready-item-branch :defer [_]
   (s/merge ::ready-fields (s/keys :req-un [:skein.spools.workflow.view/defer
+                                           :skein.spools.workflow.view/workflows])))
+
+(defmethod ready-item-branch :dispatch [_]
+  (s/merge ::ready-fields (s/keys :req-un [:skein.spools.workflow.view/dispatch
                                            :skein.spools.workflow.view/workflows])))
 
 (defmethod ready-item-branch :gate [_]
@@ -1565,7 +1577,7 @@
 ;; `await` answers with the attention vocabulary instead: a run it stopped
 ;; blocking on has a reason, and the reason carries the item behind it.
 (s/def :skein.spools.workflow.view/reason
-  #{:done :checkpoint :defer :step :gate :stalled :waiting :timeout})
+  #{:done :checkpoint :defer :dispatch-ready :step :gate :stalled :waiting :timeout})
 (s/def :skein.spools.workflow.view/detail map?)
 (s/def ::attention-result
   (s/keys :req-un [:skein.spools.workflow.view/operation
@@ -2005,7 +2017,8 @@
   "Return the current attention state for workflow run-id.
 
   `:done` when finished; `:checkpoint` when a checkpoint is ready; `:defer` when
-  a defer exit is ready and a worker must pick its continuation; `:step` when a
+  a defer exit is ready and a worker must pick its continuation; `:dispatch-ready`
+  when a dispatch is ready and a worker must select its returning target; `:step` when a
   ready `:self` step needs the driving agent (kills the footgun of a ready step
   burying itself under `:waiting`); `:gate` when a ready gate's waiter has no
   registered executor; `:stalled` when a registered executor's stall predicate
@@ -2016,7 +2029,8 @@
         done (query/done-with-rt? rt run-id)
         checkpoint (first (filter #(= "checkpoint" (:role %)) ready))
         defer (first (filter #(= "defer" (:role %)) ready))
-        self-step (first (filter #(and (not (contains? #{"checkpoint" "defer"} (:role %)))
+        dispatch (first (filter #(= "dispatch" (:role %)) ready))
+        self-step (first (filter #(and (not (contains? #{"checkpoint" "defer" "dispatch"} (:role %)))
                                        (not (:gate %)))
                                  ready))
         unowned-gate (first (filter #(and (:gate %)
@@ -2032,6 +2046,7 @@
       done {:reason :done :ready ready :done true}
       checkpoint {:reason :checkpoint :ready ready :done false :detail checkpoint}
       defer {:reason :defer :ready ready :done false :detail defer}
+      dispatch {:reason :dispatch-ready :ready ready :done false :detail dispatch}
       self-step {:reason :step :ready ready :done false :detail self-step}
       unowned-gate {:reason :gate :ready ready :done false :detail unowned-gate}
       stalled {:reason :stalled :ready ready :done false :detail stalled}
