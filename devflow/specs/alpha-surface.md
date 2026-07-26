@@ -11,9 +11,9 @@ This spec draws the line around what Skein ships as "alpha": which surface is in
 - **SPEC-005.C1:** The four root specs are the behavior contracts for shipped engine surface: strand model and storage semantics (SPEC-001), the public `strand`/`mill` CLI (SPEC-002), the trusted Clojure/REPL surface (SPEC-003), and the weaver runtime, transports, and registries (SPEC-004).
 - **SPEC-005.C2:** The blessed spool-facing API is every `skein.api.*.alpha` namespace — currently `batch`, `cli`, `clock`, `current`, `events`, `format`, `graph`, `hooks`, `notes`, `patterns`, `peers`, `registry`, `relations`, `return-shape`, `runtime`, `scheduler`, `spool`, `vocab`, `weaver` — plus `skein.test.alpha`, `skein.userland.alpha`, and the human-facing `skein.repl` helpers. Each is specified in SPEC-003/SPEC-004 (relations in SPEC-001.P5, notes in SPEC-001, vocab in SPEC-001) and follows accretion-based compatibility within its subnamespace. `skein.api.return-shape.alpha` exposes the in-contract `validate!`, `explain`, and `check!` functions; `skein.test.alpha/check-op-return!` accretes within the already-listed author-side test tier.
 - **SPEC-005.C3:** The reference spools shipped in the Skein tree — `batteries`,
-  `executors/shell`, `guild`, `unsafe-text-search`, and `workflow` — are in-contract through their spool docs at
-  [`spools/*.md`](../../spools/README.md) (the shell executor's contract doc nests one level deeper,
-  at `spools/executors/shell.md`), loaded **opt-in**: an approved `spools.edn`
+  `executors/code`, `executors/shell`, `guild`, `unsafe-text-search`, and `workflow` — are in-contract through their spool docs at
+  [`spools/*.md`](../../spools/README.md) (the executor contract docs nest one level deeper,
+  under `spools/executors/`), loaded **opt-in**: an approved `spools.edn`
   coordinate and a `:spools`-guarded `runtime/module!` declaration. Batteries follows the same
   path through the `{:skein/source-root "spools/batteries"}` entry that `mill init` seeds by
   default. Deleting that entry is its supported opt-out. No reference spool ships on the weaver
