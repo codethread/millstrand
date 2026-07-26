@@ -156,6 +156,10 @@
                 "attention.clj" "nvd_scan.clj" "reviewers.clj" "analytics.clj"
                 "kanban_tracker.clj" "module_adapters.clj" "spools.edn"]]
     (io/copy (io/file ".skein" name) (io/file target name)))
+  (let [scripts-target (io/file target "scripts")]
+    (.mkdirs scripts-target)
+    (doseq [name ["feature-ci-watch.sh" "land-merge.sh"]]
+      (io/copy (io/file ".skein/scripts" name) (io/file scripts-target name))))
   ;; The copied config dir would reinterpret repo-relative local roots. Git
   ;; families remain byte-for-byte sourced from the checked-in approvals.
   (write-embedded-spools! target)
@@ -882,8 +886,8 @@
     file))
 
 (defn- run-feature-ci-watch
-  "Run script against fake-gh-dir with mode and startup timeout, without sleeping."
-  [script fake-gh-dir mode expected-sha timeout]
+  "Run executable against fake-gh-dir with mode and startup timeout, without sleeping."
+  [executable fake-gh-dir mode expected-sha timeout]
   (let [env (merge (into {} (System/getenv))
                    {"PATH" (str (.getAbsolutePath fake-gh-dir)
                                 java.io.File/pathSeparator
@@ -892,9 +896,53 @@
                     "FAKE_GH_COUNTER" (str (io/file fake-gh-dir (str "counter-" mode)))
                     "FAKE_GH_EXPECTED_SHA" expected-sha
                     "FAKE_GH_STALE_SHA" (str/join (repeat 40 "0"))})]
-    (sh/sh "sh" "-c" script "land-ci-watch" "land-x" (str timeout) "0"
+    (sh/sh (.getAbsolutePath executable) "land-x" (str timeout) "0"
            :dir (System/getProperty "user.dir")
            :env env)))
+
+(defn- write-fake-merge-gh!
+  "Write a fake `gh` that records the merge script's command sequence."
+  [dir]
+  (let [file (io/file dir "gh")]
+    (spit file
+          (str "#!/bin/sh\n"
+               "set -eu\n"
+               "printf '%s\\n' \"$*\" >> \"$FAKE_GH_LOG\"\n"
+               "case \"$1 $2\" in\n"
+               "  'pr view')\n"
+               "    case \"$*\" in\n"
+               "      *'--json state'*)\n"
+               "        case \"$FAKE_GH_MODE\" in\n"
+               "          merged) printf 'MERGED\\n' ;;\n"
+               "          invalid-state) printf 'CLOSED\\n' ;;\n"
+               "          *) printf 'OPEN\\n' ;;\n"
+               "        esac ;;\n"
+               "      *'--json isDraft'*)\n"
+               "        case \"$FAKE_GH_MODE\" in\n"
+               "          ready-failure) printf 'true\\n' ;;\n"
+               "          *) printf 'false\\n' ;;\n"
+               "        esac ;;\n"
+               "    esac ;;\n"
+               "  'pr ready')\n"
+               "    case \"$FAKE_GH_MODE\" in draft-recovery|ready-failure) exit 1 ;; esac ;;\n"
+               "  'pr merge')\n"
+               "    if [ \"$FAKE_GH_MODE\" = merge-failure ]; then exit 17; fi ;;\n"
+               "  *) echo \"unexpected gh argv: $*\" >&2; exit 64 ;;\n"
+               "esac\n"))
+    (is (.setExecutable file true))
+    file))
+
+(defn- run-land-merge
+  "Run executable against fake-gh-dir and return its process result."
+  [executable fake-gh-dir mode subject body]
+  (sh/sh (.getAbsolutePath executable) "land-x" subject body
+         :dir (System/getProperty "user.dir")
+         :env (merge (into {} (System/getenv))
+                     {"PATH" (str (.getAbsolutePath fake-gh-dir)
+                                  java.io.File/pathSeparator
+                                  (System/getenv "PATH"))
+                      "FAKE_GH_MODE" mode
+                      "FAKE_GH_LOG" (.getAbsolutePath (io/file fake-gh-dir "merge.log"))})))
 
 (deftest land-feature-ci-watch-waits-for-check-registration-and-preserves-failures
   (with-config-runtime
@@ -906,6 +954,7 @@
             gate-attrs (:attributes (weaver/show rt (get-in completed [:ready 0 :id])))
             [shell-command shell-flag script script-name branch startup-timeout poll-interval]
             (:shell/argv gate-attrs)
+            executable (io/file ".skein/scripts/feature-ci-watch.sh")
             expected-sha (str/trim (:out (sh/sh "git" "rev-parse" "HEAD")))
             fake-gh-dir (.toFile
                          (java.nio.file.Files/createTempDirectory
@@ -913,42 +962,83 @@
                           (make-array java.nio.file.attribute.FileAttribute 0)))]
         (try
           (write-fake-gh! fake-gh-dir)
+          (is (.canExecute executable))
+          (is (= script (slurp executable)))
           (is (= ["sh" "-c" "land-ci-watch" "land-x" "180" "5"]
                  [shell-command shell-flag script-name branch startup-timeout poll-interval]))
-          (let [{:keys [exit out err]} (run-feature-ci-watch script fake-gh-dir "delayed" expected-sha 10)]
+          (let [{:keys [exit out err]} (run-feature-ci-watch executable fake-gh-dir "delayed" expected-sha 10)]
             (is (zero? exit))
             (is (= "watch:pr checks land-x --watch --fail-fast\n" out))
             (is (= "" err))
             (is (= "3" (str/trim (slurp (io/file fake-gh-dir "counter-delayed"))))))
-          (let [{:keys [exit err]} (run-feature-ci-watch script fake-gh-dir "absent" expected-sha 0)]
+          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "absent" expected-sha 0)]
             (is (= 1 exit))
             (is (str/includes? err "timed out after 0s waiting for CI checks on land-x"))
             (is (str/includes? err (str "expected HEAD: " expected-sha)))
             (is (str/includes? err (str "last PR HEAD: " expected-sha "; checks: 0"))))
-          (let [{:keys [exit err]} (run-feature-ci-watch script fake-gh-dir "stale-absent" expected-sha 0)]
+          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "stale-absent" expected-sha 0)]
             (is (= 1 exit))
             (is (str/includes? err (str "expected HEAD: " expected-sha)))
             (is (str/includes? err (str "last PR HEAD: " (str/join (repeat 40 "0"))))))
-          (let [{:keys [exit err]} (run-feature-ci-watch script fake-gh-dir "malformed-shape" expected-sha 10)]
+          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "malformed-shape" expected-sha 10)]
             (is (= 1 exit))
             (is (str/includes? err "malformed PR check metadata")))
-          (let [{:keys [exit err]} (run-feature-ci-watch script fake-gh-dir "malformed-head" expected-sha 10)]
+          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "malformed-head" expected-sha 10)]
             (is (= 1 exit))
             (is (str/includes? err "malformed PR head")))
-          (let [{:keys [exit err]} (run-feature-ci-watch script fake-gh-dir "short-head" expected-sha 10)]
+          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "short-head" expected-sha 10)]
             (is (= 1 exit))
             (is (str/includes? err "malformed PR head for land-x: deadbeef")))
-          (let [{:keys [exit err]} (run-feature-ci-watch script fake-gh-dir "malformed-count" expected-sha 10)]
+          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "malformed-count" expected-sha 10)]
             (is (= 1 exit))
             (is (str/includes? err "malformed PR check count")))
-          (let [{:keys [exit err]} (run-feature-ci-watch script fake-gh-dir "lookup-fail" expected-sha 10)]
+          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "lookup-fail" expected-sha 10)]
             (is (= 42 exit))
             (is (str/includes? err "lookup failed")))
-          (let [{:keys [exit out]} (run-feature-ci-watch script fake-gh-dir "watch-fail" expected-sha 10)]
+          (let [{:keys [exit out]} (run-feature-ci-watch executable fake-gh-dir "watch-fail" expected-sha 10)]
             (is (= 17 exit))
             (is (= "watch:pr checks land-x --watch --fail-fast\n" out)))
           (finally
             (delete-directory! fake-gh-dir)))))))
+
+(deftest land-merge-script-runs-standalone-with-argv-values
+  (let [executable (io/file ".skein/scripts/land-merge.sh")
+        fake-gh-dir (.toFile
+                     (java.nio.file.Files/createTempDirectory
+                      "skein-land-merge-fake-gh"
+                      (make-array java.nio.file.attribute.FileAttribute 0)))
+        log-file (io/file fake-gh-dir "merge.log")
+        subject "feat: keep argv intact"
+        body "Squashed commits: abc123; echo not-interpolated"]
+    (try
+      (write-fake-merge-gh! fake-gh-dir)
+      (is (.canExecute executable))
+      (let [{:keys [exit out err]} (run-land-merge executable fake-gh-dir "open" subject body)]
+        (is (zero? exit))
+        (is (= "" out))
+        (is (= "" err))
+        (is (= ["pr view land-x --json state --jq .state"
+                "pr ready land-x"
+                (str "pr merge land-x --squash --subject " subject " --body " body)]
+               (str/split-lines (slurp log-file)))))
+      (doseq [[mode expected-exit expected-out expected-err]
+              [["merged" 0 "already merged: land-x\n" ""]
+               ["invalid-state" 1 "" "cannot merge PR for land-x: state is CLOSED\n"]
+               ["ready-failure" 1 "" "failed to mark PR ready: land-x\n"]
+               ["merge-failure" 17 "" ""]
+               ["draft-recovery" 0 "" ""]]]
+        (io/delete-file log-file true)
+        (let [{:keys [exit out err]} (run-land-merge executable fake-gh-dir mode subject body)]
+          (is (= expected-exit exit) mode)
+          (is (= expected-out out) mode)
+          (is (= expected-err err) mode)))
+      (is (= ["pr view land-x --json state --jq .state"
+              "pr ready land-x"
+              "pr view land-x --json isDraft --jq .isDraft"
+              (str "pr merge land-x --squash --subject " subject " --body " body)]
+             (str/split-lines (slurp log-file))))
+      (finally
+        (delete-directory! fake-gh-dir)))))
 
 (deftest land-ops-drive-a-poured-run-end-to-end
   (with-config-runtime

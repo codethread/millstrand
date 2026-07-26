@@ -16,7 +16,8 @@
   its thin CLI wrapper ops live in config.clj. This file is loaded after
   config.clj and reuses its public CLI-tail helpers (`config/pop-step-selector`
   and friends) so the `step=<id>` tail convention has one definition."
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.macros.ops :refer [defop]]
             [skein.macros.patterns :refer [defpattern]]
@@ -272,6 +273,20 @@
 ;; `workflow/instruction` text as the enforcement surface, shipped as data.
 ;; ---------------------------------------------------------------------------
 
+(def ^:private scripts-dir
+  "Directory containing this workspace's standalone workflow scripts."
+  (.getParentFile (io/file *file*)))
+
+(defn- script
+  "Return the frozen source of named workspace script."
+  [name]
+  (slurp (io/file scripts-dir "scripts" name)))
+
+(defn- sh-gate
+  "Return shell argv that runs script with name as `$0` and args as positionals."
+  [script name & args]
+  (into ["sh" "-c" script name] args))
+
 (def ^:private feature-ci-watch-script
   "POSIX script for the feature ci-green shell gate: wait up to the supplied
   startup budget for the PR head to match local HEAD and report at least one
@@ -281,44 +296,7 @@
   retryable states. Command failures and malformed successful output fail
   immediately. The gate's `shell/timeout-secs` bounds the whole startup and
   check watch."
-  (str "set -eu\n"
-       "branch=$1\n"
-       "startup_timeout=$2\n"
-       "poll_interval=$3\n"
-       "expected_sha=$(git rev-parse HEAD)\n"
-       "deadline=$(( $(date +%s) + startup_timeout ))\n"
-       "last_pr_sha='<none>'\n"
-       "last_check_count='<unknown>'\n"
-       "while :; do\n"
-       "  metadata=$(gh pr view \"$branch\" --json headRefOid,statusCheckRollup --jq "
-       "'[.headRefOid, (.statusCheckRollup | length)] | @tsv')\n"
-       "  set -- $metadata\n"
-       "  if [ \"$#\" -ne 2 ]; then\n"
-       "    echo \"malformed PR check metadata for $branch: $metadata\" >&2\n"
-       "    exit 1\n"
-       "  fi\n"
-       "  last_pr_sha=$1\n"
-       "  last_check_count=$2\n"
-       "  case \"$last_pr_sha\" in\n"
-       "    ''|*[!0-9a-fA-F]*) echo \"malformed PR head for $branch: $last_pr_sha\" >&2; exit 1 ;;\n"
-       "  esac\n"
-       "  if [ \"${#last_pr_sha}\" -ne \"${#expected_sha}\" ]; then\n"
-       "    echo \"malformed PR head for $branch: $last_pr_sha\" >&2\n"
-       "    exit 1\n"
-       "  fi\n"
-       "  case \"$last_check_count\" in\n"
-       "    ''|*[!0-9]*) echo \"malformed PR check count for $branch: $last_check_count\" >&2; exit 1 ;;\n"
-       "  esac\n"
-       "  if [ \"$last_pr_sha\" = \"$expected_sha\" ] && [ \"$last_check_count\" -gt 0 ]; then\n"
-       "    exec gh pr checks \"$branch\" --watch --fail-fast\n"
-       "  fi\n"
-       "  if [ \"$(date +%s)\" -ge \"$deadline\" ]; then\n"
-       "    echo \"timed out after ${startup_timeout}s waiting for CI checks on $branch\" >&2\n"
-       "    echo \"expected HEAD: $expected_sha; last PR HEAD: $last_pr_sha; checks: $last_check_count\" >&2\n"
-       "    exit 1\n"
-       "  fi\n"
-       "  sleep \"$poll_interval\"\n"
-       "done\n"))
+  (script "feature-ci-watch.sh"))
 
 (def ^:private main-ci-watch-script
   "POSIX script for the main-ci-green shell gate: poll the full workflow-run
@@ -387,24 +365,13 @@
 
 (def ^:private land-merge-script
   "Idempotently ready and squash-merge the feature PR."
-  (str "set -eu\n"
-       "state=$(gh pr view \"$1\" --json state --jq .state)\n"
-       "case \"$state\" in\n"
-       "  MERGED) echo \"already merged: $1\"; exit 0 ;;\n"
-       "  OPEN) ;;\n"
-       "  *) echo \"cannot merge PR for $1: state is $state\" >&2; exit 1 ;;\n"
-       "esac\n"
-       "if ! gh pr ready \"$1\"; then\n"
-       "  draft=$(gh pr view \"$1\" --json isDraft --jq .isDraft)\n"
-       "  if [ \"$draft\" != false ]; then\n"
-       "    echo \"failed to mark PR ready: $1\" >&2\n"
-       "    exit 1\n"
-       "  fi\n"
-       "fi\n"
-       "gh pr merge \"$1\" --squash --subject \"$2\" --body \"$3\"\n"))
+  (script "land-merge.sh"))
 
 (def ^:private land-pull-main-script
-  "Fast-forward the canonical main checkout to origin/main."
+  "Fast-forward the canonical main checkout to origin/main.
+
+  This stays inline as the small-script exemplar: eight lines of shell and no
+  data-shaping logic do not earn a separate file."
   (str "set -eu\n"
        "root=$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\n"
        "branch=$(git -C \"$root\" branch --show-current)\n"
@@ -456,8 +423,8 @@
                   :shell
                   :attributes {"workflow/action-ref" "land.pr.merge"
                                "shell/argv" (fn [{:keys [branch subject body]}]
-                                              ["sh" "-c" land-merge-script
-                                               "land-merge" branch subject body])
+                                              (sh-gate land-merge-script
+                                                       "land-merge" branch subject body))
                                "shell/cwd" (fn [{:keys [worktree]}] worktree)
                                "shell/timeout-secs" 300
                                "workflow/instruction"
@@ -565,8 +532,8 @@
                   :depends-on [:push-draft-pr]
                   :attributes {"workflow/action-ref" "land.ci.green"
                                "shell/argv" (fn [{:keys [branch]}]
-                                              ["sh" "-c" feature-ci-watch-script
-                                               "land-ci-watch" branch "180" "5"])
+                                              (sh-gate feature-ci-watch-script
+                                                       "land-ci-watch" branch "180" "5"))
                                "shell/cwd" (fn [{:keys [worktree]}] worktree)
                                "shell/timeout-secs" 5400
                                "workflow/instruction"
