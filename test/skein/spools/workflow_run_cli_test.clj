@@ -79,7 +79,7 @@
 (workflow/defworkflow handoff
   "Hand a finished run to whichever routine the worker picks."
   {:entrypoints #{:start}}
-  (workflow/bind-defers
+  (workflow/bind-handoffs
    (workflow/workflow
     "Hand off"
     (workflow/step :summarize "Summarize what happened" :self)
@@ -747,7 +747,7 @@
   (str "(workflow/defworkflow tracked-card\n"
        "  \"Track a card and select its delivery routine.\"\n"
        "  {:entrypoints #{:start}}\n"
-       "  (workflow/bind-defers template/general {:perform-work #{:devflow}}))\n"))
+       "  (workflow/bind-handoffs template/general {:perform-work #{:devflow}}))\n"))
 
 (deftest a-workspace-binds-one-spools-defer-exit-to-anothers-registered-routine
   (with-runtime

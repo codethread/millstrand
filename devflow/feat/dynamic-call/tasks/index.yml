@@ -5,7 +5,7 @@ tasks:
   - id: 1
     description: Dispatch declaration and generalised hand-off binding
     task_file: tasks/001-declaration-and-binding.md
-    status: pending
+    status: complete
     blocked_by: []
   - id: 2
     description: Pending dispatch state, pour, and every role site

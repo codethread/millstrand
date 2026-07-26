@@ -57,7 +57,7 @@
 (workflow/defworkflow handoff
   "Hand a finished run to whichever routine the worker picks."
   {:entrypoints #{:start}}
-  (workflow/bind-defers
+  (workflow/bind-handoffs
    (workflow/workflow
     "Hand off"
     (workflow/step :summarize "Summarize what happened" :self)

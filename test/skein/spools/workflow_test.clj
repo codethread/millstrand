@@ -34,6 +34,7 @@
     (is (re-find #"skein.spools.workflow/workflow" (get-in contract [:contract :spec])))
     (is (= :step (get-in contract [:step :topic])))
     (is (= :checkpoint (get-in contract [:checkpoint :topic])))
+    (is (= :dispatch (:topic (workflow/explain :dispatch))))
     (is (= :definition (get-in contract [:definition :topic])))
     (is (= 'skein.spools.workflow/defworkflow
            (get-in contract [:builders 'defworkflow])))
@@ -2506,6 +2507,11 @@
    "Call only"
    (workflow/step :inner "Inner" :self)))
 
+(workflow/defworkflow dispatch-call-target
+  "A call-capable routine a dispatch may select."
+  {:entrypoints #{:call}}
+  (workflow/workflow "Dispatch call target" (workflow/step :work "Work" :self)))
+
 (def ^:private card-template
   "The unregistered template a spool publishes: it names its exit point without
   naming anyone else's workflow."
@@ -2518,10 +2524,25 @@
 (defn- bound-card
   "Return the template bound to `targets`, as user code with both spools would."
   [targets]
-  (workflow/bind-defers card-template {:perform-work targets}))
+  (workflow/bind-handoffs card-template {:perform-work targets}))
 
 (def ^:private tracked-card (bound-card #{:wt-devflow :wt-spike}))
 (def ^:private call-only-bound-card (bound-card #{:wt-callonly}))
+
+(def ^:private dispatch-template
+  (workflow/workflow "Dispatch" (workflow/dispatch :perform-work "Choose work")))
+
+(def ^:private dispatch-continue-bound
+  (workflow/bind-handoffs dispatch-template {:perform-work #{:wt-devflow}}))
+(def ^:private dispatch-defer-bound
+  (workflow/bind-handoffs dispatch-template {:perform-work #{:wt-card}}))
+
+(workflow/defworkflow nested-dispatch-target
+  "A dispatch target which may itself dispatch."
+  {:entrypoints #{:call}}
+  (workflow/bind-handoffs
+   (workflow/workflow "Nested dispatch" (workflow/dispatch :another "Choose more work"))
+   {:another #{:wt-dispatch-call-target}}))
 
 (def ^:private defer-caller
   (workflow/workflow
@@ -2532,6 +2553,10 @@
 (defn- register-defer-targets! []
   (workflow/register-workflow! :wt-devflow 'skein.spools.workflow-test/defer-devflow)
   (workflow/register-workflow! :wt-spike 'skein.spools.workflow-test/defer-spike))
+
+(defn- definition-symbol [v]
+  (let [{ns-sym :ns name-sym :name} (meta v)]
+    (symbol (str (ns-name ns-sym)) (str name-sym))))
 
 (defn- start-at-defer!
   "Start `run-id` on the bound card and complete its first step, leaving the
@@ -2588,13 +2613,13 @@
            (get-in (second (:steps (bound-card #{:wt-spike :wt-devflow})))
                    [:attributes "workflow/defer-workflows"]))))
   (testing "binding a name the definition never declared is a defect, not a new exit"
-    (let [thrown (try (workflow/bind-defers card-template {:nope #{:wt-spike}})
+    (let [thrown (try (workflow/bind-handoffs card-template {:nope #{:wt-spike}})
                       (catch clojure.lang.ExceptionInfo e e))]
-      (is (= :workflow/defer-unknown (:reason (ex-data thrown))))
+      (is (= :workflow/handoff-unknown (:reason (ex-data thrown))))
       (is (= [:perform-work] (:declared (ex-data thrown))))))
   (testing "an empty target set is an exit no worker can fill"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow defer bindings"
-                          (workflow/bind-defers card-template {:perform-work #{}}))))
+                          (workflow/bind-handoffs card-template {:perform-work #{}}))))
   (testing "an unbound template describes itself but cannot pour"
     (is (= [nil ["wt-devflow" "wt-spike"]]
            [(:workflows (second (:steps (workflow/describe card-template))))
@@ -2603,6 +2628,87 @@
                       (catch clojure.lang.ExceptionInfo e e))]
       (is (= :workflow/defer-unbound (:reason (ex-data thrown))))
       (is (= :perform-work (:defer (ex-data thrown)))))))
+
+(deftest dispatch-declares-a-returning-hand-off
+  (let [definition (workflow/workflow
+                    "Dispatch"
+                    (workflow/dispatch :perform-work "Choose work")
+                    (workflow/step :record "Record outcome" :self
+                                   :depends-on [:perform-work]))]
+    (is (= {:id :perform-work
+            :title "Choose work"
+            :attributes {"workflow/role" "dispatch"
+                         "workflow/dispatch" "perform-work"}}
+           (first (:steps definition))))
+    (is (s/valid? ::workflow/dispatch-declaration (first (:steps definition))))
+    (is (not (s/valid? ::workflow/dispatch-declaration
+                       {:id :bad :title "Bad"})))
+    (doseq [key [:condition :loop]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow option keys"
+                            (workflow/dispatch :perform-work "Choose" key :flag))))))
+
+(deftest bind-handoffs-binds-each-declared-kind
+  (let [template (workflow/workflow
+                  "Both"
+                  (workflow/defer :continue "Continue")
+                  (workflow/dispatch :call "Call"))
+        bound (workflow/bind-handoffs template {:continue #{:wt-devflow}
+                                                :call #{:wt-callonly}})]
+    (is (= [["wt-devflow"] ["wt-callonly"]]
+           (mapv #(get-in % [:attributes (if (= "defer" (get-in % [:attributes "workflow/role"]))
+                                           "workflow/defer-workflows"
+                                           "workflow/dispatch-workflows")])
+                 (:steps bound))))
+    (is (s/valid? ::workflow/handoff-bindings {:continue #{:wt-devflow}}))
+    (is (not (s/valid? ::workflow/handoff-bindings {:continue #{}})))
+    (let [thrown (try (workflow/bind-handoffs template {:unknown #{:wt-devflow}})
+                      (catch clojure.lang.ExceptionInfo e e))]
+      (is (= :workflow/handoff-unknown (:reason (ex-data thrown))))
+      (is (= [:call :continue] (:declared (ex-data thrown)))))))
+
+(deftest unbound-dispatch-is-refused-at-pour
+  (let [template (workflow/workflow "Dispatch" (workflow/dispatch :perform-work "Choose work"))
+        thrown (try (workflow/compile template)
+                    (catch clojure.lang.ExceptionInfo e e))]
+    (is (= :workflow/handoff-unbound (:reason (ex-data thrown))))
+    (is (= :perform-work (:handoff (ex-data thrown))))))
+
+(deftest dispatch-targets-require-call-and-cannot-defer
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-dispatch-call-target
+                                   'skein.spools.workflow-test/dispatch-call-target)
+      (is (= :wt-nested-dispatch
+             (workflow/register-workflow! :wt-nested-dispatch
+                                          'skein.spools.workflow-test/nested-dispatch-target)))
+      (testing "a dispatch target requires :call rather than :continue"
+        (workflow/register-workflow! :wt-devflow 'skein.spools.workflow-test/defer-devflow)
+        (let [thrown (try (workflow/register-workflow! :wt-dispatch-continue
+                                                       (definition-symbol #'dispatch-continue-bound))
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/reference-entrypoint-unsupported (:reason (ex-data thrown))))
+          (is (= :call (:entrypoint (ex-data thrown))))
+          (is (= :dispatch (:declaring-kind (ex-data thrown))))))
+      (testing "a dispatch target may not declare a terminal defer"
+        (workflow/register-workflow! :wt-spike 'skein.spools.workflow-test/defer-spike)
+        (workflow/register-workflow! :wt-card 'skein.spools.workflow-test/tracked-card)
+        (let [thrown (try (workflow/register-workflow! :wt-dispatch-defer
+                                                       (definition-symbol #'dispatch-defer-bound))
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/defer-in-procedure (:reason (ex-data thrown))))
+          (is (= :dispatch (:declaring-kind (ex-data thrown)))))))))
+
+(deftest registering-a-definition-with-an-unbound-dispatch-is-refused
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (let [thrown (try (workflow/register-workflow!
+                         :wt-dispatch-template
+                         'skein.spools.workflow-test/dispatch-template)
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/handoff-unbound (:reason (ex-data thrown))))
+        (is (= :perform-work (:handoff (ex-data thrown))))))))
 
 (deftest registering-a-definition-with-an-unbound-defer-is-refused
   (with-runtime

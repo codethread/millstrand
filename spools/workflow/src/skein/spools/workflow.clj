@@ -43,12 +43,12 @@
             [skein.spools.workflow.internal.specs :as specs]
             [skein.spools.workflow.internal.util :as util]))
 
-(declare non-blank-string? defer-step?
+(declare non-blank-string? defer-step? dispatch-step?
          explain-step explain-gate explain-checkpoint explain-call explain-workflow
-         explain-definition explain-defer
-         reject-unknown-keys! step* bind-defer-step
+         explain-definition explain-defer explain-dispatch
+         reject-unknown-keys! step* bind-handoff-step
          step-opt-keys checkpoint-opt-keys call-opt-keys workflow-opt-keys
-         defer-opt-keys
+         defer-opt-keys dispatch-opt-keys
          choice-name choice-details-attr reject-unknown-choice-keys!
          require-valid-choices!
          reject-next-and-revise! require-unique-choice-keys!
@@ -72,9 +72,10 @@
      :checkpoint (explain-checkpoint)
      :call (explain-call)
      :defer (explain-defer)
+     :dispatch (explain-dispatch)
      (fail! "Unknown workflow explain topic"
             {:topic topic
-             :topics [:workflow :definition :step :gate :checkpoint :call :defer]}))))
+             :topics [:workflow :definition :step :gate :checkpoint :call :defer :dispatch]}))))
 
 (defn spec-forms
   "Return the ordered `s/form` documentation graph rooted at `spec-name`.
@@ -200,7 +201,7 @@
   neither can be a cross-spool exit whose allowed targets user code supplies
   later. So a spool may publish a template naming `:perform-work` without naming
   anyone else's workflow, and user Clojure that can see both spools binds that
-  name with `bind-defers`.
+  name with `bind-handoffs`.
 
   It is terminal by construction: nothing may declare `:depends-on` this id, and
   a workflow declaring one may not be used as a `call` procedure, because a
@@ -216,33 +217,47 @@
       (update :attributes merge {"workflow/role" "defer"
                                  "workflow/defer" (name id)})))
 
-(defn bind-defers
-  "Return `definition` with each defer exit named in `bindings` bound to the
-  registered workflows it allows.
+(defn dispatch
+  "Return a workflow dispatch step definition — a named returning hand-off.
 
-  `bindings` maps a declared defer name to a non-empty set of registered
-  workflow keywords, each of which must advertise `:continue`. This is the
+  A dispatch names the point where a worker will later select an allowed
+  workflow. Unlike a defer it returns to the declaring workflow, so later steps
+  may depend on it. Opts are `:depends-on`, `:description`, `:title`, and
+  `:attributes`; `:condition` and `:loop` are deliberately not supported."
+  [id title & {:as opts}]
+  (reject-unknown-keys! opts dispatch-opt-keys :dispatch)
+  (-> (step* id title opts)
+      (update :attributes merge {"workflow/role" "dispatch"
+                                 "workflow/dispatch" (name id)})))
+
+(defn bind-handoffs
+  "Return `definition` with each declared defer or dispatch named in `bindings`
+  bound to the registered workflows it allows.
+
+  `bindings` maps a declared hand-off name to a non-empty set of registered
+  workflow keywords. A defer target must advertise `:continue`; a dispatch
+  target must advertise `:call`. This is the
   authority boundary: the spool that authored the template said *where* a worker
   chooses, and the user code that publishes the complete definition says *what*
   they may choose from. Binding a name the definition does not declare fails
-  loudly rather than adding a defer nobody can reach.
+  loudly rather than adding a hand-off nobody can reach.
 
   The allowed names are stored in registered-name order, so the frontier a worker
   reads is stable. Targets are checked against the complete candidate registry
-  when the result is registered, not here: `bind-defers` is pure and has no
+  when the result is registered, not here: `bind-handoffs` is pure and has no
   registry to consult."
   [definition bindings]
   (util/require-map! definition [:definition])
-  (require-valid! ::defer-bindings bindings "Invalid workflow defer bindings")
-  (let [declared (into #{} (map defs/defer-name) (defs/defer-steps definition))]
+  (require-valid! ::handoff-bindings bindings "Invalid workflow defer bindings")
+  (let [declared (into #{} (map defs/handoff-name) (defs/handoff-steps definition))]
     (doseq [[name _] (sort-by key bindings)]
       (when-not (contains? declared name)
-        (fail! "Workflow defer binding names no declared defer exit"
-               {:reason :workflow/defer-unknown
-                :defer name
+        (fail! "Workflow handoff binding names no declared hand-off"
+               {:reason :workflow/handoff-unknown
+                :handoff name
                 :declared (vec (sort declared))})))
     (-> definition
-        (update :steps (fn [steps] (mapv #(bind-defer-step % bindings) steps)))
+        (update :steps (fn [steps] (mapv #(bind-handoff-step % bindings) steps)))
         (as-> bound (require-valid! ::definition bound "Invalid workflow definition"))
         defs/validate-defer-topology!)))
 
@@ -1110,6 +1125,7 @@
            "workflow/gate" "workflow/checkpoint"
            "workflow/checkpoint-kind" "workflow/choices"
            "workflow/defer" "workflow/defer-workflows"
+           "workflow/dispatch" "workflow/dispatch-workflows"
            "workflow/continued-workflow" "workflow/continued-definition"
            "workflow/continued-fingerprint" "workflow/continued-params"
            "workflow/choice-details" "workflow/procedure" "workflow/outcome"
@@ -1182,6 +1198,10 @@
   [value]
   (util/defer-step? value))
 
+(defn- dispatch-step?
+  [value]
+  (util/dispatch-step? value))
+
 (s/def ::form #{:molecule :wisp})
 (s/def ::id-ref #(or (keyword? %) (symbol? %) (non-blank-string? %)))
 (s/def ::id ::id-ref)
@@ -1232,7 +1252,12 @@
   (s/and defer-step?
          (s/keys :req-un [::id ::title]
                  :opt-un [::description ::attributes ::depends-on])))
-(s/def ::workflow-item (s/or :defer ::defer-declaration :step ::step :call ::call))
+(s/def ::dispatch-declaration
+  (s/and dispatch-step?
+         (s/keys :req-un [::id ::title]
+                 :opt-un [::description ::attributes ::depends-on])))
+(s/def ::workflow-item (s/or :defer ::defer-declaration :dispatch ::dispatch-declaration
+                             :step ::step :call ::call))
 (s/def ::steps (s/coll-of ::workflow-item :kind vector?))
 (s/def ::workflow (s/keys :req-un [::name ::steps]
                           :opt-un [::attributes ::state ::form]))
@@ -1293,7 +1318,7 @@
 
 ;; Each declared exit binds to a non-empty set of registered names; an empty set
 ;; is a defer no worker can fill, which is a defect rather than a template.
-(s/def ::defer-bindings
+(s/def ::handoff-bindings
   (s/map-of ::registry-name (s/coll-of ::registry-name :kind set? :min-count 1)
             :min-count 1))
 
@@ -1675,9 +1700,9 @@
                          (fmt/reflow "
                          |A defer requires :id and :title and accepts :depends-on,
                          |:description, and :attributes. It has no :condition or :loop.
-                         |bind-defers binds each declared name to a non-empty set of
-                         |registered workflows, validated against ::defer-bindings.")
-                         '(bind-defers
+                         |bind-handoffs binds each declared name to a non-empty set of
+                         |registered workflows, validated against ::handoff-bindings.")
+                         '(bind-handoffs
                            (workflow "Track a card"
                                      (step :prepare "Prepare the card" :self)
                                      (defer :perform-work
@@ -1706,6 +1731,17 @@
                        |continue! merges no parent context: the target sees its own
                        |:defaults under exactly the params supplied, judged whole by
                        |its :param-spec.")}})
+
+(defn- explain-dispatch []
+  {:topic :dispatch
+   :summary "A dispatch is a named returning hand-off selected at run time."
+   :contract (spec-entry ::dispatch-declaration
+                         "A dispatch requires :id and :title and accepts :depends-on, :description, and :attributes."
+                         '(dispatch :perform-work "Choose work" :depends-on [:prepare]))
+   :fields {:id "Stable local ref; also the dispatch's declared name."
+            :depends-on "Vector of local refs this hand-off waits for."
+            :workflow/dispatch "The declared name, stored on the poured step."
+            :workflow/dispatch-workflows "Bound targets in registered-name order."}})
 
 (defn- explain-definition []
   {:topic :definition
@@ -1758,7 +1794,8 @@
               'checkpoint 'skein.spools.workflow/checkpoint
               'call 'skein.spools.workflow/call
               'defer 'skein.spools.workflow/defer
-              'bind-defers 'skein.spools.workflow/bind-defers}
+              'dispatch 'skein.spools.workflow/dispatch
+              'bind-handoffs 'skein.spools.workflow/bind-handoffs}
    :contract (spec-entry ::workflow
                          "A workflow requires a non-blank :name and vector :steps."
                          '(workflow (fn [{:keys [feature]}] (str "Ship " feature))
@@ -1840,6 +1877,7 @@
 (def ^:private checkpoint-opt-keys (into step-opt-keys #{:kind :choices}))
 (def ^:private call-opt-keys #{:title :depends-on :attributes})
 (def ^:private defer-opt-keys #{:description :attributes :depends-on})
+(def ^:private dispatch-opt-keys #{:description :attributes :depends-on :title})
 (def ^:private workflow-opt-keys
   #{:attributes :state :form :doc :entrypoints :param-spec :defaults})
 (def ^:private choice-opt-keys #{:key :label :description :next :input :revise})
@@ -1849,15 +1887,19 @@
   [id title opts]
   (merge {:id id :title title} opts))
 
-(defn- bind-defer-step
-  "Return `step` with its defer binding materialized when `bindings` names it.
+(defn- bind-handoff-step
+  "Return `step` with its hand-off binding materialized when `bindings` names it.
 
   Targets are stored in registered-name order so the allowlist a worker reads at
   the frontier is stable, whatever order the author wrote the set in."
   [step bindings]
-  (if-let [targets (and (util/defer-step? step) (get bindings (defs/defer-name step)))]
+  (if-let [targets (and (or (util/defer-step? step) (util/dispatch-step? step))
+                        (get bindings (defs/handoff-name step)))]
     (update step :attributes merge
-            {"workflow/defer-workflows" (mapv name (sort targets))})
+            {(if (util/defer-step? step)
+               "workflow/defer-workflows"
+               "workflow/dispatch-workflows")
+             (mapv name (sort targets))})
     step))
 
 ;; --- checkpoint choice builders -------------------------------------------

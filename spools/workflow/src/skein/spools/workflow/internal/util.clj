@@ -70,6 +70,11 @@
   [step]
   (and (map? step) (= "defer" (get-in step [:attributes "workflow/role"]))))
 
+(defn dispatch-step?
+  "True when `step` is a declared dispatch hand-off."
+  [step]
+  (and (map? step) (= "dispatch" (get-in step [:attributes "workflow/role"]))))
+
 (defn json-scalar?
   "True when `value` is a leaf that survives the JSON attribute wire.
 

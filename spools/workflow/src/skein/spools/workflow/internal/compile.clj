@@ -430,7 +430,7 @@
   has bound yet and still describe itself, but materializing it would strand the
   run at an exit with nowhere to go."
   [root form steps]
-  (defs/validate-defer-bindings! {:steps steps} {:workflow (:title root)})
+  (defs/validate-handoff-bindings! {:steps steps} {:workflow (:title root)})
   {:strands (into [root] (map-indexed #(step-strand %2 form %1) steps))
    :edges (vec (concat (parent-edges (:ref root) steps)
                        (dependency-edges steps)))})
