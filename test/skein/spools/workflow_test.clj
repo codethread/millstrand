@@ -3271,7 +3271,7 @@
       (workflow/complete! "double")
       (let [pending-id (:id (workflow/ready-step "double"))]
         (workflow/dispatch! "double" :wt-two-step)
-        (testing "a filled dispatch is a closed procedure join, so naming it is not-ready"
+        (testing "a filled dispatch is no longer ready, so naming it is not-ready"
           (let [thrown (try (workflow/dispatch! "double" :wt-two-step {} {:step pending-id})
                             (catch clojure.lang.ExceptionInfo e e))]
             (is (re-find #"not ready" (ex-message thrown)))
@@ -3402,6 +3402,27 @@
         (is (= :workflow/dispatch-path-reserved (:reason (ex-data thrown)))
             "an authored path is refused at the builder, so it can never be mistaken
              for a nested compile's already-correct stamping")))))
+
+(deftest dispatch-refuses-a-malformed-persisted-path
+  ;; Persisted attributes are an I/O boundary. Missing lineage must fail before
+  ;; mutation instead of becoming an empty ancestry that lets a cycle through.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-two-step
+                                   'skein.spools.workflow-test/dispatch-two-step-target)
+      (doseq [[run-id bad-path] [["bad-path-shape" {}]
+                                 ["bad-path-entry" [{"definition" nil}]]]]
+        (workflow/start! run-id (dispatch-sandwich #{:wt-two-step}) {})
+        (workflow/complete! run-id)
+        (let [pending (workflow/ready-step run-id)]
+          (repl/update! (:id pending) {:attributes {"workflow/dispatch-path" bad-path}})
+          (let [thrown (try (workflow/dispatch! run-id :wt-two-step)
+                            (catch clojure.lang.ExceptionInfo e e))]
+            (is (= :workflow/dispatch-path-invalid (:reason (ex-data thrown))))
+            (is (contains? (ex-data thrown) :path))
+            (is (= "active" (:state (repl/strand (:id pending))))
+                "a malformed path fails before the fill mutates the dispatch")))))))
 
 (defn reject-dispatch-batch-hook [ctx]
   (throw (ex-info "dispatch batch rejected" {:code "policy/rejected" :ctx ctx})))

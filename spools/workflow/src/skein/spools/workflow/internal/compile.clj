@@ -150,18 +150,15 @@
            {:procedure procedure
             :resolved-class (some-> procedure class .getName)})))
 
-(defn prefixed-ref
-  "Return `ref` namespaced beneath procedure or dispatch `call-id`."
+(defn- prefixed-ref
   [call-id ref]
   (keyword (str (name call-id) "--" (name (util/normalize-ref ref [:procedure :ref])))))
 
-(defn entry-refs
-  "Return the refs of `steps` with no dependencies."
+(defn- entry-refs
   [steps]
   (->> steps (remove #(seq (:depends-on %))) (map :id) vec))
 
-(defn exit-refs
-  "Return the refs of `steps` that no other step depends on."
+(defn- exit-refs
   [steps]
   (let [depended (set (mapcat :depends-on steps))]
     (->> steps (map :id) (remove depended) vec)))

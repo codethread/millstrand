@@ -1,6 +1,6 @@
 # Runtime-selected returning composition in the workflow engine
 
-**Document ID:** `RFC-Dyc-001` **Status:** Accepted — see P7 **Date:** 2026-07-26 **Related:** [`spools/workflow.md`](../../spools/workflow.md); [`PROP-Wcd-001`](../feat/s9i26-flow-cli/proposal.md) (S2 worker grammar, S4 ready inference, S6 entrypoints, S7 named deferred continuation, S9 params); proposal [`devflow/feat/dynamic-call/proposal.md`](../feat/dynamic-call/proposal.md); card `mvryi`; review notes `per7e`, `9d4yx`
+**Document ID:** `RFC-Dyc-001` **Status:** Accepted — see P7 **Date:** 2026-07-26 **Related:** [`spools/workflow.md`](../../spools/workflow.md); [`PROP-Wcd-001`](../feat/s9i26-flow-cli/proposal.md) (S2 worker grammar, S4 ready inference, S6 entrypoints, S7 named deferred continuation, S9 params); proposal [`devflow/archive/26-07-26__dynamic-call/proposal.md`](../archive/26-07-26__dynamic-call/proposal.md); card `mvryi`; review notes `per7e`, `9d4yx`
 
 > This RFC records the design fork and rejected alternatives. The proposal owns problem framing and
 > scope; the plan will own build strategy.
@@ -76,4 +76,4 @@ The decision this RFC makes: whether that remaining gap — one molecule spannin
 ## RFC-Dyc-001.P7 Outcome
 
 - **RFC-Dyc-001.OUT1:** **Decided 2026-07-26 by the code owner: build O2**, designed greenfield. The single-molecule property is wanted on its own merits, not only where O4 falls short, and the design was to be drawn as if from scratch rather than around existing seams. REC1's adapter composition ships anyway as a documented recipe (RFC-Dyc-001.REC2), because a genuine transfer of ownership is still sometimes what an author means.
-- **RFC-Dyc-001.OUT2:** The construct is named `dispatch`. Contract in [`DELTA-Dyc-001`](../feat/dynamic-call/specs/workflow-spool.delta.md); build sequencing in [`PLAN-Dyc-001`](../feat/dynamic-call/dynamic-call.plan.md). REC4–REC6 are carried into CC3, CC6, and CC7 respectively; REC6's ancestry model was corrected in review from a root-wide path to a branch-local lexical one (DELTA-Dyc-001.D4).
+- **RFC-Dyc-001.OUT2:** The construct is named `dispatch`. Contract in [`DELTA-Dyc-001`](../archive/26-07-26__dynamic-call/specs/workflow-spool.delta.md); build sequencing in [`PLAN-Dyc-001`](../archive/26-07-26__dynamic-call/dynamic-call.plan.md). REC4–REC6 are carried into CC3, CC6, and CC7 respectively; REC6's ancestry model was corrected in review from a root-wide path to a branch-local lexical one (DELTA-Dyc-001.D4).

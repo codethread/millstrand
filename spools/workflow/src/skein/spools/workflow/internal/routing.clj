@@ -18,7 +18,8 @@
             [skein.spools.workflow.internal.compile :as cmp]
             [skein.spools.workflow.internal.definitions :as defs]
             [skein.spools.workflow.internal.query :as query]
-            [skein.spools.workflow.internal.specs :as specs]))
+            [skein.spools.workflow.internal.specs :as specs]
+            [skein.spools.workflow.internal.util :as util]))
 
 (def ^:private closeable-roles
   "The workflow roles a cutover force-closes when it leaves a root behind.
@@ -415,12 +416,36 @@
   {"fingerprint" (or (get entry "fingerprint") (get entry :fingerprint))
    "definition" (or (get entry "definition") (get entry :definition))})
 
+(defn- dispatch-path!
+  [step]
+  (let [raw (query/attr step :workflow/dispatch-path)
+        entry-keys (fn [entry]
+                     (when (map? entry)
+                       (into #{} (keep #(when (or (string? %) (keyword? %)) (name %)))
+                             (keys entry))))
+        valid-entry? (fn [entry]
+                       (let [canonical (path-entry entry)]
+                         (and (= #{"fingerprint" "definition"} (entry-keys entry))
+                              (util/non-blank-string? (get canonical "fingerprint"))
+                              (or (nil? (get canonical "definition"))
+                                  (util/non-blank-string? (get canonical "definition"))))))]
+    (when-not (and (vector? raw) (every? valid-entry? raw))
+      (fail! "Workflow dispatch path is malformed"
+             {:reason :workflow/dispatch-path-invalid
+              :run-id (query/attr step :workflow/run-id)
+              :step (:id step)
+              :path raw
+              :value raw
+              :expected [{:fingerprint "non-blank string"
+                          :definition "non-blank string or null"}]}))
+    (mapv path-entry raw)))
+
 (defn dispatch-plan
   "Build the one transactional fill payload for dispatch `step` and `target`."
   [rt run-id step target params opts]
   (let [root (query/current-root-with-rt rt run-id)
         built (defs/build target params)
-        path (mapv path-entry (or (query/attr step :workflow/dispatch-path) []))
+        path (dispatch-path! step)
         identity {"fingerprint" (defs/fingerprint target)
                   "definition" (some-> (:definition target) str)}
         _ (when (some #(= (get % "fingerprint") (get identity "fingerprint")) path)

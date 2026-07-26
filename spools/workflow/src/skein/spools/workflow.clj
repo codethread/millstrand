@@ -244,11 +244,11 @@
 
   `bindings` maps a declared hand-off name to a non-empty set of registered
   workflow keywords. A defer target must advertise `:continue`; a dispatch
-  target must advertise `:call`. This is the
-  authority boundary: the spool that authored the template said *where* a worker
-  chooses, and the user code that publishes the complete definition says *what*
-  they may choose from. Binding a name the definition does not declare fails
-  loudly rather than adding a hand-off nobody can reach.
+  target must advertise `:call`. This is the authority boundary: the spool that
+  authored the template said *where* a worker chooses, and the user code that
+  publishes the complete definition says *what* they may choose from. Binding a
+  name the definition does not declare fails loudly rather than adding a hand-off
+  nobody can reach.
 
   The allowed names are stored in registered-name order, so the frontier a worker
   reads is stable. Targets are checked against the complete candidate registry
