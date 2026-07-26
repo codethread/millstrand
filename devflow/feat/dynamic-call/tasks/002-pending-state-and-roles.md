@@ -26,7 +26,7 @@ PLAN-Dyc-001.A4 is the checklist and every row must be accounted for — includi
   `:reason :workflow/step-not-completable`, naming `dispatch` and the verb to use instead (CC4a).
   `advance!` currently falls through every non-defer, non-checkpoint role to `complete!` — that
   fallthrough is the bug this closes.
-- **TASK-Dyc-002.MI3:** Attention reason `:workflow/dispatch-ready`, distinct from the defer reason
+- **TASK-Dyc-002.MI3:** Attention reason `:dispatch`, distinct from the defer reason
   (CC9).
 - **TASK-Dyc-002.MI4:** `workflow/dispatch-path` per CC7/D4/D4a: written by `compile` onto **each
   dispatch strand**, immutable, carrying the lexical ancestry enclosing that dispatch — the definition
@@ -58,7 +58,7 @@ PLAN-Dyc-001.A4 is the checklist and every row must be accounted for — includi
   nested inside a fixed call to `C` has `C`'s fingerprint as its last entry; two sibling dispatches
   carry equal-but-independent paths; a run started from an anonymous workflow map yields entries whose
   `"definition"` is `null` and whose `"fingerprint"` is present.
-- **TASK-Dyc-002.DW7:** A ready dispatch reports attention reason `:workflow/dispatch-ready`, not the
+- **TASK-Dyc-002.DW7:** A ready dispatch reports attention reason `:dispatch`, not the
   defer reason and not `:step`.
 - **TASK-Dyc-002.DW8:** `run-history` emits no new event kind for a dispatch — the deliberate
   no-change in DELTA-Dyc-001.CC4c, asserted so a later reader sees it was decided.

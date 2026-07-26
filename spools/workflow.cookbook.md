@@ -89,7 +89,8 @@ Each recipe cites the honest source it was distilled from — a shipped spool, t
 (workflow/choose! "ship-feature-x" :revise {})
 ;; => {:ready [{:id :implement ...}] :done false}
 
-;; advance! also drives the run one step regardless of kind
+;; advance! also drives the run one step — ordinary steps and checkpoints;
+;; a ready defer or dispatch is refused, since each needs its own target
 (workflow/advance! "ship-feature-x")
 ;; => {:ready [{:id :signoff ...}] :done false}
 

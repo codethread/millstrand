@@ -250,12 +250,12 @@ Every run-mutating op holds a per-run guard from the moment it resolves the read
 
 The three-arg `(runtime run-id opts)` arity threads the target runtime explicitly; the shorter arities resolve the ambient `current/runtime` as the ergonomic default.
 
-It returns `{:reason :done|:checkpoint|:defer|:dispatch-ready|:step|:gate|:stalled|:timeout :ready [...] :done boolean :detail ...}`. `opts` takes non-negative `:timeout-secs` (default 1800) and positive `:poll-ms` (default 250, matching the agent-run await surface) — there is no predicate to name, because `await!` resolves attention purely from the ready frontier and the executor registry. The wait uses the supplied runtime's Clock, so a manual Clock makes timeout tests deterministic. Malformed values fail at the caller boundary:
+It returns `{:reason :done|:checkpoint|:defer|:dispatch|:step|:gate|:stalled|:timeout :ready [...] :done boolean :detail ...}`. `opts` takes non-negative `:timeout-secs` (default 1800) and positive `:poll-ms` (default 250, matching the agent-run await surface) — there is no predicate to name, because `await!` resolves attention purely from the ready frontier and the executor registry. The wait uses the supplied runtime's Clock, so a manual Clock makes timeout tests deterministic. Malformed values fail at the caller boundary:
 
 - `:done` — the run is finished.
 - `:checkpoint` — a checkpoint is ready (any kind wakes the caller).
 - `:defer` — a defer exit is ready and needs a continuation selected with `continue!`.
-- `:dispatch-ready` — a returning hand-off is ready and needs a target selected with `dispatch!`.
+- `:dispatch` — a returning hand-off is ready and needs a target selected with `dispatch!`.
 - `:step` — a ready `:self` step needs the driving agent. This exists so a
   ready step can never bury itself under `:waiting`.
 - `:gate` — a ready gate's `waiter` has no registered executor, so someone
@@ -383,7 +383,7 @@ A `:next` route starts its continuation from `call-params = (merge workflow/cont
 Choosing a `:next` choice applies **one** transactional `batch/apply!` that, atomically:
 
 - closes the checkpoint, recording the outcome (see attribute table);
-- force-closes every remaining active `step`/`checkpoint`/`procedure`/`root`
+- force-closes every remaining active `step`/`checkpoint`/`defer`/`dispatch`/`procedure`/`root`
   strand in the current run's subgraph (existing strands are bound by their
   durable id and updated in place); and
 - pours the compiled continuation's new strands and edges under the same
@@ -667,7 +667,7 @@ These projections let a user (or an agent) inspect a workflow's shape, its contr
                      :input-spec {"spec" "my.ns/revise-input" "doc" "…"}}]}]}
 ```
 
-Each step carries `:id`, `:title`, `:role` (`"step"`/`"checkpoint"`/`"procedure"`, so a `call`'s procedure join shows as `:procedure`), and `:depends-on`; a conditioned step adds `:condition`, a gate adds `:gate`, and a checkpoint adds `:choices`. Each choice carries its `:key` plus any declared `:label`, `:description`, input contract (`:input-spec`, with its identity and doc), and its routing target (`:next` string or `:revise` override-param map). Description stays cheap: the spec's form graph is recorded when the checkpoint pours, not here. A `:condition`-excluded step is **absent** (its dependents splice through it, §3), so the ready frontier reads straight off the description. `(describe workflow)` describes what a definition's `:defaults` alone would pour, so a definition whose `:param-spec` wants more than they supply **fails loudly** against that spec; pass `params` for those.
+Each step carries `:id`, `:title`, `:role` (`"step"`/`"checkpoint"`/`"defer"`/`"dispatch"`/`"procedure"`, so a `call`'s procedure join shows as `:procedure` and an unfilled returning hand-off shows as `:dispatch`), and `:depends-on`; a conditioned step adds `:condition`, a gate adds `:gate`, and a checkpoint adds `:choices`. Each choice carries its `:key` plus any declared `:label`, `:description`, input contract (`:input-spec`, with its identity and doc), and its routing target (`:next` string or `:revise` override-param map). Description stays cheap: the spec's form graph is recorded when the checkpoint pours, not here. A `:condition`-excluded step is **absent** (its dependents splice through it, §3), so the ready frontier reads straight off the description. `(describe workflow)` describes what a definition's `:defaults` alone would pour, so a definition whose `:param-spec` wants more than they supply **fails loudly** against that spec; pass `params` for those.
 
 ### `run-history`
 

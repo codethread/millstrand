@@ -362,6 +362,11 @@
                           (when-let [description (:description step)]
                             {"description" description}))]
     (cond-> attributes
+      ;; A step spliced in from a nested compile already carries the deeper
+      ;; ancestry that compile computed for it, and that value is the correct
+      ;; one — re-stamping it here would flatten the nesting away. An *authored*
+      ;; path can never reach this point: the `dispatch` builder refuses the key
+      ;; outright (DELTA-Dyc-001.CC7), so absence means "not yet stamped".
       (and (= "dispatch" (get attributes "workflow/role"))
            (not (contains? attributes "workflow/dispatch-path")))
       (assoc "workflow/dispatch-path" (vec *dispatch-path*))

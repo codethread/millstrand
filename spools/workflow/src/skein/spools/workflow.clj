@@ -226,6 +226,14 @@
   `:attributes`; `:condition` and `:loop` are deliberately not supported."
   [id title & {:as opts}]
   (reject-unknown-keys! opts dispatch-opt-keys :dispatch)
+  ;; The lineage a cycle check reads is compile's to write. An authored value
+  ;; would be honoured as an already-stamped nested path, so a self-dispatch
+  ;; declaring an empty one would walk straight past the membership check.
+  (when (contains? (:attributes opts) "workflow/dispatch-path")
+    (fail! "Workflow dispatch may not author workflow/dispatch-path"
+           {:reason :workflow/dispatch-path-reserved
+            :dispatch id
+            :alternative "Remove the attribute; compile stamps the lexical ancestry."}))
   (-> (step* id title opts)
       (update :attributes merge {"workflow/role" "dispatch"
                                  "workflow/dispatch" (name id)})))
@@ -482,8 +490,9 @@
     (some-> (query/raw-ready-step rt run-id) query/strand->view (assoc :run-id run-id))))
 
 (defn done?
-  "Return true when run-id has no active workflow root, or its active root's
-  step, checkpoint, and procedure strands are all closed.
+  "Return true when run-id has no active workflow root, or every workflow work
+  strand under its active root — step, checkpoint, defer, dispatch, and
+  procedure — is closed. An unfilled dispatch therefore keeps a run unfinished.
 
   Fails loudly for a run-id that has never had a root strand."
   [run-id]
@@ -686,7 +695,7 @@
            (query/run-result rt run-id)))))))
 
 (defn advance!
-  "Advance run-id by one ready step regardless of its kind, returning the
+  "Advance run-id by one ready ordinary step or checkpoint, returning the
   `{:ready [step-view ...] :done boolean}` result shape.
 
   Resolves the ready step (honoring an optional `:step` selector). When it is a
@@ -696,9 +705,11 @@
   absent (fail loudly otherwise); `advance!` dispatches to `complete!` with the
   pass-through `:attributes`/`:step`/`:by` opts.
 
-  A ready defer is not advanceable. Selecting a continuation is a root transfer
-  with its own target and params, which `advance!`'s one-ready-step vocabulary
-  cannot carry, so it directs the caller to `continue!` instead."
+  Neither hand-off role is advanceable, and each says so loudly. Selecting a
+  defer's continuation is a root transfer with its own target and params, and
+  filling a dispatch pours a target with its own params; neither fits
+  `advance!`'s one-ready-step vocabulary, so it directs the caller to
+  `continue!` or `dispatch!` respectively."
   ([run-id]
    (advance! run-id {}))
   ([run-id opts]
@@ -1191,7 +1202,10 @@
            "workflow/gate" "workflow/checkpoint"
            "workflow/checkpoint-kind" "workflow/choices"
            "workflow/defer" "workflow/defer-workflows"
-           "workflow/dispatch" "workflow/dispatch-workflows" "workflow/dispatch-path"
+           "workflow/dispatch" "workflow/dispatch-workflows"
+           "workflow/dispatched-workflow" "workflow/dispatched-definition"
+           "workflow/dispatched-fingerprint" "workflow/dispatched-params"
+           "workflow/dispatched-by" "workflow/dispatch-path"
            "workflow/continued-workflow" "workflow/continued-definition"
            "workflow/continued-fingerprint" "workflow/continued-params"
            "workflow/choice-details" "workflow/procedure" "workflow/outcome"
@@ -1654,7 +1668,7 @@
 ;; `await` answers with the attention vocabulary instead: a run it stopped
 ;; blocking on has a reason, and the reason carries the item behind it.
 (s/def :skein.spools.workflow.view/reason
-  #{:done :checkpoint :defer :dispatch-ready :step :gate :stalled :waiting :timeout})
+  #{:done :checkpoint :defer :dispatch :step :gate :stalled :waiting :timeout})
 (s/def :skein.spools.workflow.view/detail map?)
 (s/def ::attention-result
   (s/keys :req-un [:skein.spools.workflow.view/operation
@@ -1823,9 +1837,17 @@
 
 (defn- explain-dispatch []
   {:topic :dispatch
-   :summary "A dispatch is a named returning hand-off selected at run time."
+   :summary (fmt/reflow "
+            |A dispatch is a named hand-off whose target a worker selects at run
+            |time and which returns to the workflow that declared it. Later steps
+            |may depend on it; bind its allowed targets with bind-handoffs and
+            |fill it with dispatch!.")
    :contract (spec-entry ::dispatch-declaration
-                         "A dispatch requires :id and :title and accepts :depends-on, :description, and :attributes."
+                         (fmt/reflow "
+                         |A dispatch requires :id and :title and accepts
+                         |:depends-on, :description, and :attributes. It carries no
+                         |:condition or :loop, and may not author
+                         |workflow/dispatch-path.")
                          '(dispatch :perform-work "Choose work" :depends-on [:prepare]))
    :fields {:id "Stable local ref; also the dispatch's declared name."
             :depends-on "Vector of local refs this hand-off waits for."
@@ -2094,7 +2116,7 @@
   "Return the current attention state for workflow run-id.
 
   `:done` when finished; `:checkpoint` when a checkpoint is ready; `:defer` when
-  a defer exit is ready and a worker must pick its continuation; `:dispatch-ready`
+  a defer exit is ready and a worker must pick its continuation; `:dispatch`
   when a dispatch is ready and a worker must select its returning target; `:step` when a
   ready `:self` step needs the driving agent (kills the footgun of a ready step
   burying itself under `:waiting`); `:gate` when a ready gate's waiter has no
@@ -2123,7 +2145,7 @@
       done {:reason :done :ready ready :done true}
       checkpoint {:reason :checkpoint :ready ready :done false :detail checkpoint}
       defer {:reason :defer :ready ready :done false :detail defer}
-      dispatch {:reason :dispatch-ready :ready ready :done false :detail dispatch}
+      dispatch {:reason :dispatch :ready ready :done false :detail dispatch}
       self-step {:reason :step :ready ready :done false :detail self-step}
       unowned-gate {:reason :gate :ready ready :done false :detail unowned-gate}
       stalled {:reason :stalled :ready ready :done false :detail stalled}

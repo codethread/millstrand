@@ -427,6 +427,10 @@
             (fail! "Workflow dispatch is cyclic"
                    {:reason :workflow/dispatch-cyclic :path path
                     :offending identity :dispatch (:id step)}))
+        ;; compile appends the target's own identity to this base and threads the
+        ;; result through every nested fixed call, so a dispatch inside a called
+        ;; procedure keeps that procedure in its ancestry. Re-stamping the
+        ;; expansion afterwards would flatten exactly that nesting away.
         compiled (cmp/compile (defs/require-no-defers! (:workflow built)
                                                        {:dispatch (:id step)})
                               (:params built)
@@ -435,27 +439,32 @@
         deps (dispatch-dependency-refs rt step)
         expansion (cmp/procedure-expansion (keyword (:id step)) compiled deps)
         expansion-strands (mapv (fn [strand]
-                                  (let [strand (if (= "dispatch" (get-in strand [:attributes "workflow/role"]))
-                                                 (assoc-in strand [:attributes "workflow/dispatch-path"]
-                                                           (conj path identity))
-                                                 strand)]
-                                    (-> strand
-                                        (assoc :ref (:id strand))
-                                        (dissoc :id :depends-on))))
+                                  (-> strand
+                                      (assoc :ref (:id strand))
+                                      (dissoc :id :depends-on)))
                                 (:strands expansion))
         refs (into {:root (:id root) :dispatch (:id step)}
                    (map (fn [ref] [ref (name ref)]) deps))
         parent-edges (mapv (fn [strand] {:op :upsert :from :root :to (:ref strand)
                                          :type "parent-of"}) expansion-strands)
+        ;; A target may materialize nothing — an empty definition, or one whose
+        ;; every step is conditioned out. There are then no exits for the join to
+        ;; wait on, and no inner step whose close would cascade it shut, so the
+        ;; join would sit active and invisible (procedures are hidden from the
+        ;; ready frontier) and the run would never finish. Close it with the fill.
+        empty-expansion? (empty? (:exits expansion))
         outcome (cond-> {"workflow/role" "procedure"
                          "workflow/procedure" (:id step)
                          "workflow/dispatched-workflow" (name (:name target))
                          "workflow/dispatched-definition" (str (:definition target))
                          "workflow/dispatched-fingerprint" (defs/fingerprint target)
                          "workflow/dispatched-params" (:params built)}
-                  (contains? opts :by) (assoc "workflow/dispatched-by" (:by opts)))]
+                  (contains? opts :by) (assoc "workflow/dispatched-by" (:by opts))
+                  empty-expansion? (assoc "workflow/outcome-by" "engine"))]
     {:refs refs
-     :strands (conj expansion-strands {:ref :dispatch :attributes outcome})
+     :strands (conj expansion-strands
+                    (cond-> {:ref :dispatch :attributes outcome}
+                      empty-expansion? (assoc :state "closed")))
      :edges (vec (concat parent-edges
                          (mapcat (fn [{:keys [id depends-on]}]
                                    (map (fn [to] {:op :upsert :from id :to to :type "depends-on"})

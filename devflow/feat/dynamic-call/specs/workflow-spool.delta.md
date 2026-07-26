@@ -152,9 +152,10 @@ required entrypoint branched by declaration kind. No shipped or pinned external 
   `:reason :workflow/step-not-dispatch`).
 
 - **DELTA-Dyc-001.CC9 (attention — amends §4 "Awaiting attention"):** A ready dispatch surfaces its own
-  attention reason `:workflow/dispatch-ready`, distinct from the defer reason. Reporting it as a defer
-  would send a worker to `continue`, which would fail; hiding it as `procedure` would keep actionable
-  work off the frontier.
+  attention reason `:dispatch`, distinct from the defer reason and matching the shape of the existing
+  unqualified attention vocabulary (`:done`, `:checkpoint`, `:defer`, `:step`, `:gate`, …). Reporting
+  it as a defer would send a worker to `continue`, which would fail; hiding it as `procedure` would
+  keep actionable work off the frontier.
 
 - **DELTA-Dyc-001.CC10 (double fill is refused — adds to §5c):** A dispatch is filled exactly once.
   Once rewritten to `procedure` it is a closed join, so `dispatch!` no longer resolves it and an

@@ -53,7 +53,7 @@ Why it matters: [PROP-Dyc-001.P1](./proposal.md). What is contractual:
   | generic worker roles / `ordinary?`, `internal/runs.clj:34-60` | **add** dispatch role, **exclude** from `ordinary?` (CC4a) |
   | `complete!` role guard, `workflow.clj:528-546` | **add** dispatch refusal (CC4a) |
   | `advance!` role fallthrough, `workflow.clj:669-689` | **add** dispatch refusal (CC4a) |
-  | attention selection/exclusion/reason, `workflow.clj:1540-1551, 1962-1996` | **add** dispatch + `:workflow/dispatch-ready` |
+  | attention selection/exclusion/reason, `workflow.clj:1540-1551, 1962-1996` | **add** dispatch + `:dispatch` |
   | discovery predicate/projection, `internal/discovery.clj:66-76` | **add** parallel dispatch predicate — do not broaden the defer one |
   | raw-ready exclusion, `internal/query.clj:73` | **unchanged** — `#{"root" "procedure"}`; adding dispatch would hide actionable work |
   | procedure cascade, `internal/routing.clj:73-100` | **unchanged** — `procedure`-only is the safety property (V2) |

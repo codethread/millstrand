@@ -3043,8 +3043,10 @@
           (let [thrown (try (call) (catch clojure.lang.ExceptionInfo e e))]
             (is (= :workflow/step-not-completable (:reason (ex-data thrown))))
             (is (re-find #"dispatch!" (ex-message thrown)))))
-        (let [attention (workflow/await! "dispatch-pending" {:timeout-secs 5 :poll-ms 10})]
-          (is (= :dispatch-ready (:reason attention)))
+        ;; the run is already settled, so the first evaluation decides; a zero
+        ;; budget keeps a wrong answer an immediate failure rather than a wait.
+        (let [attention (workflow/await! "dispatch-pending" {:timeout-secs 0 :poll-ms 1})]
+          (is (= :dispatch (:reason attention)))
           (is (= (:id dispatch) (get-in attention [:detail :id]))))
         (is (not-any? #(= (:id dispatch) (:id %))
                       (mapcat :events (workflow/run-history "dispatch-pending")))
@@ -3293,6 +3295,112 @@
                             (catch clojure.lang.ExceptionInfo e e))]
             (is (some? (ex-data thrown)))))
         (is (= "active" (:state (repl/strand (:id pending)))))))))
+
+(workflow/defworkflow dispatch-fanout-target
+  "A call-capable routine with a fan-out and colliding step ids."
+  {:entrypoints #{:call}}
+  (workflow/workflow
+   "Fanout"
+   (workflow/step :a "Target a" :self)
+   (workflow/step :left "Target left" :self :depends-on [:a])
+   (workflow/step :right "Target right" :self :depends-on [:a])
+   (workflow/step :c "Target c" :self :depends-on [:left :right])))
+
+(workflow/defworkflow dispatch-empty-target
+  "A call-capable routine that materializes no steps."
+  {:entrypoints #{:call}}
+  (workflow/workflow "Empty"))
+
+(deftest dispatch-materializes-a-multi-step-expansion-with-colliding-ids
+  ;; PLAN-Dyc-001.A6 / R4: prefixing is what keeps a target whose step ids are
+  ;; :a and :c disjoint from a caller that already uses :a and :c, and the
+  ;; expansion's entry must inherit the dispatch's own depends-on.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-fanout 'skein.spools.workflow-test/dispatch-fanout-target)
+      (workflow/start! "fanout" (dispatch-sandwich #{:wt-fanout}) {})
+      (workflow/complete! "fanout")
+      (let [pending (workflow/ready-step "fanout")
+            filled (workflow/dispatch! "fanout" :wt-fanout)
+            root-id (:id (workflow/current-root "fanout"))
+            strands (:strands (graph/subgraph rt [root-id]))
+            titles (set (map :title strands))]
+        (is (= ["Target a"] (mapv :title (:ready filled)))
+            "only the expansion's entry is ready; the caller's own :a and :c are untouched")
+        (is (every? titles ["Step a" "Step c" "Target a" "Target left" "Target right" "Target c"])
+            "colliding ids materialize as distinct prefixed strands")
+        (testing "the whole fan-out runs and returns to the caller"
+          (workflow/complete! "fanout")
+          (let [after-a (workflow/ready "fanout")]
+            (is (= #{"Target left" "Target right"} (set (map :title after-a)))))
+          (workflow/complete! "fanout" {:step (:id (first (workflow/ready "fanout")))})
+          (workflow/complete! "fanout" {:step (:id (first (workflow/ready "fanout")))})
+          (is (= ["Target c"] (mapv :title (workflow/ready "fanout"))))
+          (let [after-c (workflow/complete! "fanout")]
+            (is (= ["Step c"] (mapv :title (:ready after-c)))
+                "step c waits for the whole expansion, then becomes ready")
+            (is (= "closed" (:state (repl/strand (:id pending)))))))))))
+
+(deftest dispatch-into-an-empty-target-does-not-stall-the-run
+  ;; An empty or fully-conditioned-out target yields no exits, so the join must
+  ;; still close rather than leaving an invisible active procedure forever.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-empty 'skein.spools.workflow-test/dispatch-empty-target)
+      (workflow/start! "empty-target" (dispatch-sandwich #{:wt-empty}) {})
+      (workflow/complete! "empty-target")
+      (let [pending (workflow/ready-step "empty-target")
+            filled (workflow/dispatch! "empty-target" :wt-empty)]
+        (is (= "closed" (:state (repl/strand (:id pending))))
+            "a join with no expansion to wait for closes immediately")
+        (is (= ["Step c"] (mapv :title (:ready filled)))
+            "the declaring workflow continues instead of stalling")))))
+
+(workflow/defworkflow dispatch-nested-inner
+  "A routine whose own dispatch must not be able to select it again."
+  {:entrypoints #{:start :call}}
+  (workflow/bind-handoffs
+   (workflow/workflow "Inner" (workflow/dispatch :again "Choose again"))
+   {:again #{:wt-nested-inner}}))
+
+(workflow/defworkflow dispatch-nested-outer
+  "A dispatch target that fixed-calls a routine declaring its own dispatch."
+  {:entrypoints #{:call}}
+  (workflow/workflow "Outer" (workflow/call :inner :wt-nested-inner {})))
+
+(deftest a-poured-expansion-keeps-its-fixed-call-ancestry
+  ;; DELTA-Dyc-001.CC7/D4 and PLAN-Dyc-001.V10. A dispatches to B; B fixed-calls
+  ;; C; C declares a dispatch. C must be in that dispatch's path, or it can
+  ;; select itself.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-nested-inner 'skein.spools.workflow-test/dispatch-nested-inner)
+      (workflow/register-workflow! :wt-nested-outer 'skein.spools.workflow-test/dispatch-nested-outer)
+      (workflow/start! "nested" (dispatch-sandwich #{:wt-nested-outer}) {})
+      (workflow/complete! "nested")
+      (workflow/dispatch! "nested" :wt-nested-outer)
+      (let [inner (first (filter #(= "dispatch" (:role %)) (workflow/ready "nested")))
+            thrown (try (workflow/dispatch! "nested" :wt-nested-inner {} {:step (:id inner)})
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/dispatch-cyclic (:reason (ex-data thrown)))
+            "the poured path kept the fixed-call ancestor, so selecting it is a cycle")))))
+
+(deftest an-authored-dispatch-path-cannot-forge-lineage
+  ;; CC7: compile owns the path. An author who supplies one must not be able to
+  ;; blank it and walk past the cycle check.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-self 'skein.spools.workflow-test/dispatch-self-target)
+      (let [thrown (try (workflow/dispatch :again "Choose again"
+                                           :attributes {"workflow/dispatch-path" []})
+                        (catch clojure.lang.ExceptionInfo e e))]
+        (is (= :workflow/dispatch-path-reserved (:reason (ex-data thrown)))
+            "an authored path is refused at the builder, so it can never be mistaken
+             for a nested compile's already-correct stamping")))))
 
 (deftest concurrent-choose-and-continue-serialize-under-the-run-guard
   ;; Both verbs resolve their frontier inside the guard, so one wins the cutover
