@@ -499,18 +499,6 @@
                                  |refuses the canonical worktree or a worktree checked out on a
                                  |different branch. On failure, fix the cause and remove `gate/error`
                                  |to retry.")})
-   (workflow/step :cleanup
-                  (fn [{:keys [branch]}] (str "Finish bookkeeping for " branch " and close the land run"))
-                  :self
-                  :depends-on [:tidy-created-resources]
-                  :attributes {"workflow/action-ref" "land.cleanup"
-                               "workflow/instruction"
-                               (fn [{:keys [card]}]
-                                 (str (if (non-blank-string? card)
-                                        (str "Finish the kanban card (`strand kanban finish " card
-                                             " --outcome done`). ")
-                                        "")
-                                      "Then close this land run's root to complete it."))})
    (workflow/step :tidy-created-resources
                   (fn [{:keys [branch]}] (str "Tidy resources created while working on " branch))
                   :self
@@ -525,7 +513,22 @@
                                  |name; never use broad pattern kills. Remove only resources owned by
                                  |this feature, leave shared or uncertain resources alone, and ignore
                                  |OS-managed temporary files outside the repository. Record anything
-                                 |intentionally retained in the doing-task handover.")})))
+                                 |intentionally retained in the doing-task handover.")})
+   (workflow/step :cleanup
+                  (fn [{:keys [branch]}] (str "Finish bookkeeping for " branch " and close the land run"))
+                  :self
+                  :depends-on [:tidy-created-resources]
+                  :attributes {"workflow/action-ref" "land.cleanup"
+                               "workflow/instruction"
+                               (fn [{:keys [card]}]
+                                 (if (non-blank-string? card)
+                                   (format-alpha/reflow
+                                    (format
+                                     "|Finish the kanban card (`strand kanban finish %s --outcome
+                                      |done`). Then close this land run's root to complete it."
+                                     card))
+                                   (format-alpha/reflow
+                                    "|Close this land run's root to complete it.")))})))
 
 (workflow/defworkflow land
   "Drive the coordinator LANDING workflow for a feature branch (family \"land\").

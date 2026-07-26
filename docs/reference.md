@@ -132,9 +132,10 @@ gate runs `gh pr merge --squash`; the canonical checkout then advances with `git
 which stops for an operator rather than stashing or resetting a non-fast-forward state. Main is
 protected by a repository ruleset: squash-only PR merges, ten required status checks, and a strict
 up-to-date policy make PR CI the complete merged-state gate. The workflow watches main CI after the
-merge, then hands cleanup back to the coordinator. Cleanup deletes the remote branch, removes the
-worktree, finishes the kanban card when one is set (`strand kanban finish <card> --outcome done`),
-and closes the run. Worker
+merge, then a shell gate deletes the remote branch, removes the worktree, and prunes Git metadata.
+The coordinator then tidies resources created
+for the feature, finishes the kanban card when one is set
+(`strand kanban finish <card> --outcome done`), and closes the run. Worker
 agents never land — they stop at implemented+committed; only a coordinator holding delegated sign-off
 authority drives a `land` run (`strand land about` for the manual, `strand help land` for the command
 surface).
