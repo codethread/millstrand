@@ -16,7 +16,7 @@ This is userland spool code, not a separate scheduler or persistence system. Wor
 
 Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `defer`, `dispatch`, `bind-handoffs`, `compile`, `pour!`, `wisp!`, and `explain`.
 
-The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `continue!`, `dispatch!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see §5), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see §5b). That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`complete`/`choose`/`continue`/`dispatch`/`await` over the run lifecycle (see §5c). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
+The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `continue!`, `dispatch!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see [§5](#5-checkpoints-and-routing)), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see [§5b](#5b-registry-discovery)). That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`complete`/`choose`/`continue`/`dispatch`/`await` over the run lifecycle (see [§5c](#5c-driving-a-run)). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
 
 Every run-mutating op (`start!`, `complete!`, `choose!`, `continue!`, `dispatch!`, `advance!`) returns one `{:ready [step-view ...] :done boolean}` map: `:ready` is the run's ready step views (as `ready` would return them) and `:done` is its done-ness, so an empty `:ready` never leaves a caller guessing whether the run finished or merely stalled. The pure queries `ready`/`ready-step` still return step views directly.
 
@@ -34,11 +34,11 @@ What skein does differently: workflow definitions are Clojure-native data instea
 |---|---|
 | `(step id title waiter & opts)` | A step definition map. `waiter` must be `:self` — a step is always driven-agent-owned; any other value fails loudly, directing the caller to `gate`. Opts: `:depends-on`, `:attributes`, `:condition`, `:loop`, `:description`, `:state`. |
 | `(gate id title waiter & opts)` | A step marked `workflow/gate <waiter>` as an external wait point. `waiter` is a freeform actor hint (`:ci`, `:human`, `:subagent`, …), not `:self`. Same opts as `step`. See "Gates" below. |
-| `(checkpoint id title & opts)` | A step definition with checkpoint metadata. `:kind` (`:human` or `:agent`, default `:human`), `:choices`. A choice's `:input` names the spec `choose!` validates against — see §5. |
+| `(checkpoint id title & opts)` | A step definition with checkpoint metadata. `:kind` (`:human` or `:agent`, default `:human`), `:choices`. A choice's `:input` names the spec `choose!` validates against — see [§5](#5-checkpoints-and-routing). |
 | `(call id procedure params & opts)` | An inline procedure-reuse step. `:depends-on`, `:title`, `:attributes`. |
-| `(defer id title & opts)` | A named terminal exit whose continuation a worker picks at run time. Opts: `:depends-on`, `:description`, `:attributes`. See §5a. |
-| `(dispatch id title & opts)` | A named returning hand-off whose target a worker picks at run time. Opts: `:depends-on`, `:title`, `:description`, `:attributes`. See §5a. |
-| `(bind-handoffs definition bindings)` | Returns `definition` with each declared defer or dispatch bound to the registered workflows it allows. See §5a. |
+| `(defer id title & opts)` | A named terminal exit whose continuation a worker picks at run time. Opts: `:depends-on`, `:description`, `:attributes`. See [§5a](#5a-deferred-continuation-an-exit-someone-else-fills). |
+| `(dispatch id title & opts)` | A named returning hand-off whose target a worker picks at run time. Opts: `:depends-on`, `:title`, `:description`, `:attributes`. See [§5a](#5a-deferred-continuation-an-exit-someone-else-fills). |
+| `(bind-handoffs definition bindings)` | Returns `definition` with each declared defer or dispatch bound to the registered workflows it allows. See [§5a](#5a-deferred-continuation-an-exit-someone-else-fills). |
 | `(workflow name & body)` | A workflow definition: `{:name .. :steps [..]}` plus optional leading opts map (`:attributes`, `:state`, `:form`, and the registration contract `:doc`, `:entrypoints`, `:param-spec`, `:defaults`). |
 | `(defworkflow name doc opts definition)` | Defines a static definition Var and collects its registry entry during module contribution. See "Static definitions" below. |
 
@@ -155,8 +155,8 @@ The runtime is pull-based and *every* strand is already a durable wait point: an
   to close a gate without `:by`** (fails loudly) and records `:by` as
   `workflow/outcome-by` on the closed step. Raw `repl/update!` remains the
   trusted escape hatch (TEN-002) for closing any strand directly.
-- `register-executor!` (§4 "Awaiting attention") keys a stall predicate by a
-  gate's `waiter` name, so an adapter that fulfills a whole waiter class of
+- `register-executor!` ([§4 "Awaiting attention"](#awaiting-attention)) keys a
+  stall predicate by a gate's `waiter` name, so an adapter that fulfills a whole waiter class of
   gates can make `await!` stay silent while it is healthy. A gate whose
   waiter has no registered executor always surfaces immediately — there is no
   silent default.
@@ -231,10 +231,11 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
   optionally routes to a continuation (`:next`), and returns the
   `{:ready [...] :done boolean}` result. When the chosen choice declares an
   `:input` contract, `choose!` validates the input map against it and fails
-  loudly before any mutation (see §5). Revision loops route `:next` back to the
-  same stage (see §5).
-- `(continue! run-id workflow)` / `(continue! run-id workflow params)` / `(continue! run-id workflow params opts)` — fills a ready defer exit by closing the current root and pouring one of the defer's allowed registered workflows under the same run id, returning the same result shape. `opts` takes `:step` (to pick among several ready defers) and `:by`. See §5a.
-- `(dispatch! run-id workflow)` / `(dispatch! run-id workflow params)` / `(dispatch! run-id workflow params opts)` — fills a ready dispatch with one of its allowed registered workflows, keeping the current root and returning the same result shape. `opts` takes `:step` (to pick among several ready dispatches) and `:by`. See §5a.
+  loudly before any mutation (see [§5](#5-checkpoints-and-routing)). Revision
+  loops route `:next` back to the same stage (see
+  [§5](#5-checkpoints-and-routing)).
+- `(continue! run-id workflow)` / `(continue! run-id workflow params)` / `(continue! run-id workflow params opts)` — fills a ready defer exit by closing the current root and pouring one of the defer's allowed registered workflows under the same run id, returning the same result shape. `opts` takes `:step` (to pick among several ready defers) and `:by`. See [§5a](#5a-deferred-continuation-an-exit-someone-else-fills).
+- `(dispatch! run-id workflow)` / `(dispatch! run-id workflow params)` / `(dispatch! run-id workflow params opts)` — fills a ready dispatch with one of its allowed registered workflows, keeping the current root and returning the same result shape. `opts` takes `:step` (to pick among several ready dispatches) and `:by`. See [§5a](#5a-deferred-continuation-an-exit-someone-else-fills).
 - `(advance! run-id)` / `(advance! run-id opts)` — one verb that advances the run regardless of the ready step's kind, returning the same result shape. When the resolved ready step is a checkpoint, `opts` must carry `:choice` (and may carry `:input`, default `{}`, plus pass-through `:by`/`:step`) and it dispatches to `choose!`; when it is a step, `:choice` must be absent and it dispatches to `complete!` with pass-through `:attributes`/`:step`/`:by`. Passing the removed `:notes` fails as `workflow/notes-removed`. Supplying `:choice` on a step, or omitting it on a checkpoint, fails loudly. A ready defer or dispatch is not advanceable: selecting a target carries its own params, which `advance!` has no way to express, so it directs the caller to `continue!` or `dispatch!`.
 
 Every run-mutating op holds a per-run guard from the moment it resolves the ready frontier through the batch it applies. Two workers acting on one run are therefore serialized: the second re-resolves against the frontier the first left, and fails loudly on a step that is no longer ready rather than writing over it. The guard is runtime-owned, so it covers one weaver's in-process callers — the same scope as the ambient runtime those ops resolve.
@@ -282,7 +283,7 @@ are gone.
 
 ### Procedure join auto-close
 
-A `call` expands to its inner steps plus a `procedure`-role **join** step that depends on the procedure's exit steps (see §3). Joins never surface as ready work: when `complete!`/`choose!` closes the last active inner step beneath a join, the join closes in the same `batch/apply!` transaction (stamped `workflow/outcome-by "engine"` for provenance), and a join that is itself the last inner step of an outer join cascades likewise. Agents therefore never complete a bookkeeping join by hand.
+A `call` expands to its inner steps plus a `procedure`-role **join** step that depends on the procedure's exit steps (see [§3](#3-definition-layer)). Joins never surface as ready work: when `complete!`/`choose!` closes the last active inner step beneath a join, the join closes in the same `batch/apply!` transaction (stamped `workflow/outcome-by "engine"` for provenance), and a join that is itself the last inner step of an outer join cascades likewise. Agents therefore never complete a bookkeeping join by hand.
 
 **`complete!` opts** (trailing map, all optional):
 
@@ -295,7 +296,7 @@ A `call` expands to its inner steps plus a `procedure`-role **join** step that d
   in your own namespaced keys. The engine keeps no prose field of its own;
   passing the removed `:notes` fails as `workflow/notes-removed`.
 - `:by` — actor identity, recorded as `"workflow/outcome-by"`. **Mandatory**
-  when closing a `gate` step (see §3 "Gates"); ignored on non-gate steps.
+  when closing a `gate` step (see [§3 "Gates"](#3-definition-layer)); ignored on non-gate steps.
 
 **`choose!` opts** (trailing map, all optional):
 
@@ -401,7 +402,7 @@ A `:revise {:params {...}}` choice is the declarative revision loop: instead of 
 
 A root poured from a registered name revises through that **name**: the registry is resolved again at `choose!` time, so a coordinator who repointed the name revises into the replacement, and a name that has since been removed fails before any mutation rather than reviving a definition nothing points at. A root that recorded only a symbol — a Var or map start — keeps symbol-based revision. Either way the root must carry a resolvable definition (seed it via start/`opts :definition`, which routed continuations also set for their stage); `:revise` **fails loudly** when it is absent.
 
-There is no reopen/reactivate mechanism: each round is a **fresh** immutable subgraph poured under the same `run-id`, so the whole loop history stays in the graph, squashable, never mutated in place. A `:condition [:!= :revision true]` gates the work that must not repeat; on a revision round the excluded step drops out and condition splicing (§3) reattaches its dependents, so the round is ready at the first genuinely-repeatable step.
+There is no reopen/reactivate mechanism: each round is a **fresh** immutable subgraph poured under the same `run-id`, so the whole loop history stays in the graph, squashable, never mutated in place. A `:condition [:!= :revision true]` gates the work that must not repeat; on a revision round the excluded step drops out and condition splicing ([§3](#3-definition-layer)) reattaches its dependents, so the round is ready at the first genuinely-repeatable step.
 
 ```clojure
 (workflow/register-workflow! :spec-plan 'my.ns/spec-plan)   ; the target declares :continue
@@ -433,7 +434,7 @@ There is no reopen/reactivate mechanism: each round is a **fresh** immutable sub
 
 A routed `:revise` is an ordinary transactional continuation, so the same "closes out the remaining steps" warning above applies unchanged.
 
-## 5a. Deferred continuation — an exit someone else fills
+## 5a. Deferred continuation: an exit someone else fills
 
 A checkpoint's `:next` is decided where the workflow is authored, and a `call` always returns to its caller. Neither can express the case this section covers: a spool that knows it has an exit point but has no business knowing what lies beyond it. `defer` names that exit; user Clojure that can see both spools says what may be chosen there.
 
@@ -547,15 +548,15 @@ The default lists definitions declaring the `:start` entrypoint, which is the qu
 | `params` | `{"kind":"spec"}` with the `:param-spec` identity, its live `spec-forms` graph, and `defaults`; or `{"kind":"none"}` with `defaults` alone, when the definition constrains nothing. |
 | `declared` | `entry` (items waiting for nothing), `loops`, `gates`, `checkpoints` with their choice keys, `calls` with their target and how it is named, `defers` and `dispatches` with their bound targets and required entrypoint, and `routes` — the registered names checkpoint choices route to. |
 
-The declared summary is exactly that: a summary of what the definition declares. Loops, calls, and continuations are never expanded, because an expansion depends on params that do not exist yet and a deferred exit cannot be described before a worker fills it. Use `describe` (§6a) when you have params and want the shape they would pour.
+The declared summary is exactly that: a summary of what the definition declares. Loops, calls, and continuations are never expanded, because an expansion depends on params that do not exist yet and a deferred exit cannot be described before a worker fills it. Use `describe` ([§6a](#6a-describing-and-archiving)) when you have params and want the shape they would pour.
 
-Failures carry the reason and what to do about it: an unregistered name fails as `workflow/definition-unregistered` listing the registered names, and a definition whose Var has vanished since publication fails as `workflow/definition-unresolvable` with the owner and the three repair choices (§5). A `list` read fails the same way rather than quietly returning one workflow fewer.
+Failures carry the reason and what to do about it: an unregistered name fails as `workflow/definition-unregistered` listing the registered names, and a definition whose Var has vanished since publication fails as `workflow/definition-unresolvable` with the owner and the three repair choices ([§5](#5-checkpoints-and-routing)). A `list` read fails the same way rather than quietly returning one workflow fewer.
 
 There is no family filter, pagination, JSON Schema projection, or registry mutation on this surface. Registration stays a trusted-Clojure and module-publication concern.
 
 ## 5c. Driving a run
 
-The same opt-in module publishes seven verbs over the lifecycle in §4: `start`, `ready`, `complete`, `choose`, `continue`, `dispatch`, and `await`. They add no engine semantics. Each validates a named request spec and delegates to the trusted-Clojure operation behind it. The four mutations — `complete`, `choose`, `continue`, and `dispatch` — additionally narrow the ready frontier to the role they act on and pass the engine an explicit step; `ready` reports the whole frontier and `start` and `await` act on the run rather than an item in it. Their Clojure entry points are `run-start!`, `run-ready`, `run-complete!`, `run-choose!`, `run-continue!`, `run-dispatch!`, and `run-await`, each taking one request map.
+The same opt-in module publishes seven verbs over the lifecycle in [§4](#4-run-lifecycle): `start`, `ready`, `complete`, `choose`, `continue`, `dispatch`, and `await`. They add no engine semantics. Each validates a named request spec and delegates to the trusted-Clojure operation behind it. The four mutations — `complete`, `choose`, `continue`, and `dispatch` — additionally narrow the ready frontier to the role they act on and pass the engine an explicit step; `ready` reports the whole frontier and `start` and `await` act on the run rather than an item in it. Their Clojure entry points are `run-start!`, `run-ready`, `run-complete!`, `run-choose!`, `run-continue!`, `run-dispatch!`, and `run-await`, each taking one request map.
 
 `advance!` is deliberately absent. A worker naming what it is doing — completing a step, choosing at a checkpoint, continuing into another routine — leaves a record of its intent that one general verb does not, and trusted Clojure still has `advance!` when a wrapper wants it.
 
@@ -572,7 +573,7 @@ $ strand workflow start feat-x --workflow spike --params '{"scope":"queue"}'
 
 `start`, `ready`, `complete`, `choose`, `continue`, and `dispatch` all answer with that shape: what you invoked, the run, its current root, its complete ready frontier, and whether it is done. A mutation therefore never needs a read after it to learn what is possible next, and an empty `ready` is never ambiguous — `done` says whether the run finished or stalled.
 
-`ready` reports every ready item of every role, not the subset your verb could act on. A worker that wants only its own role can filter; one that never saw the sibling item cannot know it exists. Items come back in definition order (§4), and a finished run still names the last root it poured, so the shape does not depend on when you asked.
+`ready` reports every ready item of every role, not the subset your verb could act on. A worker that wants only its own role can filter; one that never saw the sibling item cannot know it exists. Items come back in definition order ([§4](#4-run-lifecycle)), and a finished run still names the last root it poured, so the shape does not depend on when you asked.
 
 ### Inference by role
 
@@ -614,7 +615,7 @@ That is what makes the failure worth distinguishing: a stale frontier is retryab
 
 ### `workflow await`
 
-`await` blocks until the run is done or needs a worker, with the attention semantics `await!` already has (§4). It answers with the reason that stopped it, the frontier, done state, and the item behind the reason:
+`await` blocks until the run is done or needs a worker, with the attention semantics `await!` already has ([§4](#4-run-lifecycle)). It answers with the reason that stopped it, the frontier, done state, and the item behind the reason:
 
 ```console
 $ strand workflow await feat-x --timeout-secs 600
@@ -648,8 +649,8 @@ These projections let a user (or an agent) inspect a workflow's shape, its contr
 | Fn | Effect |
 |---|---|
 | `(describe workflow)` / `(describe workflow params)` | Compile-time projection of a workflow definition — **materializes nothing**. |
-| `(spec-forms ::spec)` | Ordered `s/form` documentation graph for a param or checkpoint input spec (§3). Runs no predicate; an unregistered root fails as `:workflow/spec-missing`. |
-| `(json->params obj)` | Recursively keywordizes a decoded JSON object's keys into a params or choice-input map (§3, §5). |
+| `(spec-forms ::spec)` | Ordered `s/form` documentation graph for a param or checkpoint input spec ([§3](#3-definition-layer)). Runs no predicate; an unregistered root fails as `:workflow/spec-missing`. |
+| `(json->params obj)` | Recursively keywordizes a decoded JSON object's keys into a params or choice-input map ([§3](#3-definition-layer), [§5](#5-checkpoints-and-routing)). |
 | `(run-history run-id)` | Read-only, creation-ordered projection of every molecule ever poured for a run. |
 | `(squash-run! run-id)` / `(squash-run! run-id {:title .. :attributes ..})` | Squash a finished run's molecules into one closed digest strand. |
 
@@ -667,7 +668,7 @@ These projections let a user (or an agent) inspect a workflow's shape, its contr
                      :input-spec {"spec" "my.ns/revise-input" "doc" "…"}}]}]}
 ```
 
-Each step carries `:id`, `:title`, `:role` (`"step"`/`"checkpoint"`/`"defer"`/`"dispatch"`/`"procedure"`, so a `call`'s procedure join shows as `:procedure` and an unfilled returning hand-off shows as `:dispatch`), and `:depends-on`; a conditioned step adds `:condition`, a gate adds `:gate`, and a checkpoint adds `:choices`. Each choice carries its `:key` plus any declared `:label`, `:description`, input contract (`:input-spec`, with its identity and doc), and its routing target (`:next` string or `:revise` override-param map). Description stays cheap: the spec's form graph is recorded when the checkpoint pours, not here. A `:condition`-excluded step is **absent** (its dependents splice through it, §3), so the ready frontier reads straight off the description. `(describe workflow)` describes what a definition's `:defaults` alone would pour, so a definition whose `:param-spec` wants more than they supply **fails loudly** against that spec; pass `params` for those.
+Each step carries `:id`, `:title`, `:role` (`"step"`/`"checkpoint"`/`"defer"`/`"dispatch"`/`"procedure"`, so a `call`'s procedure join shows as `:procedure` and an unfilled returning hand-off shows as `:dispatch`), and `:depends-on`; a conditioned step adds `:condition`, a gate adds `:gate`, and a checkpoint adds `:choices`. Each choice carries its `:key` plus any declared `:label`, `:description`, input contract (`:input-spec`, with its identity and doc), and its routing target (`:next` string or `:revise` override-param map). Description stays cheap: the spec's form graph is recorded when the checkpoint pours, not here. A `:condition`-excluded step is **absent** (its dependents splice through it, [§3](#3-definition-layer)), so the ready frontier reads straight off the description. `(describe workflow)` describes what a definition's `:defaults` alone would pour, so a definition whose `:param-spec` wants more than they supply **fails loudly** against that spec; pass `params` for those.
 
 ### `run-history`
 
@@ -685,7 +686,7 @@ Each event is a **closed** `step`, `checkpoint`, or `defer` strand (procedure jo
 
 ### `squash-run!`
 
-`squash-run!` is the run-level counterpart of `squash!` (§6). It **fails loudly** for an unknown run or one that still has an active root, then replaces every molecule subgraph of the run with **one** closed digest strand (`weaver/add!`, then `burn!` on each molecule) and returns it. The digest is stamped `workflow/role "digest"`, `workflow/run-id`, `workflow/squashed-count` (total strands folded), and a compact JSON-safe `workflow/summary` — one entry per molecule (creation order) with its title and the ordered checkpoint `outcomes`. `opts` may override the digest `:title` and merge extra `:attributes`. As with `squash!`, the original graph is burned, so a later `run-history` for the squashed run fails loudly.
+`squash-run!` is the run-level counterpart of `squash!` ([§6](#6-molecule-ops)). It **fails loudly** for an unknown run or one that still has an active root, then replaces every molecule subgraph of the run with **one** closed digest strand (`weaver/add!`, then `burn!` on each molecule) and returns it. The digest is stamped `workflow/role "digest"`, `workflow/run-id`, `workflow/squashed-count` (total strands folded), and a compact JSON-safe `workflow/summary` — one entry per molecule (creation order) with its title and the ordered checkpoint `outcomes`. `opts` may override the digest `:title` and merge extra `:attributes`. As with `squash!`, the original graph is burned, so a later `run-history` for the squashed run fails loudly.
 
 ## 7. Attribute vocabulary
 
@@ -695,7 +696,7 @@ This table is the extension API: spools built on top of `skein.spools.workflow` 
 |---|---|---|
 | `workflow/role` | `"root"`, `"step"`, `"checkpoint"`, `"defer"`, `"dispatch"`, `"procedure"`, or `"digest"`. Drives which strands count as workflow work. | `compile` (root/step strands), `defer`/`dispatch` builders, `dispatch!` and `expand-call-step` (procedure joins), `squash!` (digest). |
 | `workflow/form` | `"molecule"` or `"wisp"`. | `compile`, from `opts :form` (defaults molecule) or `pour!`/`wisp!`. |
-| `workflow/position` | Integer index of a step in the normalized step order — declaration order with loops expanded and calls spliced. Orders the ready frontier (§4). Steps poured before this attribute existed sort after positioned ones, by id. | `compile` (step strands only). |
+| `workflow/position` | Integer index of a step in the normalized step order — declaration order with loops expanded and calls spliced. Orders the ready frontier ([§4](#4-run-lifecycle)). Steps poured before this attribute existed sort after positioned ones, by id. | `compile` (step strands only). |
 | `workflow/run-id` | Stable run handle used by `start!`/`ready`/`complete!`/`choose!`/`continue!`/`dispatch!`/`current-root`. | `compile`, from `opts :run-id` (root strand only). |
 | `workflow/family` | Grouping label across related runs (e.g. `"devflow"`). Carried forward into `:next` continuations. | `compile`, from `opts :family` (root strand only). |
 | `workflow/definition` | Stringified symbol naming the definition Var this root was built from. | `compile`, from `opts :definition` (root strand only; set by start, `:revise`, and named/symbol `:next` routing). |
@@ -760,8 +761,8 @@ The test suite in [`test/skein/spools/workflow_test.clj`](../test/skein/spools/w
   namespace: opinionated devflow-stage workflow definitions and thin
   `start!`/`ready-step`/`complete!`/`choose!` wrappers keyed by feature name
   instead of a raw run-id. It registers its stages under stable names and uses
-  `:revise` choices for its revision loops (§5) rather than dead-ending the run
-  or hand-writing revision wrappers. See `devflow.md`.
+  `:revise` choices for its revision loops ([§5](#5-checkpoints-and-routing))
+  rather than dead-ending the run or hand-writing revision wrappers. See `devflow.md`.
 - `(skein.spools.workflow/explain)` / `(explain topic)` — machine-readable
   contracts for `:workflow`, `:definition`, `:step`, `:gate`, `:checkpoint`, and `:call`,
   intended for agents to call before constructing workflow data instead of

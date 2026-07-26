@@ -174,8 +174,9 @@ The override inherits the shared family's `:roots`, `:requires`, and `:skein/min
 
 ## Reference examples
 
-- Each contract doc ends with worked examples (`workflow.md` §8,
-  `devflow.md` §4).
+- Each contract doc ends with worked examples ([workflow.md
+  §8](./workflow.md#8-worked-examples), and §4 of the external
+  [devflow.md](./devflow.md) contract).
 - The test suites drive every documented behavior against a real weaver
   runtime and double as executable examples:
   [`test/skein/spools/workflow_test.clj`](../test/skein/spools/workflow_test.clj),
@@ -183,18 +184,20 @@ The override inherits the shared family's `:roots`, `:requires`, and `:skein/min
 
 ## Using and extending
 
-- Strand **attributes are the extension surface**: `workflow.md` §7's
-  attribute table is the workflow engine's extension API, and `devflow.md`
-  §6 documents devflow's conventions on top of it. Build your own
-  conventions the same way instead of waiting for engine fields — and give
+- Strand **attributes are the extension surface**: [workflow.md
+  §7](./workflow.md#7-attribute-vocabulary)'s attribute table is the workflow
+  engine's extension API, and §6 of the external
+  [devflow.md](./devflow.md) contract documents its conventions on top of
+  it. Build your own conventions the same way instead of waiting for engine fields — and give
   them new names only for new concepts. A spool built on workflow or
   agent-run reads and writes `workflow/*` / `agent-run/*` attributes
   directly and reserves its own namespace for state the primitive does not
   carry ([the vocabulary
   rule](../docs/spools/writing-shared-spools.md#the-rules-for-shared-spools)).
-- Workflow definitions accept pure-data **tool bindings** (`workflow.md`
-  §3), so a consumer rebinds steps to their own tooling from trusted config
-  without touching these namespaces.
+- Workflow definitions accept pure-data **tool bindings** ([workflow.md §3
+  "Tool bindings"](./workflow.md#3-definition-layer)), so a consumer rebinds
+  steps to their own tooling from trusted config without touching these
+  namespaces.
 - A spool publishes its declarations through a `contribute` function that
   returns owner-complete kind→entry data, and owns any resource or registration
   effects in an optional `reconcile` function. See each contract doc for exact
