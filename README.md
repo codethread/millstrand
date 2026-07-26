@@ -311,6 +311,23 @@ The checkpoint above names its routes where the workflow is written, which is fi
     (workflow/defer :perform-work "Choose how this work will be performed"
                     :depends-on [:prepare])))
 
+;; two delivery routines, sketched small — ordinary workflows in their own right
+(workflow/defworkflow spike
+  "Timebox an experiment and write up what it settled."
+  {:entrypoints #{:start :continue}}
+  (workflow/workflow "Spike"
+    (workflow/step :explore "Timebox the experiment" :self)
+    (workflow/step :write-up "Write up what it settled" :self :depends-on [:explore])))
+
+(workflow/defworkflow devflow
+  "Specify a feature, review the spec, then build it."
+  {:entrypoints #{:start :continue}
+   :defaults {:feature "unnamed"}}
+  (workflow/workflow (fn [{:keys [feature]}] (str "Devflow: " feature))
+    (workflow/step :spec "Write the spec" :self)
+    (workflow/gate :review "Roster review of the spec" :subagent :depends-on [:spec])
+    (workflow/step :build "Build to the spec" :self :depends-on [:review])))
+
 ;; in your workspace config, which can see both spools
 (workflow/defworkflow tracked-card
   "Track a card and select its delivery routine."
@@ -318,7 +335,7 @@ The checkpoint above names its routes where the workflow is written, which is fi
   (workflow/bind-defers track-card {:perform-work #{:spike :devflow}}))
 ```
 
-The spool says where a worker chooses; `bind-defers` says what they may choose from. Once `:prepare` closes, the exit is the ready frontier and carries that allowlist. A worker fills it:
+Nothing marks `spike` and `devflow` as continuations beyond the `:continue` they declare — they are the same `step`/`gate`/`defworkflow` pieces as everything above, and either can still be started on its own. The spool says where a worker chooses; `bind-defers` says what they may choose from. Once `:prepare` closes, the exit is the ready frontier and carries that allowlist. A worker fills it:
 
 ```clojure
 (workflow/continue! "card-123" :devflow {:feature "kanban-web-ui"} {:by "worker-1"})
