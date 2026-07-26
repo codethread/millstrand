@@ -437,21 +437,21 @@
             |and show answer which registered routines exist and what one of them
             |expects, both read from the weaver's live registry rather than a
             |catalogue baked in when Skein was built. start, ready, complete,
-            |choose, continue, dispatch, and await drive a run: they share one result shape
-            |— the run, its current root, its complete ready frontier, and
-            |whether it is done — so every call tells you what you may do next
-            |without a second read.")
+            |choose, continue, dispatch, and await drive a run: they share one
+            |result shape — the run, its current root, its complete ready
+            |frontier, and whether it is done — so every call tells you what
+            |you may do next without a second read.")
    :prime (fmt/reflow
            "|Run workflow list before choosing a routine and workflow show
             |<name> before supplying params; the param contract it prints is the
             |one the engine will judge your invocation against. Then start the
             |run and work its frontier: complete a step, choose a checkpoint,
             |continue a defer exit, or dispatch a returning hand-off. Each verb
-            |infers the sole ready item of its
-            |own role, so pass --step only when it says the frontier is
-            |ambiguous — and always to close a gate, which also needs --by. If a
-            |mutation fails as workflow/frontier-stale, another worker moved the
-            |run: re-read workflow ready and act on what is there now.")})
+            |infers the sole ready item of its own role, so pass --step only
+            |when it says the frontier is ambiguous — and always to close a
+            |gate, which also needs --by. If a mutation fails as
+            |workflow/frontier-stale, another worker moved the run: re-read
+            |workflow ready and act on what is there now.")})
 
 (def ^:private workflow-glossary
   [{:name "workflow/ready-dispatch-absent"
