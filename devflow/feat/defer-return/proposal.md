@@ -1,6 +1,7 @@
 # Defer as runtime-selected returning composition
 
 **Document ID:** `PROP-Dfr-001`
+**Status:** Implemented
 **Last Updated:** 2026-07-26
 **Related RFCs:** [`RFC-Dyc-001`](../../rfcs/2026-07-26-runtime-selected-returning-composition.md)
 **Related spool contract:** [Workflow](../../../spools/workflow.md)

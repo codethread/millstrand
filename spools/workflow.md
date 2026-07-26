@@ -20,6 +20,8 @@ The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `read
 
 Every run-mutating op (`start!`, `complete!`, `choose!`, `defer!`, `advance!`) returns one `{:ready [step-view ...] :done boolean}` map: `:ready` is the run's ready step views (as `ready` would return them) and `:done` is its done-ness, so an empty `:ready` never leaves a caller guessing whether the run finished or merely stalled. The pure queries `ready`/`ready-step` still return step views directly.
 
+The returning-defer change is a cold cutover with no old-strand interpreter. Before installing a build that contains it, follow the [defer-return cutover runbook](../docs/spools/defer-return-cutover.md); live refresh is not a valid pickup path.
+
 ## 2. Credit
 
 Terminology — molecule, wisp, pour, bond, squash, burn, and the proto-like workflow-definition-as-data pattern — borrows heavily from [beads](https://github.com/steveyegge/beads) by Steve Yegge (see `docs/MOLECULES.md` in that repo).

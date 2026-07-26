@@ -3,7 +3,7 @@
 **Document ID:** `DELTA-Dfr-001`
 **Contract doc:** [spools/workflow.md](../../../../spools/workflow.md)
 **Feature:** [../proposal.md](../proposal.md)
-**Status:** Draft
+**Status:** Merged
 **Last Updated:** 2026-07-26
 
 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `DELTA-Dfr-001` for v1 and `DELTA-Dfr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `DELTA-Dfr-001.P1` or `DELTA-Dfr-001@2.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
@@ -45,3 +45,7 @@ The workflow spool replaces its two runtime-selected composition concepts with o
 ## DELTA-Dfr-001.P4 Open questions
 
 None.
+
+## DELTA-Dfr-001.P5 Merge record
+
+Merged into [`spools/workflow.md`](../../../../spools/workflow.md) on 2026-07-26. The contract's builders, driving, awaiting, returning defer, discovery, history, and attribute-vocabulary sections carry CC1–CC6. [The defer-return cutover runbook](../../../../docs/spools/defer-return-cutover.md) carries CC7.

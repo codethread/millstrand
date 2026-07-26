@@ -6,7 +6,7 @@
 **RFC:** [Runtime-selected returning composition](../../rfcs/2026-07-26-runtime-selected-returning-composition.md)
 **Root specs:** None; the shipped workflow contract is `spools/workflow.md`.
 **Feature specs:** [Workflow spool delta](./specs/workflow-spool.delta.md)
-**Status:** Active
+**Status:** Shipped
 **Last Updated:** 2026-07-26
 
 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PLAN-Dfr-001` for v1 and `PLAN-Dfr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `PLAN-Dfr-001.P1` or `PLAN-Dfr-001@2.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
@@ -104,3 +104,18 @@ Outcome: the pinned-peer no-impact audit is recorded, the workflow contract and 
 - Discovery reports one `:defers` collection. Every entry carries `:entrypoint "call"`, and the projection and its spec have no parallel collection for the removed role.
 - The README, workflow contract, cookbook, spool index, shared-spool guide, repository worker prose, and Ubiquitous Language now teach `call` for an author-selected returning procedure, `defer` for a worker-selected returning procedure, and checkpoint `:next` for root routing. The obsolete adapter recipe is gone; the cookbook has separate middle and final defer recipes.
 - Cold `skein.spools.workflow-test`, `skein.spools.workflow-cli-test`, and `skein.spools.workflow-run-cli-test` passed: 213 tests and 916 assertions. `make api-docs`, `make docs-check`, `make fmt-check lint reflect-check`, the docs-style sweep, and `git diff --check` also passed.
+
+### PLAN-Dfr-001.DN6 Task 3 pinned-peer audit — 2026-07-26
+
+The acceptance audit used the exact repository pins from `.skein/spools.edn`. These commands first proved that v15, v9, and v11 peel to the recorded SHAs, then searched every tracked file at each commit for the removed Clojure, CLI, discovery, failure, role, and durable-attribute surface:
+
+```sh
+git -C /Users/ct/dev/projects/agent-harness.spool rev-parse 'v15^{}'
+git -C /Users/ct/dev/projects/agent-harness.spool grep -nI -E 'skein\.spools\.workflow/(dispatch!?|run-dispatch!|continue!|run-continue!|bind-handoffs)|workflow/(dispatch|dispatched-|continued-|ready-dispatch|step-not-dispatch|handoff)|:dispatches|workflow (dispatch|continue)([^[:alnum:]_-]|$)|"dispatch"' 0e3f43f695b0d4d1695754a59348c339220281a8 -- . || test $? -eq 1
+git -C /Users/ct/dev/projects/devflow.spool rev-parse 'v9^{}'
+git -C /Users/ct/dev/projects/devflow.spool grep -nI -E 'skein\.spools\.workflow/(dispatch!?|run-dispatch!|continue!|run-continue!|bind-handoffs)|workflow/(dispatch|dispatched-|continued-|ready-dispatch|step-not-dispatch|handoff)|:dispatches|workflow (dispatch|continue)([^[:alnum:]_-]|$)|"dispatch"' 499c9d6c51f28cd3a5d6de28718df082118ff4cc -- . || test $? -eq 1
+git -C /Users/ct/dev/projects/kanban.spool rev-parse 'v11^{}'
+git -C /Users/ct/dev/projects/kanban.spool grep -nI -E 'skein\.spools\.workflow/(dispatch!?|run-dispatch!|continue!|run-continue!|bind-handoffs)|workflow/(dispatch|dispatched-|continued-|ready-dispatch|step-not-dispatch|handoff)|:dispatches|workflow (dispatch|continue)([^[:alnum:]_-]|$)|"dispatch"' e165b9b8c721653d32243fe177bd910f52325a00 -- . || test $? -eq 1
+```
+
+All three removed-surface searches returned no matches. A second pass for `run-history`, `current-root`, `workflow/role`, and `workflow/outcome` found only retained contracts: agent-harness v15 reads `workflow/outcome-by` on delegation gates; devflow v9 calls `current-root` and `run-history` and checks digest role; kanban v11 has no reader. None depends on the deleted continuation event, dispatch role, or bare `workflow/outcome`. The disposition is no impact for v15/v9/v11, with no peer release and no pin movement.

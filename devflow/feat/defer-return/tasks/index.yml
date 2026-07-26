@@ -12,5 +12,5 @@ tasks:
   - id: 3
     description: Promote contracts and run acceptance
     task_file: tasks/003-contracts-and-acceptance.md
-    status: pending
+    status: complete
     blocked_by: [2]
