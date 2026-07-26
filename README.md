@@ -237,7 +237,7 @@ Skein is built for agents, and its own repository is written for them to read. P
 
 Everything on this page is a few small primitives — `add`, `weave`, `pattern` — over one graph. Around them Skein ships shared libraries called [spools](./spools/README.md), the durable workspace config you saw `mill init` create, an event and hooks system inside the weaver, and a testing library (`skein.test.alpha`) that spins up disposable weaver worlds. They go a long way: this repository coordinates its own development (a kanban board, a feature lifecycle, delegated agent runs, and a landing workflow) entirely in userland code built from those parts.
 
-Workflows are plain data, so they compose. A `workflow/call` inlines a reusable procedure into its parent's graph; a dependency on the call waits for the whole procedure to finish. A `workflow/defer` is a terminal exit a spool can name without naming what fills it. A `workflow/dispatch` selects such a routine at run time but returns to the workflow that declared it.
+Workflows are plain data, so they compose. A `workflow/call` inlines a reusable procedure chosen while the workflow is authored; a dependency on the call waits for the whole procedure to finish. A `workflow/defer` does the same returning composition when a worker must choose the routine at run time. Checkpoint `:next` is the separate root-routing construct.
 
 <details markdown>
 <summary>One workflow calling another</summary>
@@ -299,9 +299,9 @@ The example at the top of this page shows the shape. Here is the workflow from t
 </details>
 
 <details markdown>
-<summary>A hand-off the spool cannot name</summary>
+<summary>A returning routine chosen at run time</summary>
 
-The checkpoint above names its routes where the workflow is written, which is fine when one repo owns both ends. A spool published for other people often can't do that: it knows *where* the work gets handed off, but deciding what is on the other side is not its call. That exit is a `workflow/defer`.
+A checkpoint names its route while the workflow is authored. A shared spool often knows where a reusable routine belongs without knowing which routine a workspace will permit there. That selection point is a `workflow/defer`.
 
 ```clojure
 ;; in the tracker spool, which mentions no other spool
@@ -309,19 +309,21 @@ The checkpoint above names its routes where the workflow is written, which is fi
   (workflow/workflow "Track a card"
     (workflow/step :prepare "Prepare the card" :self)
     (workflow/defer :perform-work "Choose how this work will be performed"
-                    :depends-on [:prepare])))
+                    :depends-on [:prepare])
+    (workflow/step :close-card "Close the card" :self
+                   :depends-on [:perform-work])))
 
 ;; two delivery routines, sketched small — ordinary workflows in their own right
 (workflow/defworkflow spike
   "Timebox an experiment and write up what it settled."
-  {:entrypoints #{:start :continue}}
+  {:entrypoints #{:start :call}}
   (workflow/workflow "Spike"
     (workflow/step :explore "Timebox the experiment" :self)
     (workflow/step :write-up "Write up what it settled" :self :depends-on [:explore])))
 
 (workflow/defworkflow devflow
   "Specify a feature, review the spec, then build it."
-  {:entrypoints #{:start :continue}
+  {:entrypoints #{:start :call}
    :defaults {:feature "unnamed"}}
   (workflow/workflow (fn [{:keys [feature]}] (str "Devflow: " feature))
     (workflow/step :spec "Write the spec" :self)
@@ -332,26 +334,18 @@ The checkpoint above names its routes where the workflow is written, which is fi
 (workflow/defworkflow tracked-card
   "Track a card and select its delivery routine."
   {:entrypoints #{:start}}
-  (workflow/bind-handoffs track-card {:perform-work #{:spike :devflow}}))
+  (workflow/bind-defers track-card {:perform-work #{:spike :devflow}}))
 ```
 
-Nothing marks `spike` and `devflow` as continuations beyond the `:continue` they declare — they are the same `step`/`gate`/`defworkflow` pieces as everything above, and either can still be started on its own. The spool says where a worker chooses; `bind-handoffs` says what they may choose from. Once `:prepare` closes, the exit is the ready frontier and carries that allowlist. A worker fills it:
+The targets declare `:call` because they return to the workflow containing the defer. The spool names the selection point; `bind-defers` says what may be chosen there. Once `:prepare` closes, the defer is ready and carries that allowlist. A worker fills it:
 
 ```clojure
-(workflow/continue! "card-123" :devflow {:feature "kanban-web-ui"} {:by "worker-1"})
-;; closes the card's root and pours devflow under the same run id
+(workflow/defer! "card-123" :devflow {:feature "kanban-web-ui"} {:by "worker-1"})
+;; pours devflow beneath the card's root; :close-card waits for it to return
 ```
 
-A defer never returns, so there is no closing step to write. Trying anyway fails at the builder rather than at the pour:
+A defer in final position has the same meaning. Omit `:close-card` and the declaring run finishes after the selected routine and any parallel siblings finish. Tail position does not transfer the root or abandon sibling work.
 
-```clojure
-(workflow/step :close-card "Close the card" :self :depends-on [:perform-work])
-;; Workflow steps cannot depend on a defer exit
-;; {:reason :workflow/defer-not-terminal :step :close-card :defer :perform-work}
-```
-
-The card is already closed by then. `continue!` is a root transfer: it closes the card's root and pours devflow as the run's new root in one batch, so a failing pour commits nothing and leaves the exit ready to retry. It merges none of the card's context either, so devflow validates its own params whole. For the same reason a workflow declaring a defer cannot be `call`-ed — a procedure join would continue past the exit.
-
-If you do want work after a worker-selected routine finishes, use `workflow/dispatch`: it fills in place, keeps the current root, and makes the next step ready after the routine's procedure join closes. Its targets declare `:call`, and user code binds its allowlist with `bind-handoffs`. Use `call` when the target is known while authoring the workflow. The cookbook also shows a user-owned adapter for cases where the terminal hand-off genuinely transfers ownership but must later reach a wrap-up workflow.
+`defer!` keeps the current root and rewrites the selection point as the procedure join. It passes the target only its own defaults plus the explicit params above; caller context does not leak across the boundary. A refusal or failed pour leaves the defer ready to retry. Use `call` when the target is already known while authoring, `defer` when a worker chooses at run time, and checkpoint `:next` when the current stage should be abandoned for an authored route.
 
 </details>

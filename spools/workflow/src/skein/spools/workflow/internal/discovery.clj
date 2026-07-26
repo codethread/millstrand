@@ -12,10 +12,10 @@
   time.
 
   The projections are topology-lazy on purpose. `show` reports what a definition
-  *declares* — its entry items, loops, gates, checkpoints, calls, defer exits,
-  and the registered workflows it routes to — and never expands one. An
-  expansion depends on params that do not exist yet, and a deferred exit cannot
-  be honestly described before a worker fills it.
+  *declares* — its entry items, loops, gates, checkpoints, calls, defers, and the
+  registered workflows it routes to — and never expands one. An expansion depends
+  on params that do not exist yet, and a defer cannot be honestly described
+  before a worker fills it.
 
   Definitions that declare nothing are reported as such rather than hidden."
   (:require [skein.spools.workflow.internal.definitions :as defs]
@@ -132,20 +132,13 @@
   (assoc (procedure-view (:procedure item)) :step (item-id item)))
 
 (defn- defer-view
-  "Return the declared summary of a defer exit: the named exit and the registered
-  workflows its binding allows, in the stored order."
+  "Return the declared summary of a defer: the named selection point, the
+  registered workflows its binding allows in the stored order, and the entrypoint
+  every one of them must declare."
   [item]
   {:step (item-id item)
    :defer (name (defs/defer-name item))
-   :workflows (vec (get-in item [:attributes "workflow/defer-workflows"] []))})
-
-(defn- dispatch-view
-  "Return the declared summary of a dispatch: its point, allowed targets, and
-  required target entrypoint."
-  [item]
-  {:step (item-id item)
-   :dispatch (name (defs/handoff-name item))
-   :workflows (vec (get-in item [:attributes "workflow/dispatch-workflows"] []))
+   :workflows (vec (get-in item [:attributes "workflow/defer-workflows"] []))
    :entrypoint "call"})
 
 (defn- declared-view
@@ -154,11 +147,10 @@
   Every vector holds declaration order — the order the author wrote — except
   `:routes`, which is a set of registered names and is therefore sorted. Nothing
   here is an expansion: a loop reports its declared source, a call reports its
-  declared target, and each hand-off reports its binding."
+  declared target, and each defer reports its binding."
   [definition]
   (let [items (:steps definition)
         defers (filterv util/defer-step? items)
-        dispatches (filterv util/dispatch-step? items)
         calls (filterv call-item? items)
         checkpoints (filterv checkpoint-item? items)]
     {:kind "static"
@@ -168,7 +160,6 @@
      :checkpoints (mapv checkpoint-view checkpoints)
      :calls (mapv call-view calls)
      :defers (mapv defer-view defers)
-     :dispatches (mapv dispatch-view dispatches)
      :routes (mapv name (sort (:continue (defs/references definition))))}))
 
 ;; --- param contract views -----------------------------------------------------

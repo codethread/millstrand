@@ -101,13 +101,13 @@
   ;; (TEN-003) instead of overflowing the stack.
   [])
 
-(def ^:private ^:dynamic *dispatch-path*
-  ;; A dispatch records the lexical definition ancestry that encloses it. Unlike
+(def ^:private ^:dynamic *defer-path*
+  ;; A defer records the lexical definition ancestry that encloses it. Unlike
   ;; `*procedure-path*`, which exists solely to reject recursive fixed calls,
-  ;; this holds the durable wire values written on every poured dispatch.
+  ;; this holds the durable wire values written on every poured defer.
   [])
 
-(defn- dispatch-identity
+(defn- defer-identity
   "Return the persisted identity entry for a definition being compiled."
   [workflow definition]
   {"fingerprint" (defs/fingerprint {:value workflow})
@@ -124,7 +124,7 @@
   "Return the call target's classification `{:kind … :value …}`.
 
   `:value` is the canonical procedure definition map, so cycle detection and
-  dispatch never depend on whether the author wrote a registered name, a
+  expansion never depend on whether the author wrote a registered name, a
   symbol, a Var, or the definition itself. A registered name must declare
   `:call`; raw targets skip that entrypoint check but still supply their
   `:defaults` and `:param-spec` when they are definition maps."
@@ -202,12 +202,11 @@
         params (->> (merge params (or (:params call-step) {}))
                     (defs/definition-params target)
                     (defs/validate-params! target))
-        workflow (defs/require-no-defers! (procedure-workflow procedure params)
-                                          {:call call-id :procedure (:procedure call-step)})
+        workflow (procedure-workflow procedure params)
         payload (binding [*procedure-path* (conj *procedure-path* procedure)]
                   (compile workflow params
                            (assoc (select-keys target [:definition])
-                                  :dispatch-path *dispatch-path*)))
+                                  :defer-path *defer-path*)))
         expansion (procedure-expansion call-id payload (:depends-on call-step))
         prefixed (:strands expansion)
         join-title (or (:title call-step) (str "Complete " (name call-id)))]
@@ -298,8 +297,25 @@
     (when-let [collision (some #{root-ref} base-ids)]
       (fail! "Workflow step ref collides with the root ref" {:step collision :root-ref root-ref}))))
 
+(defn- stamp-defer-paths
+  "Return `steps` with every authored defer carrying the engine-owned
+  `workflow/defer-path` of the definition being compiled.
+
+  The lineage a cycle check reads is compile's to write, so this overwrites
+  whatever the step arrived with: a raw definition map that skipped the builder
+  cannot declare an empty ancestry and walk straight past the fill-time
+  membership check (PROP-Dfr-001.S5). It runs before procedure expansion, so a
+  step spliced in from a nested compile keeps the deeper path that compile
+  already computed for it — re-stamping there would flatten the nesting away."
+  [steps]
+  (mapv (fn [step]
+          (cond-> step
+            (util/defer-step? step)
+            (assoc-in [:attributes "workflow/defer-path"] (vec *defer-path*))))
+        steps))
+
 (defn- normalize-steps [workflow params root-ref]
-  (let [steps (util/require-vector! (:steps workflow) [:steps])
+  (let [steps (stamp-defer-paths (util/require-vector! (:steps workflow) [:steps]))
         _ (require-unique-base-ids! steps root-ref)
         expansions (mapv (fn [step]
                            (let [expanded (expand-loop-step step params)]
@@ -359,14 +375,6 @@
                           (when-let [description (:description step)]
                             {"description" description}))]
     (cond-> attributes
-      ;; A step spliced in from a nested compile already carries the deeper
-      ;; ancestry that compile computed for it, and that value is the correct
-      ;; one — re-stamping it here would flatten the nesting away. An *authored*
-      ;; path can never reach this point: the `dispatch` builder refuses the key
-      ;; outright (DELTA-Dyc-001.CC7), so absence means "not yet stamped".
-      (and (= "dispatch" (get attributes "workflow/role"))
-           (not (contains? attributes "workflow/dispatch-path")))
-      (assoc "workflow/dispatch-path" (vec *dispatch-path*))
       (get attributes "workflow/choice-details")
       (update "workflow/choice-details" poured-choice-details))))
 
@@ -457,24 +465,24 @@
   parent-of + depends-on edges under `root`'s ref.
 
   This is where every pour passes and `describe` does not, so it is where an
-  unbound defer is refused: a published template may name an exit point nobody
-  has bound yet and still describe itself, but materializing it would strand the
-  run at an exit with nowhere to go."
+  unbound defer is refused: a published template may name a selection point
+  nobody has bound yet and still describe itself, but materializing it would
+  strand the run at a defer no worker could fill."
   [root form steps]
-  (defs/validate-handoff-bindings! {:steps steps} {:workflow (:title root)})
+  (defs/validate-defer-bindings! {:steps steps} {:workflow (:title root)})
   {:strands (into [root] (map-indexed #(step-strand %2 form %1) steps))
    :edges (vec (concat (parent-edges (:ref root) steps)
                        (dependency-edges steps)))})
 
-(defn with-dispatch-path
-  "Call `f` with the lexical dispatch path for compiling `workflow` and `opts`.
+(defn with-defer-path
+  "Call `f` with the lexical defer path for compiling `workflow` and `opts`.
 
   The public compile story and recursive inline-call compiler share this small
   dynamic-context seam; the named compilation stages stay independently visible."
   [workflow opts f]
-  (let [path (conj (or (:dispatch-path opts) *dispatch-path*)
-                   (dispatch-identity workflow (:definition opts)))]
-    (binding [*dispatch-path* path]
+  (let [path (conj (or (:defer-path opts) *defer-path*)
+                   (defer-identity workflow (:definition opts)))]
+    (binding [*defer-path* path]
       (f))))
 
 (defn compile
@@ -502,7 +510,7 @@
   ([workflow params]
    (compile workflow params {}))
   ([workflow params opts]
-   (with-dispatch-path
+   (with-defer-path
      workflow opts
      (fn []
        (let [form (or (:form opts) (:form workflow) :molecule)

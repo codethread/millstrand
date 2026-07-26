@@ -114,9 +114,6 @@
       (attr step :workflow/defer) (assoc :defer (attr step :workflow/defer))
       (attr step :workflow/defer-workflows)
       (assoc :workflows (attr step :workflow/defer-workflows))
-      (attr step :workflow/dispatch) (assoc :dispatch (attr step :workflow/dispatch))
-      (attr step :workflow/dispatch-workflows)
-      (assoc :workflows (attr step :workflow/dispatch-workflows))
       (attr step :workflow/checkpoint) (assoc :checkpoint (attr step :workflow/checkpoint))
       (attr step :workflow/checkpoint-kind) (assoc :checkpoint-kind (attr step :workflow/checkpoint-kind))
       (attr step :workflow/choices) (assoc :choices (attr step :workflow/choices))
@@ -138,7 +135,7 @@
          (filter matches?)
          vec)))
 
-(def ^:private workflow-work-roles #{"step" "checkpoint" "defer" "dispatch" "procedure"})
+(def ^:private workflow-work-roles #{"step" "checkpoint" "defer" "procedure"})
 
 (defn- workflow-role [strand]
   (attr strand :workflow/role))
@@ -191,18 +188,16 @@
 (def ^:private history-event-roles
   ;; Procedure joins (role "procedure") are engine bookkeeping with no
   ;; user-facing outcome, so run-history projects only the roles a worker acted
-  ;; on: step, checkpoint, and defer closes.
-  #{"step" "checkpoint" "defer"})
+  ;; on: step and checkpoint closes. A filled defer *is* such a join, and an
+  ;; unfilled one force-closed by a checkpoint cutover was never acted on at all
+  ;; (PROP-Dfr-001.S6); which routine a worker selected stays readable on the
+  ;; strand itself.
+  #{"step" "checkpoint"})
 
 (defn- history-event
-  "Project one closed step/checkpoint/defer strand into a history event. A
-  checkpoint is a `:choice`, a filled defer exit is a `:continuation`, a closed
-  gate is a `:gate-closed`, and any other step is a `:step-closed`; `:at` is the
-  strand's `updated_at`, used for event ordering.
-
-  A continuation's `:outcome` is the registered workflow the worker selected;
-  the resolved symbol, fingerprint, and exact target params stay on the strand
-  where `continue!` recorded them.
+  "Project one closed step/checkpoint strand into a history event. A checkpoint
+  is a `:choice`, a closed gate is a `:gate-closed`, and any other step is a
+  `:step-closed`; `:at` is the strand's `updated_at`, used for event ordering.
 
   The projected keys are the engine's own three outcome attributes and nothing
   else. A caller's outcome vocabulary rides `complete!`'s `:attributes` onto the
@@ -213,7 +208,6 @@
         gate (attr strand :workflow/gate)
         type (cond
                (= "checkpoint" role) :choice
-               (= "defer" role) :continuation
                gate :gate-closed
                :else :step-closed)]
     (cond-> {:type type
@@ -225,8 +219,9 @@
       (attr strand :workflow/outcome-input) (assoc :input (attr strand :workflow/outcome-input)))))
 
 (defn molecule-history
-  "Project one molecule root into `{:root {…} :events [event …]}`, its events being
-  every closed step/checkpoint strand in the root's subgraph, ordered by `:at`."
+  "Project one molecule root into `{:root {…} :events [event …]}`, its events
+  being every closed step/checkpoint strand in the root's subgraph, ordered by
+  `:at`."
   [rt root]
   (let [events (->> (:strands (graph/subgraph rt [(:id root)]))
                     (filter #(and (= "closed" (:state %))

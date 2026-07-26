@@ -19,11 +19,13 @@
   registered workflow, a call target, a defer's bound target set, and the
   deletions an owner expressed by omitting an entry it used to contribute.
 
-  The defer topology rules live here too. They read the authored `:steps` rather
-  than a compiled graph, so a defer is judged terminal before any params exist,
-  and one predicate answers for the builder, the pour, and publication alike."
+  The defer declaration rules live here too. They read the authored `:steps`
+  rather than a compiled graph, so a defer is judged static before any params
+  exist, and one predicate answers for the builder, the pour, and publication
+  alike."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [skein.api.format.alpha :as fmt]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :refer [fail! require-valid!]]
             [skein.spools.workflow.internal.registry :as registry]
@@ -35,9 +37,10 @@
   "The invocation capabilities a static definition may declare, in the order
   every projection reports them.
 
-  `:start` begins a fresh run, `:continue` is any tail continuation — an
-  authored checkpoint route or a worker-selected deferred exit — and `:call`
-  allows inline procedure expansion inside another workflow.
+  `:start` begins a fresh run, `:continue` is an authored checkpoint route, and
+  `:call` allows inline procedure expansion inside another workflow — whether
+  the caller named the procedure when it was authored or a worker selected it at
+  a defer.
 
   A definition declares its capabilities as a set, so this vector is where the
   reported order comes from: discovery emits `[\"start\" \"continue\"]` for the
@@ -191,10 +194,10 @@
                         (.getBytes (pr-str (:value resolved)) "UTF-8"))]
     (str/join (map #(format "%02x" %) (take 8 digest)))))
 
-;; --- hand-offs ----------------------------------------------------------------
+;; --- defers -------------------------------------------------------------------
 
 (defn defer-steps
-  "Return the declared defer exit steps of `definition`, in declaration order."
+  "Return the declared defer steps of `definition`, in declaration order."
   [definition]
   (filterv util/defer-step? (:steps definition)))
 
@@ -209,96 +212,54 @@
   [step]
   (into #{} (map keyword) (get-in step [:attributes "workflow/defer-workflows"] [])))
 
-(defn handoff-steps
-  "Return every declared defer or dispatch step in declaration order."
+(defn validate-defer-declarations!
+  "Return `definition` once every defer it declares is static and carries no
+  authored lineage.
+
+  A defer is runtime-selected returning composition, so it takes ordinary
+  dependency topology — a step, checkpoint, call, condition, or loop may depend
+  on one. What it may not be is conditional or multiplied: a selection point the
+  params could delete, or fan out, is not a selection point. The `defer` builder
+  rejects `:condition` and `:loop` as unknown opts; this is the check a raw
+  definition map registered directly still has to pass (PROP-Dfr-001.S1).
+
+  `workflow/defer-path` is engine-owned lineage. An authored value would be read
+  as an already-stamped ancestry, so a defer declaring an empty one would walk
+  straight past the fill-time cycle check (PROP-Dfr-001.S5)."
   [definition]
-  (filterv #(or (util/defer-step? %) (util/dispatch-step? %)) (:steps definition)))
-
-(defn handoff-name
-  "Return the declared name of hand-off `step` as a keyword."
-  [step]
-  (keyword (get-in step [:attributes (if (util/defer-step? step)
-                                       "workflow/defer"
-                                       "workflow/dispatch")])))
-
-(defn dispatch-targets
-  "Return the registered workflow names `step`'s dispatch binding allows."
-  [step]
-  (into #{} (map keyword) (get-in step [:attributes "workflow/dispatch-workflows"] [])))
-
-(defn validate-defer-topology!
-  "Return `definition` once its defer exits are terminal and unconditional.
-
-  A defer is a terminal cross-spool exit: `continue!` closes the whole root and
-  pours an independently registered one, so there is nothing for a successor to
-  resume into. Every way a definition can continue past a step — a direct
-  successor, a conditional or looping step, a procedure call — says so with
-  `:depends-on`, which is why one check covers them all, and why it reads the
-  declaration rather than an expansion: the answer must not depend on params
-  (PROP-Wcd-001.S7).
-
-  The exit itself carries no `:condition` or `:loop` for the same reason. The
-  `defer` builder rejects both as unknown opts; this is the check a raw
-  definition map registered directly still has to pass."
-  [definition]
-  (let [defers (into #{} (map #(util/normalize-ref (:id %) [:steps :id]))
-                     (defer-steps definition))]
-    (when (seq defers)
-      (doseq [step (defer-steps definition)
-              key [:condition :loop]
-              :when (contains? step key)]
-        (fail! "A workflow defer exit carries no :condition or :loop"
-               {:reason :workflow/defer-not-static
-                :defer (defer-name step)
-                :key key}))
-      (doseq [step (:steps definition)
-              dep (:depends-on step)
-              :let [ref (util/normalize-ref dep [:steps (:id step) :depends-on])]
-              :when (contains? defers ref)]
-        (fail! "Workflow steps cannot depend on a defer exit"
-               {:reason :workflow/defer-not-terminal
-                :defer ref
-                :step (util/normalize-ref (:id step) [:steps :id])}))))
+  (doseq [step (defer-steps definition)]
+    (doseq [key [:condition :loop]
+            :when (contains? step key)]
+      (fail! "A workflow defer carries no :condition or :loop"
+             {:reason :workflow/defer-not-static
+              :defer (defer-name step)
+              :key key}))
+    (when (contains? (:attributes step) "workflow/defer-path")
+      (fail! "A workflow defer may not author workflow/defer-path"
+             {:reason :workflow/defer-path-reserved
+              :defer (defer-name step)
+              :alternative "Remove the attribute; compile stamps the lexical ancestry."})))
   definition)
 
-(defn require-no-defers!
-  "Return `definition` once it declares no defer exit, for the procedure-call
-  path that must refuse one.
-
-  A `call` join depends on its expansion's exit steps, so an enclosing workflow
-  always continues past whatever it calls. That is precisely what a defer cannot
-  do, and the two compose into a contradiction rather than a useful topology:
-  returning composition stays `call`, and a cross-spool exit stays `defer`."
-  [definition context]
-  (when-let [defer (first (defer-steps definition))]
-    (fail! "A workflow called as a procedure cannot declare a defer exit"
-           (assoc context
-                  :reason :workflow/defer-in-procedure
-                  :defer (defer-name defer)
-                  :alternative "Reach the continuation with a defer on the calling workflow.")))
-  definition)
-
-(defn validate-handoff-bindings!
-  "Return `definition` once every hand-off it declares is bound to a non-empty
+(defn validate-defer-bindings!
+  "Return `definition` once every defer it declares is bound to a non-empty
   target set.
 
-  An unbound hand-off is a legitimate published *template* — a spool naming an
-  exit point without naming another spool's workflows — but it is not something a
-  run can reach, so it may not be registered or poured. `bind-handoffs` is what
-  turns the template into a complete definition."
+  An unbound defer is a legitimate published *template* — a spool naming a
+  selection point without naming another spool's workflows — but it is not
+  something a run can reach, so it may not be registered or poured.
+  `bind-defers` is what turns the template into a complete definition."
   [definition context]
-  (doseq [step (handoff-steps definition)
-          :let [dispatch? (util/dispatch-step? step)
-                targets (if dispatch? (dispatch-targets step) (defer-targets step))]
-          :when (empty? targets)]
-    (fail! "Workflow hand-off is not bound to any registered workflow"
+  (doseq [step (defer-steps definition)
+          :when (empty? (defer-targets step))]
+    (fail! "Workflow defer is not bound to any registered workflow"
            (assoc context
-                  :reason (if dispatch? :workflow/handoff-unbound :workflow/defer-unbound)
-                  (if dispatch? :handoff :defer) (handoff-name step)
-                  :kind (if dispatch? :dispatch :defer)
-                  :alternative (if dispatch?
-                                 "Bind the hand-off with bind-handoffs before registering or pouring."
-                                 "Bind the exit with bind-handoffs before registering or pouring."))))
+                  :reason :workflow/defer-unbound
+                  :defer (defer-name step)
+                  :alternative
+                  (fmt/reflow
+                   "|Bind the defer with bind-defers before registering or
+                    |pouring."))))
   definition)
 
 (defn registry-input?
@@ -363,28 +324,26 @@
 (def use-entrypoint
   "The entrypoint each way of naming another registered workflow requires.
 
-  `:continue` and `:defer` both demand the `:continue` capability — the proposal
-  deliberately gives a worker-selected exit and an authored route one capability
-  rather than inventing a second one — but they stay separate uses so a failure
-  can name which one a caller took (PROP-Wcd-001.S6/S13)."
+  `:defer` and `:call` both demand the `:call` capability — filling a defer runs
+  its target as an inline procedure that returns, which is exactly what a fixed
+  call does — but they stay separate uses so a failure can name which one a
+  caller took. `:continue` belongs to authored checkpoint routing alone
+  (PROP-Dfr-001.S2)."
   {:continue :continue
-   :defer :continue
-   :dispatch :call
+   :defer :call
    :call :call})
 
 (defn references
-  "Return `{:continue #{names} :defer #{names} :dispatch #{names} :call #{names}}`
-  — the registered workflows a static definition names, grouped by how it names
-  them."
+  "Return `{:continue #{names} :defer #{names} :call #{names}}` — the registered
+  workflows a static definition names, grouped by how it names them."
   [definition]
   (reduce (fn [acc step]
             (cond-> (-> acc
                         (update :continue into (choice-next-names step))
-                        (update :defer into (defer-targets step))
-                        (update :dispatch into (dispatch-targets step)))
+                        (update :defer into (defer-targets step)))
               (keyword? (:procedure step))
               (update :call conj (:procedure step))))
-          {:continue #{} :defer #{} :dispatch #{} :call #{}}
+          {:continue #{} :defer #{} :call #{}}
           (:steps definition)))
 
 (defn- validate-defaults!
@@ -437,9 +396,6 @@
                       :target target
                       :entrypoint entrypoint
                       :registered (vec (sort (keys entry-kinds))))))
-      (when (contains? #{:call :dispatch} use)
-        (require-no-defers! (:value declared) (assoc context :target target
-                                                     :declaring-kind use)))
       (when-not (contains? (:entrypoints declared) entrypoint)
         (fail! "Workflow definition names a workflow that does not declare the required entrypoint"
                (assoc context :reason :workflow/reference-entrypoint-unsupported
@@ -460,8 +416,8 @@
     (validate-defaults! context (:defaults value))
     (validate-param-spec! context (:param-spec value))
     (validate-input-specs! context value)
-    (validate-defer-topology! value)
-    (validate-handoff-bindings! value context)
+    (validate-defer-declarations! value)
+    (validate-defer-bindings! value context)
     resolved))
 
 (defn validate-candidates!

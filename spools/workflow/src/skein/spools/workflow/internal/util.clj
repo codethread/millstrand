@@ -61,19 +61,14 @@
   value)
 
 (defn defer-step?
-  "True when `step` is a declared defer exit.
+  "True when `step` is a declared defer point.
 
   Builders write the `workflow/*` vocabulary string-keyed onto a step's
   `:attributes`, so this reads the authored declaration without compiling or
-  pouring anything — which is what lets the topology rules judge a defer
-  \"regardless of params\" (PROP-Wcd-001.S7)."
+  pouring anything — which is what lets the declaration rules judge a defer
+  \"regardless of params\" (PROP-Dfr-001.S1)."
   [step]
   (and (map? step) (= "defer" (get-in step [:attributes "workflow/role"]))))
-
-(defn dispatch-step?
-  "True when `step` is a declared dispatch hand-off."
-  [step]
-  (and (map? step) (= "dispatch" (get-in step [:attributes "workflow/role"]))))
 
 (defn json-scalar?
   "True when `value` is a leaf that survives the JSON attribute wire.

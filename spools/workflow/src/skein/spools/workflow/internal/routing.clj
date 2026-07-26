@@ -27,7 +27,7 @@
   Everything the engine poured under the root, so no strand of an abandoned
   stage stays active; a strand some other spool attached to the graph is not
   the workflow engine's to close."
-  #{"root" "step" "checkpoint" "defer" "dispatch" "procedure"})
+  #{"root" "step" "checkpoint" "defer" "procedure"})
 
 (def ^:private notes-removed-guidance
   (fmt/reflow
@@ -339,11 +339,11 @@
   (close-batch (:id step) outcome
                (cascade-join-ids rt (:id (query/current-root-with-rt rt run-id)) #{(:id step)})))
 
-;; --- deferred continuation ---------------------------------------------------
+;; --- runtime-selected returning composition ----------------------------------
 
 (defn resolve-defer!
-  "Resolve run-id's ready defer exit, honoring an optional `:step` selector in
-  `opts`, and fail loudly when the resolved step is not one."
+  "Resolve run-id's ready defer, honoring an optional `:step` selector in `opts`,
+  and fail loudly when the resolved step is another role."
   [rt run-id opts]
   (let [step (or (query/resolve-ready-step rt run-id opts)
                  (fail! "No ready workflow defer"
@@ -355,58 +355,33 @@
               :step (query/strand->view step)}))
     step))
 
-(defn continue-target
-  "Resolve the live continuation `target-name` a ready defer `step` allows.
+(defn defer-target
+  "Resolve the live `:call` target `target-name` a ready defer `step` allows.
 
   Two boundaries meet here. The allowlist was materialized when the defer poured
-  and is the user's authority over where this run may go, so a name outside it is
-  refused before anything resolves. The name itself resolves *now*, against the
-  live registry: a compatible repoint continues into the replacement, while a
-  removal or a lost `:continue` fails with the defer still ready
-  (PROP-Wcd-001.S7)."
+  and is the user's authority over what this run may select, so a name outside it
+  is refused before anything resolves. The name itself resolves *now*, against
+  the live registry: a compatible repoint runs the replacement, while a removal
+  or a lost `:call` fails with the defer still ready (PROP-Dfr-001.G4)."
   [rt step target-name]
-  (let [allowed (set (query/attr step :workflow/defer-workflows))
-        defer (query/attr step :workflow/defer)]
+  (let [allowed (set (query/attr step :workflow/defer-workflows))]
     (when-not (contains? allowed (name target-name))
-      (fail! "Workflow is not an allowed continuation for this defer"
+      (fail! "Workflow is not an allowed defer target"
              {:reason :workflow/defer-target-not-allowed
-              :defer defer
+              :defer (query/attr step :workflow/defer)
               :workflow target-name
               :allowed (vec (sort allowed))}))
-    (defs/require-entrypoint! (defs/resolve-registered rt target-name) :continue)))
-
-(defn resolve-dispatch!
-  "Resolve run-id's ready dispatch, failing when the selected step is another role."
-  [rt run-id opts]
-  (let [step (or (query/resolve-ready-step rt run-id opts)
-                 (fail! "No ready workflow dispatch"
-                        {:reason :workflow/dispatch-not-ready :run-id run-id}))]
-    (when-not (= "dispatch" (query/attr step :workflow/role))
-      (fail! "Current workflow step is not a dispatch"
-             {:reason :workflow/step-not-dispatch :run-id run-id
-              :step (query/strand->view step)}))
-    step))
-
-(defn dispatch-target
-  "Resolve the live `:call` target allowed by materialized dispatch `step`."
-  [rt step target-name]
-  (let [allowed (set (query/attr step :workflow/dispatch-workflows))]
-    (when-not (contains? allowed (name target-name))
-      (fail! "Workflow is not an allowed dispatch target"
-             {:reason :workflow/dispatch-target-not-allowed
-              :dispatch (query/attr step :workflow/dispatch)
-              :workflow target-name :allowed (vec (sort allowed))}))
     (defs/require-entrypoint! (defs/resolve-registered rt target-name) :call)))
 
-(defn- dispatch-dependency-refs
+(defn- defer-dependency-refs
   [rt step]
   (let [edges (:edges (graph/subgraph rt [(:id step)] {:type "depends-on"}))]
     (mapv (comp keyword :to_strand_id)
           (filter #(= (:id step) (:from_strand_id %)) edges))))
 
 (defn- path-entry
-  "Return one `workflow/dispatch-path` entry in its canonical string-keyed wire
-  shape (DELTA-Dyc-001.CC7).
+  "Return one `workflow/defer-path` entry in its canonical string-keyed wire
+  shape (DELTA-Dfr-001.CC5).
 
   A path written by `compile` is string-keyed JSON, but reading it back off a
   persisted strand keywordizes it. Normalizing on read keeps the comparison and
@@ -419,52 +394,73 @@
     {"fingerprint" (get entry :fingerprint)
      "definition" (get entry :definition)}))
 
-(defn- dispatch-path!
+(defn- same-routine?
+  "True when persisted path `entry` names the same routine as the `identity` a
+  fill is about to append.
+
+  Two identities, because neither alone is enough. A fingerprint digests the
+  printed definition, and a definition holding render or predicate functions
+  prints with their JVM identity hashes — so the same registered routine
+  fingerprints differently in a later weaver generation, and a fingerprint-only
+  check would let an `A → B → A` cycle through whenever the second fill lands
+  after a restart. The definition symbol survives that, but it is absent for an
+  anonymous definition and blind to two names resolving to one value. Matching on
+  either is what makes the refusal durable without narrowing what it already
+  caught (DELTA-Dfr-001.CC5)."
+  [entry identity]
+  (or (= (get entry "fingerprint") (get identity "fingerprint"))
+      (boolean (and (get entry "definition")
+                    (= (get entry "definition") (get identity "definition"))))))
+
+(defn- defer-path!
   [step]
-  (let [raw (query/attr step :workflow/dispatch-path)
+  (let [raw (query/attr step :workflow/defer-path)
         invalid-entry (when (vector? raw)
-                        (first (remove #(s/valid? ::specs/dispatch-path-entry %) raw)))]
-    (when-not (s/valid? ::specs/dispatch-path raw)
-      (fail! "Workflow dispatch path is malformed"
-             {:reason :workflow/dispatch-path-invalid
+                        (first (remove #(s/valid? ::specs/defer-path-entry %) raw)))]
+    (when-not (s/valid? ::specs/defer-path raw)
+      (fail! "Workflow defer path is malformed"
+             {:reason :workflow/defer-path-invalid
               :run-id (query/attr step :workflow/run-id)
               :step (:id step)
               :path raw
               :value (or invalid-entry raw)
-              :problems (::s/problems (s/explain-data ::specs/dispatch-path raw))
+              :problems (::s/problems (s/explain-data ::specs/defer-path raw))
               :expected [{:fingerprint "non-blank string"
                           :definition "non-blank string or null"}]}))
     (mapv path-entry raw)))
 
-(defn dispatch-plan
-  "Build the one transactional fill payload for dispatch `step` and `target`."
+(defn defer-plan
+  "Build the one transactional fill payload for defer `step` and `target`.
+
+  The defer becomes an ordinary procedure join over the target's expansion, so
+  everything that already knows how to finish a fixed call — the cascade close,
+  done-ness, the ready frontier hiding joins — carries the selected routine home
+  without a second mechanism (PROP-Dfr-001.S3)."
   [rt run-id step target params opts]
   (let [root (query/current-root-with-rt rt run-id)
         built (defs/build target params)
-        path (dispatch-path! step)
+        path (defer-path! step)
         identity {"fingerprint" (defs/fingerprint target)
                   "definition" (some-> (:definition target) str)}
-        _ (when (some #(= (get % "fingerprint") (get identity "fingerprint")) path)
-            (fail! "Workflow dispatch is cyclic"
-                   {:reason :workflow/dispatch-cyclic :path path
-                    :offending identity :dispatch (:id step)}))
+        _ (when (some #(same-routine? % identity) path)
+            (fail! "Workflow defer is cyclic"
+                   {:reason :workflow/defer-cyclic :path path
+                    :offending identity :defer (:id step)}))
         ;; compile appends the target's own identity to this base and threads the
-        ;; result through every nested fixed call, so a dispatch inside a called
+        ;; result through every nested fixed call, so a defer inside a called
         ;; procedure keeps that procedure in its ancestry. Re-stamping the
         ;; expansion afterwards would flatten exactly that nesting away.
-        compiled (cmp/compile (defs/require-no-defers! (:workflow built)
-                                                       {:dispatch (:id step)})
-                              (:params built)
+        compiled (cmp/compile (:workflow built) (:params built)
                               {:definition (:definition target)
-                               :dispatch-path path})
-        deps (dispatch-dependency-refs rt step)
+                               :defer-path path})
+        deps (defer-dependency-refs rt step)
         expansion (cmp/procedure-expansion (keyword (:id step)) compiled deps)
         expansion-strands (mapv (fn [strand]
                                   (-> strand
                                       (assoc :ref (:id strand))
                                       (dissoc :id :depends-on)))
                                 (:strands expansion))
-        refs (into {:root (:id root) :dispatch (:id step)}
+        refs (into {:root (:id root) :defer (:id step)}
                    (map (fn [ref] [ref (name ref)]) deps))
         parent-edges (mapv (fn [strand] {:op :upsert :from :root :to (:ref strand)
                                          :type "parent-of"}) expansion-strands)
@@ -476,61 +472,20 @@
         empty-expansion? (empty? (:exits expansion))
         outcome (cond-> {"workflow/role" "procedure"
                          "workflow/procedure" (:id step)
-                         "workflow/dispatched-workflow" (name (:name target))
-                         "workflow/dispatched-definition" (str (:definition target))
-                         "workflow/dispatched-fingerprint" (defs/fingerprint target)
-                         "workflow/dispatched-params" (:params built)}
-                  (contains? opts :by) (assoc "workflow/dispatched-by" (:by opts))
+                         "workflow/deferred-workflow" (name (:name target))
+                         "workflow/deferred-definition" (str (:definition target))
+                         "workflow/deferred-fingerprint" (defs/fingerprint target)
+                         "workflow/deferred-params" (:params built)}
+                  (contains? opts :by) (assoc "workflow/deferred-by" (:by opts))
                   empty-expansion? (assoc "workflow/outcome-by" "engine"))]
     {:refs refs
      :strands (conj expansion-strands
-                    (cond-> {:ref :dispatch :attributes outcome}
+                    (cond-> {:ref :defer :attributes outcome}
                       empty-expansion? (assoc :state "closed")))
      :edges (vec (concat parent-edges
                          (mapcat (fn [{:keys [id depends-on]}]
                                    (map (fn [to] {:op :upsert :from id :to to :type "depends-on"})
                                         depends-on))
                                  (:strands expansion))
-                         (map (fn [exit] {:op :upsert :from :dispatch :to exit :type "depends-on"})
+                         (map (fn [exit] {:op :upsert :from :defer :to exit :type "depends-on"})
                               (:exits expansion))))}))
-
-(defn continue-plan
-  "Return the cutover plan for a deferred continuation: `{:old-root … :payload …
-  :params …}` for `target` poured under the same run-id.
-
-  No parent context is merged. A defer is the cross-spool isolation boundary, so
-  the target sees its own `:defaults` under only the params explicitly supplied,
-  and its `:param-spec` judges that merged map — omitting `params` and passing an
-  empty map are therefore the same request (PROP-Wcd-001.S7/S9).
-
-  `:params` is the JSON-safe projection of the resolved params — the same value
-  the new root persists as `workflow/context` and the closed defer records as the
-  params it continued with, so the two never disagree. It is converted the way a
-  fresh `start!` converts them, because this pour begins a root rather than
-  carrying a stage forward."
-  [rt run-id target params]
-  (let [root (query/current-root-with-rt rt run-id)
-        built (defs/build target params)
-        context (cmp/default-context (:params built))
-        payload (cmp/compile (:workflow built) (:params built)
-                             (merge (defs/identity-attrs target)
-                                    {:run-id run-id
-                                     :family (query/attr root :workflow/family)
-                                     :context context
-                                     :form :molecule}))]
-    {:old-root root :payload payload :params context}))
-
-(defn continuation-outcome
-  "Build the attributes recorded on the defer exit a continuation fills.
-
-  `workflow/outcome` carries the selected name so history reads a continuation
-  the same way it reads a choice; beside it go the resolved symbol and
-  fingerprint that say *which* definition poured, and the exact params it poured
-  with, so a later reader can tell a repoint from the original."
-  [target params opts]
-  (cond-> {"workflow/outcome" (name (:name target))
-           "workflow/continued-workflow" (name (:name target))
-           "workflow/continued-definition" (str (:definition target))
-           "workflow/continued-fingerprint" (defs/fingerprint target)
-           "workflow/continued-params" params}
-    (contains? opts :by) (assoc "workflow/outcome-by" (:by opts))))

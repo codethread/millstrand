@@ -1,6 +1,8 @@
 # Runtime-selected returning composition in the workflow engine
 
-**Document ID:** `RFC-Dyc-001` **Status:** Accepted — see P7 **Date:** 2026-07-26 **Related:** [`spools/workflow.md`](../../spools/workflow.md); [`PROP-Wcd-001`](../feat/s9i26-flow-cli/proposal.md) (S2 worker grammar, S4 ready inference, S6 entrypoints, S7 named deferred continuation, S9 params); proposal [`devflow/archive/26-07-26__dynamic-call/proposal.md`](../archive/26-07-26__dynamic-call/proposal.md); card `mvryi`; review notes `per7e`, `9d4yx`
+**Document ID:** `RFC-Dyc-001` **Status:** Superseded by [`PROP-Dfr-001`](../feat/defer-return/proposal.md) **Date:** 2026-07-26 **Related:** [`spools/workflow.md`](../../spools/workflow.md); [`PROP-Wcd-001`](../feat/s9i26-flow-cli/proposal.md) (S2 worker grammar, S4 ready inference, S6 entrypoints, S7 named deferred continuation, S9 params); proposal [`devflow/archive/26-07-26__dynamic-call/proposal.md`](../archive/26-07-26__dynamic-call/proposal.md); card `mvryi`; review notes `per7e`, `9d4yx`
+
+> RFC-Dyc-001.P1–P7 remain the historical record of the decision to add `dispatch`. PROP-Dfr-001.S1–S8 supersede the separate construct, terminal-defer model, adapter recommendation, and P7 outcome. REC4–REC6 survive under returning `defer`; the shipped contract now owns their entrypoint, parameter-isolation, and lexical-cycle behavior.
 
 > This RFC records the design fork and rejected alternatives. The proposal owns problem framing and
 > scope; the plan will own build strategy.

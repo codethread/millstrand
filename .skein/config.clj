@@ -552,7 +552,7 @@
           :purpose (format-alpha/reflow
                     "|Shipped generic worker surface over every registered workflow:
                      |list/show the catalogue, then start, ready, complete, choose,
-                     |continue, and await a run. Activated by .skein/init.clj. The
+                     |defer, and await a run. Activated by .skein/init.clj. The
                      |registered story workflow is the module-shaping discipline:
                      |split-first refactor, public-surface tests, auto-spawned
                      |adversarial review gates, measure, fold-back-or-keep-split

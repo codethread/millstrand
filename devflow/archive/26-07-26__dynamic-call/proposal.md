@@ -1,6 +1,8 @@
 # Runtime-selected returning composition
 
-**Document ID:** `PROP-Dyc-001` **Last Updated:** 2026-07-26 **Related RFCs:** [RFC-Dyc-001](../../rfcs/2026-07-26-runtime-selected-returning-composition.md) **Related root specs:** None directly. The workflow engine is a userland spool; its contract is [`spools/workflow.md`](../../../spools/workflow.md). [SPEC-005](../../specs/alpha-surface.md) indexes where that contract lives, and [SPEC-002](../../specs/cli.md) governs the CLI style any new worker verb must follow.
+**Document ID:** `PROP-Dyc-001` **Status:** Superseded by [`PROP-Dfr-001`](../../feat/defer-return/proposal.md) **Last Updated:** 2026-07-26 **Related RFCs:** [RFC-Dyc-001](../../rfcs/2026-07-26-runtime-selected-returning-composition.md) **Related root specs:** None directly. The workflow engine is a userland spool; its contract is [`spools/workflow.md`](../../../spools/workflow.md). [SPEC-005](../../specs/alpha-surface.md) indexes where that contract lives, and [SPEC-002](../../specs/cli.md) governs the CLI style any new worker verb must follow.
+
+> PROP-Dyc-001.P1–P5 remain the proposal record for the shipped `dispatch` design. PROP-Dfr-001.S1–S8 supersede S1–S12: the adapter and terminal-defer guidance was removed, while the pending-state, `:call` entrypoint, explicit params, lexical ancestry, worker inference, and fill invariants now ship under `defer`.
 
 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `PROP-Dwr-001.P1` or `PROP-Dwr-001@2.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
 

@@ -90,7 +90,7 @@ Each recipe cites the honest source it was distilled from — a shipped spool, t
 ;; => {:ready [{:id :implement ...}] :done false}
 
 ;; advance! also drives the run one step — ordinary steps and checkpoints;
-;; a ready defer or dispatch is refused, since each needs its own target
+;; a ready defer is refused, since it needs its own target and params
 (workflow/advance! "ship-feature-x")
 ;; => {:ready [{:id :signoff ...}] :done false}
 
@@ -252,113 +252,84 @@ Honest source: the `call` inlining test in `test/skein/spools/workflow_test.clj`
 
 ---
 
-## Recipe: Handing off to a workflow your spool cannot name
+## Recipe: Choosing a returning routine in the middle
 
-**Situation.** Your spool tracks something — a card, a ticket, an intake form — and at some point the work has to be *done*, by a routine that lives in a spool you have no business depending on. You know where the hand-off is; you don't know, and shouldn't decide, what is on the other side.
+**Situation.** A tracker needs a worker to choose a routine that the tracker cannot name, then record or notify after that routine finishes.
 
-**Composition.** Publish a template with a `defer` exit naming the hand-off point. Whoever installs both spools binds that name to the registered workflows it may reach, with `bind-handoffs`, and registers the complete definition. A worker fills the exit with `continue!`.
+**Composition.** Put a `defer` between the preparation and record steps. User code that can see both spools binds the defer to registered targets. Each target declares `:call`, because it returns into the tracker's molecule.
 
 ```clojure
 (require '[skein.spools.workflow :as workflow])
 
-;; in the kanban spool — no mention of any other spool
-(def general
-  (workflow/workflow
-    "Track a card"
-    (workflow/step :prepare "Prepare the card" :self)
-    (workflow/defer :perform-work "Choose how this work will be performed"
-      :depends-on [:prepare])))
+(workflow/defworkflow spike
+  "Run a bounded investigation."
+  {:entrypoints #{:call}}
+  (workflow/workflow "Spike"
+    (workflow/step :investigate "Investigate" :self)))
 
-;; in user config, which can see both spools
-(workflow/defworkflow tracked-card
-  "Track a card and select its delivery routine."
-  {:entrypoints #{:start}}
-  (workflow/bind-handoffs general {:perform-work #{:spike :devflow}}))
-```
+(workflow/defworkflow devflow
+  "Deliver a feature."
+  {:entrypoints #{:call}}
+  (workflow/workflow "Devflow"
+    (workflow/step :build "Build the feature" :self)))
 
-Driving it: `:prepare` completes as usual, then the ready frontier is the exit, carrying its allowlist.
-
-```clojure
-(workflow/ready "card-123")
-;; => [{:id "step-d71" :role "defer" :defer "perform-work"
-;;      :title "Choose how this work will be performed"
-;;      :workflows ["devflow" "spike"] :run-id "card-123"}]
-
-(workflow/continue! "card-123" :devflow {:feature "kanban-web-ui"} {:by "worker-1"})
-;; closes the card root, pours devflow under the same run id
-```
-
-**Why this shape.**
-
-- **Neither `call` nor a checkpoint fits.** `call` returns to its caller, so the card would resume after devflow finished — but there is nothing left to do, and the card is not the owner of what follows. A checkpoint's `:next` has to name its routes where the workflow is authored, which is exactly the dependency the kanban spool is avoiding.
-- **The bind is the authority boundary.** The template says *where* a worker chooses; the person who installed both spools says *what they may choose from*. Neither spool acquires a dependency on the other, and the allowlist is a deliberate decision rather than "any registered workflow".
-- **The target keeps its own params.** `continue!` merges no parent context, so devflow sees its own `:defaults` under exactly the params supplied for it and validates them whole. A card param that happens to share a name with a devflow param cannot leak in and quietly mean the wrong thing.
-- **The exit is terminal, and the engine holds you to it.** Nothing may `:depends-on` a defer, and a workflow declaring one cannot be `call`-ed. If you find yourself wanting a step after the exit, use a checkpoint route for authored routing, `call` for a fixed target, or the dispatch recipe below for a target selected by a worker. The hand-off is not really an exit.
-
-Honest source: PROP-Wcd-001.EX7 in `devflow/feat/s9i26-flow-cli/proposal.md`, and the defer suite in `test/skein/spools/workflow_test.clj` (`continue-transfers-the-root-and-records-the-cutover`, `continue-isolates-the-target-from-the-parent-context`).
-
----
-
-## Recipe: Choosing a routine and keeping the workflow
-
-**Situation.** A tracker needs a worker to select a routine it cannot name, then needs to record, notify, or otherwise continue after that routine finishes. The tracker still owns the work.
-
-**Composition.** Use `dispatch`. Bind the dispatch point in user code with `bind-handoffs`; every target declares `:call`, because it returns into the tracker's molecule. A worker fills the point with `dispatch!`.
-
-```clojure
+;; tracker spool: no dependency on a delivery spool
 (def intake
   (workflow/workflow
     "Handle an intake"
     (workflow/step :prepare "Prepare the intake" :self)
-    (workflow/dispatch :perform-work "Choose the routine" :depends-on [:prepare])
+    (workflow/defer :perform-work "Choose the routine" :depends-on [:prepare])
     (workflow/step :record "Record the result" :self :depends-on [:perform-work])))
 
+;; user config: the authority that can see the tracker and delivery routines
 (workflow/defworkflow handled-intake
   "Handle an intake and record its result."
   {:entrypoints #{:start}}
-  (workflow/bind-handoffs intake {:perform-work #{:spike :devflow}}))
+  (workflow/bind-defers intake {:perform-work #{:spike :devflow}}))
 
-(workflow/dispatch! "intake-123" :devflow {:feature "kanban-web-ui"} {:by "worker-1"})
+(workflow/defer! "intake-123" :devflow
+                 {:feature "kanban-web-ui"}
+                 {:by "worker-1"})
 ```
 
-`dispatch!` leaves the current root in place. It pours the selected workflow below that root and changes the dispatch into a procedure join. When the selected routine finishes, the join closes and `:record` becomes ready. The target receives only its defaults plus the explicit params passed to `dispatch!`; the tracker's context does not cross the boundary.
+`defer!` leaves the current root in place. It pours the selected workflow below that root and changes the defer into a procedure join. When the selected routine finishes, the join closes and `:record` becomes ready.
 
-Use this shape when the tracker keeps ownership and the work after the routine belongs in the same molecule. A pending dispatch is ready work, blocks the run from finishing, and must be filled with `dispatch!`; `complete!` and `advance!` cannot close it.
+The target receives only its defaults plus the explicit params passed to `defer!`; the tracker's context does not cross the boundary. A pending defer is ready work, blocks the run from finishing, and must be filled with `defer!`. `complete!` and `advance!` cannot close it.
+
+Use `call` instead when the author already knows the target. Use checkpoint `:next` when choosing a route should abandon the current stage rather than return to it.
+
+Honest source: `defer-returns-to-the-declaring-workflow` and `defer-isolates-the-target-from-caller-params` in `test/skein/spools/workflow_test.clj`.
 
 ---
 
-## Recipe: Returning through a user-owned adapter
+## Recipe: Finishing with a returning defer
 
-**Situation.** Ownership genuinely transfers at the tracker boundary, but user config still needs to select a routine and then run tracker-owned wrap-up. The tracker does not need one molecule spanning both sides.
+**Situation.** A worker must choose the last routine in a workflow, and the declaring run should finish after that routine and any parallel sibling work finish.
 
-**Composition.** Keep the tracker's terminal `defer`. Bind it to a user-owned adapter workflow. The adapter fixed-calls the routine, then uses its own terminal defer to transfer to the wrap-up workflow. The adapter owns both bindings and supplies explicit params at each boundary.
+**Composition.** Make the defer the final declared step. This is the same returning composition as a middle defer; final position does not turn it into a root transfer.
 
 ```clojure
-;; tracker spool: no dependency on the routine or adapter
-(def track-card
-  (workflow/workflow "Track a card"
-    (workflow/step :prepare "Prepare the card" :self)
-    (workflow/defer :perform-work "Choose the routine" :depends-on [:prepare])))
+(def final-selection
+  (workflow/workflow
+    "Finish an intake"
+    (workflow/step :prepare "Prepare the intake" :self)
+    (workflow/step :audit "Audit the intake" :self)
+    (workflow/defer :perform-work "Choose the final routine"
+      :depends-on [:prepare])))
 
-;; user config: the adapter can see every participant
-(workflow/defworkflow selected-routine
-  "Run the selected routine, then return to wrap-up."
-  {:entrypoints #{:continue}}
-  (workflow/bind-handoffs
-   (workflow/workflow "Selected routine"
-     (workflow/call :routine :devflow {:feature "kanban-web-ui"})
-     (workflow/defer :wrap-up "Run tracker wrap-up" :depends-on [:routine]))
-   {:wrap-up #{:card-wrap-up}}))
-
-(workflow/defworkflow tracked-card
-  "Track a card through a user-owned adapter."
+(workflow/defworkflow finished-intake
+  "Finish an intake with a worker-selected routine."
   {:entrypoints #{:start}}
-  (workflow/bind-handoffs track-card {:perform-work #{:selected-routine}}))
+  (workflow/bind-defers final-selection {:perform-work #{:spike :devflow}}))
+
+(workflow/defer! "intake-456" :spike {:scope "queue"} {:by "worker-2"})
 ```
 
-The tracker continues into `:selected-routine`; the adapter calls `:devflow`; then the adapter continues into `:card-wrap-up`. The routine declares `:call`; the adapter and wrap-up declare `:continue`. Each `continue!` changes the current root but preserves the run id. No caller context crosses either transfer unless the adapter supplies it explicitly.
+The selected routine pours below the existing root. The defer join closes when that routine exits, but the run is done only when `:audit` is also closed. Filling the final defer never closes the declaring root early and never abandons parallel siblings.
 
-Use this shape when the hand-off really changes ownership. Use `dispatch` instead when the original workflow must remain the owner and resume in the same molecule. The regression `adapter-composition-transfers-through-a-user-owned-returning-workflow` exercises this composition.
+An empty or fully conditioned-out target closes the join in the fill transaction. If that was the last outstanding work, `defer!` returns `{:ready [] :done true}`.
+
+Honest source: `a-final-defer-returns-without-abandoning-parallel-siblings` and `defer-into-an-empty-target-does-not-stall-the-run` in `test/skein/spools/workflow_test.clj`.
 
 ---
 

@@ -4,8 +4,8 @@
   (PROP-Wcd-001.S2/S4).
 
   A worker drives a run through one verb per role. `complete` acts on an
-  ordinary step, `choose` on a checkpoint, `continue` on a defer exit — so each
-  verb first narrows the run's ready frontier to the items *it* could act on and
+  ordinary step, `choose` on a checkpoint, `defer` on a defer — so each verb
+  first narrows the run's ready frontier to the items *it* could act on and
   only then asks whether the answer is unambiguous. That order is what makes a
   mixed frontier workable: a run with one ready step and one ready checkpoint is
   unambiguous for both verbs, and neither has to name a step id to say what it
@@ -38,7 +38,7 @@
   `:selectable?` is what an explicit step selector may name and `:inferable?`
   what a bare verb may pick. They differ for exactly one item: a gate is a step
   a worker may close by naming it, never one the engine picks for them."
-  (let [ordinary? (fn [item] (not (contains? #{"checkpoint" "defer" "dispatch"} (:role item))))
+  (let [ordinary? (fn [item] (not (contains? #{"checkpoint" "defer"} (:role item))))
         role? (fn [role] (fn [item] (= role (:role item))))]
     {:step {:noun "step"
             :selectable? ordinary?
@@ -52,18 +52,12 @@
                   :absent :workflow/ready-checkpoint-absent
                   :ambiguous :workflow/ready-checkpoint-ambiguous
                   :incompatible :workflow/ready-checkpoint-incompatible}
-     :defer {:noun "defer exit"
+     :defer {:noun "defer"
              :selectable? (role? "defer")
              :inferable? (role? "defer")
              :absent :workflow/ready-defer-absent
              :ambiguous :workflow/ready-defer-ambiguous
-             :incompatible :workflow/ready-defer-incompatible}
-     :dispatch {:noun "dispatch"
-                :selectable? (role? "dispatch")
-                :inferable? (role? "dispatch")
-                :absent :workflow/ready-dispatch-absent
-                :ambiguous :workflow/ready-dispatch-ambiguous
-                :incompatible :workflow/ready-dispatch-incompatible}}))
+             :incompatible :workflow/ready-defer-incompatible}}))
 
 (def ^:private stale-guidance
   (fmt/reflow
