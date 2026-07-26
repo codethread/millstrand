@@ -59,13 +59,40 @@ required entrypoint branched by declaration kind. No shipped or pinned external 
   closed, and an unfilled join has no dependencies, so `every?` over the empty set would close it on
   any sibling completion.
 
+- **DELTA-Dyc-001.CC4a (no worker may close a dispatch as ordinary work — amends §5c "Inference by
+  role"):** A dispatch is closed only by being filled. Every path that selects or closes ordinary work
+  refuses it explicitly: the generic worker role classifier (`internal/runs.clj:34-60`, whose
+  `ordinary?` today excludes only checkpoint and defer), `complete!` (`workflow.clj:528-546`), and
+  `advance!` (`workflow.clj:669-689`, which currently falls through every non-defer, non-checkpoint
+  role to `complete!`). Each fails with `:reason :workflow/step-not-completable` naming `dispatch` and
+  the verb to use instead. Without this a `workflow complete` would infer and close a pending
+  hand-off, and the run would proceed as though the routine had run.
+
+- **DELTA-Dyc-001.CC4b (an abandoned root takes its dispatches with it — amends §5 "`:next`" and §5a
+  "`continue!` transfers the root"):** `"dispatch"` joins the cutover close-role set
+  (`internal/routing.clj:23-29`), which force-closes every engine-poured strand under an abandoned
+  root. A checkpoint `:next`/`:revise` route or a `continue!` taken while a sibling dispatch is still
+  unfilled would otherwise leave that dispatch active beneath a closed root. This is the one role set
+  where dispatch behaves exactly like every other engine-poured role; the cascade set
+  (`internal/routing.clj:73-100`) stays `procedure`-only, and the raw-ready exclusion set
+  (`internal/query.clj:73`) stays `#{"root" "procedure"}` so a pending dispatch reaches the frontier.
+
+- **DELTA-Dyc-001.CC4c (run history is unchanged, deliberately):** `history-event-roles`
+  (`internal/query.clj:188-215`) gains nothing. A filled dispatch has become a `procedure` join
+  *before* it closes, so it emits the procedure event that already exists; an unfilled dispatch under
+  an abandoned root was never worker-completed and has no event to emit. The omission is intentional
+  and recorded here so a later reader does not read it as a gap.
+
 - **DELTA-Dyc-001.CC5 (`dispatch!` fills a hand-off in place — adds to §5c "Driving a run"):**
   `(workflow/dispatch! run-id workflow params opts)` resolves the run's ready dispatch, resolves
   `workflow` live against the allowlist materialized at pour, compiles it, and pours its expansion
   **beneath the run's current root** in one `batch/apply!`:
 
   - Expansion strands are ref-prefixed by the dispatch id, exactly as `expand-call-step` prefixes a
-    fixed call's expansion, and hang off the root by `parent-of`.
+    fixed call's expansion. The target's compiled payload carries its own synthetic root; that root is
+    **stripped**, the run's current root is bound as a top-level batch ref, and every prefixed
+    expansion strand is parented beneath it by `parent-of`. A compiled payload cannot simply be
+    concatenated into the batch.
   - The dispatch strand is rewritten in the same transaction to `workflow/role "procedure"` with
     `workflow/procedure <dispatch id>`, and gains `depends-on` edges to the expansion's exit refs.
     From that moment it **is** an ordinary procedure join: auto-close, cascade, done-detection, and
@@ -82,15 +109,32 @@ required entrypoint branched by declaration kind. No shipped or pinned external 
   across the boundary PROP-Wcd-001.S7/S9 made explicit-only. Passing no params and passing `{}` are
   the same request.
 
-- **DELTA-Dyc-001.CC7 (cycle rejection is a persisted path, not a graph walk — adds to §4):** Each
-  poured root carries `workflow/dispatch-path`, a JSON vector of stringified definition symbols: the
-  root's own definition, followed by every definition reached through an enclosing dispatch. `dispatch!`
-  appends its resolved target symbol and refuses before any mutation when that symbol is already in the
-  path (`:reason :workflow/dispatch-cyclic`, carrying the path and the offending symbol). Identity is
-  the **resolved definition symbol**, so a live repoint to a different definition is not a cycle and a
-  repoint back to an ancestor is. Fixed calls inside a dispatched expansion remain covered by the
-  existing compile-time `*procedure-path*` check, which the pour runs. No traversal is introduced, so
-  TEN-005 is satisfied without a new acyclic-relation claim.
+- **DELTA-Dyc-001.CC7 (cycle rejection is a branch-local lexical path — adds to §4):** Every
+  materialized dispatch strand carries its own immutable `workflow/dispatch-path`: a JSON vector of
+  definition identities naming the **lexical ancestry enclosing that dispatch**, outermost first. It
+  is written at pour, never mutated, and never shared between siblings.
+
+  - `compile` builds it from the definition being poured plus the fixed-call callees the dispatch is
+    lexically nested inside — the same ancestry `*procedure-path*` already tracks during expansion
+    (`internal/compile.clj:98-109, 150-165`). A dispatch inside a called procedure therefore carries
+    that procedure's identity, which a root-level record could not know.
+  - `dispatch!` reads the path off **the dispatch strand it is filling**, refuses before any mutation
+    when the resolved target's identity is already in it (`:reason :workflow/dispatch-cyclic`,
+    carrying the path, the offending identity, and the dispatch id), and otherwise stamps
+    `path ++ [target]` as the base ancestry for every dispatch strand in the expansion it pours.
+  - Two sibling dispatches in one molecule, or a later dispatch after an earlier one returned, are
+    **not** cycles: neither is in the other's lexical ancestry. A `:revise` re-pour is a new root and
+    gets a fresh path (`internal/routing.clj:231-253`), inheriting no sibling's fills.
+
+  **Identity is the definition fingerprint** — the short hex digest of the printed definition value
+  already computed for the `continue!` cutover record — with the resolved symbol recorded alongside
+  for readability. Fingerprint, not symbol, because `start!` accepts a plain anonymous workflow map
+  (`workflow.clj:383-415`) which `definitions/plan` gives no symbol identity
+  (`internal/definitions.clj:291-314`), so a symbol-keyed path could not be built for every root. It
+  also gives the right repoint behavior for free: a repoint to a different definition value is not a
+  cycle, and a repoint back to an ancestor's value is.
+
+  No traversal is introduced, so TEN-005 is satisfied without a new acyclic-relation claim.
 
 - **DELTA-Dyc-001.CC8 (worker verb and inference — amends §5b/§5c and PROP-Wcd-001.S2/S4):** The
   workflow CLI gains `workflow dispatch <run-id> --workflow <name> [--params <json>] [--step <id>]
@@ -119,7 +163,7 @@ required entrypoint branched by declaration kind. No shipped or pinned external 
   |---|---|---|
   | `workflow/dispatch` | Stable dispatch-point name (the step's own local id). | `dispatch` builder. |
   | `workflow/dispatch-workflows` | Vector of registered workflow names this point allows, in registered-name order. Fixed for the run at pour; each name still resolves live at `dispatch!` time. | `bind-handoffs`. |
-  | `workflow/dispatch-path` | JSON vector of stringified definition symbols recording dispatch lineage, for cycle rejection (CC7). | `compile` (root strand); extended by `dispatch!`. |
+  | `workflow/dispatch-path` | JSON vector of definition identities naming the lexical ancestry enclosing this dispatch, outermost first (CC7). Immutable once written. | `compile` (on each dispatch strand); `dispatch!` writes the extended path onto the expansion's own dispatch strands. |
   | `workflow/dispatched-workflow` | Registered name the worker selected. | `dispatch!`, on the join, at fill. |
   | `workflow/dispatched-definition` | Stringified symbol that name resolved to at fill time. | `dispatch!`, on the join, at fill. |
   | `workflow/dispatched-fingerprint` | Short hex digest of the printed definition value that poured. | `dispatch!`, on the join, at fill. |
@@ -162,13 +206,34 @@ required entrypoint branched by declaration kind. No shipped or pinned external 
   set lie about whether the definition may be tail-transferred into. **Rejected:** a third entrypoint
   value; the existing three already partition the space.
 
-- **DELTA-Dyc-001.D4 (persisted lineage, not ancestry traversal):** **Rationale:** the data a walk
-  would need does not exist — a poured join records only its local call id
-  (`internal/compile.clj:190-196`) and only roots persist definition identity
-  (`internal/compile.clj:394-421`). Persisting the path at pour makes the check a set membership test
-  with no traversal and no new acyclic-relation claim, and makes the lineage readable for debugging.
-  **Rejected:** walking `parent-of` at fill time, which would need new identity attributes on every
-  join anyway and would still be ambiguous under a live repoint.
+- **DELTA-Dyc-001.D4 (branch-local lexical lineage, not a root-wide history):** The path is written per
+  dispatch strand at pour and never mutated. **Rationale:** a single accumulating vector on the root
+  is a *history of what this run has filled*, which is not a call stack. Two sibling dispatches share
+  the root, so filling one to `B` would falsely forbid the other from choosing `B`; and a dispatch
+  lexically inside a fixed call to `C` needs `C` in its ancestry, which a root-level record never
+  learns because `*procedure-path*` is compile-time state over definition values that is not persisted
+  (`internal/compile.clj:98-109, 150-165`). Only a per-dispatch lexical path is sound.
+  **Rejected:** a mutable root-wide path (unsound as above, and not repairable by clearing on return
+  because siblings can be concurrently active); walking `parent-of` at fill time, which would need new
+  identity attributes on every join anyway and would still be ambiguous under a live repoint.
+
+- **DELTA-Dyc-001.D4a (fingerprint identity, not symbol):** Path entries are definition fingerprints,
+  with the resolved symbol recorded alongside for readability. **Rationale:** `start!` accepts a plain
+  anonymous workflow map, which carries no symbol identity, so a symbol-keyed path cannot be built for
+  every root and a dispatch-bearing run would have to be restricted to registered definitions for no
+  good reason. The fingerprint is already computed for the `continue!` cutover record, and it gives the
+  correct repoint semantics without a special rule. **Rejected:** requiring dispatch-bearing runs to be
+  started from an identified Var; symbol identity with a fallback rule for anonymous roots, which is
+  two identity schemes where one suffices.
+
+- **DELTA-Dyc-001.D7 (the fill record is deliberate provenance, not a V1 requirement):** The five
+  `workflow/dispatched-*` attributes are not needed to make a dispatch execute. They exist because the
+  defer cutover already records exactly this — selected name, resolved symbol, fingerprint, exact
+  params, actor (§7) — and a hand-off that returns deserves the same audit trail as one that
+  transfers. **Rationale:** stated as a contract choice rather than smuggled in as a mechanical
+  necessity, so TEN-004 is answered honestly: this is surface bought for durable observability, at
+  parity with the construct it sits beside. **Rejected:** recording only the selected name, which would
+  leave a filled dispatch less inspectable than a filled defer for no principled reason.
 
 - **DELTA-Dyc-001.D5 (rename `bind-defers`, no alias):** **Rationale:** one authority boundary for
   every hand-off kind is the greenfield shape; two binding functions that differ only in which

@@ -1,7 +1,7 @@
 # Runtime-selected returning composition in the workflow engine
 
 **Document ID:** `RFC-Dyc-001`
-**Status:** Draft
+**Status:** Accepted — see P7
 **Date:** 2026-07-26
 **Related:** [`spools/workflow.md`](../../spools/workflow.md); [`PROP-Wcd-001`](../feat/s9i26-flow-cli/proposal.md) (S2 worker grammar, S4 ready inference, S6 entrypoints, S7 named deferred continuation, S9 params); proposal [`devflow/feat/dynamic-call/proposal.md`](../feat/dynamic-call/proposal.md); card `mvryi`; review notes `per7e`, `9d4yx`
 
@@ -66,6 +66,10 @@ routine — is worth engine vocabulary, and if so, in what shape.
 
 ## RFC-Dyc-001.P5 Recommendation
 
+> **Superseded by the P7 outcome.** REC1–REC2 below were the recommendation put to the code owner.
+> The decision went the other way: build the construct on its own merits. REC3–REC6 stand and are
+> what `DELTA-Dyc-001` implements; REC1–REC2 survive as the reason the adapter recipe still ships.
+
 - **RFC-Dyc-001.REC1:** Take **O4**. Build nothing in the engine yet. The composition was probed end
   to end against this checkout and drives the whole motivating case under one run id:
 
@@ -119,6 +123,13 @@ routine — is worth engine vocabulary, and if so, in what shape.
 
 ## RFC-Dyc-001.P7 Outcome
 
-- **RFC-Dyc-001.OUT1:** Pending human sign-off on the proposal. The choice put to the code owner is
-  REC1 (document the adapter pattern, build no engine vocabulary) versus commissioning O2 for the
-  single-molecule property. Decision, date, and decider recorded here at sign-off.
+- **RFC-Dyc-001.OUT1:** **Decided 2026-07-26 by the code owner: build O2**, designed greenfield. The
+  single-molecule property is wanted on its own merits, not only where O4 falls short, and the design
+  was to be drawn as if from scratch rather than around existing seams. REC1's adapter composition
+  ships anyway as a documented recipe (RFC-Dyc-001.REC2), because a genuine transfer of ownership is
+  still sometimes what an author means.
+- **RFC-Dyc-001.OUT2:** The construct is named `dispatch`. Contract in
+  [`DELTA-Dyc-001`](../feat/dynamic-call/specs/workflow-spool.delta.md); build sequencing in
+  [`PLAN-Dyc-001`](../feat/dynamic-call/dynamic-call.plan.md). REC4–REC6 are carried into CC3, CC6,
+  and CC7 respectively; REC6's ancestry model was corrected in review from a root-wide path to a
+  branch-local lexical one (DELTA-Dyc-001.D4).
