@@ -128,6 +128,13 @@ coordinate rather than carrying a second pin, so the test and weaver pins cannot
 Developers override the coordinate with a gitignored `spools.local.edn` local root to work
 against a checkout.
 
+`ct.spools.kanban` does not choose a workflow system. This repo declares the
+`:kanban/tracker` module in `.skein/init.clj`; its
+`.skein/kanban_tracker.clj` reconciliation binds devflow with
+`kanban/set-tracker!`, and the projection receives the owning runtime before the
+run id. Repos using another tracker provide the same runtime-aware projection
+contract. Repos that do not project run state omit the binding.
+
 `ct.spools.kanban` is the second external spool: it lives in
 [`codethread/kanban.spool`](https://github.com/codethread/kanban.spool). Kanban loads independently
 of a tracker; this repo's `.skein/kanban_tracker.clj` binds devflow after both spools are active.

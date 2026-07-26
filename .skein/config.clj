@@ -287,7 +287,7 @@
                       {:value worktree-check :help "strand help devflow-start"})))
     (merge {:operation "devflow-start"
             :feature feature}
-           (devflow/start! feature (if worktree-check {:worktree-check worktree-check} {})))))
+           (devflow/start! (:op/runtime ctx) feature (if worktree-check {:worktree-check worktree-check} {})))))
 
 (defop devflow-ready
   "Return the ready devflow step views for a feature."
@@ -300,7 +300,7 @@
   (let [{:keys [feature]} (:op/args ctx)]
     {:operation "devflow-ready"
      :feature feature
-     :ready (devflow/ready feature)}))
+     :ready (devflow/ready (:op/runtime ctx) feature)}))
 
 (defop devflow-choices
   "Return choice explanations for the feature's current checkpoint."
@@ -321,7 +321,7 @@
                       {:op "devflow-choices" :help "strand help devflow-choices" :extra extra})))
     {:operation "devflow-choices"
      :feature feature
-     :choices (devflow/choice-details feature (if step {:step step} {}))}))
+     :choices (devflow/choice-details (:op/runtime ctx) feature (if step {:step step} {}))}))
 
 (defop devflow-choose
   "Record a devflow checkpoint choice, optionally with JSON input.
@@ -352,7 +352,7 @@
       (merge {:operation "devflow-choose"
               :feature feature
               :choice choice}
-             (devflow/choose! feature (keyword choice) input (if step {:step step} {}))))))
+             (devflow/choose! (:op/runtime ctx) feature (keyword choice) input (if step {:step step} {}))))))
 
 (defop devflow-complete
   "Close the feature's current non-checkpoint devflow step."
@@ -373,7 +373,7 @@
                       {:op "devflow-complete" :help "strand help devflow-complete" :extra (vec rest-tokens)})))
     (merge {:operation "devflow-complete"
             :feature feature}
-           (devflow/complete! feature (if step {:step step} {})))))
+           (devflow/complete! (:op/runtime ctx) feature (if step {:step step} {})))))
 
 (defn- parse-advance-tail
   "Parse devflow-advance tail tokens into workflow advance opts.
@@ -419,7 +419,7 @@
     (require-non-blank! :feature feature)
     (merge {:operation "devflow-advance"
             :feature feature}
-           (devflow/advance! feature (parse-advance-tail tail)))))
+           (devflow/advance! (:op/runtime ctx) feature (parse-advance-tail tail)))))
 
 (defop devflow-describe
   "Return the devflow cycle or one registered stage description.
@@ -449,7 +449,7 @@
   (let [{:keys [feature]} (:op/args ctx)]
     {:operation "devflow-run-history"
      :feature feature
-     :run-history (devflow/run-history feature)}))
+     :run-history (devflow/run-history (:op/runtime ctx) feature)}))
 
 (defop devflow-squash-run
   "Squash a finished devflow run into one closed digest strand.
@@ -466,7 +466,7 @@
   (let [{:keys [feature]} (:op/args ctx)]
     {:operation "devflow-squash-run"
      :feature feature
-     :digest (devflow/squash-run! feature)}))
+     :digest (devflow/squash-run! (:op/runtime ctx) feature)}))
 
 (defop devflow-status
   "Return the active devflow root, ready steps, and done state for a feature.
@@ -481,9 +481,9 @@
   (let [{:keys [feature]} (:op/args ctx)]
     {:operation "devflow-status"
      :feature feature
-     :root (some-> (devflow/current-root feature) entity-projection)
+     :root (some-> (devflow/current-root (:op/runtime ctx) feature) entity-projection)
      :done (workflow/done? feature)
-     :ready (devflow/ready feature)}))
+     :ready (devflow/ready (:op/runtime ctx) feature)}))
 
 (defop workflow-runs
   "Return active workflow roots, optionally filtered by family.

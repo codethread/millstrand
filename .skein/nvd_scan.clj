@@ -15,7 +15,6 @@
   see test/skein/nvd_scan_test.clj. This is its own init.clj module (not part of
   config.clj) so config_test's direct config.clj load never registers the job."
   (:require [clojure.data.json :as json]
-            [skein.api.current.alpha :as current]
             [skein.spools.cron :as cron]))
 
 (def ^:private nvd-scan-interval-ms
@@ -175,9 +174,8 @@
   [runtime]
   (run-nvd-scan! {:run-cmd run-command
                   :raise-card! (fn [{:keys [title body]}]
-                                 (current/with-runtime runtime
-                                   ((requiring-resolve 'ct.spools.kanban/add!)
-                                    title {"--body" body "--priority" "p1"})))}))
+                                 ((requiring-resolve 'ct.spools.kanban/add!)
+                                  runtime title {"--body" body "--priority" "p1"}))}))
 
 (cron/defjob :nvd-scan
   {:interval-ms nvd-scan-interval-ms
