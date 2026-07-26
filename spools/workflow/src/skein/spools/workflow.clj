@@ -248,7 +248,7 @@
   registry to consult."
   [definition bindings]
   (util/require-map! definition [:definition])
-  (require-valid! ::handoff-bindings bindings "Invalid workflow defer bindings")
+  (require-valid! ::handoff-bindings bindings "Invalid workflow hand-off bindings")
   (let [declared (into #{} (map defs/handoff-name) (defs/handoff-steps definition))]
     (doseq [[name _] (sort-by key bindings)]
       (when-not (contains? declared name)

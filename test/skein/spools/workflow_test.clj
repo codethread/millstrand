@@ -2607,7 +2607,7 @@
       (is (= :workflow/defer-in-procedure (:reason (ex-data thrown))))
       (is (= :perform-work (:defer (ex-data thrown)))))))
 
-(deftest bind-defers-owns-the-user-authority-boundary
+(deftest bind-handoffs-owns-the-user-authority-boundary
   (testing "targets materialize in registered-name order whatever the author wrote"
     (is (= ["wt-devflow" "wt-spike"]
            (get-in (second (:steps (bound-card #{:wt-spike :wt-devflow})))
@@ -2618,7 +2618,7 @@
       (is (= :workflow/handoff-unknown (:reason (ex-data thrown))))
       (is (= [:perform-work] (:declared (ex-data thrown))))))
   (testing "an empty target set is an exit no worker can fill"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow defer bindings"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow hand-off bindings"
                           (workflow/bind-handoffs card-template {:perform-work #{}}))))
   (testing "an unbound template describes itself but cannot pour"
     (is (= [nil ["wt-devflow" "wt-spike"]]
