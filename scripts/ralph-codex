@@ -199,12 +199,17 @@ while true; do
     fi
   else
     consecutive_failures=0
-    [ -f "$final_message" ] \
-      || { echo "[ralph-codex] codex exited successfully without a final message" >&2; exit 1; }
+    [ -r "$final_message" ] && [ -s "$final_message" ] \
+      || { echo "[ralph-codex] codex exited successfully without a readable, non-empty final message" >&2; exit 1; }
     # Only the final line is a brake, so quoting the instruction earlier in the
     # response cannot stop the loop.
     brake_line="$(tail -n 1 "$final_message")"
-    if [[ "$brake_line" == "RALPH-STOP: "* ]]; then
+    if [[ "$brake_line" == RALPH-STOP:* ]]; then
+      brake_reason="${brake_line#RALPH-STOP: }"
+      if [[ "$brake_line" != "RALPH-STOP: "* ]] || [ -z "$brake_reason" ]; then
+        echo "[ralph-codex] malformed emergency brake; expected RALPH-STOP: <reason>" >&2
+        exit 1
+      fi
       echo
       echo "[ralph-codex] agent pulled the emergency brake:" >&2
       echo "$brake_line" >&2
