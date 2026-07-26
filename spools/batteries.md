@@ -302,7 +302,7 @@ strand spool bump <family> [--to vN]
 strand spool status
 ```
 
-`spool about` returns the command forms and conventions as data. `spool add` and `spool bump` are mutating leaves, while the offline `spool status` projection is a read leaf. Per-leaf hook classes keep status free of mutation gating.
+`spool about` returns each verb's behavior and the helper's conventions as data; the invocation forms above come from `strand help spool`. `spool add` and `spool bump` are mutating leaves, while the offline `spool status` projection is a read leaf. Per-leaf hook classes keep status free of mutation gating.
 
 The public boundary specs are `::spool-op-context`, `::spool-about-result`, `::spool-add-result`, `::spool-bump-result`, `::spool-status-result`, and `::advisory-manifest` in `skein.spools.batteries`. Closed result and manifest maps also use the named `exact-keys?` predicate because `clojure.spec.alpha/keys` accepts extra keys.
 

@@ -651,93 +651,31 @@
     (workflow/start! feature :land context {:family "land" :context context})))
 
 (defn land-about
-  "Return the coordinator landing discipline manual."
+  "Return the landing runbook context: who drives a land run, and what this op
+  owns on top of the workflow definition."
   []
   {:operation "land about"
    :summary (format-alpha/reflow
-             "|Coordinator-only landing workflow: the encoded discipline a
-              |coordinator drives before a branch is considered landed.")
+             "|Coordinator-only landing workflow: the discipline that takes a
+              |finished branch to landed. The `land` definition is the source of
+              |truth for the steps and their instructions; this manual carries
+              |only what reading it cannot tell you.")
    :coordinator-only
    (format-alpha/reflow
     "|Worker agents never land — they stop at implemented+committed. Only a
      |coordinator, holding delegated sign-off authority, drives a land run.")
-   :discipline (format-alpha/reflow
-                "|Sign-off is only valid on a pushed branch with an open draft PR and
-                 |green CI at HEAD — the ci-green shell gate enforces that ordering
-                 |mechanically: the shell executor runs the recorded `gh pr checks`
-                 |watch and only its green exit opens signoff-review. A red watch
-                 |stamps gate/error on the gate; fix, push, and remove the stamp
-                 |(`strand update <gate-id> --attributes '{\"gate/error\":null}'`) to re-run it. For
-                 |card-backed runs, completing push-draft-pr moves the card to
-                 |in_review, and aborting sign-off moves it back to claimed. The
-                 |lock is acquired after sign-off approval, immediately before the
-                 |mechanical merge continuation, so review and CI work can run
-                 |concurrently but only one coordinator lands a branch. Approval
-                 |requires the semantic squash subject and Squashed commits body.
-                 |The shell executor marks the PR ready, runs `gh pr merge --squash`,
-                 |fast-forwards canonical main with `git pull --ff-only`, and watches
-                 |main CI to green. Branch protection requires green CI on an
-                 |up-to-date branch. Any mechanical gate failure stamps gate/error;
-                 |fix the cause and clear the stamp to re-run. Aborting at sign-off
-                 |records a reason and leaves the branch/worktree untouched.")
-   :steps [{:step "push-draft-pr"
-            :purpose (format-alpha/reflow
-                      "|Push the branch and open or reuse a draft PR against main.
-                       |Completing it starts the automated CI watch and moves a
-                       |card-backed run's card to in_review.")}
-           {:step "ci-green"
-            :purpose (format-alpha/reflow
-                      "|Machine shell gate: watch CI to green at the branch HEAD.
-                       |A red watch stamps gate/error for a fix-push-clear retry.")}
-           {:step "signoff-review"
-            :purpose (format-alpha/reflow
-                      "|Run the declared roster review and drive fix rounds. Every
-                       |fix round re-establishes green CI.")}
-           {:step "signoff"
-            :purpose (format-alpha/reflow
-                      "|Coordinator sign-off checkpoint (:agent): approved requires a
-                       |squash subject/body and routes to the mechanical merge
-                       |continuation; abort routes to a reason-recording step.")}
-           {:step "merge-pr"
-            :purpose (format-alpha/reflow
-                      "|Machine shell gate: mark the PR ready and squash-merge it
-                       |through GitHub. Safe to re-run if the PR already merged.")}
-           {:step "pull-main"
-            :purpose (format-alpha/reflow
-                      "|Machine shell gate: verify the canonical checkout is on main
-                       |and fast-forward it with `git pull --ff-only origin main`.")}
-           {:step "main-ci-green"
-            :purpose (format-alpha/reflow
-                      "|Machine shell gate: watch every main workflow run at the
-                       |merged sha to green.")}
-           {:step "cleanup"
-            :purpose (format-alpha/reflow
-                      "|Delete the remote branch/PR, remove the worktree and local
-                       |branch, finish the card, and close the run.")}]
-   :commands [{:verb "start"
-               :purpose (format-alpha/reflow
-                         "|Pour and start the land run: land start <feature> --branch
-                          |<b> --worktree <path> [--card <id>].")}
-              {:verb "ready"
-               :purpose "Show the ready land frontier, including checkpoint choice input details."}
-              {:verb "complete"
-               :purpose (format-alpha/reflow
-                         "|Close the current non-checkpoint land step, optionally with a
-                          |step=<id> selector. CI shell gates are closed by the executor,
-                          |never by complete. The result includes input details when
-                          |completion reaches a checkpoint.")}
-              {:verb "choose"
-               :purpose (format-alpha/reflow
-                         "|Decide sign-off: approved requires
-                          |{\"subject\":\"...\",\"body\":\"...\"}; abort requires
-                          |{\"reason\":\"...\"}.")}
-              {:verb "status"
-               :purpose (format-alpha/reflow
-                         "|Show the land root, ready steps, checkpoint input details,
-                          |done state, and merge lock.")}
-              {:verb "break-lock"
-               :purpose "Explicitly break a stale merge lock with a reason."}]
-   :discovery {:help "strand help land"
+   :op-owns
+   (format-alpha/reflow
+    "|Beyond the definition, this op owns the singleton merge lock — taken at
+     |sign-off approval and released at terminal cleanup, so review and CI run
+     |concurrently while only one coordinator lands a branch — and the kanban
+     |lane moves: a card-backed run moves its card to in_review when
+     |push-draft-pr completes, and back to claimed on abort.")
+   :discovery {:definition "strand workflow show land"
+               :continuations ["strand workflow show land-merge"
+                               "strand workflow show land-abort"]
+               :instructions "strand land ready"
+               :help "strand help land"
                :conventions "strand devflow-conventions"}})
 
 (defn- land-result
@@ -756,9 +694,9 @@
   "Declared command surface for the `land` op (one level of subcommands; the
   handler dispatches on the first routed subcommand, never a hand-written usage)."
   {:op "land"
-   :doc "Drive the coordinator landing workflow for a feature branch. Run `strand land about` for the discipline manual."
+   :doc "Drive the coordinator landing workflow for a feature branch. Run `strand land about` for the runbook context."
    :subcommands
-   {"about" {:doc "Return the landing discipline manual: purpose, step map, and coordinator-only note."
+   {"about" {:doc "Return the landing runbook context: who drives a land run, and what this op owns beyond the workflow definition."
              :hook-class :read :deadline-class :standard}
     "start" {:doc "Pour and start the land run for a feature branch."
              :hook-class :mutating :deadline-class :standard
@@ -825,7 +763,7 @@
   Dispatches the parsed `strand land ...` subcommands over the `land` workflow
   and its continuations, adding the domain behavior the engine does not own: the
   singleton merge lock and the kanban lane moves. Run `strand land about` for
-  the discipline manual."
+  the runbook context."
   {:returns land-returns :arg-spec land-arg-spec}
   [ctx]
   (let [{:keys [subcommand feature choice tail] :as args} (:op/args ctx)

@@ -511,10 +511,8 @@
   (is (not (s/valid? ::batteries/advisory-manifest
                      {:spool/format 1 :roots {'demo/root {:root "."}} :extra true})))
   (let [about (batteries/spool-op {:op/args {:subcommand ["about"]}})]
-    (is (= ["strand spool add <git-url> [--tag vN] [--lib family]"
-            "strand spool bump <family> [--to vN]"
-            "strand spool status"]
-           (mapv :form (:commands about))))
+    (is (= ["add" "bump" "status"]
+           (mapv :verb (:commands about))))
     (is (s/valid? ::batteries/spool-about-result about)))
   (let [error (is (thrown? clojure.lang.ExceptionInfo
                            (batteries/spool-op {:op/args {:subcommand :unexpected}})))]
