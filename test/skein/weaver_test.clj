@@ -3573,6 +3573,7 @@
                            (nrepl/message
                             session
                             {:op "load-file"
+                             :eval "clojure.core/eval"
                              :file (source-file/render-forms
                                     [`(require '~ns-sym)
                                      `(deref (resolve '~(symbol (str ns-sym) "visible")))])}))]
