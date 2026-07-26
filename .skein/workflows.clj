@@ -16,7 +16,8 @@
   its thin CLI wrapper ops live in config.clj. This file is loaded after
   config.clj and reuses its public CLI-tail helpers (`config/pop-step-selector`
   and friends) so the `step=<id>` tail convention has one definition."
-  (:require [clojure.java.io :as io]
+  (:require [clojure.data.json :as json]
+            [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.macros.ops :refer [defop]]
@@ -267,10 +268,11 @@
 ;; valid on a pushed branch with a draft PR and green CI, and main is
 ;; branch-protected — it only moves via a mechanical `gh pr merge` with green
 ;; CI, never a direct push. The two CI watches and the merge continuation's
-;; pull are `:shell` gates the shell executor (skein.spools.executors.shell) fulfils
-;; mechanically — a red watch stamps `gate/error` on the gate for a
-;; fix-push-clear retry, and `land complete` refuses gates. Human steps keep
-;; `workflow/instruction` text as the enforcement surface, shipped as data.
+;; pull and cleanup gates use the shell executor; the main CI watch uses the
+;; code executor because its work is data-shaped polling. A red machine gate
+;; stamps `gate/error` for a fix-push-clear retry, and `land complete` refuses
+;; gates. Human steps keep `workflow/instruction` text as the enforcement
+;; surface, shipped as data.
 ;; ---------------------------------------------------------------------------
 
 (def ^:private scripts-dir
@@ -298,45 +300,154 @@
   check watch."
   (script "feature-ci-watch.sh"))
 
-(def ^:private main-ci-watch-script
-  "POSIX script for the main-ci-green shell gate: poll the full workflow-run
-  set at the merged main sha until it is non-empty, every run has completed,
-  and the all-green state holds across two consecutive polls — the
-  stabilisation window that catches workflows GitHub registers late, which a
-  one-shot snapshot of the first non-empty listing would miss. Any completed
-  conclusion other than success or skipped fails loudly with the run listing
-  on stderr. The gate's `shell/timeout-secs` bounds the whole watch."
-  (str "set -eu\n"
-       "sha=$(git rev-parse origin/main)\n"
-       "stable=0\n"
-       "while :; do\n"
-       "  counts=$(gh run list --commit \"$sha\" --json status,conclusion --jq '"
-       "[length,"
-       " ([.[] | select(.status != \"completed\")] | length),"
-       " ([.[] | select(.status == \"completed\" and .conclusion != \"success\""
-       " and .conclusion != \"skipped\")] | length)] | @tsv')\n"
-       "  set -- $counts\n"
-       "  if [ \"$3\" -gt 0 ]; then\n"
-       "    echo \"unsuccessful workflow runs at $sha:\" >&2\n"
-       "    gh run list --commit \"$sha\" >&2\n"
-       "    exit 1\n"
-       "  fi\n"
-       "  if [ \"$1\" -gt 0 ] && [ \"$2\" -eq 0 ]; then\n"
-       "    stable=$((stable + 1))\n"
-       "    if [ \"$stable\" -ge 2 ]; then break; fi\n"
-       "  else\n"
-       "    stable=0\n"
-       "  fi\n"
-       "  sleep 30\n"
-       "done\n"
-       "echo \"all $1 workflow runs at $sha completed successfully\"\n"))
+(s/def ::worktree ::non-blank-string)
+(s/def ::poll-interval-ms nat-int?)
+(s/def ::env (s/map-of string? string?))
+(s/def ::main-ci-watch-params
+  (s/keys :req-un [::worktree]
+          :opt-un [::poll-interval-ms ::env]))
+
+(declare run-blocking-command! parse-runs run-counts)
+
+(defn main-ci-watch
+  "Poll main workflow runs to a stable all-green result from `worktree`.
+
+  `params` must satisfy `::main-ci-watch-params`: a non-blank `:worktree`, plus
+  optional non-negative `:poll-interval-ms` and string-to-string `:env` test
+  seams. Poured gates supply only the frozen worktree.
+
+  This public Var is persisted as `workflows/main-ci-watch` in poured gates;
+  keep its qualified name and one-map arity stable for those in-flight runs.
+  Completed success/skipped runs are green; every known non-completed status is
+  pending; any other completed conclusion fails with the run listing; unknown
+  statuses and malformed output fail loudly. Two consecutive complete snapshots
+  are required because GitHub can register workflows after the first green
+  listing. A failed command, blank main sha, malformed response, or interruption
+  throws. Returns `all N workflow runs at SHA completed successfully`."
+  [params]
+  (when-not (s/valid? ::main-ci-watch-params params)
+    (throw (ex-info "main CI watch params must satisfy the declared spec"
+                    {:params params
+                     :spec ::main-ci-watch-params
+                     :explain (s/explain-str ::main-ci-watch-params params)})))
+  (let [{:keys [worktree poll-interval-ms env]
+         :or {poll-interval-ms 30000 env {}}} params
+        sha (str/trim
+             (run-blocking-command! worktree env
+                                    ["git" "rev-parse" "origin/main"]))]
+    (when (str/blank? sha)
+      (throw (ex-info "git rev-parse origin/main returned a blank sha"
+                      {:worktree worktree})))
+    (loop [stable 0]
+      (when (Thread/interrupted)
+        (throw (InterruptedException. "main CI watch interrupted")))
+      (let [out (run-blocking-command! worktree env
+                                       ["gh" "run" "list" "--commit" sha
+                                        "--json" "status,conclusion"])
+            runs (parse-runs sha out)
+            {:keys [total pending unsuccessful]} (run-counts runs)]
+        (when (pos? unsuccessful)
+          (let [listing (run-blocking-command! worktree env
+                                               ["gh" "run" "list" "--commit" sha])]
+            (throw (ex-info (str "unsuccessful workflow runs at " sha ":\n" listing)
+                            {:sha sha :runs runs}))))
+        (let [next-stable (if (and (pos? total) (zero? pending))
+                            (inc stable)
+                            0)]
+          (if (>= next-stable 2)
+            (str "all " total " workflow runs at " sha
+                 " completed successfully")
+            (do
+              (Thread/sleep (long poll-interval-ms))
+              (recur next-stable))))))))
+
+(defn- command-result
+  "Run argv in worktree and return its exit code and separate output streams.
+
+  Interruption destroys and joins the active child before it propagates, so the
+  code executor never abandons a subprocess when its worker times out."
+  [worktree env argv]
+  (let [path (get env "PATH")
+        command (first argv)
+        executable (or (when path
+                         (some (fn [dir]
+                                 (let [file (io/file dir command)]
+                                   (when (.canExecute file)
+                                     (.getAbsolutePath file))))
+                               (str/split path
+                                          (re-pattern
+                                           (java.util.regex.Pattern/quote
+                                            java.io.File/pathSeparator)))))
+                       command)
+        resolved-argv (into [executable] (rest argv))
+        ^ProcessBuilder builder (ProcessBuilder. ^java.util.List resolved-argv)
+        _ (.directory builder (io/file worktree))
+        _ (doseq [[name value] env]
+            (.put (.environment builder) name value))
+        ^Process process (.start builder)
+        stdout (future (slurp (.getInputStream process)))
+        stderr (future (slurp (.getErrorStream process)))]
+    (try
+      (let [exit (.waitFor process)]
+        {:exit exit :out @stdout :err @stderr})
+      (catch InterruptedException interrupted
+        (.destroyForcibly process)
+        (.waitFor process)
+        (future-cancel stdout)
+        (future-cancel stderr)
+        (throw interrupted)))))
+
+(defn- run-blocking-command!
+  "Block on one child while draining both streams; return stdout or throw."
+  [worktree env argv]
+  (let [{:keys [exit out err]} (command-result worktree env argv)]
+    (when-not (zero? exit)
+      (throw (ex-info "main CI watch command failed"
+                      {:argv argv :exit exit :out out :err err})))
+    out))
+
+(defn- parse-runs
+  "Parse a gh run-list response, preserving the raw output on malformed JSON."
+  [sha out]
+  (try
+    (json/read-str out :key-fn keyword)
+    (catch Exception cause
+      (throw (ex-info "gh run list returned malformed JSON"
+                      {:sha sha :out out}
+                      cause)))))
+
+(defn- run-counts
+  "Return total, pending, and unsuccessful counts for a gh run listing."
+  [runs]
+  (when-not (and (vector? runs)
+                 (every? #(and (map? %)
+                               (string? (:status %))
+                               (or (nil? (:conclusion %))
+                                   (string? (:conclusion %))))
+                         runs))
+    (throw (ex-info "gh run list returned malformed workflow runs"
+                    {:runs runs})))
+  (let [known-statuses #{"completed" "in_progress" "queued"
+                         "requested" "waiting" "pending"}
+        unknown-statuses (->> runs
+                              (map :status)
+                              (remove known-statuses)
+                              distinct
+                              vec)]
+    (when (seq unknown-statuses)
+      (throw (ex-info "gh run list returned unknown workflow statuses"
+                      {:statuses unknown-statuses :runs runs}))))
+  {:total (count runs)
+   :pending (count (remove #(= "completed" (:status %)) runs))
+   :unsuccessful (count (filter #(and (= "completed" (:status %))
+                                      (not (#{"success" "skipped"} (:conclusion %))))
+                                runs))})
 
 ;; The land family's param and choice-input contracts. Each workflow names one
 ;; whole-map spec, so `strand workflow show land` prints the contract a run is
 ;; judged against and `choose!` re-resolves the live spec before it mutates.
 (s/def ::feature ::non-blank-string)
 (s/def ::branch ::non-blank-string)
-(s/def ::worktree ::non-blank-string)
 (s/def ::card ::non-blank-string)
 (s/def ::subject ::non-blank-string)
 (s/def ::reason ::non-blank-string)
@@ -412,8 +523,8 @@
 (workflow/defworkflow land-merge
   "Run the mechanical merge continuation for an approved land run.
 
-  The shell gates squash-merge the PR, fast-forward canonical main, watch main
-  CI, and remove the landed branch and worktree. Final bookkeeping remains
+  Machine gates squash-merge the PR, fast-forward canonical main, watch main CI,
+  and remove the landed branch and worktree. Final bookkeeping remains
   coordinator-owned and releases the merge lock when completed."
   {:entrypoints #{:continue}
    :param-spec ::land-merge-params
@@ -459,26 +570,28 @@
                                  |(`strand update <gate-id> --attributes '{\"gate/error\":null}'`) to re-run.")})
    (workflow/gate :main-ci-green
                   "Watch main CI to green at the merged sha"
-                  :shell
+                  :code
                   :depends-on [:pull-main]
                   :attributes {"workflow/action-ref" "land.main.ci-green"
-                               "shell/argv" ["sh" "-c" main-ci-watch-script]
-                               ;; The feature worktree shares the repo's refs and outlives this
-                               ;; gate (cleanup runs after), so it is a safe cwd for the watch.
-                               "shell/cwd" (fn [{:keys [worktree]}] worktree)
-                               "shell/timeout-secs" 5400
+                               ;; Shell would need jq + TSV to emulate the run-state tuple.
+                               ;; Code keeps that data as data. The worktree is poured because
+                               ;; code gates have no ambient cwd attribute.
+                               "code/fn" "workflows/main-ci-watch"
+                               "code/params" (fn [{:keys [worktree]}]
+                                               {:worktree worktree})
+                               "code/timeout-secs" 5400
                                "workflow/instruction"
                                (format-alpha/reflow
-                                "|Machine gate: the shell executor polls the full workflow-run set at
+                                "|Machine gate: the code executor polls the full workflow-run set at
                                  |the merged main sha (`gh run list --commit <sha>`) until it is
                                  |non-empty, every run has completed, and the all-green state holds
                                  |across two consecutive polls, so late-registering workflows are
                                  |caught. Any conclusion besides success or skipped stamps
                                  |`gate/error` with the run listing: re-run transient infra failures
                                  |(`gh run rerun <run-id>`), then remove the stamp
-                                 |(`strand update <gate-id> --attributes '{\"gate/error\":null}'`) to re-watch. The
-                                 |gate closing asserts green CI on the main sha; run output is
-                                 |recorded on the gate.")})
+                                 |(`strand update <gate-id> --attributes
+                                 |'{\"gate/error\":null}'`) to re-watch. The gate closing asserts green
+                                 |CI on the main sha; run output is recorded on the gate.")})
    (workflow/gate :remove-branch-worktree
                   (fn [{:keys [branch]}] (str "Remove landed branch and worktree for " branch))
                   :shell

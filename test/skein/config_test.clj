@@ -848,6 +848,12 @@
   ((requiring-resolve 'skein.spools.workflow/complete!)
    feature {:by "shell" :attributes {"shell/exit-code" 0 "shell/output" output}}))
 
+(defn- code-gate-complete!
+  "Close the ready :code land gate with the executor's success attributes."
+  [feature result]
+  ((requiring-resolve 'skein.spools.workflow/complete!)
+   feature {:by "code" :attributes {"code/result" result}}))
+
 (defn- write-fake-gh!
   "Write a deterministic `gh` executable for feature-CI watch script tests."
   [dir]
@@ -943,6 +949,192 @@
                                   (System/getenv "PATH"))
                       "FAKE_GH_MODE" mode
                       "FAKE_GH_LOG" (.getAbsolutePath (io/file fake-gh-dir "merge.log"))})))
+
+(defn- write-main-ci-fakes!
+  "Write deterministic git and gh executables for main-CI code-gate tests."
+  [bin-dir]
+  (.mkdirs (io/file bin-dir))
+  (let [git-file (io/file bin-dir "git")
+        gh-file (io/file bin-dir "gh")]
+    (spit git-file
+          (str "#!/bin/sh\n"
+               "set -eu\n"
+               "pwd >> \"$FAKE_MAIN_CI_CWD_LOG\"\n"
+               "if [ \"$*\" != 'rev-parse origin/main' ]; then\n"
+               "  echo \"unexpected git argv: $*\" >&2\n"
+               "  exit 64\n"
+               "fi\n"
+               "printf '%s\\n' \"$FAKE_MAIN_CI_SHA\"\n"))
+    (spit gh-file
+          (str "#!/bin/sh\n"
+               "set -eu\n"
+               "pwd >> \"$FAKE_MAIN_CI_CWD_LOG\"\n"
+               "case \"$*\" in\n"
+               "  *'--json status,conclusion')\n"
+               "    case \"$FAKE_MAIN_CI_MODE\" in\n"
+               "      polling)\n"
+               "        n=0\n"
+               "        if [ -f \"$FAKE_MAIN_CI_COUNTER\" ]; then n=$(cat \"$FAKE_MAIN_CI_COUNTER\"); fi\n"
+               "        n=$((n + 1))\n"
+               "        printf '%s\\n' \"$n\" > \"$FAKE_MAIN_CI_COUNTER\"\n"
+               "        case \"$n\" in\n"
+               "          1) printf '[{\"status\":\"in_progress\",\"conclusion\":null}]\\n' ;;\n"
+               "          *) printf '[{\"status\":\"completed\",\"conclusion\":\"success\"},"
+               "{\"status\":\"completed\",\"conclusion\":\"skipped\"}]\\n' ;;\n"
+               "        esac ;;\n"
+               "      failing)\n"
+               "        printf '[{\"status\":\"completed\",\"conclusion\":\"failure\"}]\\n' ;;\n"
+               "      malformed-json) printf '{not-json\\n' ;;\n"
+               "      unknown-status)\n"
+               "        printf '[{\"status\":\"mysterious\",\"conclusion\":null}]\\n' ;;\n"
+               "      blocking)\n"
+               "        printf '%s\\n' \"$$\" > \"$FAKE_MAIN_CI_PID\"\n"
+               "        read _ < \"$FAKE_MAIN_CI_RELEASE\" ;;\n"
+               "    esac ;;\n"
+               "  'run list --commit '*) printf 'failing workflow listing\\n' ;;\n"
+               "  *) echo \"unexpected gh argv: $*\" >&2; exit 64 ;;\n"
+               "esac\n"))
+    (is (.setExecutable git-file true))
+    (is (.setExecutable gh-file true))
+    {:git git-file :gh gh-file}))
+
+(defn- main-ci-env
+  "Return a fake-command environment for mode under worktree."
+  [worktree bin-dir mode]
+  {"PATH" (str (.getAbsolutePath (io/file bin-dir))
+               java.io.File/pathSeparator
+               (System/getenv "PATH"))
+   "FAKE_MAIN_CI_MODE" mode
+   "FAKE_MAIN_CI_SHA" (str/join (repeat 40 "a"))
+   "FAKE_MAIN_CI_COUNTER" (.getAbsolutePath (io/file worktree "counter"))
+   "FAKE_MAIN_CI_CWD_LOG" (.getAbsolutePath (io/file worktree "cwd.log"))
+   "FAKE_MAIN_CI_PID" (.getAbsolutePath (io/file worktree "gh.pid"))
+   "FAKE_MAIN_CI_RELEASE" (.getAbsolutePath (io/file worktree "release"))})
+
+(deftest main-ci-watch-polls-to-two-stable-green-snapshots-from-explicit-cwd
+  (with-config-runtime
+    (fn [_rt]
+      (let [worktree (.toFile
+                      (java.nio.file.Files/createTempDirectory
+                       "skein-main-ci-worktree"
+                       (make-array java.nio.file.attribute.FileAttribute 0)))
+            unrelated (.toFile
+                       (java.nio.file.Files/createTempDirectory
+                        "skein-main-ci-unrelated"
+                        (make-array java.nio.file.attribute.FileAttribute 0)))
+            bin-dir (io/file worktree "bin")
+            watch (requiring-resolve 'workflows/main-ci-watch)]
+        (try
+          (write-main-ci-fakes! bin-dir)
+          (let [original-user-dir (System/getProperty "user.dir")]
+            (try
+              (System/setProperty "user.dir" (.getAbsolutePath unrelated))
+              (is (= (str "all 2 workflow runs at " (str/join (repeat 40 "a"))
+                          " completed successfully")
+                     (watch {:worktree (.getAbsolutePath worktree)
+                             :poll-interval-ms 0
+                             :env (main-ci-env worktree bin-dir "polling")})))
+              (finally
+                (System/setProperty "user.dir" original-user-dir))))
+          (is (= "3" (str/trim (slurp (io/file worktree "counter"))))
+              "one pending poll plus two consecutive green polls are required")
+          (is (every? #{(.getCanonicalPath worktree)}
+                      (str/split-lines (slurp (io/file worktree "cwd.log")))))
+          (finally
+            (delete-directory! unrelated)
+            (delete-directory! worktree)))))))
+
+(deftest main-ci-watch-preserves-failing-run-listing
+  (with-config-runtime
+    (fn [_rt]
+      (let [worktree (.toFile
+                      (java.nio.file.Files/createTempDirectory
+                       "skein-main-ci-failing"
+                       (make-array java.nio.file.attribute.FileAttribute 0)))
+            bin-dir (io/file worktree "bin")
+            watch (requiring-resolve 'workflows/main-ci-watch)]
+        (try
+          (write-main-ci-fakes! bin-dir)
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo
+               #"(?s)unsuccessful workflow runs at .*failing workflow listing"
+               (watch {:worktree (.getAbsolutePath worktree)
+                       :poll-interval-ms 0
+                       :env (main-ci-env worktree bin-dir "failing")})))
+          (finally
+            (delete-directory! worktree)))))))
+
+(deftest main-ci-watch-fails-loudly-on-malformed-params-and-gh-output
+  (with-config-runtime
+    (fn [_rt]
+      (let [worktree (.toFile
+                      (java.nio.file.Files/createTempDirectory
+                       "skein-main-ci-malformed"
+                       (make-array java.nio.file.attribute.FileAttribute 0)))
+            bin-dir (io/file worktree "bin")
+            watch (requiring-resolve 'workflows/main-ci-watch)]
+        (try
+          (write-main-ci-fakes! bin-dir)
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                #"params must satisfy the declared spec"
+                                (watch {:worktree ""})))
+          (try
+            (watch {:worktree (.getAbsolutePath worktree)
+                    :poll-interval-ms 0
+                    :env (main-ci-env worktree bin-dir "malformed-json")})
+            (is false "malformed JSON must throw")
+            (catch clojure.lang.ExceptionInfo error
+              (is (= "gh run list returned malformed JSON" (ex-message error)))
+              (is (= "{not-json\n" (:out (ex-data error))))))
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo
+               #"unknown workflow statuses"
+               (watch {:worktree (.getAbsolutePath worktree)
+                       :poll-interval-ms 0
+                       :env (main-ci-env worktree bin-dir "unknown-status")})))
+          (finally
+            (delete-directory! worktree)))))))
+
+(deftest main-ci-watch-timeout-interrupt-destroys-the-active-child
+  (with-config-runtime
+    (fn [_rt]
+      (let [worktree (.toFile
+                      (java.nio.file.Files/createTempDirectory
+                       "skein-main-ci-blocking"
+                       (make-array java.nio.file.attribute.FileAttribute 0)))
+            bin-dir (io/file worktree "bin")
+            pid-file (io/file worktree "gh.pid")
+            watcher (.newWatchService (java.nio.file.FileSystems/getDefault))
+            watch (requiring-resolve 'workflows/main-ci-watch)]
+        (try
+          (write-main-ci-fakes! bin-dir)
+          (is (zero? (:exit (sh/sh "mkfifo" (.getAbsolutePath
+                                             (io/file worktree "release"))))))
+          (.register (.toPath worktree)
+                     watcher
+                     (into-array java.nio.file.WatchEvent$Kind
+                                 [java.nio.file.StandardWatchEventKinds/ENTRY_CREATE]))
+          (let [call (future
+                       (watch {:worktree (.getAbsolutePath worktree)
+                               :poll-interval-ms 0
+                               :env (main-ci-env worktree bin-dir "blocking")}))]
+            (is (loop []
+                  (if (.exists pid-file)
+                    true
+                    (let [key (.take watcher)]
+                      (.reset key)
+                      (recur))))
+                "the fake gh child started before interruption")
+            (let [pid (parse-long (str/trim (slurp pid-file)))
+                  handle (.orElseThrow (java.lang.ProcessHandle/of pid))]
+              (future-cancel call)
+              (is (thrown? java.util.concurrent.CancellationException @call))
+              (.get (.onExit handle))
+              (is (not (.isAlive handle))
+                  "interruption destroys and joins the active gh child")))
+          (finally
+            (.close watcher)
+            (delete-directory! worktree)))))))
 
 (deftest land-feature-ci-watch-waits-for-check-registration-and-preserves-failures
   (with-config-runtime
@@ -1127,10 +1319,11 @@
       (let [gate (first (:ready (op! "land" ["ready" "land-x"])))
             gate-attrs (:attributes (weaver/show rt (:id gate)))]
         (is (= "land.main.ci-green" (:action-ref gate)))
-        (is (= "shell" (:gate gate)))
-        (is (= "sh" (first (:shell/argv gate-attrs))))
-        (is (str/includes? (last (:shell/argv gate-attrs)) "gh run list")))
-      (shell-gate-complete! "land-x" "main runs green")
+        (is (= "code" (:gate gate)))
+        (is (= "workflows/main-ci-watch" (:code/fn gate-attrs)))
+        (is (= {:worktree "/tmp/land-x"} (:code/params gate-attrs)))
+        (is (= 5400 (:code/timeout-secs gate-attrs))))
+      (code-gate-complete! "land-x" "main runs green")
       (let [gate (first (:ready (op! "land" ["ready" "land-x"])))
             gate-attrs (:attributes (weaver/show rt (:id gate)))]
         (is (= "land.branch-worktree.cleanup" (:action-ref gate)))
@@ -1213,7 +1406,7 @@
                      "{\"subject\":\"feat: land w\",\"body\":\"Squashed commits: abc123\"}"])
         (shell-gate-complete! "land-w" "PR merged")                  ; merge-pr
         (shell-gate-complete! "land-w" "main fast-forwarded")       ; pull-main
-        (shell-gate-complete! "land-w" "main runs green")           ; main-ci-green
+        (code-gate-complete! "land-w" "main runs green")            ; main-ci-green
         (shell-gate-complete! "land-w" "branch and worktree removed") ; remove-branch-worktree
         (op! "land" ["complete" "land-w"])                           ; tidy-created-resources
         (let [ready-cleanup (op! "land" ["ready" "land-w"])
@@ -1315,7 +1508,8 @@
   "Assert repo startup guards every module that relies on the workflow coordinate."
   [rt]
   (let [modules (:modules (runtime/status rt))]
-    (doseq [id [:skein/spools-workflow :skein/spools-workflow-cli :skein/spools-shell]]
+    (doseq [id [:skein/spools-workflow :skein/spools-workflow-cli
+                :skein/spools-shell :skein/spools-code]]
       (is (= ['skein.spools/workflow] (:spools (get modules id)))
           (str id " must opt into skein.spools/workflow")))
     (is (= [:skein/spools-workflow] (:after (get modules :skein/spools-workflow-cli)))
@@ -1328,7 +1522,13 @@
         ":config is required — a guarded but non-required module skips silently, dropping the op/query surface")
     (is (= ['skein.spools/workflow 'ct.spools/delegation 'skein.macros/macros]
            (:spools (get modules :workflows)))
-        ":workflows must opt into skein.spools/workflow, ct.spools/delegation, and the authoring macros")))
+        ":workflows must opt into skein.spools/workflow, ct.spools/delegation, and the authoring macros")
+    (is (= [:skein/spools-workflow :workflows]
+           (:after (get modules :skein/spools-code)))
+        "the code executor scans only after workflows/main-ci-watch is loaded")
+    (is (= (requiring-resolve 'workflows/main-ci-watch)
+           (runtime/resolve-var rt 'workflows/main-ci-watch))
+        "cold startup resolves the exact persisted code/fn symbol")))
 
 (defn- assert-kanban-tracker-installed
   "Assert startup declared the required devflow tracker binding and it is live."
@@ -1522,6 +1722,7 @@
    :skein/spools-workflow 'skein.spools.workflow/spool
    :skein/spools-workflow-cli 'skein.spools.workflow.cli/spool
    :skein/spools-shell 'skein.spools.executors.shell/spool
+   :skein/spools-code 'skein.spools.executors.code/spool
    :skein/spools-unsafe-text-search 'skein.spools.unsafe-text-search/spool
    :skein/spools-chime 'skein.spools.chime/spool
    :skein/spools-cron 'skein.spools.cron/spool})
