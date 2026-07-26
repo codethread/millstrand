@@ -13,6 +13,7 @@
            [java.util.concurrent CountDownLatch TimeUnit]))
 
 (def ^:private blocker (atom (CountDownLatch. 0)))
+(def ^:private worker-exited (atom (CountDownLatch. 0)))
 
 (defn return-value
   "Return the test value supplied in `params`."
@@ -48,30 +49,38 @@
 (defn ignore-interrupt-until-release
   "Ignore interrupts and return only after the test-owned latch is released."
   [params]
-  (loop []
-    (if (try
-          (.await ^CountDownLatch @blocker 100 TimeUnit/MILLISECONDS)
-          (catch InterruptedException _
-            false))
-      (:value params)
-      (recur))))
+  (try
+    (loop []
+      (if (try
+            (.await ^CountDownLatch @blocker 100 TimeUnit/MILLISECONDS)
+            (catch InterruptedException _
+              false))
+        (:value params)
+        (recur)))
+    (finally
+      (.countDown ^CountDownLatch @worker-exited))))
 
 (defn poll-short-subprocesses
   "Poll short-lived subprocesses until interrupted, cleaning up the active child."
   [params]
   (let [marker (File. ^String (:marker params))]
-    (loop []
-      (when (Thread/interrupted)
-        (throw (InterruptedException. "poll interrupted")))
-      (spit marker "tick\n" :append true)
-      (let [process (.start (ProcessBuilder. ^java.util.List ["sh" "-c" "sleep 0.05"]))]
-        (try
-          (.waitFor process)
-          (catch InterruptedException interrupted
-            (.destroyForcibly process)
+    (try
+      (loop []
+        (when (Thread/interrupted)
+          (throw (InterruptedException. "poll interrupted")))
+        (spit marker "tick\n" :append true)
+        ;; The short child keeps the fixture in subprocess-polling work long
+        ;; enough for the executor timeout to interrupt its wait deterministically.
+        (let [process (.start (ProcessBuilder. ^java.util.List ["sh" "-c" "sleep 0.05"]))]
+          (try
             (.waitFor process)
-            (throw interrupted))))
-      (recur))))
+            (catch InterruptedException interrupted
+              (.destroyForcibly process)
+              (.waitFor process)
+              (throw interrupted))))
+        (recur))
+      (finally
+        (.countDown ^CountDownLatch @worker-exited)))))
 
 (defn- with-code [f]
   (with-runtime
@@ -171,7 +180,7 @@
     (fn [rt]
       (doseq [[run-id fn-name expected]
               [["throw" "skein.spools.executors.code-test/throw-value" "code test exploded"]
-               ["json" "skein.spools.executors.code-test/non-json-value" "Attributes"]]]
+               ["json" "skein.spools.executors.code-test/non-json-value" "not JSON-safe"]]]
         (workflow/start! run-id (single-gate run-id (request fn-name {})) {})
         (test-alpha/await-quiescent! rt)
         (let [gate-id (:id (ready-code-gate run-id))
@@ -229,6 +238,7 @@
   (with-code
     (fn [rt]
       (reset! blocker (CountDownLatch. 1))
+      (reset! worker-exited (CountDownLatch. 1))
       (let [run-id "saturation"
             gates (mapv (fn [index]
                           (workflow/gate
@@ -260,7 +270,7 @@
             (is (zero? (.size (.getQueue ^java.util.concurrent.ThreadPoolExecutor
                                (:worker-executor
                                 (binding [code/*runtime* rt]
-                                  (#'code/state)))))))
+                                  (#'code/resources)))))))
             (.countDown ^CountDownLatch @blocker)
             (await-eventually #(when (every? (fn [gate] (= "closed" (:state gate)))
                                              (all-gates))
@@ -300,7 +310,9 @@
                                            (when (= "closed" (:state gate)) gate)))]
             (is (= "fresh" (attr fresh :code/result))))
           (.countDown ^CountDownLatch @blocker)
-          (Thread/sleep 200)
+          (is (.await ^CountDownLatch @worker-exited
+                      (test-support/await-budget-ms)
+                      TimeUnit/MILLISECONDS))
           (let [after-late-return (weaver/show rt gate-id)]
             (is (= "active" (:state after-late-return)))
             (is (str/includes? (attr after-late-return :gate/error) "timed out"))
@@ -311,6 +323,7 @@
 (deftest timeout-stops-cooperative-subprocess-poll-with-no-late-completion
   (with-code
     (fn [rt]
+      (reset! worker-exited (CountDownLatch. 1))
       (let [marker (temp-file)]
         (workflow/start!
          "poll"
@@ -327,7 +340,9 @@
               count-at-timeout (line-count marker)]
           (is (str/includes? (attr timed-out :gate/error) "timed out"))
           (is (pos? count-at-timeout))
-          (Thread/sleep 300)
+          (is (.await ^CountDownLatch @worker-exited
+                      (test-support/await-budget-ms)
+                      TimeUnit/MILLISECONDS))
           (is (= count-at-timeout (line-count marker)))
           (let [after-wait (weaver/show rt gate-id)]
             (is (= "active" (:state after-wait)))
@@ -336,7 +351,7 @@
 (deftest state-shape-matches-declared-version
   (test-support/assert-state-shape
    #'code/new-state
-   #{:scan-monitor :worker-executor :timeout-executor :close-fn}))
+   #{:scan-monitor :resources :close-fn}))
 
 (deftest contribution-vocabulary-reconcile-and-removal
   (with-runtime
@@ -344,13 +359,13 @@
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
       (is (= {workflow/executor-kind
               {"code" 'skein.spools.executors.code/gate-stalled?}
-              :queries {"stalled-code-gates" code/stalled-code-gates-query}}
+              :queries {"stalled-code-gates" @#'code/stalled-code-gates-query}}
              (code/contribute {:runtime rt})))
       (is (= {:reconciled :applied}
              (code/reconcile {:runtime rt
                               :module/contribution {:status :applied}})))
       (let [pool (:worker-executor
-                  (binding [code/*runtime* rt] (#'code/state)))
+                  (binding [code/*runtime* rt] (#'code/resources)))
             declaration (first (filter #(= "code" (:name %))
                                        (vocab/declarations
                                         rt {:kind :attr-namespace})))]
@@ -363,8 +378,15 @@
                          :module/contribution {:status :applied}})
         (is (identical? pool
                         (:worker-executor
-                         (binding [code/*runtime* rt] (#'code/state)))))
+                         (binding [code/*runtime* rt] (#'code/resources)))))
         (is (= {:reconciled :removed}
                (code/reconcile {:runtime rt
                                 :module/contribution {:status :removed}})))
-        (is (not-any? #(= :code/engine (:key %)) (events/handlers rt)))))))
+        (is (.isShutdown pool))
+        (is (not-any? #(= :code/engine (:key %)) (events/handlers rt)))
+        (is (= {:reconciled :applied}
+               (code/reconcile {:runtime rt
+                                :module/contribution {:status :applied}})))
+        (is (not (identical? pool
+                             (:worker-executor
+                              (binding [code/*runtime* rt] (#'code/resources))))))))))

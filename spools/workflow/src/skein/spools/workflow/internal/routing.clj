@@ -197,6 +197,17 @@
   (when (seq override-params)
     {"workflow/stage-params" (mapv name (keys override-params))}))
 
+(defn- require-context-map [run-id root]
+  (let [context (query/attr root :workflow/context)]
+    (if (map? context)
+      context
+      (fail! "Workflow root context is malformed"
+             {:reason :workflow/context-invalid
+              :run-id run-id
+              :root (:id root)
+              :context context
+              :expected "map"}))))
+
 (defn- next-plan
   "Return the routing plan for a `:next` continuation (a symbol or registered
   name).
@@ -209,7 +220,7 @@
   [rt run-id _step next-str input]
   (let [target (resolve-next-target rt next-str)
         root (query/current-root-with-rt rt run-id)
-        context (or (query/attr root :workflow/context) {})
+        context (require-context-map run-id root)
         call-params (apply dissoc (merge context input) (stage-param-keys root))
         {:keys [workflow params]} (defs/build target call-params)
         payload (cmp/compile workflow params
@@ -248,7 +259,7 @@
   [rt run-id _step choice input override-params]
   (let [root (query/current-root-with-rt rt run-id)
         target (revision-target rt run-id choice root)
-        context (or (query/attr root :workflow/context) {})
+        context (require-context-map run-id root)
         built (defs/build target (merge context input override-params))
         workflow (:workflow built)
         params (merge (:params built) override-params)

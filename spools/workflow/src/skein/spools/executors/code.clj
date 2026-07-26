@@ -7,7 +7,8 @@
   non-nil returns are recorded as `code/result`; exceptions and timeouts stamp
   `gate/error`. Claim tokens prevent an abandoned invocation from publishing a
   late result."
-  (:require [skein.api.current.alpha :as current]
+  (:require [clojure.spec.alpha :as s]
+            [skein.api.current.alpha :as current]
             [skein.api.events.alpha :as events]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :refer [attr-get fail!]]
@@ -36,7 +37,31 @@
 
 (def ^:private state-version
   "Shape version for the code executor's runtime spool-state map."
-  1)
+  2)
+
+(defn- qualified-symbol-string? [value]
+  (and (string? value) (qualified-symbol? (symbol value))))
+
+(defn- json-safe? [value]
+  (or (nil? value)
+      (boolean? value)
+      (number? value)
+      (string? value)
+      (and (map? value)
+           (every? #(or (string? %) (keyword? %)) (keys value))
+           (every? json-safe? (vals value)))
+      (and (sequential? value) (every? json-safe? value))))
+
+(s/def ::fn qualified-symbol-string?)
+(s/def ::params (s/and map? json-safe?))
+(s/def ::timeout-secs pos-int?)
+(s/def ::request
+  (s/and map?
+         #(s/valid? ::fn (get % "code/fn"))
+         #(s/valid? ::params (get % "code/params"))
+         #(or (not (contains? % "code/timeout-secs"))
+              (s/valid? ::timeout-secs (get % "code/timeout-secs")))))
+(s/def ::result json-safe?)
 
 (defn- daemon-thread-factory ^ThreadFactory [prefix]
   (let [counter (atom 0)]
@@ -50,7 +75,7 @@
   (when-not (.awaitTermination executor 1000 TimeUnit/MILLISECONDS)
     (fail! detail {})))
 
-(defn- new-state []
+(defn- new-resources []
   (let [workers (ThreadPoolExecutor. pool-size pool-size
                                      0 TimeUnit/MILLISECONDS
                                      (SynchronousQueue.)
@@ -58,12 +83,23 @@
                                      (ThreadPoolExecutor$AbortPolicy.))
         timeouts (Executors/newSingleThreadScheduledExecutor
                   (daemon-thread-factory "code-timeout"))]
+    {:worker-executor workers
+     :timeout-executor timeouts}))
+
+(defn- close-resources! [{:keys [worker-executor timeout-executor]}]
+  (when worker-executor
+    (await-stop! worker-executor "Code executor worker pool did not stop"))
+  (when timeout-executor
+    (await-stop! timeout-executor "Code executor timeout scheduler did not stop")))
+
+(defn- new-state []
+  (let [resources (atom nil)]
     {:scan-monitor (Object.)
-     :worker-executor workers
-     :timeout-executor timeouts
-     :close-fn (fn []
-                 (await-stop! workers "Code executor worker pool did not stop")
-                 (await-stop! timeouts "Code executor timeout scheduler did not stop"))}))
+     :resources resources
+     :close-fn #(locking resources
+                  (when-let [owned @resources]
+                    (reset! resources nil)
+                    (close-resources! owned)))}))
 
 (defn- state []
   (runtime/spool-state (rt) ::state {:version state-version} new-state))
@@ -71,12 +107,22 @@
 (defn- scan-monitor []
   (:scan-monitor (state)))
 
+(defn- resources []
+  (or @(:resources (state))
+      (fail! "Code executor resources are not active" {})))
+
+(defn- ensure-resources! []
+  (let [resources (:resources (state))]
+    (locking resources
+      (or @resources
+          (reset! resources (new-resources))))))
+
 (defn- worker-executor ^ThreadPoolExecutor []
-  (or (:worker-executor (state))
+  (or (:worker-executor (resources))
       (fail! "Code executor worker pool is missing from spool state" {})))
 
 (defn- timeout-executor ^ScheduledExecutorService []
-  (or (:timeout-executor (state))
+  (or (:timeout-executor (resources))
       (fail! "Code executor timeout scheduler is missing from spool state" {})))
 
 (defn- attr [strand k]
@@ -88,28 +134,41 @@
 (defn- stamp! [id attributes]
   (weaver/update! (rt) id {:attributes attributes}))
 
+(defn- require-request! [gate]
+  (let [request (cond-> {"code/fn" (attr gate :code/fn)
+                         "code/params" (attr gate :code/params)}
+                  (stamped? gate :code/timeout-secs)
+                  (assoc "code/timeout-secs" (attr gate :code/timeout-secs)))]
+    (when-not (s/valid? ::request request)
+      (fail! "code gate request must satisfy code/fn, code/params, and code/timeout-secs"
+             {:gate (:id gate) :value request :spec ::request
+              :explain (s/explain-str ::request request)}))))
+
 (defn- parse-fn-symbol [gate]
   (let [value (attr gate :code/fn)
         sym (when (string? value) (symbol value))]
-    (when-not (qualified-symbol? sym)
+    (when-not (s/valid? ::fn value)
       (fail! "code/fn must be a fully qualified symbol"
-             {:gate (:id gate) :value value}))
+             {:gate (:id gate) :value value :spec ::fn
+              :explain (s/explain-str ::fn value)}))
     sym))
 
 (defn- parse-params [gate]
   (let [value (attr gate :code/params)]
-    (when-not (map? value)
-      (fail! "code/params must be a JSON object"
-             {:gate (:id gate) :value value}))
+    (when-not (s/valid? ::params value)
+      (fail! "code/params must be a JSON object with JSON-safe values"
+             {:gate (:id gate) :value value :spec ::params
+              :explain (s/explain-str ::params value)}))
     value))
 
 (defn- parse-timeout [gate]
   (let [value (attr gate :code/timeout-secs)]
     (cond
       (nil? value) nil
-      (and (integer? value) (pos? value)) (long value)
+      (s/valid? ::timeout-secs value) (long value)
       :else (fail! "code/timeout-secs must be a positive integer"
-                   {:gate (:id gate) :value value}))))
+                   {:gate (:id gate) :value value :spec ::timeout-secs
+                    :explain (s/explain-str ::timeout-secs value)}))))
 
 (defn- resolve-callable [sym]
   (let [resolved (runtime/resolve-var (rt) sym)
@@ -140,15 +199,21 @@
     (when (live-claim? gate-id token)
       (f))))
 
+(declare fail-gate!)
+
 (defn- pass! [run-id gate-id token result]
-  (with-live-claim!
-    gate-id token
-    #(workflow/complete!
-      run-id
-      {:step gate-id
-       :by "code"
-       :attributes (cond-> {"code/running" nil}
-                     (some? result) (assoc "code/result" result))})))
+  (if (s/valid? ::result result)
+    (with-live-claim!
+      gate-id token
+      #(workflow/complete!
+        run-id
+        {:step gate-id
+         :by "code"
+         :attributes (cond-> {"code/running" nil}
+                       (some? result) (assoc "code/result" result))}))
+    (fail-gate! gate-id token
+                (str "code result is not JSON-safe: "
+                     (s/explain-str ::result result)))))
 
 (defn- fail-gate! [gate-id token detail]
   (with-live-claim!
@@ -182,6 +247,7 @@
     (try
       (when (live-claim? gate-id token)
         (let [gate (weaver/show (rt) gate-id)
+              _ (require-request! gate)
               fn-symbol (parse-fn-symbol gate)
               params (parse-params gate)
               timeout-secs (parse-timeout gate)
@@ -222,7 +288,7 @@
           (catch RejectedExecutionException _
             nil))))))
 
-(defn scan!
+(defn- scan!
   "Dispatch every ready `:code` gate not already claimed or errored."
   []
   (let [runtime (rt)]
@@ -248,11 +314,11 @@
     (when (stamped? gate :gate/error)
       {:gate (:id gate) :error (attr gate :gate/error)})))
 
-(def gate-stalled-symbol
+(def ^:private gate-stalled-symbol
   "The `:code` executor's stall predicate symbol."
   'skein.spools.executors.code/gate-stalled?)
 
-(def stalled-code-gates-query
+(def ^:private stalled-code-gates-query
   "Named query behind `stalled-code-gates`."
   [:and [:= :state "active"]
    [:= [:attr "workflow/gate"] "code"]
@@ -287,11 +353,12 @@
         :applied (do
                    (declare-code-vocab! runtime)
                    (register-code-handler! runtime)
-                   (state)
+                   (ensure-resources!)
                    (scan!)
                    {:reconciled :applied})
         :removed (do
                    (events/unregister-handler! runtime :code/engine)
+                   ((:close-fn (state)))
                    {:reconciled :removed})
         (fail! "Unsupported module contribution status"
                {:status status
