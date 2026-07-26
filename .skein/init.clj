@@ -224,6 +224,15 @@
                           :macros/ops :macros/patterns :config]
                   :required? true})
 
+;; The code executor scans ready gates during reconcile. It must load after
+;; workflows.clj so every persisted code/fn symbol owned there can resolve on
+;; the initial scan.
+(runtime/module! runtime :skein/spools-code
+                 {:ns 'skein.spools.executors.code
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows]
+                  :required? true})
+
 ;; The subagent gate executor reconciles last: its reconcile runs an initial gate
 ;; scan, so every harness alias harnesses.clj registers must already exist or a
 ;; durable ready gate would be stamped gate/error on every cold start.
