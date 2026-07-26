@@ -222,9 +222,10 @@ Skein is built for agents, and its own repository is written for them to read. P
 - [Tutorial](./docs/tutorial.md) — install to your first named query, top to bottom.
 - [Skein user reference](./docs/reference.md) — the data model, CLI, weaver, REPL,
   and workspace conventions.
-- [Reference spools](./spools/README.md) — the shipped workflow extensions:
-  a workflow engine, a feature lifecycle, a kanban board, and more, each one
-  working code you can read, run, or copy.
+- [Reference spools](./spools/README.md) — the workflow extensions. A workflow
+  engine, its shell gate executor, and a notification engine ship in this repo;
+  a feature lifecycle and a kanban board are sha-pinned external spools this
+  repo runs. Each one is working code you can read, run, or copy.
 - [Customising your workspace](./docs/spools/customisation.md),
   [testing your config and spools](./docs/spools/testing.md), and
   [writing shared spools](./docs/spools/writing-shared-spools.md) — the ladder
@@ -236,20 +237,22 @@ Skein is built for agents, and its own repository is written for them to read. P
 
 Everything on this page is a few small primitives — `add`, `weave`, `pattern` — over one graph. Around them Skein ships shared libraries called [spools](./spools/README.md), the durable workspace config you saw `mill init` create, an event and hooks system inside the weaver, and a testing library (`skein.test.alpha`) that spins up disposable weaver worlds. They go a long way: this repository coordinates its own development (a kanban board, a feature lifecycle, delegated agent runs, and a landing workflow) entirely in userland code built from those parts.
 
-Workflows are plain data, so they compose. A `workflow/call` inlines a reusable procedure into its parent's graph; a dependency on the call waits for the whole procedure to finish.
+Workflows are plain data, so they compose. A `workflow/call` inlines a reusable procedure into its parent's graph; a dependency on the call waits for the whole procedure to finish. A `workflow/defer` goes the other way: a terminal exit a spool can name without naming what fills it.
 
 <details markdown>
 <summary>One workflow calling another</summary>
 
 ```clojure
-(defn review [_]
+(workflow/defworkflow review
+  "Review an artifact."
+  {}
   (workflow/workflow "Review"
     (workflow/step :inspect "Inspect the artifact" :self)
     (workflow/step :verdict "Write the verdict" :self :depends-on [:inspect])))
 
 (workflow/workflow "Ship a proposal"
   (workflow/step :draft "Draft the proposal" :self)
-  (workflow/call :review review {} :depends-on [:draft])
+  (workflow/call :review #'review {} :depends-on [:draft])
   (workflow/step :publish "Publish" :self :depends-on [:review]))
 ```
 
@@ -292,5 +295,36 @@ The example at the top of this page shows the shape. Here is the workflow from t
                        :choices [{:key :approved :label "Approve" :next :land-merge}
                                  {:key :abort    :label "Abort"   :next :land-abort}])))
 ```
+
+</details>
+
+<details markdown>
+<summary>A hand-off the spool cannot name</summary>
+
+The checkpoint above names its routes where the workflow is written, which is fine when one repo owns both ends. A spool published for other people often can't do that: it knows *where* the work gets handed off, but deciding what is on the other side is not its call. That exit is a `workflow/defer`.
+
+```clojure
+;; in the tracker spool, which mentions no other spool
+(def track-card
+  (workflow/workflow "Track a card"
+    (workflow/step :prepare "Prepare the card" :self)
+    (workflow/defer :perform-work "Choose how this work will be performed"
+                    :depends-on [:prepare])))
+
+;; in your workspace config, which can see both spools
+(workflow/defworkflow tracked-card
+  "Track a card and select its delivery routine."
+  {:entrypoints #{:start}}
+  (workflow/bind-defers track-card {:perform-work #{:spike :devflow}}))
+```
+
+The spool says where a worker chooses; `bind-defers` says what they may choose from. Once `:prepare` closes, the exit is the ready frontier and carries that allowlist. A worker fills it:
+
+```clojure
+(workflow/continue! "card-123" :devflow {:feature "kanban-web-ui"} {:by "worker-1"})
+;; closes the card's root and pours devflow under the same run id
+```
+
+A defer is terminal: nothing may depend on it, and a workflow declaring one cannot be `call`-ed, because a procedure join would continue past the exit. `continue!` merges none of the card's context either, so devflow validates its own params whole.
 
 </details>
