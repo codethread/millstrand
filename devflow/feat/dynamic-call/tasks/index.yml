@@ -20,7 +20,7 @@ tasks:
   - id: 4
     description: Worker CLI verb and discovery
     task_file: tasks/004-worker-surface.md
-    status: pending
+    status: complete
     blocked_by: [3]
   - id: 5
     description: Contract docs, cookbook recipes, README, and folding in PR 199

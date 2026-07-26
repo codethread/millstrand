@@ -57,7 +57,13 @@
              :inferable? (role? "defer")
              :absent :workflow/ready-defer-absent
              :ambiguous :workflow/ready-defer-ambiguous
-             :incompatible :workflow/ready-defer-incompatible}}))
+             :incompatible :workflow/ready-defer-incompatible}
+     :dispatch {:noun "dispatch"
+                :selectable? (role? "dispatch")
+                :inferable? (role? "dispatch")
+                :absent :workflow/ready-dispatch-absent
+                :ambiguous :workflow/ready-dispatch-ambiguous
+                :incompatible :workflow/ready-dispatch-incompatible}}))
 
 (def ^:private stale-guidance
   (fmt/reflow

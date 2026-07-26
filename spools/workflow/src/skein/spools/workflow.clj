@@ -1074,7 +1074,13 @@
   [request]
   (let [rt (current/runtime)
         {:keys [run-id by attributes]} (require-valid! ::complete-request request
-                                                       "Invalid workflow complete request")]
+                                                       "Invalid workflow complete request")
+        ready (runs/frontier rt run-id)
+        dispatches (filterv #(= "dispatch" (:role %)) ready)
+        ordinary (filterv #(not (contains? #{"checkpoint" "defer" "dispatch"} (:role %))) ready)]
+    (when (or (some #(= (:step request) (:id %)) dispatches)
+              (and (nil? (:step request)) (empty? ordinary) (= 1 (count dispatches))))
+      (complete! run-id {:step (or (:step request) (:id (first dispatches)))}))
     (mutate-run! rt "workflow complete" :step request
                  (fn [target]
                    (runs/require-gate-actor! run-id target by)
@@ -1113,10 +1119,38 @@
   [request]
   (let [rt (current/runtime)
         {:keys [run-id workflow params by]} (require-valid! ::continue-request request
-                                                            "Invalid workflow continue request")]
+                                                            "Invalid workflow continue request")
+        ready (runs/frontier rt run-id)
+        dispatches (filterv #(= "dispatch" (:role %)) ready)
+        defers (filterv #(= "defer" (:role %)) ready)]
+    (when (or (some #(= (:step request) (:id %)) dispatches)
+              (and (nil? (:step request)) (empty? defers) (= 1 (count dispatches))))
+      (fail! "Current workflow step is a dispatch; use workflow dispatch"
+             {:reason :workflow/step-not-dispatch
+              :run-id run-id
+              :step (or (:step request) (:id (first dispatches)))
+              :guidance "Use workflow dispatch to fill a returning hand-off."}))
     (mutate-run! rt "workflow continue" :defer request
                  (fn [target]
                    (continue! run-id workflow (or params {})
+                              (cond-> {:step (:id target)}
+                                by (assoc :by by)))))))
+
+(defn run-dispatch!
+  "Fill the ready dispatch of `request`'s run and return the run result.
+
+  `request` is `{:run-id … :workflow … :params {…} :step … :by …}`, with params,
+  step, and actor optional. Without `:step`, the sole ready dispatch is inferred.
+  A selected target must be in the dispatch's materialized allowlist and declare
+  the `:call` entrypoint; its params are its own. `::dispatch-request` owns the
+  request shape."
+  [request]
+  (let [rt (current/runtime)
+        {:keys [run-id workflow params by]} (require-valid! ::dispatch-request request
+                                                            "Invalid workflow dispatch request")]
+    (mutate-run! rt "workflow dispatch" :dispatch request
+                 (fn [target]
+                   (dispatch! run-id workflow (or params {})
                               (cond-> {:step (:id target)}
                                 by (assoc :by by)))))))
 
@@ -1441,6 +1475,8 @@
 (s/def :skein.spools.workflow.view.call/kind
   #{"registered" "symbol" "var" "inline"})
 (s/def :skein.spools.workflow.view.declared/defer non-blank-string?)
+(s/def :skein.spools.workflow.view.declared/dispatch non-blank-string?)
+(s/def :skein.spools.workflow.view.declared/entrypoint #{"call"})
 (s/def :skein.spools.workflow.view.declared/names
   (s/coll-of non-blank-string? :kind vector?))
 (s/def :skein.spools.workflow.view.declared/entry
@@ -1478,6 +1514,13 @@
                    :skein.spools.workflow.view.declared/workflows]))
 (s/def :skein.spools.workflow.view.declared/defers
   (s/coll-of :skein.spools.workflow.view.declared/defer-exit :kind vector?))
+(s/def :skein.spools.workflow.view.declared/dispatch-point
+  (s/keys :req-un [:skein.spools.workflow.view/step
+                   :skein.spools.workflow.view.declared/dispatch
+                   :skein.spools.workflow.view.declared/workflows
+                   :skein.spools.workflow.view.declared/entrypoint]))
+(s/def :skein.spools.workflow.view.declared/dispatches
+  (s/coll-of :skein.spools.workflow.view.declared/dispatch-point :kind vector?))
 (s/def :skein.spools.workflow.view/declared
   (s/keys :req-un [:skein.spools.workflow.view.declared/kind]
           :opt-un [:skein.spools.workflow.view.declared/entry
@@ -1486,6 +1529,7 @@
                    :skein.spools.workflow.view.declared/checkpoints
                    :skein.spools.workflow.view.declared/calls
                    :skein.spools.workflow.view.declared/defers
+                   :skein.spools.workflow.view.declared/dispatches
                    :skein.spools.workflow.view.declared/routes]))
 
 ;; A definition view is the catalogue item plus the param

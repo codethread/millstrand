@@ -86,6 +86,27 @@
     (workflow/defer :next-routine "Choose the next routine" :depends-on [:summarize]))
    {:next-routine #{:follow-on}}))
 
+(workflow/defworkflow dispatched
+  "Select a returning procedure, then finish the caller."
+  {:entrypoints #{:start}}
+  (workflow/bind-handoffs
+   (workflow/workflow
+    "Dispatched"
+    (workflow/step :prepare "Prepare the work" :self)
+    (workflow/dispatch :perform "Choose the procedure" :depends-on [:prepare])
+    (workflow/step :finish "Finish the work" :self :depends-on [:perform]))
+   {:perform #{:solo}}))
+
+(workflow/defworkflow two-dispatches
+  "Two independent returning hand-offs."
+  {:entrypoints #{:start}}
+  (workflow/bind-handoffs
+   (workflow/workflow
+    "Two dispatches"
+    (workflow/dispatch :left "Choose left")
+    (workflow/dispatch :right "Choose right"))
+   {:left #{:solo} :right #{:solo}}))
+
 (defn- activate-cli!
   "Activate the engine and then the separately declared CLI module."
   [rt]
@@ -467,6 +488,49 @@
                                     :workflow "follow-on"
                                     :step (first (ready-ids start))}))))))))
 
+;; --- dispatch ---------------------------------------------------------------
+
+(deftest dispatch-drives-a-returning-procedure-through-the-cli
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo :dispatched)
+      (started "run-dispatch" :dispatched)
+      (verb "complete" "run-dispatch")
+      (let [filled (invoke {:subcommand ["dispatch"] :run-id "run-dispatch"
+                            :workflow "solo" :by "worker"})]
+        (is (= "workflow dispatch" (:operation filled)))
+        (is (= ["Do the work"] (mapv :title (:ready filled))))
+        (verb "complete" "run-dispatch")
+        (is (= ["Finish the work"] (mapv :title (:ready (verb "ready" "run-dispatch")))))
+        (is (true? (:done (verb "complete" "run-dispatch"))))))))
+
+(deftest dispatch-is-role-scoped-and-leaves-the-point-ready-on-refusal
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo :follow-on :handoff :dispatched :two-dispatches)
+      (let [two (started "run-two-dispatches" :two-dispatches)]
+        (is (= :workflow/ready-dispatch-ambiguous
+               (reason-of #(invoke {:subcommand ["dispatch"] :run-id "run-two-dispatches"
+                                    :workflow "solo"}))))
+        (is (= (ready-ids two)
+               (mapv :id (:compatible (failure #(invoke {:subcommand ["dispatch"]
+                                                         :run-id "run-two-dispatches"
+                                                         :workflow "solo"})))))))
+      (started "run-dispatch-roles" :dispatched)
+      (verb "complete" "run-dispatch-roles")
+      (is (= :workflow/step-not-dispatch
+             (reason-of #(invoke {:subcommand ["continue"] :run-id "run-dispatch-roles"
+                                  :workflow "solo"}))))
+      (is (= :workflow/step-not-completable
+             (reason-of #(verb "complete" "run-dispatch-roles"))))
+      (is (= :workflow/dispatch-target-not-allowed
+             (reason-of #(invoke {:subcommand ["dispatch"] :run-id "run-dispatch-roles"
+                                  :workflow "handoff"}))))
+      (is (= ["Choose the procedure"]
+             (mapv :title (:ready (verb "ready" "run-dispatch-roles"))))))))
+
 ;; --- concurrency ------------------------------------------------------------
 
 (deftest a-mutation-whose-frontier-moved-fails-as-retryable-rather-than-applying
@@ -589,13 +653,13 @@
       (activate-cli! rt)
       (let [entry (weaver/resolve-op rt 'workflow)
             leaf (fn [verb] (get-in entry [:arg-spec :subcommands verb]))]
-        (doseq [verb ["start" "complete" "choose" "continue"]]
+        (doseq [verb ["start" "complete" "choose" "continue" "dispatch"]]
           (is (= :mutating (:hook-class (leaf verb))) verb)
           (is (= :standard (:deadline-class (leaf verb))) verb))
         (is (= [:read :standard] ((juxt :hook-class :deadline-class) (leaf "ready"))))
         (is (= [:read :unbounded] ((juxt :hook-class :deadline-class) (leaf "await")))
             "await blocks by design and writes nothing")
-        (is (= #{"list" "show" "start" "ready" "complete" "choose" "continue" "await"}
+        (is (= #{"list" "show" "start" "ready" "complete" "choose" "continue" "dispatch" "await"}
                (set (keys (:subcommands (:arg-spec entry))))))
         (is (= (set (keys (:subcommands (:arg-spec entry))))
                (set (keys (:subcommands (:returns entry))))))))))
@@ -604,7 +668,7 @@
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (register! :solo :mixed :follow-on :handoff)
+      (register! :solo :mixed :follow-on :handoff :dispatched)
       (let [check (fn [verb value]
                     (test-alpha/check-op-return! rt 'workflow {:subcommand [verb]}
                                                  (wire-value value)))]
@@ -617,7 +681,11 @@
         (started "run-returns-defer" :handoff)
         (verb "complete" "run-returns-defer")
         (check "continue" (invoke {:subcommand ["continue"] :run-id "run-returns-defer"
-                                   :workflow "follow-on" :params {"scope" "queue"}}))))))
+                                   :workflow "follow-on" :params {"scope" "queue"}}))
+        (started "run-returns-dispatch" :dispatched)
+        (verb "complete" "run-returns-dispatch")
+        (check "dispatch" (invoke {:subcommand ["dispatch"] :run-id "run-returns-dispatch"
+                                   :workflow "solo"}))))))
 
 (deftest declared-args-carry-argv-to-the-run-verbs
   ;; The op is reached as argv, so the declared arg-spec is the real entrance.
@@ -643,6 +711,8 @@
                (parse ["choose" "r1" "ship" "--input" "{\"verdict\":\"pass\"}"])))
         (is (= {:subcommand ["continue"] :run-id "r1" :workflow "follow-on"}
                (parse ["continue" "r1" "--workflow" "follow-on"])))
+        (is (= {:subcommand ["dispatch"] :run-id "r1" :workflow "solo"}
+               (parse ["dispatch" "r1" "--workflow" "solo"])))
         (is (= {:subcommand ["await"] :run-id "r1" :timeout-secs 30}
                (parse ["await" "r1" "--timeout-secs" "30"])))
         (testing "the parser refuses what the surface does not declare"

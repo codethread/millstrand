@@ -26,6 +26,7 @@
          :after [:skein/spools-workflow]})"
   (:require [clojure.string :as str]
             [skein.api.format.alpha :as fmt]
+            [skein.api.runtime.glossary.alpha :as glossary]
             [skein.spools.workflow :as workflow]))
 
 (defn- list-request
@@ -137,12 +138,15 @@
       "continue" (workflow/run-continue!
                   (-> (assoc (run-request args) :workflow (keyword target))
                       (with-json-object args :params :params)))
+      "dispatch" (workflow/run-dispatch!
+                  (-> (assoc (run-request args) :workflow (keyword target))
+                      (with-json-object args :params :params)))
       "await" (workflow/run-await
                (carry {:run-id (:run-id args)} args :timeout-secs :timeout-secs))
       (throw (ex-info "Unsupported workflow subcommand"
                       {:subcommand subcommand
                        :allowed ["list" "show" "start" "ready" "complete"
-                                 "choose" "continue" "await"]})))))
+                                 "choose" "continue" "dispatch" "await"]})))))
 
 (def ^:private workflow-doc
   (fmt/reflow
@@ -322,6 +326,32 @@
                           "|A root transfer, not a step transition: the current
                            |root closes and the target pours under the same run
                            |id, carrying nothing over.")]}}
+    "dispatch" {:doc "Fill the ready dispatch of a run with a registered workflow."
+                :hook-class :mutating
+                :deadline-class :standard
+                :positionals [run-id-positional]
+                :flags {:workflow
+                        {:type :string
+                         :required? true
+                         :doc (fmt/reflow
+                               "|Registered workflow to invoke inside the dispatch; the
+                                |allowlist must permit it and it must declare the call
+                                |entrypoint.")}
+                        :params
+                        {:type :string
+                         :parse :json
+                         :doc "JSON object of the target's own params."}
+                        :step step-flag
+                        :by by-flag}
+                :annotations
+                {:notes [(fmt/reflow
+                          "|A returning hand-off: the selected workflow pours beneath
+                           |the current root, and the run resumes after it finishes.")]
+                 :failure-modes ["workflow/ready-dispatch-absent"
+                                 "workflow/ready-dispatch-ambiguous"
+                                 "workflow/ready-dispatch-incompatible"
+                                 "workflow/dispatch-target-not-allowed"
+                                 "workflow/step-not-dispatch"]}}
     "await" {:doc "Block until a run is done or needs a worker."
              :hook-class :read
              :deadline-class :unbounded
@@ -388,6 +418,7 @@
     "complete" run-result-return
     "choose" run-result-return
     "continue" run-result-return
+    "dispatch" run-result-return
     "await" {:type :map
              :required {:operation :string
                         :run-id :string
@@ -406,7 +437,7 @@
             |and show answer which registered routines exist and what one of them
             |expects, both read from the weaver's live registry rather than a
             |catalogue baked in when Skein was built. start, ready, complete,
-            |choose, continue, and await drive a run: they share one result shape
+            |choose, continue, dispatch, and await drive a run: they share one result shape
             |— the run, its current root, its complete ready frontier, and
             |whether it is done — so every call tells you what you may do next
             |without a second read.")
@@ -415,11 +446,24 @@
             |<name> before supplying params; the param contract it prints is the
             |one the engine will judge your invocation against. Then start the
             |run and work its frontier: complete a step, choose a checkpoint,
-            |continue a defer exit. Each verb infers the sole ready item of its
+            |continue a defer exit, or dispatch a returning hand-off. Each verb
+            |infers the sole ready item of its
             |own role, so pass --step only when it says the frontier is
             |ambiguous — and always to close a gate, which also needs --by. If a
             |mutation fails as workflow/frontier-stale, another worker moved the
             |run: re-read workflow ready and act on what is there now.")})
+
+(def ^:private workflow-glossary
+  [{:name "workflow/ready-dispatch-absent"
+    :definition "No ready dispatch exists for workflow dispatch to fill."}
+   {:name "workflow/ready-dispatch-ambiguous"
+    :definition "More than one dispatch is ready; workflow dispatch needs --step."}
+   {:name "workflow/ready-dispatch-incompatible"
+    :definition "The selected ready item is not a dispatch."}
+   {:name "workflow/dispatch-target-not-allowed"
+    :definition "The selected workflow is not in the dispatch point's allowlist."}
+   {:name "workflow/step-not-dispatch"
+    :definition "A continuing worker selected a dispatch; use workflow dispatch."}])
 
 (defn contribute
   "Return the workflow CLI module's complete operation contribution.
@@ -440,6 +484,19 @@
                                       :returns workflow-returns}
                                      workflow-meta)}}})
 
+(defn reconcile
+  "Seed the workflow worker CLI's failure glossary when the module is applied."
+  [{:keys [runtime] :as ctx}]
+  (case (get-in ctx [:module/contribution :status])
+    :applied (do (doseq [outcome workflow-glossary]
+                   (glossary/register-glossary-outcome!
+                    runtime (assoc outcome :owner 'skein.spools.workflow.cli)))
+                 {:reconciled :workflow-cli-glossary})
+    :removed {:reconciled :removed}
+    (throw (ex-info "Unsupported module contribution status"
+                    {:status (get-in ctx [:module/contribution :status])
+                     :module/key (:module/key ctx)}))))
+
 (def spool
   "Entry-point declaration for the workflow CLI module (PROP-Dsp-001 `def spool`
   convention).
@@ -447,4 +504,5 @@
   The refresh coordinator resolves `:contribute` from this public var at every
   module evaluation. The module owns no live resources of its own — the registry
   and vocabulary belong to the engine module — so it declares no `:reconcile`."
-  {:contribute 'contribute})
+  {:contribute 'contribute
+   :reconcile 'reconcile})
