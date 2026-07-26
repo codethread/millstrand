@@ -526,25 +526,29 @@
    ;; does not match the defop author order in this file, and reordering the defop
    ;; forms to force a match would trade that grouping away (RFC-020.Q2 tradeoff;
    ;; see PLAN-Srm-001.DN1). :queries has no such mismatch and derives below.
-   :ops [{:name "kanban" :help "strand help kanban" :manual "strand about kanban"}
-         {:name "kanban-export" :help "strand help kanban-export"}
-         {:name "kanban-tree" :help "strand help kanban-tree"
+   ;; An entry carries a name, plus a :purpose or :manual only where one says
+   ;; something `strand help <op>` does not: invocation is help's alone.
+   :discovery {:help "strand help [<op>]"
+               :manuals "strand about <op>, or strand <op> about where the op declares that subcommand"}
+   :ops [{:name "kanban" :manual "strand kanban about"}
+         {:name "kanban-export"}
+         {:name "kanban-tree"
           :purpose "Epic -> feature -> task kanban hierarchy with derived task status, in one projection for renderers."}
-         {:name "devflow-start" :help "strand help devflow-start"}
-         {:name "devflow-ready" :help "strand help devflow-ready"}
-         {:name "devflow-choices" :help "strand help devflow-choices"}
-         {:name "devflow-choose" :help "strand help devflow-choose"}
-         {:name "devflow-complete" :help "strand help devflow-complete"}
-         {:name "devflow-advance" :help "strand help devflow-advance"}
-         {:name "devflow-describe" :help "strand help devflow-describe"}
-         {:name "devflow-run-history" :help "strand help devflow-run-history"}
-         {:name "devflow-squash-run" :help "strand help devflow-squash-run"}
-         {:name "devflow-status" :help "strand help devflow-status"}
-         {:name "workflow-runs" :help "strand help workflow-runs"}
-         {:name "feature-costs" :help "strand help feature-costs"
+         {:name "devflow-start"}
+         {:name "devflow-ready"}
+         {:name "devflow-choices"}
+         {:name "devflow-choose"}
+         {:name "devflow-complete"}
+         {:name "devflow-advance"}
+         {:name "devflow-describe"}
+         {:name "devflow-run-history"}
+         {:name "devflow-squash-run"}
+         {:name "devflow-status"}
+         {:name "workflow-runs"}
+         {:name "feature-costs"
           :purpose "Agent-run cost/usage rollup beneath a work root, as pure data. Registered by .skein/analytics.clj."}
-         {:name "agent" :help "strand help agent" :manual "strand about agent"}
-         {:name "workflow" :help "strand help workflow" :manual "strand about workflow"
+         {:name "agent" :manual "strand about agent"}
+         {:name "workflow" :manual "strand about workflow"
           :purpose (format-alpha/reflow
                     "|Shipped generic worker surface over every registered workflow:
                      |list/show the catalogue, then start, ready, complete, choose,
@@ -558,8 +562,8 @@
                      |contract. `strand workflow show story` prints its param
                      |contract; the definitions are registered by
                      |.skein/workflows.clj.")}
-         {:name "hitl" :help "strand help hitl" :purpose "Interactive user+agent session with a self-terminating tracking strand."}
-         {:name "land" :help "strand help land" :manual "strand about land"
+         {:name "hitl" :purpose "Interactive user+agent session with a self-terminating tracking strand."}
+         {:name "land" :manual "strand land about"
           :purpose (format-alpha/reflow
                     "|Coordinator-only landing workflow: push+draft-PR, green CI, roster
                      |sign-off, then a mechanical GitHub squash-merge under the merge lock
