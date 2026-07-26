@@ -71,9 +71,20 @@ per-target adapters become a burden.
 
 ## PROP-Dyc-001.P4 Proposed scope
 
-The proposal offers the code owner a decision between two scopes. RFC-Dyc-001.REC1 recommends A.
+**Decision, 2026-07-26, code owner:** build Scope B, designed greenfield. The instruction was "if this
+were greenfield, what design would we build without accidental constraints holding us back — that's
+the design." Scope A ships alongside it: the adapter composition stays a legitimate answer for the
+cases where a genuine transfer of ownership is what the author means, and the recipe documents it.
+Q1 is answered; the single-molecule property is wanted on its own merits.
 
-### Scope A — document the composition, build no vocabulary (recommended)
+Greenfield framing that governs the design work: `call` and the runtime-selected hand-off are not two
+constructs, they are one construct on two axes — *does control return* and *when is the target
+known*. Today's vocabulary populates three of the four cells (`call`, `defer`, checkpoint `:next`)
+and leaves returns × runtime-selected empty. The design pins that cell as a first-class role rather
+than bolting a second mode onto `call`, and the binding authority boundary is generalised across
+every hand-off kind rather than being defer-specific.
+
+### Scope A — document the composition (ships alongside)
 
 - **PROP-Dyc-001.S1:** Add a `spools/workflow.cookbook.md` recipe for the adapter composition beside
   the existing defer recipe: tracker template with a terminal exit, user-owned adapter that calls the
@@ -87,10 +98,9 @@ The proposal offers the code owner a decision between two scopes. RFC-Dyc-001.RE
 - **PROP-Dyc-001.S4:** Add a regression test for the composition, so the pattern the docs promise
   stays true. The probe in note `9d4yx` is the shape.
 
-### Scope B — build the pending-call construct (only on demand)
+### Scope B — build the pending-call construct
 
-Taken only if the code owner has a consumer needing a property Scope A cannot supply. Settled design
-constraints, from review, that any build must honour:
+Settled design constraints, from review, that the build must honour:
 
 - **PROP-Dyc-001.S5:** A distinct pending-call role, converted to an ordinary `procedure` join when
   filled — not an unexpanded `procedure` join. `cascade-join-ids` treats a join as closeable when
@@ -125,15 +135,13 @@ constraints, from review, that any build must honour:
 
 ## PROP-Dyc-001.P5 Open questions
 
-- **PROP-Dyc-001.Q1:** *(Scope decision, for the code owner.)* Is there a consumer that needs one
-  molecule spanning the hand-off, or the tracker's root context surviving it? Without one, Scope A is
-  the whole feature.
-- **PROP-Dyc-001.Q2:** *(Scope B only.)* The declaration representation. `::procedure` already accepts
-  a bare keyword as a registered target (`workflow.clj:1215-1224`), so a hand-off marker must be a
-  separate key or an explicitly tagged value — not an untagged keyword. This blocks the question of
-  whether one declaration can serve both a terminal exit and a pending call.
-- **PROP-Dyc-001.Q3:** *(Scope B only.)* The verb name. It must not collide with the existing worker
-  grammar or read as a synonym for `continue`.
-- **PROP-Dyc-001.Q4:** Should Scope A's cookbook recipe ship a helper that generates the per-target
-  adapter, or stay a hand-written pattern? A helper reduces the per-target cost that is O4's main
-  weakness, without engine vocabulary.
+- **PROP-Dyc-001.Q1:** *Answered (P4 decision).* Scope B is built; Scope A ships alongside.
+- **PROP-Dyc-001.Q2:** The declaration representation. `::procedure` already accepts a bare keyword as
+  a registered target (`workflow.clj:1215-1224`), so a hand-off marker cannot be an untagged keyword.
+  The greenfield answer is a distinct builder producing its own role, with the binding authority
+  generalised across hand-off kinds — the spec deltas settle the exact shape.
+- **PROP-Dyc-001.Q3:** The verb name. It must not collide with the existing worker grammar or read as
+  a synonym for `continue`. Settled in the spec deltas.
+- **PROP-Dyc-001.Q4:** Whether the binding surface keeps the name `bind-defers` once it binds more
+  than defers, and if renamed, whether the old name stays as an alias. TEN-000@1 permits the rename
+  without migration; the spec deltas decide.
