@@ -544,10 +544,14 @@
        (require-valid! :skein.spools.workflow.request/attributes (:attributes opts)
                        "Invalid workflow complete attributes"))
      (let [context (when (contains? opts :context)
-                     (-> (require-valid! :skein.spools.workflow.values/params
-                                         (:context opts)
-                                         "Invalid workflow complete context")
-                         cmp/default-context))]
+                     (let [normalized
+                           (-> (require-valid! :skein.spools.workflow.values/params
+                                               (:context opts)
+                                               "Invalid workflow complete context")
+                               cmp/default-context)]
+                       (require-valid! :skein.spools.workflow.request/context
+                                       normalized
+                                       "Invalid workflow complete context")))]
        (guard/with-run!
          rt run-id
          (fn []
@@ -1232,6 +1236,15 @@
   [value]
   (util/defer-step? value))
 
+(defn- json-safe-context?
+  "True when `value` can pass through the workflow context normalizer."
+  [value]
+  (try
+    (cmp/default-context value)
+    true
+    (catch clojure.lang.ExceptionInfo _
+      false)))
+
 (s/def ::form #{:molecule :wisp})
 (s/def ::id-ref #(or (keyword? %) (symbol? %) (non-blank-string? %)))
 (s/def ::id ::id-ref)
@@ -1489,7 +1502,8 @@
 
 (s/def :skein.spools.workflow.request/choice non-blank-string?)
 (s/def :skein.spools.workflow.request/input :skein.spools.workflow.values/params)
-(s/def :skein.spools.workflow.request/context :skein.spools.workflow.values/params)
+(s/def :skein.spools.workflow.request/context
+  (s/and :skein.spools.workflow.values/params json-safe-context?))
 (s/def :skein.spools.workflow.request/timeout-secs ::timeout-secs)
 
 ;; One request spec per worker verb, and the whole of what each verb accepts.

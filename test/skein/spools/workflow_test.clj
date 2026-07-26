@@ -561,13 +561,23 @@
 (deftest workflow-complete-requires-keyword-context-keys
   (with-runtime
     (fn [_rt _]
-      (let [definition (workflow/workflow "Context keys" (workflow/step :a "Do A" :self))
+      (let [definition (workflow/workflow
+                        "Context keys"
+                        (workflow/step :a "Do A" :self)
+                        (workflow/step :b "Do B" :self))
             [step] (:ready (workflow/start! "context-keys-run" definition {}))]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"Invalid workflow complete context"
                               (workflow/complete! "context-keys-run"
                                                   {:context {"owner" "agent"}})))
-        (is (= "active" (:state (repl/strand (:id step)))))))))
+        (is (= "active" (:state (repl/strand (:id step)))))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"cannot be defaulted into workflow/context"
+                              (workflow/complete! "context-keys-run"
+                                                  {:context {:opaque (Object.)}})))
+        (is (= "active" (:state (repl/strand (:id step)))))
+        (is (not (s/valid? :skein.spools.workflow.request/context
+                           {:opaque (Object.)})))))))
 
 (deftest workflow-complete-refuses-malformed-persisted-context-before-mutating
   (with-runtime
