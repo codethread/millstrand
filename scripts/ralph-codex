@@ -39,8 +39,7 @@ done
 # cwd and never depends on a globally installed binary.
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 strand="$script_dir/../bin/strand"
-[ -x "$strand" ] || strand="strand"
-command -v "$strand" >/dev/null || { echo "ralph-codex: no strand binary (run make build)" >&2; exit 1; }
+[ -x "$strand" ] || { echo "ralph-codex: repo-local bin/strand not found (run make build)" >&2; exit 1; }
 
 model="${RALPH_MODEL:-sol-low}"
 case "$model" in
@@ -55,13 +54,20 @@ case "$model" in
 esac
 effort="${RALPH_EFFORT:-$default_effort}"
 max_iterations="${RALPH_MAX_ITERATIONS:-30}"
+[[ "$max_iterations" =~ ^[0-9]+$ ]] \
+  || { echo "ralph-codex: RALPH_MAX_ITERATIONS must be a non-negative integer, got: $max_iterations" >&2; exit 2; }
 log_dir="${RALPH_LOG_DIR:-${TMPDIR:-/tmp}/ralph/${epic}-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$log_dir"
 
 codex_flags=(--json --model "$codex_model" -c "model_reasoning_effort=\"$effort\"")
-if [ "${RALPH_SKIP_PERMISSIONS:-1}" != "0" ]; then
-  codex_flags+=(--dangerously-bypass-approvals-and-sandbox)
-fi
+case "${RALPH_SKIP_PERMISSIONS:-1}" in
+  0) ;;
+  1) codex_flags+=(--dangerously-bypass-approvals-and-sandbox) ;;
+  *)
+    echo "ralph-codex: RALPH_SKIP_PERMISSIONS must be 0 or 1" >&2
+    exit 2
+    ;;
+esac
 
 # The strand lifecycle (active|closed|replaced) is the loop condition; anything
 # other than active means the epic is finished and the loop is done.
@@ -72,10 +78,18 @@ epic_state() {
 epic_json="$("$strand" show "$epic" 2>/dev/null)" \
   || { echo "ralph-codex: epic $epic not found (strand show failed)" >&2; exit 1; }
 epic_title="$(jq -r '.title' <<<"$epic_json")"
-if [ "$(jq -r '.state' <<<"$epic_json")" != "active" ]; then
-  echo "ralph-codex: epic $epic ($epic_title) is already $(jq -r '.state' <<<"$epic_json"); nothing to do"
-  exit 0
-fi
+initial_state="$(jq -r '.state' <<<"$epic_json")"
+case "$initial_state" in
+  active) ;;
+  closed|replaced)
+    echo "ralph-codex: epic $epic ($epic_title) is already $initial_state; nothing to do"
+    exit 0
+    ;;
+  *)
+    echo "ralph-codex: epic $epic ($epic_title) has unexpected state: $initial_state" >&2
+    exit 1
+    ;;
+esac
 
 harness_prompt() {
   cat <<EOF
@@ -125,10 +139,17 @@ iteration=0
 consecutive_failures=0
 while true; do
   state="$(epic_state)" || { echo "[ralph-codex] cannot read epic state (weaver down?); stopping" >&2; exit 1; }
-  if [ "$state" != "active" ]; then
-    echo "[ralph-codex] epic $epic is $state — loop complete after $iteration iteration(s)"
-    exit 0
-  fi
+  case "$state" in
+    active) ;;
+    closed|replaced)
+      echo "[ralph-codex] epic $epic is $state — loop complete after $iteration iteration(s)"
+      exit 0
+      ;;
+    *)
+      echo "[ralph-codex] epic $epic has unexpected state: $state" >&2
+      exit 1
+      ;;
+  esac
   if [ "$max_iterations" -ne 0 ] && [ "$iteration" -ge "$max_iterations" ]; then
     echo "[ralph-codex] hit RALPH_MAX_ITERATIONS=$max_iterations with epic still active; stopping" >&2
     exit 1
@@ -141,21 +162,30 @@ while true; do
   echo "[ralph-codex] iteration $iteration — epic $epic ($epic_title) | transcript: $raw_log"
   echo
 
-  pipe_status=(0)
+  pipe_status=(0 0 0)
   codex exec "${codex_flags[@]}" --output-last-message "$final_message" \
     "${extra_args[@]}" "$(harness_prompt "$iteration")" \
     | tee "$raw_log" | render_stream || pipe_status=("${PIPESTATUS[@]}")
-  status="${pipe_status[0]}"
+  codex_status="${pipe_status[0]}"
+  tee_status="${pipe_status[1]}"
+  render_status="${pipe_status[2]}"
 
-  if [ "$status" -ne 0 ]; then
+  if [ "$tee_status" -ne 0 ] || [ "$render_status" -ne 0 ]; then
+    echo "[ralph-codex] transcript pipeline failed (tee=$tee_status renderer=$render_status); stopping" >&2
+    exit 1
+  fi
+
+  if [ "$codex_status" -ne 0 ]; then
     consecutive_failures=$((consecutive_failures + 1))
-    echo "[ralph-codex] codex exited $status (failure $consecutive_failures/3)" >&2
+    echo "[ralph-codex] codex exited $codex_status (failure $consecutive_failures/3)" >&2
     if [ "$consecutive_failures" -ge 3 ]; then
       echo "[ralph-codex] three consecutive failed runs; stopping" >&2
       exit 1
     fi
   else
     consecutive_failures=0
+    [ -f "$final_message" ] \
+      || { echo "[ralph-codex] codex exited successfully without a final message" >&2; exit 1; }
     # Anchor to line start so the agent quoting the instruction mid-sentence
     # cannot trip the brake by accident.
     if grep -q '^RALPH-STOP:' "$final_message"; then
