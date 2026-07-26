@@ -25,6 +25,7 @@
   alike."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [skein.api.format.alpha :as fmt]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :refer [fail! require-valid!]]
             [skein.spools.workflow.internal.registry :as registry]
@@ -255,7 +256,10 @@
            (assoc context
                   :reason :workflow/defer-unbound
                   :defer (defer-name step)
-                  :alternative "Bind the defer with bind-defers before registering or pouring.")))
+                  :alternative
+                  (fmt/reflow
+                   "|Bind the defer with bind-defers before registering or
+                    |pouring."))))
   definition)
 
 (defn registry-input?

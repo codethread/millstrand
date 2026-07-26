@@ -695,7 +695,7 @@ This table is the extension API: spools built on top of `skein.spools.workflow` 
 | `workflow/outcome-input` | The `input` map passed to `choose!`. | `choose!`, on the checkpoint step, at close. |
 | `workflow/outcome-by` | Actor identity that closed the strand; `"engine"` on an auto-closed procedure join. | `choose!` (checkpoint close, when opts supply `:by`); `complete!` (gate close, where `:by` is mandatory); join auto-close (`"engine"`). |
 | `workflow/outcome-notes` | **Historical.** Freeform notes a step close recorded before the outcome cutover. Nothing writes it now; existing rows read back as ordinary attributes, and `run-history` gives them no special projection. | — (was `complete!`, from `opts :notes`). |
-| `workflow/procedure` | Name of the `call` id whose expansion this join step represents. | `expand-call-step`, on the procedure join step. |
+| `workflow/procedure` | Name of the `call` id for a fixed-call join, or the defer strand id for a filled-defer join. | `expand-call-step` (fixed-call join); `defer!` (filled-defer join). |
 | `workflow/bond` | `"sequential"` — recorded on the bond edge itself, marking a cross-molecule bond. | `bond!`. |
 | `workflow/squashed-root` | Root id of the subgraph a digest strand replaced. | `squash!`. |
 | `workflow/squashed-count` | Number of strands folded into a digest. | `squash!` (one subgraph); `squash-run!` (all a run's molecules). |
