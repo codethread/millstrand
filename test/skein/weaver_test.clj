@@ -3567,7 +3567,8 @@
         (.addURL ^clojure.lang.DynamicClassLoader (:spool-classloader rt)
                  (.toURL (.toURI source-root)))
         (with-open [conn (nrepl/connect :host host :port port)]
-          (let [session (nrepl/client-session (nrepl/client conn 60000))
+          (let [session (nrepl/client-session
+                         (nrepl/client conn (test-support/await-budget-ms)))
                 responses (doall
                            (nrepl/message
                             session
