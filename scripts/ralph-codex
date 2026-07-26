@@ -41,7 +41,8 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 strand="$script_dir/../bin/strand"
 [ -x "$strand" ] || { echo "ralph-codex: repo-local bin/strand not found (run make build)" >&2; exit 1; }
 
-model="${RALPH_MODEL:-sol-low}"
+model="${RALPH_MODEL-sol-low}"
+[ -n "$model" ] || { echo "ralph-codex: RALPH_MODEL must not be empty" >&2; exit 2; }
 case "$model" in
   sol-low)
     codex_model="gpt-5.6-sol"
@@ -52,15 +53,23 @@ case "$model" in
     default_effort="high"
     ;;
 esac
-effort="${RALPH_EFFORT:-$default_effort}"
-max_iterations="${RALPH_MAX_ITERATIONS:-30}"
+effort="${RALPH_EFFORT-$default_effort}"
+[ -n "$effort" ] || { echo "ralph-codex: RALPH_EFFORT must not be empty" >&2; exit 2; }
+max_iterations="${RALPH_MAX_ITERATIONS-30}"
 [[ "$max_iterations" =~ ^[0-9]+$ ]] \
   || { echo "ralph-codex: RALPH_MAX_ITERATIONS must be a non-negative integer, got: $max_iterations" >&2; exit 2; }
-log_dir="${RALPH_LOG_DIR:-${TMPDIR:-/tmp}/ralph/${epic}-$(date +%Y%m%d-%H%M%S)}"
+tmp_dir="${TMPDIR-/tmp}"
+[ -n "$tmp_dir" ] || { echo "ralph-codex: TMPDIR must not be empty" >&2; exit 2; }
+if [ "${RALPH_LOG_DIR+x}" = x ]; then
+  [ -n "$RALPH_LOG_DIR" ] || { echo "ralph-codex: RALPH_LOG_DIR must not be empty" >&2; exit 2; }
+  log_dir="$RALPH_LOG_DIR"
+else
+  log_dir="$tmp_dir/ralph/${epic}-$(date +%Y%m%d-%H%M%S)"
+fi
 mkdir -p "$log_dir"
 
 codex_flags=(--json --model "$codex_model" -c "model_reasoning_effort=\"$effort\"")
-case "${RALPH_SKIP_PERMISSIONS:-1}" in
+case "${RALPH_SKIP_PERMISSIONS-1}" in
   0) ;;
   1) codex_flags+=(--dangerously-bypass-approvals-and-sandbox) ;;
   *)

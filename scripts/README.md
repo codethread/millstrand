@@ -4,7 +4,7 @@ These scripts support development and coordination in this repository. Run them 
 
 ## Ralph epic loops
 
-`ralph` is a foreground loop for Claude Code. `ralph-codex` provides the same loop for Codex. Each iteration starts a fresh headless agent run, streams its activity to the terminal, and writes the raw transcript under `RALPH_LOG_DIR`. The loop stops when the epic closes, after three consecutive harness failures, at `RALPH_MAX_ITERATIONS`, or when the agent ends its final message with `RALPH-STOP: <reason>`.
+`ralph` is a foreground loop for Claude Code. `ralph-codex` provides the same loop for Codex. Each iteration starts a fresh headless agent run, streams its activity to the terminal, and writes the raw transcript under `RALPH_LOG_DIR`. The loop stops when the epic becomes inactive (`closed` or `replaced`), after three consecutive harness failures, at `RALPH_MAX_ITERATIONS`, or when the agent ends its final message with `RALPH-STOP: <reason>`.
 
 ```sh
 scripts/ralph <epic-id> "Work every feature and close the epic"
