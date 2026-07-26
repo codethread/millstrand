@@ -465,7 +465,7 @@ That is the whole reason the two compose cleanly: fixed-target returning composi
 
 An unbound defer or dispatch is a legitimate published template: `describe` reports it, and it can be transformed and re-registered by whoever binds it. It cannot be registered or poured: an unbound defer fails as `:workflow/defer-unbound`; an unbound dispatch fails as `:workflow/handoff-unbound`. Materializing either would strand the run at a hand-off with nowhere to go.
 
-Publication validates the bound targets against the complete staged candidate. A defer target must be registered and declare `:continue`, the same capability an authored `:next` route requires. A dispatch target must be registered and declare `:call`, because it returns to its caller as inline composition does. One definition may declare both entrypoints.
+Publication validates the bound targets against the complete staged candidate. A defer target must be registered and declare `:continue`, the same capability an authored `:next` route requires. A dispatch target must be registered and declare `:call`, because it returns to its caller as inline composition does. One definition may declare both entrypoints. Like a fixed `call` target, a dispatch target may not declare a terminal defer; publication rejects that returning/terminal contradiction as `:workflow/defer-in-procedure`. A dispatch target may declare dispatch points of its own.
 
 ### `continue!` transfers the root
 
