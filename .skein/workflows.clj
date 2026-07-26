@@ -307,7 +307,7 @@
   (s/keys :req-un [::worktree]
           :opt-un [::poll-interval-ms ::env]))
 
-(declare require-command! parse-runs run-counts)
+(declare run-blocking-command! parse-runs run-counts)
 
 (defn main-ci-watch
   "Poll main workflow runs to a stable all-green result from `worktree`.
@@ -333,21 +333,22 @@
   (let [{:keys [worktree poll-interval-ms env]
          :or {poll-interval-ms 30000 env {}}} params
         sha (str/trim
-             (require-command! worktree env ["git" "rev-parse" "origin/main"]))]
+             (run-blocking-command! worktree env
+                                    ["git" "rev-parse" "origin/main"]))]
     (when (str/blank? sha)
       (throw (ex-info "git rev-parse origin/main returned a blank sha"
                       {:worktree worktree})))
     (loop [stable 0]
       (when (Thread/interrupted)
         (throw (InterruptedException. "main CI watch interrupted")))
-      (let [out (require-command! worktree env
-                                  ["gh" "run" "list" "--commit" sha
-                                   "--json" "status,conclusion"])
+      (let [out (run-blocking-command! worktree env
+                                       ["gh" "run" "list" "--commit" sha
+                                        "--json" "status,conclusion"])
             runs (parse-runs sha out)
             {:keys [total pending unsuccessful]} (run-counts runs)]
         (when (pos? unsuccessful)
-          (let [listing (require-command! worktree env
-                                          ["gh" "run" "list" "--commit" sha])]
+          (let [listing (run-blocking-command! worktree env
+                                               ["gh" "run" "list" "--commit" sha])]
             (throw (ex-info (str "unsuccessful workflow runs at " sha ":\n" listing)
                             {:sha sha :runs runs}))))
         (let [next-stable (if (and (pos? total) (zero? pending))
@@ -396,8 +397,8 @@
         (future-cancel stderr)
         (throw interrupted)))))
 
-(defn- require-command!
-  "Return stdout from a successful command or throw with its diagnostics."
+(defn- run-blocking-command!
+  "Block on one child while draining both streams; return stdout or throw."
   [worktree env argv]
   (let [{:keys [exit out err]} (command-result worktree env argv)]
     (when-not (zero? exit)
