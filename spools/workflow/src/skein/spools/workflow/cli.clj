@@ -485,7 +485,10 @@
                                      workflow-meta)}}})
 
 (defn reconcile
-  "Seed the workflow worker CLI's failure glossary when the module is applied."
+  "Seed the workflow worker CLI's failure glossary when the module is applied.
+
+  Removal is deliberately effect-free: the glossary API ships register and
+  replace but no unregister, so outcomes are process-lifetime seeds."
   [{:keys [runtime] :as ctx}]
   (case (get-in ctx [:module/contribution :status])
     :applied (do (doseq [outcome workflow-glossary]
@@ -502,7 +505,7 @@
   convention).
 
   The refresh coordinator resolves `:contribute` from this public var at every
-  module evaluation. The module owns no live resources of its own — the registry
-  and vocabulary belong to the engine module — so it declares no `:reconcile`."
+  module evaluation. The op registry and vocabulary belong to the engine module;
+  `reconcile` seeds this module's process-lifetime glossary outcomes."
   {:contribute 'contribute
    :reconcile 'reconcile})

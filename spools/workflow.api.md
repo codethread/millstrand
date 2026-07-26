@@ -71,9 +71,9 @@ Advance run-id by one ready ordinary step or checkpoint, returning the
 Function.
 
 Block until workflow run-id is done, at a checkpoint, at a defer exit
-  awaiting its continuation, at a ready `:self` step, at a gate whose waiter has
-  no registered executor, at an executor-owned gate whose stall predicate reports
-  detail, or timed out.
+  awaiting its continuation, at a ready dispatch, at a ready `:self` step, at a
+  gate whose waiter has no registered executor, at an executor-owned gate whose
+  stall predicate reports detail, or timed out.
 
   opts: `:timeout-secs` (default 1800) and `:poll-ms` (default 250, matching
   the agent-run await surface). `:timeout-secs` must be a non-negative integer;
@@ -716,11 +716,11 @@ Block until `request`'s run is done or needs a worker, and return the result.
 
   `request` is `{:run-id … :timeout-secs …}`, the timeout optional. The polling
   and the attention vocabulary are `await!`'s unchanged: the reason says which
-  kind of attention the run needs — `:done`, `:checkpoint`, `:defer`, `:step`,
-  `:gate`, `:stalled`, or `:timeout` — and `:waiting` is never returned, because
-  a run whose whole frontier is executor-owned and healthy is exactly what this
-  call waits through. `::await-request` owns the request shape and
-  `::attention-result` the answer.
+  kind of attention the run needs — `:done`, `:checkpoint`, `:defer`,
+  `:dispatch`, `:step`, `:gate`, `:stalled`, or `:timeout` — and `:waiting` is
+  never returned, because a run whose whole frontier is executor-owned and
+  healthy is exactly what this call waits through. `::await-request` owns the
+  request shape and `::attention-result` the answer.
 <p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1168-L1182">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/run-choose!">`run-choose!`</a>

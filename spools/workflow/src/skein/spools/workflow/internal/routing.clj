@@ -413,29 +413,35 @@
   the extended path both honest; comparing the two shapes directly is a silent
   no-op that lets every cycle through."
   [entry]
-  {"fingerprint" (or (get entry "fingerprint") (get entry :fingerprint))
-   "definition" (or (get entry "definition") (get entry :definition))})
+  (if (contains? entry "fingerprint")
+    {"fingerprint" (get entry "fingerprint")
+     "definition" (get entry "definition")}
+    {"fingerprint" (get entry :fingerprint)
+     "definition" (get entry :definition)}))
 
 (defn- dispatch-path!
   [step]
   (let [raw (query/attr step :workflow/dispatch-path)
-        entry-keys (fn [entry]
-                     (when (map? entry)
-                       (into #{} (keep #(when (or (string? %) (keyword? %)) (name %)))
-                             (keys entry))))
+        valid-keys? (fn [entry]
+                      (and (map? entry)
+                           (contains? #{#{"fingerprint" "definition"}
+                                        #{:fingerprint :definition}}
+                                      (set (keys entry)))))
         valid-entry? (fn [entry]
-                       (let [canonical (path-entry entry)]
-                         (and (= #{"fingerprint" "definition"} (entry-keys entry))
-                              (util/non-blank-string? (get canonical "fingerprint"))
-                              (or (nil? (get canonical "definition"))
-                                  (util/non-blank-string? (get canonical "definition"))))))]
+                       (when (valid-keys? entry)
+                         (let [canonical (path-entry entry)]
+                           (and (util/non-blank-string? (get canonical "fingerprint"))
+                                (or (nil? (get canonical "definition"))
+                                    (util/non-blank-string?
+                                     (get canonical "definition")))))))
+        invalid-entry (when (vector? raw) (first (remove valid-entry? raw)))]
     (when-not (and (vector? raw) (every? valid-entry? raw))
       (fail! "Workflow dispatch path is malformed"
              {:reason :workflow/dispatch-path-invalid
               :run-id (query/attr step :workflow/run-id)
               :step (:id step)
               :path raw
-              :value raw
+              :value (or invalid-entry raw)
               :expected [{:fingerprint "non-blank string"
                           :definition "non-blank string or null"}]}))
     (mapv path-entry raw)))
