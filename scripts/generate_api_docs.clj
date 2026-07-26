@@ -9,6 +9,7 @@
    {:name "guild" :source "spools/guild/src/skein/spools/guild.clj" :outfile "spools/guild.api.md"}
    {:name "unsafe-text-search" :source "spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj" :outfile "spools/unsafe-text-search.api.md"}
    {:name "shell" :source "spools/workflow/src/skein/spools/executors/shell.clj" :outfile "spools/executors/shell.api.md"}
+   {:name "code" :source "spools/workflow/src/skein/spools/executors/code.clj" :outfile "spools/executors/code.api.md"}
    {:name "chime" :source "spools/chime/src/skein/spools/chime.clj" :outfile "spools/chime.api.md"}
    {:name "cron" :source "spools/cron/src/skein/spools/cron.clj" :outfile "spools/cron.api.md"}])
 

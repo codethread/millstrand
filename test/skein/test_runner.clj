@@ -54,7 +54,9 @@
    ;; for the scheduler and cron timers, event-lane quiescence for the async
    ;; dispatch suites — so there is no JVM-global timer or shared-lane state.
    'skein.scheduler-runtime-test 'skein.api.scheduler.alpha-test 'skein.scheduler-e2e-test
-   'skein.cron-test 'skein.cron-e2e-test 'skein.spools.executors.shell-test 'skein.chime-test
+   'skein.cron-test 'skein.cron-e2e-test
+   'skein.spools.executors.shell-test 'skein.spools.executors.code-test
+   'skein.chime-test
    'skein.weaver-test])
 
 (def serial-namespaces

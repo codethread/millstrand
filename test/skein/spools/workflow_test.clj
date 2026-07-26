@@ -1483,6 +1483,33 @@
   {:entrypoints #{:continue}}
   (workflow/workflow "Downstream stage" (workflow/step :do-downstream "Do downstream" :self)))
 
+(deftest workflow-routing-refuses-malformed-persisted-context-before-mutating
+  (with-runtime
+    (fn [_rt _]
+      (workflow/register-workflow! :wt-second 'skein.spools.workflow-test/registry-second-stage)
+      (workflow/register-workflow! :wt-downstream
+                                   'skein.spools.workflow-test/downstream-stage-workflow)
+      (doseq [[run-id definition choice]
+              [["malformed-next" (registry-router-stage {:target :wt-second}) :advance]
+               ["malformed-revise" #'revise-stage-workflow :revise]]]
+        (workflow/start! run-id definition {} {:context {}})
+        (when (= choice :revise)
+          (workflow/complete! run-id))
+        (let [root-id (:id (workflow/current-root run-id))
+              checkpoint-id (:id (workflow/ready-step run-id))]
+          (repl/update! root-id {:attributes {"workflow/context" "not-a-map"}})
+          (let [thrown (try
+                         (workflow/choose! run-id choice)
+                         (catch clojure.lang.ExceptionInfo e e))]
+            (is (= :workflow/context-invalid (:reason (ex-data thrown))))
+            (is (= run-id (:run-id (ex-data thrown))))
+            (is (= root-id (:root (ex-data thrown))))
+            (is (= "not-a-map" (:context (ex-data thrown)))))
+          (is (= "active" (:state (repl/strand checkpoint-id))))
+          (is (= "not-a-map"
+                 (get-in (repl/strand root-id)
+                         [:attributes :workflow/context]))))))))
+
 (deftest workflow-revise-repours-definition-skipping-condition-gated-steps
   (with-runtime
     (fn [_rt _]
