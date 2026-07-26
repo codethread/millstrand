@@ -50,7 +50,7 @@
                   :spools ['skein.spools/workflow]})
 ;; The generic worker CLI is a separate, opt-in module of the same spool: the
 ;; engine ships no verbs, and this declaration is what puts the root `workflow`
-;; op (list/show/start/ready/complete/choose/continue/await) on the surface for
+;; op (list/show/start/ready/complete/choose/defer/await) on the surface for
 ;; every registered definition. Dropping it and refreshing removes the verb.
 (runtime/module! runtime :skein/spools-workflow-cli
                  {:ns 'skein.spools.workflow.cli

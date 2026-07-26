@@ -1,6 +1,6 @@
 (ns skein.spools.workflow-run-cli-test
   "Tests for the generic worker run surface of the `workflow` op: start, ready,
-  complete, choose, continue, and await over the engine's published lifecycle."
+  complete, choose, defer, and await over the engine's published lifecycle."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
@@ -71,13 +71,13 @@
                      (workflow/step :work "Do the work" :self)))
 
 (workflow/defworkflow follow-on
-  "A routine a run can be continued or routed into."
-  {:entrypoints #{:start :continue}
+  "A routine a run can call or start."
+  {:entrypoints #{:start :call}
    :param-spec ::build-params}
   (workflow/workflow "Follow on" (workflow/step :record "Record the outcome" :self)))
 
-(workflow/defworkflow handoff
-  "Hand a finished run to whichever routine the worker picks."
+(workflow/defworkflow final-defer
+  "Finish with whichever returning routine the worker picks."
   {:entrypoints #{:start}}
   (workflow/bind-defers
    (workflow/workflow
@@ -86,23 +86,23 @@
     (workflow/defer :next-routine "Choose the next routine" :depends-on [:summarize]))
    {:next-routine #{:follow-on}}))
 
-(workflow/defworkflow dispatched
+(workflow/defworkflow middle-defer
   "Select a returning procedure, then finish the caller."
   {:entrypoints #{:start}}
   (workflow/bind-defers
    (workflow/workflow
-    "Dispatched"
+    "Middle defer"
     (workflow/step :prepare "Prepare the work" :self)
     (workflow/defer :perform "Choose the procedure" :depends-on [:prepare])
     (workflow/step :finish "Finish the work" :self :depends-on [:perform]))
    {:perform #{:solo}}))
 
-(workflow/defworkflow two-dispatches
-  "Two independent returning hand-offs."
+(workflow/defworkflow two-defers
+  "Two independent returning selections."
   {:entrypoints #{:start}}
   (workflow/bind-defers
    (workflow/workflow
-    "Two dispatches"
+    "Two defers"
     (workflow/defer :left "Choose left")
     (workflow/defer :right "Choose right"))
    {:left #{:solo} :right #{:solo}}))
@@ -444,94 +444,97 @@
                (reason-of #(invoke {:subcommand ["choose"] :run-id "run-no-checkpoint"
                                     :choice "ship" :step (first (ready-ids start))}))))))))
 
-;; --- continue ---------------------------------------------------------------
+;; --- defer ------------------------------------------------------------------
 
-(deftest continue-infers-the-sole-defer-exit-and-pours-the-target
+(deftest defer-infers-the-sole-final-defer-and-pours-the-target
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (register! :follow-on :handoff)
-      (started "run-handoff" :handoff)
-      (verb "complete" "run-handoff")
-      (let [result (invoke {:subcommand ["continue"] :run-id "run-handoff"
+      (register! :follow-on :final-defer)
+      (started "run-final-defer" :final-defer)
+      (verb "complete" "run-final-defer")
+      (let [root-id (get-in (verb "ready" "run-final-defer") [:root :id])
+            result (invoke {:subcommand ["defer"] :run-id "run-final-defer"
                             :workflow "follow-on" :params {"scope" "queue"}
                             :by "worker"})]
-        (is (= "workflow continue" (:operation result)))
-        (is (= "Follow on" (get-in result [:root :title])))
+        (is (= "workflow defer" (:operation result)))
+        (is (= root-id (get-in result [:root :id]))
+            "a final defer keeps the declaring root")
         (is (= ["Record the outcome"] (mapv :title (:ready result))))))))
 
-(deftest continue-refuses-a-target-outside-the-defers-allowlist
+(deftest defer-refuses-a-target-outside-the-defers-allowlist
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (register! :solo :follow-on :handoff)
-      (started "run-handoff-denied" :handoff)
-      (verb "complete" "run-handoff-denied")
+      (register! :solo :follow-on :final-defer)
+      (started "run-defer-denied" :final-defer)
+      (verb "complete" "run-defer-denied")
       (is (= :workflow/defer-target-not-allowed
-             (reason-of #(invoke {:subcommand ["continue"] :run-id "run-handoff-denied"
+             (reason-of #(invoke {:subcommand ["defer"] :run-id "run-defer-denied"
                                   :workflow "solo"}))))
       (is (= ["Choose the next routine"]
-             (mapv :title (:ready (verb "ready" "run-handoff-denied"))))
+             (mapv :title (:ready (verb "ready" "run-defer-denied"))))
           "the defer stays ready to retry"))))
 
-(deftest continue-refuses-a-frontier-without-a-defer-exit
+(deftest defer-refuses-a-frontier-without-a-defer
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (register! :follow-on :handoff)
-      (let [start (started "run-handoff-early" :handoff)]
+      (register! :follow-on :final-defer)
+      (let [start (started "run-defer-early" :final-defer)]
         (is (= :workflow/ready-defer-absent
-               (reason-of #(invoke {:subcommand ["continue"] :run-id "run-handoff-early"
+               (reason-of #(invoke {:subcommand ["defer"] :run-id "run-defer-early"
                                     :workflow "follow-on"}))))
         (is (= :workflow/ready-defer-incompatible
-               (reason-of #(invoke {:subcommand ["continue"] :run-id "run-handoff-early"
+               (reason-of #(invoke {:subcommand ["defer"] :run-id "run-defer-early"
                                     :workflow "follow-on"
                                     :step (first (ready-ids start))}))))))))
 
-;; --- dispatch ---------------------------------------------------------------
-
-(deftest dispatch-drives-a-returning-procedure-through-the-cli
+(deftest defer-drives-a-middle-returning-procedure-through-the-cli
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (register! :solo :dispatched)
-      (started "run-dispatch" :dispatched)
-      (verb "complete" "run-dispatch")
+      (register! :solo :middle-defer)
+      (started "run-middle-defer" :middle-defer)
+      (verb "complete" "run-middle-defer")
       ;; through real argv, so the declared arg-spec — subcommand, positional, and
       ;; every flag — is what the verb is reached by, not a hand-built arg map.
-      (let [filled (from-argv rt ["dispatch" "run-dispatch"
+      (let [filled (from-argv rt ["defer" "run-middle-defer"
                                   "--workflow" "solo" "--by" "worker"])]
-        (is (= "workflow dispatch" (:operation filled)))
+        (is (= "workflow defer" (:operation filled)))
         (is (= ["Do the work"] (mapv :title (:ready filled))))
-        (verb "complete" "run-dispatch")
-        (is (= ["Finish the work"] (mapv :title (:ready (verb "ready" "run-dispatch")))))
-        (is (true? (:done (verb "complete" "run-dispatch"))))))))
+        (verb "complete" "run-middle-defer")
+        (is (= ["Finish the work"]
+               (mapv :title (:ready (verb "ready" "run-middle-defer")))))
+        (is (true? (:done (verb "complete" "run-middle-defer"))))))))
 
-(deftest dispatch-is-role-scoped-and-leaves-the-point-ready-on-refusal
+(deftest defer-is-role-scoped-and-leaves-the-point-ready-on-refusal
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (register! :solo :follow-on :handoff :dispatched :two-dispatches)
-      (let [two (started "run-two-dispatches" :two-dispatches)]
-        (is (= :workflow/ready-dispatch-ambiguous
-               (reason-of #(invoke {:subcommand ["dispatch"] :run-id "run-two-dispatches"
+      (register! :solo :follow-on :final-defer :middle-defer :two-defers)
+      (let [two (started "run-two-defers" :two-defers)]
+        (is (= :workflow/ready-defer-ambiguous
+               (reason-of #(invoke {:subcommand ["defer"] :run-id "run-two-defers"
                                     :workflow "solo"}))))
         (is (= (ready-ids two)
-               (mapv :id (:compatible (failure #(invoke {:subcommand ["dispatch"]
-                                                         :run-id "run-two-dispatches"
+               (mapv :id (:compatible (failure #(invoke {:subcommand ["defer"]
+                                                         :run-id "run-two-defers"
                                                          :workflow "solo"})))))))
-      (started "run-dispatch-roles" :dispatched)
-      (verb "complete" "run-dispatch-roles")
-      (is (= :workflow/step-not-dispatch
-             (reason-of #(invoke {:subcommand ["continue"] :run-id "run-dispatch-roles"
-                                  :workflow "solo"}))))
-      (is (= :workflow/step-not-completable
-             (reason-of #(verb "complete" "run-dispatch-roles"))))
-      (is (= :workflow/dispatch-target-not-allowed
-             (reason-of #(invoke {:subcommand ["dispatch"] :run-id "run-dispatch-roles"
-                                  :workflow "handoff"}))))
+      (started "run-defer-roles" :middle-defer)
+      (verb "complete" "run-defer-roles")
+      (let [ordinary (first (ready-ids (started "run-no-defer" :solo)))]
+        (is (= :workflow/ready-defer-incompatible
+               (reason-of #(invoke {:subcommand ["defer"] :run-id "run-no-defer"
+                                    :step ordinary
+                                    :workflow "solo"})))))
+      (is (= :workflow/ready-step-absent
+             (reason-of #(verb "complete" "run-defer-roles"))))
+      (is (= :workflow/defer-target-not-allowed
+             (reason-of #(invoke {:subcommand ["defer"] :run-id "run-defer-roles"
+                                  :workflow "final-defer"}))))
       (is (= ["Choose the procedure"]
-             (mapv :title (:ready (verb "ready" "run-dispatch-roles"))))))))
+             (mapv :title (:ready (verb "ready" "run-defer-roles"))))))))
 
 ;; --- concurrency ------------------------------------------------------------
 
@@ -655,13 +658,13 @@
       (activate-cli! rt)
       (let [entry (weaver/resolve-op rt 'workflow)
             leaf (fn [verb] (get-in entry [:arg-spec :subcommands verb]))]
-        (doseq [verb ["start" "complete" "choose" "continue" "dispatch"]]
+        (doseq [verb ["start" "complete" "choose" "defer"]]
           (is (= :mutating (:hook-class (leaf verb))) verb)
           (is (= :standard (:deadline-class (leaf verb))) verb))
         (is (= [:read :standard] ((juxt :hook-class :deadline-class) (leaf "ready"))))
         (is (= [:read :unbounded] ((juxt :hook-class :deadline-class) (leaf "await")))
             "await blocks by design and writes nothing")
-        (is (= #{"list" "show" "start" "ready" "complete" "choose" "continue" "dispatch" "await"}
+        (is (= #{"list" "show" "start" "ready" "complete" "choose" "defer" "await"}
                (set (keys (:subcommands (:arg-spec entry))))))
         (is (= (set (keys (:subcommands (:arg-spec entry))))
                (set (keys (:subcommands (:returns entry))))))))))
@@ -670,7 +673,7 @@
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (register! :solo :mixed :follow-on :handoff :dispatched)
+      (register! :solo :mixed :follow-on :final-defer :middle-defer)
       (let [check (fn [verb value]
                     (test-alpha/check-op-return! rt 'workflow {:subcommand [verb]}
                                                  (wire-value value)))]
@@ -680,21 +683,17 @@
         (check "choose" (invoke {:subcommand ["choose"] :run-id "run-returns"
                                  :choice "ship" :input {"verdict" "pass"}}))
         (check "await" (verb "await" "run-returns" :timeout-secs 0))
-        (started "run-returns-defer" :handoff)
+        (started "run-returns-defer" :final-defer)
         (verb "complete" "run-returns-defer")
-        (check "continue" (invoke {:subcommand ["continue"] :run-id "run-returns-defer"
-                                   :workflow "follow-on" :params {"scope" "queue"}}))
-        (started "run-returns-dispatch" :dispatched)
-        (verb "complete" "run-returns-dispatch")
-        (check "dispatch" (invoke {:subcommand ["dispatch"] :run-id "run-returns-dispatch"
-                                   :workflow "solo"}))))))
+        (check "defer" (invoke {:subcommand ["defer"] :run-id "run-returns-defer"
+                                :workflow "follow-on" :params {"scope" "queue"}}))))))
 
 (deftest declared-args-carry-argv-to-the-run-verbs
   ;; The op is reached as argv, so the declared arg-spec is the real entrance.
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (register! :solo :mixed :follow-on :handoff)
+      (register! :solo :mixed :follow-on :final-defer)
       (let [arg-spec (:arg-spec (weaver/resolve-op rt 'workflow))
             parse (fn [argv] (cli-alpha/parse arg-spec argv))]
         (is (= {:subcommand ["start"] :run-id "r1" :workflow "solo"}
@@ -711,16 +710,18 @@
                        "--attributes" "{\"acme/exit\":0}"])))
         (is (= {:subcommand ["choose"] :run-id "r1" :choice "ship" :input {"verdict" "pass"}}
                (parse ["choose" "r1" "ship" "--input" "{\"verdict\":\"pass\"}"])))
-        (is (= {:subcommand ["continue"] :run-id "r1" :workflow "follow-on"}
-               (parse ["continue" "r1" "--workflow" "follow-on"])))
-        (is (= {:subcommand ["dispatch"] :run-id "r1" :workflow "solo"}
-               (parse ["dispatch" "r1" "--workflow" "solo"])))
+        (is (= {:subcommand ["defer"] :run-id "r1" :workflow "follow-on"}
+               (parse ["defer" "r1" "--workflow" "follow-on"])))
         (is (= {:subcommand ["await"] :run-id "r1" :timeout-secs 30}
                (parse ["await" "r1" "--timeout-secs" "30"])))
         (testing "the parser refuses what the surface does not declare"
           (is (thrown? clojure.lang.ExceptionInfo (parse ["start" "r1"])))
           (is (thrown? clojure.lang.ExceptionInfo (parse ["choose" "r1"])))
-          (is (thrown? clojure.lang.ExceptionInfo (parse ["continue" "r1"])))
+          (is (thrown? clojure.lang.ExceptionInfo (parse ["defer" "r1"])))
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (parse ["continue" "r1" "--workflow" "follow-on"])))
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (parse ["dispatch" "r1" "--workflow" "solo"])))
           (is (thrown? clojure.lang.ExceptionInfo (parse ["ready" "r1" "--limit" "5"])))
           (is (thrown? clojure.lang.ExceptionInfo (parse ["complete" "r1" "--notes" "done"]))))
         (testing "argv reaches the engine through the handler"
@@ -774,8 +775,8 @@
 ;;
 ;; PROP-Wcd-001.S7/EX7 end to end, through module publication rather than
 ;; imperative registration: three owners that never name each other's code. A
-;; kanban-style spool publishes a template with a named exit, a devflow-style
-;; spool registers a routine that advertises `:continue`, and the workspace —
+;; kanban-style spool publishes a template with a named selection point, a
+;; devflow-style spool registers a routine that advertises `:call`, and the workspace —
 ;; the only place that can see both — binds one to the other and registers the
 ;; result. A worker then drives the composite through the shipped verbs alone.
 
@@ -807,7 +808,7 @@
        "  (clojure.spec.alpha/keys :req-un [::feature]))\n"
        "(workflow/defworkflow devflow\n"
        "  \"Plan and build a feature.\"\n"
-       "  {:entrypoints #{:start :continue}\n"
+       "  {:entrypoints #{:start :call}\n"
        "   :param-spec ::devflow-params}\n"
        "  (workflow/workflow\n"
        "    (fn [{:keys [feature]}] (str \"Plan and build \" feature))\n"
@@ -855,14 +856,13 @@
             (is (= "defer" (:role exit)))
             (is (= "perform-work" (:defer exit)))
             (is (= ["devflow"] (:workflows exit))))
-          (testing "continue transfers the root and carries only the target's params"
-            (let [continued (invoke {:subcommand ["continue"] :run-id "card-123"
-                                     :workflow "devflow"
-                                     :params {"feature" "kanban-web-ui"}})]
-              (is (= "workflow continue" (:operation continued)))
-              (is (= "Plan and build kanban-web-ui" (:title (:root continued))))
-              (is (not= (:id (:root started)) (:id (:root continued))))
-              (is (= ["Inspect feature context"] (mapv :title (:ready continued))))
-              (is (false? (:done continued)))))
-          (testing "the transferred run finishes under the same run id"
+          (testing "defer returns under the same root and carries only target params"
+            (let [deferred (invoke {:subcommand ["defer"] :run-id "card-123"
+                                    :workflow "devflow"
+                                    :params {"feature" "kanban-web-ui"}})]
+              (is (= "workflow defer" (:operation deferred)))
+              (is (= (:id (:root started)) (:id (:root deferred))))
+              (is (= ["Inspect feature context"] (mapv :title (:ready deferred))))
+              (is (false? (:done deferred)))))
+          (testing "the declaring run finishes after the selected routine returns"
             (is (true? (:done (verb "complete" "card-123"))))))))))

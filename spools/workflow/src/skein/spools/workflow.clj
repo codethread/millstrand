@@ -670,9 +670,9 @@
 
   Resolves the ready step (honoring an optional `:step` selector). When it is a
   checkpoint, `opts` must carry `:choice` (fail loudly otherwise); `advance!`
-  dispatches to `choose!` with that choice, its `:input` (default `{}`), and the
+  calls `choose!` with that choice, its `:input` (default `{}`), and the
   pass-through `:by`/`:step` opts. When it is a plain step, `:choice` must be
-  absent (fail loudly otherwise); `advance!` dispatches to `complete!` with the
+  absent (fail loudly otherwise); `advance!` calls `complete!` with the
   pass-through `:attributes`/`:step`/`:by` opts.
 
   A defer is not advanceable and says so loudly: filling one selects a target
@@ -1516,7 +1516,7 @@
                    :skein.spools.workflow.view/state]))
 
 ;; Every ready item names itself the same way; what it *offers* depends on its
-;; role, so the role is the dispatch. A gate is the one branch the stored role
+;; role, so the role selects the branch. A gate is the one branch the stored role
 ;; does not name: it is a step carrying an external waiter, and a worker must be
 ;; able to tell it apart from a step it may simply complete.
 (s/def ::ready-fields

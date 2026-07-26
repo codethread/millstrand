@@ -114,11 +114,11 @@
 (defn workflow-op
   "Handle `strand workflow <verb>`, routing to the engine's worker surface.
 
-  The registered op handler; resolved by symbol at dispatch time, so it is public
+  The registered op handler; resolved by symbol at invocation time, so it is public
   like the other spools' op handlers. Each verb assembles a request map and hands
   it to the engine function that owns the semantics — the CLI resolves no step,
   infers no role, and stamps no outcome of its own. The declared arg-spec rejects
-  an unknown verb before dispatch, so the fall-through exists only to keep a
+  an unknown verb before invocation, so the fall-through exists only to keep a
   direct Clojure caller loud."
   [{:op/keys [args argv]}]
   (let [{:keys [subcommand choice] target :workflow} args]
@@ -356,7 +356,7 @@
 (def ^:private ready-item-return
   ;; Every ready item names itself the same way; what it carries beyond that is
   ;; its role's business, owned by the engine's ::ready-item spec. Restating that
-  ;; dispatch in a second schema language would be a copy free to disagree.
+  ;; branching in a second schema language would be a copy free to disagree.
   {:type :map
    :required {:id :string
               :role :string

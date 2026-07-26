@@ -143,8 +143,8 @@ Contract: [`spools/workflow.md`](../spools/workflow.md). Terminology (molecule, 
 | **Checkpoint** | A step that stops for a decision rather than for work. | Gate, save point, milestone, approval |
 | **Choice** | One option at a checkpoint, optionally declaring required input and a route. | Option, branch, route, answer |
 | **Procedure** | A join step that closes when its parallel children are done. Procedure joins never appear in the ready frontier. | Step, join, subroutine, group |
-| **Defer** | A terminal exit someone else fills later by continuing the run into an allowed registered workflow. | Gate, checkpoint, pause, TODO |
-| **Continuation** | The workflow a `:next` route or a defer resolves into, poured under the same run id. | Next step, callback, child workflow, subflow |
+| **Defer** | A returning procedure whose registered target a worker selects at run time. The target pours beneath the current root and the declaring workflow resumes when it finishes. | Gate, checkpoint, transfer, TODO |
+| **Continuation** | The new root a checkpoint `:next` route resolves into under the same run id. Routing abandons the previous root; calls and defers return instead. | Next step, callback, child workflow, subflow |
 | **Bond** | A dependency edge between two materialized molecules. | Dependency, edge, link, depends-on |
 | **Squash** | Replace a finished molecule or run with one closed digest strand and burn the graph behind it. | Git squash, delete, archive, close |
 | **Stage** | One molecule in a multi-molecule run, so a run's root moves as it advances. | Step, phase, molecule, milestone |

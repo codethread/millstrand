@@ -22,7 +22,7 @@
 
 (workflow/defworkflow build
   "Build an agreed feature scope."
-  {:entrypoints #{:start :continue}}
+  {:entrypoints #{:start :continue :call}}
   (workflow/workflow "Build" (workflow/step :implement "Implement the scope" :self)))
 
 (workflow/defworkflow review
@@ -32,7 +32,7 @@
 
 (workflow/defworkflow fold
   "Fold a finished run back into the board."
-  {:entrypoints #{:continue}}
+  {:entrypoints #{:continue :call}}
   (workflow/workflow "Fold" (workflow/step :record "Record the outcome" :self)))
 
 (workflow/defworkflow spike
@@ -54,8 +54,8 @@
                         :choices [{:key :recommend-build :label "Build" :next :build}
                                   {:key :stop :label "Stop"}])))
 
-(workflow/defworkflow handoff
-  "Hand a finished run to whichever routine the worker picks."
+(workflow/defworkflow deferred
+  "Run whichever returning routine the worker picks."
   {:entrypoints #{:start}}
   (workflow/bind-defers
    (workflow/workflow
@@ -64,12 +64,12 @@
     (workflow/defer :next-routine "Choose the next routine" :depends-on [:summarize]))
    {:next-routine #{:build :fold}}))
 
-(workflow/defworkflow dispatched
+(workflow/defworkflow returning-defer
   "Select a returning workflow at run time."
   {:entrypoints #{:start}}
   (workflow/bind-defers
    (workflow/workflow
-    "Dispatched"
+    "Returning defer"
     (workflow/defer :perform-work "Choose work"))
    {:perform-work #{:review}}))
 
@@ -212,7 +212,7 @@
       (register! :build :review :fold :spike)
       (is (= [{:name "build"
                :doc "Build an agreed feature scope."
-               :entrypoints ["start" "continue"]
+               :entrypoints ["start" "continue" "call"]
                :definition "skein.spools.workflow-cli-test/build"}
               {:name "review"
                :doc "Review a completed implementation."
@@ -231,7 +231,7 @@
       (activate-cli! rt)
       (register! :build :review :fold :spike)
       (is (= ["build" "fold" "spike"] (mapv :name (listed {:entrypoint "continue"}))))
-      (is (= ["review"] (mapv :name (listed {:entrypoint "call"}))))
+      (is (= ["build" "fold" "review"] (mapv :name (listed {:entrypoint "call"}))))
       (is (= ["build" "review" "spike"] (mapv :name (listed {:entrypoint "start"})))))))
 
 (deftest list-has-no-all-flag
@@ -240,9 +240,8 @@
       (activate-cli! rt)
       (register! :fold)
       (is (= [] (listed))
-          "a continue-only definition is not startable")
-      (is (= [] (listed {:entrypoint "call"}))
-          "no call-only definitions are registered")
+          "a definition without :start is not startable")
+      (is (= ["fold"] (mapv :name (listed {:entrypoint "call"}))))
       (let [parse (fn [argv]
                     (cli-alpha/parse (:arg-spec (weaver/resolve-op rt 'workflow)) argv))]
         (is (thrown? clojure.lang.ExceptionInfo (parse ["list" "--all"])))))))
@@ -331,7 +330,6 @@
                   :checkpoints [{:step "recommendation" :choices ["recommend-build" "stop"]}]
                   :calls [{:step "assess" :procedure "review" :kind "registered"}]
                   :defers []
-                  :dispatches []
                   :routes ["build"]}
                  (:declared view))))))))
 
@@ -344,13 +342,13 @@
           "a call-only component is a point read away even though list hides it")
       (is (= {:kind "none" :defaults {}} (:params (shown :review)))
           "a definition constraining nothing says so rather than omitting the field")
-      (is (= ["continue"] (:entrypoints (shown :fold)))))))
+      (is (= ["continue" "call"] (:entrypoints (shown :fold)))))))
 
 (deftest show-reports-a-defer-exit-with-its-bound-targets
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (register! :build :fold :handoff)
+      (register! :build :fold :deferred)
       (is (= {:kind "static"
               :entry ["summarize"]
               :loops []
@@ -359,21 +357,21 @@
               :calls []
               :defers [{:step "next-routine"
                         :defer "next-routine"
-                        :workflows ["build" "fold"]}]
-              :dispatches []
+                        :workflows ["build" "fold"]
+                        :entrypoint "call"}]
               :routes []}
-             (:declared (shown :handoff)))))))
+             (:declared (shown :deferred)))))))
 
-(deftest show-reports-a-dispatch-with-its-allowlist-and-entrypoint
+(deftest show-reports-one-defer-collection-with-the-call-entrypoint
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
-      (register! :review :dispatched)
+      (register! :review :returning-defer)
       (is (= [{:step "perform-work"
-               :dispatch "perform-work"
+               :defer "perform-work"
                :workflows ["review"]
                :entrypoint "call"}]
-             (:dispatches (:declared (shown :dispatched))))))))
+             (:defers (:declared (shown :returning-defer))))))))
 
 (deftest show-omits-the-removed-kind-and-opaque-fields
   (with-runtime
@@ -450,7 +448,8 @@
         (is (= {:subcommand ["list"]} (parse ["list"])))
         (is (= {:subcommand ["list"] :entrypoint "call"} (parse ["list" "--entrypoint" "call"])))
         (is (= {:subcommand ["show"] :workflow "spike"} (parse ["show" "spike"])))
-        (is (= ["review"] (mapv :name (listed (parse ["list" "--entrypoint" "call"])))))
+        (is (= ["build" "review"]
+               (mapv :name (listed (parse ["list" "--entrypoint" "call"])))))
         (is (= "spike" (:name (cli/workflow-op {:op/args (parse ["show" "spike"])}))))
         (testing "the parser refuses what the surface does not declare"
           (is (thrown? clojure.lang.ExceptionInfo (parse ["show"])))
