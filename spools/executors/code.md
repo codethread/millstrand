@@ -27,7 +27,12 @@ Reconciliation scans durable ready gates immediately.
 
 ## Gate attributes
 
-| Attribute | Required | Meaning | |---|---|---| | `workflow/gate` = `"code"` | yes | Selects this executor. | | `code/fn` | yes | Fully qualified symbol naming the Var to invoke. Strings, unqualified symbols, closures, and unresolved Vars fail loudly. | | `code/params` | yes | JSON object poured with the gate. Missing or non-object values fail loudly. | | `code/timeout-secs` | no | Positive-integer wall-clock bound. Invalid values fail loudly. |
+| Attribute | Required | Meaning |
+|---|---|---|
+| `workflow/gate` = `"code"` | yes | Selects this executor. |
+| `code/fn` | yes | Fully qualified symbol naming the Var to invoke. Strings, unqualified symbols, closures, and unresolved Vars fail loudly. |
+| `code/params` | yes | JSON object poured with the gate. Missing or non-object values fail loudly. |
+| `code/timeout-secs` | no | Positive-integer wall-clock bound. Invalid values fail loudly. |
 
 The executor consults the named specs `:skein.spools.executors.code/fn`, `:skein.spools.executors.code/params`, and `:skein.spools.executors.code/timeout-secs` before invocation. Their combined request contract is `:skein.spools.executors.code/request`. Successful return values must satisfy `:skein.spools.executors.code/result`.
 
@@ -35,7 +40,11 @@ Request attributes are snapshots. Function resolution happens when the gate exec
 
 ## Outcomes
 
-| Attribute | Meaning | |---|---| | `code/running` | Unique claim token for one accepted invocation. | | `code/result` | JSON-safe non-nil return value. Nil omits this attribute. | | `gate/error` | Durable exception, validation, resolution, or timeout detail. Presence stalls the gate until a coordinator removes it. |
+| Attribute | Meaning |
+|---|---|
+| `code/running` | Unique claim token for one accepted invocation. |
+| `code/result` | JSON-safe non-nil return value. Nil omits this attribute. |
+| `gate/error` | Durable exception, validation, resolution, or timeout detail. Presence stalls the gate until a coordinator removes it. |
 
 A successful invocation clears its matching claim and closes the gate through `workflow/complete!` with `:by "code"`. A thrown exception records its message and `ex-data`. Result validation is part of the terminal transition: a non-JSON-safe return fails the gate instead of corrupting persisted attributes.
 

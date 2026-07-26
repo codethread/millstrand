@@ -69,9 +69,9 @@
         (when (Thread/interrupted)
           (throw (InterruptedException. "poll interrupted")))
         (spit marker "tick\n" :append true)
-        ;; The short child keeps the fixture in subprocess-polling work long
-        ;; enough for the executor timeout to interrupt its wait deterministically.
-        (let [process (.start (ProcessBuilder. ^java.util.List ["sh" "-c" "sleep 0.05"]))]
+        ;; `read` blocks on the pipe this function owns until the executor
+        ;; interrupts waitFor; no wall-clock delay decides when the child exits.
+        (let [process (.start (ProcessBuilder. ^java.util.List ["sh" "-c" "read _"]))]
           (try
             (.waitFor process)
             (catch InterruptedException interrupted
@@ -269,7 +269,7 @@
                                     (all-gates)))))
             (is (zero? (.size (.getQueue ^java.util.concurrent.ThreadPoolExecutor
                                (:worker-executor
-                                (binding [code/*runtime* rt]
+                                (with-bindings {#'code/*runtime* rt}
                                   (#'code/resources)))))))
             (.countDown ^CountDownLatch @blocker)
             (await-eventually #(when (every? (fn [gate] (= "closed" (:state gate)))
@@ -359,13 +359,17 @@
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
       (is (= {workflow/executor-kind
               {"code" 'skein.spools.executors.code/gate-stalled?}
-              :queries {"stalled-code-gates" @#'code/stalled-code-gates-query}}
+              :queries
+              {"stalled-code-gates"
+               [:and [:= :state "active"]
+                [:= [:attr "workflow/gate"] "code"]
+                [:exists [:attr "gate/error"]]]}}
              (code/contribute {:runtime rt})))
       (is (= {:reconciled :applied}
              (code/reconcile {:runtime rt
                               :module/contribution {:status :applied}})))
       (let [pool (:worker-executor
-                  (binding [code/*runtime* rt] (#'code/resources)))
+                  (with-bindings {#'code/*runtime* rt} (#'code/resources)))
             declaration (first (filter #(= "code" (:name %))
                                        (vocab/declarations
                                         rt {:kind :attr-namespace})))]
@@ -378,7 +382,7 @@
                          :module/contribution {:status :applied}})
         (is (identical? pool
                         (:worker-executor
-                         (binding [code/*runtime* rt] (#'code/resources)))))
+                         (with-bindings {#'code/*runtime* rt} (#'code/resources)))))
         (is (= {:reconciled :removed}
                (code/reconcile {:runtime rt
                                 :module/contribution {:status :removed}})))
@@ -389,4 +393,5 @@
                                 :module/contribution {:status :applied}})))
         (is (not (identical? pool
                              (:worker-executor
-                              (binding [code/*runtime* rt] (#'code/resources))))))))))
+                              (with-bindings {#'code/*runtime* rt}
+                                (#'code/resources))))))))))

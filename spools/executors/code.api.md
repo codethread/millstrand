@@ -15,22 +15,14 @@ Fulfil workflow `:code` gates by invoking trusted Clojure functions.
 
 
 
-## <a name="skein.spools.executors.code/*runtime*">`*runtime*`</a>
-
-
-
-
-Runtime captured for asynchronous code-executor threads.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L31-L33">Source</a></sub></p>
-
 ## <a name="skein.spools.executors.code/contribute">`contribute`</a>
 ``` clojure
-(contribute _ctx)
+(contribute ctx)
 ```
 Function.
 
 Contribute the `:code` workflow executor and its stalled-gates query.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L341-L345">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L99-L110">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.code/gate-stalled?">`gate-stalled?`</a>
 ``` clojure
@@ -39,7 +31,7 @@ Contribute the `:code` workflow executor and its stalled-gates query.
 Function.
 
 Return durable stall detail for a ready `:code` gate view, or nil.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L310-L315">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L90-L97">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.code/on-event">`on-event`</a>
 ``` clojure
@@ -48,7 +40,7 @@ Return durable stall detail for a ready `:code` gate view, or nil.
 Function.
 
 Scan for newly ready code gates after a graph mutation.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L305-L308">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L85-L88">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.code/reconcile">`reconcile`</a>
 ``` clojure
@@ -57,7 +49,7 @@ Scan for newly ready code gates after a graph mutation.
 Function.
 
 Reconcile the code executor's vocabulary, handler, and runtime-owned pools.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L347-L367">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L112-L130">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.code/spool">`spool`</a>
 
@@ -65,4 +57,4 @@ Reconcile the code executor's vocabulary, handler, and runtime-owned pools.
 
 
 Entry-point declaration for the code executor module.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L369-L372">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L132-L135">Source</a></sub></p>

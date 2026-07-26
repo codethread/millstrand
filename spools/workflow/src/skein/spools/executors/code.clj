@@ -11,7 +11,7 @@
             [skein.api.current.alpha :as current]
             [skein.api.events.alpha :as events]
             [skein.api.runtime.alpha :as runtime]
-            [skein.api.spool.alpha :refer [attr-get fail!]]
+            [skein.api.spool.alpha :refer [attr-get fail! require-valid!]]
             [skein.api.vocab.alpha :as vocab]
             [skein.api.weaver.alpha :as weaver]
             [skein.spools.workflow :as workflow])
@@ -28,7 +28,7 @@
   "Maximum number of code-gate invocations that may occupy worker threads."
   8)
 
-(def ^:dynamic *runtime*
+(def ^:private ^:dynamic *runtime*
   "Runtime captured for asynchronous code-executor threads."
   nil)
 
@@ -62,6 +62,77 @@
          #(or (not (contains? % "code/timeout-secs"))
               (s/valid? ::timeout-secs (get % "code/timeout-secs")))))
 (s/def ::result json-safe?)
+(s/def ::contribute-context map?)
+(s/def ::contribution
+  #(= #{workflow/executor-kind :queries} (set (keys %))))
+(s/def ::reconcile-context
+  (s/and map?
+         #(map? (:runtime %))
+         #(contains? #{:applied :removed}
+                     (get-in % [:module/contribution :status]))))
+(s/def ::reconcile-result
+  #(contains? #{:applied :removed} (:reconciled %)))
+(s/def ::gate-view (s/and map? #(string? (:id %))))
+(s/def ::stall-detail
+  (s/nilable
+   (s/and map?
+          #(string? (:gate %))
+          #(contains? % :error))))
+
+(declare attr stamped? scan! declare-code-vocab! register-code-handler!
+         ensure-resources! state)
+
+(defn on-event
+  "Scan for newly ready code gates after a graph mutation."
+  [_event]
+  (scan!))
+
+(defn gate-stalled?
+  "Return durable stall detail for a ready `:code` gate view, or nil."
+  [gate-view]
+  (require-valid! ::gate-view gate-view "Invalid code gate view")
+  (let [gate (weaver/show (rt) (:id gate-view))
+        result (when (stamped? gate :gate/error)
+                 {:gate (:id gate) :error (attr gate :gate/error)})]
+    (require-valid! ::stall-detail result "Invalid code gate stall detail")))
+
+(defn contribute
+  "Contribute the `:code` workflow executor and its stalled-gates query."
+  [ctx]
+  (require-valid! ::contribute-context ctx "Invalid code executor contribution context")
+  (let [result {workflow/executor-kind
+                {"code" 'skein.spools.executors.code/gate-stalled?}
+                :queries
+                {"stalled-code-gates"
+                 [:and [:= :state "active"]
+                  [:= [:attr "workflow/gate"] "code"]
+                  [:exists [:attr "gate/error"]]]}}]
+    (require-valid! ::contribution result "Invalid code executor contribution")))
+
+(defn reconcile
+  "Reconcile the code executor's vocabulary, handler, and runtime-owned pools."
+  [{:keys [runtime] :as ctx}]
+  (require-valid! ::reconcile-context ctx "Invalid code executor reconcile context")
+  (binding [*runtime* runtime]
+    (let [status (get-in ctx [:module/contribution :status])
+          result (case status
+                   :applied (do
+                              (declare-code-vocab! runtime)
+                              (register-code-handler! runtime)
+                              (ensure-resources!)
+                              (scan!)
+                              {:reconciled :applied})
+                   :removed (do
+                              (events/unregister-handler! runtime :code/engine)
+                              ((:close-fn (state)))
+                              {:reconciled :removed}))]
+      (require-valid! ::reconcile-result result
+                      "Invalid code executor reconcile result"))))
+
+(def spool
+  "Entry-point declaration for the code executor module."
+  {:contribute 'contribute
+   :reconcile 'reconcile})
 
 (defn- daemon-thread-factory ^ThreadFactory [prefix]
   (let [counter (atom 0)]
@@ -302,28 +373,6 @@
           (claim-and-dispatch! runtime run-id step))
         {:scanned true}))))
 
-(defn on-event
-  "Scan for newly ready code gates after a graph mutation."
-  [_event]
-  (scan!))
-
-(defn gate-stalled?
-  "Return durable stall detail for a ready `:code` gate view, or nil."
-  [gate-view]
-  (let [gate (weaver/show (rt) (:id gate-view))]
-    (when (stamped? gate :gate/error)
-      {:gate (:id gate) :error (attr gate :gate/error)})))
-
-(def ^:private gate-stalled-symbol
-  "The `:code` executor's stall predicate symbol."
-  'skein.spools.executors.code/gate-stalled?)
-
-(def ^:private stalled-code-gates-query
-  "Named query behind `stalled-code-gates`."
-  [:and [:= :state "active"]
-   [:= [:attr "workflow/gate"] "code"]
-   [:exists [:attr "gate/error"]]])
-
 (defn- declare-code-vocab! [runtime]
   (vocab/declare! runtime
                   {:kind :attr-namespace
@@ -337,36 +386,3 @@
   (events/register-handler! runtime :code/engine event-types
                             'skein.spools.executors.code/on-event
                             {:spool "code"}))
-
-(defn contribute
-  "Contribute the `:code` workflow executor and its stalled-gates query."
-  [_ctx]
-  {workflow/executor-kind {"code" gate-stalled-symbol}
-   :queries {"stalled-code-gates" stalled-code-gates-query}})
-
-(defn reconcile
-  "Reconcile the code executor's vocabulary, handler, and runtime-owned pools."
-  [{:keys [runtime] :as ctx}]
-  (binding [*runtime* runtime]
-    (let [status (get-in ctx [:module/contribution :status])]
-      (case status
-        :applied (do
-                   (declare-code-vocab! runtime)
-                   (register-code-handler! runtime)
-                   (ensure-resources!)
-                   (scan!)
-                   {:reconciled :applied})
-        :removed (do
-                   (events/unregister-handler! runtime :code/engine)
-                   ((:close-fn (state)))
-                   {:reconciled :removed})
-        (fail! "Unsupported module contribution status"
-               {:status status
-                :allowed #{:applied :removed}
-                :module/key (:module/key ctx)
-                :reconciler 'skein.spools.executors.code/reconcile})))))
-
-(def spool
-  "Entry-point declaration for the code executor module."
-  {:contribute 'contribute
-   :reconcile 'reconcile})
