@@ -3196,6 +3196,39 @@
           (workflow/defer! "cycles" :wt-two-step {} {:step (:id inner)})
           (is (= ["Plan default"] (ready-titles "cycles"))))))))
 
+(deftest defer-cycles-survive-a-fingerprint-change-across-weaver-generations
+  ;; A definition holding render fns prints with their JVM identity hashes, so
+  ;; the same registered routine fingerprints differently after a restart. The
+  ;; ancestry check must still refuse the cycle, or A -> B -> A slips through
+  ;; whenever the second fill lands in a later generation.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-two-step
+                                   'skein.spools.workflow-test/defer-two-step-target)
+      (workflow/register-workflow! :wt-cycle-b
+                                   'skein.spools.workflow-test/defer-two-step-target)
+      (workflow/register-workflow! :wt-cycle-a 'skein.spools.workflow-test/defer-cycle-a)
+      (workflow/register-workflow! :wt-cycle-b 'skein.spools.workflow-test/defer-cycle-b)
+      (workflow/start! "regen" #'defer-cycle-a {})
+      (workflow/defer! "regen" :wt-cycle-b)
+      (let [inner (first (filter #(= "defer" (:role %)) (workflow/ready "regen")))
+            path (get-in (repl/strand (:id inner)) [:attributes :workflow/defer-path])
+            restarted (mapv #(assoc % :fingerprint (str "0000000000000000" (:fingerprint %)))
+                            path)]
+        (is (= 2 (count path)))
+        (is (every? :definition path)
+            "every ancestry entry of a registered routine records its symbol")
+        ;; exactly what a later generation persists: same symbols, fresh digests
+        (repl/update! (:id inner) {:attributes {"workflow/defer-path" restarted}})
+        (let [thrown (try (workflow/defer! "regen" :wt-cycle-a {} {:step (:id inner)})
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/defer-cyclic (:reason (ex-data thrown)))
+              "the definition symbol carries the ancestry when the digest cannot"))
+        (testing "and a genuinely different routine still fills"
+          (workflow/defer! "regen" :wt-two-step {} {:step (:id inner)})
+          (is (= ["Plan default"] (ready-titles "regen"))))))))
+
 (deftest defer-materializes-a-multi-step-expansion-with-colliding-ids
   ;; Prefixing is what keeps a target whose step ids are :a and :c disjoint from
   ;; a caller that already uses :a and :c, and the expansion's entry must inherit

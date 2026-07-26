@@ -394,6 +394,24 @@
     {"fingerprint" (get entry :fingerprint)
      "definition" (get entry :definition)}))
 
+(defn- same-routine?
+  "True when persisted path `entry` names the same routine as the `identity` a
+  fill is about to append.
+
+  Two identities, because neither alone is enough. A fingerprint digests the
+  printed definition, and a definition holding render or predicate functions
+  prints with their JVM identity hashes — so the same registered routine
+  fingerprints differently in a later weaver generation, and a fingerprint-only
+  check would let an `A → B → A` cycle through whenever the second fill lands
+  after a restart. The definition symbol survives that, but it is absent for an
+  anonymous definition and blind to two names resolving to one value. Matching on
+  either is what makes the refusal durable without narrowing what it already
+  caught (DELTA-Dfr-001.CC5)."
+  [entry identity]
+  (or (= (get entry "fingerprint") (get identity "fingerprint"))
+      (boolean (and (get entry "definition")
+                    (= (get entry "definition") (get identity "definition"))))))
+
 (defn- defer-path!
   [step]
   (let [raw (query/attr step :workflow/defer-path)
@@ -424,7 +442,7 @@
         path (defer-path! step)
         identity {"fingerprint" (defs/fingerprint target)
                   "definition" (some-> (:definition target) str)}
-        _ (when (some #(= (get % "fingerprint") (get identity "fingerprint")) path)
+        _ (when (some #(same-routine? % identity) path)
             (fail! "Workflow defer is cyclic"
                    {:reason :workflow/defer-cyclic :path path
                     :offending identity :defer (:id step)}))

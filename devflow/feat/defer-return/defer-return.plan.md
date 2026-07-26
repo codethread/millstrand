@@ -87,6 +87,12 @@ Outcome: the pinned-peer no-impact audit is recorded, the workflow contract and 
 - Mutually-referencing defer definitions cannot both be staged at once: `validate-candidates!` judges the whole candidate registry, so an `A → B → A` fixture registers B as a plain callable first and repoints it after A lands. The A→B→A cycle test documents that sequence.
 - Task 1 leaves `skein.spools.workflow.cli` pointing at one `defer` verb so the module compiles and its declared grammar matches its handler, but the two CLI test suites still drive the removed `continue`/`dispatch` verbs and fail. That is Task 2's cutover, not a regression to chase here.
 
-### PLAN-Dfr-001.DN3 Module measurement for the story fold decision — 2026-07-26
+### PLAN-Dfr-001.DN3 Intent-review finding: durable cycle identity — 2026-07-26
+
+- The `defer-return-story` intent review (run `48nr2`, sol-med) returned CHANGES REQUIRED on one real defect, inherited from the dispatch implementation rather than introduced here: `fingerprint` digests `pr-str` of the definition, and a definition holding render or predicate functions prints with their JVM identity hashes. The same registered routine therefore fingerprints differently in a later weaver generation, and a fingerprint-only ancestry check would let an `A → B → A` cycle through whenever the second fill lands after a restart.
+- Resolved in `routing/same-routine?`: an ancestry entry matches a candidate when *either* the fingerprints match or both record the same definition symbol. The symbol is durable across generations and repoints; the fingerprint still covers anonymous definitions and two registry names resolving to one value. Matching on either strictly widens what the old check caught, so no previously-refused cycle becomes fillable.
+- `defer-cycles-survive-a-fingerprint-change-across-weaver-generations` locks it by rewriting the persisted path's digests while keeping its symbols — exactly what a restart persists. It fails against the fingerprint-only check.
+
+### PLAN-Dfr-001.DN4 Module measurement for the story fold decision — 2026-07-26
 
 - `spools/workflow` after the cutover: 2041 lines in the public story file plus 2809 across ten `internal/*` concerns, 4850 total. The rough single-file fold sits an order of magnitude past the ~500-line tipping point, so the per-concern split is the deliverable and the fold-back branch does not apply.
