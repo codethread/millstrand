@@ -7,6 +7,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
+            [nrepl.core :as nrepl]
             [skein.api.batch.alpha :as batch]
             [skein.api.current.alpha :as current]
             [skein.api.events.alpha :as events]
@@ -3548,6 +3549,33 @@
             (weaver-runtime/stop! rt))))
       (finally
         (delete-tree! (io/file (:config-dir world)))))))
+
+(deftest runtime-nrepl-load-file-uses-spool-classloader
+  (with-runtime
+    (fn [rt _]
+      (let [suffix (str/replace (str (java.util.UUID/randomUUID)) "-" "")
+            ns-sym (symbol (str "demo.load-file-" suffix))
+            source-root (io/file (get-in rt [:metadata :config-dir]) "load-file-src")
+            source-file (io/file source-root
+                                 (str (-> (str ns-sym)
+                                          (str/replace \- \_)
+                                          (str/replace \. java.io.File/separatorChar))
+                                      ".clj"))
+            {:keys [host port]} (get-in rt [:metadata :endpoint])]
+        (.mkdirs (.getParentFile source-file))
+        (source-file/spit-forms! source-file [(list 'ns ns-sym) '(def visible :through-spool-loader)])
+        (.addURL ^clojure.lang.DynamicClassLoader (:spool-classloader rt)
+                 (.toURL (.toURI source-root)))
+        (with-open [conn (nrepl/connect :host host :port port)]
+          (let [session (nrepl/client-session (nrepl/client conn 60000))
+                responses (doall
+                           (nrepl/message
+                            session
+                            {:op "load-file"
+                             :file (source-file/render-forms
+                                    [`(require '~ns-sym)
+                                     `(deref (resolve '~(symbol (str ns-sym) "visible")))])}))]
+            (is (= ":through-spool-loader" (last (keep :value responses))))))))))
 
 (deftest runtime-metadata-rejects-blank-friendly-name
   (let [world (temp-world)

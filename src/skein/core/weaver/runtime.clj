@@ -370,7 +370,7 @@
   (let [handler (nrepl/default-handler)]
     (fn [message]
       (handler (cond-> (assoc message ::runtime-state runtime-state)
-                 (and (= "eval" (:op message)) (nil? (:eval message)))
+                 (and (#{"eval" "load-file"} (:op message)) (nil? (:eval message)))
                  (assoc :eval eval-runtime-symbol))))))
 
 (defn- close-storage!
