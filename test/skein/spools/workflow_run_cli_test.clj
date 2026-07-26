@@ -304,6 +304,33 @@
         (is (= 7 (get-in closed [:attributes :acme/exit]))
             "--attributes carries typed values through untouched")))))
 
+(deftest complete-shallow-merges-json-context-onto-the-run-root
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo :mixed)
+      (let [started (started "run-context" :mixed)
+            work (item-id started "Do the work")
+            result (from-argv rt ["complete" "run-context"
+                                  "--context"
+                                  "{\"owner\":\"agent\",\"nested\":{\"new\":true}}"])
+            root (weaver/show rt (get-in result [:root :id]))]
+        (is (= "closed" (:state (weaver/show rt work))))
+        (is (= {:owner "agent" :nested {:new true}}
+               (get-in root [:attributes :workflow/context])))))))
+
+(deftest complete-refuses-context-that-is-not-a-json-object-before-mutating
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo)
+      (doseq [[run-id value] [["run-context-array" "[1,2]"]
+                              ["run-context-null" "null"]]]
+        (let [work (item-id (started run-id :solo) "Do the work")]
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (from-argv rt ["complete" run-id "--context" value])))
+          (is (= "active" (:state (weaver/show rt work)))))))))
+
 (deftest complete-refuses-a-duplicate-attr-key-before-mutating
   (with-runtime
     (fn [rt _]
@@ -708,6 +735,9 @@
                 :attr {"acme/verdict" "pass"} :attributes {"acme/exit" 0}}
                (parse ["complete" "r1" "--attr" "acme/verdict=pass"
                        "--attributes" "{\"acme/exit\":0}"])))
+        (is (= {:subcommand ["complete"] :run-id "r1"
+                :context {"pr-number" 412}}
+               (parse ["complete" "r1" "--context" "{\"pr-number\":412}"])))
         (is (= {:subcommand ["choose"] :run-id "r1" :choice "ship" :input {"verdict" "pass"}}
                (parse ["choose" "r1" "ship" "--input" "{\"verdict\":\"pass\"}"])))
         (is (= {:subcommand ["defer"] :run-id "r1" :workflow "follow-on"}
