@@ -1010,7 +1010,7 @@
 
 ;; --- the generic worker run surface ------------------------------------------
 ;;
-;; Six request-map verbs over the lifecycle above, sharing one result shape.
+;; Seven request-map verbs over the lifecycle above, sharing one result shape.
 ;; They add no engine semantics: each validates its named request spec, narrows
 ;; the ready frontier to the role it acts on, and delegates to the trusted-
 ;; Clojure operation with an explicit step selector (PROP-Wcd-001.S2/S4). What
@@ -1021,7 +1021,7 @@
   "Apply `mutate` to the ready item `role`'s verb resolves for `request`, and
   return the shared run result stamped `operation`.
 
-  The shape all three worker mutations share. Resolution happens twice on
+  The shape all four worker mutations share. Resolution happens twice on
   purpose: the pre-guard pass answers an invalid request without queueing behind
   another worker, and the in-guard pass is what the request actually acts on. If
   another worker wrote between the two, `require-fresh-frontier!` refuses before
@@ -1830,8 +1830,9 @@
    :rules {:terminal (fmt/reflow "
                       |No step, condition, loop, or call may :depends-on a defer, and
                       |a workflow declaring one cannot be a call procedure — a
-                      |procedure join would continue past the exit. Returning
-                      |composition stays call.")
+                      |procedure join would continue past the exit. Fixed-target
+                      |returning composition uses call; runtime-selected returning
+                      |composition uses dispatch.")
            :entrypoints (fmt/reflow "
                          |Every bound target must be registered and declare :continue.")
            :binding (fmt/reflow "
@@ -1852,8 +1853,8 @@
    :contract (spec-entry ::dispatch-declaration
                          (fmt/reflow "
                          |A dispatch requires :id and :title and accepts
-                         |:depends-on, :description, and :attributes. It carries no
-                         |:condition or :loop, and may not author
+                         |:depends-on, :title, :description, and :attributes. It
+                         |carries no :condition or :loop, and may not author
                          |workflow/dispatch-path.")
                          '(dispatch :perform-work "Choose work" :depends-on [:prepare]))
    :fields {:id "Stable local ref; also the dispatch's declared name."
@@ -1962,7 +1963,7 @@
                             |A static definition declares a non-empty subset of
                             |#{:start :continue :call}. Reaching it by registered name
                             |requires :start to start!, :continue for a :next route,
-                            |and :call for a call target.")}
+                            |and :call for a call or dispatch target.")}
    :contracts {:spec-forms (fmt/reflow "
                             |(spec-forms ::spec) returns the ordered JSON-safe form graph
                             |documenting a param or checkpoint input spec: the root first,

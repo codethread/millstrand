@@ -10,7 +10,8 @@
   `batch/apply!`, so two active roots never share a run-id; because the closes
   and the pour ride one batch, a failing apply commits nothing and the run stays
   resumable."
-  (:require [clojure.string :as str]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [skein.api.format.alpha :as fmt]
             [skein.api.graph.alpha :as graph]
             [skein.api.spool.alpha :refer [fail!]]
@@ -18,8 +19,7 @@
             [skein.spools.workflow.internal.compile :as cmp]
             [skein.spools.workflow.internal.definitions :as defs]
             [skein.spools.workflow.internal.query :as query]
-            [skein.spools.workflow.internal.specs :as specs]
-            [skein.spools.workflow.internal.util :as util]))
+            [skein.spools.workflow.internal.specs :as specs]))
 
 (def ^:private closeable-roles
   "The workflow roles a cutover force-closes when it leaves a root behind.
@@ -422,26 +422,16 @@
 (defn- dispatch-path!
   [step]
   (let [raw (query/attr step :workflow/dispatch-path)
-        valid-keys? (fn [entry]
-                      (and (map? entry)
-                           (contains? #{#{"fingerprint" "definition"}
-                                        #{:fingerprint :definition}}
-                                      (set (keys entry)))))
-        valid-entry? (fn [entry]
-                       (when (valid-keys? entry)
-                         (let [canonical (path-entry entry)]
-                           (and (util/non-blank-string? (get canonical "fingerprint"))
-                                (or (nil? (get canonical "definition"))
-                                    (util/non-blank-string?
-                                     (get canonical "definition")))))))
-        invalid-entry (when (vector? raw) (first (remove valid-entry? raw)))]
-    (when-not (and (vector? raw) (every? valid-entry? raw))
+        invalid-entry (when (vector? raw)
+                        (first (remove #(s/valid? ::specs/dispatch-path-entry %) raw)))]
+    (when-not (s/valid? ::specs/dispatch-path raw)
       (fail! "Workflow dispatch path is malformed"
              {:reason :workflow/dispatch-path-invalid
               :run-id (query/attr step :workflow/run-id)
               :step (:id step)
               :path raw
               :value (or invalid-entry raw)
+              :problems (::s/problems (s/explain-data ::specs/dispatch-path raw))
               :expected [{:fingerprint "non-blank string"
                           :definition "non-blank string or null"}]}))
     (mapv path-entry raw)))
