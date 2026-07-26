@@ -43,12 +43,12 @@
             [skein.spools.workflow.internal.specs :as specs]
             [skein.spools.workflow.internal.util :as util]))
 
-(declare non-blank-string? defer-step? dispatch-step?
+(declare non-blank-string? defer-step?
          explain-step explain-gate explain-checkpoint explain-call explain-workflow
-         explain-definition explain-defer explain-dispatch
-         reject-unknown-keys! step* bind-handoff-step
+         explain-definition explain-defer
+         reject-unknown-keys! step* bind-defer-step
          step-opt-keys checkpoint-opt-keys call-opt-keys workflow-opt-keys
-         defer-opt-keys dispatch-opt-keys
+         defer-opt-keys
          choice-name choice-details-attr reject-unknown-choice-keys!
          require-valid-choices!
          reject-next-and-revise! require-unique-choice-keys!
@@ -72,10 +72,9 @@
      :checkpoint (explain-checkpoint)
      :call (explain-call)
      :defer (explain-defer)
-     :dispatch (explain-dispatch)
      (fail! "Unknown workflow explain topic"
             {:topic topic
-             :topics [:workflow :definition :step :gate :checkpoint :call :defer :dispatch]}))))
+             :topics [:workflow :definition :step :gate :checkpoint :call :defer]}))))
 
 (defn spec-forms
   "Return the ordered `s/form` documentation graph rooted at `spec-name`.
@@ -193,81 +192,68 @@
   (merge {:id id :procedure procedure :params params} opts))
 
 (defn defer
-  "Return a workflow defer step definition — a named terminal exit whose
-  continuation a worker selects at run time.
+  "Return a workflow defer step definition — a named point whose target a worker
+  selects at run time and which returns to the workflow that declared it.
 
-  A defer is what `call` and `checkpoint` cannot express. `call` returns to its
-  caller, and a checkpoint must name its routes where the workflow is authored;
-  neither can be a cross-spool exit whose allowed targets user code supplies
-  later. So a spool may publish a template naming `:perform-work` without naming
-  anyone else's workflow, and user Clojure that can see both spools binds that
-  name with `bind-handoffs`.
+  A defer is what `call` and `checkpoint` cannot express. `call` fixes its
+  procedure where the workflow is authored, and a checkpoint must name its routes
+  there too; neither can be a selection point whose allowed targets user code
+  supplies later. So a spool may publish a template naming `:perform-work`
+  without naming anyone else's workflow, and user Clojure that can see both
+  spools binds that name with `bind-defers`.
 
-  It is terminal by construction: nothing may declare `:depends-on` this id, and
-  a workflow declaring one may not be used as a `call` procedure, because a
-  procedure join would continue past the exit. `continue!` fills it by closing
-  this whole root and pouring the selected workflow under the same run id.
+  It composes like any other step: a step, checkpoint, call, condition, or loop
+  may `:depends-on` it, and a defer may equally be the last thing a workflow
+  declares. `defer!` fills it by pouring the selected workflow beneath the
+  current root and rewriting the defer into an ordinary procedure join.
 
-  Opts are `:depends-on`, `:description`, and `:attributes`. There is
-  deliberately no `:condition` or `:loop`: an exit that the params might delete,
-  or multiply, is not an exit."
+  Opts are `:depends-on`, `:description`, `:title`, and `:attributes`. There is
+  deliberately no `:condition` or `:loop`: a selection point the params might
+  delete, or multiply, is not a selection point."
   [id title & {:as opts}]
   (reject-unknown-keys! opts defer-opt-keys :defer)
+  ;; The lineage a cycle check reads is compile's to write. An authored value
+  ;; would be honoured as an already-stamped nested path, so a self-selecting
+  ;; defer declaring an empty one would walk straight past the membership check.
+  (when (contains? (:attributes opts) "workflow/defer-path")
+    (fail! "Workflow defer may not author workflow/defer-path"
+           {:reason :workflow/defer-path-reserved
+            :defer id
+            :alternative "Remove the attribute; compile stamps the lexical ancestry."}))
   (-> (step* id title opts)
       (update :attributes merge {"workflow/role" "defer"
                                  "workflow/defer" (name id)})))
 
-(defn dispatch
-  "Return a workflow dispatch step definition — a named returning hand-off.
+(defn bind-defers
+  "Return `definition` with each declared defer named in `bindings` bound to the
+  registered workflows it allows.
 
-  A dispatch names the point where a worker will later select an allowed
-  workflow. Unlike a defer it returns to the declaring workflow, so later steps
-  may depend on it. Opts are `:depends-on`, `:description`, `:title`, and
-  `:attributes`; `:condition` and `:loop` are deliberately not supported."
-  [id title & {:as opts}]
-  (reject-unknown-keys! opts dispatch-opt-keys :dispatch)
-  ;; The lineage a cycle check reads is compile's to write. An authored value
-  ;; would be honoured as an already-stamped nested path, so a self-dispatch
-  ;; declaring an empty one would walk straight past the membership check.
-  (when (contains? (:attributes opts) "workflow/dispatch-path")
-    (fail! "Workflow dispatch may not author workflow/dispatch-path"
-           {:reason :workflow/dispatch-path-reserved
-            :dispatch id
-            :alternative "Remove the attribute; compile stamps the lexical ancestry."}))
-  (-> (step* id title opts)
-      (update :attributes merge {"workflow/role" "dispatch"
-                                 "workflow/dispatch" (name id)})))
-
-(defn bind-handoffs
-  "Return `definition` with each declared defer or dispatch named in `bindings`
-  bound to the registered workflows it allows.
-
-  `bindings` maps a declared hand-off name to a non-empty set of registered
-  workflow keywords. A defer target must advertise `:continue`; a dispatch
-  target must advertise `:call`. This is the authority boundary: the spool that
-  authored the template said *where* a worker chooses, and the user code that
-  publishes the complete definition says *what* they may choose from. Binding a
-  name the definition does not declare fails loudly rather than adding a hand-off
-  nobody can reach.
+  `bindings` maps a declared defer name to a non-empty set of registered workflow
+  keywords, each of which must advertise `:call` — filling a defer executes its
+  target as an inline procedure that returns. This is the authority boundary: the
+  spool that authored the template said *where* a worker chooses, and the user
+  code that publishes the complete definition says *what* they may choose from.
+  Binding a name the definition does not declare fails loudly rather than adding
+  a selection point nobody can reach.
 
   The allowed names are stored in registered-name order, so the frontier a worker
   reads is stable. Targets are checked against the complete candidate registry
-  when the result is registered, not here: `bind-handoffs` is pure and has no
+  when the result is registered, not here: `bind-defers` is pure and has no
   registry to consult."
   [definition bindings]
   (util/require-map! definition [:definition])
-  (require-valid! ::handoff-bindings bindings "Invalid workflow hand-off bindings")
-  (let [declared (into #{} (map defs/handoff-name) (defs/handoff-steps definition))]
+  (require-valid! ::defer-bindings bindings "Invalid workflow defer bindings")
+  (let [declared (into #{} (map defs/defer-name) (defs/defer-steps definition))]
     (doseq [[name _] (sort-by key bindings)]
       (when-not (contains? declared name)
-        (fail! "Workflow handoff binding names no declared hand-off"
-               {:reason :workflow/handoff-unknown
-                :handoff name
+        (fail! "Workflow defer binding names no declared defer"
+               {:reason :workflow/defer-unknown
+                :defer name
                 :declared (vec (sort declared))})))
     (-> definition
-        (update :steps (fn [steps] (mapv #(bind-handoff-step % bindings) steps)))
+        (update :steps (fn [steps] (mapv #(bind-defer-step % bindings) steps)))
         (as-> bound (require-valid! ::definition bound "Invalid workflow definition"))
-        defs/validate-defer-topology!)))
+        defs/validate-defer-declarations!)))
 
 (defn workflow
   "Return a Clojure-native workflow definition.
@@ -278,8 +264,9 @@
   definition declares about itself: `:doc`, `:entrypoints`, `:param-spec`, and
   `:defaults` (see `defworkflow`). Options and the complete assembled definition
   are both validated here, so a malformed nested step, choice, or call fails at
-  the builder rather than at the pour — as does a step declaring `:depends-on` a
-  `defer` exit, which no shape spec can express."
+  the builder rather than at the pour — as does a defer carrying a `:condition`,
+  a `:loop`, or an authored `workflow/defer-path`, none of which a shape spec can
+  express."
   [name & body]
   (let [[opts steps] (if (and (map? (first body))
                               (not (contains? (first body) :id)))
@@ -289,7 +276,7 @@
     (require-valid! ::workflow-options opts "Invalid workflow options")
     (-> (require-valid! ::definition (merge opts {:name name :steps (vec steps)})
                         "Invalid workflow definition")
-        defs/validate-defer-topology!)))
+        defs/validate-defer-declarations!)))
 
 (defn compile
   "Return a batch payload for a workflow molecule or wisp.
@@ -315,7 +302,7 @@
   ([workflow params]
    (compile workflow params {}))
   ([workflow params opts]
-   (cmp/with-dispatch-path
+   (cmp/with-defer-path
      workflow opts
      (fn []
        (let [form (or (:form opts) (:form workflow) :molecule)
@@ -497,8 +484,9 @@
 
 (defn done?
   "Return true when run-id has no active workflow root, or every workflow work
-  strand under its active root — step, checkpoint, defer, dispatch, and
-  procedure — is closed. An unfilled dispatch therefore keeps a run unfinished.
+  strand under its active root — step, checkpoint, defer, and procedure — is
+  closed. An unfilled defer therefore keeps a run unfinished, and so does a
+  parallel sibling still running beside a filled one.
 
   Fails loudly for a run-id that has never had a root strand."
   [run-id]
@@ -510,11 +498,14 @@
   `{:root {:id :title :state :created_at} :events [{:type :id :title
   :outcome :by :input :at} …]}` maps.
 
-  `:type` is `:step-closed`, `:choice`, `:continuation`, or `:gate-closed`;
-  events are ordered by their strand's `updated_at`. An event projects the
-  engine's own outcome attributes only; a caller's `complete!` `:attributes` stay
-  readable on the closed strand itself. Writes nothing and fails loudly
-  (TEN-003) for a run that never had a root strand."
+  `:type` is `:step-closed`, `:choice`, or `:gate-closed`; events are ordered by
+  their strand's `updated_at`. A defer contributes none: a filled one is
+  procedure bookkeeping and an unfilled one force-closed by a checkpoint cutover
+  was never acted on, so which routine a worker selected is read from the strand
+  rather than from history. An event projects the engine's own outcome attributes
+  only; a caller's `complete!` `:attributes` stay readable on the closed strand
+  itself. Writes nothing and fails loudly (TEN-003) for a run that never had a
+  root strand."
   [run-id]
   (let [rt (current/runtime)
         roots (query/run-molecule-roots rt run-id)]
@@ -558,12 +549,8 @@
              (fail! "Cannot complete a checkpoint; use choose!"
                     {:run-id run-id :step (query/strand->view step)}))
            (when (= "defer" (query/attr step :workflow/role))
-             (fail! "Cannot complete a defer exit; use continue!"
+             (fail! "Cannot complete a defer; use defer!"
                     {:reason :workflow/step-is-defer
-                     :run-id run-id :step (query/strand->view step)}))
-           (when (= "dispatch" (query/attr step :workflow/role))
-             (fail! "Cannot complete a dispatch; use dispatch!"
-                    {:reason :workflow/step-not-completable
                      :run-id run-id :step (query/strand->view step)}))
            (let [gate (query/attr step :workflow/gate)
                  by (:by opts)]
@@ -626,78 +613,54 @@
            (routing/close-run-if-done! rt run-id)
            (query/run-result rt run-id)))))))
 
-(defn continue!
-  "Fill run-id's ready defer exit by pouring registered `workflow` under the same
-  run id, returning the `{:ready [step-view ...] :done boolean}` result shape.
+(defn defer!
+  "Fill run-id's ready defer with an allowed registered `workflow`, returning the
+  `{:ready [step-view ...] :done boolean}` result shape.
 
-  This is a root transfer, not a step transition. `continue!` closes the current
-  root outright and pours the selected workflow as the run's new root; it never
-  calls `advance!`, never resumes a caller, and never merges the old root's
-  context. Fixed-target returning composition stays `call`, runtime-selected
-  returning composition uses `dispatch!`, and authored routing stays a
-  checkpoint's `:next`.
+  This is returning composition, not a root transfer. The target pours beneath
+  the *current* root in the same batch that rewrites the defer into an ordinary
+  procedure join, so the declaring workflow resumes when that join closes and
+  parallel siblings are never abandoned. A final defer is no different: its join
+  closes normally, and the run finishes only once every workflow work strand
+  under the root is closed.
 
   `workflow` must be one of the registered names the defer's materialized
-  allowlist permits, and must advertise the `:continue` entrypoint. It resolves
-  live: a name repointed since the defer poured continues into the replacement,
-  while a removed name, one that lost `:continue`, or params its `:param-spec`
-  rejects all fail before anything closes, leaving the defer ready to retry.
+  allowlist permits, and must advertise the `:call` entrypoint. It resolves live:
+  a name repointed since the defer poured runs the replacement, while a removed
+  name, one that lost `:call`, params its `:param-spec` rejects, or a target
+  already in this defer's `workflow/defer-path` ancestry
+  (`:workflow/defer-cyclic`) all fail before anything mutates, leaving the defer
+  ready to retry.
 
   `params` is the target's own — its `:defaults` under exactly what is supplied
-  here, validated whole against its `:param-spec`. Passing no params and passing
-  `{}` are the same request. `opts` may carry `:step` to disambiguate a run with
-  more than one ready defer, and `:by` recording who chose.
+  here, validated whole against its `:param-spec`; caller context is never
+  merged, so passing no params and passing `{}` are the same request. `opts` may
+  carry `:step` to disambiguate a run with more than one ready defer, and `:by`
+  recorded as `workflow/deferred-by`.
 
-  The close and the pour ride one `batch/apply!`, so a failing apply commits
-  nothing and the run stays resumable. Resolution through mutation holds the
-  run's guard, so a concurrent `choose!` or `continue!` re-resolves against the
-  frontier this one left rather than writing over it."
+  The rewrite and the pour ride one `batch/apply!`, so a failing apply commits
+  nothing and the defer stays ready. Resolution through mutation holds the run's
+  guard, so a concurrent `choose!` or `defer!` re-resolves against the frontier
+  this one left rather than writing over it."
   ([run-id workflow]
-   (continue! run-id workflow {} {}))
+   (defer! run-id workflow {} {}))
   ([run-id workflow params]
-   (continue! run-id workflow params {}))
+   (defer! run-id workflow params {}))
   ([run-id workflow params opts]
    (let [rt (current/runtime)]
      (util/require-map! opts [:opts])
-     (require-valid! ::continue-request
+     (require-valid! ::defer-request
                      (merge {:run-id run-id :workflow workflow :params params} opts)
-                     "Invalid workflow continue request")
+                     "Invalid workflow defer request")
      (guard/with-run!
        rt run-id
        (fn []
          (let [step (routing/resolve-defer! rt run-id opts)
-               target (routing/continue-target rt step workflow)
-               plan (routing/continue-plan rt run-id target params)
-               outcome (routing/continuation-outcome target (:params plan) opts)]
-           (batch/apply! rt (routing/routed-batch rt plan step outcome))
-          ;; a target that poured no active work must not leave its fresh root
-          ;; lingering active on a logically finished run
-           (routing/close-run-if-done! rt run-id)
-           (query/run-result rt run-id)))))))
-
-(defn dispatch!
-  "Fill run-id's ready dispatch with an allowed registered `workflow`.
-
-  The target is resolved live and poured beneath the current root in the same
-  batch that turns the dispatch into a procedure join. Target params are its
-  own defaults plus only `params`; caller context is never merged."
-  ([run-id workflow]
-   (dispatch! run-id workflow {} {}))
-  ([run-id workflow params]
-   (dispatch! run-id workflow params {}))
-  ([run-id workflow params opts]
-   (let [rt (current/runtime)]
-     (util/require-map! opts [:opts])
-     (require-valid! ::dispatch-request
-                     (merge {:run-id run-id :workflow workflow :params params} opts)
-                     "Invalid workflow dispatch request")
-     (guard/with-run!
-       rt run-id
-       (fn []
-         (let [step (routing/resolve-dispatch! rt run-id opts)
-               target (routing/dispatch-target rt step workflow)
-               fill (routing/dispatch-plan rt run-id step target params opts)]
+               target (routing/defer-target rt step workflow)
+               fill (routing/defer-plan rt run-id step target params opts)]
            (batch/apply! rt fill)
+          ;; an empty target closes its join in the fill batch, so a run whose
+          ;; last work that was must not linger active on a finished molecule
            (routing/close-run-if-done! rt run-id)
            (query/run-result rt run-id)))))))
 
@@ -712,11 +675,9 @@
   absent (fail loudly otherwise); `advance!` dispatches to `complete!` with the
   pass-through `:attributes`/`:step`/`:by` opts.
 
-  Neither hand-off role is advanceable, and each says so loudly. Selecting a
-  defer's continuation is a root transfer with its own target and params, and
-  filling a dispatch pours a target with its own params; neither fits
-  `advance!`'s one-ready-step vocabulary, so it directs the caller to
-  `continue!` or `dispatch!` respectively."
+  A defer is not advanceable and says so loudly: filling one selects a target
+  and supplies that target's own params, which does not fit `advance!`'s
+  one-ready-step vocabulary, so it directs the caller to `defer!`."
   ([run-id]
    (advance! run-id {}))
   ([run-id opts]
@@ -730,13 +691,8 @@
                         (fail! "No ready workflow step" {:run-id run-id}))]
            (case (query/attr step :workflow/role)
              "defer"
-             (fail! "Cannot advance a defer exit; use continue!"
+             (fail! "Cannot advance a defer; use defer!"
                     {:reason :workflow/step-is-defer
-                     :run-id run-id :step (query/strand->view step)})
-
-             "dispatch"
-             (fail! "Cannot advance a dispatch; use dispatch!"
-                    {:reason :workflow/step-not-completable
                      :run-id run-id :step (query/strand->view step)})
 
              "checkpoint"
@@ -787,10 +743,10 @@
          (fail! "Choice detail not found" {:run-id run-id :choice choice})))))
 
 (defn await!
-  "Block until workflow run-id is done, at a checkpoint, at a defer exit
-  awaiting its continuation, at a ready dispatch, at a ready `:self` step, at a
-  gate whose waiter has no registered executor, at an executor-owned gate whose
-  stall predicate reports detail, or timed out.
+  "Block until workflow run-id is done, at a checkpoint, at a defer awaiting a
+  worker's target selection, at a ready `:self` step, at a gate whose waiter has
+  no registered executor, at an executor-owned gate whose stall predicate reports
+  detail, or timed out.
 
   opts: `:timeout-secs` (default 1800) and `:poll-ms` (default 250, matching
   the agent-run await surface). `:timeout-secs` must be a non-negative integer;
@@ -865,7 +821,7 @@
   (require-valid! ::workflow-options options "Invalid workflow options")
   (-> (require-valid! ::definition (merge definition options {:doc doc})
                       "Invalid workflow definition")
-      defs/validate-defer-topology!))
+      defs/validate-defer-declarations!))
 
 (defmacro defworkflow
   "Define a static workflow definition Var and collect its registry entry.
@@ -996,12 +952,12 @@
   including a call-only component the default catalogue omits. The view carries
   the catalogue fields, the param contract (`:param-spec` identity with its live
   `s/form` graph plus `:defaults`), and the declared summary: entry items, loops,
-  gates, checkpoint choice keys, calls, defer exits and dispatches with their
-  bound targets, and the registered workflows the definition routes to.
+  gates, checkpoint choice keys, calls, defers with their bound targets, and the
+  registered workflows the definition routes to.
 
   It stays topology-lazy. Nothing is expanded, rendered, or evaluated: an
-  expansion needs params that do not exist yet, and a deferred exit cannot be
-  described before a worker fills it.
+  expansion needs params that do not exist yet, and a defer cannot be described
+  before a worker fills it.
 
   `::show-request` owns the request shape and `::definition-view` the result,
   both validated at the boundary."
@@ -1010,7 +966,7 @@
 
 ;; --- the generic worker run surface ------------------------------------------
 ;;
-;; Seven request-map verbs over the lifecycle above, sharing one result shape.
+;; Six request-map verbs over the lifecycle above, sharing one result shape.
 ;; They add no engine semantics: each validates its named request spec, narrows
 ;; the ready frontier to the role it acts on, and delegates to the trusted-
 ;; Clojure operation with an explicit step selector (PROP-Wcd-001.S2/S4). What
@@ -1021,7 +977,7 @@
   "Apply `mutate` to the ready item `role`'s verb resolves for `request`, and
   return the shared run result stamped `operation`.
 
-  The shape all four worker mutations share. Resolution happens twice on
+  The shape all three worker mutations share. Resolution happens twice on
   purpose: the pre-guard pass answers an invalid request without queueing behind
   another worker, and the in-guard pass is what the request actually acts on. If
   another worker wrote between the two, `require-fresh-frontier!` refuses before
@@ -1077,9 +1033,9 @@
   "Close the ready ordinary step of `request`'s run and return the run result.
 
   `request` is `{:run-id … :step … :by … :attributes {…}}`, all but the run id
-  optional. Without `:step` the sole ready ordinary step is inferred; a checkpoint
-  defer exit, or dispatch ready alongside it does not make that ambiguous,
-  because none is a step this verb could act on.
+  optional. Without `:step` the sole ready ordinary step is inferred; a
+  checkpoint or defer ready alongside it does not make that ambiguous, because
+  neither is a step this verb could act on.
 
   `:attributes` merges onto the closed step in the closing mutation, so a worker
   records what it found in its own vocabulary without a second write an observer
@@ -1092,13 +1048,7 @@
   [request]
   (let [rt (current/runtime)
         {:keys [run-id by attributes]} (require-valid! ::complete-request request
-                                                       "Invalid workflow complete request")
-        ready (runs/frontier rt run-id)
-        dispatches (filterv #(= "dispatch" (:role %)) ready)
-        ordinary (filterv #(not (contains? #{"checkpoint" "defer" "dispatch"} (:role %))) ready)]
-    (when (or (some #(= (:step request) (:id %)) dispatches)
-              (and (nil? (:step request)) (empty? ordinary) (= 1 (count dispatches))))
-      (complete! run-id {:step (or (:step request) (:id (first dispatches)))}))
+                                                       "Invalid workflow complete request")]
     (mutate-run! rt "workflow complete" :step request
                  (fn [target]
                    (runs/require-gate-actor! run-id target by)
@@ -1125,60 +1075,33 @@
                             (cond-> {:step (:id target)}
                               by (assoc :by by)))))))
 
-(defn run-continue!
-  "Fill the ready defer exit of `request`'s run and return the run result.
-
-  `request` is `{:run-id … :workflow … :params {…} :step … :by …}`, params, step,
-  and actor optional. Without `:step` the sole ready defer exit is inferred. This
-  is the root transfer `continue!` documents, not a step transition: the target
-  must be one of the names the defer's materialized allowlist permits and must
-  declare `:continue`, and its params are its own. `::continue-request` owns the
-  request shape."
-  [request]
-  (let [rt (current/runtime)
-        {:keys [run-id workflow params by]} (require-valid! ::continue-request request
-                                                            "Invalid workflow continue request")
-        ready (runs/frontier rt run-id)
-        dispatches (filterv #(= "dispatch" (:role %)) ready)
-        defers (filterv #(= "defer" (:role %)) ready)]
-    (when (or (some #(= (:step request) (:id %)) dispatches)
-              (and (nil? (:step request)) (empty? defers) (= 1 (count dispatches))))
-      (fail! "Current workflow step is a dispatch; use workflow dispatch"
-             {:reason :workflow/step-not-dispatch
-              :run-id run-id
-              :step (or (:step request) (:id (first dispatches)))
-              :guidance "Use workflow dispatch to fill a returning hand-off."}))
-    (mutate-run! rt "workflow continue" :defer request
-                 (fn [target]
-                   (continue! run-id workflow (or params {})
-                              (cond-> {:step (:id target)}
-                                by (assoc :by by)))))))
-
-(defn run-dispatch!
-  "Fill the ready dispatch of `request`'s run and return the run result.
+(defn run-defer!
+  "Fill the ready defer of `request`'s run and return the run result.
 
   `request` is `{:run-id … :workflow … :params {…} :step … :by …}`, with params,
-  step, and actor optional. Without `:step`, the sole ready dispatch is inferred.
-  A selected target must be in the dispatch's materialized allowlist and declare
-  the `:call` entrypoint; its params are its own. `::dispatch-request` owns the
-  request shape."
+  step, and actor optional. Without `:step`, the sole ready defer is inferred. A
+  selected target must be in the defer's materialized allowlist and declare the
+  `:call` entrypoint; its params are its own. The target pours beneath the
+  current root and the run resumes when it finishes, so the returned frontier is
+  the expansion's — or, for a target that materializes nothing, whatever the
+  declaring workflow does next. `::defer-request` owns the request shape."
   [request]
   (let [rt (current/runtime)
-        {:keys [run-id workflow params by]} (require-valid! ::dispatch-request request
-                                                            "Invalid workflow dispatch request")]
-    (mutate-run! rt "workflow dispatch" :dispatch request
+        {:keys [run-id workflow params by]} (require-valid! ::defer-request request
+                                                            "Invalid workflow defer request")]
+    (mutate-run! rt "workflow defer" :defer request
                  (fn [target]
-                   (dispatch! run-id workflow (or params {})
-                              (cond-> {:step (:id target)}
-                                by (assoc :by by)))))))
+                   (defer! run-id workflow (or params {})
+                           (cond-> {:step (:id target)}
+                             by (assoc :by by)))))))
 
 (defn run-await
   "Block until `request`'s run is done or needs a worker, and return the result.
 
   `request` is `{:run-id … :timeout-secs …}`, the timeout optional. The polling
   and the attention vocabulary are `await!`'s unchanged: the reason says which
-  kind of attention the run needs — `:done`, `:checkpoint`, `:defer`,
-  `:dispatch`, `:step`, `:gate`, `:stalled`, or `:timeout` — and `:waiting` is
+  kind of attention the run needs — `:done`, `:checkpoint`, `:defer`, `:step`,
+  `:gate`, `:stalled`, or `:timeout` — and `:waiting` is
   never returned, because a run whose whole frontier is executor-owned and
   healthy is exactly what this call waits through. `::await-request` owns the
   request shape and `::attention-result` the answer."
@@ -1208,13 +1131,10 @@
            "workflow/context"
            "workflow/gate" "workflow/checkpoint"
            "workflow/checkpoint-kind" "workflow/choices"
-           "workflow/defer" "workflow/defer-workflows"
-           "workflow/dispatch" "workflow/dispatch-workflows"
-           "workflow/dispatched-workflow" "workflow/dispatched-definition"
-           "workflow/dispatched-fingerprint" "workflow/dispatched-params"
-           "workflow/dispatched-by" "workflow/dispatch-path"
-           "workflow/continued-workflow" "workflow/continued-definition"
-           "workflow/continued-fingerprint" "workflow/continued-params"
+           "workflow/defer" "workflow/defer-workflows" "workflow/defer-path"
+           "workflow/deferred-workflow" "workflow/deferred-definition"
+           "workflow/deferred-fingerprint" "workflow/deferred-params"
+           "workflow/deferred-by"
            "workflow/choice-details" "workflow/procedure" "workflow/outcome"
            "workflow/outcome-by" "workflow/outcome-input"
            "workflow/summary" "workflow/stage-params" "workflow/squashed-root"
@@ -1285,10 +1205,6 @@
   [value]
   (util/defer-step? value))
 
-(defn- dispatch-step?
-  [value]
-  (util/dispatch-step? value))
-
 (s/def ::form #{:molecule :wisp})
 (s/def ::id-ref #(or (keyword? %) (symbol? %) (non-blank-string? %)))
 (s/def ::id ::id-ref)
@@ -1332,19 +1248,14 @@
 (s/def ::step (s/keys :req-un [::id ::title]
                       :opt-un [::description ::attributes ::state ::depends-on
                                ::condition ::loop]))
-;; A defer carries no :condition or :loop: an exit the params could delete or
-;; multiply is not an exit. It is discriminated by the role its builder stamps,
-;; so this branch owns the shape rather than sharing ::step's.
+;; A defer carries no :condition or :loop: a selection point the params could
+;; delete or multiply is not a selection point. It is discriminated by the role
+;; its builder stamps, so this branch owns the shape rather than sharing ::step's.
 (s/def ::defer-declaration
   (s/and defer-step?
          (s/keys :req-un [::id ::title]
                  :opt-un [::description ::attributes ::depends-on])))
-(s/def ::dispatch-declaration
-  (s/and dispatch-step?
-         (s/keys :req-un [::id ::title]
-                 :opt-un [::description ::attributes ::depends-on])))
-(s/def ::workflow-item (s/or :defer ::defer-declaration :dispatch ::dispatch-declaration
-                             :step ::step :call ::call))
+(s/def ::workflow-item (s/or :defer ::defer-declaration :step ::step :call ::call))
 (s/def ::steps (s/coll-of ::workflow-item :kind vector?))
 (s/def ::workflow (s/keys :req-un [::name ::steps]
                           :opt-un [::attributes ::state ::form]))
@@ -1401,15 +1312,15 @@
 (s/def ::registry-name keyword?)
 (s/def ::definition-symbol qualified-symbol?)
 
-;; --- deferred continuation shapes -----------------------------------------
+;; --- runtime-selected composition shapes ----------------------------------
 
-;; Each declared exit binds to a non-empty set of registered names; an empty set
+;; Each declared defer binds to a non-empty set of registered names; an empty set
 ;; is a defer no worker can fill, which is a defect rather than a template.
-(s/def ::handoff-bindings
+(s/def ::defer-bindings
   (s/map-of ::registry-name (s/coll-of ::registry-name :kind set? :min-count 1)
             :min-count 1))
 
-;; The `continue!` wire boundary. `:workflow` and `:params` are the target's own
+;; The `defer!` wire boundary. `:workflow` and `:params` are the target's own
 ;; — never the current run's — so they live in a request-local aux namespace
 ;; rather than reusing the definition-shaped ::workflow and ::params specs.
 ;; `:params` is optional because omitting it and passing `{}` are the same
@@ -1423,14 +1334,7 @@
 ;; are strand attribute keys as the wire and the query language spell them, not
 ;; the keywordized params a definition's `:param-spec` judges.
 (s/def :skein.spools.workflow.request/attributes (s/map-of non-blank-string? any?))
-(s/def ::continue-request
-  (s/keys :req-un [:skein.spools.workflow.request/run-id
-                   :skein.spools.workflow.request/workflow]
-          :opt-un [:skein.spools.workflow.request/params
-                   :skein.spools.workflow.request/step
-                   :skein.spools.workflow.request/by]))
-
-(s/def ::dispatch-request
+(s/def ::defer-request
   (s/keys :req-un [:skein.spools.workflow.request/run-id
                    :skein.spools.workflow.request/workflow]
           :opt-un [:skein.spools.workflow.request/params
@@ -1496,7 +1400,6 @@
 (s/def :skein.spools.workflow.view.call/kind
   #{"registered" "symbol" "var" "inline"})
 (s/def :skein.spools.workflow.view.declared/defer non-blank-string?)
-(s/def :skein.spools.workflow.view.declared/dispatch non-blank-string?)
 (s/def :skein.spools.workflow.view.declared/entrypoint #{"call"})
 (s/def :skein.spools.workflow.view.declared/names
   (s/coll-of non-blank-string? :kind vector?))
@@ -1529,19 +1432,13 @@
                    :skein.spools.workflow.view.call/kind]))
 (s/def :skein.spools.workflow.view.declared/calls
   (s/coll-of :skein.spools.workflow.view.declared/call :kind vector?))
-(s/def :skein.spools.workflow.view.declared/defer-exit
+(s/def :skein.spools.workflow.view.declared/defer-point
   (s/keys :req-un [:skein.spools.workflow.view/step
                    :skein.spools.workflow.view.declared/defer
-                   :skein.spools.workflow.view.declared/workflows]))
-(s/def :skein.spools.workflow.view.declared/defers
-  (s/coll-of :skein.spools.workflow.view.declared/defer-exit :kind vector?))
-(s/def :skein.spools.workflow.view.declared/dispatch-point
-  (s/keys :req-un [:skein.spools.workflow.view/step
-                   :skein.spools.workflow.view.declared/dispatch
                    :skein.spools.workflow.view.declared/workflows
                    :skein.spools.workflow.view.declared/entrypoint]))
-(s/def :skein.spools.workflow.view.declared/dispatches
-  (s/coll-of :skein.spools.workflow.view.declared/dispatch-point :kind vector?))
+(s/def :skein.spools.workflow.view.declared/defers
+  (s/coll-of :skein.spools.workflow.view.declared/defer-point :kind vector?))
 (s/def :skein.spools.workflow.view/declared
   (s/keys :req-un [:skein.spools.workflow.view.declared/kind]
           :opt-un [:skein.spools.workflow.view.declared/entry
@@ -1550,7 +1447,6 @@
                    :skein.spools.workflow.view.declared/checkpoints
                    :skein.spools.workflow.view.declared/calls
                    :skein.spools.workflow.view.declared/defers
-                   :skein.spools.workflow.view.declared/dispatches
                    :skein.spools.workflow.view.declared/routes]))
 
 ;; A definition view is the catalogue item plus the param
@@ -1605,13 +1501,12 @@
 ;; bookkeeping and never reach it, so a fourth value in a run result means a
 ;; definition wrote its own `workflow/role`, and the result says so rather than
 ;; presenting it to a worker as an ordinary step.
-(s/def :skein.spools.workflow.view/role #{"step" "checkpoint" "defer" "dispatch"})
+(s/def :skein.spools.workflow.view/role #{"step" "checkpoint" "defer"})
 (s/def :skein.spools.workflow.view/run-id non-blank-string?)
 (s/def :skein.spools.workflow.view/operation non-blank-string?)
 (s/def :skein.spools.workflow.view/done boolean?)
 (s/def :skein.spools.workflow.view/gate non-blank-string?)
 (s/def :skein.spools.workflow.view/defer non-blank-string?)
-(s/def :skein.spools.workflow.view/dispatch non-blank-string?)
 (s/def :skein.spools.workflow.view/workflows (s/coll-of non-blank-string?))
 (s/def :skein.spools.workflow.view/choices (s/coll-of non-blank-string?))
 
@@ -1635,7 +1530,6 @@
   (cond
     (= "checkpoint" (:role item)) :checkpoint
     (= "defer" (:role item)) :defer
-    (= "dispatch" (:role item)) :dispatch
     (:gate item) :gate
     :else :step))
 
@@ -1648,10 +1542,6 @@
 
 (defmethod ready-item-branch :defer [_]
   (s/merge ::ready-fields (s/keys :req-un [:skein.spools.workflow.view/defer
-                                           :skein.spools.workflow.view/workflows])))
-
-(defmethod ready-item-branch :dispatch [_]
-  (s/merge ::ready-fields (s/keys :req-un [:skein.spools.workflow.view/dispatch
                                            :skein.spools.workflow.view/workflows])))
 
 (defmethod ready-item-branch :gate [_]
@@ -1675,7 +1565,7 @@
 ;; `await` answers with the attention vocabulary instead: a run it stopped
 ;; blocking on has a reason, and the reason carries the item behind it.
 (s/def :skein.spools.workflow.view/reason
-  #{:done :checkpoint :defer :dispatch :step :gate :stalled :waiting :timeout})
+  #{:done :checkpoint :defer :step :gate :stalled :waiting :timeout})
 (s/def :skein.spools.workflow.view/detail map?)
 (s/def ::attention-result
   (s/keys :req-un [:skein.spools.workflow.view/operation
@@ -1803,64 +1693,54 @@
 (defn- explain-defer []
   {:topic :defer
    :summary (fmt/reflow "
-            |A defer is a named terminal exit whose continuation a worker picks at
-            |run time. The spool authoring it names the exit; user code binds what
-            |may be chosen; continue! closes this root and pours the choice.")
+            |A defer is a named point whose target a worker picks at run time and
+            |which returns to the workflow that declared it. The spool authoring
+            |it names the point; user code binds what may be chosen; defer! runs
+            |the choice as a procedure beneath the current root.")
    :contract (spec-entry ::defer-declaration
                          (fmt/reflow "
                          |A defer requires :id and :title and accepts :depends-on,
-                         |:description, and :attributes. It has no :condition or :loop.
-                         |bind-handoffs binds each declared name to a non-empty set of
-                         |registered workflows, validated against ::handoff-bindings.")
-                         '(bind-handoffs
+                         |:title, :description, and :attributes. It has no :condition
+                         |or :loop, and may not author workflow/defer-path.
+                         |bind-defers binds each declared name to a non-empty set of
+                         |registered workflows, validated against ::defer-bindings.")
+                         '(bind-defers
                            (workflow "Track a card"
                                      (step :prepare "Prepare the card" :self)
                                      (defer :perform-work
                                             "Choose how this work will be performed"
-                                            :depends-on [:prepare]))
+                                            :depends-on [:prepare])
+                                     (step :record "Record the result" :self
+                                           :depends-on [:perform-work]))
                            {:perform-work #{:spike :devflow}}))
    :fields {:id "Stable local ref; also the defer's declared name."
-            :depends-on "Vector of local refs this exit waits for."
+            :depends-on "Vector of local refs this defer waits for."
             :workflow/defer "The declared name, stored on the poured step."
             :workflow/defer-workflows (fmt/reflow "
                                        |The bound targets, materialized at pour in
                                        |registered-name order. This allowlist is fixed
                                        |for the run; each name still resolves live at
-                                       |continue! time.")}
-   :rules {:terminal (fmt/reflow "
-                      |No step, condition, loop, or call may :depends-on a defer, and
-                      |a workflow declaring one cannot be a call procedure — a
-                      |procedure join would continue past the exit. Fixed-target
-                      |returning composition uses call; runtime-selected returning
-                      |composition uses dispatch.")
+                                       |defer! time.")
+            :workflow/defer-path (fmt/reflow "
+                                  |Engine-owned lexical ancestry, stamped by compile
+                                  |and extended through fixed calls and nested
+                                  |selections. A target already in it is refused as
+                                  |workflow/defer-cyclic.")}
+   :rules {:composition (fmt/reflow "
+                         |A step, checkpoint, call, condition, or loop may
+                         |:depends-on a defer, and a defer may be the last step a
+                         |workflow declares — its join then closes like any other,
+                         |and the run finishes once every parallel sibling does.")
            :entrypoints (fmt/reflow "
-                         |Every bound target must be registered and declare :continue.")
+                         |Every bound target must be registered and declare :call:
+                         |filling a defer runs it as an inline procedure.")
            :binding (fmt/reflow "
                      |An unbound defer is a publishable template but cannot be
                      |registered or poured (workflow/defer-unbound).")
            :isolation (fmt/reflow "
-                       |continue! merges no parent context: the target sees its own
+                       |defer! merges no caller context: the target sees its own
                        |:defaults under exactly the params supplied, judged whole by
                        |its :param-spec.")}})
-
-(defn- explain-dispatch []
-  {:topic :dispatch
-   :summary (fmt/reflow "
-            |A dispatch is a named hand-off whose target a worker selects at run
-            |time and which returns to the workflow that declared it. Later steps
-            |may depend on it; bind its allowed targets with bind-handoffs and
-            |fill it with dispatch!.")
-   :contract (spec-entry ::dispatch-declaration
-                         (fmt/reflow "
-                         |A dispatch requires :id and :title and accepts
-                         |:depends-on, :title, :description, and :attributes. It
-                         |carries no :condition or :loop, and may not author
-                         |workflow/dispatch-path.")
-                         '(dispatch :perform-work "Choose work" :depends-on [:prepare]))
-   :fields {:id "Stable local ref; also the dispatch's declared name."
-            :depends-on "Vector of local refs this hand-off waits for."
-            :workflow/dispatch "The declared name, stored on the poured step."
-            :workflow/dispatch-workflows "Bound targets in registered-name order."}})
 
 (defn- explain-definition []
   {:topic :definition
@@ -1913,8 +1793,7 @@
               'checkpoint 'skein.spools.workflow/checkpoint
               'call 'skein.spools.workflow/call
               'defer 'skein.spools.workflow/defer
-              'dispatch 'skein.spools.workflow/dispatch
-              'bind-handoffs 'skein.spools.workflow/bind-handoffs}
+              'bind-defers 'skein.spools.workflow/bind-defers}
    :contract (spec-entry ::workflow
                          "A workflow requires a non-blank :name and vector :steps."
                          '(workflow (fn [{:keys [feature]}] (str "Ship " feature))
@@ -1932,12 +1811,12 @@
                       |:defaults under params; a registered name must declare the
                       |:start entrypoint. Absent :context defaults from JSON-safe
                       |params after keyword values are stringified.")
-             :continue! (fmt/reflow "
-                         |(continue! run-id workflow params opts) fills a ready defer
-                         |exit: it closes the current root and pours one of the
-                         |defer's allowed registered workflows under the same run
-                         |id, with that target's own params and no parent context.
-                         |It is a root transfer, not a step advance.")
+             :defer! (fmt/reflow "
+                      |(defer! run-id workflow params opts) fills a ready defer: it
+                      |pours one of the defer's allowed registered workflows beneath
+                      |the current root, with that target's own params and no caller
+                      |context, and rewrites the defer as the procedure join the
+                      |declaring workflow resumes from.")
              :ready (fmt/reflow "
                      |(ready run-id selector) filters ready views by keys such as :role, :gate,
                      |:checkpoint, or :checkpoint-kind.")
@@ -1963,7 +1842,7 @@
                             |A static definition declares a non-empty subset of
                             |#{:start :continue :call}. Reaching it by registered name
                             |requires :start to start!, :continue for a :next route,
-                            |and :call for a call or dispatch target.")}
+                            |and :call for a call or defer target.")}
    :contracts {:spec-forms (fmt/reflow "
                             |(spec-forms ::spec) returns the ordered JSON-safe form graph
                             |documenting a param or checkpoint input spec: the root first,
@@ -1978,8 +1857,7 @@
    :gate (explain-gate)
    :checkpoint (explain-checkpoint)
    :call (explain-call)
-   :defer (explain-defer)
-   :dispatch (explain-dispatch)})
+   :defer (explain-defer)})
 
 ;; --- builder option validation --------------------------------------------
 
@@ -1996,8 +1874,7 @@
 (def ^:private step-opt-keys #{:description :attributes :state :depends-on :condition :loop})
 (def ^:private checkpoint-opt-keys (into step-opt-keys #{:kind :choices}))
 (def ^:private call-opt-keys #{:title :depends-on :attributes})
-(def ^:private defer-opt-keys #{:description :attributes :depends-on})
-(def ^:private dispatch-opt-keys #{:description :attributes :depends-on :title})
+(def ^:private defer-opt-keys #{:description :attributes :depends-on :title})
 (def ^:private workflow-opt-keys
   #{:attributes :state :form :doc :entrypoints :param-spec :defaults})
 (def ^:private choice-opt-keys #{:key :label :description :next :input :revise})
@@ -2007,19 +1884,15 @@
   [id title opts]
   (merge {:id id :title title} opts))
 
-(defn- bind-handoff-step
-  "Return `step` with its hand-off binding materialized when `bindings` names it.
+(defn- bind-defer-step
+  "Return `step` with its defer binding materialized when `bindings` names it.
 
   Targets are stored in registered-name order so the allowlist a worker reads at
   the frontier is stable, whatever order the author wrote the set in."
   [step bindings]
-  (if-let [targets (and (or (util/defer-step? step) (util/dispatch-step? step))
-                        (get bindings (defs/handoff-name step)))]
-    (update step :attributes merge
-            {(if (util/defer-step? step)
-               "workflow/defer-workflows"
-               "workflow/dispatch-workflows")
-             (mapv name (sort targets))})
+  (if-let [targets (and (util/defer-step? step)
+                        (get bindings (defs/defer-name step)))]
+    (update step :attributes merge {"workflow/defer-workflows" (mapv name (sort targets))})
     step))
 
 ;; --- checkpoint choice builders -------------------------------------------
@@ -2125,8 +1998,7 @@
   "Return the current attention state for workflow run-id.
 
   `:done` when finished; `:checkpoint` when a checkpoint is ready; `:defer` when
-  a defer exit is ready and a worker must pick its continuation; `:dispatch`
-  when a dispatch is ready and a worker must select its returning target; `:step`
+  a defer is ready and a worker must select its target; `:step`
   when a ready `:self` step needs the driving agent (kills the footgun of a ready
   step burying itself under `:waiting`); `:gate` when a ready gate's waiter has
   no registered executor; `:stalled` when a registered executor's stall
@@ -2137,8 +2009,7 @@
         done (query/done-with-rt? rt run-id)
         checkpoint (first (filter #(= "checkpoint" (:role %)) ready))
         defer (first (filter #(= "defer" (:role %)) ready))
-        dispatch (first (filter #(= "dispatch" (:role %)) ready))
-        self-step (first (filter #(and (not (contains? #{"checkpoint" "defer" "dispatch"} (:role %)))
+        self-step (first (filter #(and (not (contains? #{"checkpoint" "defer"} (:role %)))
                                        (not (:gate %)))
                                  ready))
         unowned-gate (first (filter #(and (:gate %)
@@ -2154,7 +2025,6 @@
       done {:reason :done :ready ready :done true}
       checkpoint {:reason :checkpoint :ready ready :done false :detail checkpoint}
       defer {:reason :defer :ready ready :done false :detail defer}
-      dispatch {:reason :dispatch :ready ready :done false :detail dispatch}
       self-step {:reason :step :ready ready :done false :detail self-step}
       unowned-gate {:reason :gate :ready ready :done false :detail unowned-gate}
       stalled {:reason :stalled :ready ready :done false :detail stalled}

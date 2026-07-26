@@ -79,7 +79,7 @@
 (workflow/defworkflow handoff
   "Hand a finished run to whichever routine the worker picks."
   {:entrypoints #{:start}}
-  (workflow/bind-handoffs
+  (workflow/bind-defers
    (workflow/workflow
     "Hand off"
     (workflow/step :summarize "Summarize what happened" :self)
@@ -89,22 +89,22 @@
 (workflow/defworkflow dispatched
   "Select a returning procedure, then finish the caller."
   {:entrypoints #{:start}}
-  (workflow/bind-handoffs
+  (workflow/bind-defers
    (workflow/workflow
     "Dispatched"
     (workflow/step :prepare "Prepare the work" :self)
-    (workflow/dispatch :perform "Choose the procedure" :depends-on [:prepare])
+    (workflow/defer :perform "Choose the procedure" :depends-on [:prepare])
     (workflow/step :finish "Finish the work" :self :depends-on [:perform]))
    {:perform #{:solo}}))
 
 (workflow/defworkflow two-dispatches
   "Two independent returning hand-offs."
   {:entrypoints #{:start}}
-  (workflow/bind-handoffs
+  (workflow/bind-defers
    (workflow/workflow
     "Two dispatches"
-    (workflow/dispatch :left "Choose left")
-    (workflow/dispatch :right "Choose right"))
+    (workflow/defer :left "Choose left")
+    (workflow/defer :right "Choose right"))
    {:left #{:solo} :right #{:solo}}))
 
 (defn- activate-cli!
@@ -819,7 +819,7 @@
   (str "(workflow/defworkflow tracked-card\n"
        "  \"Track a card and select its delivery routine.\"\n"
        "  {:entrypoints #{:start}}\n"
-       "  (workflow/bind-handoffs template/general {:perform-work #{:devflow}}))\n"))
+       "  (workflow/bind-defers template/general {:perform-work #{:devflow}}))\n"))
 
 (deftest a-workspace-binds-one-spools-defer-exit-to-anothers-registered-routine
   (with-runtime

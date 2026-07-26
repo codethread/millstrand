@@ -57,7 +57,7 @@
 (workflow/defworkflow handoff
   "Hand a finished run to whichever routine the worker picks."
   {:entrypoints #{:start}}
-  (workflow/bind-handoffs
+  (workflow/bind-defers
    (workflow/workflow
     "Hand off"
     (workflow/step :summarize "Summarize what happened" :self)
@@ -67,10 +67,10 @@
 (workflow/defworkflow dispatched
   "Select a returning workflow at run time."
   {:entrypoints #{:start}}
-  (workflow/bind-handoffs
+  (workflow/bind-defers
    (workflow/workflow
     "Dispatched"
-    (workflow/dispatch :perform-work "Choose work"))
+    (workflow/defer :perform-work "Choose work"))
    {:perform-work #{:review}}))
 
 (defn legacy-spike

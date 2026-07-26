@@ -24,7 +24,7 @@
   [value]
   (and (string? value) (not (str/blank? value))))
 
-(defn- dispatch-path-entry?
+(defn- defer-path-entry?
   [entry]
   (let [string-keys? (= #{"fingerprint" "definition"} (set (keys entry)))
         keyword-keys? (= #{:fingerprint :definition} (set (keys entry)))
@@ -34,8 +34,8 @@
          (non-blank-string? fingerprint)
          (or (nil? definition) (non-blank-string? definition)))))
 
-(s/def ::dispatch-path-entry (s/and map? dispatch-path-entry?))
-(s/def ::dispatch-path (s/coll-of ::dispatch-path-entry :kind vector?))
+(s/def ::defer-path-entry (s/and map? defer-path-entry?))
+(s/def ::defer-path (s/coll-of ::defer-path-entry :kind vector?))
 
 (defn registered?
   "True when `spec-name` currently resolves to a registered spec."

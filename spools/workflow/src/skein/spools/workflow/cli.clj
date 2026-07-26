@@ -135,18 +135,15 @@
       "choose" (workflow/run-choose!
                 (-> (assoc (run-request args) :choice choice)
                     (with-json-object args :input :input)))
-      "continue" (workflow/run-continue!
-                  (-> (assoc (run-request args) :workflow (keyword target))
-                      (with-json-object args :params :params)))
-      "dispatch" (workflow/run-dispatch!
-                  (-> (assoc (run-request args) :workflow (keyword target))
-                      (with-json-object args :params :params)))
+      "defer" (workflow/run-defer!
+               (-> (assoc (run-request args) :workflow (keyword target))
+                   (with-json-object args :params :params)))
       "await" (workflow/run-await
                (carry {:run-id (:run-id args)} args :timeout-secs :timeout-secs))
       (throw (ex-info "Unsupported workflow subcommand"
                       {:subcommand subcommand
                        :allowed ["list" "show" "start" "ready" "complete"
-                                 "choose" "continue" "dispatch" "await"]})))))
+                                 "choose" "defer" "await"]})))))
 
 (def ^:private workflow-doc
   (fmt/reflow
@@ -183,7 +180,7 @@
                  |run.")
                (fmt/reflow
                 "|Driving a run you own: start it, read what is ready, and
-                 |complete, choose, or continue your way through it.")]}
+                 |complete, choose, or defer your way through it.")]}
    :subcommands
    {"list" {:doc (fmt/reflow
                   "|List registered workflow definitions: name, doc,
@@ -304,54 +301,33 @@
                         "|A routed choice pours its continuation in the same
                          |mutation, so the frontier returned is already the
                          |continuation's.")]}}
-    "continue" {:doc "Fill the ready defer exit of a run with a registered workflow."
-                :hook-class :mutating
-                :deadline-class :standard
-                :positionals [run-id-positional]
-                :flags {:workflow
-                        {:type :string
-                         :required? true
-                         :doc (fmt/reflow
-                               "|Registered workflow to continue into; the defer's
-                                |allowlist must permit it and it must declare the
-                                |continue entrypoint.")}
-                        :params
-                        {:type :string
-                         :parse :json
-                         :doc "JSON object of the target's own params."}
-                        :step step-flag
-                        :by by-flag}
-                :annotations
-                {:notes [(fmt/reflow
-                          "|A root transfer, not a step transition: the current
-                           |root closes and the target pours under the same run
-                           |id, carrying nothing over.")]}}
-    "dispatch" {:doc "Fill the ready dispatch of a run with a registered workflow."
-                :hook-class :mutating
-                :deadline-class :standard
-                :positionals [run-id-positional]
-                :flags {:workflow
-                        {:type :string
-                         :required? true
-                         :doc (fmt/reflow
-                               "|Registered workflow to invoke inside the dispatch; the
-                                |allowlist must permit it and it must declare the call
-                                |entrypoint.")}
-                        :params
-                        {:type :string
-                         :parse :json
-                         :doc "JSON object of the target's own params."}
-                        :step step-flag
-                        :by by-flag}
-                :annotations
-                {:notes [(fmt/reflow
-                          "|A returning hand-off: the selected workflow pours beneath
-                           |the current root, and the run resumes after it finishes.")]
-                 :failure-modes ["workflow/ready-dispatch-absent"
-                                 "workflow/ready-dispatch-ambiguous"
-                                 "workflow/ready-dispatch-incompatible"
-                                 "workflow/dispatch-target-not-allowed"
-                                 "workflow/step-not-dispatch"]}}
+    "defer" {:doc "Fill the ready defer of a run with a registered workflow."
+             :hook-class :mutating
+             :deadline-class :standard
+             :positionals [run-id-positional]
+             :flags {:workflow
+                     {:type :string
+                      :required? true
+                      :doc (fmt/reflow
+                            "|Registered workflow to run at the defer; the
+                             |allowlist must permit it and it must declare the call
+                             |entrypoint.")}
+                     :params
+                     {:type :string
+                      :parse :json
+                      :doc "JSON object of the target's own params."}
+                     :step step-flag
+                     :by by-flag}
+             :annotations
+             {:notes [(fmt/reflow
+                       "|Returning composition: the selected workflow pours beneath
+                        |the current root, and the run resumes after it finishes.")]
+              :failure-modes ["workflow/ready-defer-absent"
+                              "workflow/ready-defer-ambiguous"
+                              "workflow/ready-defer-incompatible"
+                              "workflow/defer-target-not-allowed"
+                              "workflow/defer-cyclic"
+                              "workflow/step-not-defer"]}}
     "await" {:doc "Block until a run is done or needs a worker."
              :hook-class :read
              :deadline-class :unbounded
@@ -417,8 +393,7 @@
     "ready" run-result-return
     "complete" run-result-return
     "choose" run-result-return
-    "continue" run-result-return
-    "dispatch" run-result-return
+    "defer" run-result-return
     "await" {:type :map
              :required {:operation :string
                         :run-id :string
@@ -437,7 +412,7 @@
             |and show answer which registered routines exist and what one of them
             |expects, both read from the weaver's live registry rather than a
             |catalogue baked in when Skein was built. start, ready, complete,
-            |choose, continue, dispatch, and await drive a run: they share one
+            |choose, defer, and await drive a run: they share one
             |result shape — the run, its current root, its complete ready
             |frontier, and whether it is done — so every call tells you what
             |you may do next without a second read.")
@@ -445,8 +420,8 @@
            "|Run workflow list before choosing a routine and workflow show
             |<name> before supplying params; the param contract it prints is the
             |one the engine will judge your invocation against. Then start the
-            |run and work its frontier: complete a step, choose a checkpoint,
-            |continue a defer exit, or dispatch a returning hand-off. Each verb
+            |run and work its frontier: complete a step, choose a checkpoint, or
+            |defer to a registered routine. Each verb
             |infers the sole ready item of its own role, so pass --step only
             |when it says the frontier is ambiguous — and always to close a
             |gate, which also needs --by. If a mutation fails as
@@ -454,16 +429,18 @@
             |workflow ready and act on what is there now.")})
 
 (def ^:private workflow-glossary
-  [{:name "workflow/ready-dispatch-absent"
-    :definition "No ready dispatch exists for workflow dispatch to fill."}
-   {:name "workflow/ready-dispatch-ambiguous"
-    :definition "More than one dispatch is ready; workflow dispatch needs --step."}
-   {:name "workflow/ready-dispatch-incompatible"
-    :definition "The selected ready item is not a dispatch."}
-   {:name "workflow/dispatch-target-not-allowed"
-    :definition "The selected workflow is not in the dispatch point's allowlist."}
-   {:name "workflow/step-not-dispatch"
-    :definition "A continuing worker selected a dispatch; use workflow dispatch."}])
+  [{:name "workflow/ready-defer-absent"
+    :definition "No ready defer exists for workflow defer to fill."}
+   {:name "workflow/ready-defer-ambiguous"
+    :definition "More than one defer is ready; workflow defer needs --step."}
+   {:name "workflow/ready-defer-incompatible"
+    :definition "The selected ready item is not a defer."}
+   {:name "workflow/defer-target-not-allowed"
+    :definition "The selected workflow is not in the defer point's allowlist."}
+   {:name "workflow/defer-cyclic"
+    :definition "The selected workflow is already in this defer's lexical ancestry."}
+   {:name "workflow/step-not-defer"
+    :definition "The step named for workflow defer holds another role."}])
 
 (defn contribute
   "Return the workflow CLI module's complete operation contribution.
