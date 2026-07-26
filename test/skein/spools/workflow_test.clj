@@ -569,6 +569,28 @@
                                                   {:context {"owner" "agent"}})))
         (is (= "active" (:state (repl/strand (:id step)))))))))
 
+(deftest workflow-complete-refuses-malformed-persisted-context-before-mutating
+  (with-runtime
+    (fn [_rt _]
+      (let [definition (workflow/workflow
+                        "Malformed context"
+                        (workflow/step :a "Do A" :self)
+                        (workflow/step :b "Do B" :self :depends-on [:a]))
+            [step] (:ready (workflow/start! "malformed-context-run" definition {}))
+            root-id (:id (workflow/current-root "malformed-context-run"))]
+        (repl/update! root-id {:attributes {"workflow/context" "not-a-map"}})
+        (let [thrown (try
+                       (workflow/complete! "malformed-context-run"
+                                           {:context {:owner "agent"}})
+                       (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/context-invalid (:reason (ex-data thrown))))
+          (is (= "malformed-context-run" (:run-id (ex-data thrown))))
+          (is (= root-id (:root (ex-data thrown))))
+          (is (= "not-a-map" (:context (ex-data thrown)))))
+        (is (= "active" (:state (repl/strand (:id step)))))
+        (is (= "not-a-map"
+               (get-in (repl/strand root-id) [:attributes :workflow/context])))))))
+
 (deftest workflow-complete-holds-direct-callers-to-the-attributes-spec
   ;; The worker CLI validates its request map; a direct Clojure caller reaches
   ;; the same mutation, so the same spec judges it rather than a looser local check.

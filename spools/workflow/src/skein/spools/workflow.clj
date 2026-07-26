@@ -568,10 +568,18 @@
                (let [attrs (cond-> (or (routing/close-attributes! opts) {})
                              (non-blank-string? by) (assoc "workflow/outcome-by" by))
                      root (query/current-root-with-rt rt run-id)
+                     existing-context (query/attr root :workflow/context)
+                     _ (when (and (contains? opts :context)
+                                  (not (map? existing-context)))
+                         (fail! "Workflow root context is malformed"
+                                {:reason :workflow/context-invalid
+                                 :run-id run-id
+                                 :root (:id root)
+                                 :context existing-context
+                                 :expected "map"}))
                      root-attrs (when (contains? opts :context)
                                   {"workflow/context"
-                                   (merge (or (query/attr root :workflow/context) {})
-                                          context)})
+                                   (merge existing-context context)})
                      join-ids (routing/cascade-join-ids rt (:id root) #{(:id step)})]
                  (batch/apply! rt (routing/close-batch (:id step) (not-empty attrs) join-ids
                                                        (:id root) root-attrs))
@@ -1054,6 +1062,10 @@
   records what it found in its own vocabulary without a second write an observer
   could see the step closed without. The engine judges the shape and nothing more:
   what the keys mean belongs to whoever poured the workflow.
+
+  `:context` is a keyword-keyed map of JSON-safe values shallow-merged over the
+  run root's `workflow/context` in that same mutation. A supplied key replaces
+  its existing value whole, including a nested map.
 
   A gate is never inferred. Closing one is an assertion that something outside
   the run happened, so it takes both an explicit `:step` and a `:by` recording
