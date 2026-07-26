@@ -131,7 +131,9 @@
                (-> {:run-id (:run-id args) :workflow (keyword target)}
                    (with-json-object args :params :params)))
       "ready" (workflow/run-ready {:run-id (:run-id args)})
-      "complete" (workflow/run-complete! (with-attributes (run-request args) args argv))
+      "complete" (workflow/run-complete!
+                  (-> (with-attributes (run-request args) args argv)
+                      (with-json-object args :context :context)))
       "choose" (workflow/run-choose!
                 (-> (assoc (run-request args) :choice choice)
                     (with-json-object args :input :input)))
@@ -256,6 +258,12 @@
                 :positionals [run-id-positional]
                 :flags {:step step-flag
                         :by by-flag
+                        :context
+                        {:type :string
+                         :parse :json
+                         :doc (fmt/reflow
+                               "|JSON object shallow-merged into the run's
+                                |workflow context in the closing transaction.")}
                         :attr
                         {:type :map
                          :doc (fmt/reflow

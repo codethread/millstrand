@@ -226,7 +226,7 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
   optionally restricted to one waiter string/keyword such as `:subagent`.
 - `(ready-checkpoint run-id)` — the single ready checkpoint view, nil if none,
   or a loud ambiguity failure if more than one checkpoint is ready.
-- `(complete! run-id)` / `(complete! run-id opts)` — closes a ready step that is neither a checkpoint nor defer, and returns the `{:ready [...] :done boolean}` result.
+- `(complete! run-id)` / `(complete! run-id opts)` — closes a ready step that is neither a checkpoint nor defer, and returns the `{:ready [...] :done boolean}` result. `opts :context` shallow-merges JSON-safe values into the run root's `workflow/context` in the same transaction as the close.
 - `(choose! run-id choice)` / `(choose! run-id choice input)` /
   `(choose! run-id choice input opts)` — records a checkpoint decision,
   optionally routes to a continuation (`:next`), and returns the
@@ -294,6 +294,7 @@ A `call` expands to its inner steps plus a `procedure`-role **join** step that d
   exist for the audit trail, so closing a step can record what happened —
   in your own namespaced keys. The engine keeps no prose field of its own;
   passing the removed `:notes` fails as `workflow/notes-removed`.
+- `:context` — keyword-keyed map shallow-merged over the root's `workflow/context` in the closing transaction. A supplied key replaces its old value whole, including a nested map. Values must be JSON-safe; keyword values become strings.
 - `:by` — actor identity, recorded as `"workflow/outcome-by"`. **Mandatory**
   when closing a `gate` step (see [§3 "Gates"](#3-definition-layer)); ignored on non-gate steps.
 
@@ -578,6 +579,14 @@ Repeatable `--attr key=value` carries string values at the highest precedence; `
 
 The engine names none of these keys. It has no outcome-prose field for a worker to fill — a step's outcome is whatever vocabulary the spool that poured the workflow decided on, which is why the merge rides the closing transaction: no observer can see the step closed without it. A step closed before this cutover may carry `workflow/outcome-notes`, which nothing writes now and `run-history` no longer projects; it reads back as an ordinary historical attribute.
 
+`complete` also accepts `--context <json-object>`. It shallow-merges the supplied keys into the run root's `workflow/context` in the same transaction as the step close:
+
+```console
+$ strand workflow complete feat-x --context '{"pr-number":412}'
+```
+
+An existing key is replaced whole. Nested maps are values, not recursive merge targets. The updated context is available to later checkpoint `:next` and `:revise` routing; defer targets still take only the params supplied to `defer!`.
+
 ### Losing a race
 
 Every mutation resolves the frontier twice: once before taking the run's guard, so a bad request fails without waiting behind another worker, and once after. If the compatible frontier changed in between, the request describes a run state that no longer exists and fails as `workflow/frontier-stale` with the frontier as it is now, having written nothing. Read `workflow ready` and act on what is there.
@@ -672,7 +681,7 @@ This table is the extension API: spools built on top of `skein.spools.workflow` 
 | `workflow/family` | Grouping label across related runs (e.g. `"devflow"`). Carried forward into `:next` continuations. | `compile`, from `opts :family` (root strand only). |
 | `workflow/definition` | Stringified symbol naming the definition Var this root was built from. | `compile`, from `opts :definition` (root strand only; set by start, `:revise`, and named/symbol `:next` routing). |
 | `workflow/definition-name` | Registered name this root was poured from, when it came from the registry. `:revise` resolves this name live, so a repointed registry revises into the replacement. | `compile`, from `opts :definition-name` (root strand only). |
-| `workflow/context` | Map merged with checkpoint choice input to build `:next`/`:revise` continuation params (also carries revision-loop state forward). | `compile`, from `opts :context` (root strand only); read back by `route-plan`. |
+| `workflow/context` | Map merged with checkpoint choice input to build `:next`/`:revise` continuation params (also carries revision-loop state forward). | `compile`, from `opts :context` (root strand only); `complete!`, from `opts :context`; read back by `route-plan`. |
 | `workflow/stage-params` | Vector of the stage-local override key names a `:revise` round set; dropped from continuation params when a later `:next` route leaves the stage. | `route-plan` (`:revise`), root strand only. |
 | `workflow/gate` | Freeform waiter/actor hint marking a step an external wait point (`"ci"`, `"human"`, `"subagent"`, …). Surfaced by `step-view` as `:gate`; makes `complete!` require `:by`. | `gate` builder. |
 | `workflow/checkpoint` | Stable checkpoint id (the step's own local id). | `checkpoint` builder. |

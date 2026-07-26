@@ -511,6 +511,64 @@
           ;; a typed value survives the merge as itself, not as its printed form
           (is (= 7 (get-in strand [:attributes :acme/exit-code]))))))))
 
+(deftest workflow-complete-context-is-shallow-last-write-wins
+  (with-runtime
+    (fn [_rt _]
+      (let [definition (workflow/workflow
+                        "Context run"
+                        (workflow/step :a "Do A" :self)
+                        (workflow/step :b "Do B" :self :depends-on [:a]))
+            [step] (:ready (workflow/start! "context-run" definition
+                                            {:owner "old"
+                                             :nested {:keep true}}))]
+        (workflow/complete! "context-run"
+                            {:context {:owner "new"
+                                       :nested {:replacement true}
+                                       :result :passed}})
+        (is (= "closed" (:state (repl/strand (:id step)))))
+        (is (= {:owner "new"
+                :nested {:replacement true}
+                :result "passed"}
+               (get-in (workflow/current-root "context-run")
+                       [:attributes :workflow/context]))
+            "last write wins shallowly, including replacing a nested value")))))
+
+(defn reject-complete-batch-hook [ctx]
+  (throw (ex-info "complete batch rejected" {:code "policy/rejected" :ctx ctx})))
+
+(deftest workflow-complete-context-and-step-close-rollback-together
+  (with-runtime
+    (fn [rt _]
+      (let [definition (workflow/workflow
+                        "Rejected context run"
+                        (workflow/step :a "Do A" :self)
+                        (workflow/step :b "Do B" :self :depends-on [:a]))
+            [step] (:ready (workflow/start! "rejected-context-run" definition
+                                            {:owner "before"}))
+            root-id (:id (workflow/current-root "rejected-context-run"))]
+        (hooks/register-hook! rt :reject-complete #{:batch/apply-before-commit}
+                              'skein.spools.workflow-test/reject-complete-batch-hook {})
+        (let [thrown (try
+                       (workflow/complete! "rejected-context-run"
+                                           {:context {:owner "after"}})
+                       (catch clojure.lang.ExceptionInfo e e))]
+          (is (= "Lifecycle hook failed" (ex-message thrown)))
+          (is (= "policy/rejected" (:hook/cause-code (ex-data thrown)))))
+        (is (= "active" (:state (repl/strand (:id step)))))
+        (is (= {:owner "before"}
+               (get-in (repl/strand root-id) [:attributes :workflow/context])))))))
+
+(deftest workflow-complete-requires-keyword-context-keys
+  (with-runtime
+    (fn [_rt _]
+      (let [definition (workflow/workflow "Context keys" (workflow/step :a "Do A" :self))
+            [step] (:ready (workflow/start! "context-keys-run" definition {}))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"Invalid workflow complete context"
+                              (workflow/complete! "context-keys-run"
+                                                  {:context {"owner" "agent"}})))
+        (is (= "active" (:state (repl/strand (:id step)))))))))
+
 (deftest workflow-complete-holds-direct-callers-to-the-attributes-spec
   ;; The worker CLI validates its request map; a direct Clojure caller reaches
   ;; the same mutation, so the same spec judges it rather than a looser local check.
