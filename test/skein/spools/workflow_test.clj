@@ -2974,6 +2974,55 @@
       (is (nil? (get-in anonymous-path [0 "definition"])))
       (is (re-matches #"[0-9a-f]{16}" (get-in anonymous-path [0 "fingerprint"]))))))
 
+(deftest a-cutover-closes-an-unfilled-sibling-dispatch
+  ;; DELTA-Dyc-001.CC4b: closeable-roles is every strand the engine poured under
+  ;; an abandoned root. Omitting dispatch would leave a pending hand-off active
+  ;; beneath a root that has already been replaced.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-dispatch-call-target
+                                   'skein.spools.workflow-test/dispatch-call-target)
+      (workflow/register-workflow! :wt-second
+                                   'skein.spools.workflow-test/registry-second-stage)
+      (let [definition (workflow/bind-handoffs
+                        (workflow/workflow
+                         "Router with a pending dispatch"
+                         (workflow/checkpoint :go "Go"
+                                              :kind :agent
+                                              :choices [{:key :advance :label "Advance"
+                                                         :next :wt-second}])
+                         (workflow/dispatch :perform-work "Choose work"))
+                        {:perform-work #{:wt-dispatch-call-target}})
+            result (workflow/start! "dispatch-cutover" definition {})
+            dispatch-id (:id (first (filter #(= "dispatch" (:role %)) (:ready result))))
+            go-id (:id (first (filter #(= "checkpoint" (:role %)) (:ready result))))]
+        (is (= "active" (:state (repl/strand dispatch-id))))
+        ;; the selector is required because a pending dispatch is ready beside the
+        ;; checkpoint, and trusted choose! resolves the sole ready step by id
+        ;; rather than filtering by role — the CLI is where roles partition.
+        (workflow/choose! "dispatch-cutover" :advance {} {:step go-id})
+        (is (= "closed" (:state (repl/strand dispatch-id)))
+            "the route's cutover force-closes the pending dispatch with the old root")))))
+
+(deftest sibling-dispatches-carry-independent-paths
+  ;; DELTA-Dyc-001.D4: the path is per dispatch strand, never a shared root
+  ;; record, which is what lets two siblings later select the same target.
+  (let [definition (workflow/bind-handoffs
+                    (workflow/workflow
+                     "Two hand-offs"
+                     (workflow/dispatch :first-pick "First")
+                     (workflow/dispatch :second-pick "Second"))
+                    {:first-pick #{:wt-dispatch-call-target}
+                     :second-pick #{:wt-dispatch-call-target}})
+        payload (workflow/compile definition {})
+        paths (mapv #(get-in % [:attributes "workflow/dispatch-path"])
+                    (filter #(= "dispatch" (get-in % [:attributes "workflow/role"]))
+                            (:strands payload)))]
+    (is (= 2 (count paths)))
+    (is (every? some? paths) "each sibling carries its own path, not a shared one")
+    (is (apply = paths) "siblings at the same lexical depth share a path value")))
+
 (deftest concurrent-choose-and-continue-serialize-under-the-run-guard
   ;; Both verbs resolve their frontier inside the guard, so one wins the cutover
   ;; and the other re-resolves against the frontier it left rather than writing
