@@ -988,7 +988,8 @@
                "      unknown-status)\n"
                "        printf '[{\"status\":\"mysterious\",\"conclusion\":null}]\\n' ;;\n"
                "      blocking)\n"
-               "        printf '%s\\n' \"$$\" > \"$FAKE_MAIN_CI_PID\"\n"
+               "        printf '%s\\n' \"$$\" > \"$FAKE_MAIN_CI_PID.tmp\"\n"
+               "        mv \"$FAKE_MAIN_CI_PID.tmp\" \"$FAKE_MAIN_CI_PID\"\n"
                "        read _ < \"$FAKE_MAIN_CI_RELEASE\" ;;\n"
                "    esac ;;\n"
                "  'run list --commit '*) printf 'failing workflow listing\\n' ;;\n"
@@ -1113,8 +1114,7 @@
           (.register (.toPath worktree)
                      watcher
                      (into-array java.nio.file.WatchEvent$Kind
-                                 [java.nio.file.StandardWatchEventKinds/ENTRY_CREATE
-                                  java.nio.file.StandardWatchEventKinds/ENTRY_MODIFY]))
+                                 [java.nio.file.StandardWatchEventKinds/ENTRY_CREATE]))
           (let [call (future
                        (watch {:worktree (.getAbsolutePath worktree)
                                :poll-interval-ms 0
