@@ -103,17 +103,25 @@
 (defn close-batch
   "Return one batch payload closing `primary-id` (merging `primary-attrs`) plus
   each cascaded procedure `join-ids` (stamped `workflow/outcome-by \"engine\"`
-  for provenance), updating each existing strand in place by its durable id ref."
-  [primary-id primary-attrs join-ids]
-  (let [primary (cond-> {:ref (keyword primary-id) :state "closed"}
-                  (seq primary-attrs) (assoc :attributes primary-attrs))
-        joins (mapv (fn [id]
-                      {:ref (keyword id) :state "closed"
-                       :attributes {"workflow/outcome-by" "engine"}})
-                    join-ids)
-        strands (into [primary] joins)]
-    {:refs (into {} (map (fn [s] [(:ref s) (name (:ref s))])) strands)
-     :strands strands}))
+  for provenance), updating each existing strand in place by its durable id ref.
+
+  The five-arg arity also merges `root-attrs` onto `root-id`, keeping run-context
+  writes in the same transaction as the step close."
+  ([primary-id primary-attrs join-ids]
+   (close-batch primary-id primary-attrs join-ids nil nil))
+  ([primary-id primary-attrs join-ids root-id root-attrs]
+   (let [primary (cond-> {:ref (keyword primary-id) :state "closed"}
+                   (seq primary-attrs) (assoc :attributes primary-attrs))
+         joins (mapv (fn [id]
+                       {:ref (keyword id) :state "closed"
+                        :attributes {"workflow/outcome-by" "engine"}})
+                     join-ids)
+         root (when (seq root-attrs)
+                {:ref (keyword root-id) :attributes root-attrs})
+         strands (cond-> (into [primary] joins)
+                   root (conj root))]
+     {:refs (into {} (map (fn [s] [(:ref s) (name (:ref s))])) strands)
+      :strands strands})))
 
 (defn- close-workflow-root! [rt root]
   (doseq [strand (:strands (graph/subgraph rt [(:id root)]))]

@@ -524,9 +524,12 @@
   reason it publishes none of its own. Its keys are non-blank attribute-key
   strings, judged here by the same
   `:skein.spools.workflow.request/attributes` spec the CLI request carries, so a
-  direct Clojure caller and a worker verb are held to one contract. A non-blank
-  `:by` is recorded as \"workflow/outcome-by\" on any step it is supplied for,
-  but is only required when closing a gate step (one built with `gate`).
+  direct Clojure caller and a worker verb are held to one contract. `:context`
+  is a keyword-keyed map shallow-merged over the root's `workflow/context` in
+  the same batch; new values replace existing values whole, and are normalized
+  by `default-context` so only JSON-safe values persist. A non-blank `:by` is
+  recorded as \"workflow/outcome-by\" on any step it is supplied for, but is
+  only required when closing a gate step (one built with `gate`).
 
   When the closed step is the last active inner step beneath a `procedure`
   join, the join closes in the same transaction (see `cascade-join-ids`). All
@@ -540,30 +543,52 @@
      (when (contains? opts :attributes)
        (require-valid! :skein.spools.workflow.request/attributes (:attributes opts)
                        "Invalid workflow complete attributes"))
-     (guard/with-run!
-       rt run-id
-       (fn []
-         (let [step (or (query/resolve-ready-step rt run-id opts)
-                        (fail! "No ready workflow step" {:run-id run-id}))]
-           (when (= "checkpoint" (query/attr step :workflow/role))
-             (fail! "Cannot complete a checkpoint; use choose!"
-                    {:run-id run-id :step (query/strand->view step)}))
-           (when (= "defer" (query/attr step :workflow/role))
-             (fail! "Cannot complete a defer; use defer!"
-                    {:reason :workflow/step-is-defer
-                     :run-id run-id :step (query/strand->view step)}))
-           (let [gate (query/attr step :workflow/gate)
-                 by (:by opts)]
-             (when (and gate (not (non-blank-string? by)))
-               (fail! "Gate steps require a non-blank :by to record who closed them"
-                      {:run-id run-id :step (query/strand->view step) :gate gate :by by}))
-             (let [attrs (cond-> (or (routing/close-attributes! opts) {})
-                           (non-blank-string? by) (assoc "workflow/outcome-by" by))
-                   root (query/current-root-with-rt rt run-id)
-                   join-ids (routing/cascade-join-ids rt (:id root) #{(:id step)})]
-               (batch/apply! rt (routing/close-batch (:id step) (not-empty attrs) join-ids))
-               (routing/close-run-if-done! rt run-id)
-               (query/run-result rt run-id)))))))))
+     (let [context (when (contains? opts :context)
+                     (let [normalized
+                           (-> (require-valid! :skein.spools.workflow.values/params
+                                               (:context opts)
+                                               "Invalid workflow complete context")
+                               cmp/default-context)]
+                       (require-valid! :skein.spools.workflow.request/context
+                                       normalized
+                                       "Invalid workflow complete context")))]
+       (guard/with-run!
+         rt run-id
+         (fn []
+           (let [step (or (query/resolve-ready-step rt run-id opts)
+                          (fail! "No ready workflow step" {:run-id run-id}))]
+             (when (= "checkpoint" (query/attr step :workflow/role))
+               (fail! "Cannot complete a checkpoint; use choose!"
+                      {:run-id run-id :step (query/strand->view step)}))
+             (when (= "defer" (query/attr step :workflow/role))
+               (fail! "Cannot complete a defer; use defer!"
+                      {:reason :workflow/step-is-defer
+                       :run-id run-id :step (query/strand->view step)}))
+             (let [gate (query/attr step :workflow/gate)
+                   by (:by opts)]
+               (when (and gate (not (non-blank-string? by)))
+                 (fail! "Gate steps require a non-blank :by to record who closed them"
+                        {:run-id run-id :step (query/strand->view step) :gate gate :by by}))
+               (let [attrs (cond-> (or (routing/close-attributes! opts) {})
+                             (non-blank-string? by) (assoc "workflow/outcome-by" by))
+                     root (query/current-root-with-rt rt run-id)
+                     existing-context (query/attr root :workflow/context)
+                     _ (when (and (contains? opts :context)
+                                  (not (map? existing-context)))
+                         (fail! "Workflow root context is malformed"
+                                {:reason :workflow/context-invalid
+                                 :run-id run-id
+                                 :root (:id root)
+                                 :context existing-context
+                                 :expected "map"}))
+                     root-attrs (when (contains? opts :context)
+                                  {"workflow/context"
+                                   (merge existing-context context)})
+                     join-ids (routing/cascade-join-ids rt (:id root) #{(:id step)})]
+                 (batch/apply! rt (routing/close-batch (:id step) (not-empty attrs) join-ids
+                                                       (:id root) root-attrs))
+                 (routing/close-run-if-done! rt run-id)
+                 (query/run-result rt run-id))))))))))
 
 (defn choose!
   "Record a checkpoint choice for run-id, optionally pour its continuation,
@@ -1032,29 +1057,35 @@
 (defn run-complete!
   "Close the ready ordinary step of `request`'s run and return the run result.
 
-  `request` is `{:run-id … :step … :by … :attributes {…}}`, all but the run id
-  optional. Without `:step` the sole ready ordinary step is inferred; a
-  checkpoint or defer ready alongside it does not make that ambiguous, because
-  neither is a step this verb could act on.
+  `request` is `{:run-id … :step … :by … :attributes {…} :context {…}}`, all
+  but the run id optional. Without `:step` the sole ready ordinary step is
+  inferred; a checkpoint or defer ready alongside it does not make that
+  ambiguous, because neither is a step this verb could act on.
 
   `:attributes` merges onto the closed step in the closing mutation, so a worker
   records what it found in its own vocabulary without a second write an observer
   could see the step closed without. The engine judges the shape and nothing more:
   what the keys mean belongs to whoever poured the workflow.
 
+  `:context` is a keyword-keyed map of JSON-safe values shallow-merged over the
+  run root's `workflow/context` in that same mutation. A supplied key replaces
+  its existing value whole, including a nested map.
+
   A gate is never inferred. Closing one is an assertion that something outside
   the run happened, so it takes both an explicit `:step` and a `:by` recording
   who decided so. `::complete-request` owns the request shape."
   [request]
   (let [rt (current/runtime)
-        {:keys [run-id by attributes]} (require-valid! ::complete-request request
-                                                       "Invalid workflow complete request")]
+        {:keys [run-id by attributes context]} (require-valid! ::complete-request request
+                                                               "Invalid workflow complete request")]
     (mutate-run! rt "workflow complete" :step request
                  (fn [target]
                    (runs/require-gate-actor! run-id target by)
                    (complete! run-id (cond-> {:step (:id target)}
                                        by (assoc :by by)
-                                       attributes (assoc :attributes attributes)))))))
+                                       attributes (assoc :attributes attributes)
+                                       (contains? request :context)
+                                       (assoc :context context)))))))
 
 (defn run-choose!
   "Record `request`'s choice on the ready checkpoint and return the run result.
@@ -1204,6 +1235,15 @@
   ;; as `non-blank-string?` above: ::defer-declaration's printed form names it.
   [value]
   (util/defer-step? value))
+
+(defn- json-safe-context?
+  "True when `value` can pass through the workflow context normalizer."
+  [value]
+  (try
+    (cmp/default-context value)
+    true
+    (catch clojure.lang.ExceptionInfo _
+      false)))
 
 (s/def ::form #{:molecule :wisp})
 (s/def ::id-ref #(or (keyword? %) (symbol? %) (non-blank-string? %)))
@@ -1462,6 +1502,8 @@
 
 (s/def :skein.spools.workflow.request/choice non-blank-string?)
 (s/def :skein.spools.workflow.request/input :skein.spools.workflow.values/params)
+(s/def :skein.spools.workflow.request/context
+  (s/and :skein.spools.workflow.values/params json-safe-context?))
 (s/def :skein.spools.workflow.request/timeout-secs ::timeout-secs)
 
 ;; One request spec per worker verb, and the whole of what each verb accepts.
@@ -1478,7 +1520,8 @@
   (s/keys :req-un [:skein.spools.workflow.request/run-id]
           :opt-un [:skein.spools.workflow.request/step
                    :skein.spools.workflow.request/by
-                   :skein.spools.workflow.request/attributes]))
+                   :skein.spools.workflow.request/attributes
+                   :skein.spools.workflow.request/context]))
 (s/def ::choose-request
   (s/keys :req-un [:skein.spools.workflow.request/run-id
                    :skein.spools.workflow.request/choice]
