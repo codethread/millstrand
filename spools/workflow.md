@@ -37,7 +37,7 @@ What skein does differently: workflow definitions are Clojure-native data instea
 | `(checkpoint id title & opts)` | A step definition with checkpoint metadata. `:kind` (`:human` or `:agent`, default `:human`), `:choices`. A choice's `:input` names the spec `choose!` validates against — see §5. |
 | `(call id procedure params & opts)` | An inline procedure-reuse step. `:depends-on`, `:title`, `:attributes`. |
 | `(defer id title & opts)` | A named terminal exit whose continuation a worker picks at run time. Opts: `:depends-on`, `:description`, `:attributes`. See §5a. |
-| `(dispatch id title & opts)` | A named returning hand-off whose target a worker picks at run time. Opts: `:depends-on`, `:description`, `:attributes`. See §5a. |
+| `(dispatch id title & opts)` | A named returning hand-off whose target a worker picks at run time. Opts: `:depends-on`, `:title`, `:description`, `:attributes`. See §5a. |
 | `(bind-handoffs definition bindings)` | Returns `definition` with each declared defer or dispatch bound to the registered workflows it allows. See §5a. |
 | `(workflow name & body)` | A workflow definition: `{:name .. :steps [..]}` plus optional leading opts map (`:attributes`, `:state`, `:form`, and the registration contract `:doc`, `:entrypoints`, `:param-spec`, `:defaults`). |
 | `(defworkflow name doc opts definition)` | Defines a static definition Var and collects its registry entry during module contribution. See "Static definitions" below. |

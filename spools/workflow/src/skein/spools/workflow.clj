@@ -315,7 +315,13 @@
   ([workflow params]
    (compile workflow params {}))
   ([workflow params opts]
-   (cmp/compile workflow params opts)))
+   (cmp/with-dispatch-path
+     workflow opts
+     (fn []
+       (let [form (or (:form opts) (:form workflow) :molecule)
+             [workflow _params root-ref steps] (cmp/resolve-and-normalize workflow params opts)
+             root (cmp/root-strand workflow root-ref form opts)]
+         (cmp/payload root form steps))))))
 
 (defn describe
   "Return a compile-time projection of `workflow` without materializing any strand.
@@ -2119,12 +2125,12 @@
 
   `:done` when finished; `:checkpoint` when a checkpoint is ready; `:defer` when
   a defer exit is ready and a worker must pick its continuation; `:dispatch`
-  when a dispatch is ready and a worker must select its returning target; `:step` when a
-  ready `:self` step needs the driving agent (kills the footgun of a ready step
-  burying itself under `:waiting`); `:gate` when a ready gate's waiter has no
-  registered executor; `:stalled` when a registered executor's stall predicate
-  reports detail for one of its gates; else `:waiting`, which now means the whole
-  ready frontier is executor-owned and healthy."
+  when a dispatch is ready and a worker must select its returning target; `:step`
+  when a ready `:self` step needs the driving agent (kills the footgun of a ready
+  step burying itself under `:waiting`); `:gate` when a ready gate's waiter has
+  no registered executor; `:stalled` when a registered executor's stall
+  predicate reports detail for one of its gates; else `:waiting`, which now
+  means the whole ready frontier is executor-owned and healthy."
   [rt run-id]
   (let [ready (query/ready-with-rt rt run-id {})
         done (query/done-with-rt? rt run-id)

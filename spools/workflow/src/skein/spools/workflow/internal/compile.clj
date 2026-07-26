@@ -466,6 +466,17 @@
    :edges (vec (concat (parent-edges (:ref root) steps)
                        (dependency-edges steps)))})
 
+(defn with-dispatch-path
+  "Call `f` with the lexical dispatch path for compiling `workflow` and `opts`.
+
+  The public compile story and recursive inline-call compiler share this small
+  dynamic-context seam; the named compilation stages stay independently visible."
+  [workflow opts f]
+  (let [path (conj (or (:dispatch-path opts) *dispatch-path*)
+                   (dispatch-identity workflow (:definition opts)))]
+    (binding [*dispatch-path* path]
+      (f))))
+
 (defn compile
   "Return a batch payload for a workflow molecule or wisp.
 
@@ -491,11 +502,11 @@
   ([workflow params]
    (compile workflow params {}))
   ([workflow params opts]
-   (let [form (or (:form opts) (:form workflow) :molecule)
-         path (conj (or (:dispatch-path opts) *dispatch-path*)
-                    (dispatch-identity workflow (:definition opts)))]
-     (binding [*dispatch-path* path]
-       (let [[workflow _params root-ref steps] (resolve-and-normalize workflow params opts)]
+   (with-dispatch-path
+     workflow opts
+     (fn []
+       (let [form (or (:form opts) (:form workflow) :molecule)
+             [workflow _params root-ref steps] (resolve-and-normalize workflow params opts)]
          (payload (root-strand workflow root-ref form opts) form steps))))))
 
 (defn- step-attr

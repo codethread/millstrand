@@ -373,8 +373,9 @@
    :call :call})
 
 (defn references
-  "Return `{:continue #{names} :defer #{names} :dispatch #{names} :call #{names}}` — the registered
-  workflows a static definition names, grouped by how it names them."
+  "Return `{:continue #{names} :defer #{names} :dispatch #{names} :call #{names}}`
+  — the registered workflows a static definition names, grouped by how it names
+  them."
   [definition]
   (reduce (fn [acc step]
             (cond-> (-> acc
