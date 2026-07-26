@@ -150,15 +150,48 @@
            {:procedure procedure
             :resolved-class (some-> procedure class .getName)})))
 
-(defn- prefixed-ref [call-id ref]
+(defn prefixed-ref
+  "Return `ref` namespaced beneath procedure or dispatch `call-id`."
+  [call-id ref]
   (keyword (str (name call-id) "--" (name (util/normalize-ref ref [:procedure :ref])))))
 
-(defn- entry-refs [steps]
+(defn entry-refs
+  "Return the refs of `steps` with no dependencies."
+  [steps]
   (->> steps (remove #(seq (:depends-on %))) (map :id) vec))
 
-(defn- exit-refs [steps]
+(defn exit-refs
+  "Return the refs of `steps` that no other step depends on."
+  [steps]
   (let [depended (set (mapcat :depends-on steps))]
     (->> steps (map :id) (remove depended) vec)))
+
+(defn procedure-expansion
+  "Return a rootless prefixed expansion of compiled procedure `payload`.
+
+  Entry strands inherit `entry-deps`; callers use the returned `:entries`,
+  `:exits`, and `:dependencies` to wire their own parent and join shapes."
+  [call-id payload entry-deps]
+  (let [steps (mapv (fn [strand]
+                      {:id (:ref strand) :title (:title strand) :state (:state strand)
+                       :attributes (:attributes strand)})
+                    (rest (:strands payload)))
+        internal (reduce (fn [acc {:keys [from to type]}]
+                           (if (= "depends-on" type) (update acc from (fnil conj []) to) acc))
+                         {} (:edges payload))
+        steps (mapv #(assoc % :depends-on (get internal (:id %) [])) steps)
+        entries (entry-refs steps)
+        exits (exit-refs steps)
+        strands (mapv (fn [step]
+                        (let [id (:id step)]
+                          (assoc step :id (prefixed-ref call-id id)
+                                 :depends-on (vec (concat (map #(prefixed-ref call-id %)
+                                                               (get internal id []))
+                                                          (when (some #{id} entries) entry-deps))))))
+                      steps)]
+    {:strands strands
+     :entries (mapv #(prefixed-ref call-id %) entries)
+     :exits (mapv #(prefixed-ref call-id %) exits)}))
 
 (defn- expand-call-step [call-step params]
   (let [call-id (util/normalize-ref (:id call-step) [:call :id])
@@ -178,34 +211,12 @@
                   (compile workflow params
                            (assoc (select-keys target [:definition])
                                   :dispatch-path *dispatch-path*)))
-        steps (mapv (fn [strand]
-                      {:id (:ref strand)
-                       :title (:title strand)
-                       :state (:state strand)
-                       :attributes (:attributes strand)})
-                    (rest (:strands payload)))
-        edges (:edges payload)
-        internal-deps (reduce (fn [acc {:keys [from to type]}]
-                                (if (= "depends-on" type)
-                                  (update acc from (fnil conj []) to)
-                                  acc))
-                              {}
-                              edges)
-        steps-with-deps (mapv #(assoc % :depends-on (get internal-deps (:id %) [])) steps)
-        entries (entry-refs steps-with-deps)
-        exits (exit-refs steps-with-deps)
-        prefixed (mapv (fn [step]
-                         (let [id (:id step)
-                               internal (mapv #(prefixed-ref call-id %) (get internal-deps id []))
-                               entry-extra (when (some #{id} entries) (:depends-on call-step))]
-                           (-> step
-                               (assoc :id (prefixed-ref call-id id))
-                               (assoc :depends-on (vec (concat internal entry-extra))))))
-                       steps)
+        expansion (procedure-expansion call-id payload (:depends-on call-step))
+        prefixed (:strands expansion)
         join-title (or (:title call-step) (str "Complete " (name call-id)))]
     (conj prefixed {:id call-id
                     :title join-title
-                    :depends-on (mapv #(prefixed-ref call-id %) exits)
+                    :depends-on (:exits expansion)
                     :attributes (merge {"workflow/role" "procedure"
                                         "workflow/procedure" (name call-id)}
                                        (:attributes call-step))})))

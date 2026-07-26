@@ -157,10 +157,11 @@ required entrypoint branched by declaration kind. No shipped or pinned external 
   work off the frontier.
 
 - **DELTA-Dyc-001.CC10 (double fill is refused — adds to §5c):** A dispatch is filled exactly once.
-  Once rewritten to `procedure`, `dispatch!` no longer resolves it, and an explicit `--step` naming a
-  filled dispatch fails with `:reason :workflow/step-not-dispatch`. Concurrent `dispatch!` calls
-  serialize on the run guard and the loser re-resolves, failing as `workflow/frontier-stale` exactly as
-  `choose!`/`continue!` do.
+  Once rewritten to `procedure` it is a closed join, so `dispatch!` no longer resolves it and an
+  explicit `--step` naming it fails the ordinary **not-ready** check every closed strand already gets
+  — no dispatch-specific branch. `:reason :workflow/step-not-dispatch` is reserved for naming a strand
+  that *is* ready but holds another role. Concurrent `dispatch!` calls serialize on the run guard and
+  the loser re-resolves, failing as `workflow/frontier-stale` exactly as `choose!`/`continue!` do.
 
 - **DELTA-Dyc-001.CC11 (attribute vocabulary — adds to §7):** New attributes, all following the
   `continue!` cutover record's shape so the two hand-off kinds read alike:

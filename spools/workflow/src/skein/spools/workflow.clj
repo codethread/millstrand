@@ -659,6 +659,32 @@
            (routing/close-run-if-done! rt run-id)
            (query/run-result rt run-id)))))))
 
+(defn dispatch!
+  "Fill run-id's ready dispatch with an allowed registered `workflow`.
+
+  The target is resolved live and poured beneath the current root in the same
+  batch that turns the dispatch into a procedure join. Target params are its
+  own defaults plus only `params`; caller context is never merged."
+  ([run-id workflow]
+   (dispatch! run-id workflow {} {}))
+  ([run-id workflow params]
+   (dispatch! run-id workflow params {}))
+  ([run-id workflow params opts]
+   (let [rt (current/runtime)]
+     (util/require-map! opts [:opts])
+     (require-valid! ::dispatch-request
+                     (merge {:run-id run-id :workflow workflow :params params} opts)
+                     "Invalid workflow dispatch request")
+     (guard/with-run!
+       rt run-id
+       (fn []
+         (let [step (routing/resolve-dispatch! rt run-id opts)
+               target (routing/dispatch-target rt step workflow)
+               fill (routing/dispatch-plan rt run-id step target params opts)]
+           (batch/apply! rt fill)
+           (routing/close-run-if-done! rt run-id)
+           (query/run-result rt run-id)))))))
+
 (defn advance!
   "Advance run-id by one ready step regardless of its kind, returning the
   `{:ready [step-view ...] :done boolean}` result shape.
@@ -1343,6 +1369,13 @@
 ;; the keywordized params a definition's `:param-spec` judges.
 (s/def :skein.spools.workflow.request/attributes (s/map-of non-blank-string? any?))
 (s/def ::continue-request
+  (s/keys :req-un [:skein.spools.workflow.request/run-id
+                   :skein.spools.workflow.request/workflow]
+          :opt-un [:skein.spools.workflow.request/params
+                   :skein.spools.workflow.request/step
+                   :skein.spools.workflow.request/by]))
+
+(s/def ::dispatch-request
   (s/keys :req-un [:skein.spools.workflow.request/run-id
                    :skein.spools.workflow.request/workflow]
           :opt-un [:skein.spools.workflow.request/params

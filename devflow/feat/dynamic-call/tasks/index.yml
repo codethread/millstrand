@@ -15,7 +15,7 @@ tasks:
   - id: 3
     description: dispatch! fills a hand-off in place
     task_file: tasks/003-dispatch-fill.md
-    status: pending
+    status: complete
     blocked_by: [2]
   - id: 4
     description: Worker CLI verb and discovery
