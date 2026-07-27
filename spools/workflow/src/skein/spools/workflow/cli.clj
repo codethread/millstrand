@@ -332,16 +332,16 @@
             :annotations
             {:notes [(fmt/reflow
                       "|An ordinary step needs no choice. A checkpoint
-                          |requires --choice and accepts its declared --input.")
+                       |requires --choice and accepts its declared --input.")
                      (fmt/reflow
                       "|A mixed or parallel advanceable frontier is
-                          |ambiguous; use --step to select one item.")
+                       |ambiguous; use --step to select one item.")
                      (fmt/reflow
                       "|A defer selects another workflow and its params, so
-                          |drive it with workflow defer instead.")
+                       |drive it with workflow defer instead.")
                      (fmt/reflow
                       "|A gate is never inferred and still requires both
-                          |--step and --by.")]
+                       |--step and --by.")]
              :failure-modes ["workflow/ready-next-absent"
                              "workflow/ready-next-ambiguous"
                              "workflow/ready-next-incompatible"

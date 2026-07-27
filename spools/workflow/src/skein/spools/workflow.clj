@@ -689,6 +689,24 @@
            (routing/close-run-if-done! rt run-id)
            (query/run-result rt run-id)))))))
 
+(defn- resolve-advance-target!
+  "Resolve the item `advance!` acts on without letting incompatible siblings
+  make an otherwise unique ordinary step or checkpoint ambiguous."
+  [rt run-id opts]
+  (let [ready (runs/frontier rt run-id)
+        inferable (filterv #(and (contains? #{"step" "checkpoint"} (:role %))
+                                 (not (:gate %)))
+                           ready)
+        selected (some #(when (= (:step opts) (:id %)) %) ready)
+        selectable? (and selected
+                         (contains? #{"step" "checkpoint"} (:role selected)))]
+    (if (or selectable? (and (nil? (:step opts)) (seq inferable)))
+      (runs/resolve-target! :advance run-id ready (:step opts))
+      ;; Preserve the trusted API's established defer and invalid-role failures
+      ;; when there is no advanceable item at all.
+      (some-> (query/resolve-ready-step rt run-id opts)
+              query/strand->view))))
+
 (defn advance!
   "Advance run-id by one ready ordinary step or checkpoint, returning the
   `{:ready [step-view ...] :done boolean}` result shape.
@@ -714,10 +732,9 @@
      (guard/with-run!
        rt run-id
        (fn []
-         (let [step (or (query/resolve-ready-step rt run-id opts)
+         (let [view (or (resolve-advance-target! rt run-id opts)
                         (fail! "No ready workflow step" {:run-id run-id}))
-               role (query/attr step :workflow/role)
-               view (query/strand->view step)]
+               role (:role view)]
            (case role
              "defer"
              (fail! "Cannot advance a defer; use defer!"
@@ -740,7 +757,7 @@
                          :attributes (:attributes opts)
                          :allowed #{:choice :input :step :by}}))
                (choose! run-id (:choice opts) (get opts :input {})
-                        (select-keys opts [:by :step])))
+                        (assoc (select-keys opts [:by]) :step (:id view))))
 
              "step"
              (do
@@ -758,7 +775,9 @@
                          :step view
                          :input (:input opts)
                          :allowed #{:attributes :step :by}}))
-               (complete! run-id (select-keys opts [:attributes :step :by])))
+               (complete! run-id
+                          (assoc (select-keys opts [:attributes :by])
+                                 :step (:id view))))
 
              (fail! "Cannot advance an unknown workflow role"
                     {:reason :workflow/advance-role-invalid
@@ -1146,9 +1165,9 @@
   `request` is `{:run-id … :choice … :input {…} :step … :by …}`, with only the
   run id required. Without `:step`, exactly one non-gate ordinary step or
   checkpoint must be ready. A checkpoint requires `:choice`; an ordinary step
-  rejects it. `:input` is the selected choice's JSON-worker input, and `:by`
-  records the actor and remains mandatory when an explicitly selected item is a
-  gate.
+  rejects it. `:input` is the selected checkpoint choice's JSON-worker input
+  and is rejected for an ordinary step or gate. `:by` records the actor and
+  remains mandatory when an explicitly selected item is a gate.
 
   A defer is not advanceable because selecting its target and params is a
   different request; failures direct the worker to `workflow defer`.

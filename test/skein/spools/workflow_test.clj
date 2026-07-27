@@ -1440,7 +1440,16 @@
                                      :attributes {"verdict" "pass"}}))))
         ;; advance! dispatches the checkpoint choice and closes the run
         (is (= {:ready [] :done true} (workflow/advance! "advance-run" {:choice :approved})))
-        (is (workflow/done? "advance-run"))))))
+        (is (workflow/done? "advance-run"))
+        (testing "a non-inferable sibling does not make one advanceable item ambiguous"
+          (workflow/start! "advance-with-gate"
+                           (workflow/workflow
+                            "Advance beside gate"
+                            (workflow/step :work "Do work" :self)
+                            (workflow/gate :wait "Wait" :external))
+                           {})
+          (is (= ["Wait"]
+                 (mapv :title (:ready (workflow/advance! "advance-with-gate"))))))))))
 
 (defn- registry-router-stage [{:keys [target]}]
   (workflow/workflow
