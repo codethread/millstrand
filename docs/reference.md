@@ -112,12 +112,11 @@ the behavior contracts remain the root specs (see the [spec index](#spec-index))
 
 When working in this repository, also read the "Repo coordination workspace (.skein)" section of the
 root [`AGENTS.md`](../AGENTS.md): the `.skein` shared coordination world, its working discipline,
-and pointers into the live surface (`strand devflow-conventions` for the registered ops, queries,
-and patterns). The config layout — `.skein/init.clj` activation order and its per-concern modules
+and pointers into the live surface (`strand help`, `strand query list`, `strand pattern list`, and `strand workflow list` for registered ops, queries, patterns, and workflows). The config layout — `.skein/init.clj` activation order and its per-concern modules
 (`config.clj`, `workflows.clj`, `harnesses.clj`, `reviewers.clj`, `attention.clj`, `nvd_scan.clj`,
 `analytics.clj`) — is documented in the `init.clj` header itself.
 
-`.skein/workflows.clj` authors this repo's workflow definitions as static `defworkflow` Vars: `land` with its `land-merge`/`land-abort` continuations, and `story` with its `story-fold`/`story-keep` continuations. Because they are static, a worker reads them with the shipped generic surface, which `.skein/init.clj` activates as its own module beside the engine: `strand workflow list` for the catalogue, `strand workflow show story` for a definition's param contract, then `start`, `ready`, `complete`, `choose`, `continue`, and `await` to drive a run.
+`.skein/workflows.clj` authors this repo's workflow definitions as static `defworkflow` Vars: `land` with its `land-merge`/`land-abort` continuations, and `story` with its `story-fold`/`story-keep` continuations. Because they are static, a worker reads them with the shipped generic surface, which `.skein/init.clj` activates as its own module beside the engine: `strand workflow list` for the catalogue, `strand workflow show story` for a definition's param contract, then `start`, `ready`, `next`, `complete`, `choose`, `defer`, and `await` to drive a run.
 
 The `land` op survives beside that generic surface because it adds behavior the engine has no business knowing: the singleton merge lock and the kanban lane moves.
 

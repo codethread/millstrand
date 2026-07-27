@@ -10,7 +10,7 @@ Read `./devflow/TENETS.md`, `./devflow/PHILOSOPHY.md`, and `./devflow/UBIQUITOUS
 
 **Driving any registered workflow** — this repo activates the shipped worker surface in `.skein/init.clj`: `strand prime workflow` before you start, `strand about workflow` for the manual, `strand help workflow` for exact invocation.
 
-**Starting multi-step work** — `mill strand prime`: the planning/tracking workflow. Feature work runs the devflow lifecycle (`strand devflow-start <feature>`); large module changes pour the registered story workflow — invocation and discipline via `strand devflow-conventions` and `strand about workflow`.
+**Starting multi-step work** — `mill strand prime`: the planning/tracking workflow. Feature work runs the registered devflow lifecycle (`strand workflow show intake`, then `strand workflow start <feature> --workflow intake --params '{"feature":"<feature>","worktree-check":"already-in-worktree-ok"}'`); large module changes pour the registered story workflow — invocation and discipline via `strand prime workflow` and `strand about workflow`.
 
 **Delegating** — `strand prime agent` first; `strand about agent` is the full verb manual. Delegate real work as tracked agent runs, never harness-native subagents (recon-only). Seats and review rosters: `strand agent harnesses` / `strand agent rosters`, with routing policy beside the definitions in `.skein/harnesses.clj` / `.skein/reviewers.clj`.
 

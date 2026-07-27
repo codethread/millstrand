@@ -826,7 +826,7 @@
                                "strand workflow show land-abort"]
                :instructions "strand land ready"
                :help "strand help land"
-               :conventions "strand devflow-conventions"}})
+               :conventions "strand prime workflow"}})
 
 (defn- land-result
   "Add canonical choice details to ready land checkpoint views."
