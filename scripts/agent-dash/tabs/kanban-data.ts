@@ -27,6 +27,10 @@ export type BoardCard = {
   priority?: string;
   branch?: string;
   outcome?: string;
+  // Sorted label slugs, present only on cards that carry any (the spool omits the
+  // key rather than emitting an empty vector). Shipped on every card the board
+  // returns, active and closed alike, so label filtering needs no second read.
+  labels?: string[];
 };
 
 export type BoardSnapshot = {

@@ -22,6 +22,7 @@ import {
   detailPage,
   Failure,
   fitCol,
+  hintRows,
   listPage,
   ListFooter,
   oneLine,
@@ -245,7 +246,7 @@ function DevflowList({ rows, selected, interactive, cols, termRows, all, loaded 
     fail: fitCol("FAIL", rows.map((r) => String(r.failCount)), 5),
   };
   const frontierWidth = Math.max(0, cols - 8 - w.feature - w.stage - w.state - w.fail);
-  const { start, visible, below } = windowRows(rows, selected, interactive, termRows);
+  const { start, visible, below } = windowRows(rows, selected, interactive, termRows, hintRows(LIST_HINT, cols));
 
   return (
     <Box flexDirection="column">
@@ -380,7 +381,7 @@ export const devflowTab = defineTab<DevflowView>({
       if (input === "r") ctx.refresh();
       return v;
     }
-    const moved = reduceListKeys(v.s, input, key, v.rows, (r) => r.id, listPage(ctx.termRows));
+    const moved = reduceListKeys(v.s, input, key, v.rows, (r) => r.id, listPage(ctx.termRows, hintRows(LIST_HINT, ctx.cols)));
     if (moved) return { ...v, s: moved };
     if (input === "d") {
       const r = v.rows[v.s.selected];

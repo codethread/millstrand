@@ -11,8 +11,9 @@
 // table ⇄ the plans delegation tree, and d graphs the selected plans node's
 // delegation subtree as boxart; on KANBAN, the board is an epic → feature → task
 // tree where = expands and - collapses the selected card (epics open by default,
-// a feature's tasks closed); on DEVFLOW, d graphs the selected feature's workflow
-// DAG (esc/h returns). Non-TTY (and --once) prints the first tab's flat runs frame.
+// a feature's tasks closed) and f opens the saved label-filter picker (⇧f parks
+// the active view); on DEVFLOW, d graphs the selected feature's workflow DAG
+// (esc/h returns). Non-TTY (and --once) prints the first tab's flat runs frame.
 //
 // Adding a tab is a local change: write a module under ./tabs that exports a Tab
 // via defineTab(...) — composing the shared list/detail/graph reducers from ./app

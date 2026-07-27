@@ -6,6 +6,10 @@
 // (`=`/`-` collapses the group, open by
 // default); a feature that bears tasks gets a marker and `=`/`-` reveals/hides
 // them (collapsed by default).
+// `f` opens a picker over the board's labels — saved, named filter views with
+// AND/OR combination and per-label exclusion; ⇧f parks the active one. Filtering
+// is client-side over the `labels` each card ships (the pure half lives in
+// ./kanban-filter, which also owns the on-disk store of saved views).
 // Alongside the board it scans active strands for the land workflow's merge-lock
 // sentinel and surfaces it as a one-line status strip. Self-contained: the row
 // types, both fetchers, colour maps, the tree component, and the merge-lock banner
@@ -21,7 +25,9 @@ import {
   detailPage,
   Failure,
   fitCol,
+  hintRows,
   listPage,
+  listViewport,
   ListFooter,
   oneLine,
   pad,
@@ -39,6 +45,24 @@ import {
   type CardView,
   type TaskChild,
 } from "./kanban-data";
+import {
+  applyFilter,
+  commitViews,
+  describeView,
+  emptyFilterState,
+  emptyView,
+  filtersFile,
+  isBlank,
+  loadFilterState,
+  negateTerm,
+  removeSlot,
+  saveFilterState,
+  toggleTerm,
+  withTerm,
+  type FilterState,
+  type FilterView,
+} from "./kanban-filter";
+import { workspaceRoot } from "../data";
 
 // A kanban card (epic or feature) plus the two joins the client caches: the epic
 // it hangs under (null for top-level cards) and its lazily loaded tasks.
@@ -48,6 +72,7 @@ export type KanbanRow = DetailRow & {
   owner: string;
   priority: string;
   epic: string | null;
+  labels: string[];
   tasks: TaskChild[];
   tasksLoaded: boolean;
 };
@@ -87,11 +112,16 @@ function byLane(a: KanbanRow, b: KanbanRow): number {
   return a.createdAt.localeCompare(b.createdAt);
 }
 
+// `labels` is passed separately rather than read off `s`: when a card's tasks are
+// expanded, `s` is the richer `kanban card` detail, and that view returns a null
+// `labels` — folding it in would silently drop an expanded card out of its own
+// filter. The board snapshot is the authority for labels.
 const rowFromCard = (
   s: BoardCard,
   tasks: TaskChild[],
   tasksLoaded: boolean,
   epic: string | null,
+  labels: string[],
 ): KanbanRow => {
     const attrs = s.attributes ?? {};
     const lane = s.state === "closed"
@@ -110,6 +140,7 @@ const rowFromCard = (
       updatedAt: s.updated_at ?? s.created_at,
       attrs,
       epic,
+      labels,
       tasks,
       tasksLoaded,
     };
@@ -145,6 +176,7 @@ async function fetchActiveKanban(
       activeTasks(taskCache.get(card.id) ?? []),
       taskCache.has(card.id),
       card.epic ?? null,
+      card.labels ?? [],
     );
   });
 }
@@ -162,6 +194,7 @@ async function fetchAllKanban(
       taskCache.get(card.id) ?? [],
       taskCache.has(card.id),
       card.epic ?? null,
+      card.labels ?? [],
     ));
 }
 
@@ -262,7 +295,7 @@ const rowBranch = (r: FlatRow): string => (r.kind === "card" ? r.card.branch : "
 const rowTitle = (r: FlatRow): string =>
   "  ".repeat(r.depth) + (r.kind === "card" ? MARK[r.marker] : "  ") + oneLine(r.kind === "card" ? r.card.title ?? "" : r.task.title);
 
-const HINT = "↑↓/jk move · ⌃d/⌃u page · = expand · - collapse · ⏎ attrs · ⌃g open · y copy · a all/active · r refresh · ⇥ tab · q quit";
+const HINT = "↑↓/jk move · ⌃d/⌃u page · = expand · - collapse · ⏎ attrs · f filter · ⌃g open · y copy · a all/active · r refresh · ⇥ tab · q quit";
 
 function KanbanTree({
   rows,
@@ -303,7 +336,7 @@ function KanbanTree({
     branch: fitCol(branchHeader, rows.map(branchText), 24),
   };
   const titleWidth = Math.max(0, cols - 12 - w.id - w.lane - w.prio - w.type - w.owner - w.branch);
-  const { start, visible, below } = windowRows(rows, selected, interactive, termRows);
+  const { start, visible, below } = windowRows(rows, selected, interactive, termRows, hintRows(HINT, cols));
 
   return (
     <Box flexDirection="column">
@@ -434,6 +467,113 @@ function TaskFailureBanner(failures: Map<string, string>, ctx: RenderCtx) {
   );
 }
 
+// ── label filter ─────────────────────────────────────────────────────────────
+// `f` opens a picker over every label in play, editing a working copy of the
+// saved views with one blank slot appended (h/l walk them, so stepping off the
+// end lands on a fresh view). Nothing is written until ⏎ commits, and ⎋ throws
+// the whole working copy away, so browsing saved views never disturbs them.
+
+type Overlay = { views: FilterView[]; slot: number; cursor: number; naming: boolean };
+
+// Every label the picker offers: the ones cards actually carry, plus any a saved
+// view still names. A view outliving the last card with its label must stay
+// editable — otherwise its term is invisible and impossible to clear.
+const labelUniverse = (rows: KanbanRow[], views: FilterView[]): string[] =>
+  [...new Set([...rows.flatMap((r) => r.labels), ...views.flatMap((v) => Object.keys(v.terms))])].sort();
+
+const labelCount = (rows: KanbanRow[], label: string): number =>
+  rows.filter((r) => r.labels.includes(label)).length;
+
+const openOverlay = (v: KanbanView): Overlay => {
+  const views = [...v.filter.views.map((view) => ({ ...view, terms: { ...view.terms } })), emptyView()];
+  return { views, slot: v.filter.active ?? views.length - 1, cursor: 0, naming: false };
+};
+
+const TERM_MARK: Record<string, string> = { include: "✓", exclude: "✗" };
+const TERM_COLOR: Record<string, string> = { include: "green", exclude: "red" };
+
+function FilterOverlay({ o, rows, cols, termRows }: { o: Overlay; rows: KanbanRow[]; cols: number; termRows: number }) {
+  const view = o.views[o.slot]!;
+  const labels = labelUniverse(rows, o.views);
+  const slots = o.views.map((_, i) => (i === o.slot ? "●" : "○")).join("");
+  const hint = o.naming
+    ? "type a name · ⏎/⎋ done"
+    : "↑↓/jk move · ␣ toggle · ! exclude · ⇥ and/or · i name · h/l view · x delete · ⏎ apply · ⎋ cancel";
+  // The pane spends the list viewport less its three header rows (title, name,
+  // mode), against a footer that wraps to however many rows the hint needs, so
+  // the whole overlay stays inside the frame the shell pins to the terminal.
+  const footer = hintRows(hint, cols);
+  const viewport = Math.max(3, listViewport(termRows, footer) - 3);
+  const start = Math.max(0, Math.min(o.cursor - Math.floor(viewport / 2), labels.length - viewport));
+  const visible = labels.slice(start, start + viewport);
+
+  return (
+    <Box flexDirection="column">
+      <Text bold>{clip(`FILTER VIEW  ${o.slot + 1}/${o.views.length}  ${slots}`, cols)}</Text>
+      <Text>
+        <Text dimColor>{pad("name", 6)}</Text>
+        <Text color={o.naming ? "green" : undefined}>{clip(view.name || (o.naming ? "" : "(unnamed)"), Math.max(0, cols - 8))}</Text>
+        {o.naming ? <Text inverse> </Text> : null}
+      </Text>
+      <Text>
+        <Text dimColor>{pad("mode", 6)}</Text>
+        <Text color="cyan">{view.mode.toUpperCase()}</Text>
+        <Text dimColor>{clip(view.mode === "and" ? "  (all of)" : "  (any of)", Math.max(0, cols - 12))}</Text>
+      </Text>
+      <Box marginTop={1} flexDirection="column">
+        {labels.length === 0 ? (
+          <Text dimColor>{clip("no labels on the board — `strand kanban label add <id> <slug>`", cols)}</Text>
+        ) : (
+          visible.map((label, i) => {
+            const term = view.terms[label];
+            const selected = start + i === o.cursor && !o.naming;
+            return (
+              <TableRow
+                key={label}
+                width={cols}
+                inverse={selected}
+                cells={[
+                  { text: "  " },
+                  { text: pad(term ? TERM_MARK[term]! : " ", 2), color: selected || !term ? undefined : TERM_COLOR[term] },
+                  { text: pad(label, Math.max(8, Math.min(32, cols - 16))) },
+                  { text: `${labelCount(rows, label)}`, dimColor: !selected },
+                ]}
+              />
+            );
+          })
+        )}
+      </Box>
+      <ListFooter hint={hint} cols={cols} start={0} below={0} total={labels.length} />
+    </Box>
+  );
+}
+
+// One dim line naming the view in force and what it left on screen, so a board
+// that is hiding cards always says so — a filtered board and an empty backlog
+// must never look the same.
+function FilterStrip(v: KanbanView, shown: number, total: number, ctx: RenderCtx) {
+  const view = v.filter.active !== null ? v.filter.views[v.filter.active] : null;
+  if (!view) return null;
+  const name = view.name.trim() || "(unnamed)";
+  const text = v.filter.enabled
+    ? `FILTER · ${name} · ${describeView(view)} · ${shown}/${total} cards · f change · ⇧f off`
+    : `FILTER · ${name} · off · ⇧f on · f change`;
+  return (
+    <Text bold={v.filter.enabled} color={v.filter.enabled ? "blue" : undefined} dimColor={!v.filter.enabled}>
+      {clip(text, ctx.cols)}
+    </Text>
+  );
+}
+
+function FilterErrorBanner(error: string | null, ctx: RenderCtx) {
+  if (!error) return null;
+  return (
+    <Text bold color="red">
+      {clip(`SAVED FILTERS · ${oneLine(error)}`, ctx.cols)}
+    </Text>
+  );
+}
+
 // ── the tab ────────────────────────────────────────────────────────────────
 // kanban is a list+detail tab with a status strip, so it composes the shared
 // movement/scroll reducers directly (like agents/devflow) rather than a shared list
@@ -452,36 +592,82 @@ type KanbanView = {
   failure: string | null;
   collapsed: Set<string>;
   expanded: Set<string>;
+  filter: FilterState;
+  filterError: string | null;
+  overlay: Overlay | null;
   s: ListState;
 };
+
+// The view in force, or null when none is selected or ⇧f has switched it off.
+const activeView = (v: KanbanView): FilterView | null =>
+  v.filter.enabled && v.filter.active !== null ? v.filter.views[v.filter.active] ?? null : null;
+
+// Every read of the board goes through here, so the filter applies once, before
+// grouping — and selection, paging, and the detail target all agree on which rows
+// exist. `rows` is explicit so a poll can flatten its fresh cards against the
+// latest view state.
+const treeOf = (rows: KanbanRow[], v: KanbanView): FlatRow[] =>
+  flatten(applyFilter(rows, activeView(v)), v.collapsed, v.expanded);
+const tree = (v: KanbanView): FlatRow[] => treeOf(v.rows, v);
+
+// Total rows the status strips above the board consume. Every banner that can
+// draw is counted here once, so the list windows against the height it actually
+// gets and the stacked heights still sum to the pinned frame.
+const stripRows = (v: KanbanView): number =>
+  lockRows(v.lock) +
+  (v.taskFailures.size > 0 ? 1 : 0) +
+  (v.filter.active !== null ? 1 : 0) +
+  (v.filterError ? 1 : 0);
+
+// Commit the overlay's working copy: blank slots are dropped, the cursor's slot
+// becomes active (or the filter clears if that slot was the blank one), and the
+// result is written through to the store.
+function commitOverlay(v: KanbanView, o: Overlay): KanbanView {
+  const { views, active } = commitViews(o.views, o.slot);
+  const filter: FilterState = { views, active, enabled: true };
+  const next = { ...v, filter, filterError: saveFilterState(filtersFile(), workspaceRoot, filter), overlay: null };
+  return { ...next, s: followSelection(next.s, tree(next), keyOf) };
+}
 
 export const kanbanTab = defineTab<KanbanView>({
   id: "kanban",
   label: "KANBAN",
-  init: () => ({
-    rows: [],
-    taskCache: new Map(),
-    cardCache: new Map(),
-    taskFailures: new Map(),
-    lock: { kind: "none" },
-    loaded: false,
-    failure: null,
-    collapsed: new Set(),
-    expanded: new Set(),
-    s: emptyListState(),
-  }),
+  init: () => {
+    // Saved views are read once at startup; a store the user has never written is
+    // simply an empty set, while a corrupt one degrades to empty plus a banner.
+    const { state, error } = loadFilterState(filtersFile(), workspaceRoot);
+    return {
+      rows: [],
+      taskCache: new Map(),
+      cardCache: new Map(),
+      taskFailures: new Map(),
+      lock: { kind: "none" },
+      loaded: false,
+      failure: null,
+      collapsed: new Set(),
+      expanded: new Set(),
+      filter: state,
+      filterError: error,
+      overlay: null,
+      s: emptyListState(),
+    };
+  },
   fetchKey: (v) => {
-    const selected = cardAt(flatten(v.rows, v.collapsed, v.expanded), v.s.selected);
+    const selected = cardAt(tree(v), v.s.selected);
     const detail = v.s.view === "detail" && selected ? selected.id : "";
     return `${[...v.expanded].sort().join(",")}|${detail}`;
   },
   allApplies: () => true,
-  inDetail: (v) => v.s.view === "detail",
-  editTarget: (v) => cardAt(flatten(v.rows, v.collapsed, v.expanded), v.s.selected) ?? null,
+  inDetail: (v) => v.s.view === "detail" || v.overlay !== null,
+  // The overlay owns every key while it is open, including the shell's q — a
+  // filter name with a "q" in it must not quit the dashboard.
+  capturesInput: (v) => v.overlay !== null,
+  editTarget: (v) => (v.overlay ? null : cardAt(tree(v), v.s.selected) ?? null),
   // Unlike editTarget (cards only — a task has no openable source), y copies the id
   // of whatever row is under the cursor, task rows included: they are strands too.
   copyId: (v) => {
-    const row = flatten(v.rows, v.collapsed, v.expanded)[v.s.selected];
+    if (v.overlay) return null;
+    const row = tree(v)[v.s.selected];
     return row ? rowId(row) : null;
   },
   refresh: async (v, all) => {
@@ -490,7 +676,7 @@ export const kanbanTab = defineTab<KanbanView>({
     // (it resolves failures to a LockState.error rather than throwing), so a flaky
     // merge-lock query degrades to a loud banner and never blanks a good board.
     try {
-      const selected = cardAt(flatten(v.rows, v.collapsed, v.expanded), v.s.selected);
+      const selected = cardAt(tree(v), v.s.selected);
       const detailIds = new Set(v.expanded);
       if (v.s.view === "detail" && selected) detailIds.add(selected.id);
       const [details, lock] = await Promise.all([
@@ -511,7 +697,7 @@ export const kanbanTab = defineTab<KanbanView>({
         lock,
         loaded: true,
         failure: null,
-        s: followSelection(latest.s, flatten(rows, latest.collapsed, latest.expanded), keyOf),
+        s: followSelection(latest.s, treeOf(rows, latest), keyOf),
       });
     } catch (e) {
       const failure = e instanceof Error ? e.message : String(e);
@@ -520,7 +706,51 @@ export const kanbanTab = defineTab<KanbanView>({
   },
   onKey: (v, ctx) => {
     const { input, key } = ctx;
-    const rows = flatten(v.rows, v.collapsed, v.expanded);
+    // The overlay is modal: it precedes every other binding and swallows keys it
+    // does not use, so a stray press can never leak through to the board beneath.
+    if (v.overlay) {
+      const o = v.overlay;
+      const view = o.views[o.slot]!;
+      const labels = labelUniverse(v.rows, o.views);
+      const setView = (next: FilterView): KanbanView => ({
+        ...v,
+        overlay: { ...o, views: o.views.map((w, i) => (i === o.slot ? next : w)) },
+      });
+      if (o.naming) {
+        // Name editing is a sub-mode because the picker's own keys (jk/hl/space)
+        // are letters: there is no way to type "test only" and navigate at once.
+        if (key.return || key.escape) return { ...v, overlay: { ...o, naming: false } };
+        if (key.backspace || key.delete) return setView({ ...view, name: view.name.slice(0, -1) });
+        // Printable ASCII only: a tab, arrow, or unparsed escape sequence must not
+        // land in the name as literal control characters.
+        if (!key.ctrl && !key.meta && /^[\x20-\x7e]+$/.test(input)) return setView({ ...view, name: view.name + input });
+        return v;
+      }
+      if (key.escape) return { ...v, overlay: null };
+      if (key.return) return commitOverlay(v, o);
+      if (input === "i") return { ...v, overlay: { ...o, naming: true } };
+      if (key.tab) return setView({ ...view, mode: view.mode === "and" ? "or" : "and" });
+      if (labels.length > 0 && (input === " " || input === "!")) {
+        const label = labels[Math.min(o.cursor, labels.length - 1)]!;
+        const current = view.terms[label];
+        return setView(withTerm(view, label, input === " " ? toggleTerm(current) : negateTerm(current)));
+      }
+      if (key.upArrow || input === "k") return { ...v, overlay: { ...o, cursor: Math.max(0, o.cursor - 1) } };
+      if (key.downArrow || input === "j") return { ...v, overlay: { ...o, cursor: Math.min(labels.length - 1, o.cursor + 1) } };
+      if (input === "x") {
+        const { views, slot } = removeSlot(o.views, o.slot);
+        return { ...v, overlay: { ...o, views, slot } };
+      }
+      if (key.leftArrow || input === "h") return { ...v, overlay: { ...o, slot: Math.max(0, o.slot - 1) } };
+      if (key.rightArrow || input === "l") {
+        // Stepping off the end always lands on a blank slot: once the trailing one
+        // has been filled in, another is appended so a new view is always one `l` away.
+        const views = o.slot === o.views.length - 1 && !isBlank(view) ? [...o.views, emptyView()] : o.views;
+        return { ...v, overlay: { ...o, views, slot: Math.min(views.length - 1, o.slot + 1) } };
+      }
+      return v;
+    }
+    const rows = tree(v);
     if (v.s.view === "detail") {
       const r = reduceScrollKeys(v.s.detailScroll, input, key, detailMaxScroll(cardAt(rows, v.s.selected), ctx.cols, ctx.termRows), detailPage(ctx.termRows));
       if (r === "back") return { ...v, s: { ...v.s, view: "list" } };
@@ -528,11 +758,20 @@ export const kanbanTab = defineTab<KanbanView>({
       if (input === "r") ctx.refresh();
       return v;
     }
-    // The banner steals a list row when it draws, so page jumps size against the
+    // The banners steal list rows when they draw, so page jumps size against the
     // same reduced viewport the list renders into, not the raw terminal.
-    const listRows = ctx.termRows - lockRows(v.lock) - (v.taskFailures.size > 0 ? 1 : 0);
-    const moved = reduceListKeys(v.s, input, key, rows, keyOf, listPage(listRows));
+    const listRows = ctx.termRows - stripRows(v);
+    const moved = reduceListKeys(v.s, input, key, rows, keyOf, listPage(listRows, hintRows(HINT, ctx.cols)));
     if (moved) return { ...v, s: moved };
+    if (input === "f") return { ...v, overlay: openOverlay(v) };
+    // ⇧f parks the active view without discarding it, so the board can be widened
+    // for a moment and the same filter put straight back.
+    if (input === "F") {
+      if (v.filter.active === null) return v;
+      const filter = { ...v.filter, enabled: !v.filter.enabled };
+      const next = { ...v, filter, filterError: saveFilterState(filtersFile(), workspaceRoot, filter) };
+      return { ...next, s: followSelection(next.s, tree(next), keyOf) };
+    }
     // Expand/collapse the selected card. Epics default open (toggle via collapsed);
     // features default closed (toggle via expanded), and only when they bear tasks.
     if (input === "=" || input === "-") {
@@ -558,22 +797,25 @@ export const kanbanTab = defineTab<KanbanView>({
   },
   render: (v, ctx) => {
     if (v.failure) return <Failure failure={v.failure} cols={ctx.cols} />;
-    const rows = flatten(v.rows, v.collapsed, v.expanded);
+    // The picker takes the whole pane, like the detail view: its own name/mode
+    // header would not survive sharing the frame with the board's status strips.
+    if (v.overlay && ctx.interactive)
+      return <FilterOverlay o={v.overlay} rows={v.rows} cols={ctx.cols} termRows={ctx.termRows} />;
+    const rows = tree(v);
     if (v.s.view === "detail" && ctx.interactive)
       return <DetailView row={cardAt(rows, v.s.selected)} scroll={v.s.detailScroll} cols={ctx.cols} termRows={ctx.termRows} />;
-    // The banner reserves its row so the list windows against the height it gets and
-    // the stacked heights still sum to the pinned frame (detail view hides the strip).
-    const reserved = lockRows(v.lock) + (v.taskFailures.size > 0 ? 1 : 0);
     return (
       <Box flexDirection="column">
         {MergeLockBanner(v.lock, ctx)}
         {TaskFailureBanner(v.taskFailures, ctx)}
+        {FilterErrorBanner(v.filterError, ctx)}
+        {FilterStrip(v, applyFilter(v.rows, activeView(v)).length, v.rows.length, ctx)}
         <KanbanTree
           rows={rows}
           selected={v.s.selected}
           interactive={ctx.interactive}
           cols={ctx.cols}
-          termRows={ctx.termRows - reserved}
+          termRows={ctx.termRows - stripRows(v)}
           all={ctx.all}
           loaded={v.loaded}
         />
