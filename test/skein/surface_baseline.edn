@@ -6,7 +6,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 285},
+   :source {:file ".skein/config.clj", :line 292},
    :glossary {},
    :node
    {:children [],
@@ -106,6 +106,8 @@
    [:= :state "active"]
    [:= [:attr "workflow/role"] "root"]
    [:= [:attr "workflow/family"] "devflow"]],
+  "merge-lock"
+  [:and [:= :state "active"] [:= [:attr "kind"] "merge-lock"]],
   "work"
   [:and
    [:= :state "active"]

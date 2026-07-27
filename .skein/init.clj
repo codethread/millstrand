@@ -14,7 +14,7 @@
 ;;
 ;; File-per-concern map (each is one module):
 ;;   config.clj        — named queries + the devflow/kanban/hitl CLI op surface
-;;   workflows.clj     — hand-authored land/story workflow definitions + the land op
+;;   workflows.clj     — hand-authored workflows + the land policy op
 ;;   harnesses.clj     — harness seats + routing policy
 ;;   reviewers.clj     — reviewer rosters
 ;;   attention.clj     — chime attention rules
@@ -211,11 +211,10 @@
                   :spools ['skein.macros/macros]
                   :after [:macros/ops]
                   :required? true})
-;; workflows.clj authors the land/story workflow definitions with defworkflow,
-;; the land op with defop, and the delegate-pipeline pattern with defpattern, so
-;; its contribution is those collected entries. It references config.clj's
-;; public CLI-tail helpers at load time, so it orders after :config as well as
-;; the workflow/delegation spools and the authoring macros.
+;; workflows.clj authors land/story definitions, the narrow land policy op, and
+;; the delegate-pipeline pattern. It reuses config.clj's public validation
+;; helper, so it orders after :config as well as the workflow/delegation spools
+;; and authoring macros.
 (runtime/module! runtime :workflows
                  {:file "workflows.clj"
                   :spools ['skein.spools/workflow 'ct.spools/delegation

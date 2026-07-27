@@ -4,7 +4,8 @@
   surface, the delegate-pipeline weave pattern, the land workflow, the
   generic workflow integration with ct.spools.devflow, and the feature-costs
   usage rollup."
-  (:require [clojure.edn :as edn]
+  (:require [clojure.data.json :as json]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.spec.alpha :as s]
@@ -133,6 +134,14 @@
             ((requiring-resolve 'skein.spools.workflow/reconcile)
              {:runtime rt :module/key :skein/spools-workflow
               :module/contribution {:status :applied}})
+            (load-module-namespace! rt :skein/spools-workflow-cli
+                                    'skein.spools.workflow.cli)
+            (publish-module-contribution!
+             rt :skein/spools-workflow-cli
+             (requiring-resolve 'skein.spools.workflow.cli/contribute))
+            ((requiring-resolve 'skein.spools.workflow.cli/reconcile)
+             {:runtime rt :module/key :skein/spools-workflow-cli
+              :module/contribution {:status :applied}})
             (load-module-namespace! rt :skein/spools-devflow 'ct.spools.devflow)
             (load-module-source! rt :config ".skein/config.clj")
             (load-file ".skein/harnesses.clj")
@@ -257,6 +266,24 @@
   [op-name argv]
   (weaver/op! (current/runtime) (symbol op-name) argv))
 
+(defn- start-land!
+  "Start the registered land workflow through the generic CLI."
+  [run-id branch worktree & [card]]
+  (op! "workflow"
+       ["start" run-id
+        "--workflow" "land"
+        "--params" (json/write-str (cond-> {:feature run-id
+                                            :branch branch
+                                            :worktree worktree}
+                                     card (assoc :card card)))]))
+
+(defn- active-merge-locks
+  "Return active merge locks from the same query shape as the named query."
+  []
+  (weaver/list (current/runtime)
+               [:and [:= :state "active"] [:= [:attr "kind"] "merge-lock"]]
+               {}))
+
 (def ^:private config-op-names
   "The config-owned CLI ops whose generated `help <op>` the refactor must preserve.
 
@@ -269,7 +296,7 @@
   "The config-owned named queries whose registered definitions the refactor must
   preserve, authored as `defquery` blocks in .skein/config.clj."
   ["feature-active" "feature-work" "feature-owner-work" "feature-run"
-   "workflow-runs" "devflow-runs" "work"])
+   "workflow-runs" "devflow-runs" "merge-lock" "work"])
 
 (defn- portable-source
   "Rewrite an op-help envelope's absolute `:source` file to a repo-relative path.
@@ -331,7 +358,8 @@
   "Assert the repo-local query/op/pattern registrations are present."
   [rt]
   (doseq [query-name ["kanban-cards" "kanban-pending" "feature-active" "feature-work"
-                      "feature-owner-work" "feature-run" "workflow-runs" "devflow-runs" "work"]]
+                      "feature-owner-work" "feature-run" "workflow-runs" "devflow-runs"
+                      "merge-lock" "work"]]
     (is (contains? (graph/queries rt) query-name)))
   (is (contains? (graph/queries rt) "bench-runs"))
   (doseq [op-name ["kanban" "hitl" "land" "workflow"
@@ -991,9 +1019,7 @@
 (deftest land-feature-ci-watch-waits-for-check-registration-and-preserves-failures
   (with-config-runtime
     (fn [rt]
-      (let [_ (op! "land" ["start" "land-ci-script"
-                           "--branch" "land-x"
-                           "--worktree" (System/getProperty "user.dir")])
+      (let [_ (start-land! "land-ci-script" "land-x" (System/getProperty "user.dir"))
             completed (op! "land" ["complete" "land-ci-script" "--pr-number" "411"])
             gate-attrs (:attributes (weaver/show rt (get-in completed [:ready 0 :id])))
             [shell-command shell-flag script script-name branch startup-timeout poll-interval]
@@ -1087,8 +1113,8 @@
 (deftest land-ops-drive-a-poured-run-end-to-end
   (with-config-runtime
     (fn [rt]
-      (let [started (op! "land" ["start" "land-x" "--branch" "land-x" "--worktree" "/tmp/land-x"])]
-        (is (= "land start" (:operation started)))
+      (let [started (start-land! "land-x" "land-x" "/tmp/land-x")]
+        (is (= "workflow start" (:operation started)))
         (is (false? (:done started)))
         (is (= "land.pr.open" (:action-ref (first (:ready started)))))
         (is (not (contains? (first (:ready started)) :choice-details))))
@@ -1109,42 +1135,44 @@
                  (into [command flag] args))))
         (is (= "/tmp/land-x" (:shell/cwd gate-attrs))))
       ;; a coordinator cannot hand-close a CI gate; the shell executor owns it
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Gate steps require a non-blank :by"
-                            (op! "land" ["complete" "land-x"])))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"No ready workflow step"
+                            (op! "workflow" ["complete" "land-x"])))
       (shell-gate-complete! "land-x" "checks green")
       (is (= "land.signoff.review"
-             (:action-ref (first (:ready (op! "land" ["ready" "land-x"]))))))
-      (let [at-checkpoint (op! "land" ["complete" "land-x"])
+             (:action-ref (first (:ready (op! "workflow" ["ready" "land-x"]))))))
+      (let [at-checkpoint (op! "workflow" ["complete" "land-x"])
             checkpoint (first (:ready at-checkpoint))
-            choices ((requiring-resolve 'skein.spools.workflow/choice-details) "land-x")
-            next-checkpoint (first (:ready (op! "land" ["ready" "land-x"])))
-            status-checkpoint (first (:ready (op! "land" ["status" "land-x"])))]
+            next-checkpoint (first (:ready (op! "workflow" ["ready" "land-x"])))
+            status-checkpoint (first (:ready (op! "workflow" ["ready" "land-x"])))]
         (is (= "checkpoint" (:role checkpoint)))
         (is (= "signoff" (:checkpoint checkpoint)))
         (is (= ["approved" "revise" "abort"] (:choices checkpoint)))
-        (is (= choices (:choice-details checkpoint)))
-        (is (= choices (:choice-details next-checkpoint)))
-        (is (= choices (:choice-details status-checkpoint))))
+        (is (= checkpoint next-checkpoint status-checkpoint))
+        (is (not (contains? checkpoint :choice-details))))
       ;; approved and abort each name one whole-map input spec; revise takes no
       ;; input and re-pours the current definition from saved context
-      (let [choices (:choice-details
-                     (first (:ready (op! "land" ["ready" "land-x"]))))
+      (let [choices ((requiring-resolve 'skein.spools.workflow/choice-details) "land-x")
             approved-input (get-in choices ["approved" "input-spec"])
             abort-input (get-in choices ["abort" "input-spec"])]
         (is (= #{"approved" "revise" "abort"} (set (keys choices))))
         (is (= "workflows/land-merge-input" (get approved-input "spec")))
         (is (= "workflows/land-abort-input" (get abort-input "spec")))
-        (is (= "(clojure.spec.alpha/keys :req-un [:workflows/subject :workflows/body])"
+        (is (= "(clojure.spec.alpha/and (clojure.spec.alpha/keys :req-un [:workflows/subject :workflows/body]) (clojure.core/fn [%] (clojure.core/every? #{:body :subject} (clojure.core/keys %))))"
                (get (first (get approved-input "spec-forms")) "form")))
-        (is (= "(clojure.spec.alpha/keys :req-un [:workflows/reason])"
+        (is (= "(clojure.spec.alpha/and (clojure.spec.alpha/keys :req-un [:workflows/reason]) (clojure.core/fn [%] (clojure.core/every? #{:reason} (clojure.core/keys %))))"
                (get (first (get abort-input "spec-forms")) "form"))))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Value does not satisfy the named spec"
-                            (op! "land" ["choose" "land-x" "approved"])))
+                            (op! "land" ["choose" "land-x" "approved" "--input" "{}"])))
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"input contains unsupported keys"
+           (op! "land" ["choose" "land-x" "approved" "--input"
+                        "{\"subject\":\"feat: land x\",\"body\":\"Squashed commits: abc123\",\"subjet\":\"typo\"}"])))
       ;; approval routes to the mechanical merge continuation. Subject and body
       ;; remain argv elements rather than being interpolated into shell source.
       (let [subject "feat: land x"
             body "Squashed commits: abc123"
-            approved (op! "land" ["choose" "land-x" "approved"
+            approved (op! "land" ["choose" "land-x" "approved" "--input"
                                   "{\"subject\":\"feat: land x\",\"body\":\"Squashed commits: abc123\"}"])
             gate (first (:ready approved))
             gate-attrs (:attributes (weaver/show rt (:id gate)))
@@ -1156,22 +1184,22 @@
         (is (str/includes? script "gh pr merge"))
         (is (= ["sh" "-c" script "land-merge" "412" subject body]
                (:shell/argv gate-attrs)))
-        (is (= "merge-lock" (get-in (op! "land" ["status" "land-x"]) [:merge-lock :attributes :kind]))))
-      (op! "land" ["start" "land-z" "--branch" "land-z" "--worktree" "/tmp/land-z"])
+        (is (= ["merge-lock"] (mapv #(get-in % [:attributes :kind]) (active-merge-locks)))))
+      (start-land! "land-z" "land-z" "/tmp/land-z")
       (op! "land" ["complete" "land-z" "--pr-number" "413"])
       (shell-gate-complete! "land-z" "checks green")
-      (op! "land" ["complete" "land-z"])
+      (op! "workflow" ["complete" "land-z"])
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"another land run holds the merge lock"
-                            (op! "land" ["choose" "land-z" "approved"
+                            (op! "land" ["choose" "land-z" "approved" "--input"
                                          "{\"subject\":\"feat: land z\",\"body\":\"Squashed commits: def456\"}"])))
       (shell-gate-complete! "land-x" "PR merged")
-      (let [gate (first (:ready (op! "land" ["ready" "land-x"])))
+      (let [gate (first (:ready (op! "workflow" ["ready" "land-x"])))
             gate-attrs (:attributes (weaver/show rt (:id gate)))]
         (is (= "land.main.pull" (:action-ref gate)))
         (is (= "shell" (:gate gate)))
         (is (str/includes? (last (:shell/argv gate-attrs)) "--ff-only")))
       (shell-gate-complete! "land-x" "main fast-forwarded")
-      (let [gate (first (:ready (op! "land" ["ready" "land-x"])))
+      (let [gate (first (:ready (op! "workflow" ["ready" "land-x"])))
             gate-attrs (:attributes (weaver/show rt (:id gate)))]
         (is (= "land.main.ci-green" (:action-ref gate)))
         (is (= "code" (:gate gate)))
@@ -1179,7 +1207,7 @@
         (is (= {:worktree "/tmp/land-x"} (:code/params gate-attrs)))
         (is (= 5400 (:code/timeout-secs gate-attrs))))
       (code-gate-complete! "land-x" "main runs green")
-      (let [gate (first (:ready (op! "land" ["ready" "land-x"])))
+      (let [gate (first (:ready (op! "workflow" ["ready" "land-x"])))
             gate-attrs (:attributes (weaver/show rt (:id gate)))]
         (is (= "land.branch-worktree.cleanup" (:action-ref gate)))
         (is (= "shell" (:gate gate)))
@@ -1192,28 +1220,50 @@
         (is (str/includes? (nth (:shell/argv gate-attrs) 2) "git -C \"$canonical\" branch -D"))
         (is (not (str/includes? (nth (:shell/argv gate-attrs) 2) "wktree"))))
       (shell-gate-complete! "land-x" "branch and worktree removed")
-      (let [ready-tidy (op! "land" ["ready" "land-x"])
+      (let [ready-tidy (op! "workflow" ["ready" "land-x"])
             tidy-step (first (:ready ready-tidy))]
         (is (= "land.resources.tidy" (:action-ref tidy-step)))
         (is (str/includes? (:instruction tidy-step) "tmux sessions"))
         (is (str/includes? (:instruction tidy-step) "recorded PID")))
-      (op! "land" ["complete" "land-x"])
-      (let [ready-cleanup (op! "land" ["ready" "land-x"])
+      (op! "workflow" ["complete" "land-x"])
+      (let [ready-cleanup (op! "workflow" ["ready" "land-x"])
             cleanup-step (first (:ready ready-cleanup))]
-        (is (= "land ready" (:operation ready-cleanup)))
+        (is (= "workflow ready" (:operation ready-cleanup)))
         (is (= "land.cleanup" (:action-ref cleanup-step)))
         ;; cardless run: the cleanup instruction must omit kanban-finish
         ;; entirely rather than render a literal "<card>" placeholder
         (is (not (str/includes? (:instruction cleanup-step) "kanban finish")))
         (is (not (str/includes? (:instruction cleanup-step) "<card>"))))
-      (let [done (op! "land" ["complete" "land-x"])]
-        (is (true? (:done done)))
-        (is (empty? (:ready done))))
-      (let [status (op! "land" ["status" "land-x"])]
-        (is (= "land status" (:operation status)))
+      (let [owned (first (active-merge-locks))]
+        (weaver/update! rt (:id owned) {:state "closed"})
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"cleanup requires its active merge lock"
+                              (op! "land" ["complete" "land-x"])))
+        (let [foreign (weaver/add! rt {:title "Foreign merge lock"
+                                       :attributes {:kind "merge-lock"
+                                                    :land/run-id "other-land-run"}})]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                #"another land run holds the merge lock"
+                                (op! "land" ["complete" "land-x"])))
+          (weaver/update! rt (:id foreign) {:state "closed"}))
+        (weaver/update! rt (:id owned) {:state "active"}))
+      (let [duplicate (weaver/add! rt {:title "Corrupt duplicate merge lock"
+                                       :attributes {:kind "merge-lock"
+                                                    :land/run-id "other-land-run"}})]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"multiple active merge locks found"
+                              (op! "land" ["complete" "land-x"])))
+        (is (= 2 (count (active-merge-locks)))
+            "terminal cleanup must not normalize a corrupt lock set")
+        (weaver/update! rt (:id duplicate) {:state "closed"})
+        (let [done (op! "land" ["complete" "land-x"])]
+          (is (true? (:done done)))
+          (is (empty? (:ready done)))))
+      (let [status (op! "workflow" ["ready" "land-x"])]
+        (is (= "workflow ready" (:operation status)))
         (is (true? (:done status)))
         (is (empty? (:ready status)))
-        (is (nil? (:merge-lock status)))
+        (is (empty? (active-merge-locks)))
         ;; history is not a land concern: read a run's past through trusted Clojure
         (is (not (contains? status :history)))))))
 
@@ -1224,17 +1274,17 @@
                                           :attributes {:kanban/card "true"
                                                        :kanban/lane "claimed"
                                                        :kanban/type "feature"}}))
-            _ (op! "land" ["start" "land-pr-context"
-                           "--branch" "land-pr-context"
-                           "--worktree" "/tmp/land-pr-context"
-                           "--card" card-id])
+            _ (start-land! "land-pr-context" "land-pr-context"
+                           "/tmp/land-pr-context" card-id)
             root-before ((requiring-resolve 'skein.spools.workflow/current-root)
                          "land-pr-context")
             context-before (get-in root-before [:attributes :workflow/context])]
-        (doseq [argv [["complete" "land-pr-context"]
-                      ["complete" "land-pr-context" "--pr-number" "0"]]]
+        (doseq [[argv message] [[["complete" "land-pr-context"]
+                                 #"push-draft-pr completion requires a positive --pr-number"]
+                                [["complete" "land-pr-context" "--pr-number" "0"]
+                                 #"push-draft-pr completion requires a positive --pr-number"]]]
           (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                                #"push-draft-pr completion requires a positive --pr-number"
+                                message
                                 (op! "land" argv)))
           (is (= "active" (:state (weaver/show rt (:id root-before)))))
           (is (= context-before
@@ -1246,51 +1296,109 @@
         (op! "land" ["complete" "land-pr-context" "--pr-number" "417"])
         (shell-gate-complete! "land-pr-context" "checks green")
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                              #"--pr-number is only accepted when completing push-draft-pr"
+                              #"requires a PR-open or terminal policy frontier"
                               (op! "land" ["complete" "land-pr-context"
                                            "--pr-number" "418"])))))))
 
 (deftest land-signoff-invalid-pr-number-leaves-no-durable-mutation
   (with-config-runtime
     (fn [rt]
-      (op! "land" ["start" "land-invalid-pr"
-                   "--branch" "land-invalid-pr"
-                   "--worktree" "/tmp/land-invalid-pr"])
+      (start-land! "land-invalid-pr" "land-invalid-pr" "/tmp/land-invalid-pr")
       ;; Bypass the land wrapper to model a pre-feature run whose draft-PR step
       ;; closed without producing :pr-number.
       ((requiring-resolve 'skein.spools.workflow/complete!) "land-invalid-pr")
       (shell-gate-complete! "land-invalid-pr" "checks green")
-      (op! "land" ["complete" "land-invalid-pr"])
+      (op! "workflow" ["complete" "land-invalid-pr"])
       (let [old-root ((requiring-resolve 'skein.spools.workflow/current-root)
                       "land-invalid-pr")]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"Value does not satisfy the named spec"
-                              (op! "land" ["choose" "land-invalid-pr" "approved"
+                              (op! "land" ["choose" "land-invalid-pr" "approved" "--input"
                                            "{\"subject\":\"feat: invalid\",\"body\":\"body\"}"])))
         (is (= "active" (:state (weaver/show rt (:id old-root))))
             "invalid sign-off leaves the old workflow root active")
-        (is (nil? (:merge-lock (op! "land" ["status" "land-invalid-pr"])))
+        (is (empty? (active-merge-locks))
             "invalid sign-off leaves no durable merge lock")))))
+
+(deftest land-policy-rollbacks-preserve-idempotent-pre-call-state
+  (with-config-runtime
+    (fn [rt]
+      (let [review-card (:id (weaver/add! rt {:title "Already reviewed card"
+                                              :attributes {:kanban/card "true"
+                                                           :kanban/lane "in_review"
+                                                           :kanban/type "feature"}}))]
+        (start-land! "land-review-idempotent" "land-review-idempotent"
+                     "/tmp/land-review-idempotent" review-card)
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"push-draft-pr completion requires a positive --pr-number"
+             (op! "land" ["complete" "land-review-idempotent"
+                          "--pr-number" "0"])))
+        (is (= "in_review"
+               (get-in (weaver/show rt review-card) [:attributes :kanban/lane]))))
+      (let [claimed-card (:id (weaver/add! rt {:title "Already claimed abort card"
+                                               :attributes {:kanban/card "true"
+                                                            :kanban/lane "claimed"
+                                                            :kanban/type "feature"}}))]
+        (start-land! "land-abort-idempotent" "land-abort-idempotent"
+                     "/tmp/land-abort-idempotent" claimed-card)
+        (op! "land" ["complete" "land-abort-idempotent" "--pr-number" "420"])
+        (shell-gate-complete! "land-abort-idempotent" "checks green")
+        (op! "workflow" ["complete" "land-abort-idempotent"])
+        ((requiring-resolve 'ct.spools.kanban/rework!) rt claimed-card)
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"Value does not satisfy the named spec"
+                              (op! "land" ["choose" "land-abort-idempotent" "abort"
+                                           "--input" "{}"])))
+        (is (= "claimed"
+               (get-in (weaver/show rt claimed-card) [:attributes :kanban/lane])))))))
+
+(deftest land-failed-approval-retains-a-reused-same-run-lock
+  (with-config-runtime
+    (fn [rt]
+      (start-land! "land-reused-lock" "land-reused-lock" "/tmp/land-reused-lock")
+      (op! "land" ["complete" "land-reused-lock" "--pr-number" "421"])
+      (shell-gate-complete! "land-reused-lock" "checks green")
+      (op! "workflow" ["complete" "land-reused-lock"])
+      (let [root ((requiring-resolve 'skein.spools.workflow/current-root)
+                  "land-reused-lock")
+            lock (weaver/add! rt {:title "Merge lock: land-reused-lock"
+                                  :attributes {:kind "merge-lock"
+                                               :owner (:id root)
+                                               :land/run-id "land-reused-lock"}})]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"Value does not satisfy the named spec"
+                              (op! "land" ["choose" "land-reused-lock" "approved"
+                                           "--input" "{}"])))
+        (is (= "active" (:state (weaver/show rt (:id lock)))))
+        (is (= [(:id lock)] (mapv :id (active-merge-locks))))
+        (weaver/add! rt {:title "Corrupt second merge lock"
+                         :attributes {:kind "merge-lock"
+                                      :land/run-id "other-land-run"}})
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"multiple active merge locks found"
+             (op! "land" ["choose" "land-reused-lock" "approved"
+                          "--input"
+                          "{\"subject\":\"feat: reused\",\"body\":\"Squashed commits: abc123\"}"])))))))
 
 (deftest land-signoff-revise-repours-with-context-and-no-merge-lock
   (with-config-runtime
     (fn [rt]
-      (op! "land" ["start" "land-revise"
-                   "--branch" "land-revise"
-                   "--worktree" "/tmp/land-revise"])
+      (start-land! "land-revise" "land-revise" "/tmp/land-revise")
       (op! "land" ["complete" "land-revise" "--pr-number" "419"])
       (shell-gate-complete! "land-revise" "checks green")
-      (op! "land" ["complete" "land-revise"])
+      (op! "workflow" ["complete" "land-revise"])
       (let [old-root ((requiring-resolve 'skein.spools.workflow/current-root) "land-revise")
             old-context (get-in old-root [:attributes :workflow/context])
-            revised (op! "land" ["choose" "land-revise" "revise"])
+            revised (op! "workflow" ["choose" "land-revise" "revise"])
             new-root ((requiring-resolve 'skein.spools.workflow/current-root) "land-revise")]
         (is (= "land.pr.open" (:action-ref (first (:ready revised)))))
         (is (not= (:id old-root) (:id new-root)))
         (is (= "closed" (:state (weaver/show rt (:id old-root)))))
         (is (= old-context (get-in new-root [:attributes :workflow/context])))
         (is (= 419 (get-in new-root [:attributes :workflow/context :pr-number])))
-        (is (nil? (:merge-lock (op! "land" ["status" "land-revise"]))))))))
+        (is (empty? (active-merge-locks)))))))
 
 (deftest land-signoff-abort-routes-to-record-step
   (with-config-runtime
@@ -1299,7 +1407,7 @@
                                           :attributes {:kanban/card "true"
                                                        :kanban/lane "claimed"
                                                        :kanban/type "feature"}}))]
-        (op! "land" ["start" "land-y" "--branch" "land-y" "--worktree" "/tmp/land-y" "--card" card-id]))
+        (start-land! "land-y" "land-y" "/tmp/land-y" card-id))
       ;; completing push-draft-pr starts the automated CI watch and review
       ;; pipeline, so it is the completion that moves the card to in_review
       (op! "land" ["complete" "land-y" "--pr-number" "414"]) ; push-draft-pr
@@ -1308,8 +1416,8 @@
             card-id (or (:card context) (get context "card"))]
         (is (= "in_review" (get-in (weaver/show rt card-id) [:attributes :kanban/lane]))))
       (shell-gate-complete! "land-y" "checks green") ; ci-green
-      (op! "land" ["complete" "land-y"])           ; signoff-review
-      (let [aborted (op! "land" ["choose" "land-y" "abort" "{\"reason\":\"scope changed\"}"])]
+      (op! "workflow" ["complete" "land-y"])           ; signoff-review
+      (let [aborted (op! "land" ["choose" "land-y" "abort" "--input" "{\"reason\":\"scope changed\"}"])]
         (is (= "land choose" (:operation aborted)))
         ;; routing is a hard cutover to the reason-recording continuation
         (is (= "land.abort.record" (:action-ref (first (:ready aborted))))))
@@ -1328,18 +1436,18 @@
                                           :attributes {:kanban/card "true"
                                                        :kanban/lane "claimed"
                                                        :kanban/type "feature"}}))]
-        (op! "land" ["start" "land-w" "--branch" "land-w" "--worktree" "/tmp/land-w" "--card" card-id])
+        (start-land! "land-w" "land-w" "/tmp/land-w" card-id)
         (op! "land" ["complete" "land-w" "--pr-number" "415"])      ; push-draft-pr
         (shell-gate-complete! "land-w" "checks green")              ; ci-green
-        (op! "land" ["complete" "land-w"])                          ; signoff-review
-        (op! "land" ["choose" "land-w" "approved"
+        (op! "workflow" ["complete" "land-w"])                          ; signoff-review
+        (op! "land" ["choose" "land-w" "approved" "--input"
                      "{\"subject\":\"feat: land w\",\"body\":\"Squashed commits: abc123\"}"])
         (shell-gate-complete! "land-w" "PR merged")                  ; merge-pr
         (shell-gate-complete! "land-w" "main fast-forwarded")       ; pull-main
         (code-gate-complete! "land-w" "main runs green")            ; main-ci-green
         (shell-gate-complete! "land-w" "branch and worktree removed") ; remove-branch-worktree
-        (op! "land" ["complete" "land-w"])                           ; tidy-created-resources
-        (let [ready-cleanup (op! "land" ["ready" "land-w"])
+        (op! "workflow" ["complete" "land-w"])                           ; tidy-created-resources
+        (let [ready-cleanup (op! "workflow" ["ready" "land-w"])
               cleanup-step (first (:ready ready-cleanup))]
           (is (= "land.cleanup" (:action-ref cleanup-step)))
           (is (str/includes? (:instruction cleanup-step)
@@ -1349,26 +1457,29 @@
 (deftest land-break-lock-closes-active-sentinel-with-reason
   (with-config-runtime
     (fn [_rt]
-      (op! "land" ["start" "land-lock-x" "--branch" "land-lock-x" "--worktree" "/tmp/land-lock-x"])
+      (start-land! "land-lock-x" "land-lock-x" "/tmp/land-lock-x")
       (op! "land" ["complete" "land-lock-x" "--pr-number" "416"])
       (shell-gate-complete! "land-lock-x" "checks green")
-      (op! "land" ["complete" "land-lock-x"])
-      (op! "land" ["choose" "land-lock-x" "approved"
+      (op! "workflow" ["complete" "land-lock-x"])
+      (op! "land" ["choose" "land-lock-x" "approved" "--input"
                    "{\"subject\":\"feat: land lock x\",\"body\":\"Squashed commits: abc123\"}"])
-      (is (= "merge-lock" (get-in (op! "land" ["status" "land-lock-x"])
-                                  [:merge-lock :attributes :kind])))
+      (is (= ["merge-lock"] (mapv #(get-in % [:attributes :kind]) (active-merge-locks))))
       ;; a blank reason fails at the handler; a missing reason fails at the arg-spec
       ;; parse layer — both are loud rejections rather than a silent break
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"reason must be a non-blank string"
-                            (op! "land" ["break-lock" ""])))
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required argument tail"
+                            (op! "land" ["break-lock" "--reason" ""])))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required flag --reason"
                             (op! "land" ["break-lock"])))
-      (let [broken (op! "land" ["break-lock" "coordinator confirmed stale lock"])]
+      (let [broken (op! "land" ["break-lock" "--reason" "coordinator confirmed stale lock"])]
         (is (= "land break-lock" (:operation broken)))
         (is (= "closed" (get-in broken [:broken :state])))
         (is (= "coordinator confirmed stale lock"
                (get-in broken [:broken :attributes :land/broken-reason])))
-        (is (nil? (:merge-lock (op! "land" ["status" "land-lock-x"]))))))))
+        (is (empty? (active-merge-locks))))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"no active merge lock to break"
+                            (op! "land" ["break-lock" "--reason"
+                                         "must not report a nonexistent intervention"]))))))
 
 (deftest land-break-lock-refuses-to-break-when-multiple-locks-are-active
   (with-config-runtime
@@ -1380,21 +1491,22 @@
       (weaver/add! rt {:title "Merge lock: land-dup-b"
                        :attributes {:kind "merge-lock" :land/run-id "land-dup-b"}})
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"multiple active merge locks found"
-                            (op! "land" ["break-lock" "trying to clear a corrupt state"]))))))
+                            (op! "land" ["break-lock" "--reason"
+                                         "trying to clear a corrupt state"]))))))
 
-(deftest land-start-fails-loudly-on-a-blank-card
+(deftest generic-land-start-fails-loudly-on-a-blank-card
   (with-config-runtime
     (fn [_rt]
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"card must be a non-blank string"
-                            (op! "land" ["start" "land-blank-card"
-                                         "--branch" "land-blank-card"
-                                         "--worktree" "/tmp/land-blank-card"
-                                         "--card" ""])))
-      ;; absent --card stays legal: not every land run has a card
-      (is (= "land start"
-             (:operation (op! "land" ["start" "land-no-card"
-                                      "--branch" "land-no-card"
-                                      "--worktree" "/tmp/land-no-card"])))))))
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Value does not satisfy the named spec"
+           (op! "workflow"
+                ["start" "land-blank-card"
+                 "--workflow" "land"
+                 "--params" "{\"feature\":\"land-blank-card\",\"branch\":\"land-blank-card\",\"worktree\":\"/tmp/land-blank-card\",\"card\":\"\"}"])))
+      (is (= "workflow start"
+             (:operation (start-land! "land-no-card" "land-no-card"
+                                      "/tmp/land-no-card")))))))
 
 (deftest land-op-renders-arg-spec-subcommand-help-and-fails-loudly
   (with-config-runtime
@@ -1402,32 +1514,33 @@
       (let [help (op! "help" ["land"])
             subs (get-in help [:node :children])
             by-name (into {} (map (juxt :name identity)) subs)]
-        (let [about (op! "land" ["about"])]
-          (is (= "land about" (:operation about)))
-          (is (str/includes? (:pr-context about) "--pr-number"))
-          (is (str/includes? (:revision about) "re-pours")))
-        (is (= #{"about" "start" "ready" "complete" "choose" "status" "break-lock"}
+        (is (= #{"complete" "choose" "break-lock"}
                (set (map :name subs))))
         (is (str/starts-with? (get-in help [:node :doc])
-                              "Drive the coordinator landing workflow"))
-        ;; flags render sorted by key: branch, card, worktree
-        (is (= [["branch" true] ["card" false] ["worktree" true]]
-               (mapv (juxt :name :required) (get-in by-name ["start" :invocation :flags]))))
-        (is (= [["feature" true false]]
-               (mapv (juxt :name :required :variadic) (get-in by-name ["start" :invocation :positionals]))))
+                              "Enforce the cross-domain policy boundaries"))
         (is (= [["pr-number" false "int"]]
                (mapv (juxt :name :required :type)
                      (get-in by-name ["complete" :invocation :flags]))))
-        (is (str/includes? (get-in by-name ["choose" :doc]) "revise re-pours"))
-        (is (= [["feature" true false] ["choice" true false] ["tail" false true]]
-               (mapv (juxt :name :required :variadic) (get-in by-name ["choose" :invocation :positionals])))))
+        (is (= [["input" true "string" "json"]]
+               (mapv (juxt :name :required :type :parse)
+                     (get-in by-name ["choose" :invocation :flags]))))
+        (is (= [["reason" true "string"]]
+               (mapv (juxt :name :required :type)
+                     (get-in by-name ["break-lock" :invocation :flags]))))
+        (is (= [["run-id" true false]]
+               (mapv (juxt :name :required :variadic)
+                     (get-in by-name ["complete" :invocation :positionals]))))
+        (is (= [["run-id" true false] ["choice" true false]]
+               (mapv (juxt :name :required :variadic)
+                     (get-in by-name ["choose" :invocation :positionals])))))
       ;; required flags and positionals fail loudly at parse
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required flag --branch"
-                            (op! "land" ["start" "no-flags"])))
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required argument feature"
-                            (op! "land" ["start" "--branch" "b" "--worktree" "w"])))
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow run"
-                            (op! "land" ["status" "never-landed"]))))))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required flag --input"
+                            (op! "land" ["choose" "no-input" "approved"])))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"accepts only approved or abort"
+                            (op! "land" ["choose" "unused-run" "revise"
+                                         "--input" "{}"])))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required argument run-id"
+                            (op! "land" ["complete"]))))))
 
 (defn- assert-treadle-installed-after-runtime-dependencies
   "Assert the subagent executor module orders after the modules it consumes.

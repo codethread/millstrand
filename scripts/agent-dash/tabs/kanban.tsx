@@ -305,8 +305,8 @@ function KanbanTree({
 // The singleton merge sentinel (land workflow): at most one active kind=merge-lock
 // strand exists, acquired at land sign-off and released at cleanup/abort. Its
 // owner is the land root id, land/run-id is the feature, and created_at is when
-// the lock was acquired. The active-strand list is the cleanest read that needs no
-// registered query — the board payload omits the lock — so we scan it for locks.
+// the lock was acquired. The repo's merge-lock query isolates the sentinel from
+// broad list caps; the board payload itself omits the lock.
 //
 // LockState is what that scan resolves to. The dash is the coordinator's anomaly
 // watch, so it never normalizes a corrupt world into a plausible banner: >1 active
@@ -318,20 +318,20 @@ type MergeLock = { id: string; owner: string; feature: string; acquiredAt: strin
 type LockState =
   | { kind: "none" }
   | { kind: "ok"; lock: MergeLock }
-  | { kind: "corrupt"; count: number }
+  | { kind: "corrupt"; ids: string[] }
   | { kind: "malformed"; id: string; missing: string[] }
   | { kind: "error"; message: string };
 
 async function fetchMergeLock(): Promise<LockState> {
   let items: StrandRecord[];
   try {
-    items = (await strandJson(["list", "--state", "active"])) as StrandRecord[];
+    items = (await strandJson(["list", "--query", "merge-lock"])) as StrandRecord[];
   } catch (e) {
     return { kind: "error", message: e instanceof Error ? e.message : String(e) };
   }
   const locks = items.filter((s) => str(s.attributes["kind"]) === "merge-lock");
   if (locks.length === 0) return { kind: "none" };
-  if (locks.length > 1) return { kind: "corrupt", count: locks.length };
+  if (locks.length > 1) return { kind: "corrupt", ids: locks.map((lock) => lock.id) };
   const lock = locks[0]!;
   const owner = str(lock.attributes["owner"]);
   const feature = str(lock.attributes["land/run-id"]);
@@ -363,7 +363,10 @@ function MergeLockBanner(st: LockState, ctx: RenderCtx) {
       return line("magenta", `MERGE LOCK · ${st.lock.feature} · owner ${st.lock.owner} · held ${held}`);
     }
     case "corrupt":
-      return line("red", `${st.count} ACTIVE MERGE LOCKS · state corrupt · run land break-lock`);
+      return line(
+        "red",
+        `ACTIVE MERGE LOCKS ${st.ids.join(",")} · strand list --query merge-lock; strand update <duplicate-id> --state closed; then strand land break-lock --reason "<reason>"`,
+      );
     case "malformed":
       return line("red", `MERGE LOCK ${st.id} malformed · missing ${st.missing.join(", ")} · inspect the strand`);
     case "error":
@@ -407,7 +410,7 @@ export const kanbanTab = defineTab<KanbanView>({
     // The board is the tab's primary data: a kanban-tree failure surfaces as the
     // full-pane <Failure>. The merge-lock scan is isolated inside fetchMergeLock
     // (it resolves failures to a LockState.error rather than throwing), so a flaky
-    // active-strand scan degrades to a loud banner and never blanks a good board.
+    // merge-lock query degrades to a loud banner and never blanks a good board.
     try {
       const [rows, lock] = await Promise.all([fetchKanban(all), fetchMergeLock()]);
       return (latest) => ({
