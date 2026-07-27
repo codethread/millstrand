@@ -1035,7 +1035,7 @@
   "Apply `mutate` to the ready item `role`'s verb resolves for `request`, and
   return the shared run result stamped `operation`.
 
-  The shape all four worker mutations share. Resolution happens twice on
+  The shape all worker mutations share. Resolution happens twice on
   purpose: the pre-guard pass answers an invalid request without queueing behind
   another worker, and the in-guard pass is what the request actually acts on. If
   another worker wrote between the two, `require-fresh-frontier!` refuses before
@@ -1044,14 +1044,15 @@
   could resolve differently."
   [rt operation role request mutate]
   (let [{:keys [run-id step]} (runs/require-run! rt request)
-        before (runs/frontier rt run-id)
-        target (runs/resolve-target! role run-id before step)]
+        before (runs/frontier rt run-id)]
+    (runs/resolve-target! role run-id before step)
     (guard/with-run!
       rt run-id
       (fn []
-        (runs/require-fresh-frontier! operation role run-id step before
-                                      (runs/frontier rt run-id))
-        (mutate target)
+        (let [after (runs/require-fresh-frontier!
+                     operation role run-id step before (runs/frontier rt run-id))
+              current-target (runs/resolve-target! role run-id after step)]
+          (mutate current-target))
         (runs/result rt operation run-id)))))
 
 (defn run-start!

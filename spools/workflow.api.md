@@ -320,7 +320,7 @@ Module contribution for the workflow spool.
   register — so it contributes no declarative entries. It materializes the
   registry handle so a dependent module contributing to the workflow kinds finds
   them already declared (DELTA-OlrDrt-001.CC4).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1260-L1270">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1261-L1271">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/current-root">`current-root`</a>
 ``` clojure
@@ -632,7 +632,7 @@ Reconcile the workflow spool's resources per the module contract.
   API — declarations are process-lifetime seeds (SPEC-004.C46b,
   DELTA-Itr-001) — and re-declaring on removal is the defect the contract
   names. Any other status is a direct-call error and fails loudly.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1272-L1290">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1273-L1291">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/register-executor!">`register-executor!`</a>
 ``` clojure
@@ -682,7 +682,7 @@ Register a workflow definition under a stable keyword `name`.
 Function.
 
 Return the live resolved registered workflow definition for `name`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1225-L1228">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1226-L1229">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/run-advance!">`run-advance!`</a>
 ``` clojure
@@ -702,7 +702,7 @@ Advance the ready ordinary step or checkpoint and return the run result.
   A defer is not advanceable because selecting its target and params is a
   different request; failures direct the worker to `workflow defer`.
   `::advance-request` owns the request shape.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1142-L1187">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1143-L1188">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/run-await">`run-await`</a>
 ``` clojure
@@ -719,7 +719,7 @@ Block until `request`'s run is done or needs a worker, and return the result.
   never returned, because a run whose whole frontier is executor-owned and
   healthy is exactly what this call waits through. `::await-request` owns the
   request shape and `::attention-result` the answer.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1209-L1223">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1210-L1224">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/run-choose!">`run-choose!`</a>
 ``` clojure
@@ -735,7 +735,7 @@ Record `request`'s choice on the ready checkpoint and return the run result.
   `json->params` first — and a routed choice pours its continuation in the same
   mutation, so the returned frontier is already the continuation's.
   `::choose-request` owns the request shape.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1123-L1140">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1124-L1141">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/run-complete!">`run-complete!`</a>
 ``` clojure
@@ -762,7 +762,7 @@ Close the ready ordinary step of `request`'s run and return the run result.
   A gate is never inferred. Closing one is an assertion that something outside
   the run happened, so it takes both an explicit `:step` and a `:by` recording
   who decided so. `::complete-request` owns the request shape.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1090-L1121">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1091-L1122">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/run-defer!">`run-defer!`</a>
 ``` clojure
@@ -779,7 +779,7 @@ Fill the ready defer of `request`'s run and return the run result.
   current root and the run resumes when it finishes, so the returned frontier is
   the expansion's — or, for a target that materializes nothing, whatever the
   declaring workflow does next. `::defer-request` owns the request shape.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1189-L1207">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1190-L1208">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/run-history">`run-history`</a>
 ``` clojure
@@ -816,7 +816,7 @@ Return the run result for `request`'s run without touching it.
   complete current frontier — every ready item of every role, in definition and
   loop order — because a worker filtering for its own role can do so, while one
   that never saw a sibling item cannot. `::ready-request` owns the request shape.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1076-L1088">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1077-L1089">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/run-start!">`run-start!`</a>
 ``` clojure
@@ -835,7 +835,7 @@ Start registered workflow `:workflow` as run `:run-id` and return the run result
   Params are the definition's own: its `:defaults` merge underneath and the
   merged map is judged whole by its `:param-spec`, so omitting `:params` and
   passing `{}` are the same request. `::start-request` owns the request shape.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1057-L1074">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1058-L1075">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/spec-forms">`spec-forms`</a>
 ``` clojure
@@ -871,7 +871,7 @@ Entry-point declaration for the workflow spool (PROP-Dsp-001 `def spool`
   and world policy (`{:ns 'skein.spools.workflow :spools [...]}`) and never
   mirrors the pair. Unqualified symbols resolve against this namespace; fn
   values are rejected (ADR-002.O1).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1292-L1302">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1293-L1303">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/squash!">`squash!`</a>
 ``` clojure

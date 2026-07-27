@@ -701,6 +701,17 @@
                  (reason-of #(runs/require-fresh-frontier!
                               "workflow next" :advance
                               "run-race" right before after)))))
+        (testing "next re-resolves a same-id item whose semantics changed"
+          (let [changed (mapv #(if (= right (:id %))
+                                 (assoc % :role "checkpoint")
+                                 %)
+                              before)
+                current (runs/require-fresh-frontier!
+                         "workflow next" :advance
+                         "run-race" right before changed)]
+            (is (= "checkpoint"
+                   (:role (runs/resolve-target!
+                           :advance "run-race" current right))))))
         (testing "a sibling of another role changing is not this verb's race"
           (is (= [left right] (ready-ids (verb "ready" "run-race")))))))))
 
