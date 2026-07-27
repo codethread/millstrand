@@ -18,7 +18,6 @@
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [config :as config]
             [skein.macros.ops :refer [defop]]
             [skein.macros.patterns :refer [defpattern]]
             [skein.api.current.alpha :as current]
@@ -57,6 +56,17 @@
   [strand k]
   (when strand
     (attr-get strand k)))
+
+(defn- require-land-input!
+  "Return value when it satisfies spec, otherwise fail with spec evidence."
+  [spec key value]
+  (when-not (s/valid? spec value)
+    (throw (ex-info (str (name key) " must be a non-blank string")
+                    {:key key
+                     :value value
+                     :spec spec
+                     :explain (s/explain-data spec value)})))
+  value)
 
 (defn- active-merge-locks
   "Return active merge-lock strands."
@@ -133,7 +143,7 @@
 (defn- break-merge-lock!
   "Explicitly break a stale merge lock with a human-supplied reason."
   [reason]
-  (config/require-non-blank! :reason reason)
+  (require-land-input! ::reason :reason reason)
   (let [rt (current/runtime)]
     (with-merge-lock-acquisition
       rt
@@ -759,11 +769,12 @@
                                    "|Machine gate: the shell executor waits up to three minutes for
                                     |GitHub to register checks at %s HEAD, then runs `gh pr checks %s
                                     |--watch --fail-fast`. It closes this gate only when all checks are
-                                    |green; generic workflow completion refuses gates. A startup timeout, red check,
-                                    |or command failure stamps `gate/error` with captured output. Fix the
-                                    |cause, commit and push when needed, then remove the stamp (`strand
-                                    |update <gate-id> --attributes '{\"gate/error\":null}'`) to retry. The exit code and
-                                    |output tail are recorded on the gate."
+                                    |green; generic workflow completion refuses gates. A startup
+                                    |timeout, red check, or command failure stamps `gate/error`
+                                    |with captured output. Fix the cause, commit and push when
+                                    |needed, then remove the stamp (`strand update <gate-id>
+                                    |--attributes '{\"gate/error\":null}'`) to retry. The exit
+                                    |code and output tail are recorded on the gate."
                                    branch branch)))})
    (workflow/step :signoff-review
                   (fn [{:keys [branch]}] (str "Run roster sign-off review for " branch))
@@ -883,7 +894,7 @@
         verb (first subcommand)]
     (case verb
       "complete"
-      (let [feature (config/require-non-blank! :run-id run-id)
+      (let [feature (require-land-input! ::run-id :run-id run-id)
             ready (workflow/ready feature)]
         (cond
           (some #(= "land.pr.open" (:action-ref %)) ready)
@@ -919,7 +930,7 @@
                           {:run-id feature :ready ready}))))
 
       "choose"
-      (let [feature (config/require-non-blank! :run-id run-id)
+      (let [feature (require-land-input! ::run-id :run-id run-id)
             input (keywordize-input! "choose" input)]
         (case choice
           "approved"
