@@ -1002,7 +1002,7 @@
   "Apply `mutate` to the ready item `role`'s verb resolves for `request`, and
   return the shared run result stamped `operation`.
 
-  The shape all three worker mutations share. Resolution happens twice on
+  The shape all four worker mutations share. Resolution happens twice on
   purpose: the pre-guard pass answers an invalid request without queueing behind
   another worker, and the in-guard pass is what the request actually acts on. If
   another worker wrote between the two, `require-fresh-frontier!` refuses before

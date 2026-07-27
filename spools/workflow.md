@@ -16,7 +16,7 @@ This is userland spool code, not a separate scheduler or persistence system. Wor
 
 Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `defer`, `bind-defers`, `compile`, `pour!`, `wisp!`, and `explain`.
 
-The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `defer!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see [§5](#5-checkpoints-and-routing)), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see [§5b](#5b-registry-discovery)). That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`complete`/`choose`/`defer`/`await` over the run lifecycle (see [§5c](#5c-driving-a-run)). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
+The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `defer!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see [§5](#5-checkpoints-and-routing)), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see [§5b](#5b-registry-discovery)). That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`complete`/`choose`/`advance`/`defer`/`await` over the run lifecycle (see [§5c](#5c-driving-a-run)). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
 
 Every run-mutating op (`start!`, `complete!`, `choose!`, `defer!`, `advance!`) returns one `{:ready [step-view ...] :done boolean}` map: `:ready` is the run's ready step views (as `ready` would return them) and `:done` is its done-ness, so an empty `:ready` never leaves a caller guessing whether the run finished or merely stalled. The pure queries `ready`/`ready-step` still return step views directly.
 
@@ -565,6 +565,7 @@ Failures name the role they refused for:
 | `workflow/attr-key-duplicate` | One `--attr` key was given twice in a single `workflow complete`. |
 | `workflow/attributes-invalid` | `--attributes` was not a JSON object, or carried a blank key. |
 | `workflow/context-invalid` | The persisted run root has a malformed `workflow/context` value. The failure names the run, root, offending value, and expected map shape. |
+| `workflow/advance-input-without-checkpoint` | `workflow advance --input` selected an ordinary step or gate. Remove `--input`, or select a checkpoint. |
 
 ### Advancing ordinary steps and checkpoints
 
@@ -580,6 +581,8 @@ $ strand workflow advance feat-x --step a1b2c --choice approved
 An ordinary step takes no choice. A checkpoint requires `--choice` and accepts the choice's declared `--input` object. A gate is never inferred and still needs both `--step` and `--by`.
 
 A defer cannot be advanced because its request must name another registered workflow and that workflow's params. The failure directs the worker to `workflow defer`.
+
+This is one engine mutation, not a client-side `ready` followed by `complete` or `choose`. The engine resolves the role before and after taking the run guard, so another worker cannot move the frontier between a client's read and mutation and cause `advance` to act on a different item. The role-specific verbs remain available when the caller already knows what it is closing.
 
 ### Recording an outcome on `complete`
 

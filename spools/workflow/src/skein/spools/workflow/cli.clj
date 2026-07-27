@@ -344,7 +344,8 @@
                           |--step and --by.")]
                 :failure-modes ["workflow/ready-advance-absent"
                                 "workflow/ready-advance-ambiguous"
-                                "workflow/ready-advance-incompatible"]}}
+                                "workflow/ready-advance-incompatible"
+                                "workflow/advance-input-without-checkpoint"]}}
     "defer" {:doc "Fill the ready defer of a run with a registered workflow."
              :hook-class :mutating
              :deadline-class :standard
@@ -480,6 +481,8 @@
     :definition "More than one item is advanceable; workflow advance needs --step."}
    {:name "workflow/ready-advance-incompatible"
     :definition "The selected ready item cannot be advanced."}
+   {:name "workflow/advance-input-without-checkpoint"
+    :definition "Workflow advance received --input for an ordinary step or gate."}
    {:name "workflow/ready-defer-absent"
     :definition "No ready defer exists for workflow defer to fill."}
    {:name "workflow/ready-defer-ambiguous"
