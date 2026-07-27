@@ -1167,8 +1167,10 @@
   `::next-request` owns the request shape."
   [request]
   (let [rt (current/runtime)
-        {:keys [run-id choice input by]} (require-valid! ::next-request request
-                                                         "Invalid workflow next request")]
+        validated (require-valid! ::next-request request
+                                  "Invalid workflow next request")
+        _ (reject-unknown-keys! validated #{:run-id :choice :input :step :by} :next)
+        {:keys [run-id choice input by]} validated]
     (mutate-run! rt "workflow next" :advance request
                  (fn [target]
                    (runs/require-gate-actor! run-id target by)

@@ -474,6 +474,18 @@
 
 ;; --- next -------------------------------------------------------------------
 
+(deftest next-rejects-unknown-worker-request-keys
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo)
+      (started "run-next-unknown-key" :solo)
+      (let [data (failure #(workflow/run-next!
+                            {:run-id "run-next-unknown-key" :bogus true}))]
+        (is (= :next (:context data)))
+        (is (= [:bogus] (:unknown data)))
+        (is (false? (:done (verb "ready" "run-next-unknown-key"))))))))
+
 (deftest next-completes-an-ordinary-step-with-the-standard-envelope
   (with-runtime
     (fn [rt _]
