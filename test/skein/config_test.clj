@@ -477,16 +477,49 @@
                           :direct-user-request true}))
               bump-steps (filterv #(= "spool-bump.coordinate.bump"
                                       (get-in % [:attributes "workflow/action-ref"]))
-                                  compiled)]
+                                  compiled)
+              by-action-ref
+              (into {}
+                    (keep (fn [strand]
+                            (when-let [action-ref
+                                       (get-in strand
+                                               [:attributes "workflow/action-ref"])]
+                              [action-ref strand])))
+                    compiled)]
           (is (= ["Bump third-party spool codethread/kanban to latest"
                   "Bump third-party spool codethread/devflow to v12"]
                  (mapv :title bump-steps)))
+          (is (str/includes?
+               (get-in by-action-ref
+                       ["spool-bump.bump-world.start"
+                        :attributes
+                        "workflow/instruction"])
+               "mill weaver start --workspace /tmp/bump-demo/.skein"))
           (is (str/includes?
                (get-in (first bump-steps) [:attributes "workflow/instruction"])
                "spool bump codethread/kanban`"))
           (is (str/includes?
                (get-in (second bump-steps) [:attributes "workflow/instruction"])
-               "spool bump codethread/devflow --to v12`")))
+               "spool bump codethread/devflow --to v12`"))
+          (is (str/includes?
+               (get-in by-action-ref
+                       ["spool-bump.bump-world.stop"
+                        :attributes
+                        "workflow/instruction"])
+               "mill weaver stop --workspace /tmp/bump-demo/.skein"))
+          (is (str/includes?
+               (get-in by-action-ref
+                       ["spool-bump.world.create"
+                        :attributes
+                        "workflow/instruction"])
+               "validation_ws=$(mktemp -d)"))
+          (is (str/includes?
+               (get-in by-action-ref
+                       ["spool-bump.world.smoke"
+                        :attributes
+                        "workflow/instruction"])
+               "spool status"))
+          (is (contains? by-action-ref "spool-bump.resources.cleanup")))
         (op! "workflow" ["start" "indirect-bump"
                          "--workflow" "spool-bump"
                          "--params" (params false)])

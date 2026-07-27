@@ -1058,12 +1058,27 @@
                         |any operation that would discard work. The new worktree's
                         |`.skein` directory is the selected workspace for the bump."
                        branch worktree)))})
+   (workflow/step :start-bump-world
+                  "Start the feature worktree weaver"
+                  :self
+                  :depends-on [:create-branch]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.bump-world.start"
+                   "workflow/instruction"
+                   (fn [{:keys [worktree]}]
+                     (format-alpha/reflow
+                      (format
+                       "|Run `mill weaver start --workspace %s/.skein` before invoking
+                        |`strand --workspace`: every selected workspace needs its own
+                        |running weaver. Record the returned PID and config directory so
+                        |this workflow can stop exactly the weaver it started."
+                       worktree)))})
    (workflow/step :bump-spool
                   (fn [{:keys [item]}]
                     (str "Bump third-party spool " (:family item)
                          " to " (:version item)))
                   :self
-                  :depends-on [:create-branch]
+                  :depends-on [:start-bump-world]
                   :loop {:each :bumps :chain true}
                   :attributes
                   {"workflow/action-ref" "spool-bump.coordinate.bump"
@@ -1080,21 +1095,37 @@
                          (if (= "latest" version)
                            ""
                            (str " --to " version))))))})
+   (workflow/step :stop-bump-world
+                  "Stop the feature worktree weaver"
+                  :self
+                  :depends-on [:bump-spool]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.bump-world.stop"
+                   "workflow/instruction"
+                   (fn [{:keys [worktree]}]
+                     (format-alpha/reflow
+                      (format
+                       "|After every requested bump has completed, run
+                        |`mill weaver stop --workspace %s/.skein`. Confirm the stopped
+                        |PID matches the weaver recorded by the start step; never use a
+                        |pattern kill or stop the canonical weaver."
+                       worktree)))})
    (workflow/step :create-test-world
                   "Create an isolated world from the bumped branch"
                   :self
-                  :depends-on [:bump-spool]
+                  :depends-on [:stop-bump-world]
                   :attributes
                   {"workflow/action-ref" "spool-bump.world.create"
                    "workflow/instruction"
                    (fn [{:keys [worktree]}]
                      (format-alpha/reflow
                       (format
-                       "|Create a disposable workspace from `%s/.skein`, preserving
-                        |relative config layout, and start its weaver. Hold the path in
-                        |a task-specific shell variable and guard every expansion with
-                        |`${var:?}`. Never target the canonical workspace for this
-                        |validation."
+                       "|Create a disposable directory with `validation_ws=$(mktemp -d)`.
+                        |Copy the feature checkout from `%s/` into
+                        |`${validation_ws:?}/` with its relative layout intact but
+                        |without `.git`, then run `mill weaver start --workspace
+                        |${validation_ws:?}/.skein`. Record the exact directory and PID.
+                        |Never target the canonical workspace for this validation."
                        worktree)))})
    (workflow/step :smoke-test
                   (fn [{:keys [bumps]}]
@@ -1108,11 +1139,13 @@
                    (fn [{:keys [bumps]}]
                      (format-alpha/reflow
                       (format
-                       "|In the disposable world, prove the weaver starts and adopts
-                        |the bumped coordinates for `%s`. Run spool-specific smoke paths
-                        |where the spools expose them; otherwise record why startup and
-                        |adoption are the strongest available checks. Stop the disposable
-                        |weaver afterward. A failed available smoke check blocks landing."
+                       "|In the disposable world, run `strand --workspace
+                        |${validation_ws:?}/.skein spool status` and prove the effective
+                        |tag and SHA for `%s` match `.skein/spools.edn` with no pending
+                        |generation. Use `prime` and `help` to discover each bumped
+                        |spool's available smoke surface, run the strongest non-destructive
+                        |command, and record the result. Stop the disposable weaver by its
+                        |workspace afterward. A failed available smoke check blocks landing."
                        (str/join "`, `" (map :family bumps)))))})
    (workflow/step :prepare-change
                   (fn [{:keys [bumps]}]
@@ -1190,10 +1223,26 @@
                     "|Machine gate: locate the canonical checkout through the shared Git
                      |directory, verify that it is on `main`, and fast-forward it from
                      |`origin/main`. Never stash, reset, or discard local work.")})
+   (workflow/step :cleanup
+                  "Clean up the landed bump worlds and branch"
+                  :self
+                  :depends-on [:pull-main]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.resources.cleanup"
+                   "workflow/instruction"
+                   (fn [{:keys [branch worktree]}]
+                     (format-alpha/reflow
+                      (format
+                       "|Stop any still-running weavers created by this run using their
+                        |recorded workspace or PID. Remove only the recorded disposable
+                        |workspace. Fetch and prune `origin`, confirm PR merge state, then
+                        |remove worktree `%s`, remote branch `%s`, and its local branch
+                        |using exact targets. Leave shared or uncertain resources alone."
+                       worktree branch)))})
    (workflow/step :reload
                   "Refresh the canonical world and record generation state"
                   :self
-                  :depends-on [:pull-main]
+                  :depends-on [:cleanup]
                   :attributes
                   {"workflow/action-ref" "spool-bump.runtime.refresh"
                    "workflow/instruction"
