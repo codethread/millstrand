@@ -1166,7 +1166,7 @@
                             (cond-> {:step (:id target)}
                               by (assoc :by by)))))))
 
-(defn run-advance!
+(defn run-next!
   "Advance the ready ordinary step, checkpoint, or explicitly selected gate and
   return the run result.
 
@@ -1180,10 +1180,10 @@
 
   A defer is not advanceable because selecting its target and params is a
   different request; failures direct the worker to `workflow defer`.
-  `::advance-request` owns the request shape."
+  `::next-request` owns the request shape."
   [request]
   (let [rt (current/runtime)
-        {:keys [run-id choice input by]} (require-valid! ::advance-request request
+        {:keys [run-id choice input by]} (require-valid! ::next-request request
                                                          "Invalid workflow next request")]
     (mutate-run! rt "workflow next" :advance request
                  (fn [target]
@@ -1646,7 +1646,7 @@
           :opt-un [:skein.spools.workflow.request/input
                    :skein.spools.workflow.request/step
                    :skein.spools.workflow.request/by]))
-(s/def ::advance-request
+(s/def ::next-request
   (s/keys :req-un [:skein.spools.workflow.request/run-id]
           :opt-un [:skein.spools.workflow.request/choice
                    :skein.spools.workflow.request/input

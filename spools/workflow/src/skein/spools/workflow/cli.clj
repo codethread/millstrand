@@ -137,7 +137,7 @@
       "choose" (workflow/run-choose!
                 (-> (assoc (run-request args) :choice choice)
                     (with-json-object args :input :input)))
-      "next" (workflow/run-advance!
+      "next" (workflow/run-next!
               (-> (run-request args)
                   (carry args :choice :choice)
                   (with-json-object args :input :input)))

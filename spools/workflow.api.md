@@ -687,28 +687,6 @@ Function.
 Return the live resolved registered workflow definition for `name`.
 <p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1254-L1257">Source</a></sub></p>
 
-## <a name="skein.spools.workflow/run-advance!">`run-advance!`</a>
-``` clojure
-(run-advance! request)
-```
-Function.
-
-Advance the ready ordinary step, checkpoint, or explicitly selected gate and
-  return the run result.
-
-  `request` is `{:run-id … :choice … :input {…} :step … :by …}`, with only the
-  run id required. Without `:step`, exactly one non-gate ordinary step or
-  checkpoint must be ready. A checkpoint requires `:choice`; an ordinary step
-  rejects it. `:input` is the selected checkpoint choice's JSON-worker input
-  and is rejected for an ordinary step or gate. A gate is never inferred and
-  requires both `:step` and a non-blank `:by`; it also rejects `:choice` and
-  `:input`.
-
-  A defer is not advanceable because selecting its target and params is a
-  different request; failures direct the worker to `workflow defer`.
-  `::advance-request` owns the request shape.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1169-L1216">Source</a></sub></p>
-
 ## <a name="skein.spools.workflow/run-await">`run-await`</a>
 ``` clojure
 (run-await request)
@@ -806,6 +784,28 @@ Return a read-only, creation-ordered projection of every molecule ever poured
   itself. Writes nothing and fails loudly (TEN-003) for a run that never had a
   root strand.
 <p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L495-L514">Source</a></sub></p>
+
+## <a name="skein.spools.workflow/run-next!">`run-next!`</a>
+``` clojure
+(run-next! request)
+```
+Function.
+
+Advance the ready ordinary step, checkpoint, or explicitly selected gate and
+  return the run result.
+
+  `request` is `{:run-id … :choice … :input {…} :step … :by …}`, with only the
+  run id required. Without `:step`, exactly one non-gate ordinary step or
+  checkpoint must be ready. A checkpoint requires `:choice`; an ordinary step
+  rejects it. `:input` is the selected checkpoint choice's JSON-worker input
+  and is rejected for an ordinary step or gate. A gate is never inferred and
+  requires both `:step` and a non-blank `:by`; it also rejects `:choice` and
+  `:input`.
+
+  A defer is not advanceable because selecting its target and params is a
+  different request; failures direct the worker to `workflow defer`.
+  `::next-request` owns the request shape.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/workflow.clj#L1169-L1216">Source</a></sub></p>
 
 ## <a name="skein.spools.workflow/run-ready">`run-ready`</a>
 ``` clojure
