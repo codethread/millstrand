@@ -77,6 +77,13 @@
    [:= [:attr "workflow/role"] "root"]
    [:= [:attr "workflow/family"] "devflow"]])
 
+(defquery merge-lock-query
+  "Query for the active singleton landing lock."
+  {:usage "strand list --query merge-lock"}
+  [:and
+   [:= :state "active"]
+   [:= [:attr "kind"] "merge-lock"]])
+
 (defquery work-query
   "Query for active actionable work, excluding workflow plumbing, agent run records, and inert kanban refinement cards."
   {:usage "strand ready --query work"}

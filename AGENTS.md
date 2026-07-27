@@ -16,7 +16,7 @@ Read `./devflow/TENETS.md`, `./devflow/PHILOSOPHY.md`, and `./devflow/UBIQUITOUS
 
 **Waiting on or recovering runs** — `strand workflow await <run-id>` blocks until a run needs you (`strand help workflow` for the await cap); `strand ready --query work` is the default ready view; failures surface via `strand list --query agent-failures` and `strand agent logs <run-id> --tail 80`.
 
-**Landing a finished branch** — coordinator-only: `strand land about`. Required checks are strict here, so a merge gate failing with "N of N required status checks are expected" usually means the PR is `BEHIND` main (`gh pr view <n> --json mergeStateStatus`) rather than that a check went red: rebase onto `origin/main`, push, re-establish green CI at the new HEAD, then clear the gate stamp.
+**Landing a finished branch** — coordinator-only: `strand workflow show land`, then use generic workflow verbs and `strand help land` for the policy boundaries. Required checks are strict here, so a merge gate failing with "N of N required status checks are expected" usually means the PR is `BEHIND` main (`gh pr view <n> --json mergeStateStatus`) rather than that a check went red: rebase onto `origin/main`, push, re-establish green CI at the new HEAD, then clear the gate stamp.
 
 **Changing shipped behavior** — update the relevant root spec in `devflow/specs/`; namespace tiers are contractual (SPEC-003.C19). **Authoring or changing spools** — `docs/spools/writing-shared-spools.md`; the spool index is `spools/README.md`.
 
