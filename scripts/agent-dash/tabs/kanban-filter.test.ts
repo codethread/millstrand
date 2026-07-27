@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -180,28 +180,67 @@ describe("the saved-view store", () => {
     });
   });
 
-  test("a corrupt store degrades to no views but says so", () => {
+  test("a corrupt store degrades to no views but names the file", () => {
     const file = tempStore();
     saveFilterState(file, "/repo", { views: [], active: null, enabled: true });
     writeFileSync(file, "{not json");
 
     const { state, error } = loadFilterState(file, "/repo");
     expect(state.views).toEqual([]);
-    expect(error).toContain("saved filters unreadable");
+    expect(error).toContain(file);
   });
 
-  test("junk terms and an out-of-range active slot are dropped, not trusted", () => {
+  test("a workspace with no saved entry is not an error", () => {
+    const file = tempStore();
+    saveFilterState(file, "/one", { views: [view({ name: "one" })], active: 0, enabled: true });
+
+    expect(loadFilterState(file, "/other")).toEqual({ state: { views: [], active: null, enabled: true }, error: null });
+  });
+
+  // TEN-003: a value we did not expect is reported, never coerced into a
+  // "sensible" default that would silently change what a saved view means.
+  const rejects = (entry: unknown, expected: string) => {
     const file = tempStore();
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(
-      file,
-      JSON.stringify({ "/repo": { active: 7, enabled: true, views: [{ name: "x", mode: "nonsense", terms: { a: "include", b: "maybe" } }] } }),
-    );
+    writeFileSync(file, JSON.stringify({ "/repo": entry }));
 
-    expect(loadFilterState(file, "/repo").state).toEqual({
-      views: [{ name: "x", mode: "and", terms: { a: "include" } }],
-      active: null,
-      enabled: true,
-    });
+    const { state, error } = loadFilterState(file, "/repo");
+    expect(state).toEqual({ views: [], active: null, enabled: true });
+    expect(error).toContain(expected);
+  };
+
+  test("an unknown mode is rejected rather than defaulted to AND", () => {
+    rejects({ active: null, enabled: true, views: [{ name: "x", mode: "nonsense", terms: {} }] }, 'mode must be "and" or "or"');
+  });
+
+  test("an unknown term value is rejected rather than dropped", () => {
+    rejects({ active: null, enabled: true, views: [{ name: "x", mode: "and", terms: { a: "maybe" } }] }, '"include" or "exclude"');
+  });
+
+  test("an out-of-range active slot is rejected rather than nulled", () => {
+    rejects({ active: 7, enabled: true, views: [] }, "must be null or an index into views");
+  });
+
+  test("a non-string name and unexpected keys are both rejected", () => {
+    rejects({ active: null, enabled: true, views: [{ name: 7, mode: "and", terms: {} }] }, "name must be a string");
+    rejects({ active: null, enabled: true, views: [{ name: "x", mode: "and", terms: {}, colour: "red" }] }, "unexpected keys: colour");
+  });
+
+  test("a missing enabled flag is rejected rather than assumed true", () => {
+    rejects({ active: null, views: [] }, "enabled must be a boolean");
+  });
+
+  test("a store that failed to read is never overwritten — other workspaces survive", () => {
+    const file = tempStore();
+    saveFilterState(file, "/one", { views: [view({ name: "one" })], active: 0, enabled: true });
+    const intact = readFileSync(file, "utf8");
+    writeFileSync(file, "{not json");
+
+    const error = saveFilterState(file, "/two", { views: [view({ name: "two" })], active: 0, enabled: true });
+    expect(error).toContain("refusing to overwrite");
+    // The unreadable bytes are left exactly as found rather than replaced by a
+    // store carrying only /two — that rewrite would destroy /one's saved views.
+    expect(readFileSync(file, "utf8")).toBe("{not json");
+    expect(intact).toContain("one");
   });
 });

@@ -146,6 +146,20 @@ const rowFromCard = (
     };
 };
 
+// The board snapshot is the shape authority for labels, and every filter decision
+// keys off them, so a payload whose `labels` is not a string vector is reported
+// rather than coerced (TEN-003) — a filter silently matching nothing would look
+// exactly like an empty backlog. Absent is not malformed: the spool omits the key
+// on cards carrying no labels.
+function cardLabels(card: BoardCard): string[] {
+  const raw = card.labels;
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw) || raw.some((label) => typeof label !== "string")) {
+    throw new Error(`kanban board returned a non-string-vector labels for card ${card.id}: ${JSON.stringify(raw)}`);
+  }
+  return raw;
+}
+
 async function fetchTaskDetails(
   ids: string[],
   cached: Map<string, TaskChild[]>,
@@ -176,7 +190,7 @@ async function fetchActiveKanban(
       activeTasks(taskCache.get(card.id) ?? []),
       taskCache.has(card.id),
       card.epic ?? null,
-      card.labels ?? [],
+      cardLabels(card),
     );
   });
 }
@@ -194,7 +208,7 @@ async function fetchAllKanban(
       taskCache.get(card.id) ?? [],
       taskCache.has(card.id),
       card.epic ?? null,
-      card.labels ?? [],
+      cardLabels(card),
     ));
 }
 

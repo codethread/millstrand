@@ -124,21 +124,52 @@ export function describeView(view: FilterView): string {
 export const filtersFile = (): string =>
   join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "skein", "agent-dash", "filters.json");
 
-function normalizeView(raw: unknown): FilterView | null {
-  if (!raw || typeof raw !== "object") return null;
-  const r = raw as Record<string, unknown>;
-  const terms: Record<string, Term> = {};
-  if (r.terms && typeof r.terms === "object") {
-    for (const [label, term] of Object.entries(r.terms as Record<string, unknown>)) {
-      if (term === "include" || term === "exclude") terms[label] = term;
-    }
+// The store is parsed strictly (TEN-003): a value we did not expect is reported
+// with where it sat and what was allowed, never coerced to a "sensible" default.
+// Quietly rewriting `mode: "orr"` to AND would change what a saved view means
+// without telling anyone, which is exactly the silent-semantics failure the
+// tenet forbids.
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+function parseView(raw: unknown, where: string): FilterView {
+  if (!isObject(raw)) throw new Error(`${where} must be an object`);
+  const extra = Object.keys(raw).filter((k) => !["name", "mode", "terms"].includes(k));
+  if (extra.length > 0) throw new Error(`${where} has unexpected keys: ${extra.join(", ")}`);
+  if (typeof raw.name !== "string") throw new Error(`${where}.name must be a string, got ${JSON.stringify(raw.name)}`);
+  if (raw.mode !== "and" && raw.mode !== "or") {
+    throw new Error(`${where}.mode must be "and" or "or", got ${JSON.stringify(raw.mode)}`);
   }
-  return { name: typeof r.name === "string" ? r.name : "", mode: r.mode === "or" ? "or" : "and", terms };
+  if (!isObject(raw.terms)) throw new Error(`${where}.terms must be an object`);
+  const terms: Record<string, Term> = {};
+  for (const [label, term] of Object.entries(raw.terms)) {
+    if (term !== "include" && term !== "exclude") {
+      throw new Error(`${where}.terms[${JSON.stringify(label)}] must be "include" or "exclude", got ${JSON.stringify(term)}`);
+    }
+    terms[label] = term;
+  }
+  return { name: raw.name, mode: raw.mode, terms };
 }
 
-// A corrupt or unreadable store degrades to "no saved views" plus a message the
-// tab shows in a banner: losing a filter bookmark must never blank the board, but
-// silently discarding the user's saved views would be worse than saying so.
+function parseState(raw: unknown, where: string): FilterState {
+  if (!isObject(raw)) throw new Error(`${where} must be an object`);
+  const extra = Object.keys(raw).filter((k) => !["views", "active", "enabled"].includes(k));
+  if (extra.length > 0) throw new Error(`${where} has unexpected keys: ${extra.join(", ")}`);
+  if (!Array.isArray(raw.views)) throw new Error(`${where}.views must be an array`);
+  const views = raw.views.map((view, i) => parseView(view, `${where}.views[${i}]`));
+  if (typeof raw.enabled !== "boolean") {
+    throw new Error(`${where}.enabled must be a boolean, got ${JSON.stringify(raw.enabled)}`);
+  }
+  if (raw.active !== null && !(typeof raw.active === "number" && Number.isInteger(raw.active) && raw.active >= 0 && raw.active < views.length)) {
+    throw new Error(`${where}.active must be null or an index into views (0..${views.length - 1}), got ${JSON.stringify(raw.active)}`);
+  }
+  return { views, active: raw.active as number | null, enabled: raw.enabled };
+}
+
+// A store we cannot read or cannot trust yields no views plus a message the tab
+// shows in a banner. The board still renders — losing a filter bookmark must not
+// blank it — but the filters stay unloaded and the reason is stated, rather than
+// a guessed-at version of the user's saved views being put quietly into force.
 export function loadFilterState(file: string, root: string): { state: FilterState; error: string | null } {
   let text: string;
   try {
@@ -146,33 +177,40 @@ export function loadFilterState(file: string, root: string): { state: FilterStat
   } catch (e) {
     // A store that has never been written is the normal first-run case.
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return { state: emptyFilterState(), error: null };
-    return { state: emptyFilterState(), error: e instanceof Error ? e.message : String(e) };
+    return { state: emptyFilterState(), error: `${file}: ${e instanceof Error ? e.message : String(e)}` };
   }
   try {
-    const parsed = JSON.parse(text) as Record<string, unknown>;
-    const entry = parsed?.[root];
-    if (!entry || typeof entry !== "object") return { state: emptyFilterState(), error: null };
-    const e = entry as Record<string, unknown>;
-    const views = Array.isArray(e.views) ? e.views.map(normalizeView).filter((v): v is FilterView => v !== null) : [];
-    const active = typeof e.active === "number" && e.active >= 0 && e.active < views.length ? e.active : null;
-    return { state: { views, active, enabled: e.enabled !== false }, error: null };
+    const parsed: unknown = JSON.parse(text);
+    if (!isObject(parsed)) throw new Error("store must be a JSON object keyed by workspace root");
+    // A workspace with no entry is not an error — that is every workspace this
+    // dashboard has not saved a view in yet.
+    if (!(root in parsed)) return { state: emptyFilterState(), error: null };
+    return { state: parseState(parsed[root], JSON.stringify(root)), error: null };
   } catch (e) {
-    return { state: emptyFilterState(), error: `saved filters unreadable: ${e instanceof Error ? e.message : String(e)}` };
+    return { state: emptyFilterState(), error: `${file}: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
 
 // Read-modify-write so a dashboard over one workspace never drops another's
-// views. Returns an error message rather than throwing — a failed preference
-// write is worth a banner, not a dead board.
+// views — which means a store we failed to *read* must never be overwritten: the
+// rewrite would carry only this workspace and silently destroy every other one's
+// saved views. Only a genuinely absent file is safe to create from nothing.
+// Returns an error message rather than throwing; a failed preference write is
+// worth a banner, not a dead board.
 export function saveFilterState(file: string, root: string, state: FilterState): string | null {
+  let all: Record<string, unknown> = {};
   try {
-    let all: Record<string, unknown> = {};
-    try {
-      all = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
-      if (!all || typeof all !== "object") all = {};
-    } catch {
-      // missing or corrupt store: this write re-establishes it
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (!isObject(parsed)) {
+      return `refusing to overwrite ${file}: store is not a JSON object keyed by workspace root`;
     }
+    all = parsed;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+      return `refusing to overwrite ${file}: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+  try {
     all[root] = { views: state.views, active: state.active, enabled: state.enabled };
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(all, null, 2) + "\n");
