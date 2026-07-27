@@ -365,7 +365,7 @@ function MergeLockBanner(st: LockState, ctx: RenderCtx) {
     case "corrupt":
       return line(
         "red",
-        `${st.count} ACTIVE MERGE LOCKS · list --query merge-lock · close extras, then land break-lock --reason`,
+        `${st.count} ACTIVE MERGE LOCKS · close duplicate strands manually until one remains; then strand land break-lock --reason`,
       );
     case "malformed":
       return line("red", `MERGE LOCK ${st.id} malformed · missing ${st.missing.join(", ")} · inspect the strand`);

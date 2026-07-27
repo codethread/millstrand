@@ -988,9 +988,10 @@
                                         |fmt-check lint reflect-check docs-check`; `make
                                         |api-docs` on docstring changes. The full change-review
                                         |roster runs once, at the land run's signoff-review
-                                        |step: continue with `strand workflow start <feature>
-                                        |--workflow land --params <json>`. Then close this
-                                        |run.")))})))
+                                        |step: continue with `strand workflow start
+                                        |<new-land-run-id> --workflow land --params
+                                        |<land-params-json>`. The params name this run's existing
+                                        |feature id; the land run id is new. Then close this run.")))})))
 
 (workflow/defworkflow story-keep
   "Keep a story split: the per-concern files are the deliverable.
@@ -1019,9 +1020,10 @@
                                         |conversion; focused cold tests; `make fmt-check lint
                                         |reflect-check docs-check`; `make api-docs` on docstring
                                         |changes. The full roster runs at the land run's
-                                        |signoff-review step: `strand workflow start <feature>
-                                        |--workflow land --params <json>`. Then close this
-                                        |run.")))})))
+                                        |signoff-review step: `strand workflow start
+                                        |<new-land-run-id> --workflow land --params
+                                        |<land-params-json>`. The params name this run's existing
+                                        |feature id; the land run id is new. Then close this run.")))})))
 
 (workflow/defworkflow story
   "Run the module-form STORY workflow (family \"story\").
