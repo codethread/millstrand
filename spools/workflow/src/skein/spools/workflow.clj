@@ -693,23 +693,7 @@
   "Resolve the item `advance!` acts on without letting incompatible siblings
   make an otherwise unique ordinary step or checkpoint ambiguous."
   [rt run-id opts]
-  (let [ready (runs/frontier rt run-id)
-        inferable (filterv #(and (contains? #{"step" "checkpoint"} (:role %))
-                                 (not (:gate %)))
-                           ready)
-        selected (some #(when (= (:step opts) (:id %)) %) ready)
-        selectable? (and selected
-                         (contains? #{"step" "checkpoint"} (:role selected)))]
-    (if (or selectable?
-            (and (nil? (:step opts))
-                 (or (seq inferable)
-                     (not= 1 (count ready))
-                     (contains? #{"step" "checkpoint"} (:role (first ready))))))
-      (runs/resolve-target! :advance run-id ready (:step opts))
-      ;; Preserve the trusted API's established defer and invalid-role failures
-      ;; when there is no advanceable item at all.
-      (some-> (query/resolve-ready-step rt run-id opts)
-              query/strand->view))))
+  (runs/resolve-target! :advance run-id (runs/frontier rt run-id) (:step opts)))
 
 (defn advance!
   "Advance run-id by one ready ordinary step, checkpoint, or explicitly selected

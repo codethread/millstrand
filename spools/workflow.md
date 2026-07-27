@@ -528,7 +528,7 @@ There is no family filter, pagination, JSON Schema projection, or registry mutat
 
 ## 5c. Driving a run
 
-The same opt-in module publishes seven verbs over the lifecycle in [§4](#4-run-lifecycle): `start`, `ready`, `complete`, `choose`, `next`, `defer`, and `await`. They add no engine semantics. Each validates a named request spec and delegates to the trusted-Clojure operation behind it. The item mutations narrow the ready frontier to what they can act on and pass the engine an explicit step; `ready` reports the whole frontier and `start` and `await` act on the run rather than an item in it. Their Clojure entry points are `run-start!`, `run-ready`, `run-complete!`, `run-choose!`, `run-advance!`, `run-defer!`, and `run-await`, each taking one request map.
+The same opt-in module publishes seven verbs over the lifecycle in [§4](#4-run-lifecycle): `start`, `ready`, `complete`, `choose`, `next`, `defer`, and `await`. They add no engine semantics. Each validates a named request spec and delegates to the trusted-Clojure operation behind it. The item mutations narrow the ready frontier to what they can act on and pass the engine an explicit step; `ready` reports the whole frontier and `start` and `await` act on the run rather than an item in it. Their Clojure entry points are `run-start!`, `run-ready`, `run-complete!`, `run-choose!`, `run-next!`, `run-defer!`, and `run-await`, each taking one request map. `next` is the worker verb and request vocabulary; trusted Clojure retains `advance!` as the engine convenience that it delegates to.
 
 ### One result shape
 

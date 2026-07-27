@@ -1418,7 +1418,7 @@
                                                    {:input {:verdict "pass"}}))))
         (let [step-id (:id (workflow/ready-step "advance-run"))]
           (weaver/update! rt step-id {:attributes {"workflow/role" "improvised"}})
-          (is (= :workflow/advance-role-invalid
+          (is (= :workflow/ready-next-incompatible
                  (failure-reason #(workflow/advance! "advance-run"
                                                      {:step step-id}))))
           (is (= "active" (:state (weaver/show rt step-id))))
@@ -3105,11 +3105,16 @@
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
       (register-defer-targets!)
       (let [defer-id (:id (start-at-defer! "role-1"))]
-        (doseq [call [#(workflow/complete! "role-1") #(workflow/advance! "role-1")]]
-          (let [thrown (try (call) (catch clojure.lang.ExceptionInfo e e))]
-            (is (= :workflow/step-is-defer (:reason (ex-data thrown))))
-            (is (re-find #"defer!" (ex-message thrown)))))
-        (is (= "active" (:state (repl/strand defer-id))))
+        (let [complete-error (try (workflow/complete! "role-1")
+                                  (catch clojure.lang.ExceptionInfo e e))
+              advance-error (try (workflow/advance! "role-1")
+                                 (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/step-is-defer (:reason (ex-data complete-error))))
+          (is (re-find #"defer!" (ex-message complete-error)))
+          (is (= :workflow/ready-next-absent (:reason (ex-data advance-error))))
+          (is (re-find #"workflow defer" (:guidance (ex-data advance-error))))
+          (is (= [defer-id] (mapv :id (:ready (ex-data advance-error)))))
+          (is (= "active" (:state (repl/strand defer-id)))))
         (testing "and choose! refuses it as a non-checkpoint"
           (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                 #"not a checkpoint"
