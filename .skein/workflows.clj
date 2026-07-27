@@ -101,34 +101,30 @@
     (throw (ex-info "land cleanup requires its active merge lock"
                     {:land/run-id feature}))))
 
-(defn- acquire-merge-lock!
-  "Acquire the singleton merge lock and report whether this call created it."
+(defn- acquire-merge-lock-serially!
+  "Acquire the singleton merge lock inside the caller's serialization scope."
   [feature]
-  (locking merge-lock-monitor
-    (let [rt (current/runtime)]
-      (with-merge-lock-acquisition
-        rt
-        (fn []
-          (let [root (land-root feature)
-                owner (:id root)
-                locks (require-sane-merge-locks!)
-                owned (some #(when (and (= owner (attr-value % :owner))
-                                        (= feature (attr-value % :land/run-id)))
-                               %)
-                            locks)]
-            (if owned
-              {:lock owned :created? false}
-              (do
-                (when-let [held (first locks)]
-                  (throw (ex-info "another land run holds the merge lock"
-                                  {:lock (:id held)
-                                   :owner (attr-value held :owner)
-                                   :land/run-id (attr-value held :land/run-id)})))
-                {:lock (weaver/add! rt {:title (str "Merge lock: " feature)
-                                        :attributes {:kind merge-lock-kind
-                                                     :owner owner
-                                                     :land/run-id feature}})
-                 :created? true}))))))))
+  (let [rt (current/runtime)
+        root (land-root feature)
+        owner (:id root)
+        locks (require-sane-merge-locks!)
+        owned (some #(when (and (= owner (attr-value % :owner))
+                                (= feature (attr-value % :land/run-id)))
+                       %)
+                    locks)]
+    (if owned
+      {:lock owned :created? false}
+      (do
+        (when-let [held (first locks)]
+          (throw (ex-info "another land run holds the merge lock"
+                          {:lock (:id held)
+                           :owner (attr-value held :owner)
+                           :land/run-id (attr-value held :land/run-id)})))
+        {:lock (weaver/add! rt {:title (str "Merge lock: " feature)
+                                :attributes {:kind merge-lock-kind
+                                             :owner owner
+                                             :land/run-id feature}})
+         :created? true}))))
 
 (defn- release-merge-lock!
   "Release the merge lock held by feature, if one exists."
@@ -609,10 +605,12 @@
                   :attributes {"workflow/action-ref" "land.abort.record"
                                "workflow/instruction"
                                (format-alpha/reflow
-                                "|Record the abort reason on the kanban card and work root, then stop.
+                                "|Record the abort reason on the kanban card and work root.
                                  |Note as you go on the doing-task so a cold agent resumes from that
                                  |task plus its latest note. Do NOT merge or push — nothing has landed;
-                                 |the branch and worktree stay for follow-up.")})))
+                                 |the branch and worktree stay for follow-up. Finish this terminal
+                                 |bookkeeping with `strand land complete <land-run-id>`; this retained
+                                 |policy boundary closes the step and synchronously releases any lock.")})))
 
 (workflow/defworkflow land-merge
   "Run the mechanical merge continuation for an approved land run.
@@ -732,10 +730,14 @@
                                    (format-alpha/reflow
                                     (format
                                      "|Finish the kanban card (`strand kanban finish %s --outcome
-                                      |done`). Then close this land run's root to complete it."
+                                      |done`). Then run `strand land complete <land-run-id>`; this
+                                      |retained terminal boundary closes bookkeeping and synchronously
+                                      |releases the merge lock."
                                      card))
                                    (format-alpha/reflow
-                                    "|Close this land run's root to complete it.")))})))
+                                    "|Run `strand land complete <land-run-id>`; this retained terminal
+                                     |boundary closes bookkeeping and synchronously releases the merge
+                                     |lock.")))})))
 
 (workflow/defworkflow land
   "Drive the coordinator LANDING workflow for a feature branch (family \"land\").
@@ -963,15 +965,19 @@
                          (require-choice-input-keys! choice))]
           (case choice
             "approved"
-            (let [{:keys [created?]} (acquire-merge-lock! feature)]
-              (try
-                (workflow/choose! feature :approved input)
-                (catch Throwable t
-                  (when created?
-                    (suppressing-rollback! t
-                                           #(release-merge-lock! feature
-                                                                 "land choose failed")))
-                  (throw t))))
+            (locking merge-lock-monitor
+              (with-merge-lock-acquisition
+                (current/runtime)
+                (fn []
+                  (let [{:keys [created?]} (acquire-merge-lock-serially! feature)]
+                    (try
+                      (workflow/choose! feature :approved input)
+                      (catch Throwable t
+                        (when created?
+                          (suppressing-rollback!
+                           t
+                           #(release-merge-lock! feature "land choose failed")))
+                        (throw t)))))))
 
             "abort"
             (let [context (attr-value (workflow/current-root feature) :workflow/context)
@@ -1037,18 +1043,17 @@
                   :attributes {"workflow/action-ref" "story.finish"
                                "workflow/instruction"
                                (fn [{:keys [module]}]
-                                 (str "Delete `\"" module "\"` "
-                                      (format-alpha/reflow
-                                       "|from quality.api-form/pending when this is an api
-                                        |conversion; run the focused cold tests and `make
-                                        |fmt-check lint reflect-check docs-check`; `make
-                                        |api-docs` on docstring changes. The full change-review
-                                        |roster runs once, at the land run's signoff-review
-                                        |step: continue with `strand workflow start
-                                        |<new-land-run-id> --workflow land --params
-                                        |<land-params-json>`. The params name this run's existing
-                                        |feature id; the land run id is new. Then close this
-                                        |run.")))})))
+                                 (format-alpha/reflow
+                                  (format
+                                   "|Delete `\"%s\"` from quality.api-form/pending when this is an api
+                                    |conversion; run the focused cold tests and `make fmt-check lint
+                                    |reflect-check docs-check`; `make api-docs` on docstring changes.
+                                    |The full change-review roster runs once, at the land run's
+                                    |signoff-review step: continue with `strand workflow start
+                                    |<new-land-run-id> --workflow land --params <land-params-json>`.
+                                    |The params name this run's existing feature id; the land run id is
+                                    |new. Then close this run."
+                                   module)))})))
 
 (workflow/defworkflow story-keep
   "Keep a story split: the per-concern files are the deliverable.
@@ -1066,22 +1071,19 @@
                   :attributes {"workflow/action-ref" "story.finish"
                                "workflow/instruction"
                                (fn [{:keys [module]}]
-                                 (str (format-alpha/reflow
-                                       "|The split stands: internal/<concern> files stay, named
-                                        |by meaning, gated dependency rules apply (internal
-                                        |never requires alpha; only own alpha/internal
-                                        |siblings/tests reach internal).")
-                                      " Delete `\"" module "\"` "
-                                      (format-alpha/reflow
-                                       "|from quality.api-form/pending when this is an api
-                                        |conversion; focused cold tests; `make fmt-check lint
-                                        |reflect-check docs-check`; `make api-docs` on docstring
-                                        |changes. The full roster runs at the land run's
-                                        |signoff-review step: `strand workflow start
-                                        |<new-land-run-id> --workflow land --params
-                                        |<land-params-json>`. The params name this run's existing
-                                        |feature id; the land run id is new. Then close this
-                                        |run.")))})))
+                                 (format-alpha/reflow
+                                  (format
+                                   "|The split stands: internal/<concern> files stay, named by meaning,
+                                    |gated dependency rules apply (internal never requires alpha; only
+                                    |own alpha/internal siblings/tests reach internal). Delete `\"%s\"`
+                                    |from quality.api-form/pending when this is an api conversion;
+                                    |focused cold tests; `make fmt-check lint reflect-check docs-check`;
+                                    |`make api-docs` on docstring changes. The full roster runs at the
+                                    |land run's signoff-review step: `strand workflow start
+                                    |<new-land-run-id> --workflow land --params <land-params-json>`.
+                                    |The params name this run's existing feature id; the land run id is
+                                    |new. Then close this run."
+                                   module)))})))
 
 (workflow/defworkflow story
   "Run the module-form STORY workflow (family \"story\").

@@ -318,7 +318,7 @@ type MergeLock = { id: string; owner: string; feature: string; acquiredAt: strin
 type LockState =
   | { kind: "none" }
   | { kind: "ok"; lock: MergeLock }
-  | { kind: "corrupt"; count: number }
+  | { kind: "corrupt"; ids: string[] }
   | { kind: "malformed"; id: string; missing: string[] }
   | { kind: "error"; message: string };
 
@@ -331,7 +331,7 @@ async function fetchMergeLock(): Promise<LockState> {
   }
   const locks = items.filter((s) => str(s.attributes["kind"]) === "merge-lock");
   if (locks.length === 0) return { kind: "none" };
-  if (locks.length > 1) return { kind: "corrupt", count: locks.length };
+  if (locks.length > 1) return { kind: "corrupt", ids: locks.map((lock) => lock.id) };
   const lock = locks[0]!;
   const owner = str(lock.attributes["owner"]);
   const feature = str(lock.attributes["land/run-id"]);
@@ -365,7 +365,7 @@ function MergeLockBanner(st: LockState, ctx: RenderCtx) {
     case "corrupt":
       return line(
         "red",
-        `${st.count} ACTIVE MERGE LOCKS · close duplicate strands manually until one remains; then strand land break-lock --reason`,
+        `ACTIVE MERGE LOCKS ${st.ids.join(",")} · strand list --query merge-lock; strand update <duplicate-id> --state closed; then strand land break-lock --reason "<reason>"`,
       );
     case "malformed":
       return line("red", `MERGE LOCK ${st.id} malformed · missing ${st.missing.join(", ")} · inspect the strand`);
