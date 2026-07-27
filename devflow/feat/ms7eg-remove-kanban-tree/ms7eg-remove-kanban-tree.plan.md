@@ -62,7 +62,7 @@ Outcome: focused dashboard/config checks and repository landing gates pass.
 
 ## PLAN-Ktr-001.P8 Task context
 
-- **PLAN-Ktr-001.TC1:** The card `ms7eg` and proposal review run `i887n` contain the accepted scope. The live kanban v12 board/card outputs are the source for response shapes.
+- **PLAN-Ktr-001.TC1:** The card `ms7eg` and proposal review run `i887n` contain the accepted scope. The live pinned kanban spool's board/card outputs are the source for response shapes.
 
 ## PLAN-Ktr-001.P9 Developer Notes
 
