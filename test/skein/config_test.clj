@@ -290,10 +290,9 @@
   [])
 
 (def ^:private named-query-names
-  "The config-owned named queries whose registered definitions the refactor must
-  preserve, authored as `defquery` blocks in .skein/config.clj."
-  ["feature-active" "feature-work" "feature-owner-work" "feature-run"
-   "workflow-runs" "devflow-runs" "merge-lock" "work"])
+  "The config-owned named queries whose registered definitions the surface
+  baseline preserves, authored as `defquery` blocks in .skein/config.clj."
+  ["run-active" "workflow-runs" "devflow-runs" "merge-lock" "work"])
 
 (defn- portable-source
   "Rewrite an op-help envelope's absolute `:source` file to a repo-relative path.
@@ -354,9 +353,8 @@
 (defn- assert-config-registrations
   "Assert the repo-local query/op/pattern registrations are present."
   [rt]
-  (doseq [query-name ["kanban-cards" "kanban-pending" "feature-active" "feature-work"
-                      "feature-owner-work" "feature-run" "workflow-runs" "devflow-runs"
-                      "merge-lock" "work"]]
+  (doseq [query-name ["kanban-cards" "kanban-pending" "run-active" "workflow-runs"
+                      "devflow-runs" "merge-lock" "work"]]
     (is (contains? (graph/queries rt) query-name)))
   (is (contains? (graph/queries rt) "bench-runs"))
   (doseq [op-name ["kanban" "land" "workflow"
@@ -565,10 +563,7 @@
         (weaver/add! rt {:title title :state "active" :attributes attrs}))
       (let [rows (fn [query-name params]
                    (set (map :title (weaver/list rt (get (graph/queries rt) query-name) params))))]
-        (is (= #{"A1" "A2" "A3"} (rows "feature-active" {:feature "alpha"})))
-        (is (= #{"A1" "A2"} (rows "feature-work" {:feature "alpha"})))
-        (is (= #{"A1"} (rows "feature-owner-work" {:feature "alpha" :owner "amy"})))
-        (is (= #{"R1"} (rows "feature-run" {:feature "alpha"})))
+        (is (= #{"R1"} (rows "run-active" {:run-id "alpha"})))
         (is (= #{"M1" "D1"} (rows "workflow-runs" {})))
         (is (= #{"D1"} (rows "devflow-runs" {})))
         (is (= #{"A1" "A2" "A3" "B1" "R1"} (rows "work" {})))))))

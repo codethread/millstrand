@@ -17,40 +17,13 @@
 ;; Named queries
 ;; ---------------------------------------------------------------------------
 
-(defquery feature-active-query
-  "Parameterized query for all active strands carrying a feature attribute."
-  {:usage "strand list --query feature-active --param feature=<feature>"}
-  {:params [:feature]
+(defquery run-active-query
+  "Parameterized query for the active strands of one workflow run."
+  {:usage "strand list --query run-active --param run-id=<run-id>"}
+  {:params [:run-id]
    :where [:and
            [:= :state "active"]
-           [:= [:attr :feature] [:param :feature]]]})
-
-(defquery feature-work-query
-  "Parameterized query for active task/review strands in a feature."
-  {:usage "strand ready --query feature-work --param feature=<feature>"}
-  {:params [:feature]
-   :where [:and
-           [:= :state "active"]
-           [:= [:attr :feature] [:param :feature]]
-           [:in [:attr :kind] ["task" "review"]]]})
-
-(defquery feature-owner-work-query
-  "Parameterized query for active task/review strands in a feature owned by one actor."
-  {:usage "strand ready --query feature-owner-work --param feature=<feature> --param owner=<owner>"}
-  {:params [:feature :owner]
-   :where [:and
-           [:= :state "active"]
-           [:= [:attr :feature] [:param :feature]]
-           [:= [:attr :owner] [:param :owner]]
-           [:in [:attr :kind] ["task" "review"]]]})
-
-(defquery feature-run-query
-  "Parameterized query for the active strands of one workflow run/feature."
-  {:usage "strand list --query feature-run --param feature=<feature>"}
-  {:params [:feature]
-   :where [:and
-           [:= :state "active"]
-           [:= [:attr "workflow/run-id"] [:param :feature]]]})
+           [:= [:attr "workflow/run-id"] [:param :run-id]]]})
 
 (defquery workflow-runs-query
   "Query for active workflow roots (any family)."

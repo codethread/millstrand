@@ -1,32 +1,11 @@
 {:op-help {},
  :queries
- {"feature-active"
-  {:params [:feature],
+ {"run-active"
+  {:params [:run-id],
    :where
    [:and
     [:= :state "active"]
-    [:= [:attr :feature] [:param :feature]]]},
-  "feature-work"
-  {:params [:feature],
-   :where
-   [:and
-    [:= :state "active"]
-    [:= [:attr :feature] [:param :feature]]
-    [:in [:attr :kind] ["task" "review"]]]},
-  "feature-owner-work"
-  {:params [:feature :owner],
-   :where
-   [:and
-    [:= :state "active"]
-    [:= [:attr :feature] [:param :feature]]
-    [:= [:attr :owner] [:param :owner]]
-    [:in [:attr :kind] ["task" "review"]]]},
-  "feature-run"
-  {:params [:feature],
-   :where
-   [:and
-    [:= :state "active"]
-    [:= [:attr "workflow/run-id"] [:param :feature]]]},
+    [:= [:attr "workflow/run-id"] [:param :run-id]]]},
   "workflow-runs"
   [:and [:= :state "active"] [:= [:attr "workflow/role"] "root"]],
   "devflow-runs"
