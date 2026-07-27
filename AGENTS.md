@@ -39,7 +39,7 @@ make fmt-check lint reflect-check docs-check   # blocking CI quality gates, held
 make api-docs                           # regenerate *.api.md after touching any spool or skein.api.*.alpha docstring
 ```
 
-`make lint` includes `lint-conventions` (ns docstrings everywhere; no locals named after clojure.core macros; requires embedded in quoted forms must resolve to real namespaces; api-module form per `quality.api-form` — contract in SPEC-003.C19a; shipped spool sources use `skein.core.*` only from unsafe-named namespaces per `quality.spool-tiers` — the unsafe-namespace convention in `docs/spools/writing-shared-spools.md`). New splint suppressions need written justification in `.splint.edn`. After validation, `git status --short` must not show generated SQLite or runtime metadata artifacts. Strand data is plain SQLite under a workspace's `data/skein.sqlite`.
+`make lint` includes `lint-conventions` (ns docstrings everywhere; no locals named after clojure.core macros; requires embedded in quoted forms must resolve to real namespaces; api-module form per `quality.api-form` — contract in SPEC-003.C19a; shipped spool sources use `skein.core.*` only from unsafe-named namespaces per `quality.spool-tiers` — the unsafe-namespace convention in `docs/spools/writing-shared-spools.md`; no hand-escaped JSON string literal that `json/write-str` would reproduce, per `quality.json-literals`). New splint suppressions need written justification in `.splint.edn`. After validation, `git status --short` must not show generated SQLite or runtime metadata artifacts. Strand data is plain SQLite under a workspace's `data/skein.sqlite`.
 
 ## Hard rules
 

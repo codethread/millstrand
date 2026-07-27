@@ -173,7 +173,8 @@
         (check! 'list (weaver/op! rt 'list []))
         (check! 'ready (weaver/op! rt 'ready []))
         (check! 'subgraph (weaver/op! rt 'subgraph [(:id first-row)]))
-        (check! 'weave (weaver/op! rt 'weave ["--pattern" "task" "--input" "{\"title\":\"Woven\"}"]))
+        (check! 'weave (weaver/op! rt 'weave ["--pattern" "task" "--input"
+                                              (json/write-str {:title "Woven"})]))
         (check! 'query "list" (weaver/op! rt 'query ["list"]))
         (check! 'query "explain" (weaver/op! rt 'query ["explain" "all"]))
         (check! 'pattern "list" (weaver/op! rt 'pattern ["list"]))
@@ -547,7 +548,7 @@
       (testing "--attr overrides --attributes, JSON types preserved"
         (let [added (weaver/op! rt 'add
                                 ["Merge" "--attributes" ":payload/attrs" "--attr" "k=flag"]
-                                {:payloads {"attrs" "{\"k\":\"json\",\"x\":1}"}})]
+                                {:payloads {"attrs" (json/write-str {:k "json" :x 1})}})]
           (is (= {:k "flag" :x 1} (:attributes added)))))
       (testing "--attr value resolves a payload reference"
         (let [added (weaver/op! rt 'add
@@ -600,25 +601,25 @@
         (let [created (weaver/add! rt {:title "Merge" :attributes {:owner "old"}})
               updated (weaver/op! rt 'update
                                   [(:id created) "--attributes" ":payload/attrs" "--attr" "owner=flag"]
-                                  {:payloads {"attrs" "{\"owner\":\"json\",\"count\":2}"}})]
+                                  {:payloads {"attrs" (json/write-str {:owner "json" :count 2})}})]
           (is (= {:owner "flag" :count 2} (:attributes updated)))))
       (testing "JSON null removes the addressed key"
         (let [created (weaver/add! rt {:title "Drop" :attributes {:owner "old" :keep "yes"}})
               updated (weaver/op! rt 'update
                                   [(:id created) "--attributes" ":payload/attrs"]
-                                  {:payloads {"attrs" "{\"owner\":null}"}})]
+                                  {:payloads {"attrs" (json/write-str {:owner nil})}})]
           (is (= {:keep "yes"} (:attributes updated)))))
       (testing "JSON empty string stores an empty string, not absence"
         (let [created (weaver/add! rt {:title "Blank" :attributes {:owner "old"}})
               updated (weaver/op! rt 'update
                                   [(:id created) "--attributes" ":payload/attrs"]
-                                  {:payloads {"attrs" "{\"owner\":\"\"}"}})]
+                                  {:payloads {"attrs" (json/write-str {:owner ""})}})]
           (is (= {:owner ""} (:attributes updated)))))
       (testing "--attr key= stores an empty string and wins over a typed null"
         (let [created (weaver/add! rt {:title "Raw blank" :attributes {:owner "old"}})
               updated (weaver/op! rt 'update
                                   [(:id created) "--attributes" ":payload/attrs" "--attr" "owner="]
-                                  {:payloads {"attrs" "{\"owner\":null}"}})]
+                                  {:payloads {"attrs" (json/write-str {:owner nil})}})]
           (is (= {:owner ""} (:attributes updated)))))
       (testing "no attribute flag leaves attributes untouched"
         (let [created (weaver/add! rt {:title "Keep" :attributes {:owner "old"}})
@@ -630,7 +631,7 @@
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"blank attribute key"
                                 (weaver/op! rt 'update
                                             [(:id created) "--attributes" ":payload/attrs"]
-                                            {:payloads {"attrs" "{\"\":\"x\"}"}})))))
+                                            {:payloads {"attrs" (json/write-str {"" "x"})}})))))
       (testing "supplied JSON null for --attributes fails loudly, not as an empty patch"
         (let [created (weaver/add! rt {:title "Null" :attributes {:owner "old"}})]
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"must reference a JSON object"
@@ -780,14 +781,15 @@
     (fn [rt]
       (testing "input as a JSON payload reference creates the pattern batch"
         (let [result (weaver/op! rt 'weave ["--pattern" "task" "--input" ":stdin"]
-                                 {:payloads {"stdin" "{\"title\":\"Do it\"}"}})]
+                                 {:payloads {"stdin" (json/write-str {:title "Do it"})}})]
           (is (= #{:created :refs} (set (keys result))))
           (is (= ["Do it"] (map :title (:created result))))
           (testing "shape matches a direct weaver-API weave!"
             (let [direct (patterns/weave! rt 'task {:title "Do it"})]
               (is (= (set (keys result)) (set (keys direct))))))))
       (testing "literal inline JSON input works too"
-        (let [result (weaver/op! rt 'weave ["--pattern" "task" "--input" "{\"title\":\"Inline\"}"])]
+        (let [result (weaver/op! rt 'weave ["--pattern" "task" "--input"
+                                            (json/write-str {:title "Inline"})])]
           (is (= ["Inline"] (map :title (:created result)))))))))
 
 (deftest weave-loud-input-paths
@@ -807,10 +809,11 @@
                                           {:payloads {"stdin" "{\"title\":\"x\"} 2"}}))))
       (testing "missing required --pattern fails in the parser"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required flag --pattern"
-                              (weaver/op! rt 'weave ["--input" "{\"title\":\"x\"}"]))))
+                              (weaver/op! rt 'weave ["--input" (json/write-str {:title "x"})]))))
       (testing "unknown pattern fails loudly"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Pattern not found"
-                              (weaver/op! rt 'weave ["--pattern" "nope" "--input" "{\"title\":\"x\"}"])))))))
+                              (weaver/op! rt 'weave ["--pattern" "nope" "--input"
+                                                     (json/write-str {:title "x"})])))))))
 
 (deftest query-list-and-explain-shapes
   (with-batteries
