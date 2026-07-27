@@ -587,6 +587,7 @@
 
 (deftest feature-cost-report-fails-loudly-on-malformed-present-values
   (doseq [[attribute value] [["agent-run/cost-usd" "not-a-number"]
+                             ["agent-run/cost-usd" "NaN"]
                              ["agent-run/tokens-total" 1.5]
                              ["agent-run/tokens" "[]"]
                              ["agent-run/started-at" "yesterday"]

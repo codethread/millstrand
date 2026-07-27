@@ -8,8 +8,12 @@ def double($strand; $attribute):
   if present($strand; $attribute) | not then null
   else
     $strand.attributes[$attribute] as $value
-    | try ($value | tonumber)
-      catch malformed($strand; $attribute; $value)
+    | (try ($value | tonumber)
+       catch malformed($strand; $attribute; $value)) as $number
+    | if $number | isfinite
+      then $number
+      else malformed($strand; $attribute; $value)
+      end
   end;
 
 def integer($strand; $attribute):
