@@ -700,7 +700,11 @@
         selected (some #(when (= (:step opts) (:id %)) %) ready)
         selectable? (and selected
                          (contains? #{"step" "checkpoint"} (:role selected)))]
-    (if (or selectable? (and (nil? (:step opts)) (seq inferable)))
+    (if (or selectable?
+            (and (nil? (:step opts))
+                 (or (seq inferable)
+                     (not= 1 (count ready))
+                     (contains? #{"step" "checkpoint"} (:role (first ready))))))
       (runs/resolve-target! :advance run-id ready (:step opts))
       ;; Preserve the trusted API's established defer and invalid-role failures
       ;; when there is no advanceable item at all.
@@ -708,8 +712,8 @@
               query/strand->view))))
 
 (defn advance!
-  "Advance run-id by one ready ordinary step or checkpoint, returning the
-  `{:ready [step-view ...] :done boolean}` result shape.
+  "Advance run-id by one ready ordinary step, checkpoint, or explicitly selected
+  gate, returning the `{:ready [step-view ...] :done boolean}` result shape.
 
   Resolves the ready step (honoring an optional `:step` selector). When it is a
   checkpoint, `opts` must carry `:choice` (fail loudly otherwise); `advance!`
@@ -717,7 +721,9 @@
   pass-through `:by`/`:step` opts. When it is a plain step, `:choice` must be
   absent (fail loudly otherwise); `advance!` calls `complete!` with the
   pass-through `:attributes`/`:step`/`:by` opts. `:input` is checkpoint-only,
-  while `:attributes` is ordinary-step-only.
+  while `:attributes` is ordinary-step-only. A gate is never inferred: closing
+  one requires both its explicit `:step` and a non-blank `:by`, and rejects
+  `:choice` and `:input` like an ordinary step.
 
   A defer is not advanceable and says so loudly: filling one selects a target
   and supplies that target's own params, which does not fit `advance!`'s
@@ -1161,14 +1167,16 @@
                               by (assoc :by by)))))))
 
 (defn run-advance!
-  "Advance the ready ordinary step or checkpoint and return the run result.
+  "Advance the ready ordinary step, checkpoint, or explicitly selected gate and
+  return the run result.
 
   `request` is `{:run-id … :choice … :input {…} :step … :by …}`, with only the
   run id required. Without `:step`, exactly one non-gate ordinary step or
   checkpoint must be ready. A checkpoint requires `:choice`; an ordinary step
   rejects it. `:input` is the selected checkpoint choice's JSON-worker input
-  and is rejected for an ordinary step or gate. `:by` records the actor and
-  remains mandatory when an explicitly selected item is a gate.
+  and is rejected for an ordinary step or gate. A gate is never inferred and
+  requires both `:step` and a non-blank `:by`; it also rejects `:choice` and
+  `:input`.
 
   A defer is not advanceable because selecting its target and params is a
   different request; failures direct the worker to `workflow defer`.

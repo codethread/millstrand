@@ -80,6 +80,11 @@
   (fmt/reflow
    "|Re-run with --by naming who closed the gate."))
 
+(def ^:private gate-selection-guidance
+  (fmt/reflow
+   "|A gate is never inferred. Re-run with --step naming it and --by naming who
+    |closed it."))
+
 (def ^:private defer-guidance
   (fmt/reflow
    "|This ready item selects another workflow and its params. Use workflow defer
@@ -226,7 +231,12 @@
                    (cond-> {:reason (:absent spec) :run-id run-id :ready ready}
                      (and (= role :advance)
                           (some #(= "defer" (:role %)) ready))
-                     (assoc :guidance defer-guidance)))
+                     (assoc :guidance defer-guidance)
+
+                     (and (= role :advance)
+                          (not-any? #(= "defer" (:role %)) ready)
+                          (some :gate ready))
+                     (assoc :guidance gate-selection-guidance)))
           (fail! (str "More than one workflow " noun " is ready")
                  {:reason (:ambiguous spec)
                   :run-id run-id

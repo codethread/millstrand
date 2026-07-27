@@ -1451,7 +1451,12 @@
                             (workflow/gate :wait "Wait" :external))
                            {})
           (is (= ["Wait"]
-                 (mapv :title (:ready (workflow/advance! "advance-with-gate"))))))))))
+                 (mapv :title (:ready (workflow/advance! "advance-with-gate")))))
+          (let [thrown (try (workflow/advance! "advance-with-gate" {:by "ci-bot"})
+                            (catch clojure.lang.ExceptionInfo e e))]
+            (is (= :workflow/ready-next-absent (:reason (ex-data thrown))))
+            (is (= ["Wait"] (mapv :title (:ready (ex-data thrown)))))
+            (is (re-find #"--step" (:guidance (ex-data thrown))))))))))
 
 (defn- registry-router-stage [{:keys [target]}]
   (workflow/workflow

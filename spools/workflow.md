@@ -236,7 +236,7 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
   loops route `:next` back to the same stage (see
   [§5](#5-checkpoints-and-routing)).
 - `(defer! run-id workflow)` / `(defer! run-id workflow params)` / `(defer! run-id workflow params opts)` — fills a ready defer with one of its allowed registered workflows, keeping the current root and returning the same result shape. `opts` takes `:step` (to pick among several ready defers) and `:by`. See [§5a](#5a-runtime-selected-returning-composition).
-- `(advance! run-id)` / `(advance! run-id opts)` — one verb over a ready ordinary step or checkpoint, returning the same result shape. At a checkpoint, `opts` must carry `:choice`, may carry `:input` (default `{}`), and rejects `:attributes`; it calls `choose!`. At an ordinary step, `:choice` and `:input` are rejected, while `:attributes` may pass through to `complete!`. Both roles accept `:by` and `:step`. Passing removed `:notes` fails as `workflow/notes-removed`. A defer directs the caller to `defer!`, and an unpublished role fails before mutation.
+- `(advance! run-id)` / `(advance! run-id opts)` — one verb over a ready ordinary step or checkpoint, plus an explicitly selected gate, returning the same result shape. At a checkpoint, `opts` must carry `:choice`, may carry `:input` (default `{}`), and rejects `:attributes`; it calls `choose!`. At an ordinary step, `:choice` and `:input` are rejected, while `:attributes` may pass through to `complete!`. A gate is never inferred: it requires both its explicit `:step` and a non-blank `:by`, and rejects `:choice` and `:input` like an ordinary step. Passing removed `:notes` fails as `workflow/notes-removed`. A defer directs the caller to `defer!`, and an unpublished role fails before mutation.
 
 Every run-mutating op holds a per-run guard from the moment it resolves the ready frontier through the batch it applies. Two workers acting on one run are therefore serialized: the second re-resolves against the frontier the first left, and fails loudly on a step that is no longer ready rather than writing over it. The guard is runtime-owned, so it covers one weaver's in-process callers — the same scope as the ambient runtime those ops resolve.
 
@@ -549,7 +549,7 @@ $ strand workflow start feat-x --workflow spike --params '{"scope":"queue"}'
 
 `complete` acts on an ordinary step, `choose` on a checkpoint, and `defer` on a runtime selection point. Each verb infers the sole ready item of its role, so a run with a step and a checkpoint ready at once is unambiguous for both and neither needs a step id. `next` can act on either an ordinary step or checkpoint, so that same mixed frontier is ambiguous for `next`. `--step` selects one compatible item when a verb reports ambiguity.
 
-A gate is the exception. Closing one asserts that something outside the run happened, so it takes both `--step` and `--by`, and a bare `complete` never picks it — a run whose only ready item is a gate reports `workflow/ready-step-absent` rather than closing it.
+A gate is the exception. Closing one asserts that something outside the run happened, so it takes both `--step` and `--by`, and neither a bare `complete` nor a bare `next` picks it — a run whose only ready item is a gate reports the corresponding `workflow/ready-*-absent` reason rather than closing it.
 
 Failures name the role they refused for:
 
