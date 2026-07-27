@@ -11,12 +11,16 @@
             [skein.api.registry.alpha :as registry]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.vocab.alpha :as vocab]
+            [skein.api.weaver.alpha :as weaver]
             [skein.spools.test-support :as test-support :refer [assert-state-shape with-runtime]]
             [skein.spools.workflow :as workflow]
             [skein.spools.workflow.internal.registry :as wf-registry]
             [skein.repl :as repl]
             [skein.test.alpha :as test-alpha])
   (:import [java.time Instant]))
+
+(defn- failure-reason [f]
+  (:reason (ex-data (try (f) (catch clojure.lang.ExceptionInfo e e)))))
 
 (deftest workflow-module-declares-workflow-attr-namespace
   (with-runtime
@@ -1396,7 +1400,7 @@
 
 (deftest workflow-advance-drives-steps-and-checkpoints
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow
                         "Advance demo"
                         (workflow/step :work "Do work" :self)
@@ -1405,6 +1409,20 @@
                                              :kind :agent
                                              :choices [{:key :approved :label "Approve"}]))]
         (workflow/start! "advance-run" definition {})
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow advance opts"
+                              (workflow/advance! "advance-run" {:step 42})))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow option keys"
+                              (workflow/advance! "advance-run" {:bogus true})))
+        (is (= :workflow/advance-input-without-checkpoint
+               (failure-reason #(workflow/advance! "advance-run"
+                                                   {:input {:verdict "pass"}}))))
+        (let [step-id (:id (workflow/ready-step "advance-run"))]
+          (weaver/update! rt step-id {:attributes {"workflow/role" "improvised"}})
+          (is (= :workflow/ready-next-incompatible
+                 (failure-reason #(workflow/advance! "advance-run"
+                                                     {:step step-id}))))
+          (is (= "active" (:state (weaver/show rt step-id))))
+          (weaver/update! rt step-id {:attributes {"workflow/role" "step"}}))
         ;; a ready step advanced with a :choice fails loudly and mutates nothing
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"must not supply a :choice"
                               (workflow/advance! "advance-run" {:choice :approved})))
@@ -1413,11 +1431,32 @@
           (is (= ["Sign off"] (mapv :title (:ready after))))
           (is (false? (:done after))))
         ;; a ready checkpoint advanced without a :choice fails loudly
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"requires a :choice"
-                              (workflow/advance! "advance-run")))
+        (let [thrown (try (workflow/advance! "advance-run")
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (re-find #"requires a :choice" (ex-message thrown)))
+          (is (= ["approved"] (:choices (ex-data thrown)))))
+        (is (= :workflow/advance-attributes-on-checkpoint
+               (failure-reason
+                #(workflow/advance! "advance-run"
+                                    {:choice :approved
+                                     :attributes {"verdict" "pass"}}))))
         ;; advance! dispatches the checkpoint choice and closes the run
         (is (= {:ready [] :done true} (workflow/advance! "advance-run" {:choice :approved})))
-        (is (workflow/done? "advance-run"))))))
+        (is (workflow/done? "advance-run"))
+        (testing "a non-inferable sibling does not make one advanceable item ambiguous"
+          (workflow/start! "advance-with-gate"
+                           (workflow/workflow
+                            "Advance beside gate"
+                            (workflow/step :work "Do work" :self)
+                            (workflow/gate :wait "Wait" :external))
+                           {})
+          (is (= ["Wait"]
+                 (mapv :title (:ready (workflow/advance! "advance-with-gate")))))
+          (let [thrown (try (workflow/advance! "advance-with-gate" {:by "ci-bot"})
+                            (catch clojure.lang.ExceptionInfo e e))]
+            (is (= :workflow/ready-next-absent (:reason (ex-data thrown))))
+            (is (= ["Wait"] (mapv :title (:ready (ex-data thrown)))))
+            (is (re-find #"--step" (:guidance (ex-data thrown))))))))))
 
 (defn- registry-router-stage [{:keys [target]}]
   (workflow/workflow
@@ -3066,11 +3105,16 @@
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
       (register-defer-targets!)
       (let [defer-id (:id (start-at-defer! "role-1"))]
-        (doseq [call [#(workflow/complete! "role-1") #(workflow/advance! "role-1")]]
-          (let [thrown (try (call) (catch clojure.lang.ExceptionInfo e e))]
-            (is (= :workflow/step-is-defer (:reason (ex-data thrown))))
-            (is (re-find #"defer!" (ex-message thrown)))))
-        (is (= "active" (:state (repl/strand defer-id))))
+        (let [complete-error (try (workflow/complete! "role-1")
+                                  (catch clojure.lang.ExceptionInfo e e))
+              advance-error (try (workflow/advance! "role-1")
+                                 (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :workflow/step-is-defer (:reason (ex-data complete-error))))
+          (is (re-find #"defer!" (ex-message complete-error)))
+          (is (= :workflow/ready-next-absent (:reason (ex-data advance-error))))
+          (is (re-find #"workflow defer" (:guidance (ex-data advance-error))))
+          (is (= [defer-id] (mapv :id (:ready (ex-data advance-error)))))
+          (is (= "active" (:state (repl/strand defer-id)))))
         (testing "and choose! refuses it as a non-checkpoint"
           (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                 #"not a checkpoint"

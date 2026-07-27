@@ -48,7 +48,7 @@
          explain-definition explain-defer
          reject-unknown-keys! step* bind-defer-step
          step-opt-keys checkpoint-opt-keys call-opt-keys workflow-opt-keys
-         defer-opt-keys
+         defer-opt-keys advance-opt-keys
          choice-name choice-details-attr reject-unknown-choice-keys!
          require-valid-choices!
          reject-next-and-revise! require-unique-choice-keys!
@@ -689,50 +689,93 @@
            (routing/close-run-if-done! rt run-id)
            (query/run-result rt run-id)))))))
 
+(defn- resolve-advance-target!
+  "Resolve the item `advance!` acts on without letting incompatible siblings
+  make an otherwise unique ordinary step or checkpoint ambiguous."
+  [rt run-id opts]
+  (runs/resolve-target! :advance run-id (runs/frontier rt run-id) (:step opts)))
+
 (defn advance!
-  "Advance run-id by one ready ordinary step or checkpoint, returning the
-  `{:ready [step-view ...] :done boolean}` result shape.
+  "Advance run-id by one ready ordinary step, checkpoint, or explicitly selected
+  gate, returning the `{:ready [step-view ...] :done boolean}` result shape.
 
   Resolves the ready step (honoring an optional `:step` selector). When it is a
   checkpoint, `opts` must carry `:choice` (fail loudly otherwise); `advance!`
   calls `choose!` with that choice, its `:input` (default `{}`), and the
   pass-through `:by`/`:step` opts. When it is a plain step, `:choice` must be
   absent (fail loudly otherwise); `advance!` calls `complete!` with the
-  pass-through `:attributes`/`:step`/`:by` opts.
+  pass-through `:attributes`/`:step`/`:by` opts. `:input` is checkpoint-only,
+  while `:attributes` is ordinary-step-only. A gate is never inferred: closing
+  one requires both its explicit `:step` and a non-blank `:by`, and rejects
+  `:choice` and `:input` like an ordinary step.
 
   A defer is not advanceable and says so loudly: filling one selects a target
   and supplies that target's own params, which does not fit `advance!`'s
-  one-ready-step vocabulary, so it directs the caller to `defer!`."
+  one-ready-step vocabulary, so it directs the caller to `defer!`.
+  `::advance-opts` owns the complete opts shape."
   ([run-id]
    (advance! run-id {}))
   ([run-id opts]
    (let [rt (current/runtime)]
-     (util/require-map! opts [:opts])
+     (require-valid! ::advance-opts opts "Invalid workflow advance opts")
      (routing/refuse-notes! "advance!" opts)
+     (reject-unknown-keys! opts advance-opt-keys :advance)
      (guard/with-run!
        rt run-id
        (fn []
-         (let [step (or (query/resolve-ready-step rt run-id opts)
-                        (fail! "No ready workflow step" {:run-id run-id}))]
-           (case (query/attr step :workflow/role)
+         (let [view (or (resolve-advance-target! rt run-id opts)
+                        (fail! "No ready workflow step" {:run-id run-id}))
+               role (:role view)]
+           (case role
              "defer"
              (fail! "Cannot advance a defer; use defer!"
                     {:reason :workflow/step-is-defer
-                     :run-id run-id :step (query/strand->view step)})
+                     :run-id run-id :step view})
 
              "checkpoint"
              (do
                (when-not (contains? opts :choice)
                  (fail! "advance! on a checkpoint requires a :choice"
-                        {:run-id run-id :step (query/strand->view step)}))
+                        {:reason :workflow/advance-choice-required
+                         :run-id run-id
+                         :step view
+                         :choices (:choices view)}))
+               (when (contains? opts :attributes)
+                 (fail! "advance! on a checkpoint rejects :attributes"
+                        {:reason :workflow/advance-attributes-on-checkpoint
+                         :run-id run-id
+                         :step view
+                         :attributes (:attributes opts)
+                         :allowed #{:choice :input :step :by}}))
                (choose! run-id (:choice opts) (get opts :input {})
-                        (select-keys opts [:by :step])))
+                        (assoc (select-keys opts [:by]) :step (:id view))))
 
+             "step"
              (do
                (when (contains? opts :choice)
                  (fail! "advance! on a step must not supply a :choice"
-                        {:run-id run-id :step (query/strand->view step)}))
-               (complete! run-id (select-keys opts [:attributes :step :by]))))))))))
+                        {:reason :workflow/advance-choice-incompatible
+                         :run-id run-id
+                         :step view
+                         :choice (:choice opts)
+                         :allowed #{:attributes :step :by}}))
+               (when (contains? opts :input)
+                 (fail! "advance! on a step rejects :input"
+                        {:reason :workflow/advance-input-without-checkpoint
+                         :run-id run-id
+                         :step view
+                         :input (:input opts)
+                         :allowed #{:attributes :step :by}}))
+               (complete! run-id
+                          (assoc (select-keys opts [:attributes :by])
+                                 :step (:id view))))
+
+             (fail! "Cannot advance an unknown workflow role"
+                    {:reason :workflow/advance-role-invalid
+                     :run-id run-id
+                     :step view
+                     :role role
+                     :allowed #{"step" "checkpoint" "defer"}}))))))))
 
 (defn choice-details
   "Return choice explanations for run-id's current workflow checkpoint, keyed by
@@ -991,7 +1034,7 @@
 
 ;; --- the generic worker run surface ------------------------------------------
 ;;
-;; Six request-map verbs over the lifecycle above, sharing one result shape.
+;; Seven request-map verbs over the lifecycle above, sharing one result shape.
 ;; They add no engine semantics: each validates its named request spec, narrows
 ;; the ready frontier to the role it acts on, and delegates to the trusted-
 ;; Clojure operation with an explicit step selector (PROP-Wcd-001.S2/S4). What
@@ -1002,7 +1045,7 @@
   "Apply `mutate` to the ready item `role`'s verb resolves for `request`, and
   return the shared run result stamped `operation`.
 
-  The shape all three worker mutations share. Resolution happens twice on
+  The shape all worker mutations share. Resolution happens twice on
   purpose: the pre-guard pass answers an invalid request without queueing behind
   another worker, and the in-guard pass is what the request actually acts on. If
   another worker wrote between the two, `require-fresh-frontier!` refuses before
@@ -1011,14 +1054,15 @@
   could resolve differently."
   [rt operation role request mutate]
   (let [{:keys [run-id step]} (runs/require-run! rt request)
-        before (runs/frontier rt run-id)
-        target (runs/resolve-target! role run-id before step)]
+        before (runs/frontier rt run-id)]
+    (runs/resolve-target! role run-id before step)
     (guard/with-run!
       rt run-id
       (fn []
-        (runs/require-fresh-frontier! operation role run-id step before
-                                      (runs/frontier rt run-id))
-        (mutate target)
+        (let [after (runs/require-fresh-frontier!
+                     operation role run-id step before (runs/frontier rt run-id))
+              current-target (runs/resolve-target! role run-id after step)]
+          (mutate current-target))
         (runs/result rt operation run-id)))))
 
 (defn run-start!
@@ -1105,6 +1149,57 @@
                    (choose! run-id choice (or input {})
                             (cond-> {:step (:id target)}
                               by (assoc :by by)))))))
+
+(defn run-next!
+  "Advance the ready ordinary step, checkpoint, or explicitly selected gate and
+  return the run result.
+
+  `request` is `{:run-id … :choice … :input {…} :step … :by …}`, with only the
+  run id required. Without `:step`, exactly one non-gate ordinary step or
+  checkpoint must be ready. A checkpoint requires `:choice`; an ordinary step
+  rejects it. `:input` is the selected checkpoint choice's JSON-worker input
+  and is rejected for an ordinary step or gate. A gate is never inferred and
+  requires both `:step` and a non-blank `:by`; it also rejects `:choice` and
+  `:input`.
+
+  A defer is not advanceable because selecting its target and params is a
+  different request; failures direct the worker to `workflow defer`.
+  `::next-request` owns the request shape."
+  [request]
+  (let [rt (current/runtime)
+        validated (require-valid! ::next-request request
+                                  "Invalid workflow next request")
+        _ (reject-unknown-keys! validated #{:run-id :choice :input :step :by} :next)
+        {:keys [run-id choice input by]} validated]
+    (mutate-run! rt "workflow next" :advance request
+                 (fn [target]
+                   (runs/require-gate-actor! run-id target by)
+                   (when (and (= "checkpoint" (:role target))
+                              (not (contains? request :choice)))
+                     (fail! "workflow next on a checkpoint requires --choice"
+                            {:reason :workflow/next-choice-required
+                             :run-id run-id
+                             :step (:id target)
+                             :choices (:choices target)}))
+                   (when (and (= "step" (:role target))
+                              (contains? request :choice))
+                     (fail! "workflow next on an ordinary step rejects --choice"
+                            {:reason :workflow/next-choice-incompatible
+                             :run-id run-id
+                             :step (:id target)
+                             :choice choice
+                             :guidance "Remove --choice, or select a checkpoint."}))
+                   (when (and (contains? request :input)
+                              (not= "checkpoint" (:role target)))
+                     (fail! "workflow next --input requires a checkpoint"
+                            {:reason :workflow/next-input-without-checkpoint
+                             :run-id run-id
+                             :step (:id target)}))
+                   (advance! run-id
+                             (cond-> {:step (:id target)}
+                               (contains? request :choice) (assoc :choice choice)
+                               (contains? request :input) (assoc :input input)
+                               by (assoc :by by)))))))
 
 (defn run-defer!
   "Fill the ready defer of `request`'s run and return the run result.
@@ -1506,6 +1601,15 @@
   (s/and :skein.spools.workflow.values/params json-safe-context?))
 (s/def :skein.spools.workflow.request/timeout-secs ::timeout-secs)
 
+(s/def :skein.spools.workflow.advance/choice
+  #(or (keyword? %) (non-blank-string? %)))
+(s/def ::advance-opts
+  (s/keys :opt-un [:skein.spools.workflow.advance/choice
+                   :skein.spools.workflow.request/input
+                   :skein.spools.workflow.request/step
+                   :skein.spools.workflow.request/by
+                   :skein.spools.workflow.request/attributes]))
+
 ;; One request spec per worker verb, and the whole of what each verb accepts.
 ;; `:step` is a disambiguator everywhere it appears, never a required address:
 ;; the surface would otherwise oblige a worker to read a frontier before every
@@ -1526,6 +1630,12 @@
   (s/keys :req-un [:skein.spools.workflow.request/run-id
                    :skein.spools.workflow.request/choice]
           :opt-un [:skein.spools.workflow.request/input
+                   :skein.spools.workflow.request/step
+                   :skein.spools.workflow.request/by]))
+(s/def ::next-request
+  (s/keys :req-un [:skein.spools.workflow.request/run-id]
+          :opt-un [:skein.spools.workflow.request/choice
+                   :skein.spools.workflow.request/input
                    :skein.spools.workflow.request/step
                    :skein.spools.workflow.request/by]))
 (s/def ::await-request
@@ -1918,6 +2028,7 @@
 (def ^:private checkpoint-opt-keys (into step-opt-keys #{:kind :choices}))
 (def ^:private call-opt-keys #{:title :depends-on :attributes})
 (def ^:private defer-opt-keys #{:description :attributes :depends-on :title})
+(def ^:private advance-opt-keys #{:choice :input :step :by :attributes})
 (def ^:private workflow-opt-keys
   #{:attributes :state :form :doc :entrypoints :param-spec :defaults})
 (def ^:private choice-opt-keys #{:key :label :description :next :input :revise})

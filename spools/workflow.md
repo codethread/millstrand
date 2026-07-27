@@ -16,7 +16,7 @@ This is userland spool code, not a separate scheduler or persistence system. Wor
 
 Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `defer`, `bind-defers`, `compile`, `pour!`, `wisp!`, and `explain`.
 
-The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `defer!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see [§5](#5-checkpoints-and-routing)), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see [§5b](#5b-registry-discovery)). That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`complete`/`choose`/`defer`/`await` over the run lifecycle (see [§5c](#5c-driving-a-run)). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
+The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `defer!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see [§5](#5-checkpoints-and-routing)), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see [§5b](#5b-registry-discovery)). That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`complete`/`choose`/`next`/`defer`/`await` over the run lifecycle (see [§5c](#5c-driving-a-run)). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
 
 Every run-mutating op (`start!`, `complete!`, `choose!`, `defer!`, `advance!`) returns one `{:ready [step-view ...] :done boolean}` map: `:ready` is the run's ready step views (as `ready` would return them) and `:done` is its done-ness, so an empty `:ready` never leaves a caller guessing whether the run finished or merely stalled. The pure queries `ready`/`ready-step` still return step views directly.
 
@@ -236,7 +236,7 @@ start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (rep
   loops route `:next` back to the same stage (see
   [§5](#5-checkpoints-and-routing)).
 - `(defer! run-id workflow)` / `(defer! run-id workflow params)` / `(defer! run-id workflow params opts)` — fills a ready defer with one of its allowed registered workflows, keeping the current root and returning the same result shape. `opts` takes `:step` (to pick among several ready defers) and `:by`. See [§5a](#5a-runtime-selected-returning-composition).
-- `(advance! run-id)` / `(advance! run-id opts)` — one verb that advances the run regardless of the ready step's kind, returning the same result shape. When the resolved ready step is a checkpoint, `opts` must carry `:choice` (and may carry `:input`, default `{}`, plus pass-through `:by`/`:step`) and it calls `choose!`; when it is a step, `:choice` must be absent and it calls `complete!` with pass-through `:attributes`/`:step`/`:by`. Passing the removed `:notes` fails as `workflow/notes-removed`. Supplying `:choice` on a step, or omitting it on a checkpoint, fails loudly. A ready defer is not advanceable: selecting a target carries its own params, which `advance!` has no way to express, so it directs the caller to `defer!`.
+- `(advance! run-id)` / `(advance! run-id opts)` — one verb over a ready ordinary step or checkpoint, plus an explicitly selected gate, returning the same result shape. At a checkpoint, `opts` must carry `:choice`, may carry `:input` (default `{}`), and rejects `:attributes`; it calls `choose!`. At an ordinary step, `:choice` and `:input` are rejected, while `:attributes` may pass through to `complete!`. A gate is never inferred: it requires both its explicit `:step` and a non-blank `:by`, and rejects `:choice` and `:input` like an ordinary step. Passing removed `:notes` fails as `workflow/notes-removed`. A defer directs the caller to `defer!`, and an unpublished role fails before mutation.
 
 Every run-mutating op holds a per-run guard from the moment it resolves the ready frontier through the batch it applies. Two workers acting on one run are therefore serialized: the second re-resolves against the frontier the first left, and fails loudly on a step that is no longer ready rather than writing over it. The guard is runtime-owned, so it covers one weaver's in-process callers — the same scope as the ambient runtime those ops resolve.
 
@@ -528,9 +528,7 @@ There is no family filter, pagination, JSON Schema projection, or registry mutat
 
 ## 5c. Driving a run
 
-The same opt-in module publishes six verbs over the lifecycle in [§4](#4-run-lifecycle): `start`, `ready`, `complete`, `choose`, `defer`, and `await`. They add no engine semantics. Each validates a named request spec and delegates to the trusted-Clojure operation behind it. The three item mutations — `complete`, `choose`, and `defer` — narrow the ready frontier to the role they act on and pass the engine an explicit step; `ready` reports the whole frontier and `start` and `await` act on the run rather than an item in it. Their Clojure entry points are `run-start!`, `run-ready`, `run-complete!`, `run-choose!`, `run-defer!`, and `run-await`, each taking one request map.
-
-`advance!` is deliberately absent. A worker naming what it is doing — completing a step, choosing at a checkpoint, or filling a defer — leaves a record of its intent that one general verb does not, and trusted Clojure still has `advance!` when a wrapper wants it.
+The same opt-in module publishes seven verbs over the lifecycle in [§4](#4-run-lifecycle): `start`, `ready`, `complete`, `choose`, `next`, `defer`, and `await`. They add no engine semantics. Each validates a named request spec and delegates to the trusted-Clojure operation behind it. The item mutations narrow the ready frontier to what they can act on and pass the engine an explicit step; `ready` reports the whole frontier and `start` and `await` act on the run rather than an item in it. Their Clojure entry points are `run-start!`, `run-ready`, `run-complete!`, `run-choose!`, `run-next!`, `run-defer!`, and `run-await`, each taking one request map. `next` is the worker verb and request vocabulary; trusted Clojure retains `advance!` as the engine convenience that it delegates to.
 
 ### One result shape
 
@@ -543,23 +541,23 @@ $ strand workflow start feat-x --workflow spike --params '{"scope":"queue"}'
  "done":false}
 ```
 
-`start`, `ready`, `complete`, `choose`, and `defer` all answer with that shape: what you invoked, the run, its current root, its complete ready frontier, and whether it is done. A mutation therefore never needs a read after it to learn what is possible next, and an empty `ready` is never ambiguous — `done` says whether the run finished or stalled.
+`start`, `ready`, `complete`, `choose`, `next`, and `defer` all answer with that shape: what you invoked, the run, its current root, its complete ready frontier, and whether it is done. A mutation therefore never needs a read after it to learn what is possible next, and an empty `ready` is never ambiguous — `done` says whether the run finished or stalled.
 
 `ready` reports every ready item of every role, not the subset your verb could act on. A worker that wants only its own role can filter; one that never saw the sibling item cannot know it exists. Items come back in definition order ([§4](#4-run-lifecycle)), and a finished run still names the last root it poured, so the shape does not depend on when you asked.
 
 ### Inference by role
 
-`complete` acts on an ordinary step, `choose` on a checkpoint, and `defer` on a runtime selection point. Each verb infers the sole ready item of its role, so a run with a step and a checkpoint ready at once is unambiguous for both and neither needs a step id. `--step` is for the case where two items of one role are ready; it is never how you address an unambiguous frontier.
+`complete` acts on an ordinary step, `choose` on a checkpoint, and `defer` on a runtime selection point. Each verb infers the sole ready item of its role, so a run with a step and a checkpoint ready at once is unambiguous for both and neither needs a step id. `next` can act on either an ordinary step or checkpoint, so that same mixed frontier is ambiguous for `next`. `--step` selects one compatible item when a verb reports ambiguity.
 
-A gate is the exception. Closing one asserts that something outside the run happened, so it takes both `--step` and `--by`, and a bare `complete` never picks it — a run whose only ready item is a gate reports `workflow/ready-step-absent` rather than closing it.
+A gate is the exception. Closing one asserts that something outside the run happened, so it takes both `--step` and `--by`, and neither a bare `complete` nor a bare `next` picks it — a run whose only ready item is a gate reports the corresponding `workflow/ready-*-absent` reason rather than closing it.
 
 Failures name the role they refused for:
 
 | Reason | Meaning |
 |---|---|
-| `workflow/ready-step-absent`, `-checkpoint-absent`, `-defer-absent` | Nothing this verb could act on is ready. The failure carries the frontier. |
-| `workflow/ready-step-ambiguous`, `-checkpoint-ambiguous`, `-defer-ambiguous` | More than one compatible item; the failure carries all of them, and `--step` picks one. |
-| `workflow/ready-step-incompatible`, `-checkpoint-incompatible`, `-defer-incompatible` | `--step` named a ready item of the wrong role; the failure carries the items that would have worked. |
+| `workflow/ready-step-absent`, `-checkpoint-absent`, `-next-absent`, `-defer-absent` | Nothing this verb could act on is ready. The failure carries the frontier. |
+| `workflow/ready-step-ambiguous`, `-checkpoint-ambiguous`, `-next-ambiguous`, `-defer-ambiguous` | More than one compatible item; the failure carries all of them, and `--step` picks one. |
+| `workflow/ready-step-incompatible`, `-checkpoint-incompatible`, `-next-incompatible`, `-defer-incompatible` | `--step` named a ready item of the wrong role; the failure carries the items that would have worked. |
 | `workflow/step-not-ready` | `--step` named something that is not in the frontier at all. |
 | `workflow/gate-actor-required` | A gate close arrived without `--by`. |
 | `workflow/frontier-stale` | Another worker moved the run first. |
@@ -567,6 +565,26 @@ Failures name the role they refused for:
 | `workflow/attr-key-duplicate` | One `--attr` key was given twice in a single `workflow complete`. |
 | `workflow/attributes-invalid` | `--attributes` was not a JSON object, or carried a blank key. |
 | `workflow/context-invalid` | The persisted run root has a malformed `workflow/context` value. The failure names the run, root, offending value, and expected map shape. |
+| `workflow/next-choice-required` | `workflow next` selected a checkpoint without `--choice`. The failure carries the allowed choices. |
+| `workflow/next-choice-incompatible` | `workflow next --choice` selected an ordinary step or gate. Remove `--choice`, or select a checkpoint. |
+| `workflow/next-input-without-checkpoint` | `workflow next --input` selected an ordinary step or gate. Remove `--input`, or select a checkpoint. |
+
+### Moving through ordinary steps and checkpoints
+
+`next` is the compact worker loop for a run whose frontier has one ordinary step or one checkpoint:
+
+```console
+$ strand workflow next feat-x
+$ strand workflow next feat-x --choice approved
+$ strand workflow next feat-x --choice abort --input '{"reason":"scope changed"}'
+$ strand workflow next feat-x --step a1b2c --choice approved
+```
+
+An ordinary step takes no choice. A checkpoint requires `--choice` and accepts the choice's declared `--input` object. A gate is never inferred and still needs both `--step` and `--by`.
+
+A defer cannot be advanced because its request must name another registered workflow and that workflow's params. The failure directs the worker to `workflow defer`.
+
+This is one engine mutation, not a client-side `ready` followed by `complete` or `choose`. The engine resolves the role before and after taking the run guard, so another worker cannot move the frontier between a client's read and mutation and cause `next` to act on a different item. The role-specific verbs remain available when the caller already knows what it is closing.
 
 ### Recording an outcome on `complete`
 

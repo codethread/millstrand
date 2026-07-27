@@ -3,13 +3,12 @@
   run-result envelope, and the concurrency guard every run mutation crosses
   (PROP-Wcd-001.S2/S4).
 
-  A worker drives a run through one verb per role. `complete` acts on an
-  ordinary step, `choose` on a checkpoint, `defer` on a defer — so each verb
-  first narrows the run's ready frontier to the items *it* could act on and
-  only then asks whether the answer is unambiguous. That order is what makes a
-  mixed frontier workable: a run with one ready step and one ready checkpoint is
-  unambiguous for both verbs, and neither has to name a step id to say what it
-  meant.
+  The role-specific verbs narrow before asking whether a frontier is ambiguous:
+  `complete` acts on ordinary steps, `choose` on checkpoints, and `defer` on
+  defers. A mixed frontier with one step and one checkpoint is therefore
+  unambiguous for both role-specific verbs. `next` is the cross-role worker
+  convenience over ordinary steps and checkpoints, so that same mixed frontier
+  is ambiguous for it and needs a step id.
 
   Gates sit deliberately outside inference. A gate is an external wait point, so
   a worker closing one asserts that something outside this run happened; that
@@ -40,7 +39,16 @@
   a worker may close by naming it, never one the engine picks for them."
   (let [ordinary? (fn [item] (not (contains? #{"checkpoint" "defer"} (:role item))))
         role? (fn [role] (fn [item] (= role (:role item))))]
-    {:step {:noun "step"
+    {:advance {:noun "advanceable item"
+               :selectable? (fn [item]
+                              (contains? #{"step" "checkpoint"} (:role item)))
+               :inferable? (fn [item]
+                             (and (contains? #{"step" "checkpoint"} (:role item))
+                                  (not (:gate item))))
+               :absent :workflow/ready-next-absent
+               :ambiguous :workflow/ready-next-ambiguous
+               :incompatible :workflow/ready-next-incompatible}
+     :step {:noun "step"
             :selectable? ordinary?
             :inferable? (fn [item] (and (ordinary? item) (not (:gate item))))
             :absent :workflow/ready-step-absent
@@ -71,6 +79,16 @@
 (def ^:private gate-actor-guidance
   (fmt/reflow
    "|Re-run with --by naming who closed the gate."))
+
+(def ^:private gate-selection-guidance
+  (fmt/reflow
+   "|A gate is never inferred. Re-run with --step naming it and --by naming who
+    |closed it."))
+
+(def ^:private defer-guidance
+  (fmt/reflow
+   "|This ready item selects another workflow and its params. Use workflow defer
+    |instead."))
 
 (defn result
   "Return the shared run result for `run-id`, stamped `operation`.
@@ -200,15 +218,25 @@
                              :run-id run-id :step step :ready ready}))]
         (when-not ((:selectable? spec) item)
           (fail! (str "Requested workflow step is not a " noun)
-                 {:reason (:incompatible spec)
-                  :run-id run-id :step step :role (:role item)
-                  :compatible (selectable role ready)}))
+                 (cond-> {:reason (:incompatible spec)
+                          :run-id run-id :step step :role (:role item)
+                          :compatible (selectable role ready)}
+                   (and (= role :advance) (= "defer" (:role item)))
+                   (assoc :guidance defer-guidance))))
         item)
       (let [items (filterv inferable? ready)]
         (case (count items)
           1 (first items)
           0 (fail! (str "No ready workflow " noun)
-                   {:reason (:absent spec) :run-id run-id :ready ready})
+                   (cond-> {:reason (:absent spec) :run-id run-id :ready ready}
+                     (and (= role :advance)
+                          (some #(= "defer" (:role %)) ready))
+                     (assoc :guidance defer-guidance)
+
+                     (and (= role :advance)
+                          (not-any? #(= "defer" (:role %)) ready)
+                          (some :gate ready))
+                     (assoc :guidance gate-selection-guidance)))
           (fail! (str "More than one workflow " noun " is ready")
                  {:reason (:ambiguous spec)
                   :run-id run-id
