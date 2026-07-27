@@ -1,8 +1,8 @@
 (ns workflows
   "This repo's hand-authored coordination workflows and their command surface:
   the coordinator `land` workflow (family \"land\") with its `land` op, the
-  module-shaping `story` workflow, and the `delegate-pipeline` weave pattern for
-  sequential delegated subagent gates.
+  third-party `spool-bump` workflow, the module-shaping `story` workflow, and
+  the `delegate-pipeline` weave pattern for sequential delegated subagent gates.
 
   Every workflow here is a static `defworkflow` Var: a definition a worker can
   read through `strand workflow show <name>` before starting a run, with its
@@ -995,6 +995,214 @@
                              :allowed ["approved" "abort"]})))))
 
       "break-lock" (break-merge-lock! reason))))
+
+;; ---------------------------------------------------------------------------
+;; spool-bump: third-party spool bump, landing, adoption, and cutover
+;; ---------------------------------------------------------------------------
+
+(s/def ::family ::non-blank-string)
+(s/def ::to ::non-blank-string)
+(s/def ::direct-user-request boolean?)
+
+(s/def ::spool-bump-params
+  (s/keys :req-un [::family ::branch ::worktree ::direct-user-request]
+          :opt-un [::to]))
+
+(workflow/defworkflow spool-bump
+  "Bump, validate, land, and adopt a third-party spool release.
+
+  The workflow runs the bump against the feature worktree's selected workspace,
+  validates the changed world, lands the PR after green CI, pulls canonical
+  `main`, and refreshes the live runtime. A Git SHA change normally leaves a
+  pending generation. The final stop/start step exists only when the run
+  truthfully records that the workflow was requested directly by the user;
+  indirect maintenance runs end with a pending-generation handover."
+  {:entrypoints #{:start}
+   :param-spec ::spool-bump-params
+   :defaults {}}
+  (workflow/workflow
+   (fn [{:keys [family]}] (str "Spool bump: " family))
+   {:attributes {"workflow/family" "spool-bump"
+                 "spool-bump/family" (fn [{:keys [family]}] family)
+                 "spool-bump/direct-user-request"
+                 (fn [{:keys [direct-user-request]}] direct-user-request)}}
+   (workflow/step :create-branch
+                  (fn [{:keys [branch]}] (str "Create bump branch " branch))
+                  :self
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.branch.create"
+                   "workflow/instruction"
+                   (fn [{:keys [branch worktree]}]
+                     (format-alpha/reflow
+                      (format
+                       "|From the canonical checkout, create branch `%s` in worktree
+                        |`%s`. Refuse an unrelated existing branch, a dirty target, or
+                        |any operation that would discard work. The new worktree's
+                        |`.skein` directory is the selected workspace for the bump."
+                       branch worktree)))})
+   (workflow/step :bump-spool
+                  (fn [{:keys [family]}] (str "Bump third-party spool " family))
+                  :self
+                  :depends-on [:create-branch]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.coordinate.bump"
+                   "workflow/instruction"
+                   (fn [{:keys [family to worktree]}]
+                     (format-alpha/reflow
+                      (format
+                       "|In `%s`, run `strand --workspace %s/.skein spool bump %s%s`.
+                        |The explicit workspace is mandatory: the bump must update the
+                        |feature branch's `.skein/spools.edn`, never the canonical
+                        |coordination world. Record the old and new tag and peeled SHA."
+                       worktree worktree family
+                       (if to (str " --to " to) ""))))})
+   (workflow/step :create-test-world
+                  "Create an isolated world from the bumped branch"
+                  :self
+                  :depends-on [:bump-spool]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.world.create"
+                   "workflow/instruction"
+                   (fn [{:keys [worktree]}]
+                     (format-alpha/reflow
+                      (format
+                       "|Create a disposable workspace from `%s/.skein`, preserving
+                        |relative config layout, and start its weaver. Hold the path in
+                        |a task-specific shell variable and guard every expansion with
+                        |`${var:?}`. Never target the canonical workspace for this
+                        |validation."
+                       worktree)))})
+   (workflow/step :smoke-test
+                  (fn [{:keys [family]}] (str "Smoke-test bumped spool " family))
+                  :self
+                  :depends-on [:create-test-world]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.world.smoke"
+                   "workflow/instruction"
+                   (fn [{:keys [family]}]
+                     (format-alpha/reflow
+                      (format
+                       "|In the disposable world, prove the weaver starts and adopts
+                        |the bumped `%s` coordinate. Run a spool-specific smoke path
+                        |when the spool exposes one; otherwise record why startup and
+                        |adoption are the strongest available check. Stop the disposable
+                        |weaver afterward. A failed available smoke check blocks landing."
+                       family)))})
+   (workflow/step :prepare-change
+                  (fn [{:keys [family]}] (str "Prepare " family " bump change"))
+                  :self
+                  :depends-on [:smoke-test]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.change.prepare"
+                   "workflow/instruction"
+                   (format-alpha/reflow
+                    "|Inspect the diff and confirm that `.skein/spools.edn` changes only
+                     |the intended family tag and peeled SHA unless the bump deliberately
+                     |opts into a new root. Remove generated SQLite and runtime metadata,
+                     |run the relevant repository checks, and commit the reviewed change.")})
+   (workflow/step :raise-pr
+                  (fn [{:keys [branch]}] (str "Raise PR for " branch))
+                  :self
+                  :depends-on [:prepare-change]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.pr.raise"
+                   "workflow/instruction"
+                   (fn [{:keys [branch]}]
+                     (format-alpha/reflow
+                      (format
+                       "|Push `%s` and open a PR against `main`. Reuse an existing open
+                        |PR for the branch rather than creating a duplicate. Record its
+                        |number and URL on this step."
+                       branch)))})
+   (workflow/gate :wait-for-green
+                  (fn [{:keys [branch]}] (str "Wait for green CI on " branch))
+                  :shell
+                  :depends-on [:raise-pr]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.pr.green"
+                   "shell/argv" (fn [{:keys [branch]}]
+                                  (sh-gate feature-ci-watch-script
+                                           "spool-bump-ci-watch" branch "180" "5"))
+                   "shell/cwd" (fn [{:keys [worktree]}] worktree)
+                   "shell/timeout-secs" 5400
+                   "workflow/instruction"
+                   (fn [{:keys [branch]}]
+                     (format-alpha/reflow
+                      (format
+                       "|Machine gate: wait for GitHub to register checks at `%s` HEAD,
+                        |then watch them to completion. Red or missing checks leave the
+                        |gate stalled with `gate/error`; fix the branch and clear that
+                        |attribute to retry. Do not merge a PR that is behind `main`."
+                       branch)))})
+   (workflow/step :merge
+                  (fn [{:keys [branch]}] (str "Merge green PR for " branch))
+                  :self
+                  :depends-on [:wait-for-green]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.pr.merge"
+                   "workflow/instruction"
+                   (fn [{:keys [branch]}]
+                     (format-alpha/reflow
+                      (format
+                       "|Confirm the PR for `%s` is still green and up to date at its
+                        |current HEAD, then squash-merge it. If `main` advanced, rebase,
+                        |push, and re-establish green CI before merging."
+                       branch)))})
+   (workflow/gate :pull-main
+                  "Fast-forward canonical main after the spool bump merges"
+                  :shell
+                  :depends-on [:merge]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.main.pull"
+                   "shell/argv" ["sh" "-c" land-pull-main-script]
+                   "shell/cwd" (fn [{:keys [worktree]}] worktree)
+                   "shell/timeout-secs" 300
+                   "workflow/instruction"
+                   (format-alpha/reflow
+                    "|Machine gate: locate the canonical checkout through the shared Git
+                     |directory, verify that it is on `main`, and fast-forward it from
+                     |`origin/main`. Never stash, reset, or discard local work.")})
+   (workflow/step :reload
+                  "Refresh the canonical world and record generation state"
+                  :self
+                  :depends-on [:pull-main]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.runtime.refresh"
+                   "workflow/instruction"
+                   (format-alpha/reflow
+                    "|Run `(runtime/refresh! (current/runtime))` in the canonical
+                     |weaver. A changed Git SHA is non-additive, so refresh will almost
+                     |always report a pending generation instead of adopting the code in
+                     |the current JVM. Record the complete refresh result and confirm the
+                     |pending coordinate before continuing.")})
+   (workflow/step :cutover
+                  "Cut over the canonical weaver to the pending generation"
+                  :self
+                  :depends-on [:reload]
+                  :condition [:= :direct-user-request true]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.runtime.cutover"
+                   "workflow/instruction"
+                   (format-alpha/reflow
+                    "|This step exists only because the workflow run records a direct
+                     |user request for cutover. From outside the weaver process, stop the
+                     |canonical weaver and start it again. Reconnect, verify startup, and
+                     |confirm `strand spool status` reports the bumped coordinate as
+                     |adopted with no pending generation. Never infer this authority for
+                     |agent-initiated sibling-spool maintenance.")})
+   (workflow/step :handover-pending-generation
+                  "Hand over the pending weaver generation"
+                  :self
+                  :depends-on [:reload]
+                  :condition [:= :direct-user-request false]
+                  :attributes
+                  {"workflow/action-ref" "spool-bump.runtime.handover"
+                   "workflow/instruction"
+                   (format-alpha/reflow
+                    "|This run was not requested directly by the user. Do not stop or
+                     |restart the canonical weaver. Record the pending-generation refresh
+                     |result and hand over that a direct user request is required before
+                     |cutover.")})))
 
 ;; ---------------------------------------------------------------------------
 ;; story: the module-form refactor workflow (family "story")
