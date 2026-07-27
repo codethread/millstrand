@@ -19,7 +19,6 @@
 ;;   reviewers.clj     — reviewer rosters
 ;;   attention.clj     — chime attention rules
 ;;   nvd_scan.clj      — NVD scan cron job
-;;   analytics.clj     — agent-run cost/usage rollups (`strand feature-costs`)
 ;;   kanban_tracker.clj— devflow<->kanban tracker binding
 ;;   module_adapters.clj — repo election of the batteries help transform
 ;;
@@ -192,7 +191,7 @@
                   :after [:skein/spools-cron :skein/spools-kanban]
                   :required? true})
 
-;; --- config op surface, analytics, hand-authored workflows ------------------
+;; --- config op surface and hand-authored workflows -------------------------
 ;; config.clj authors the devflow/kanban/hitl ops and named queries with
 ;; defop/defquery, so its contribution is those entries; it requires the workflow
 ;; engine, shuttle vocab, devflow, and the ops/queries macros, so it orders after
@@ -203,13 +202,6 @@
                            'codethread/devflow 'skein.macros/macros]
                   :after [:skein/spools-workflow :skein/spools-shuttle
                           :skein/spools-devflow :macros/ops :macros/queries]
-                  :required? true})
-;; Analytics is a read-only rollup surface over agent-run usage stamps; it authors
-;; feature-costs with defop and only needs the ops macro.
-(runtime/module! runtime :analytics
-                 {:file "analytics.clj"
-                  :spools ['skein.macros/macros]
-                  :after [:macros/ops]
                   :required? true})
 ;; workflows.clj authors land/story definitions, the narrow land policy op, and
 ;; the delegate-pipeline pattern. It reuses config.clj's public validation

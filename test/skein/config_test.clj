@@ -1,9 +1,8 @@
 (ns skein.config-test
-  "Tests for the repo-local .skein config modules (config.clj plus the
-  harnesses.clj, workflows.clj, and analytics.clj siblings): registration
-  surface, the delegate-pipeline weave pattern, the land workflow, the
-  generic workflow integration with ct.spools.devflow, and the feature-costs
-  usage rollup."
+  "Tests for the repo-local .skein config modules.
+
+  Covers registration, the delegate-pipeline weave pattern, the land workflow,
+  generic workflow integration with ct.spools.devflow, and report scripts."
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
@@ -149,7 +148,6 @@
              rt :harnesses (requiring-resolve 'harnesses/contribute))
             ((requiring-resolve 'harnesses/reconcile) {:runtime rt})
             (load-module-source! rt :workflows ".skein/workflows.clj")
-            (load-module-source! rt :analytics ".skein/analytics.clj")
             (f rt)))
         (finally
           (weaver-runtime/stop! rt)
@@ -161,7 +159,7 @@
   [target]
   (.mkdirs (io/file target))
   (doseq [name ["init.clj" "config.clj" "workflows.clj" "harnesses.clj"
-                "attention.clj" "nvd_scan.clj" "reviewers.clj" "analytics.clj"
+                "attention.clj" "nvd_scan.clj" "reviewers.clj"
                 "kanban_tracker.clj" "module_adapters.clj" "spools.edn"]]
     (io/copy (io/file ".skein" name) (io/file target name)))
   (let [scripts-target (io/file target "scripts")]
@@ -542,77 +540,83 @@
         (is (= #{"D1"} (rows "devflow-runs" {})))
         (is (= #{"A1" "A2" "A3" "B1" "R1"} (rows "work" {})))))))
 
-(deftest feature-costs-rolls-up-agent-run-usage-beneath-a-root
-  ;; analytics.clj contract: pure-data rollup of the agent-run usage stamps in
-  ;; a work root's parent-of subtree — rows ordered by start time, totals with
-  ;; wall-clock bounds, per-harness aggregates sorted by cost, and explicit
-  ;; missing-usage ids for runs whose harness recorded nothing.
-  (with-config-runtime
-    (fn [rt]
-      (let [card (weaver/add! rt {:title "Feature card" :state "active"
-                                  :attributes {:kanban/card "true"}})
-            run-a (weaver/add! rt {:title "Delegate: implement"
-                                   :state "closed"
-                               ;; values stamped as typed JSON, the shape the
-                               ;; shuttle spool writes; the corrupt-usage test
-                               ;; covers the string form
-                                   :attributes {:agent-run/run "true"
-                                                :agent-run/harness "build"
-                                                :agent-run/cost-usd 1.25
-                                                :agent-run/tokens-total 1000
-                                                :agent-run/tokens {"input" 800 "output" 200}
-                                                :agent-run/usage-source "session"
-                                                :agent-run/exit-code 0
-                                                :agent-run/started-at "2026-07-10T10:00:00Z"
-                                                :agent-run/finished-at "2026-07-10T10:05:00Z"}})
-            run-b (weaver/add! rt {:title "Review: skeptic"
-                                   :state "closed"
-                                   :attributes {:agent-run/run "true"
-                                                :agent-run/harness "hard-gpt"
-                                                :agent-run/started-at "2026-07-10T10:06:00Z"
-                                                :agent-run/finished-at "2026-07-10T10:08:30Z"}})
-            note (weaver/add! rt {:title "Not a run" :state "closed"
-                                  :attributes {:kind "note"}})]
-        (weaver/update! rt (:id card) {:edges [{:type "parent-of" :to (:id run-a)}
-                                               {:type "parent-of" :to (:id run-b)}
-                                               {:type "parent-of" :to (:id note)}]})
-        (let [result (op! "feature-costs" [(:id card)])]
-          (is (= "feature-costs" (:operation result)))
-          (is (= {:id (:id card) :title "Feature card" :state "active"}
-                 (:root result)))
-          (is (= [(:id run-a) (:id run-b)] (mapv :id (:runs result)))
-              "rows are ordered by start time and exclude non-run strands")
-          (is (= {:runs 2 :runs-with-usage 1 :cost-usd 1.25 :tokens-total 1000
-                  :wall-clock {:started-at "2026-07-10T10:00:00Z"
-                               :finished-at "2026-07-10T10:08:30Z"
-                               :duration-secs 510.0}}
-                 (:totals result)))
-          (is (= [{:harness "build" :runs 1 :runs-with-usage 1
-                   :cost-usd 1.25 :tokens-total 1000}
-                  {:harness "hard-gpt" :runs 1 :runs-with-usage 0
-                   :cost-usd 0.0 :tokens-total 0}]
-                 (:by-harness result))
-              "per-harness rollups sort most expensive first")
-          (is (= [(:id run-b)] (:missing-usage result)))
-          (let [row (first (:runs result))]
-            (is (= 300.0 (:duration-secs row)))
-            (is (zero? (:exit-code row)))
-            (is (= {:input 800 :output 200} (:tokens row))
-                "token breakdown is a keyword-keyed map, not JSON text")))))))
+(defn- feature-cost-report
+  "Run the report-side reducer against `subgraph`; return the shell result."
+  [subgraph]
+  (sh/sh "jq" "-f" "scripts/reports/feature-costs.jq"
+         :in (json/write-str subgraph)))
 
-(deftest feature-costs-fails-loudly-on-unknown-root-and-corrupt-usage
-  (with-config-runtime
-    (fn [rt]
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"root strand not found"
-                            (op! "feature-costs" ["nope"])))
-      (let [root (weaver/add! rt {:title "Ad hoc root" :state "active" :attributes {}})
-            bad (weaver/add! rt {:title "Corrupt run" :state "closed"
-                                 :attributes {:agent-run/run "true"
-                                              :agent-run/cost-usd "not-a-number"}})]
-        (weaver/update! rt (:id root) {:edges [{:type "parent-of" :to (:id bad)}]})
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"malformed agent-run attribute"
-                              (op! "feature-costs" [(:id root)]))
-            "a present but unparseable usage value is corrupt data, not absence")))))
+(deftest feature-cost-report-reduces-generic-subgraph-json
+  (let [root {:id "root" :title "Feature card" :state "active" :attributes {}}
+        run-a {:id "run-a" :title "Delegate: implement" :state "closed"
+               :attributes {"agent-run/run" "true"
+                            "agent-run/harness" "build"
+                            "agent-run/cost-usd" "1.25"
+                            "agent-run/tokens-total" "1000"
+                            "agent-run/tokens" "{\"input\":800,\"output\":200}"
+                            "agent-run/usage-source" "session"
+                            "agent-run/exit-code" 0
+                            "agent-run/started-at" "2026-07-10T11:00:00.250+01:00"
+                            "agent-run/finished-at" "2026-07-10T10:05:00.750Z"}}
+        run-b {:id "run-b" :title "Review: skeptic" :state "closed"
+               :attributes {"agent-run/run" "true"
+                            "agent-run/harness" "hard-gpt"
+                            "agent-run/started-at" "2026-07-10T10:06:00Z"
+                            "agent-run/finished-at" "2026-07-10T05:08:30-05:00"}}
+        note {:id "note" :title "Not a run" :state "closed" :attributes {}}
+        result (feature-cost-report {:root_ids ["root"]
+                                     :strands [run-b note root run-a]
+                                     :edges []})
+        report (json/read-str (:out result) :key-fn keyword)]
+    (is (zero? (:exit result)) (:err result))
+    (is (= {:id "root" :title "Feature card" :state "active"} (:root report)))
+    (is (= ["run-a" "run-b"] (mapv :id (:runs report))))
+    (is (= {:runs 2 :runs-with-usage 1 :cost-usd 1.25 :tokens-total 1000
+            :wall-clock {:started-at "2026-07-10T10:00:00.25Z"
+                         :finished-at "2026-07-10T10:08:30Z"
+                         :duration-secs 509.75}}
+           (:totals report)))
+    (is (= [{:runs 1 :runs-with-usage 1 :cost-usd 1.25 :tokens-total 1000
+             :harness "build"}
+            {:runs 1 :runs-with-usage 0 :cost-usd 0 :tokens-total 0
+             :harness "hard-gpt"}]
+           (:by-harness report)))
+    (is (= ["run-b"] (:missing-usage report)))
+    (is (= 300.5 (get-in report [:runs 0 :duration-secs])))
+    (is (= "2026-07-10T10:05:00.75Z"
+           (get-in report [:runs 0 :finished-at])))
+    (is (= {:input 800 :output 200} (get-in report [:runs 0 :tokens])))))
+
+(deftest feature-cost-report-fails-loudly-on-malformed-present-values
+  (doseq [[attribute value] [["agent-run/cost-usd" "not-a-number"]
+                             ["agent-run/cost-usd" "NaN"]
+                             ["agent-run/tokens-total" 1.5]
+                             ["agent-run/tokens" "[]"]
+                             ["agent-run/started-at" "yesterday"]
+                             ["agent-run/run" false]]]
+    (let [result (feature-cost-report
+                  {:root_ids ["root"]
+                   :strands [{:id "root" :title "Root" :state "active" :attributes {}}
+                             {:id "bad" :title "Bad run" :state "closed"
+                              :attributes (assoc {"agent-run/run" "true"}
+                                                 attribute value)}]
+                   :edges []})]
+      (is (not (zero? (:exit result))) attribute)
+      (is (empty? (:out result)) attribute)
+      (is (str/includes? (:err result) "strand=bad") attribute)
+      (is (str/includes? (:err result) (str "attribute=" attribute)) attribute)
+      (is (str/includes? (:err result) (json/write-str value)) attribute))))
+
+(deftest feature-cost-report-requires-one-matching-root
+  (doseq [[root-ids strands message]
+          [[[] [] "requires exactly one root id: count=0 root_ids=[]"]
+           [["missing"] [] "root not found in subgraph"]]]
+    (let [result (feature-cost-report {:root_ids root-ids
+                                       :strands strands
+                                       :edges []})]
+      (is (not (zero? (:exit result))))
+      (is (empty? (:out result)))
+      (is (str/includes? (:err result) message)))))
 
 (deftest chime-attention-rules-register-and-fire
   ;; TASK-Srm-009.MI1: through the full startup fixture (which loads attention.clj

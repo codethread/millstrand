@@ -109,13 +109,12 @@
   (run-with-config-world
    (fn [runtime]
      (publish-authoring! runtime :config ".skein/config.clj")
-     (publish-authoring! runtime :analytics ".skein/analytics.clj")
      ;; materialize the workflow spool's registry handle so its constructor kind
      ;; is a declared publication backend before workflows.clj contributes to it
      ((requiring-resolve 'skein.spools.workflow/contribute)
       {:runtime runtime :module/key :skein/spools-workflow})
      (publish-authoring! runtime :workflows ".skein/workflows.clj")
-     (let [provenances #{'config 'analytics 'workflows}
+     (let [provenances #{'config 'workflows}
            checked (atom #{})
            check! (fn [operation context value]
                     (t/check-op-return! runtime (symbol operation) context value)
