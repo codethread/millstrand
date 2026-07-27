@@ -1,45 +1,12 @@
 {:op-help
- {"workflow-runs"
-  {:schema-version 2,
-   :operation
-   {:name "workflow-runs",
-    :provenance "config",
-    :stream? false,
-    :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 256},
-   :glossary {},
-   :node
-   {:children [],
-    :name "workflow-runs",
-    :failure-modes [],
-    :invocation
-    {:mode "declared",
-     :flags [],
-     :positionals
-     [{:name "family",
-       :type "string",
-       :required false,
-       :variadic false,
-       :parse nil,
-       :doc "Optional workflow family, e.g. devflow."}]},
-    :deadline-class "standard",
-    :notes [],
-    :hook-class "read",
-    :use-when [],
-    :doc "Show active workflow roots, optionally filtered by family.",
-    :returns
-    {:type "map",
-     :required {"operation" "string"},
-     :optional {},
-     :extra "json"}}},
-  "hitl"
+ {"hitl"
   {:schema-version 2,
    :operation
    {:name "hitl",
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 306},
+   :source {:file ".skein/config.clj", :line 285},
    :glossary {},
    :node
    {:children [],

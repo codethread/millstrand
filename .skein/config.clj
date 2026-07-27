@@ -15,7 +15,6 @@
             [skein.macros.ops :refer [defop]]
             [skein.macros.queries :refer [defquery]]
             [ct.spools.agent-run :as shuttle]
-            [skein.spools.workflow :as workflow]
             [skein.api.current.alpha :as current]
             [skein.api.graph.alpha :as graph]
             [skein.api.spool.alpha :refer [attr-get entity-projection]]
@@ -65,7 +64,7 @@
 
 (defquery workflow-runs-query
   "Query for active workflow roots (any family)."
-  {:usage "strand list --query workflow-runs"}
+  {:usage "strand list --query workflow-runs --limit 500"}
   [:and
    [:= :state "active"]
    [:= [:attr "workflow/role"] "root"]])
@@ -252,26 +251,6 @@
     (when-let [step (first steps)]
       (require-non-blank! :step (subs step (count "step="))))
     [(vec others) (some-> (first steps) (subs (count "step=")))]))
-
-(defop workflow-runs
-  "Return active workflow roots, optionally filtered by family.
-
-  Survives the shipped `workflow` surface rather than folding into it: that
-  surface reads registries and one named run, and deliberately ships no family
-  narrowing (PROP-Wcd-001.NG9), so this is a cross-run read nothing there covers."
-  {:returns stamped-op-return :arg-spec {:op "workflow-runs"
-                                         :hook-class :read
-                                         :deadline-class :standard
-                                         :doc "Show active workflow roots, optionally filtered by family."
-                                         :positionals [{:name :family
-                                                        :type :string
-                                                        :doc "Optional workflow family, e.g. devflow."}]}}
-  [ctx]
-  (let [{:keys [family]} (:op/args ctx)]
-    {:operation "workflow-runs"
-     :family family
-     :runs (mapv entity-projection
-                 (if family (workflow/active-runs family) (workflow/active-runs)))}))
 
 ;; ---------------------------------------------------------------------------
 ;; hitl: interactive human-in-the-loop working sessions

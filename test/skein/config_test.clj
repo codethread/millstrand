@@ -263,7 +263,7 @@
   Every op authored as a `defop` in .skein/config.clj; the surrounding spool ops
   (kanban/agent/bench) and workflow ops (land) are untouched by the refactor and
   are covered by their own tests, so this holistic guard scopes to config.clj."
-  ["workflow-runs" "hitl"])
+  ["hitl"])
 
 (def ^:private named-query-names
   "The config-owned named queries whose registered definitions the refactor must
@@ -334,7 +334,7 @@
                       "feature-owner-work" "feature-run" "workflow-runs" "devflow-runs" "work"]]
     (is (contains? (graph/queries rt) query-name)))
   (is (contains? (graph/queries rt) "bench-runs"))
-  (doseq [op-name ["kanban" "workflow-runs" "hitl" "land" "workflow"
+  (doseq [op-name ["kanban" "hitl" "land" "workflow"
                    "agent" "bench"]]
     (is (some #(= op-name (:name %)) (weaver/ops rt)) op-name))
   (is (some #(= "delegate-pipeline" (:name %)) (patterns/patterns rt)))

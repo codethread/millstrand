@@ -15,10 +15,10 @@ Finish or explicitly abandon every active run. Squash or burn any bare workflow 
 Run the repository's active-root view against the selected workspace:
 
 ```sh
-strand --workspace "${workspace:?}" workflow-runs
+strand --workspace "${workspace:?}" list --query workflow-runs --limit 1
 ```
 
-The result must contain `"runs":[]`. If it lists any root, keep producers paused, resolve that root, and repeat the command. Do not continue on the strength of an earlier or differently scoped query.
+The result must be the empty array `[]`. If it contains a root, keep producers paused, resolve that root, and repeat the command. Do not continue on the strength of an earlier or differently scoped query.
 
 For a consumer without the `workflow-runs` view, inspect `(skein.spools.workflow/active-runs)` through its existing trusted operator surface. The result must be empty.
 
@@ -53,10 +53,10 @@ mill weaver start --workspace "${workspace:?}"
 mill weaver status --workspace "${workspace:?}"
 strand --workspace "${workspace:?}" help workflow
 strand --workspace "${workspace:?}" workflow list
-strand --workspace "${workspace:?}" workflow-runs
+strand --workspace "${workspace:?}" list --query workflow-runs --limit 1
 ```
 
-The weaver must be healthy, workflow discovery must succeed, and the final root view must still contain `"runs":[]`. If a check fails, keep producers paused and stop. Do not ask the new engine to reinterpret an old workflow strand.
+The weaver must be healthy, workflow discovery must succeed, and the final root view must still be `[]`. If a check fails, keep producers paused and stop. Do not ask the new engine to reinterpret an old workflow strand.
 
 ## 6. Resume producers
 
