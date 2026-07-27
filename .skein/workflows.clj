@@ -31,8 +31,25 @@
   "merge-lock")
 
 (def ^:private merge-lock-monitor
-  "JVM-local monitor for serialising merge-lock acquisition inside one weaver."
+  "JVM-local half of merge-lock acquisition serialisation.
+
+  The file lock handles other weaver processes; this monitor prevents overlapping
+  file-lock attempts inside one JVM from raising OverlappingFileLockException."
   (Object.))
+
+(defn- with-merge-lock-acquisition
+  "Call f while holding the selected workspace's cross-process acquisition lock."
+  [rt f]
+  (let [config-dir (get-in rt [:metadata :config-dir])]
+    (when-not (and (string? config-dir) (not (str/blank? config-dir)))
+      (throw (ex-info "runtime has no selected config directory for merge-lock acquisition"
+                      {:config-dir config-dir})))
+    (with-open [file (java.io.RandomAccessFile.
+                      (io/file config-dir ".land-merge-lock.acquire")
+                      "rw")
+                channel (.getChannel file)
+                lock (.lock channel)]
+      (f))))
 
 (defn- attr-value
   "Return strand attribute k using the shared fail-loud attribute reader."
@@ -55,25 +72,30 @@
   "Acquire the singleton merge lock and report whether this call created it."
   [feature]
   (locking merge-lock-monitor
-    (let [rt (current/runtime)
-          root (land-root feature)
-          owner (:id root)
-          locks (active-merge-locks)
-          owned (some #(when (and (= owner (attr-value % :owner))
-                                  (= feature (attr-value % :land/run-id))) %) locks)]
-      (if owned
-        {:lock owned :created? false}
-        (do
-          (when-let [held (first locks)]
-            (throw (ex-info "another land run holds the merge lock"
-                            {:lock (:id held)
-                             :owner (attr-value held :owner)
-                             :land/run-id (attr-value held :land/run-id)})))
-          {:lock (weaver/add! rt {:title (str "Merge lock: " feature)
-                                  :attributes {:kind merge-lock-kind
-                                               :owner owner
-                                               :land/run-id feature}})
-           :created? true})))))
+    (let [rt (current/runtime)]
+      (with-merge-lock-acquisition
+        rt
+        (fn []
+          (let [root (land-root feature)
+                owner (:id root)
+                locks (active-merge-locks)
+                owned (some #(when (and (= owner (attr-value % :owner))
+                                        (= feature (attr-value % :land/run-id)))
+                               %)
+                            locks)]
+            (if owned
+              {:lock owned :created? false}
+              (do
+                (when-let [held (first locks)]
+                  (throw (ex-info "another land run holds the merge lock"
+                                  {:lock (:id held)
+                                   :owner (attr-value held :owner)
+                                   :land/run-id (attr-value held :land/run-id)})))
+                {:lock (weaver/add! rt {:title (str "Merge lock: " feature)
+                                        :attributes {:kind merge-lock-kind
+                                                     :owner owner
+                                                     :land/run-id feature}})
+                 :created? true}))))))))
 
 (defn- release-merge-lock!
   "Release the merge lock held by feature, if one exists."
