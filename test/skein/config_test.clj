@@ -435,9 +435,11 @@
             definition (var-get (requiring-resolve 'workflows/spool-bump))
             compile-workflow (requiring-resolve 'skein.spools.workflow/compile)
             params (fn [direct?]
-                     (str "{\"family\":\"codethread/demo\",\"branch\":\"bump-demo\","
-                          "\"worktree\":\"/tmp/bump-demo\",\"direct-user-request\":"
-                          direct? "}"))
+                     (json/write-str
+                      {:family "codethread/demo"
+                       :branch "bump-demo"
+                       :worktree "/tmp/bump-demo"
+                       :direct-user-request direct?}))
             action-refs
             (fn [direct?]
               (->> (:strands
@@ -474,9 +476,10 @@
              (op! "workflow" ["start" "unstated-authority"
                               "--workflow" "spool-bump"
                               "--params"
-                              (str "{\"family\":\"codethread/demo\","
-                                   "\"branch\":\"bump-demo\","
-                                   "\"worktree\":\"/tmp/bump-demo\"}")])))))))
+                              (json/write-str
+                               {:family "codethread/demo"
+                                :branch "bump-demo"
+                                :worktree "/tmp/bump-demo"})])))))))
 
 (deftest repo-config-publishes-no-devflow-alias-ops
   (with-startup-config-runtime
