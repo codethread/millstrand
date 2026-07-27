@@ -165,7 +165,7 @@ Honest source: the `--dry-run` dispatcher flag documented in [`cli.md`](../devfl
 
 ## Recipe: Discover and run a named query
 
-**Situation.** You're in a workspace that ships named queries (this repo defines `work`, `feature-work`, and more in its `.skein` config), and you want to run one without reading the config to learn its name or parameters.
+**Situation.** You're in a workspace that ships named queries (this repo defines `work`, `run-active`, and more in its `.skein` config), and you want to run one without reading the config to learn its name or parameters.
 
 **Composition.** `query list` enumerates what's registered; `query explain <name>` tells you a query's parameters and its compiled `where` form; then `list --query <name>` or `ready --query <name>` runs it, with `--param key=value` supplying any runtime values.
 
@@ -177,7 +177,7 @@ strand query explain work         # params, referenced-params, where-form, summa
 strand list --query work --state active
 
 # a parameterized query takes repeatable --param
-strand list --query feature-run --param feature=spool-cookbooks
+strand list --query run-active --param run-id=spool-cookbooks
 strand ready --query work         # same query, gated to the unblocked frontier
 ```
 
@@ -196,7 +196,7 @@ strand ready --query work         # same query, gated to the unblocked frontier
   key isn't a declared parameter fails loudly, and `--param` without a `--query`
   is rejected — you can't accidentally pass a value into nothing.
 
-Honest source: the `query`/`list`/`ready` ops in `spools/src/skein/spools/batteries.clj`, the `list-and-ready-named-queries` and `query-list-and-explain-shapes` tests in `test/skein/spools/batteries_test.clj`, and the `work`/`feature-run` queries this repo registers in [`.skein/config.clj`](../.skein/config.clj). Verified against a demo query registered in a disposable workspace.
+Honest source: the `query`/`list`/`ready` ops in `spools/src/skein/spools/batteries.clj`, the `list-and-ready-named-queries` and `query-list-and-explain-shapes` tests in `test/skein/spools/batteries_test.clj`, and the `work`/`run-active` queries this repo registers in [`.skein/config.clj`](../.skein/config.clj). Verified against a demo query registered in a disposable workspace.
 
 ---
 
