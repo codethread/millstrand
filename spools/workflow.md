@@ -565,6 +565,8 @@ Failures name the role they refused for:
 | `workflow/attr-key-duplicate` | One `--attr` key was given twice in a single `workflow complete`. |
 | `workflow/attributes-invalid` | `--attributes` was not a JSON object, or carried a blank key. |
 | `workflow/context-invalid` | The persisted run root has a malformed `workflow/context` value. The failure names the run, root, offending value, and expected map shape. |
+| `workflow/advance-choice-required` | `workflow advance` selected a checkpoint without `--choice`. The failure carries the allowed choices. |
+| `workflow/advance-choice-incompatible` | `workflow advance --choice` selected an ordinary step or gate. Remove `--choice`, or select a checkpoint. |
 | `workflow/advance-input-without-checkpoint` | `workflow advance --input` selected an ordinary step or gate. Remove `--input`, or select a checkpoint. |
 
 ### Advancing ordinary steps and checkpoints

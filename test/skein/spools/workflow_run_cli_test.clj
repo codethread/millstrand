@@ -479,7 +479,13 @@
     (fn [rt _]
       (activate-cli! rt)
       (register! :solo)
-      (started "run-advance-step" :solo)
+      (let [start (started "run-advance-step" :solo)
+            step (first (ready-ids start))
+            data (failure #(verb "advance" "run-advance-step"
+                                 :choice "ship"))]
+        (is (= :workflow/advance-choice-incompatible (:reason data)))
+        (is (= "ship" (:choice data)))
+        (is (= "active" (:state (weaver/show rt step)))))
       (let [result (verb "advance" "run-advance-step")]
         (is (= "workflow advance" (:operation result)))
         (is (= "run-advance-step" (:run-id result)))
@@ -495,10 +501,10 @@
       (register! :solo :mixed)
       (let [start (started "run-advance-choice" :mixed)
             checkpoint (item-id start "Sign the work off")]
-        (is (thrown-with-msg?
-             clojure.lang.ExceptionInfo
-             #"requires a :choice"
-             (verb "advance" "run-advance-choice" :step checkpoint)))
+        (let [data (failure #(verb "advance" "run-advance-choice"
+                                   :step checkpoint))]
+          (is (= :workflow/advance-choice-required (:reason data)))
+          (is (= ["ship" "rework"] (:choices data))))
         (let [result (from-argv
                       rt
                       ["advance" "run-advance-choice" "--step" checkpoint
@@ -528,6 +534,19 @@
                (ready-ids
                 (verb "advance" "run-advance-twin"
                       :step (first (ready-ids start))))))))))
+
+(deftest advance-refuses-unknown-roles-before-mutating
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (register! :solo)
+      (let [start (started "run-advance-role" :solo)
+            step (first (ready-ids start))]
+        (weaver/update! rt step {:attributes {"workflow/role" "improvised"}})
+        (is (= :workflow/ready-advance-incompatible
+               (reason-of #(verb "advance" "run-advance-role" :step step))))
+        (is (= "active" (:state (weaver/show rt step)))
+            "an invalid role is rejected before the close")))))
 
 (deftest advance-preserves-gate-actor-rules
   (with-runtime

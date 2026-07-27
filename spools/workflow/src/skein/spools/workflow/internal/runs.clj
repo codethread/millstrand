@@ -42,9 +42,10 @@
   (let [ordinary? (fn [item] (not (contains? #{"checkpoint" "defer"} (:role item))))
         role? (fn [role] (fn [item] (= role (:role item))))]
     {:advance {:noun "advanceable item"
-               :selectable? (fn [item] (not= "defer" (:role item)))
+               :selectable? (fn [item]
+                              (contains? #{"step" "checkpoint"} (:role item)))
                :inferable? (fn [item]
-                             (and (not= "defer" (:role item))
+                             (and (contains? #{"step" "checkpoint"} (:role item))
                                   (not (:gate item))))
                :absent :workflow/ready-advance-absent
                :ambiguous :workflow/ready-advance-ambiguous

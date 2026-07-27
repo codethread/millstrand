@@ -1126,6 +1126,21 @@
     (mutate-run! rt "workflow advance" :advance request
                  (fn [target]
                    (runs/require-gate-actor! run-id target by)
+                   (when (and (= "checkpoint" (:role target))
+                              (not (contains? request :choice)))
+                     (fail! "workflow advance on a checkpoint requires --choice"
+                            {:reason :workflow/advance-choice-required
+                             :run-id run-id
+                             :step (:id target)
+                             :choices (:choices target)}))
+                   (when (and (= "step" (:role target))
+                              (contains? request :choice))
+                     (fail! "workflow advance on an ordinary step rejects --choice"
+                            {:reason :workflow/advance-choice-incompatible
+                             :run-id run-id
+                             :step (:id target)
+                             :choice choice
+                             :guidance "Remove --choice, or select a checkpoint."}))
                    (when (and (contains? request :input)
                               (not= "checkpoint" (:role target)))
                      (fail! "workflow advance --input requires a checkpoint"

@@ -345,6 +345,8 @@
                 :failure-modes ["workflow/ready-advance-absent"
                                 "workflow/ready-advance-ambiguous"
                                 "workflow/ready-advance-incompatible"
+                                "workflow/advance-choice-required"
+                                "workflow/advance-choice-incompatible"
                                 "workflow/advance-input-without-checkpoint"]}}
     "defer" {:doc "Fill the ready defer of a run with a registered workflow."
              :hook-class :mutating
@@ -483,6 +485,10 @@
     :definition "The selected ready item cannot be advanced."}
    {:name "workflow/advance-input-without-checkpoint"
     :definition "Workflow advance received --input for an ordinary step or gate."}
+   {:name "workflow/advance-choice-required"
+    :definition "Workflow advance selected a checkpoint without --choice."}
+   {:name "workflow/advance-choice-incompatible"
+    :definition "Workflow advance received --choice for an ordinary step or gate."}
    {:name "workflow/ready-defer-absent"
     :definition "No ready defer exists for workflow defer to fill."}
    {:name "workflow/ready-defer-ambiguous"
