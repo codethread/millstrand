@@ -6,7 +6,7 @@
     :provenance "config",
     :stream? false,
     :raw-envelope false},
-   :source {:file ".skein/config.clj", :line 292},
+   :source {:file ".skein/config.clj", :line 178},
    :glossary {},
    :node
    {:children [],
