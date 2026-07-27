@@ -436,7 +436,10 @@
             compile-workflow (requiring-resolve 'skein.spools.workflow/compile)
             params (fn [direct?]
                      (json/write-str
-                      {:family "codethread/demo"
+                      {:bumps [{:family "codethread/kanban"
+                                :version "latest"}
+                               {:family "codethread/devflow"
+                                :version "v12"}]
                        :branch "bump-demo"
                        :worktree "/tmp/bump-demo"
                        :direct-user-request direct?}))
@@ -445,7 +448,10 @@
               (->> (:strands
                     (compile-workflow
                      definition
-                     {:family "codethread/demo"
+                     {:bumps [{:family "codethread/kanban"
+                               :version "latest"}
+                              {:family "codethread/devflow"
+                               :version "v12"}]
                       :branch "bump-demo"
                       :worktree "/tmp/bump-demo"
                       :direct-user-request direct?}))
@@ -460,6 +466,28 @@
                         (op! "workflow" ["start" "direct-bump"
                                          "--workflow" "spool-bump"
                                          "--params" (params true)]))))))
+        (let [compiled (:strands
+                        (compile-workflow
+                         definition
+                         {:bumps [{:family "codethread/kanban"
+                                   :version "latest"}
+                                  {:family "codethread/devflow"
+                                   :version "v12"}]
+                          :branch "bump-demo"
+                          :worktree "/tmp/bump-demo"
+                          :direct-user-request true}))
+              bump-steps (filterv #(= "spool-bump.coordinate.bump"
+                                      (get-in % [:attributes "workflow/action-ref"]))
+                                  compiled)]
+          (is (= ["Bump third-party spool codethread/kanban to latest"
+                  "Bump third-party spool codethread/devflow to v12"]
+                 (mapv :title bump-steps)))
+          (is (str/includes?
+               (get-in (first bump-steps) [:attributes "workflow/instruction"])
+               "spool bump codethread/kanban`"))
+          (is (str/includes?
+               (get-in (second bump-steps) [:attributes "workflow/instruction"])
+               "spool bump codethread/devflow --to v12`")))
         (op! "workflow" ["start" "indirect-bump"
                          "--workflow" "spool-bump"
                          "--params" (params false)])
@@ -477,7 +505,8 @@
                               "--workflow" "spool-bump"
                               "--params"
                               (json/write-str
-                               {:family "codethread/demo"
+                               {:bumps [{:family "codethread/kanban"
+                                         :version "latest"}]
                                 :branch "bump-demo"
                                 :worktree "/tmp/bump-demo"})])))))))
 

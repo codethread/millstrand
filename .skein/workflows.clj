@@ -1001,12 +1001,29 @@
 ;; ---------------------------------------------------------------------------
 
 (s/def ::family ::non-blank-string)
-(s/def ::to ::non-blank-string)
 (s/def ::direct-user-request boolean?)
 
+(defn- spool-version?
+  "Return true for the latest release selector or an annotated vN marker."
+  [value]
+  (and (string? value)
+       (or (= "latest" value)
+           (boolean (re-matches #"v[1-9][0-9]*" value)))))
+
+(defn- unique-bump-families?
+  "Return true when each bump record names a different spool family."
+  [bumps]
+  (let [families (map :family bumps)]
+    (= (count families) (count (distinct families)))))
+
+(s/def ::version spool-version?)
+(s/def ::bump (s/keys :req-un [::family ::version]))
+(s/def ::bumps
+  (s/and (s/coll-of ::bump :kind vector? :min-count 1)
+         unique-bump-families?))
+
 (s/def ::spool-bump-params
-  (s/keys :req-un [::family ::branch ::worktree ::direct-user-request]
-          :opt-un [::to]))
+  (s/keys :req-un [::bumps ::branch ::worktree ::direct-user-request]))
 
 (workflow/defworkflow spool-bump
   "Bump, validate, land, and adopt a third-party spool release.
@@ -1021,9 +1038,10 @@
    :param-spec ::spool-bump-params
    :defaults {}}
   (workflow/workflow
-   (fn [{:keys [family]}] (str "Spool bump: " family))
+   (fn [{:keys [bumps]}]
+     (str "Spool bump: " (str/join ", " (map :family bumps))))
    {:attributes {"workflow/family" "spool-bump"
-                 "spool-bump/family" (fn [{:keys [family]}] family)
+                 "spool-bump/requests" (fn [{:keys [bumps]}] bumps)
                  "spool-bump/direct-user-request"
                  (fn [{:keys [direct-user-request]}] direct-user-request)}}
    (workflow/step :create-branch
@@ -1041,21 +1059,27 @@
                         |`.skein` directory is the selected workspace for the bump."
                        branch worktree)))})
    (workflow/step :bump-spool
-                  (fn [{:keys [family]}] (str "Bump third-party spool " family))
+                  (fn [{:keys [item]}]
+                    (str "Bump third-party spool " (:family item)
+                         " to " (:version item)))
                   :self
                   :depends-on [:create-branch]
+                  :loop {:each :bumps :chain true}
                   :attributes
                   {"workflow/action-ref" "spool-bump.coordinate.bump"
                    "workflow/instruction"
-                   (fn [{:keys [family to worktree]}]
-                     (format-alpha/reflow
-                      (format
-                       "|In `%s`, run `strand --workspace %s/.skein spool bump %s%s`.
-                        |The explicit workspace is mandatory: the bump must update the
-                        |feature branch's `.skein/spools.edn`, never the canonical
-                        |coordination world. Record the old and new tag and peeled SHA."
-                       worktree worktree family
-                       (if to (str " --to " to) ""))))})
+                   (fn [{:keys [item worktree]}]
+                     (let [{:keys [family version]} item]
+                       (format-alpha/reflow
+                        (format
+                         "|In `%s`, run `strand --workspace %s/.skein spool bump %s%s`.
+                          |The explicit workspace is mandatory: the bump must update the
+                          |feature branch's `.skein/spools.edn`, never the canonical
+                          |coordination world. Record the old and new tag and peeled SHA."
+                         worktree worktree family
+                         (if (= "latest" version)
+                           ""
+                           (str " --to " version))))))})
    (workflow/step :create-test-world
                   "Create an isolated world from the bumped branch"
                   :self
@@ -1073,23 +1097,27 @@
                         |validation."
                        worktree)))})
    (workflow/step :smoke-test
-                  (fn [{:keys [family]}] (str "Smoke-test bumped spool " family))
+                  (fn [{:keys [bumps]}]
+                    (str "Smoke-test bumped spools "
+                         (str/join ", " (map :family bumps))))
                   :self
                   :depends-on [:create-test-world]
                   :attributes
                   {"workflow/action-ref" "spool-bump.world.smoke"
                    "workflow/instruction"
-                   (fn [{:keys [family]}]
+                   (fn [{:keys [bumps]}]
                      (format-alpha/reflow
                       (format
                        "|In the disposable world, prove the weaver starts and adopts
-                        |the bumped `%s` coordinate. Run a spool-specific smoke path
-                        |when the spool exposes one; otherwise record why startup and
-                        |adoption are the strongest available check. Stop the disposable
+                        |the bumped coordinates for `%s`. Run spool-specific smoke paths
+                        |where the spools expose them; otherwise record why startup and
+                        |adoption are the strongest available checks. Stop the disposable
                         |weaver afterward. A failed available smoke check blocks landing."
-                       family)))})
+                       (str/join "`, `" (map :family bumps)))))})
    (workflow/step :prepare-change
-                  (fn [{:keys [family]}] (str "Prepare " family " bump change"))
+                  (fn [{:keys [bumps]}]
+                    (str "Prepare bump change for "
+                         (str/join ", " (map :family bumps))))
                   :self
                   :depends-on [:smoke-test]
                   :attributes
@@ -1097,7 +1125,7 @@
                    "workflow/instruction"
                    (format-alpha/reflow
                     "|Inspect the diff and confirm that `.skein/spools.edn` changes only
-                     |the intended family tag and peeled SHA unless the bump deliberately
+                     |the requested family tags and peeled SHAs unless a bump deliberately
                      |opts into a new root. Remove generated SQLite and runtime metadata,
                      |run the relevant repository checks, and commit the reviewed change.")})
    (workflow/step :raise-pr
