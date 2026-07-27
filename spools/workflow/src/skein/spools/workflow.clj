@@ -48,7 +48,7 @@
          explain-definition explain-defer
          reject-unknown-keys! step* bind-defer-step
          step-opt-keys checkpoint-opt-keys call-opt-keys workflow-opt-keys
-         defer-opt-keys
+         defer-opt-keys advance-opt-keys
          choice-name choice-details-attr reject-unknown-choice-keys!
          require-valid-choices!
          reject-next-and-revise! require-unique-choice-keys!
@@ -702,13 +702,15 @@
 
   A defer is not advanceable and says so loudly: filling one selects a target
   and supplies that target's own params, which does not fit `advance!`'s
-  one-ready-step vocabulary, so it directs the caller to `defer!`."
+  one-ready-step vocabulary, so it directs the caller to `defer!`.
+  `::advance-opts` owns the complete opts shape."
   ([run-id]
    (advance! run-id {}))
   ([run-id opts]
    (let [rt (current/runtime)]
-     (util/require-map! opts [:opts])
+     (require-valid! ::advance-opts opts "Invalid workflow advance opts")
      (routing/refuse-notes! "advance!" opts)
+     (reject-unknown-keys! opts advance-opt-keys :advance)
      (guard/with-run!
        rt run-id
        (fn []
@@ -1122,29 +1124,29 @@
   [request]
   (let [rt (current/runtime)
         {:keys [run-id choice input by]} (require-valid! ::advance-request request
-                                                         "Invalid workflow advance request")]
-    (mutate-run! rt "workflow advance" :advance request
+                                                         "Invalid workflow next request")]
+    (mutate-run! rt "workflow next" :advance request
                  (fn [target]
                    (runs/require-gate-actor! run-id target by)
                    (when (and (= "checkpoint" (:role target))
                               (not (contains? request :choice)))
-                     (fail! "workflow advance on a checkpoint requires --choice"
-                            {:reason :workflow/advance-choice-required
+                     (fail! "workflow next on a checkpoint requires --choice"
+                            {:reason :workflow/next-choice-required
                              :run-id run-id
                              :step (:id target)
                              :choices (:choices target)}))
                    (when (and (= "step" (:role target))
                               (contains? request :choice))
-                     (fail! "workflow advance on an ordinary step rejects --choice"
-                            {:reason :workflow/advance-choice-incompatible
+                     (fail! "workflow next on an ordinary step rejects --choice"
+                            {:reason :workflow/next-choice-incompatible
                              :run-id run-id
                              :step (:id target)
                              :choice choice
                              :guidance "Remove --choice, or select a checkpoint."}))
                    (when (and (contains? request :input)
                               (not= "checkpoint" (:role target)))
-                     (fail! "workflow advance --input requires a checkpoint"
-                            {:reason :workflow/advance-input-without-checkpoint
+                     (fail! "workflow next --input requires a checkpoint"
+                            {:reason :workflow/next-input-without-checkpoint
                              :run-id run-id
                              :step (:id target)}))
                    (advance! run-id
@@ -1552,6 +1554,15 @@
 (s/def :skein.spools.workflow.request/context
   (s/and :skein.spools.workflow.values/params json-safe-context?))
 (s/def :skein.spools.workflow.request/timeout-secs ::timeout-secs)
+
+(s/def :skein.spools.workflow.advance/choice
+  #(or (keyword? %) (non-blank-string? %)))
+(s/def ::advance-opts
+  (s/keys :opt-un [:skein.spools.workflow.advance/choice
+                   :skein.spools.workflow.request/input
+                   :skein.spools.workflow.request/step
+                   :skein.spools.workflow.request/by
+                   :skein.spools.workflow.request/attributes]))
 
 ;; One request spec per worker verb, and the whole of what each verb accepts.
 ;; `:step` is a disambiguator everywhere it appears, never a required address:
@@ -1971,6 +1982,7 @@
 (def ^:private checkpoint-opt-keys (into step-opt-keys #{:kind :choices}))
 (def ^:private call-opt-keys #{:title :depends-on :attributes})
 (def ^:private defer-opt-keys #{:description :attributes :depends-on :title})
+(def ^:private advance-opt-keys #{:choice :input :step :by :attributes})
 (def ^:private workflow-opt-keys
   #{:attributes :state :form :doc :entrypoints :param-spec :defaults})
 (def ^:private choice-opt-keys #{:key :label :description :next :input :revise})

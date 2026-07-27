@@ -3,14 +3,12 @@
   run-result envelope, and the concurrency guard every run mutation crosses
   (PROP-Wcd-001.S2/S4).
 
-  A worker drives a run through one verb per role. `complete` acts on an
-  ordinary step, `choose` on a checkpoint, `defer` on a defer, and `advance` on
-  either an ordinary step or checkpoint — so each verb
-  first narrows the run's ready frontier to the items *it* could act on and
-  only then asks whether the answer is unambiguous. That order is what makes a
-  mixed frontier workable: a run with one ready step and one ready checkpoint is
-  unambiguous for both verbs, and neither has to name a step id to say what it
-  meant.
+  The role-specific verbs narrow before asking whether a frontier is ambiguous:
+  `complete` acts on ordinary steps, `choose` on checkpoints, and `defer` on
+  defers. A mixed frontier with one step and one checkpoint is therefore
+  unambiguous for both role-specific verbs. `next` is the cross-role worker
+  convenience over ordinary steps and checkpoints, so that same mixed frontier
+  is ambiguous for it and needs a step id.
 
   Gates sit deliberately outside inference. A gate is an external wait point, so
   a worker closing one asserts that something outside this run happened; that
@@ -47,9 +45,9 @@
                :inferable? (fn [item]
                              (and (contains? #{"step" "checkpoint"} (:role item))
                                   (not (:gate item))))
-               :absent :workflow/ready-advance-absent
-               :ambiguous :workflow/ready-advance-ambiguous
-               :incompatible :workflow/ready-advance-incompatible}
+               :absent :workflow/ready-next-absent
+               :ambiguous :workflow/ready-next-ambiguous
+               :incompatible :workflow/ready-next-incompatible}
      :step {:noun "step"
             :selectable? ordinary?
             :inferable? (fn [item] (and (ordinary? item) (not (:gate item))))

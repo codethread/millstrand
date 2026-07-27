@@ -1405,6 +1405,10 @@
                                              :kind :agent
                                              :choices [{:key :approved :label "Approve"}]))]
         (workflow/start! "advance-run" definition {})
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow advance opts"
+                              (workflow/advance! "advance-run" {:step 42})))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow option keys"
+                              (workflow/advance! "advance-run" {:bogus true})))
         ;; a ready step advanced with a :choice fails loudly and mutates nothing
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"must not supply a :choice"
                               (workflow/advance! "advance-run" {:choice :approved})))

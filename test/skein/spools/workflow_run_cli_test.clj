@@ -1,6 +1,6 @@
 (ns skein.spools.workflow-run-cli-test
   "Tests for the generic worker run surface of the `workflow` op: start, ready,
-  complete, choose, advance, defer, and await over the engine's published
+  complete, choose, next, defer, and await over the engine's published
   lifecycle."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
@@ -472,70 +472,70 @@
                (reason-of #(invoke {:subcommand ["choose"] :run-id "run-no-checkpoint"
                                     :choice "ship" :step (first (ready-ids start))}))))))))
 
-;; --- advance ----------------------------------------------------------------
+;; --- next -------------------------------------------------------------------
 
-(deftest advance-completes-an-ordinary-step-with-the-standard-envelope
+(deftest next-completes-an-ordinary-step-with-the-standard-envelope
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
       (register! :solo)
       (let [start (started "run-advance-step" :solo)
             step (first (ready-ids start))
-            data (failure #(verb "advance" "run-advance-step"
+            data (failure #(verb "next" "run-advance-step"
                                  :choice "ship"))]
-        (is (= :workflow/advance-choice-incompatible (:reason data)))
+        (is (= :workflow/next-choice-incompatible (:reason data)))
         (is (= "ship" (:choice data)))
         (is (= "active" (:state (weaver/show rt step)))))
-      (let [result (verb "advance" "run-advance-step")]
-        (is (= "workflow advance" (:operation result)))
+      (let [result (verb "next" "run-advance-step")]
+        (is (= "workflow next" (:operation result)))
         (is (= "run-advance-step" (:run-id result)))
         (is (true? (:done result)))
         (is (= [] (:ready result)))
         (is (= #{:operation :run-id :root :ready :done}
                (set (keys result))))))))
 
-(deftest advance-requires-a-choice-at-a-checkpoint-and-carries-its-input
+(deftest next-requires-a-choice-at-a-checkpoint-and-carries-its-input
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
       (register! :solo :mixed)
-      (let [start (started "run-advance-choice" :mixed)
+      (let [start (started "run-next-choice" :mixed)
             checkpoint (item-id start "Sign the work off")]
-        (let [data (failure #(verb "advance" "run-advance-choice"
+        (let [data (failure #(verb "next" "run-next-choice"
                                    :step checkpoint))]
-          (is (= :workflow/advance-choice-required (:reason data)))
+          (is (= :workflow/next-choice-required (:reason data)))
           (is (= ["ship" "rework"] (:choices data))))
         (let [result (from-argv
                       rt
-                      ["advance" "run-advance-choice" "--step" checkpoint
+                      ["next" "run-next-choice" "--step" checkpoint
                        "--choice" "ship" "--input" "{\"verdict\":\"pass\"}"])
               closed (:attributes (weaver/show rt checkpoint))]
-          (is (= "workflow advance" (:operation result)))
+          (is (= "workflow next" (:operation result)))
           (is (= "ship" (:workflow/outcome closed)))
           (is (= {:verdict "pass"} (:workflow/outcome-input closed))))
-        (let [ordinary (item-id (verb "ready" "run-advance-choice") "Do the work")]
-          (is (= :workflow/advance-input-without-checkpoint
-                 (reason-of #(invoke {:subcommand ["advance"]
-                                      :run-id "run-advance-choice"
+        (let [ordinary (item-id (verb "ready" "run-next-choice") "Do the work")]
+          (is (= :workflow/next-input-without-checkpoint
+                 (reason-of #(invoke {:subcommand ["next"]
+                                      :run-id "run-next-choice"
                                       :step ordinary
                                       :input {"verdict" "pass"}})))))))))
 
-(deftest advance-is-loudly-ambiguous-and-an-explicit-step-disambiguates
+(deftest next-is-loudly-ambiguous-and-an-explicit-step-disambiguates
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
       (register! :twin)
       (let [start (started "run-advance-twin" :twin)
-            data (failure #(verb "advance" "run-advance-twin"))]
-        (is (= :workflow/ready-advance-ambiguous (:reason data)))
+            data (failure #(verb "next" "run-advance-twin"))]
+        (is (= :workflow/ready-next-ambiguous (:reason data)))
         (is (= (ready-ids start) (mapv :id (:compatible data))))
         (is (re-find #"--step" (:guidance data)))
         (is (= [(second (ready-ids start))]
                (ready-ids
-                (verb "advance" "run-advance-twin"
+                (verb "next" "run-advance-twin"
                       :step (first (ready-ids start))))))))))
 
-(deftest advance-refuses-unknown-roles-before-mutating
+(deftest next-refuses-unknown-roles-before-mutating
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
@@ -543,26 +543,26 @@
       (let [start (started "run-advance-role" :solo)
             step (first (ready-ids start))]
         (weaver/update! rt step {:attributes {"workflow/role" "improvised"}})
-        (is (= :workflow/ready-advance-incompatible
-               (reason-of #(verb "advance" "run-advance-role" :step step))))
+        (is (= :workflow/ready-next-incompatible
+               (reason-of #(verb "next" "run-advance-role" :step step))))
         (is (= "active" (:state (weaver/show rt step)))
             "an invalid role is rejected before the close")))))
 
-(deftest advance-preserves-gate-actor-rules
+(deftest next-preserves-gate-actor-rules
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
       (register! :gated)
       (let [start (started "run-advance-gate" :gated)
             gate (first (ready-ids start))]
-        (is (= :workflow/ready-advance-absent
-               (reason-of #(verb "advance" "run-advance-gate"))))
+        (is (= :workflow/ready-next-absent
+               (reason-of #(verb "next" "run-advance-gate"))))
         (is (= :workflow/gate-actor-required
-               (reason-of #(verb "advance" "run-advance-gate" :step gate))))
-        (is (true? (:done (verb "advance" "run-advance-gate"
+               (reason-of #(verb "next" "run-advance-gate" :step gate))))
+        (is (true? (:done (verb "next" "run-advance-gate"
                                 :step gate :by "ci-bot"))))))))
 
-(deftest advance-directs-a-ready-defer-to-the-role-specific-verb
+(deftest next-directs-a-ready-defer-to-the-role-specific-verb
   (with-runtime
     (fn [rt _]
       (activate-cli! rt)
@@ -571,10 +571,10 @@
       (verb "complete" "run-advance-defer")
       (let [ready (verb "ready" "run-advance-defer")
             defer-id (first (ready-ids ready))
-            inferred (failure #(verb "advance" "run-advance-defer"))
-            selected (failure #(verb "advance" "run-advance-defer" :step defer-id))]
-        (is (= :workflow/ready-advance-absent (:reason inferred)))
-        (is (= :workflow/ready-advance-incompatible (:reason selected)))
+            inferred (failure #(verb "next" "run-advance-defer"))
+            selected (failure #(verb "next" "run-advance-defer" :step defer-id))]
+        (is (= :workflow/ready-next-absent (:reason inferred)))
+        (is (= :workflow/ready-next-incompatible (:reason selected)))
         (is (re-find #"workflow defer" (:guidance inferred)))
         (is (re-find #"workflow defer" (:guidance selected)))
         (is (= [defer-id] (ready-ids (verb "ready" "run-advance-defer"))))))))
@@ -696,10 +696,10 @@
         (testing "an unchanged compatible frontier passes straight through"
           (is (= before (runs/require-fresh-frontier! "workflow complete" :step
                                                       "run-race" nil before before))))
-        (testing "advance uses the same retryable frontier contract"
+        (testing "next uses the same retryable frontier contract"
           (is (= :workflow/frontier-stale
                  (reason-of #(runs/require-fresh-frontier!
-                              "workflow advance" :advance
+                              "workflow next" :advance
                               "run-race" right before after)))))
         (testing "a sibling of another role changing is not this verb's race"
           (is (= [left right] (ready-ids (verb "ready" "run-race")))))))))
@@ -798,13 +798,13 @@
       (activate-cli! rt)
       (let [entry (weaver/resolve-op rt 'workflow)
             leaf (fn [verb] (get-in entry [:arg-spec :subcommands verb]))]
-        (doseq [verb ["start" "complete" "choose" "advance" "defer"]]
+        (doseq [verb ["start" "complete" "choose" "next" "defer"]]
           (is (= :mutating (:hook-class (leaf verb))) verb)
           (is (= :standard (:deadline-class (leaf verb))) verb))
         (is (= [:read :standard] ((juxt :hook-class :deadline-class) (leaf "ready"))))
         (is (= [:read :unbounded] ((juxt :hook-class :deadline-class) (leaf "await")))
             "await blocks by design and writes nothing")
-        (is (= #{"list" "show" "start" "ready" "complete" "choose" "advance"
+        (is (= #{"list" "show" "start" "ready" "complete" "choose" "next"
                  "defer" "await"}
                (set (keys (:subcommands (:arg-spec entry))))))
         (is (= (set (keys (:subcommands (:arg-spec entry))))
@@ -823,10 +823,10 @@
         (check "complete" (verb "complete" "run-returns"))
         (check "choose" (invoke {:subcommand ["choose"] :run-id "run-returns"
                                  :choice "ship" :input {"verdict" "pass"}}))
-        (check "advance" (verb "advance" "run-returns"
-                               :step (item-id (verb "ready" "run-returns")
-                                              "Wait for CI")
-                               :by "ci-bot"))
+        (check "next" (verb "next" "run-returns"
+                            :step (item-id (verb "ready" "run-returns")
+                                           "Wait for CI")
+                            :by "ci-bot"))
         (check "await" (verb "await" "run-returns" :timeout-secs 0))
         (started "run-returns-defer" :final-defer)
         (verb "complete" "run-returns-defer")
@@ -858,9 +858,9 @@
                (parse ["complete" "r1" "--context" "{\"pr-number\":412}"])))
         (is (= {:subcommand ["choose"] :run-id "r1" :choice "ship" :input {"verdict" "pass"}}
                (parse ["choose" "r1" "ship" "--input" "{\"verdict\":\"pass\"}"])))
-        (is (= {:subcommand ["advance"] :run-id "r1" :choice "ship"
+        (is (= {:subcommand ["next"] :run-id "r1" :choice "ship"
                 :input {"verdict" "pass"} :step "s-1" :by "agent"}
-               (parse ["advance" "r1" "--choice" "ship"
+               (parse ["next" "r1" "--choice" "ship"
                        "--input" "{\"verdict\":\"pass\"}"
                        "--step" "s-1" "--by" "agent"])))
         (is (= {:subcommand ["defer"] :run-id "r1" :workflow "follow-on"}

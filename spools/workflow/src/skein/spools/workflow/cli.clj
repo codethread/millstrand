@@ -137,10 +137,10 @@
       "choose" (workflow/run-choose!
                 (-> (assoc (run-request args) :choice choice)
                     (with-json-object args :input :input)))
-      "advance" (workflow/run-advance!
-                 (-> (run-request args)
-                     (carry args :choice :choice)
-                     (with-json-object args :input :input)))
+      "next" (workflow/run-advance!
+              (-> (run-request args)
+                  (carry args :choice :choice)
+                  (with-json-object args :input :input)))
       "defer" (workflow/run-defer!
                (-> (assoc (run-request args) :workflow (keyword target))
                    (with-json-object args :params :params)))
@@ -149,7 +149,7 @@
       (throw (ex-info "Unsupported workflow subcommand"
                       {:subcommand subcommand
                        :allowed ["list" "show" "start" "ready" "complete"
-                                 "choose" "advance" "defer" "await"]})))))
+                                 "choose" "next" "defer" "await"]})))))
 
 (def ^:private workflow-doc
   (fmt/reflow
@@ -186,7 +186,7 @@
                  |run.")
                (fmt/reflow
                 "|Driving a run you own: start it, read what is ready, and
-                 |advance through ordinary steps and checkpoints, or use a
+                 |move to the next ordinary step or checkpoint, or use a
                  |role-specific verb when needed.")]}
    :subcommands
    {"list" {:doc (fmt/reflow
@@ -314,40 +314,40 @@
                         "|A routed choice pours its continuation in the same
                          |mutation, so the frontier returned is already the
                          |continuation's.")]}}
-    "advance" {:doc (fmt/reflow
-                     "|Advance the sole ready ordinary step or checkpoint of a
-                      |run.")
-               :hook-class :mutating
-               :deadline-class :standard
-               :positionals [run-id-positional]
-               :flags {:choice
-                       {:type :string
-                        :doc "Choice key declared by a ready checkpoint."}
-                       :input
-                       {:type :string
-                        :parse :json
-                        :doc "JSON object satisfying the choice's own input contract."}
-                       :step step-flag
-                       :by by-flag}
-               :annotations
-               {:notes [(fmt/reflow
-                         "|An ordinary step needs no choice. A checkpoint
+    "next" {:doc (fmt/reflow
+                  "|Move through the sole ready ordinary step or checkpoint of a
+                   |run.")
+            :hook-class :mutating
+            :deadline-class :standard
+            :positionals [run-id-positional]
+            :flags {:choice
+                    {:type :string
+                     :doc "Choice key declared by a ready checkpoint."}
+                    :input
+                    {:type :string
+                     :parse :json
+                     :doc "JSON object satisfying the choice's own input contract."}
+                    :step step-flag
+                    :by by-flag}
+            :annotations
+            {:notes [(fmt/reflow
+                      "|An ordinary step needs no choice. A checkpoint
                           |requires --choice and accepts its declared --input.")
-                        (fmt/reflow
-                         "|A mixed or parallel advanceable frontier is
+                     (fmt/reflow
+                      "|A mixed or parallel advanceable frontier is
                           |ambiguous; use --step to select one item.")
-                        (fmt/reflow
-                         "|A defer selects another workflow and its params, so
+                     (fmt/reflow
+                      "|A defer selects another workflow and its params, so
                           |drive it with workflow defer instead.")
-                        (fmt/reflow
-                         "|A gate is never inferred and still requires both
+                     (fmt/reflow
+                      "|A gate is never inferred and still requires both
                           |--step and --by.")]
-                :failure-modes ["workflow/ready-advance-absent"
-                                "workflow/ready-advance-ambiguous"
-                                "workflow/ready-advance-incompatible"
-                                "workflow/advance-choice-required"
-                                "workflow/advance-choice-incompatible"
-                                "workflow/advance-input-without-checkpoint"]}}
+             :failure-modes ["workflow/ready-next-absent"
+                             "workflow/ready-next-ambiguous"
+                             "workflow/ready-next-incompatible"
+                             "workflow/next-choice-required"
+                             "workflow/next-choice-incompatible"
+                             "workflow/next-input-without-checkpoint"]}}
     "defer" {:doc "Fill the ready defer of a run with a registered workflow."
              :hook-class :mutating
              :deadline-class :standard
@@ -440,7 +440,7 @@
     "ready" run-result-return
     "complete" run-result-return
     "choose" run-result-return
-    "advance" run-result-return
+    "next" run-result-return
     "defer" run-result-return
     "await" {:type :map
              :required {:operation :string
@@ -460,7 +460,7 @@
             |and show answer which registered routines exist and what one of them
             |expects, both read from the weaver's live registry rather than a
             |catalogue baked in when Skein was built. start, ready, complete,
-            |choose, advance, defer, and await drive a run: they share one
+            |choose, next, defer, and await drive a run: they share one
             |result shape — the run, its current root, its complete ready
             |frontier, and whether it is done — so every call tells you what
             |you may do next without a second read.")
@@ -468,7 +468,7 @@
            "|Run workflow list before choosing a routine and workflow show
             |<name> before supplying params; the param contract it prints is the
             |one the engine will judge your invocation against. Then start the
-            |run and work its frontier: advance when one ordinary step or
+            |run and work its frontier: use next when one ordinary step or
             |checkpoint is ready, or use complete, choose, and defer for
             |role-specific control. Pass --step when the selected verb says the
             |frontier is ambiguous, and always to close a gate, which also needs
@@ -477,18 +477,18 @@
             |workflow ready and act on what is there now.")})
 
 (def ^:private workflow-glossary
-  [{:name "workflow/ready-advance-absent"
-    :definition "No ordinary step or checkpoint is ready for workflow advance."}
-   {:name "workflow/ready-advance-ambiguous"
-    :definition "More than one item is advanceable; workflow advance needs --step."}
-   {:name "workflow/ready-advance-incompatible"
+  [{:name "workflow/ready-next-absent"
+    :definition "No ordinary step or checkpoint is ready for workflow next."}
+   {:name "workflow/ready-next-ambiguous"
+    :definition "More than one item is advanceable; workflow next needs --step."}
+   {:name "workflow/ready-next-incompatible"
     :definition "The selected ready item cannot be advanced."}
-   {:name "workflow/advance-input-without-checkpoint"
-    :definition "Workflow advance received --input for an ordinary step or gate."}
-   {:name "workflow/advance-choice-required"
-    :definition "Workflow advance selected a checkpoint without --choice."}
-   {:name "workflow/advance-choice-incompatible"
-    :definition "Workflow advance received --choice for an ordinary step or gate."}
+   {:name "workflow/next-input-without-checkpoint"
+    :definition "Workflow next received --input for an ordinary step or gate."}
+   {:name "workflow/next-choice-required"
+    :definition "Workflow next selected a checkpoint without --choice."}
+   {:name "workflow/next-choice-incompatible"
+    :definition "Workflow next received --choice for an ordinary step or gate."}
    {:name "workflow/ready-defer-absent"
     :definition "No ready defer exists for workflow defer to fill."}
    {:name "workflow/ready-defer-ambiguous"
