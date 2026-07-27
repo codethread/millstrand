@@ -167,7 +167,7 @@ Registered by `.skein/workflows.clj` and `.skein/config.clj`.
 | **land** | The coordinator-only landing workflow: push and draft PR, green CI, roster sign-off, then a mechanical squash-merge with main CI watched to green. | Merge, deploy, release, ship, publish |
 | **Merge lock** | The exclusion held from sign-off approval through the mechanical merge, so only one coordinator lands a branch. | Branch protection, mutex, CI lock, freeze |
 | **Sign-off** | The coordinator checkpoint on a land run. Valid only on a pushed branch with an open draft PR and green CI at HEAD. | Approval, review, LGTM, merge |
-| **HITL** | Human-in-the-loop. As an attribute (`hitl=true`) it means stop and ask the user; as an op it opens an interactive session with a self-terminating tracking strand. | Manual, human review, interactive, blocked |
+| **HITL** | Human-in-the-loop. The `hitl=true` attribute means stop and ask the user. Interactive work uses a tracking strand plus `agent delegate --interactive`. | Manual, human review, interactive, blocked |
 | **Coordinator** | The agent that plans the work, delegates it, verifies the result, and closes it. Only a coordinator drives **land**. | Orchestrator, manager, parent agent, lead |
 | **Worker** | A delegated agent doing one slice of work. Workers stop at implemented and committed; they do not land. | Subagent, agent, child, slave |
 

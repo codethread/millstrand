@@ -283,12 +283,11 @@
                {}))
 
 (def ^:private config-op-names
-  "The config-owned CLI ops whose generated `help <op>` the refactor must preserve.
+  "The config-owned CLI ops whose generated help the baseline covers.
 
-  Every op authored as a `defop` in .skein/config.clj; the surrounding spool ops
-  (kanban/agent/bench) and workflow ops (land) are untouched by the refactor and
-  are covered by their own tests, so this holistic guard scopes to config.clj."
-  ["hitl"])
+  Config currently owns no ops. Keep the empty collection explicit so adding an
+  op requires an intentional baseline decision."
+  [])
 
 (def ^:private named-query-names
   "The config-owned named queries whose registered definitions the refactor must
@@ -360,7 +359,7 @@
                       "merge-lock" "work"]]
     (is (contains? (graph/queries rt) query-name)))
   (is (contains? (graph/queries rt) "bench-runs"))
-  (doseq [op-name ["kanban" "hitl" "land" "workflow"
+  (doseq [op-name ["kanban" "land" "workflow"
                    "agent" "bench"]]
     (is (some #(= op-name (:name %)) (weaver/ops rt)) op-name))
   (is (some #(= "delegate-pipeline" (:name %)) (patterns/patterns rt)))
@@ -1642,12 +1641,11 @@
           (str id " must opt into skein.spools/workflow")))
     (is (= [:skein/spools-workflow] (:after (get modules :skein/spools-workflow-cli)))
         "the opt-in worker CLI orders after the engine module it contributes beside")
-    (is (= ['skein.spools/workflow 'ct.spools/agent-run
-            'codethread/devflow 'skein.macros/macros]
+    (is (= ['skein.macros/macros]
            (:spools (get modules :config)))
         ":config must guard every spool coordinate its config.clj ns requires")
     (is (true? (:required? (get modules :config)))
-        ":config is required — a guarded but non-required module skips silently, dropping the op/query surface")
+        ":config is required — a guarded but non-required module skips silently, dropping the query surface")
     (is (= ['skein.spools/workflow 'ct.spools/delegation 'skein.macros/macros]
            (:spools (get modules :workflows)))
         ":workflows must opt into skein.spools/workflow, ct.spools/delegation, and the authoring macros")
