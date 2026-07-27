@@ -12,10 +12,8 @@
   the engine has no business knowing — the singleton merge lock and the kanban
   lane moves.
 
-  The devflow lifecycle itself is the external `ct.spools.devflow` spool;
-  its thin CLI wrapper ops live in config.clj. This file is loaded after
-  config.clj and reuses its public CLI-tail helpers (`config/pop-step-selector`
-  and friends) so the `step=<id>` tail convention has one definition."
+  The devflow lifecycle itself is the external `ct.spools.devflow` spool and
+  workers drive it through the same generic `workflow` op."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
