@@ -5,19 +5,17 @@
   Thin glue only: `ct.spools.devflow` owns the feature lifecycle,
   `skein.spools.workflow` is its generic CLI, `ct.spools.delegation` owns the
   `strand agent` surface plus the `agent-plan` pattern (all activated from
-  init.clj). This file registers the `kanban-tree` board projection op, the
-  `hitl` session op, and a few named queries. Sibling init.clj modules hold the
-  rest of the repo policy: hand-authored workflows in workflows.clj, harness
-  seats in harnesses.clj, chime attention rules in attention.clj, the NVD scan
-  cron job in nvd_scan.clj, and reviewer rosters in reviewers.clj."
+  init.clj). This file registers the `hitl` session op and a few named queries.
+  Sibling init.clj modules hold the rest of the repo policy: hand-authored
+  workflows in workflows.clj, harness seats in harnesses.clj, chime attention
+  rules in attention.clj, the NVD scan cron job in nvd_scan.clj, and reviewer
+  rosters in reviewers.clj."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [skein.macros.ops :refer [defop]]
             [skein.macros.queries :refer [defquery]]
             [ct.spools.agent-run :as shuttle]
             [skein.api.current.alpha :as current]
-            [skein.api.graph.alpha :as graph]
-            [skein.api.spool.alpha :refer [attr-get entity-projection]]
             [skein.api.weaver.alpha :as weaver]))
 
 (def ^:private stamped-op-return
@@ -96,118 +94,6 @@
    [:or
     [:missing [:attr "workflow/role"]]
     [:not [:in [:attr "workflow/role"] ["root" "digest" "procedure"]]]]])
-
-;; ---------------------------------------------------------------------------
-;; kanban-tree: epic -> feature -> task projection for the agent dashboard
-;; ---------------------------------------------------------------------------
-
-;; The kanban board links its three tiers (epic -> feature -> task) only through
-;; parent-of edges — no tier carries its parent's id as an attribute — so the CLI
-;; query surface, which filters flat strand rows by attribute, cannot join them.
-;; This projection walks each tier with one batched single-hop `outgoing-edges`
-;; call (no transitive subgraph, so note/agent-run descendants never leak in) and
-;; derives task status exactly as `kanban card` does, letting a renderer build the
-;; collapsible tree from a single poll rather than a round trip per feature. The
-;; task-tier helpers below mirror the kanban spool's private `feature-tasks` /
-;; `derive-task-status` / `tasks-with-status`, which are not part of its API.
-
-(defn- kanban-card-type
-  "Return a kanban card's type, defaulting to feature (cards predating the epic tier)."
-  [strand]
-  (or (attr-get strand :kanban/type) "feature"))
-
-(defn- kanban-task?
-  "Return true when strand carries the kanban task marker."
-  [strand]
-  (= "true" (attr-get strand :kanban/task)))
-
-(defn- kanban-task-status
-  "Derive a task's status from core graph state and the core `owner` attr only:
-  `done` when closed, `blocked` while any dependency is unclosed, then
-  `doing`/`ready` on whether an owner is stamped."
-  [task dep-states]
-  (cond
-    (= "closed" (:state task)) "done"
-    (some #(not= "closed" %) dep-states) "blocked"
-    (some? (attr-get task :owner)) "doing"
-    :else "ready"))
-
-(defn- kanban-tasks-with-status
-  "Return a map of task id -> compact task view decorated with derived status,
-  batching the depends-on frontier so status resolves without a per-task round
-  trip."
-  [rt tasks]
-  (let [dep-edges (graph/outgoing-edges rt (mapv :id tasks) "depends-on")
-        target-state (into {}
-                           (map (juxt :id :state))
-                           (graph/strands-by-ids rt (into [] (map :to_strand_id) dep-edges)))
-        deps-by-task (reduce (fn [m {:keys [from_strand_id to_strand_id]}]
-                               (update m from_strand_id (fnil conj []) to_strand_id))
-                             {} dep-edges)]
-    (into {}
-          (map (fn [task]
-                 [(:id task)
-                  (cond-> {:id (:id task)
-                           :title (:title task)
-                           :state (:state task)
-                           :status (kanban-task-status
-                                    task
-                                    (map target-state (get deps-by-task (:id task))))}
-                    (attr-get task :owner) (assoc :owner (attr-get task :owner)))]))
-          tasks)))
-
-(defn- kanban-tree-projection
-  "Join the kanban card tiers into cards carrying their parent epic id and their
-  tasks with derived status. `all?` includes closed cards and tasks; otherwise
-  only active cards and their non-closed tasks are returned."
-  [rt all?]
-  (let [all-cards (graph/strands-by-ids rt (graph/query-ids rt 'kanban-cards {}))
-        cards (if all? (vec all-cards) (filterv #(= "active" (:state %)) all-cards))
-        epics (filterv #(= "epic" (kanban-card-type %)) cards)
-        features (filterv #(= "feature" (kanban-card-type %)) cards)
-        feature-ids (set (map :id features))
-        ;; epic -> feature: direct parent-of children that are feature cards on the board
-        epic-of-feature (into {}
-                              (comp (filter #(feature-ids (:to_strand_id %)))
-                                    (map (juxt :to_strand_id :from_strand_id)))
-                              (graph/outgoing-edges rt (mapv :id epics) "parent-of"))
-        ;; feature -> task: direct parent-of children carrying the task marker
-        task-edges (graph/outgoing-edges rt (mapv :id features) "parent-of")
-        tasks (cond->> (filter kanban-task? (graph/strands-by-ids rt (mapv :to_strand_id task-edges)))
-                (not all?) (filter #(not= "closed" (:state %)))
-                :always vec)
-        task-view (kanban-tasks-with-status rt tasks)
-        tasks-of-feature (reduce (fn [m {:keys [from_strand_id to_strand_id]}]
-                                   (if-let [t (task-view to_strand_id)]
-                                     (update m from_strand_id (fnil conj []) t)
-                                     m))
-                                 {} task-edges)]
-    {:operation "kanban-tree"
-     :cards (mapv (fn [s]
-                    (assoc (entity-projection s)
-                           :created_at (:created_at s)
-                           :updated_at (:updated_at s)
-                           :type (kanban-card-type s)
-                           :epic (get epic-of-feature (:id s))
-                           :tasks (vec (sort-by :id (get tasks-of-feature (:id s) [])))))
-                  cards)}))
-
-(defop kanban-tree
-  "Return the kanban board as an epic -> feature -> task hierarchy in one call.
-
-  Each card carries its `type` (epic/feature), the `epic` id it hangs under (nil
-  for top-level cards), and its `tasks` with derived status, so a renderer builds
-  the collapsible board without a round trip per feature. Read-only; mirrors the
-  `kanban-cards` query's active-by-default scope, widened with `--all true`."
-  {:returns stamped-op-return :arg-spec {:op "kanban-tree"
-                                         :hook-class :read
-                                         :deadline-class :standard
-                                         :doc "Project the epic -> feature -> task kanban hierarchy with derived task status."
-                                         :flags {:all {:type :boolean-token
-                                                       :doc "Include closed cards and tasks: true or false (default false)."}}}}
-  [ctx]
-  (let [{:keys [all]} (:op/args ctx)]
-    (kanban-tree-projection (current/runtime) (boolean all))))
 
 ;; ---------------------------------------------------------------------------
 ;; devflow ops: thin CLI wrappers over ct.spools.devflow

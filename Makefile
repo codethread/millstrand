@@ -1,4 +1,4 @@
-.PHONY: build install dash api-docs docs-site docs-serve docs-check fmt fmt-check fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
+.PHONY: build install dash dash-check api-docs docs-site docs-serve docs-check fmt fmt-check fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
 
 GO_CLI := ./cli/cmd/strand
 MILL_CLI := ./cli/cmd/mill
@@ -43,6 +43,11 @@ install:
 dash:
 	bun install --cwd scripts/agent-dash --silent
 	bun scripts/agent-dash/index.tsx
+
+dash-check:
+	bun install --cwd scripts/agent-dash --frozen-lockfile --silent
+	bun run --cwd scripts/agent-dash test
+	bun run --cwd scripts/agent-dash typecheck
 
 api-docs:
 	@if command -v bb >/dev/null 2>&1; then \

@@ -13,7 +13,7 @@
 ;; `spool` var and needs none.
 ;;
 ;; File-per-concern map (each is one module):
-;;   config.clj        — named queries + the devflow/kanban/hitl CLI op surface
+;;   config.clj        — named queries + the devflow/hitl CLI op surface
 ;;   workflows.clj     — hand-authored workflows + the land policy op
 ;;   harnesses.clj     — harness seats + routing policy
 ;;   reviewers.clj     — reviewer rosters

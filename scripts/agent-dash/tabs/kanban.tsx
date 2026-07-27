@@ -1,9 +1,11 @@
 // KANBAN tab: the user↔agent work board as a collapsible epic → feature → task
-// tree (spools/kanban.md). One `strand kanban-tree` poll returns every card with
-// its parent epic id and its tasks (derived status), so the whole hierarchy is in
-// hand and expand/collapse is instant local state — no per-row fetch. Epics group
-// their features (`=`/`-` collapses the group, open by default); a feature that
-// bears tasks gets a marker and `=`/`-` reveals/hides them (collapsed by default).
+// tree (spools/kanban.md). Normal polling reads the spool-owned `kanban board`
+// snapshot. Expanded features fetch their authoritative task views lazily through
+// `kanban card`; the explicit all view asks that same board op for compact
+// all-state cards with direct epic membership. Epics group their features
+// (`=`/`-` collapses the group, open by
+// default); a feature that bears tasks gets a marker and `=`/`-` reveals/hides
+// them (collapsed by default).
 // Alongside the board it scans active strands for the land workflow's merge-lock
 // sentinel and surfaces it as a one-line status strip. Self-contained: the row
 // types, both fetchers, colour maps, the tree component, and the merge-lock banner
@@ -28,12 +30,18 @@ import {
   type Cell,
 } from "../ui";
 import { defineTab, emptyListState, followSelection, reduceListKeys, reduceScrollKeys, type ListState, type RenderCtx } from "../app";
+import {
+  activeBoardCards,
+  activeTasks,
+  loadCardDetails,
+  type BoardCard,
+  type BoardSnapshot,
+  type CardView,
+  type TaskChild,
+} from "./kanban-data";
 
-// A feature's task, projected with its derived status by the kanban-tree op.
-type TaskChild = { id: string; title: string; state: string; status: string; owner?: string };
-
-// A kanban card (epic or feature) plus the two tree joins the op supplies: the
-// epic it hangs under (null for top-level cards) and its tasks.
+// A kanban card (epic or feature) plus the two joins the client caches: the epic
+// it hangs under (null for top-level cards) and its lazily loaded tasks.
 export type KanbanRow = DetailRow & {
   lane: string;
   type: string;
@@ -41,12 +49,13 @@ export type KanbanRow = DetailRow & {
   priority: string;
   epic: string | null;
   tasks: TaskChild[];
+  tasksLoaded: boolean;
 };
 
 const LANE_COLOR: Record<string, string | undefined> = { claimed: "green", in_review: "magenta", pending: "yellow", refinement: "cyan" };
 
-// Derived task status (kanban-tree / `kanban card`): doing is live work, ready is
-// actionable, blocked waits on a dependency, done is closed.
+// Derived task status (`kanban card`): doing is live work, ready is actionable,
+// blocked waits on a dependency, closed is complete.
 const TASK_STATUS_COLOR: Record<string, string | undefined> = { doing: "green", ready: "yellow", blocked: "red" };
 
 // Priority tint mirrors the spool's p1..p4 urgency (spools/kanban.md): p1 is an
@@ -78,42 +87,82 @@ function byLane(a: KanbanRow, b: KanbanRow): number {
   return a.createdAt.localeCompare(b.createdAt);
 }
 
-type TreeCard = {
-  id: string;
-  title?: string;
-  state: string;
-  attributes: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-  type: string;
-  epic: string | null;
-  tasks: TaskChild[];
-};
-
-async function fetchKanban(all: boolean): Promise<KanbanRow[]> {
-  // The kanban-tree op is active-by-default, widened with `--all true` — the same
-  // axis the dash's a-key toggles. It returns the parent-of tiers already joined,
-  // so the dash never walks edges itself.
-  const args = ["kanban-tree", ...(all ? ["--all", "true"] : [])];
-  const res = (await strandJson(args)) as { cards: TreeCard[] };
-  return res.cards.map((s): KanbanRow => {
-    const attrs = s.attributes;
+const rowFromCard = (
+  s: BoardCard,
+  tasks: TaskChild[],
+  tasksLoaded: boolean,
+  epic: string | null,
+): KanbanRow => {
+    const attrs = s.attributes ?? {};
+    const lane = s.state === "closed"
+      ? s.outcome || str(attrs["kanban/outcome"], "") || s.lane || str(attrs["kanban/status"], "?")
+      : s.lane || str(attrs["kanban/lane"], "") || str(attrs["kanban/status"], "?");
     return {
       id: s.id,
       title: s.title,
       state: s.state,
-      branch: str(attrs["branch"], "-"),
-      lane: str(attrs["kanban/lane"], "") || str(attrs["kanban/outcome"], "") || str(attrs["kanban/status"], "?"),
-      type: s.type,
-      owner: str(attrs["owner"], "-"),
-      priority: str(attrs["kanban/priority"], "p3"),
+      branch: s.branch ?? str(attrs["branch"], "-"),
+      lane,
+      type: s.type ?? str(attrs["kanban/type"], "feature"),
+      owner: s.owner ?? str(attrs["owner"], "-"),
+      priority: s.priority ?? str(attrs["kanban/priority"], "p3"),
       createdAt: s.created_at,
-      updatedAt: s.updated_at,
+      updatedAt: s.updated_at ?? s.created_at,
       attrs,
-      epic: s.epic ?? null,
-      tasks: s.tasks ?? [],
+      epic,
+      tasks,
+      tasksLoaded,
     };
+};
+
+async function fetchTaskDetails(
+  ids: string[],
+  cached: Map<string, TaskChild[]>,
+  cachedCards: Map<string, BoardCard>,
+): Promise<{
+  taskCache: Map<string, TaskChild[]>;
+  cardCache: Map<string, BoardCard>;
+  taskFailures: Map<string, string>;
+}> {
+  return loadCardDetails(
+    ids,
+    cached,
+    cachedCards,
+    async (id) => (await strandJson(["kanban", "card", id])) as CardView,
+  );
+}
+
+async function fetchActiveKanban(
+  taskCache: Map<string, TaskChild[]>,
+  cardCache: Map<string, BoardCard>,
+): Promise<KanbanRow[]> {
+  const board = (await strandJson(["kanban", "board"])) as BoardSnapshot;
+  const cards = activeBoardCards(board);
+  return cards.map((card) => {
+    const detail = cardCache.get(card.id);
+    return rowFromCard(
+      detail ?? card,
+      activeTasks(taskCache.get(card.id) ?? []),
+      taskCache.has(card.id),
+      card.epic ?? null,
+    );
   });
+}
+
+async function fetchAllKanban(
+  taskCache: Map<string, TaskChild[]>,
+  cardCache: Map<string, BoardCard>,
+): Promise<KanbanRow[]> {
+  const board = (await strandJson(["kanban", "board", "--all", "true"])) as BoardSnapshot;
+  if (!Array.isArray(board.cards)) {
+    throw new Error("kanban board --all true returned no cards collection");
+  }
+  return board.cards.map((card) => rowFromCard(
+      cardCache.get(card.id) ?? card,
+      taskCache.get(card.id) ?? [],
+      taskCache.has(card.id),
+      card.epic ?? null,
+    ));
 }
 
 // ── tree flattening ──────────────────────────────────────────────────────────
@@ -166,7 +215,7 @@ function flatten(cards: KanbanRow[], collapsed: Set<string>, expanded: Set<strin
     const isEpic = card.type === "epic";
     const feats = isEpic ? featuresByEpic.get(card.id) ?? [] : [];
     const open = isEpic ? !collapsed.has(card.id) : expanded.has(card.id);
-    const hasChildren = isEpic ? feats.length > 0 : card.tasks.length > 0;
+    const hasChildren = isEpic ? feats.length > 0 : !card.tasksLoaded || card.tasks.length > 0;
     rows.push({ key: card.id, depth, guide: guideOf(depth, segs, last), kind: "card", card, marker: hasChildren ? (open ? "open" : "closed") : "leaf" });
     if (!open || !hasChildren) return;
     const childSegs = depth === 0 ? [] : [...segs, last ? "  " : "│ "];
@@ -278,7 +327,7 @@ function KanbanTree({
         // the lane column and read dimmer overall (they hang under their feature).
         const laneColor = isSelected ? undefined : isTask ? TASK_STATUS_COLOR[r.task.status] : LANE_COLOR[rowLane(r)];
         const closed = r.kind === "card" && r.card.state === "closed";
-        const laneDim = !isSelected && (isTask ? r.task.status === "done" : closed);
+        const laneDim = !isSelected && (isTask ? r.task.state === "closed" : closed);
         const cells: Cell[] = [
           { text: pad(rowIdCell(r), w.id), dimColor: !isSelected && isTask },
           { text: "  " },
@@ -288,7 +337,7 @@ function KanbanTree({
           { text: "  " },
           { text: pad(rowType(r), w.type), dimColor: !isSelected && rowType(r) !== "epic" },
           { text: "  " },
-          { text: pad(rowTitle(r), titleWidth), dimColor: !isSelected && (isTask ? r.task.status === "done" : closed) },
+          { text: pad(rowTitle(r), titleWidth), dimColor: !isSelected && (isTask ? r.task.state === "closed" : closed) },
           { text: "  " },
           { text: pad(rowOwner(r), w.owner), dimColor: !isSelected },
           { text: "  " },
@@ -374,6 +423,17 @@ function MergeLockBanner(st: LockState, ctx: RenderCtx) {
   }
 }
 
+function TaskFailureBanner(failures: Map<string, string>, ctx: RenderCtx) {
+  if (failures.size === 0) return null;
+  const [[id, message]] = failures;
+  const suffix = failures.size === 1 ? "" : ` · ${failures.size - 1} more`;
+  return (
+    <Text bold color="red">
+      {clip(`TASK DETAIL ${id} failed · ${oneLine(message)}${suffix}`, ctx.cols)}
+    </Text>
+  );
+}
+
 // ── the tab ────────────────────────────────────────────────────────────────
 // kanban is a list+detail tab with a status strip, so it composes the shared
 // movement/scroll reducers directly (like agents/devflow) rather than a shared list
@@ -384,6 +444,9 @@ function MergeLockBanner(st: LockState, ctx: RenderCtx) {
 // shaped stays put while the board refreshes underneath it.
 type KanbanView = {
   rows: KanbanRow[];
+  taskCache: Map<string, TaskChild[]>;
+  cardCache: Map<string, BoardCard>;
+  taskFailures: Map<string, string>;
   lock: LockState;
   loaded: boolean;
   failure: string | null;
@@ -395,8 +458,23 @@ type KanbanView = {
 export const kanbanTab = defineTab<KanbanView>({
   id: "kanban",
   label: "KANBAN",
-  init: () => ({ rows: [], lock: { kind: "none" }, loaded: false, failure: null, collapsed: new Set(), expanded: new Set(), s: emptyListState() }),
-  fetchKey: () => "",
+  init: () => ({
+    rows: [],
+    taskCache: new Map(),
+    cardCache: new Map(),
+    taskFailures: new Map(),
+    lock: { kind: "none" },
+    loaded: false,
+    failure: null,
+    collapsed: new Set(),
+    expanded: new Set(),
+    s: emptyListState(),
+  }),
+  fetchKey: (v) => {
+    const selected = cardAt(flatten(v.rows, v.collapsed, v.expanded), v.s.selected);
+    const detail = v.s.view === "detail" && selected ? selected.id : "";
+    return `${[...v.expanded].sort().join(",")}|${detail}`;
+  },
   allApplies: () => true,
   inDetail: (v) => v.s.view === "detail",
   editTarget: (v) => cardAt(flatten(v.rows, v.collapsed, v.expanded), v.s.selected) ?? null,
@@ -406,16 +484,30 @@ export const kanbanTab = defineTab<KanbanView>({
     const row = flatten(v.rows, v.collapsed, v.expanded)[v.s.selected];
     return row ? rowId(row) : null;
   },
-  refresh: async (_v, all) => {
-    // The board is the tab's primary data: a kanban-tree failure surfaces as the
+  refresh: async (v, all) => {
+    // The board is the tab's primary data: a kanban read failure surfaces as the
     // full-pane <Failure>. The merge-lock scan is isolated inside fetchMergeLock
     // (it resolves failures to a LockState.error rather than throwing), so a flaky
     // merge-lock query degrades to a loud banner and never blanks a good board.
     try {
-      const [rows, lock] = await Promise.all([fetchKanban(all), fetchMergeLock()]);
+      const selected = cardAt(flatten(v.rows, v.collapsed, v.expanded), v.s.selected);
+      const detailIds = new Set(v.expanded);
+      if (v.s.view === "detail" && selected) detailIds.add(selected.id);
+      const [details, lock] = await Promise.all([
+        fetchTaskDetails([...detailIds], v.taskCache, v.cardCache),
+        fetchMergeLock(),
+      ]);
+      const { taskCache, cardCache, taskFailures } = details;
+      const rows = all
+        ? await fetchAllKanban(taskCache, cardCache)
+        : await fetchActiveKanban(taskCache, cardCache);
       return (latest) => ({
         ...latest,
         rows,
+        taskCache,
+        cardCache,
+        taskFailures: new Map([...taskFailures].filter(([id]) => rows.some((row) => row.id === id))),
+        expanded: new Set([...latest.expanded].filter((id) => rows.some((row) => row.id === id))),
         lock,
         loaded: true,
         failure: null,
@@ -438,7 +530,7 @@ export const kanbanTab = defineTab<KanbanView>({
     }
     // The banner steals a list row when it draws, so page jumps size against the
     // same reduced viewport the list renders into, not the raw terminal.
-    const listRows = ctx.termRows - lockRows(v.lock);
+    const listRows = ctx.termRows - lockRows(v.lock) - (v.taskFailures.size > 0 ? 1 : 0);
     const moved = reduceListKeys(v.s, input, key, rows, keyOf, listPage(listRows));
     if (moved) return { ...v, s: moved };
     // Expand/collapse the selected card. Epics default open (toggle via collapsed);
@@ -452,12 +544,15 @@ export const kanbanTab = defineTab<KanbanView>({
         open ? collapsed.delete(card.id) : collapsed.add(card.id);
         return { ...v, collapsed };
       }
-      if (card.tasks.length === 0) return v;
+      if (card.tasksLoaded && card.tasks.length === 0) return v;
       const expanded = new Set(v.expanded);
       open ? expanded.add(card.id) : expanded.delete(card.id);
       return { ...v, expanded };
     }
-    if (key.return || key.rightArrow || input === "l") return cardAt(rows, v.s.selected) ? { ...v, s: { ...v.s, view: "detail", detailScroll: 0 } } : v;
+    if (key.return || key.rightArrow || input === "l") {
+      if (!cardAt(rows, v.s.selected)) return v;
+      return { ...v, s: { ...v.s, view: "detail", detailScroll: 0 } };
+    }
     if (input === "r") ctx.refresh();
     return v;
   },
@@ -468,10 +563,11 @@ export const kanbanTab = defineTab<KanbanView>({
       return <DetailView row={cardAt(rows, v.s.selected)} scroll={v.s.detailScroll} cols={ctx.cols} termRows={ctx.termRows} />;
     // The banner reserves its row so the list windows against the height it gets and
     // the stacked heights still sum to the pinned frame (detail view hides the strip).
-    const reserved = lockRows(v.lock);
+    const reserved = lockRows(v.lock) + (v.taskFailures.size > 0 ? 1 : 0);
     return (
       <Box flexDirection="column">
         {MergeLockBanner(v.lock, ctx)}
+        {TaskFailureBanner(v.taskFailures, ctx)}
         <KanbanTree
           rows={rows}
           selected={v.s.selected}

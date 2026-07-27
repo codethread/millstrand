@@ -4,7 +4,6 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [skein.api.runtime.alpha :as runtime]
             [skein.api.weaver.alpha :as weaver]
             [skein.core.weaver.module-graph :as module-graph]
             [skein.core.weaver.module-publication :as publication]
@@ -137,32 +136,3 @@
                                          (not (contains? (:required returns {}) :operation)))
                                 name)))
                       entries))))))))
-
-(deftest kanban-tree-builds-on-the-canonical-entity-projection
-  (run-with-config-world
-   (fn [runtime]
-     ;; The synced spool classloader has already loaded ct.spools.kanban's root;
-     ;; require makes the ns image-present so the module declaration may trust it.
-     (require 'ct.spools.kanban)
-     (let [result (runtime/module!
-                   runtime :kanban
-                   {:ns 'ct.spools.kanban
-                    :load :image})]
-       (is (= :applied (get-in result [:modules :kanban :status]))
-           "the pinned sibling activates from its own public spool var"))
-     (publish-authoring! runtime :config ".skein/config.clj")
-     (let [card (weaver/add! runtime
-                             {:title "Feature"
-                              :attributes {:kanban/card "true"
-                                           :kanban/type "feature"}})
-           projection ((ns-resolve 'config 'kanban-tree-projection) runtime false)
-           row (first (:cards projection))]
-       (is (= (select-keys card [:id :title :state :attributes])
-              (select-keys row [:id :title :state :attributes])))
-       (is (= #{:id :title :state :attributes :created_at :updated_at
-                :type :epic :tasks}
-              (set (keys row))))
-       (is (= {:type "feature" :epic nil :tasks []}
-              (select-keys row [:type :epic :tasks])))
-       (is (= (:created_at card) (:created_at row)))
-       (is (= (:updated_at card) (:updated_at row)))))))
