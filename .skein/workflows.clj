@@ -18,6 +18,7 @@
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [config :as config]
             [skein.macros.ops :refer [defop]]
             [skein.macros.patterns :refer [defpattern]]
             [skein.api.current.alpha :as current]
@@ -68,6 +69,15 @@
   (or (workflow/current-root feature)
       (throw (ex-info "land run not found" {:feature feature}))))
 
+(defn- require-sane-merge-locks!
+  "Return active locks, refusing a corrupt multiple-lock state."
+  []
+  (let [locks (active-merge-locks)]
+    (when (> (count locks) 1)
+      (throw (ex-info "multiple active merge locks found; inspect and repair manually"
+                      {:locks (mapv :id locks)})))
+    locks))
+
 (defn- acquire-merge-lock!
   "Acquire the singleton merge lock and report whether this call created it."
   [feature]
@@ -78,7 +88,7 @@
         (fn []
           (let [root (land-root feature)
                 owner (:id root)
-                locks (active-merge-locks)
+                locks (require-sane-merge-locks!)
                 owned (some #(when (and (= owner (attr-value % :owner))
                                         (= feature (attr-value % :land/run-id)))
                                %)
@@ -96,15 +106,6 @@
                                                      :owner owner
                                                      :land/run-id feature}})
                  :created? true}))))))))
-
-(defn- require-sane-merge-locks!
-  "Return active locks, refusing a corrupt multiple-lock state."
-  []
-  (let [locks (active-merge-locks)]
-    (when (> (count locks) 1)
-      (throw (ex-info "multiple active merge locks found; inspect and repair manually"
-                      {:locks (mapv :id locks)})))
-    locks))
 
 (defn- release-merge-lock!
   "Release the merge lock held by feature, if one exists."

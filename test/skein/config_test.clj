@@ -1353,7 +1353,16 @@
                               (op! "land" ["choose" "land-reused-lock" "approved"
                                            "--input" "{}"])))
         (is (= "active" (:state (weaver/show rt (:id lock)))))
-        (is (= [(:id lock)] (mapv :id (active-merge-locks))))))))
+        (is (= [(:id lock)] (mapv :id (active-merge-locks))))
+        (weaver/add! rt {:title "Corrupt second merge lock"
+                         :attributes {:kind "merge-lock"
+                                      :land/run-id "other-land-run"}})
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"multiple active merge locks found"
+             (op! "land" ["choose" "land-reused-lock" "approved"
+                          "--input"
+                          "{\"subject\":\"feat: reused\",\"body\":\"Squashed commits: abc123\"}"])))))))
 
 (deftest land-signoff-revise-repours-with-context-and-no-merge-lock
   (with-config-runtime
