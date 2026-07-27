@@ -124,9 +124,9 @@ Honest source: this repo's `agent-failure-rule` and `hitl-checkpoint-ready-rule`
 
 ## Recipe: Notify when an interactive session is waiting
 
-**Situation.** A `strand hitl` or `agent delegate --interactive` run starts a live multiplexer session. The attach command is available from `strand agent ps`, but the human should not have to poll for it. You want one notification when an interactive agent-run run enters `running`, with the same attach hint that `ps` shows.
+**Situation.** An `agent delegate --interactive` run starts a live multiplexer session. The attach command is available from `strand agent ps`, but the human should not have to poll for it. You want one notification when an interactive agent-run run enters `running`, with the same attach hint that `ps` shows.
 
-**Composition.** Keep this in userland. Agent-run exposes durable run attributes and the `ps` summary includes `attach`; chime only needs a normal rule that recognises a running interactive run. Put the rule in trusted workspace code and register it from startup config after chime is active.
+**Composition.** Follow the tracking-task contract from `strand about agent`, then keep notification policy in userland. Agent-run exposes durable run attributes and the `ps` summary includes `attach`; chime only needs a normal rule that recognises a running interactive run. Put the rule in trusted workspace code and register it from startup config after chime is active.
 
 ```clojure
 (ns my.rules
@@ -176,8 +176,8 @@ Honest source: agent-run's `run-summary` / `runs` implementation in
 and the external [`delegation/README.md`][delegation-contract] documents that `strand agent ps`
 carries `mode`, `backend`, `session`, and `attach` for interactive summaries.
 
-[agent-run-source]: https://github.com/codethread/agent-harness.spool/blob/d01e6ce6555d370dc5c9e4e0371cdabe10fab491/agent-run/src/ct/spools/agent_run.clj
-[delegation-contract]: https://github.com/codethread/agent-harness.spool/blob/d01e6ce6555d370dc5c9e4e0371cdabe10fab491/delegation/README.md
+[agent-run-source]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/agent-run/src/ct/spools/agent_run.clj
+[delegation-contract]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/delegation/README.md
 
 ---
 

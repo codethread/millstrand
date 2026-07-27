@@ -72,7 +72,7 @@
 
 (def ^:private harness-defs
   "Repo-local harness (tool) definitions: the codex tool, its read-only sandbox
-  variant, and the interactive hitl tools that cannot alias the headless
+  variant, and interactive tools that cannot alias the headless
   :claude. Seats (aliases) over these tools live in `alias-defs`."
   {;; Sessions persist to disk, so `codex exec resume <session-id>` can
    ;; continue them once a codex-json parse captures session ids; :resume
@@ -126,7 +126,7 @@
            |event stream, parse, resume, and rate-card behavior to :codex; the
            |sandbox is the only difference. A seat needing even one write — or
            |the strand CLI (weaver socket) — belongs on :codex instead.")}
-   ;; Interactive TUI tools for `strand hitl` sessions. These cannot alias
+   ;; Interactive TUI tools for `agent delegate --interactive`. These cannot alias
    ;; :claude: the shipped harness is headless (`claude -p`, prompt on stdin)
    ;; and exits immediately inside a multiplexer pane — an interactive launch
    ;; requires the prompt as the initial argv message (the session owns stdin).

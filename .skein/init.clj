@@ -13,7 +13,7 @@
 ;; `spool` var and needs none.
 ;;
 ;; File-per-concern map (each is one module):
-;;   config.clj        — named queries + the devflow/hitl CLI op surface
+;;   config.clj        — named queries + shared policy validation helpers
 ;;   workflows.clj     — hand-authored workflows + the land policy op
 ;;   harnesses.clj     — harness seats + routing policy
 ;;   reviewers.clj     — reviewer rosters
@@ -191,17 +191,14 @@
                   :after [:skein/spools-cron :skein/spools-kanban]
                   :required? true})
 
-;; --- config op surface and hand-authored workflows -------------------------
-;; config.clj authors the devflow/kanban/hitl ops and named queries with
-;; defop/defquery, so its contribution is those entries; it requires the workflow
-;; engine, shuttle vocab, devflow, and the ops/queries macros, so it orders after
-;; each. It is required: a guarded-but-optional module would drop the op surface.
+;; --- config queries/helpers and hand-authored workflows ---------------------
+;; config.clj authors named queries with defquery and public validation helpers
+;; reused by workflows.clj. It is required: a guarded-but-optional module would
+;; drop the query surface.
 (runtime/module! runtime :config
                  {:file "config.clj"
-                  :spools ['skein.spools/workflow 'ct.spools/agent-run
-                           'codethread/devflow 'skein.macros/macros]
-                  :after [:skein/spools-workflow :skein/spools-shuttle
-                          :skein/spools-devflow :macros/ops :macros/queries]
+                  :spools ['skein.macros/macros]
+                  :after [:macros/queries]
                   :required? true})
 ;; workflows.clj authors land/story definitions, the narrow land policy op, and
 ;; the delegate-pipeline pattern. It reuses config.clj's public validation
