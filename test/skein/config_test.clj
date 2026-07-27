@@ -1645,7 +1645,7 @@
            (:spools (get modules :config)))
         ":config must guard every spool coordinate its config.clj ns requires")
     (is (true? (:required? (get modules :config)))
-        ":config is required — a guarded but non-required module skips silently, dropping the query surface")
+        ":config must remain required or its query surface can disappear")
     (is (= ['skein.spools/workflow 'ct.spools/delegation 'skein.macros/macros]
            (:spools (get modules :workflows)))
         ":workflows must opt into skein.spools/workflow, ct.spools/delegation, and the authoring macros")
