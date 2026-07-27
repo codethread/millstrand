@@ -78,6 +78,19 @@
                       {:locks (mapv :id locks)})))
     locks))
 
+(defn- require-owned-merge-lock!
+  "Return feature's sole active lock, failing when absent or owned elsewhere."
+  [feature]
+  (if-let [lock (first (require-sane-merge-locks!))]
+    (if (= feature (attr-value lock :land/run-id))
+      lock
+      (throw (ex-info "another land run holds the merge lock"
+                      {:lock (:id lock)
+                       :land/run-id (attr-value lock :land/run-id)
+                       :expected-run-id feature})))
+    (throw (ex-info "land cleanup requires its active merge lock"
+                    {:land/run-id feature}))))
+
 (defn- acquire-merge-lock!
   "Acquire the singleton merge lock and report whether this call created it."
   [feature]
@@ -121,16 +134,16 @@
   "Explicitly break a stale merge lock with a human-supplied reason."
   [reason]
   (config/require-non-blank! :reason reason)
-  (let [locks (active-merge-locks)]
-    (when (> (count locks) 1)
-      (throw (ex-info "multiple active merge locks found; inspect and repair manually"
-                      {:locks (mapv :id locks)})))
-    (if-let [lock (first locks)]
-      {:broken (entity-projection (weaver/update! (current/runtime)
-                                                  (:id lock)
-                                                  {:state "closed"
-                                                   :attributes {:land/broken-reason reason}}))}
-      {:broken nil})))
+  (let [rt (current/runtime)]
+    (with-merge-lock-acquisition
+      rt
+      (fn []
+        (if-let [lock (first (require-sane-merge-locks!))]
+          {:broken (entity-projection (weaver/update! rt
+                                                      (:id lock)
+                                                      {:state "closed"
+                                                       :attributes {:land/broken-reason reason}}))}
+          (throw (ex-info "no active merge lock to break" {:reason reason})))))))
 
 (defn- move-card-to-review!
   "Move an optional claimed card to in_review; return true only when changed."
@@ -887,16 +900,19 @@
                   (suppressing-rollback! t #(move-card-to-rework! card)))
                 (throw t))))
 
-          (some #(contains? #{"land.cleanup" "land.abort.record"} (:action-ref %))
-                ready)
+          (some #(contains? #{"land.cleanup" "land.abort.record"} (:action-ref %)) ready)
           (do
             (when (some? pr-number)
               (throw (ex-info "--pr-number is only accepted at push-draft-pr"
                               {:run-id feature :pr-number pr-number})))
-            (require-sane-merge-locks!)
-            (let [result (workflow/complete! feature)]
-              (release-merge-lock! feature "land terminal cleanup")
-              result))
+            (with-merge-lock-acquisition
+              (current/runtime)
+              (fn []
+                (when (some #(= "land.cleanup" (:action-ref %)) ready)
+                  (require-owned-merge-lock! feature))
+                (let [result (workflow/complete! feature)]
+                  (release-merge-lock! feature "land terminal cleanup")
+                  result))))
 
           :else
           (throw (ex-info "land complete requires a PR-open or terminal policy frontier"
@@ -991,7 +1007,8 @@
                                         |step: continue with `strand workflow start
                                         |<new-land-run-id> --workflow land --params
                                         |<land-params-json>`. The params name this run's existing
-                                        |feature id; the land run id is new. Then close this run.")))})))
+                                        |feature id; the land run id is new. Then close this
+                                        |run.")))})))
 
 (workflow/defworkflow story-keep
   "Keep a story split: the per-concern files are the deliverable.
@@ -1023,7 +1040,8 @@
                                         |signoff-review step: `strand workflow start
                                         |<new-land-run-id> --workflow land --params
                                         |<land-params-json>`. The params name this run's existing
-                                        |feature id; the land run id is new. Then close this run.")))})))
+                                        |feature id; the land run id is new. Then close this
+                                        |run.")))})))
 
 (workflow/defworkflow story
   "Run the module-form STORY workflow (family \"story\").

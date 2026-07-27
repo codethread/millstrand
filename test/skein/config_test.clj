@@ -1457,7 +1457,11 @@
         (is (= "closed" (get-in broken [:broken :state])))
         (is (= "coordinator confirmed stale lock"
                (get-in broken [:broken :attributes :land/broken-reason])))
-        (is (empty? (active-merge-locks)))))))
+        (is (empty? (active-merge-locks))))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"no active merge lock to break"
+                            (op! "land" ["break-lock" "--reason"
+                                         "must not report a nonexistent intervention"]))))))
 
 (deftest land-break-lock-refuses-to-break-when-multiple-locks-are-active
   (with-config-runtime
