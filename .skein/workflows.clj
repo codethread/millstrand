@@ -511,8 +511,13 @@
                                    :opt-un [::card]))
 (s/def ::land-abort-params (s/keys :req-un [::branch ::reason]))
 
-(s/def ::land-abort-input (s/keys :req-un [::reason]))
-(s/def ::land-merge-input (s/keys :req-un [::subject ::body]))
+(s/def ::land-abort-input
+  (s/and (s/keys :req-un [::reason])
+         #(every? #{:reason} (keys %))))
+(s/def ::land-merge-input
+  (s/and (s/keys :req-un [::subject ::body])
+         #(every? #{:subject :body} (keys %))))
+(s/def ::land-policy-choice #{"approved" "abort"})
 
 (def ^:private land-abort-reason-input
   "Declared choice input for the land sign-off abort choice: a required
@@ -549,6 +554,20 @@
                [(if (string? k) (keyword k) k) v]))
         input))
 
+(defn- require-choice-input-keys!
+  "Return input when it contains no keys outside choice's closed contract."
+  [choice input]
+  (let [allowed (case choice
+                  "approved" #{:subject :body}
+                  "abort" #{:reason})
+        unknown (vec (remove allowed (keys input)))]
+    (when (seq unknown)
+      (throw (ex-info "land choose input contains unsupported keys"
+                      {:choice choice
+                       :unknown unknown
+                       :allowed (vec (sort allowed))})))
+    input))
+
 (def ^:private land-merge-script
   "Idempotently ready and squash-merge the feature PR."
   (script "land-merge.sh"))
@@ -574,8 +593,8 @@
 (workflow/defworkflow land-abort
   "Record an intentional abort of a land run.
 
-  Routed to by the sign-off checkpoint's `choose abort` choice: a hard cutover that
-  force-closes the remaining land steps and pours this single record step.
+  Routed to by the sign-off checkpoint's `choose abort` choice: a hard cutover
+  that force-closes the remaining land steps and pours this single record step.
   Nothing merges or pushes; the branch and worktree stay for follow-up."
   {:entrypoints #{:continue}
    :param-spec ::land-abort-params
@@ -867,6 +886,7 @@
               :positionals [{:name :run-id :required? true :doc "Land run id."}
                             {:name :choice
                              :required? true
+                             :spec ::land-policy-choice
                              :doc "Closed policy enum: approved or abort."}]}
     "break-lock" {:doc "Explicitly break a stale merge lock with a reason."
                   :hook-class :mutating :deadline-class :standard
@@ -930,34 +950,43 @@
                           {:run-id feature :ready ready}))))
 
       "choose"
-      (let [feature (require-land-input! ::run-id :run-id run-id)
-            input (keywordize-input! "choose" input)]
-        (case choice
-          "approved"
-          (let [{:keys [created?]} (acquire-merge-lock! feature)]
-            (try
-              (workflow/choose! feature :approved input)
-              (catch Throwable t
-                (when created?
-                  (suppressing-rollback! t
-                                         #(release-merge-lock! feature
-                                                               "land choose failed")))
-                (throw t))))
-
-          "abort"
-          (let [context (attr-value (workflow/current-root feature) :workflow/context)
-                card (or (:card context) (get context "card"))
-                changed? (move-card-to-rework! card)]
-            (try
-              (workflow/choose! feature :abort input)
-              (catch Throwable t
-                (when changed?
-                  (suppressing-rollback! t #(move-card-to-review! card)))
-                (throw t))))
-
+      (let [feature (require-land-input! ::run-id :run-id run-id)]
+        (when-not (s/valid? ::land-policy-choice choice)
           (throw (ex-info "land choose accepts only approved or abort"
-                          {:run-id feature :choice choice
-                           :allowed ["approved" "abort"]}))))
+                          {:run-id feature
+                           :choice choice
+                           :allowed (vec (sort (s/describe ::land-policy-choice)))
+                           :spec ::land-policy-choice
+                           :explain (s/explain-data ::land-policy-choice choice)})))
+        (let [input (->> input
+                         (keywordize-input! "choose")
+                         (require-choice-input-keys! choice))]
+          (case choice
+            "approved"
+            (let [{:keys [created?]} (acquire-merge-lock! feature)]
+              (try
+                (workflow/choose! feature :approved input)
+                (catch Throwable t
+                  (when created?
+                    (suppressing-rollback! t
+                                           #(release-merge-lock! feature
+                                                                 "land choose failed")))
+                  (throw t))))
+
+            "abort"
+            (let [context (attr-value (workflow/current-root feature) :workflow/context)
+                  card (or (:card context) (get context "card"))
+                  changed? (move-card-to-rework! card)]
+              (try
+                (workflow/choose! feature :abort input)
+                (catch Throwable t
+                  (when changed?
+                    (suppressing-rollback! t #(move-card-to-review! card)))
+                  (throw t))))
+
+            (throw (ex-info "land choose accepts only approved or abort"
+                            {:run-id feature :choice choice
+                             :allowed ["approved" "abort"]})))))
 
       "break-lock" (break-merge-lock! reason))))
 

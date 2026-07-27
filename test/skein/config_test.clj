@@ -1157,12 +1157,17 @@
         (is (= #{"approved" "revise" "abort"} (set (keys choices))))
         (is (= "workflows/land-merge-input" (get approved-input "spec")))
         (is (= "workflows/land-abort-input" (get abort-input "spec")))
-        (is (= "(clojure.spec.alpha/keys :req-un [:workflows/subject :workflows/body])"
+        (is (= "(clojure.spec.alpha/and (clojure.spec.alpha/keys :req-un [:workflows/subject :workflows/body]) (clojure.core/fn [%] (clojure.core/every? #{:body :subject} (clojure.core/keys %))))"
                (get (first (get approved-input "spec-forms")) "form")))
-        (is (= "(clojure.spec.alpha/keys :req-un [:workflows/reason])"
+        (is (= "(clojure.spec.alpha/and (clojure.spec.alpha/keys :req-un [:workflows/reason]) (clojure.core/fn [%] (clojure.core/every? #{:reason} (clojure.core/keys %))))"
                (get (first (get abort-input "spec-forms")) "form"))))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Value does not satisfy the named spec"
                             (op! "land" ["choose" "land-x" "approved" "--input" "{}"])))
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"input contains unsupported keys"
+           (op! "land" ["choose" "land-x" "approved" "--input"
+                        "{\"subject\":\"feat: land x\",\"body\":\"Squashed commits: abc123\",\"subjet\":\"typo\"}"])))
       ;; approval routes to the mechanical merge continuation. Subject and body
       ;; remain argv elements rather than being interpolated into shell source.
       (let [subject "feat: land x"
@@ -1229,6 +1234,19 @@
         ;; entirely rather than render a literal "<card>" placeholder
         (is (not (str/includes? (:instruction cleanup-step) "kanban finish")))
         (is (not (str/includes? (:instruction cleanup-step) "<card>"))))
+      (let [owned (first (active-merge-locks))]
+        (weaver/update! rt (:id owned) {:state "closed"})
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"cleanup requires its active merge lock"
+                              (op! "land" ["complete" "land-x"])))
+        (let [foreign (weaver/add! rt {:title "Foreign merge lock"
+                                       :attributes {:kind "merge-lock"
+                                                    :land/run-id "other-land-run"}})]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                #"another land run holds the merge lock"
+                                (op! "land" ["complete" "land-x"])))
+          (weaver/update! rt (:id foreign) {:state "closed"}))
+        (weaver/update! rt (:id owned) {:state "active"}))
       (let [duplicate (weaver/add! rt {:title "Corrupt duplicate merge lock"
                                        :attributes {:kind "merge-lock"
                                                     :land/run-id "other-land-run"}})]
@@ -1518,6 +1536,9 @@
       ;; required flags and positionals fail loudly at parse
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required flag --input"
                             (op! "land" ["choose" "no-input" "approved"])))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"accepts only approved or abort"
+                            (op! "land" ["choose" "unused-run" "revise"
+                                         "--input" "{}"])))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required argument run-id"
                             (op! "land" ["complete"]))))))
 
