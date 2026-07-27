@@ -126,22 +126,7 @@ Honest source: this repo's `agent-failure-rule` and `hitl-checkpoint-ready-rule`
 
 **Situation.** An `agent delegate --interactive` run starts a live multiplexer session. The attach command is available from `strand agent ps`, but the human should not have to poll for it. You want one notification when an interactive agent-run run enters `running`, with the same attach hint that `ps` shows.
 
-**Composition.** Create a tracking strand with the session brief in `body`, attach it beneath the work root, then delegate it. The brief must tell the interactive worker to record decisions as notes, write an `outcome` summary, and close the tracking strand only after its final commit. Closing the served strand completes the run and lets agent-run tear down the session.
-
-```sh
-tracking="$(
-  strand add "Interactive review: storage boundary" \
-    --attr hitl=true \
-    --attr body="Review the storage boundary with the user. Record decisions as notes. Before closing this strand, write outcome with decisions, commits, and open questions." |
-  jq -r '.id'
-)"
-strand update "$parent" --edge "parent-of:$tracking"
-strand agent delegate "$tracking" \
-  --interactive --backend tmux --harness hitl-fable --cwd "$PWD"
-strand agent ps
-```
-
-Agent-run exposes durable run attributes and the `ps` summary includes `attach`; chime only needs a normal rule that recognises a running interactive run. Put the rule in trusted workspace code and register it from startup config after chime is active.
+**Composition.** Follow the tracking-task contract from `strand about agent`, then keep notification policy in userland. Agent-run exposes durable run attributes and the `ps` summary includes `attach`; chime only needs a normal rule that recognises a running interactive run. Put the rule in trusted workspace code and register it from startup config after chime is active.
 
 ```clojure
 (ns my.rules

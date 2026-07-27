@@ -51,9 +51,7 @@ relevant files, and validation expectations.
 3. Add `body` context to any strand another agent may pick up.
 4. Run `strand ready` and pick from ready work, not the full list. Prefer a repo-curated
    ready query when one is registered: `strand ready --query <name>`.
-5. Respect attribute conventions the repo's spools declare — for example, a ready strand
-   carrying `hitl=true` means stop and ask the user before doing it. `strand vocab`
-   documents registered attribute namespaces.
+5. Respect attribute conventions the repo's spools declare — for example, a ready strand carrying `hitl=true` means stop and ask the user before doing it. `strand about agent` documents how interactive tasks use that convention.
 6. Complete one ready strand or one tightly related pair, then run relevant validation.
 7. If new work is discovered, add and wire it before closing the current loop.
 8. Close completed strands: `strand update <id> --state closed`.
