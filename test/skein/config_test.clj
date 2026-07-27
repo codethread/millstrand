@@ -2,7 +2,7 @@
   "Tests for the repo-local .skein config modules (config.clj plus the
   harnesses.clj, workflows.clj, and analytics.clj siblings): registration
   surface, the delegate-pipeline weave pattern, the land workflow, the
-  devflow op wrappers over ct.spools.devflow, and the feature-costs
+  generic workflow integration with ct.spools.devflow, and the feature-costs
   usage rollup."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
@@ -12,7 +12,6 @@
             [clojure.test :refer [deftest is testing]]
             [skein.core.db-test :as db-test]
             [skein.api.current.alpha :as current]
-            [skein.api.format.alpha :as format-alpha]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :as spool-api]
             [skein.api.graph.alpha :as graph]
@@ -264,10 +263,7 @@
   Every op authored as a `defop` in .skein/config.clj; the surrounding spool ops
   (kanban/agent/bench) and workflow ops (land) are untouched by the refactor and
   are covered by their own tests, so this holistic guard scopes to config.clj."
-  ["devflow-start" "devflow-ready" "devflow-choices" "devflow-choose"
-   "devflow-complete" "devflow-advance"
-   "devflow-describe" "devflow-run-history" "devflow-squash-run" "devflow-status"
-   "workflow-runs" "devflow-conventions" "hitl"])
+  ["workflow-runs" "hitl"])
 
 (def ^:private named-query-names
   "The config-owned named queries whose registered definitions the refactor must
@@ -299,11 +295,9 @@
 
   The surface is `{:op-help {op -> help-detail} :queries {name -> definition}}`.
   Only config.clj is loaded (no harnesses/workflows), so this captures exactly the
-  op/query surface the defquery/defop refactor could have perturbed; the
-  devflow-conventions payload is pinned separately by
-  `devflow-conventions-op-lists-repo-conventions`. Used both to snapshot the
-  pre-refactor baseline and to capture the current converted config for a
-  byte-identical comparison.
+  op/query surface the defquery/defop refactor could have perturbed. Used both
+  to snapshot the pre-refactor baseline and to capture the current converted
+  config for a byte-identical comparison.
 
   devflow is loaded first, the way init.clj's `:after` ordering loads it before
   `:config`. Its stages are top-level `defworkflow` forms, so letting
@@ -340,11 +334,8 @@
                       "feature-owner-work" "feature-run" "workflow-runs" "devflow-runs" "work"]]
     (is (contains? (graph/queries rt) query-name)))
   (is (contains? (graph/queries rt) "bench-runs"))
-  (doseq [op-name ["kanban" "devflow-start" "devflow-ready" "devflow-choices"
-                   "devflow-choose" "devflow-complete" "devflow-advance"
-                   "devflow-describe" "devflow-run-history" "devflow-squash-run"
-                   "devflow-status" "workflow-runs" "devflow-conventions"
-                   "hitl" "land" "workflow" "agent" "bench"]]
+  (doseq [op-name ["kanban" "workflow-runs" "hitl" "land" "workflow"
+                   "agent" "bench"]]
     (is (some #(= op-name (:name %)) (weaver/ops rt)) op-name))
   (is (some #(= "delegate-pipeline" (:name %)) (patterns/patterns rt)))
   ;; agent-plan is spool-owned now; a real startup wires the agents spool in
@@ -367,90 +358,9 @@
     (is (= [:change-review :complex-patch-review :docs-review] (mapv :name rosters)))
     (is (some #(= "test-sleeps" (:name %)) (:seats (first rosters))))))
 
-(deftest devflow-conventions-op-lists-repo-conventions
-  ;; :queries derives from skein.macros.queries/remembered-queries (TASK-Srm-007);
-  ;; :ops stays the RFC-020.Q2 hand-authored fallback (PLAN-Srm-001.DN1). This
-  ;; pins the whole payload so neither listing can silently drift.
-  (with-config-runtime
-    (fn [_rt]
-      (is (= {:operation "devflow-conventions"
-              :spools [{:namespace "skein.spools.workflow"
-                        :doc "spools/workflow.md"
-                        :purpose "Workflow engine: definitions compiled to strand molecules with checkpoints, routing, and gates."}
-                       {:namespace "ct.spools.devflow"
-                        :doc "spools/devflow.md"
-                        :purpose "Feature lifecycle (intake -> proposal -> spec-plan -> tasks/implementation) keyed by feature name."}
-                       {:namespace "ct.spools.kanban"
-                        :doc "spools/kanban.md"
-                        :purpose "User-facing kanban board: feature/epic cards with refinement/pending/claimed/in_review lanes."}]
-              :discovery {:help "strand help [<op>]"
-                          :manuals "strand about <op>, or strand <op> about where the op declares that subcommand"}
-              :ops [{:name "kanban" :manual "strand kanban about"}
-                    {:name "kanban-export"}
-                    {:name "kanban-tree"
-                     :purpose "Epic -> feature -> task kanban hierarchy with derived task status, in one projection for renderers."}
-                    {:name "devflow-start"}
-                    {:name "devflow-ready"}
-                    {:name "devflow-choices"}
-                    {:name "devflow-choose"}
-                    {:name "devflow-complete"}
-                    {:name "devflow-advance"}
-                    {:name "devflow-describe"}
-                    {:name "devflow-run-history"}
-                    {:name "devflow-squash-run"}
-                    {:name "devflow-status"}
-                    {:name "workflow-runs"}
-                    {:name "feature-costs"
-                     :purpose "Agent-run cost/usage rollup beneath a work root, as pure data. Registered by .skein/analytics.clj."}
-                    {:name "agent" :manual "strand about agent"}
-                    {:name "workflow" :manual "strand about workflow"
-                     :purpose (format-alpha/reflow
-                               "|Shipped generic worker surface over every registered workflow:
-                                |list/show the catalogue, then start, ready, complete, choose,
-                                |defer, and await a run. Activated by .skein/init.clj. The
-                                |registered story workflow is the module-shaping discipline:
-                                |split-first refactor, public-surface tests, auto-spawned
-                                |adversarial review gates, measure, fold-back-or-keep-split
-                                |checkpoint. Pour it for substantial module work anywhere
-                                |(`strand workflow start <id> --workflow story --params ...`);
-                                |for skein.api.* modules SPEC-003.C19a is the binding form
-                                |contract. `strand workflow show story` prints its param
-                                |contract; the definitions are registered by
-                                |.skein/workflows.clj.")}
-                    {:name "hitl" :purpose "Interactive user+agent session with a self-terminating tracking strand."}
-                    {:name "land" :manual "strand land about"
-                     :purpose (format-alpha/reflow
-                               "|Coordinator-only landing workflow: push+draft-PR, green CI, roster
-                                |sign-off, then a mechanical GitHub squash-merge under the merge lock
-                                |with main CI watched to green. Registered by .skein/workflows.clj.")}]
-              :patterns [{:name "agent-plan"
-                          :purpose "Create a feature strand plus task/review children for agent work; shipped by ct.spools.delegation."}
-                         {:name "delegate-pipeline"
-                          :purpose "Sequential chain-loop workflow of subagent gates with optional acceptance checkpoint. Registered by .skein/workflows.clj."}]
-              :queries [{:name "kanban-cards" :usage "strand list --query kanban-cards"}
-                        {:name "kanban-pending" :usage "strand ready --query kanban-pending"}
-                        {:name "feature-active" :usage "strand list --query feature-active --param feature=<feature>"}
-                        {:name "feature-work" :usage "strand ready --query feature-work --param feature=<feature>"}
-                        {:name "feature-owner-work"
-                         :usage "strand ready --query feature-owner-work --param feature=<feature> --param owner=<owner>"}
-                        {:name "feature-run" :usage "strand list --query feature-run --param feature=<feature>"}
-                        {:name "workflow-runs" :usage "strand list --query workflow-runs"}
-                        {:name "devflow-runs" :usage "strand list --query devflow-runs"}
-                        {:name "work" :usage "strand ready --query work"}]}
-             (op! "devflow-conventions" []))))))
-
-(deftest converted-config-surface-is-byte-identical-to-pre-refactor
-  ;; TASK-Srm-009.MI1 acceptance gate. surface_baseline.edn is the config-owned
-  ;; op-help + named-query surface captured via capture-config-surface; it was
-  ;; snapshotted pre-defquery/defop-conversion (base ad5d2eb), re-captured
-  ;; when declared :returns joined the op-help surface (PLAN-Dcr-001), and
-  ;; re-captured again for the canonical help envelope (TASK-Dtf-001).
-  ;; Asserting the current converted config reproduces it byte-for-byte proves the
-  ;; refactor changed no generated `help <op>` and no registered query definition;
-  ;; the devflow-conventions payload is pinned by the test above. The golden is a
-  ;; frozen pre-refactor snapshot (committed, not git-history-dependent, so it
-  ;; survives CI's shallow checkout) and also guards the surface against later
-  ;; drift.
+(deftest config-surface-matches-intentional-baseline
+  ;; The baseline freezes the config-owned op help and named-query definitions.
+  ;; Regenerate it only when a feature deliberately changes that public surface.
   (let [golden (edn/read-string (slurp "test/skein/surface_baseline.edn"))
         current (capture-config-surface ".skein/config.clj")]
     (is (= (:queries golden) (:queries current))
@@ -458,6 +368,43 @@
     (doseq [op config-op-names]
       (is (= (get-in golden [:op-help op]) (get-in current [:op-help op]))
           (str "generated help for " op " must match the pre-refactor baseline")))))
+
+(deftest generic-workflow-surface-drives-devflow-intake
+  (with-startup-config-runtime
+    (fn [_rt]
+      (let [description (op! "workflow" ["show" "intake"])
+            params "{\"feature\":\"generic-feature\",\"worktree-check\":\"already-in-worktree-ok\"}"
+            started (op! "workflow" ["start" "generic-feature"
+                                     "--workflow" "intake"
+                                     "--params" params])]
+        (is (= "ct.spools.devflow/intake" (:definition description)))
+        (is (= "create-or-confirm-worktree" (:checkpoint (first (:ready started)))))
+        (is (= "brief"
+               (:artifact
+                (first (:ready (op! "workflow"
+                                    ["next" "generic-feature"
+                                     "--choice" "already-in-worktree"]))))))
+        (is (= "discuss-scope"
+               (:checkpoint
+                (first (:ready (op! "workflow" ["next" "generic-feature"]))))))
+        (is (= "devflow.proposal.orient"
+               (:action-ref
+                (first (:ready (op! "workflow"
+                                    ["next" "generic-feature"
+                                     "--choice" "proposal-ready"]))))))
+        (is (false? (:done (op! "workflow" ["ready" "generic-feature"]))))
+        (is (= ["generic-feature"]
+               (mapv #(get-in % [:attributes :workflow/run-id])
+                     (weaver/list (current/runtime)
+                                  (var-get (requiring-resolve
+                                            'config/devflow-runs-query))
+                                  {}))))))))
+
+(deftest repo-config-publishes-no-devflow-alias-ops
+  (with-startup-config-runtime
+    (fn [rt]
+      (is (empty? (filter #(str/starts-with? (:name %) "devflow-")
+                          (weaver/ops rt)))))))
 
 (deftest named-queries-return-expected-rows-against-seeded-strands
   ;; TASK-Srm-009.MI1: exercise each registered named query's rows against one
@@ -678,50 +625,6 @@
                                              (get-in % [:attributes "workflow/role"])))
                         strands)))))))
 
-(deftest devflow-ops-drive-intake-into-proposal
-  (with-config-runtime
-    (fn [_rt]
-      (let [started (op! "devflow-start" ["ops-feature" "already-in-worktree-ok"])]
-        (is (= "devflow-start" (:operation started)))
-        (is (= "intake" (:stage (first (:ready started)))))
-        (is (= "create-or-confirm-worktree" (:checkpoint (first (:ready started))))))
-      (is (contains? (:choices (op! "devflow-choices" ["ops-feature"])) "abort"))
-      (let [after-worktree (op! "devflow-choose" ["ops-feature" "already-in-worktree"])]
-        (is (= "brief" (:artifact (first (:ready after-worktree))))))
-      (let [after-brief (op! "devflow-complete" ["ops-feature"])]
-        (is (= "discuss-scope" (:checkpoint (first (:ready after-brief))))))
-      (let [in-proposal (op! "devflow-choose" ["ops-feature" "proposal-ready"])]
-        (is (= "proposal" (:stage (first (:ready in-proposal)))))
-        (is (= "devflow.proposal.orient" (:action-ref (first (:ready in-proposal))))))
-      (let [status (op! "devflow-status" ["ops-feature"])]
-        (is (false? (:done status)))
-        (is (= "proposal" (get-in (:root status) [:attributes :devflow/stage])))
-        (is (= [{:attributes {:devflow/stage "proposal"}}]
-               (->> (:runs (op! "workflow-runs" ["devflow"]))
-                    (mapv (fn [run] {:attributes (select-keys (:attributes run) [:devflow/stage])})))))))))
-
-(deftest devflow-advance-describe-run-history-and-squash-run-ops
-  (with-config-runtime
-    (fn [_rt]
-      (let [description (op! "devflow-describe" ["proposal"])]
-        (is (= "devflow-describe" (:operation description)))
-        (is (= "proposal" (:stage description)))
-        (is (= "Devflow proposal: <feature>" (get-in description [:description :name]))))
-      (op! "devflow-start" ["squash-feature" "already-in-worktree-ok"])
-      (let [aborted (op! "devflow-advance" ["squash-feature" "abort" "{\"reason\":\"not now\"}"])]
-        (is (= "devflow-advance" (:operation aborted)))
-        (is (= "abort" (:stage (first (:ready aborted)))))
-        (is (= "devflow.abort.record" (:action-ref (first (:ready aborted))))))
-      (let [done (op! "devflow-advance" ["squash-feature"])]
-        (is (true? (:done done)))
-        (is (empty? (:ready done))))
-      (let [history (op! "devflow-run-history" ["squash-feature"])]
-        (is (= "devflow-run-history" (:operation history)))
-        (is (seq (:run-history history))))
-      (let [squashed (op! "devflow-squash-run" ["squash-feature"])]
-        (is (= "devflow-squash-run" (:operation squashed)))
-        (is (= "digest" (get-in squashed [:digest :attributes :workflow/role])))))))
-
 (deftest work-query-excludes-workflow-plumbing-but-keeps-steps
   (with-config-runtime
     (fn [rt]
@@ -786,58 +689,6 @@
             "sessions persist so codex exec resume can continue them")
         (is (= ["resume" :agent-run/session-id] (:resume codex))
             "codex declares its verified resume subcommand splice")))))
-
-(deftest devflow-ops-fail-loudly-on-bad-input
-  (with-config-runtime
-    (fn [_rt]
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required argument feature"
-                            (op! "devflow-start" [])))
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"worktree-check"
-                            (op! "devflow-start" ["bad-feature" "nope"])))
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"JSON input must be an object"
-                            (op! "devflow-choose" ["any-feature" "abort" "[1,2]"])))
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow run"
-                            (op! "devflow-status" ["never-started"])))
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"at most one step"
-                            (op! "devflow-complete" ["any-feature" "step=a" "step=b"])))
-      (let [started (op! "devflow-start" ["checkpoint-feature"])
-            checkpoint-id (:id (first (:ready started)))]
-        ;; the step=<id> selector resolves independently of other optional args
-        (is (contains? (:choices (op! "devflow-choices"
-                                      ["checkpoint-feature" (str "step=" checkpoint-id)]))
-                       "abort"))
-        ;; the engine's checkpoint guard surfaces through the op wrapper
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Cannot complete a checkpoint"
-                              (op! "devflow-complete" ["checkpoint-feature"])))))))
-
-(deftest devflow-ops-render-arg-spec-help
-  ;; the discovery convention requires generated help from arg-spec data, not
-  ;; hand-written usage strings: every devflow wrapper op must render its
-  ;; positional contract through the built-in help projection, so
-  ;; the `strand help [<op>]` pointer devflow-conventions publishes resolves to
-  ;; real help for every op it lists.
-  (with-config-runtime
-    (fn [_rt]
-      (letfn [(positionals [op-name]
-                (->> (get-in (op! "help" [op-name]) [:node :invocation :positionals])
-                     (mapv (juxt :name :required :variadic))))]
-        (is (= [["feature" true false] ["worktree-check" false false]]
-               (positionals "devflow-start")))
-        (is (= [["feature" true false]] (positionals "devflow-ready")))
-        (is (= [["feature" true false] ["step-selector" false true]]
-               (positionals "devflow-choices")))
-        (is (= [["feature" true false] ["choice" true false] ["tail" false true]]
-               (positionals "devflow-choose")))
-        (is (= [["feature" true false] ["tail" false true]]
-               (positionals "devflow-complete")))
-        (is (= [["feature" true false] ["tail" false true]]
-               (positionals "devflow-advance")))
-        (is (= [["stage-key" false false]] (positionals "devflow-describe")))
-        (is (= [["feature" true false]] (positionals "devflow-run-history")))
-        (is (= [["feature" true false]] (positionals "devflow-squash-run")))
-        (is (= [["feature" true false]] (positionals "devflow-status")))
-        (is (= "Start the devflow lifecycle for a feature."
-               (get-in (op! "help" ["devflow-start"]) [:node :doc])))))))
 
 (defn- shell-gate-complete!
   "Close the ready :shell land gate for feature the way the shell executor
@@ -1669,7 +1520,9 @@
       (is (= "bench about" (:operation (op! "bench" ["about"]))))
       (is (str/includes? (:tracker (op! "kanban" ["about"]))
                          "Bound tracker: devflow"))
-      (op! "devflow-start" ["startup-feature" "already-in-worktree-ok"])
+      (op! "workflow" ["start" "startup-feature"
+                       "--workflow" "intake"
+                       "--params" "{\"feature\":\"startup-feature\",\"worktree-check\":\"already-in-worktree-ok\"}"])
       (let [refresh-result (runtime/refresh! rt)]
         (is (contains? #{:applied :unchanged} (:status refresh-result))))
       (let [refresh-result (runtime/refresh! rt {:only #{:config}})]
@@ -1680,7 +1533,7 @@
       (assert-workflow-spool-consent-edges rt)
       (assert-kanban-tracker-installed rt)
       ;; Module-owned registrations refresh; the strand graph and run state persist.
-      (let [status (op! "devflow-status" ["startup-feature"])]
+      (let [status (op! "workflow" ["ready" "startup-feature"])]
         (is (false? (:done status)))
         (is (= "create-or-confirm-worktree" (:checkpoint (first (:ready status)))))))))
 
