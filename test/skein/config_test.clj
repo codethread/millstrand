@@ -606,7 +606,7 @@
 
 (deftest feature-cost-report-requires-one-matching-root
   (doseq [[root-ids strands message]
-          [[[] [] "requires exactly one root id"]
+          [[[] [] "requires exactly one root id: count=0 root_ids=[]"]
            [["missing"] [] "root not found in subgraph"]]]
     (let [result (feature-cost-report {:root_ids root-ids
                                        :strands strands

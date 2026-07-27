@@ -113,7 +113,9 @@ def public_row:
 
 def root_strand($subgraph):
   if ($subgraph.root_ids | length) != 1
-  then error("feature cost report requires exactly one root id")
+  then error(
+    "feature cost report requires exactly one root id: count=\($subgraph.root_ids | length) root_ids=\($subgraph.root_ids | tojson)"
+  )
   else
     $subgraph.root_ids[0] as $root_id
     | [$subgraph.strands[] | select(.id == $root_id)] as $roots
