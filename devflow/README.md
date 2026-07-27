@@ -22,7 +22,6 @@ Root specs are canonical for shipped behavior:
 
 `devflow/feat/` holds only planned-but-unbuilt work; a feature folder appears here when planning starts and moves to `archive/` once its spec deltas merge into the root specs. In-flight work lives on the kanban board and as devflow runs in `.skein`.
 
-- `feature-cost-report` — removes the repo-local `feature-costs` op and preserves the report as a checked-in `jq` reducer over the generic `subgraph` payload.
 - `source-root-spools` — adds `:skein/source-root` as the non-acquiring coordinate for spools shipped in the Skein checkout and moves batteries from the production classpath to the ordinary approved-spool path. Contracts are promoted into `cli.md` (SPEC-002.C14a), `repl-api.md` (SPEC-003.C62-adjacent module guidance and C63), `daemon-runtime.md` (SPEC-004.C42/C44/C48@2/C49@2/C50a/C50b/C94a), and `alpha-surface.md` (SPEC-005.C3); awaiting acceptance and archive.
 
 ## Archived features
@@ -30,6 +29,7 @@ Root specs are canonical for shipped behavior:
 Archived feature folders preserve historical planning context. Current shipped contracts are the root specs above, even if older archive notes describe pre-spec documentation locations.
 Default `rg` searches skip `archive/`; use `rg --no-ignore devflow/archive` when you need those records.
 
+- `26-07-27__feature-cost-report` — removed the repo-local `feature-costs` op and preserved its report as a checked-in `jq` reducer over the generic `subgraph` payload.
 - `26-06-24__agent-tool-interface` — shipped agent-operable CLI/REPL interface for the todo graph MVP.
 - `26-06-24__db-owned-task-ids` — shipped generated task ids and creation-time `--link` edges.
 - `26-06-24__batch-task-refs` — shipped stdin EDN batch task creation with batch-local refs.

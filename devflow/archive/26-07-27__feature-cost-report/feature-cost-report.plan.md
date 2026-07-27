@@ -6,7 +6,7 @@
 **RFC:** None
 **Root specs:** None
 **Feature specs:** None
-**Status:** Active
+**Status:** Shipped
 **Last Updated:** 2026-07-27
 
 ## PLAN-Fcr-001.P1 Goal and scope
@@ -66,3 +66,7 @@ Outcome: the analytics module and `feature-costs` op are gone, with docs and sur
 ### PLAN-Fcr-001.DN2 Implementation — 2026-07-27
 
 - The reducer accepts the timestamp form emitted by agent-run records: UTC ISO instants with optional fractional seconds. The full locked suite and pinned external spool suites pass after removing the analytics module.
+
+### PLAN-Fcr-001.DN3 Shipped — 2026-07-27
+
+- Shipped the report-side reducer, removed the repo-local analytics module and op, and updated tests and operator guidance. No scope was cut, no root-spec delta was needed, and no RFC was archived.
