@@ -39,6 +39,7 @@ import {
   detailPage,
   Failure,
   fitCol,
+  hintRows,
   listPage,
   ListFooter,
   oneLine,
@@ -333,7 +334,7 @@ function RunsTable({
     age: 6,
   };
   const promptWidth = Math.max(0, cols - 12 - w.id - w.phase - w.harness - w.for - w.branch - w.age);
-  const { start, visible, below } = windowRows(runs, selected, interactive, termRows);
+  const { start, visible, below } = windowRows(runs, selected, interactive, termRows, hintRows(RUNS_HINT, cols));
 
   return (
     <Box flexDirection="column">
@@ -399,7 +400,7 @@ function PlansTree({
   const kindW = fitCol("KIND", rows.map((r) => r.kind), 5);
   const statusW = fitCol("STATUS", rows.map((r) => r.status.text), Math.max(12, Math.floor(cols / 3)));
   const treeW = Math.max(0, cols - kindW - statusW - 4);
-  const { start, visible, below } = windowRows(rows, selected, interactive, termRows);
+  const { start, visible, below } = windowRows(rows, selected, interactive, termRows, hintRows(PLANS_HINT, cols));
 
   return (
     <Box flexDirection="column">
@@ -548,7 +549,7 @@ export const agentsTab = defineTab<AgentsView>({
         if (input === "r") ctx.refresh();
         return v;
       }
-      const moved = reduceListKeys(rs.s, input, key, rs.rows, (r) => r.id, listPage(ctx.termRows));
+      const moved = reduceListKeys(rs.s, input, key, rs.rows, (r) => r.id, listPage(ctx.termRows, hintRows(RUNS_HINT, ctx.cols)));
       if (moved) return { ...v, runs: { ...rs, s: moved } };
       if (key.return || key.rightArrow || input === "l")
         return rs.rows[rs.s.selected] ? { ...v, runs: { ...rs, s: { ...rs.s, view: "detail", detailScroll: 0 } } } : v;
@@ -583,7 +584,7 @@ export const agentsTab = defineTab<AgentsView>({
       }
       return v;
     }
-    const moved = reduceListKeys(ps.s, input, key, ps.rows, (r) => r.path, listPage(ctx.termRows));
+    const moved = reduceListKeys(ps.s, input, key, ps.rows, (r) => r.path, listPage(ctx.termRows, hintRows(PLANS_HINT, ctx.cols)));
     if (moved) return { ...v, plans: { ...ps, s: moved } };
     if (input === "d") {
       const r = ps.rows[ps.s.selected];

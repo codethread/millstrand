@@ -104,6 +104,10 @@ export type Tab<V> = {
   onKey: (v: V, ctx: KeyCtx<V>) => V;
   // A detail is open: the shell blocks ⇥ and leaves the all/active axis inert.
   inDetail: (v: V) => boolean;
+  // The tab is reading raw text (a filter name being typed) and every key belongs
+  // to it — including the shell's own q/⇥/a/⌃g/y, which would otherwise quit or
+  // switch tabs mid-word. Absent means "never captures".
+  capturesInput?: (v: V) => boolean;
   // The strand under the cursor in the tab's current view, or null when nothing is
   // focused (empty list, or a view with no single strand like the graph pane). The
   // shell opens it in $EDITOR on ⌃g.
@@ -277,29 +281,33 @@ function App({
           `${JSON.stringify({ input, ret: key.return, esc: key.escape, tab: t.id, inDetail: t.inDetail(v) })}\n`,
         );
       }
-      if (input === "q") {
-        exit();
-        return;
-      }
-      if (key.tab && !t.inDetail(v)) {
-        setActive((a) => (key.shift ? (a - 1 + tabs.length) % tabs.length : (a + 1) % tabs.length));
-        return;
-      }
-      if (input === "a" && !t.inDetail(v) && t.allApplies(v)) {
-        const newAll = !envsRef.current[active].all;
-        patchEnv(active, { all: newAll });
-        void refresh(active, newAll);
-        return;
-      }
-      if (key.ctrl && input === "g") {
-        const target = t.editTarget(v);
-        if (target) openInEditor(target);
-        return;
-      }
-      if (input === "y") {
-        const id = t.copyId(v);
-        if (id) void copyCursorId(id);
-        return;
+      // A capturing tab owns the whole keyboard: every global binding is skipped so
+      // no keystroke meant for a text field can quit or switch tabs mid-word.
+      if (t.capturesInput?.(v) !== true) {
+        if (input === "q") {
+          exit();
+          return;
+        }
+        if (key.tab && !t.inDetail(v)) {
+          setActive((a) => (key.shift ? (a - 1 + tabs.length) % tabs.length : (a + 1) % tabs.length));
+          return;
+        }
+        if (input === "a" && !t.inDetail(v) && t.allApplies(v)) {
+          const newAll = !envsRef.current[active].all;
+          patchEnv(active, { all: newAll });
+          void refresh(active, newAll);
+          return;
+        }
+        if (key.ctrl && input === "g") {
+          const target = t.editTarget(v);
+          if (target) openInEditor(target);
+          return;
+        }
+        if (input === "y") {
+          const id = t.copyId(v);
+          if (id) void copyCursorId(id);
+          return;
+        }
       }
       const ctx: KeyCtx<unknown> = {
         input,

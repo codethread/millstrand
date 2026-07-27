@@ -126,39 +126,64 @@ export const fitCol = (name: string, values: string[], cap: number) =>
 // viewports derive from one accounting rather than scattered magic numbers.
 //
 //   SHELL   header + tab bar + the content wrapper's top margin (app.tsx)
-//   LIST    the column header + the footer (its own top margin + text)
+//   LIST    the column header + the footer's top margin; the footer's own text
+//           rows vary with how far its hint wraps, so callers pass that count in
+//           (hintRows) rather than it being baked in here.
 //   DETAIL  the id/title line, the meta line, the attribute block's top margin,
 //           and the footer (its own top margin + text)
 //   GRAPH   the legend line plus the footer (its own top margin + text).
 //   SLACK   one row left unwritten so a full frame never lands on the terminal's
 //           last cell and nudges an autoscroll.
-const CHROME = { shell: 3, list: 3, detail: 5, graph: 3, slack: 1 };
-export const listViewport = (termRows: number) => Math.max(3, termRows - CHROME.shell - CHROME.list - CHROME.slack);
+const CHROME = { shell: 3, list: 2, detail: 5, graph: 3, slack: 1 };
+export const listViewport = (termRows: number, footerRows = 1) =>
+  Math.max(3, termRows - CHROME.shell - CHROME.list - footerRows - CHROME.slack);
 export const detailViewport = (termRows: number) => Math.max(3, termRows - CHROME.shell - CHROME.detail - CHROME.slack);
 export const graphViewport = (termRows: number) => Math.max(3, termRows - CHROME.shell - CHROME.graph - CHROME.slack);
 
+// Space held for the scroll counter ListFooter appends, so the footer's height is
+// a function of the hint and width alone. Reserving it up front is what keeps the
+// footer from growing a line mid-scroll — which would resize the viewport under
+// the selection every time the counter appeared or wrapped.
+const COUNTER_RESERVE = " · 0000↑ 0000↓ of 0000";
+
+// How many rows a hint occupies at this width — the number every caller must
+// agree on: the paging math to size its viewport, ListFooter to fill exactly that
+// many lines. One row minimum, however narrow the terminal.
+export const hintRows = (hint: string, cols: number): number =>
+  cols <= 0 ? 1 : wrapAnsi(hint + COUNTER_RESERVE, cols, { hard: true }).split("\n").length;
+
 // The ⌃u/⌃d jump: half a viewport, vim's half-page scroll, floored to at least one
 // row so a tiny terminal still moves.
-export const listPage = (termRows: number) => Math.max(1, Math.floor(listViewport(termRows) / 2));
+export const listPage = (termRows: number, footerRows = 1) => Math.max(1, Math.floor(listViewport(termRows, footerRows) / 2));
 export const detailPage = (termRows: number) => Math.max(1, Math.floor(detailViewport(termRows) / 2));
 export const graphPage = (termRows: number) => Math.max(1, Math.floor(graphViewport(termRows) / 2));
 
 // The visible slice centred on the selection, plus off-screen counts for the
 // scroll hint.
-export function windowRows<T>(rows: T[], selected: number, interactive: boolean, termRows: number) {
-  const viewport = interactive ? listViewport(termRows) : rows.length;
+export function windowRows<T>(rows: T[], selected: number, interactive: boolean, termRows: number, footerRows = 1) {
+  const viewport = interactive ? listViewport(termRows, footerRows) : rows.length;
   const start = Math.max(0, Math.min(selected - Math.floor(viewport / 2), rows.length - viewport));
   const visible = rows.slice(start, start + viewport);
   return { start, visible, below: rows.length - start - visible.length };
 }
 
-// Clipped to one line: the layout math counts the footer as a single row, so a
-// wrapped hint would push the frame past its pinned height.
+// The hint wraps rather than truncating, so every binding stays readable on a
+// narrow terminal. Height is always exactly hintRows(hint, cols) — short renders
+// are padded with blank lines — because the paging math sized the viewport
+// against that same number, and a footer even one line taller would push the
+// frame past its pinned height.
 export function ListFooter({ hint, start, below, total, cols }: { hint: string; start: number; below: number; total: number; cols: number }) {
   const text = hint + (start || below ? ` · ${start}↑ ${below}↓ of ${total}` : "");
+  const height = hintRows(hint, cols);
+  const lines = wrapAnsi(text, Math.max(1, cols), { hard: true }).split("\n").slice(0, height);
+  while (lines.length < height) lines.push("");
   return (
-    <Box marginTop={1}>
-      <Text dimColor>{clip(text, cols)}</Text>
+    <Box marginTop={1} flexDirection="column">
+      {lines.map((line, i) => (
+        <Text key={i} dimColor>
+          {clip(line, cols)}
+        </Text>
+      ))}
     </Box>
   );
 }

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test tabs/kanban-data.test.ts",
+    "test": "bun test tabs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
