@@ -716,7 +716,8 @@
   calls `choose!` with that choice, its `:input` (default `{}`), and the
   pass-through `:by`/`:step` opts. When it is a plain step, `:choice` must be
   absent (fail loudly otherwise); `advance!` calls `complete!` with the
-  pass-through `:attributes`/`:step`/`:by` opts.
+  pass-through `:attributes`/`:step`/`:by` opts. `:input` is checkpoint-only,
+  while `:attributes` is ordinary-step-only.
 
   A defer is not advanceable and says so loudly: filling one selects a target
   and supplies that target's own params, which does not fit `advance!`'s
@@ -748,7 +749,7 @@
                         {:reason :workflow/advance-choice-required
                          :run-id run-id
                          :step view
-                         :choices (query/attr step :workflow/choices)}))
+                         :choices (:choices view)}))
                (when (contains? opts :attributes)
                  (fail! "advance! on a checkpoint rejects :attributes"
                         {:reason :workflow/advance-attributes-on-checkpoint

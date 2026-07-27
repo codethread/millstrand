@@ -1431,8 +1431,10 @@
           (is (= ["Sign off"] (mapv :title (:ready after))))
           (is (false? (:done after))))
         ;; a ready checkpoint advanced without a :choice fails loudly
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"requires a :choice"
-                              (workflow/advance! "advance-run")))
+        (let [thrown (try (workflow/advance! "advance-run")
+                          (catch clojure.lang.ExceptionInfo e e))]
+          (is (re-find #"requires a :choice" (ex-message thrown)))
+          (is (= ["approved"] (:choices (ex-data thrown)))))
         (is (= :workflow/advance-attributes-on-checkpoint
                (failure-reason
                 #(workflow/advance! "advance-run"
