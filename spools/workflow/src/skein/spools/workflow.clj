@@ -991,7 +991,7 @@
 
 ;; --- the generic worker run surface ------------------------------------------
 ;;
-;; Six request-map verbs over the lifecycle above, sharing one result shape.
+;; Seven request-map verbs over the lifecycle above, sharing one result shape.
 ;; They add no engine semantics: each validates its named request spec, narrows
 ;; the ready frontier to the role it acts on, and delegates to the trusted-
 ;; Clojure operation with an explicit step selector (PROP-Wcd-001.S2/S4). What
@@ -1105,6 +1105,38 @@
                    (choose! run-id choice (or input {})
                             (cond-> {:step (:id target)}
                               by (assoc :by by)))))))
+
+(defn run-advance!
+  "Advance the ready ordinary step or checkpoint and return the run result.
+
+  `request` is `{:run-id … :choice … :input {…} :step … :by …}`, with only the
+  run id required. Without `:step`, exactly one non-gate ordinary step or
+  checkpoint must be ready. A checkpoint requires `:choice`; an ordinary step
+  rejects it. `:input` is the selected choice's JSON-worker input, and `:by`
+  records the actor and remains mandatory when an explicitly selected item is a
+  gate.
+
+  A defer is not advanceable because selecting its target and params is a
+  different request; failures direct the worker to `workflow defer`.
+  `::advance-request` owns the request shape."
+  [request]
+  (let [rt (current/runtime)
+        {:keys [run-id choice input by]} (require-valid! ::advance-request request
+                                                         "Invalid workflow advance request")]
+    (mutate-run! rt "workflow advance" :advance request
+                 (fn [target]
+                   (runs/require-gate-actor! run-id target by)
+                   (when (and (contains? request :input)
+                              (not= "checkpoint" (:role target)))
+                     (fail! "workflow advance --input requires a checkpoint"
+                            {:reason :workflow/advance-input-without-checkpoint
+                             :run-id run-id
+                             :step (:id target)}))
+                   (advance! run-id
+                             (cond-> {:step (:id target)}
+                               (contains? request :choice) (assoc :choice choice)
+                               (contains? request :input) (assoc :input input)
+                               by (assoc :by by)))))))
 
 (defn run-defer!
   "Fill the ready defer of `request`'s run and return the run result.
@@ -1526,6 +1558,12 @@
   (s/keys :req-un [:skein.spools.workflow.request/run-id
                    :skein.spools.workflow.request/choice]
           :opt-un [:skein.spools.workflow.request/input
+                   :skein.spools.workflow.request/step
+                   :skein.spools.workflow.request/by]))
+(s/def ::advance-request
+  (s/keys :req-un [:skein.spools.workflow.request/run-id]
+          :opt-un [:skein.spools.workflow.request/choice
+                   :skein.spools.workflow.request/input
                    :skein.spools.workflow.request/step
                    :skein.spools.workflow.request/by]))
 (s/def ::await-request
