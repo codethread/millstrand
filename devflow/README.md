@@ -88,7 +88,7 @@ Default `rg` searches skip `archive/`; use `rg --no-ignore devflow/archive` when
 - `26-07-10__cron-on-scheduler` — shipped cron schedules on the weaver scheduler primitive (SPEC-004.C101/C102).
 - `26-07-10__note-primitive` — shipped the core note primitive: append-only attributed notes on strands with the note/* vocabulary.
 - `26-07-10__notes-writer-task-tier` — shipped the writer-task tier for notes so delegated workers append notes without broader mutation rights.
-- `26-07-10__run-usage` — shipped cost, token, and wall-time capture as first-class data on agent-run records, feeding the feature-costs rollup.
+- `26-07-10__run-usage` — shipped cost, token, and wall-time capture as first-class data on agent-run records.
 - `26-07-10__vocab-registry` — shipped the attribute vocabulary registry (`skein.api.vocab.alpha`): versioned declare!/reads with core and spool seeds.
 - `26-07-11__large-attr-scaling` — completed the large-attribute scaling spike: committed measurement harness, baseline assessment, and a verdict staging future work; no spec deltas by design.
 - `26-07-11__pin-sync-guard` — shipped the test-only guard that pinned-spool sync behavior cannot regress silently.
