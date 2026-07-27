@@ -556,13 +556,13 @@
                             "agent-run/tokens" "{\"input\":800,\"output\":200}"
                             "agent-run/usage-source" "session"
                             "agent-run/exit-code" 0
-                            "agent-run/started-at" "2026-07-10T10:00:00.250Z"
+                            "agent-run/started-at" "2026-07-10T11:00:00.250+01:00"
                             "agent-run/finished-at" "2026-07-10T10:05:00.750Z"}}
         run-b {:id "run-b" :title "Review: skeptic" :state "closed"
                :attributes {"agent-run/run" "true"
                             "agent-run/harness" "hard-gpt"
                             "agent-run/started-at" "2026-07-10T10:06:00Z"
-                            "agent-run/finished-at" "2026-07-10T10:08:30Z"}}
+                            "agent-run/finished-at" "2026-07-10T05:08:30-05:00"}}
         note {:id "note" :title "Not a run" :state "closed" :attributes {}}
         result (feature-cost-report {:root_ids ["root"]
                                      :strands [run-b note root run-a]
@@ -572,8 +572,8 @@
     (is (= {:id "root" :title "Feature card" :state "active"} (:root report)))
     (is (= ["run-a" "run-b"] (mapv :id (:runs report))))
     (is (= {:runs 2 :runs-with-usage 1 :cost-usd 1.25 :tokens-total 1000
-            :wall-clock {:started-at "2026-07-10T10:00:00.250Z"
-                         :finished-at "2026-07-10T10:08:30Z"
+            :wall-clock {:started-at "2026-07-10T11:00:00.250+01:00"
+                         :finished-at "2026-07-10T05:08:30-05:00"
                          :duration-secs 509.75}}
            (:totals report)))
     (is (= [{:runs 1 :runs-with-usage 1 :cost-usd 1.25 :tokens-total 1000

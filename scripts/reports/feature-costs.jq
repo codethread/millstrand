@@ -47,14 +47,24 @@ def instant($strand; $attribute):
     $strand.attributes[$attribute] as $value
     | (try
          (($value | [capture(
-           "^(?<base>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?<fraction>\\.[0-9]+)?Z$"
+           "^(?<base>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?<fraction>\\.[0-9]+)?(?<zone>Z|(?<sign>[+-])(?<offset-hour>[0-9]{2}):(?<offset-minute>[0-9]{2}))$"
          )]) as $matches
          | (if ($matches | length) == 1
             then $matches[0]
             else error("invalid instant")
             end) as $parts
+          | (if $parts.zone == "Z"
+             then 0
+             elif (($parts["offset-hour"] | tonumber) <= 23
+                   and ($parts["offset-minute"] | tonumber) <= 59)
+             then ((($parts["offset-hour"] | tonumber) * 60
+                    + ($parts["offset-minute"] | tonumber)) * 60
+                   * (if $parts.sign == "+" then 1 else -1 end))
+             else error("invalid offset")
+             end) as $offset
           | (($parts.base + "Z" | fromdateiso8601)
-             + (($parts.fraction // "0") | tonumber)) as $epoch
+             + (($parts.fraction // "0") | tonumber)
+             - $offset) as $epoch
           | {text: $value, epoch: $epoch})
        catch malformed($strand; $attribute; $value))
   end;
