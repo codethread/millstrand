@@ -1,6 +1,7 @@
 (ns skein.core.db-test
   "Tests for skein.core.db: strand/edge persistence, queries, and SQLite behavior."
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.data.json :as json]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
@@ -348,7 +349,7 @@
         (is (= {:keep {:nested true}}
                (-> (db/get-strand ds id) :attributes db/<-json :existing)))
 
-        (let [patch "{\"keep\":{\"nested\":true,\"drop\":null},\"drop\":null}"
+        (let [patch (json/write-str {:keep {:nested true :drop nil} :drop nil})
               expected (db/<-json (sqlite-json-patch ds "\"old\"" patch))]
           (is (= expected
                  (-> (db/get-strand ds id) :attributes db/<-json :scalar))))))))

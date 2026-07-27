@@ -399,7 +399,8 @@
   (with-startup-config-runtime
     (fn [_rt]
       (let [description (op! "workflow" ["show" "intake"])
-            params "{\"feature\":\"generic-feature\",\"worktree-check\":\"already-in-worktree-ok\"}"
+            params (json/write-str {:feature "generic-feature"
+                                    :worktree-check "already-in-worktree-ok"})
             started (op! "workflow" ["start" "generic-feature"
                                      "--workflow" "intake"
                                      "--params" params])]
@@ -553,7 +554,7 @@
                             "agent-run/harness" "build"
                             "agent-run/cost-usd" "1.25"
                             "agent-run/tokens-total" "1000"
-                            "agent-run/tokens" "{\"input\":800,\"output\":200}"
+                            "agent-run/tokens" (json/write-str {:input 800 :output 200})
                             "agent-run/usage-source" "session"
                             "agent-run/exit-code" 0
                             "agent-run/started-at" "2026-07-10T11:00:00.250+01:00"
@@ -1253,13 +1254,15 @@
            clojure.lang.ExceptionInfo
            #"input contains unsupported keys"
            (op! "land" ["choose" "land-x" "approved" "--input"
-                        "{\"subject\":\"feat: land x\",\"body\":\"Squashed commits: abc123\",\"subjet\":\"typo\"}"])))
+                        (json/write-str {:subject "feat: land x"
+                                         :body "Squashed commits: abc123"
+                                         :subjet "typo"})])))
       ;; approval routes to the mechanical merge continuation. Subject and body
       ;; remain argv elements rather than being interpolated into shell source.
       (let [subject "feat: land x"
             body "Squashed commits: abc123"
             approved (op! "land" ["choose" "land-x" "approved" "--input"
-                                  "{\"subject\":\"feat: land x\",\"body\":\"Squashed commits: abc123\"}"])
+                                  (json/write-str {:subject subject :body body})])
             gate (first (:ready approved))
             gate-attrs (:attributes (weaver/show rt (:id gate)))
             script (nth (:shell/argv gate-attrs) 2)]
@@ -1277,7 +1280,8 @@
       (op! "workflow" ["complete" "land-z"])
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"another land run holds the merge lock"
                             (op! "land" ["choose" "land-z" "approved" "--input"
-                                         "{\"subject\":\"feat: land z\",\"body\":\"Squashed commits: def456\"}"])))
+                                         (json/write-str {:subject "feat: land z"
+                                                          :body "Squashed commits: def456"})])))
       (shell-gate-complete! "land-x" "PR merged")
       (let [gate (first (:ready (op! "workflow" ["ready" "land-x"])))
             gate-attrs (:attributes (weaver/show rt (:id gate)))]
@@ -1400,7 +1404,8 @@
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"Value does not satisfy the named spec"
                               (op! "land" ["choose" "land-invalid-pr" "approved" "--input"
-                                           "{\"subject\":\"feat: invalid\",\"body\":\"body\"}"])))
+                                           (json/write-str {:subject "feat: invalid"
+                                                            :body "body"})])))
         (is (= "active" (:state (weaver/show rt (:id old-root))))
             "invalid sign-off leaves the old workflow root active")
         (is (empty? (active-merge-locks))
@@ -1466,7 +1471,8 @@
              #"multiple active merge locks found"
              (op! "land" ["choose" "land-reused-lock" "approved"
                           "--input"
-                          "{\"subject\":\"feat: reused\",\"body\":\"Squashed commits: abc123\"}"])))))))
+                          (json/write-str {:subject "feat: reused"
+                                           :body "Squashed commits: abc123"})])))))))
 
 (deftest land-signoff-revise-repours-with-context-and-no-merge-lock
   (with-config-runtime
@@ -1503,7 +1509,8 @@
         (is (= "in_review" (get-in (weaver/show rt card-id) [:attributes :kanban/lane]))))
       (shell-gate-complete! "land-y" "checks green") ; ci-green
       (op! "workflow" ["complete" "land-y"])           ; signoff-review
-      (let [aborted (op! "land" ["choose" "land-y" "abort" "--input" "{\"reason\":\"scope changed\"}"])]
+      (let [aborted (op! "land" ["choose" "land-y" "abort" "--input"
+                                 (json/write-str {:reason "scope changed"})])]
         (is (= "land choose" (:operation aborted)))
         ;; routing is a hard cutover to the reason-recording continuation
         (is (= "land.abort.record" (:action-ref (first (:ready aborted))))))
@@ -1527,7 +1534,8 @@
         (shell-gate-complete! "land-w" "checks green")              ; ci-green
         (op! "workflow" ["complete" "land-w"])                          ; signoff-review
         (op! "land" ["choose" "land-w" "approved" "--input"
-                     "{\"subject\":\"feat: land w\",\"body\":\"Squashed commits: abc123\"}"])
+                     (json/write-str {:subject "feat: land w"
+                                      :body "Squashed commits: abc123"})])
         (shell-gate-complete! "land-w" "PR merged")                  ; merge-pr
         (shell-gate-complete! "land-w" "main fast-forwarded")       ; pull-main
         (code-gate-complete! "land-w" "main runs green")            ; main-ci-green
@@ -1548,7 +1556,8 @@
       (shell-gate-complete! "land-lock-x" "checks green")
       (op! "workflow" ["complete" "land-lock-x"])
       (op! "land" ["choose" "land-lock-x" "approved" "--input"
-                   "{\"subject\":\"feat: land lock x\",\"body\":\"Squashed commits: abc123\"}"])
+                   (json/write-str {:subject "feat: land lock x"
+                                    :body "Squashed commits: abc123"})])
       (is (= ["merge-lock"] (mapv #(get-in % [:attributes :kind]) (active-merge-locks))))
       ;; a blank reason fails at the handler; a missing reason fails at the arg-spec
       ;; parse layer — both are loud rejections rather than a silent break
@@ -1721,7 +1730,8 @@
                          "Bound tracker: devflow"))
       (op! "workflow" ["start" "startup-feature"
                        "--workflow" "intake"
-                       "--params" "{\"feature\":\"startup-feature\",\"worktree-check\":\"already-in-worktree-ok\"}"])
+                       "--params" (json/write-str {:feature "startup-feature"
+                                                   :worktree-check "already-in-worktree-ok"})])
       (let [refresh-result (runtime/refresh! rt)]
         (is (contains? #{:applied :unchanged} (:status refresh-result))))
       (let [refresh-result (runtime/refresh! rt {:only #{:config}})]

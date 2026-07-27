@@ -1,6 +1,7 @@
 (ns skein.api.cli.alpha-test
   "Tests for the blessed declarative op argv parser (SPEC-003-D003.C1/C2)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.data.json :as json]
+            [clojure.test :refer [deftest is testing]]
             [skein.api.cli.alpha :as cli]))
 
 (defn- reason
@@ -193,7 +194,7 @@
          (is (= 2 (:line (ex-data e)))))))
 
 (deftest parse-applies-to-literal-value
-  (is (= {"x" true} (:data (cli/parse parse-spec ["[]" "--data" "{\"x\":true}"])))))
+  (is (= {"x" true} (:data (cli/parse parse-spec ["[]" "--data" (json/write-str {"x" true})])))))
 
 ;; ---------------------------------------------------------------------------
 ;; explain (MI5)
@@ -338,7 +339,7 @@
   (is (= {:subcommand ["admin" "caps" "grant"] :role "r" :subject "s" :data {"k" 1}}
          (cli/parse deep-spec
                     ["admin" "caps" "grant" "--role" "r" "--data" ":stdin" "s"]
-                    {"stdin" "{\"k\":1}"}))))
+                    {"stdin" (json/write-str {"k" 1})}))))
 
 (deftest deep-parse-routing-errors-carry-walked-path
   (try (cli/parse deep-spec ["admin"])
@@ -517,7 +518,7 @@
 (deftest subcommand-payload-ref-and-json-parse-use-routed-spec
   (is (= {:subcommand ["add"] :title "literal" :data {"ok" true}}
          (cli/parse subcommand-spec ["add" "literal" "--data" ":payload/body"]
-                    {"body" "{\"ok\":true}"})))
+                    {"body" (json/write-str {"ok" true})})))
   (testing "unused payloads are evaluated against routed subcommand consumption"
     (try (cli/parse subcommand-spec ["list"] {"body" "unused"})
          (is false "expected throw")

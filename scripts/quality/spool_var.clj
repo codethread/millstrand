@@ -23,13 +23,12 @@
   `:file` modules). Engine `src/` and `test/` namespaces are never
   activated as modules, so a `spool` var there is unaffected and out of
   scope; private `spool` vars are ignored everywhere. Kept clj-kondo-free
-  so the findings logic loads on the test classpath; file reading mirrors
-  the source reader surface conventions-check already scans."
+  so the findings logic loads on the test classpath; file reading is the
+  shared `quality.source-forms` surface conventions-check already scans."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [clojure.tools.reader :as reader]
-            [clojure.tools.reader.reader-types :as reader-types]
+            [quality.source-forms :as source-forms]
             [skein.api.spool.alpha :as spool-api]))
 
 (def ^:private entry-point-keys #{:contribute :reconcile})
@@ -149,18 +148,7 @@
   A docstring form (`(def spool \"doc\" value)`) reports the value, not
   the docstring."
   [^java.io.File file]
-  (let [rdr (reader-types/indexing-push-back-reader (slurp file) 1 (.getPath file))
-        opts {:eof ::eof :read-cond :allow :features #{:clj}}]
-    (binding [*ns* (the-ns 'user)
-              reader/*read-eval* false
-              ;; Aliased ::kw/name forms only need to read, not resolve.
-              reader/*alias-map* (fn [alias] (symbol (str "spool-var." alias)))
-              reader/*default-data-reader-fn* (fn [_tag value] value)]
-      (loop [sites []]
-        (let [form (reader/read opts rdr)]
-          (cond
-            (= ::eof form) sites
-            :else (recur (into sites (declaration-sites form)))))))))
+  (into [] (mapcat declaration-sites) (source-forms/read-all file)))
 
 (defn findings
   "Turn `sites` ({:filename :line :form-kind :private? :value :has-value?

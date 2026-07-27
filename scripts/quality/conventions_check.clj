@@ -1,7 +1,7 @@
 (ns quality.conventions-check
   "Enforce repo-wide Clojure conventions that prose alone cannot hold.
 
-  Six checks, all held at zero findings:
+  Seven checks, all held at zero findings:
   - every namespace carries a docstring;
   - no local binding is named after a clojure.core macro (a local named
     `fn` shadows the macro and turns later thunks into eager calls; rename
@@ -19,13 +19,16 @@
     unsafe-namespace convention's rules live in `quality.spool-tiers`;
   - a public `spool` var in a module-loadable namespace carries a
     well-formed `::spool` declaration (PROP-Dsp-001.G6a) — the structural
-    guard against incidental shadowing lives in `quality.spool-var`."
+    guard against incidental shadowing lives in `quality.spool-var`;
+  - no source hand-escapes JSON that `json/write-str` would reproduce
+    from Clojure data; the narrowing rules live in
+    `quality.json-literals`."
   (:require [clj-kondo.core :as kondo]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.tools.reader :as reader]
-            [clojure.tools.reader.reader-types :as reader-types]
             [quality.api-form :as api-form]
+            [quality.json-literals :as json-literals]
+            [quality.source-forms :as source-forms]
             [quality.spool-tiers :as spool-tiers]
             [quality.spool-var :as spool-var]))
 
@@ -49,24 +52,6 @@
        (filter #(:macro (meta %)))
        (map #(-> % symbol name))
        set))
-
-(defn- read-all-forms
-  "Read every top-level form in `file`, tolerating the full source reader
-  surface (auto-resolved keywords, syntax quote, tagged literals)."
-  [^java.io.File file]
-  (let [rdr (reader-types/indexing-push-back-reader (slurp file) 1 (.getPath file))
-        opts {:eof ::eof :read-cond :allow :features #{:clj}}]
-    (binding [*ns* (the-ns 'user)
-              reader/*read-eval* false
-              ;; Aliased ::kw/name forms only need to read, not resolve
-              ;; truthfully; map every alias to a throwaway namespace.
-              reader/*alias-map* (fn [alias] (symbol (str "conventions-check." alias)))
-              reader/*default-data-reader-fn* (fn [_tag value] value)]
-      (loop [forms []]
-        (let [form (reader/read opts rdr)]
-          (if (= ::eof form)
-            forms
-            (recur (conj forms form))))))))
 
 (defn- quoted-libspec-ns
   "Return the namespace symbol named by a literal quoted require argument:
@@ -124,7 +109,7 @@
         ^java.io.File file (sort (file-seq (io/file root)))
         :when (and (.isFile file) (str/ends-with? (.getName file) ".clj"))
         finding (try
-                  (for [{:keys [ns line]} (embedded-requires (read-all-forms file))
+                  (for [{:keys [ns line]} (embedded-requires (source-forms/read-all file))
                         :when (not (resolvable-namespace? ns))]
                     (str (.getPath file) ":" line ": embedded require of `" ns
                          "` resolves to no source file under the repo roots or classpath"))
@@ -157,7 +142,8 @@
                   (embedded-require-findings)
                   (api-form/check analysis)
                   (spool-tiers/check analysis)
-                  (spool-var/check))]
+                  (spool-var/check)
+                  (json-literals/check source-roots))]
     (if (seq findings)
       (do (binding [*out* *err*]
             (doseq [f findings] (println f))

@@ -314,7 +314,7 @@
             work (item-id started "Do the work")
             result (from-argv rt ["complete" "run-context"
                                   "--context"
-                                  "{\"owner\":\"agent\",\"nested\":{\"new\":true}}"])
+                                  (json/write-str {:owner "agent" :nested {:new true}})])
             root (weaver/show rt (get-in result [:root :id]))]
         (is (= "closed" (:state (weaver/show rt work))))
         (is (= {:owner "agent" :nested {:new true}}
@@ -520,7 +520,7 @@
         (let [result (from-argv
                       rt
                       ["next" "run-next-choice" "--step" checkpoint
-                       "--choice" "ship" "--input" "{\"verdict\":\"pass\"}"])
+                       "--choice" "ship" "--input" (json/write-str {:verdict "pass"})])
               closed (:attributes (weaver/show rt checkpoint))]
           (is (= "workflow next" (:operation result)))
           (is (= "ship" (:workflow/outcome closed)))
@@ -868,23 +868,24 @@
                (parse ["start" "r1" "--workflow" "solo"])))
         (is (= {:subcommand ["start"] :run-id "r1" :workflow "scoped"
                 :params {"scope" "queue"}}
-               (parse ["start" "r1" "--workflow" "scoped" "--params" "{\"scope\":\"queue\"}"])))
+               (parse ["start" "r1" "--workflow" "scoped"
+                       "--params" (json/write-str {:scope "queue"})])))
         (is (= {:subcommand ["ready"] :run-id "r1"} (parse ["ready" "r1"])))
         (is (= {:subcommand ["complete"] :run-id "r1" :step "s-1" :by "agent"}
                (parse ["complete" "r1" "--step" "s-1" "--by" "agent"])))
         (is (= {:subcommand ["complete"] :run-id "r1"
                 :attr {"acme/verdict" "pass"} :attributes {"acme/exit" 0}}
                (parse ["complete" "r1" "--attr" "acme/verdict=pass"
-                       "--attributes" "{\"acme/exit\":0}"])))
+                       "--attributes" (json/write-str {"acme/exit" 0})])))
         (is (= {:subcommand ["complete"] :run-id "r1"
                 :context {"pr-number" 412}}
-               (parse ["complete" "r1" "--context" "{\"pr-number\":412}"])))
+               (parse ["complete" "r1" "--context" (json/write-str {:pr-number 412})])))
         (is (= {:subcommand ["choose"] :run-id "r1" :choice "ship" :input {"verdict" "pass"}}
-               (parse ["choose" "r1" "ship" "--input" "{\"verdict\":\"pass\"}"])))
+               (parse ["choose" "r1" "ship" "--input" (json/write-str {:verdict "pass"})])))
         (is (= {:subcommand ["next"] :run-id "r1" :choice "ship"
                 :input {"verdict" "pass"} :step "s-1" :by "agent"}
                (parse ["next" "r1" "--choice" "ship"
-                       "--input" "{\"verdict\":\"pass\"}"
+                       "--input" (json/write-str {:verdict "pass"})
                        "--step" "s-1" "--by" "agent"])))
         (is (= {:subcommand ["defer"] :run-id "r1" :workflow "follow-on"}
                (parse ["defer" "r1" "--workflow" "follow-on"])))
@@ -914,13 +915,13 @@
         (is (= {"scope" "queue"}
                (:params (cli-alpha/parse arg-spec
                                          ["start" "r1" "--workflow" "scoped" "--params" ":stdin"]
-                                         {"stdin" "{\"scope\":\"queue\"}"})))
+                                         {"stdin" (json/write-str {:scope "queue"})})))
             "a whole-value reference resolves before the JSON parse")
         (is (= {"scope" "queue"}
                (:params (cli-alpha/parse arg-spec
                                          ["start" "r1" "--workflow" "scoped"
                                           "--params" ":payload/params"]
-                                         {"params" "{\"scope\":\"queue\"}"}))))
+                                         {"params" (json/write-str {:scope "queue"})}))))
         (is (thrown? clojure.lang.ExceptionInfo
                      (cli-alpha/parse arg-spec ["start" "r1" "--workflow" "scoped"
                                                 "--params" "not-json"]))

@@ -97,9 +97,10 @@ lint-splint:
 
 # repo conventions that prose alone cannot hold: versioned tenet references,
 # ns docstrings everywhere, no local bindings named after clojure.core macros,
-# requires embedded in quoted forms resolving to real namespaces, and shipped
+# requires embedded in quoted forms resolving to real namespaces, shipped
 # spool sources touching skein.core.* only from unsafe-named namespaces
-# (quality.spool-tiers)
+# (quality.spool-tiers), and JSON authored as Clojure data rather than
+# hand-escaped string literals (quality.json-literals)
 lint-conventions:
 	@if git grep -n -E 'TEN-''000([^@]|$$)' -- . ':!devflow/TENETS.md'; then \
 		echo 'lint-conventions: bare TEN-''000 reference(s); use TEN-''000@1' >&2; \

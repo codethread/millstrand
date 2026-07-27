@@ -1,6 +1,6 @@
 (ns skein.quality.conventions-check-test
   "Ratchet-edge coverage for the `quality.api-form`, `quality.spool-tiers`,
-  and `quality.spool-var` checks.
+  `quality.spool-var`, and `quality.json-literals` checks.
 
   The conversion cards each edit `quality.api-form/pending`, so the edges
   that keep that set honest are the behavior worth pinning: a converted
@@ -23,12 +23,20 @@
   map keyed by a non-empty subset of `:contribute`/`:reconcile`, each a
   quoted entry-point symbol). Malformed and incidental public values are
   findings; private `spool` vars are ignored, and the guard is
-  structural — it reads the authored literal, never resolving symbols."
+  structural — it reads the authored literal, never resolving symbols.
+
+  The json-literals rules pin the three narrowings that keep every
+  finding mechanically convertible: only text `json/write-str` would
+  reproduce character for character is in scope, quote-free JSON is not
+  escape soup, and a direct argument of `=`/`not=` is the text under
+  test rather than an input built from data."
   (:require
+   [clojure.data.json :as json]
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
    [quality.api-form :as api-form]
+   [quality.json-literals :as json-literals]
    [quality.spool-tiers :as spool-tiers]
    [quality.spool-var :as spool-var])
   (:import
@@ -411,3 +419,59 @@
         (is (= :readable-directory (:expected (ex-data error)))))
       (finally
         (.delete root)))))
+
+;; --- json-literals ---------------------------------------------------------
+
+(def ^:private reproducible-object
+  "JSON text `write-str` reproduces exactly — the shape the check flags.
+
+  Built rather than hand-escaped, so this file passes its own rule."
+  (json/write-str {:title "x"}))
+
+(deftest only-write-str-output-is-a-reproducible-literal
+  (testing "objects and arrays write-str would reproduce"
+    (is (json-literals/reproducible-json? reproducible-object))
+    (is (json-literals/reproducible-json? (json/write-str [{:k "v"}]))))
+  (testing "spacing, JSONL, and trailing text are the author's own"
+    (is (not (json-literals/reproducible-json? "{\"a\": 1}")))
+    (is (not (json-literals/reproducible-json? "{\"k\":1}\n{\"k\":2}\n")))
+    (is (not (json-literals/reproducible-json? "{\"k\":1} and then some"))))
+  (testing "JSON carrying no quoted string is not escape soup"
+    (is (not (json-literals/reproducible-json? "[1,2]")))
+    (is (not (json-literals/reproducible-json? "{}"))))
+  (testing "text that merely opens with a brace is not JSON"
+    (is (not (json-literals/reproducible-json? "{not json at all")))))
+
+(deftest literal-sites-report-the-enclosing-form-line
+  (let [form (with-meta (list 'op! "weave" ["--input" reproducible-object]) {:line 12})]
+    (is (= [{:line 12 :text reproducible-object}]
+           (json-literals/literal-sites form 1)))))
+
+(deftest comparison-arguments-are-the-text-under-test
+  (testing "a direct argument of = or not= is the assertion, not an input"
+    (is (empty? (json-literals/literal-sites (list '= reproducible-object 'actual) 1)))
+    (is (empty? (json-literals/literal-sites (list 'not= reproducible-object 'actual) 1))))
+  (testing "a literal nested inside the comparison is still an input"
+    (is (= [{:line 1 :text reproducible-object}]
+           (json-literals/literal-sites
+            (list '= 'expected (list 'parse ["--input" reproducible-object]))
+            1)))))
+
+(deftest findings-locate-the-literal-and-name-the-fix
+  (let [[finding] (json-literals/findings
+                   [{:filename "test/skein/thing_test.clj"
+                     :line 12
+                     :text reproducible-object}])]
+    (is (str/starts-with? finding "test/skein/thing_test.clj:12: "))
+    (is (str/includes? finding reproducible-object))
+    (is (str/includes? finding "json/write-str")))
+  (testing "a long literal is excerpted rather than reprinted whole"
+    (let [long-text (json/write-str (zipmap (map #(str "key" %) (range 20)) (range 20)))
+          [finding] (json-literals/findings
+                     [{:filename "t.clj" :line 1 :text long-text}])]
+      (is (not (str/includes? finding long-text)))
+      (is (str/includes? finding "..."))))
+  (testing "an unreadable file is its own finding"
+    (is (str/includes? (first (json-literals/findings
+                               [{:filename "t.clj" :read-error "EOF while reading"}]))
+                       "could not read file: EOF while reading"))))
