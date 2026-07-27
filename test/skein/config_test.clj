@@ -428,6 +428,88 @@
                                             'config/devflow-runs-query))
                                   {}))))))))
 
+(deftest spool-bump-workflow-publishes-authority-exclusive-cutover-paths
+  (with-startup-config-runtime
+    (fn [_rt]
+      (let [description (op! "workflow" ["show" "spool-bump"])
+            definition (var-get (requiring-resolve 'workflows/spool-bump))
+            compile-workflow (requiring-resolve 'skein.spools.workflow/compile)
+            params (fn [direct?]
+                     (json/write-str
+                      {:bumps [{:family "codethread/kanban"
+                                :version "latest"}
+                               {:family "codethread/devflow"
+                                :version "v12"}]
+                       :branch "bump-demo"
+                       :worktree "/tmp/bump-demo"
+                       :direct-user-request direct?}))
+            action-refs
+            (fn [direct?]
+              (->> (:strands
+                    (compile-workflow
+                     definition
+                     {:bumps [{:family "codethread/kanban"
+                               :version "latest"}
+                              {:family "codethread/devflow"
+                               :version "v12"}]
+                      :branch "bump-demo"
+                      :worktree "/tmp/bump-demo"
+                      :direct-user-request direct?}))
+                   (keep #(get-in % [:attributes "workflow/action-ref"]))
+                   set))]
+        (is (= "workflows/spool-bump" (:definition description)))
+        (is (= ["create-branch"] (get-in description [:declared :entry])))
+        (is (= "workflows/spool-bump-params" (get-in description [:params :spec])))
+        (is (= "spool-bump.branch.create"
+               (:action-ref
+                (first (:ready
+                        (op! "workflow" ["start" "direct-bump"
+                                         "--workflow" "spool-bump"
+                                         "--params" (params true)]))))))
+        (let [compiled (:strands
+                        (compile-workflow
+                         definition
+                         {:bumps [{:family "codethread/kanban"
+                                   :version "latest"}
+                                  {:family "codethread/devflow"
+                                   :version "v12"}]
+                          :branch "bump-demo"
+                          :worktree "/tmp/bump-demo"
+                          :direct-user-request true}))
+              bump-steps (filterv #(= "spool-bump.coordinate.bump"
+                                      (get-in % [:attributes "workflow/action-ref"]))
+                                  compiled)]
+          (is (= ["Bump third-party spool codethread/kanban to latest"
+                  "Bump third-party spool codethread/devflow to v12"]
+                 (mapv :title bump-steps)))
+          (is (str/includes?
+               (get-in (first bump-steps) [:attributes "workflow/instruction"])
+               "spool bump codethread/kanban`"))
+          (is (str/includes?
+               (get-in (second bump-steps) [:attributes "workflow/instruction"])
+               "spool bump codethread/devflow --to v12`")))
+        (op! "workflow" ["start" "indirect-bump"
+                         "--workflow" "spool-bump"
+                         "--params" (params false)])
+        (is (contains? (action-refs true) "spool-bump.runtime.cutover"))
+        (is (not (contains? (action-refs true)
+                            "spool-bump.runtime.handover")))
+        (is (contains? (action-refs false)
+                       "spool-bump.runtime.handover"))
+        (is (not (contains? (action-refs false)
+                            "spool-bump.runtime.cutover")))
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"Value does not satisfy the named spec"
+             (op! "workflow" ["start" "unstated-authority"
+                              "--workflow" "spool-bump"
+                              "--params"
+                              (json/write-str
+                               {:bumps [{:family "codethread/kanban"
+                                         :version "latest"}]
+                                :branch "bump-demo"
+                                :worktree "/tmp/bump-demo"})])))))))
+
 (deftest repo-config-publishes-no-devflow-alias-ops
   (with-startup-config-runtime
     (fn [rt]
