@@ -11,12 +11,16 @@
             [skein.api.registry.alpha :as registry]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.vocab.alpha :as vocab]
+            [skein.api.weaver.alpha :as weaver]
             [skein.spools.test-support :as test-support :refer [assert-state-shape with-runtime]]
             [skein.spools.workflow :as workflow]
             [skein.spools.workflow.internal.registry :as wf-registry]
             [skein.repl :as repl]
             [skein.test.alpha :as test-alpha])
   (:import [java.time Instant]))
+
+(defn- failure-reason [f]
+  (:reason (ex-data (try (f) (catch clojure.lang.ExceptionInfo e e)))))
 
 (deftest workflow-module-declares-workflow-attr-namespace
   (with-runtime
@@ -1396,7 +1400,7 @@
 
 (deftest workflow-advance-drives-steps-and-checkpoints
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow
                         "Advance demo"
                         (workflow/step :work "Do work" :self)
@@ -1409,6 +1413,16 @@
                               (workflow/advance! "advance-run" {:step 42})))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown workflow option keys"
                               (workflow/advance! "advance-run" {:bogus true})))
+        (is (= :workflow/advance-input-without-checkpoint
+               (failure-reason #(workflow/advance! "advance-run"
+                                                   {:input {:verdict "pass"}}))))
+        (let [step-id (:id (workflow/ready-step "advance-run"))]
+          (weaver/update! rt step-id {:attributes {"workflow/role" "improvised"}})
+          (is (= :workflow/advance-role-invalid
+                 (failure-reason #(workflow/advance! "advance-run"
+                                                     {:step step-id}))))
+          (is (= "active" (:state (weaver/show rt step-id))))
+          (weaver/update! rt step-id {:attributes {"workflow/role" "step"}}))
         ;; a ready step advanced with a :choice fails loudly and mutates nothing
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"must not supply a :choice"
                               (workflow/advance! "advance-run" {:choice :approved})))
@@ -1419,6 +1433,11 @@
         ;; a ready checkpoint advanced without a :choice fails loudly
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"requires a :choice"
                               (workflow/advance! "advance-run")))
+        (is (= :workflow/advance-attributes-on-checkpoint
+               (failure-reason
+                #(workflow/advance! "advance-run"
+                                    {:choice :approved
+                                     :attributes {"verdict" "pass"}}))))
         ;; advance! dispatches the checkpoint choice and closes the run
         (is (= {:ready [] :done true} (workflow/advance! "advance-run" {:choice :approved})))
         (is (workflow/done? "advance-run"))))))

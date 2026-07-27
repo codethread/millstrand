@@ -715,26 +715,57 @@
        rt run-id
        (fn []
          (let [step (or (query/resolve-ready-step rt run-id opts)
-                        (fail! "No ready workflow step" {:run-id run-id}))]
-           (case (query/attr step :workflow/role)
+                        (fail! "No ready workflow step" {:run-id run-id}))
+               role (query/attr step :workflow/role)
+               view (query/strand->view step)]
+           (case role
              "defer"
              (fail! "Cannot advance a defer; use defer!"
                     {:reason :workflow/step-is-defer
-                     :run-id run-id :step (query/strand->view step)})
+                     :run-id run-id :step view})
 
              "checkpoint"
              (do
                (when-not (contains? opts :choice)
                  (fail! "advance! on a checkpoint requires a :choice"
-                        {:run-id run-id :step (query/strand->view step)}))
+                        {:reason :workflow/advance-choice-required
+                         :run-id run-id
+                         :step view
+                         :choices (query/attr step :workflow/choices)}))
+               (when (contains? opts :attributes)
+                 (fail! "advance! on a checkpoint rejects :attributes"
+                        {:reason :workflow/advance-attributes-on-checkpoint
+                         :run-id run-id
+                         :step view
+                         :attributes (:attributes opts)
+                         :allowed #{:choice :input :step :by}}))
                (choose! run-id (:choice opts) (get opts :input {})
                         (select-keys opts [:by :step])))
 
+             "step"
              (do
                (when (contains? opts :choice)
                  (fail! "advance! on a step must not supply a :choice"
-                        {:run-id run-id :step (query/strand->view step)}))
-               (complete! run-id (select-keys opts [:attributes :step :by]))))))))))
+                        {:reason :workflow/advance-choice-incompatible
+                         :run-id run-id
+                         :step view
+                         :choice (:choice opts)
+                         :allowed #{:attributes :step :by}}))
+               (when (contains? opts :input)
+                 (fail! "advance! on a step rejects :input"
+                        {:reason :workflow/advance-input-without-checkpoint
+                         :run-id run-id
+                         :step view
+                         :input (:input opts)
+                         :allowed #{:attributes :step :by}}))
+               (complete! run-id (select-keys opts [:attributes :step :by])))
+
+             (fail! "Cannot advance an unknown workflow role"
+                    {:reason :workflow/advance-role-invalid
+                     :run-id run-id
+                     :step view
+                     :role role
+                     :allowed #{"step" "checkpoint" "defer"}}))))))))
 
 (defn choice-details
   "Return choice explanations for run-id's current workflow checkpoint, keyed by
