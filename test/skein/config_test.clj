@@ -572,8 +572,8 @@
     (is (= {:id "root" :title "Feature card" :state "active"} (:root report)))
     (is (= ["run-a" "run-b"] (mapv :id (:runs report))))
     (is (= {:runs 2 :runs-with-usage 1 :cost-usd 1.25 :tokens-total 1000
-            :wall-clock {:started-at "2026-07-10T11:00:00.250+01:00"
-                         :finished-at "2026-07-10T05:08:30-05:00"
+            :wall-clock {:started-at "2026-07-10T10:00:00.25Z"
+                         :finished-at "2026-07-10T10:08:30Z"
                          :duration-secs 509.75}}
            (:totals report)))
     (is (= [{:runs 1 :runs-with-usage 1 :cost-usd 1.25 :tokens-total 1000
@@ -583,6 +583,8 @@
            (:by-harness report)))
     (is (= ["run-b"] (:missing-usage report)))
     (is (= 300.5 (get-in report [:runs 0 :duration-secs])))
+    (is (= "2026-07-10T10:05:00.75Z"
+           (get-in report [:runs 0 :finished-at])))
     (is (= {:input 800 :output 200} (get-in report [:runs 0 :tokens])))))
 
 (deftest feature-cost-report-fails-loudly-on-malformed-present-values

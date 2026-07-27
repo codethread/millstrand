@@ -10,7 +10,7 @@ def double($strand; $attribute):
     $strand.attributes[$attribute] as $value
     | (try ($value | tonumber)
        catch malformed($strand; $attribute; $value)) as $number
-    | if $number | isfinite
+    | if $number | (isnan or isinfinite) | not
       then $number
       else malformed($strand; $attribute; $value)
       end
@@ -69,7 +69,15 @@ def instant($strand; $attribute):
           | (($parts.base + "Z" | fromdateiso8601)
              + (($parts.fraction // "0") | tonumber)
              - $offset) as $epoch
-          | {text: $value, epoch: $epoch})
+          | (($parts.fraction // "") | sub("0+$"; "")) as $fraction
+          | {
+              text: (
+                ($epoch | floor | strftime("%Y-%m-%dT%H:%M:%S"))
+                + (if ($fraction | length) > 1 then $fraction else "" end)
+                + "Z"
+              ),
+              epoch: $epoch
+            })
        catch malformed($strand; $attribute; $value))
   end;
 
