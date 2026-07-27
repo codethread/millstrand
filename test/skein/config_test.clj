@@ -1229,9 +1229,18 @@
         ;; entirely rather than render a literal "<card>" placeholder
         (is (not (str/includes? (:instruction cleanup-step) "kanban finish")))
         (is (not (str/includes? (:instruction cleanup-step) "<card>"))))
-      (let [done (op! "land" ["complete" "land-x"])]
-        (is (true? (:done done)))
-        (is (empty? (:ready done))))
+      (let [duplicate (weaver/add! rt {:title "Corrupt duplicate merge lock"
+                                       :attributes {:kind "merge-lock"
+                                                    :land/run-id "other-land-run"}})]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"multiple active merge locks found"
+                              (op! "land" ["complete" "land-x"])))
+        (is (= 2 (count (active-merge-locks)))
+            "terminal cleanup must not normalize a corrupt lock set")
+        (weaver/update! rt (:id duplicate) {:state "closed"})
+        (let [done (op! "land" ["complete" "land-x"])]
+          (is (true? (:done done)))
+          (is (empty? (:ready done)))))
       (let [status (op! "workflow" ["ready" "land-x"])]
         (is (= "workflow ready" (:operation status)))
         (is (true? (:done status)))

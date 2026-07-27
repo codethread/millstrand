@@ -97,10 +97,19 @@
                                                      :land/run-id feature}})
                  :created? true}))))))))
 
+(defn- require-sane-merge-locks!
+  "Return active locks, refusing a corrupt multiple-lock state."
+  []
+  (let [locks (active-merge-locks)]
+    (when (> (count locks) 1)
+      (throw (ex-info "multiple active merge locks found; inspect and repair manually"
+                      {:locks (mapv :id locks)})))
+    locks))
+
 (defn- release-merge-lock!
   "Release the merge lock held by feature, if one exists."
   [feature reason]
-  (doseq [lock (active-merge-locks)
+  (doseq [lock (require-sane-merge-locks!)
           :when (= feature (attr-value lock :land/run-id))]
     (weaver/update! (current/runtime)
                     (:id lock)
@@ -798,7 +807,10 @@
                                    :revise {:params {}}}
                                   {:key :abort
                                    :label "Abort"
-                                   :description "Stop landing intentionally; nothing merges. Records the reason and leaves the branch/worktree for follow-up."
+                                   :description
+                                   (format-alpha/reflow
+                                    "|Stop landing intentionally; nothing merges. Records the
+                                     |reason and leaves the branch/worktree for follow-up.")
                                    :next :land-abort
                                    :input land-abort-reason-input}]
                         :attributes {"workflow/decision-point" "land-signed-off"})))
@@ -821,6 +833,8 @@
                 :positionals [{:name :run-id :required? true :doc "Land run id."}]}
     "choose" {:doc "Choose approved or abort sign-off with lock and card rollback."
               :hook-class :mutating :deadline-class :standard
+              :annotations
+              {:notes ["The choice positional is a closed enum: approved or abort."]}
               :flags {:input {:type :string
                               :parse :json
                               :required? true
@@ -828,7 +842,7 @@
               :positionals [{:name :run-id :required? true :doc "Land run id."}
                             {:name :choice
                              :required? true
-                             :doc "Policy choice: approved or abort."}]}
+                             :doc "Closed policy enum: approved or abort."}]}
     "break-lock" {:doc "Explicitly break a stale merge lock with a reason."
                   :hook-class :mutating :deadline-class :standard
                   :flags {:reason {:type :string
@@ -878,6 +892,7 @@
             (when (some? pr-number)
               (throw (ex-info "--pr-number is only accepted at push-draft-pr"
                               {:run-id feature :pr-number pr-number})))
+            (require-sane-merge-locks!)
             (let [result (workflow/complete! feature)]
               (release-merge-lock! feature "land terminal cleanup")
               result))

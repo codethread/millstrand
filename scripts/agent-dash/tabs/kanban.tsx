@@ -363,7 +363,10 @@ function MergeLockBanner(st: LockState, ctx: RenderCtx) {
       return line("magenta", `MERGE LOCK · ${st.lock.feature} · owner ${st.lock.owner} · held ${held}`);
     }
     case "corrupt":
-      return line("red", `${st.count} ACTIVE MERGE LOCKS · state corrupt · inspect manually`);
+      return line(
+        "red",
+        `${st.count} ACTIVE MERGE LOCKS · list --query merge-lock · close extras, then land break-lock --reason`,
+      );
     case "malformed":
       return line("red", `MERGE LOCK ${st.id} malformed · missing ${st.missing.join(", ")} · inspect the strand`);
     case "error":
