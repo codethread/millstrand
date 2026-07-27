@@ -1,22 +1,25 @@
-{:spools {;; Git family coordinates are the consumer's single source; developers
-          ;; override them with gitignored spools.local.edn entries.
-          ct.spools/agent-run {:git/url "https://github.com/codethread/agent-harness.spool.git"
-                               :git/sha "0e3f43f695b0d4d1695754a59348c339220281a8"
-                               :git/tag "v15"
-                               :roots {ct.spools/agent-run "agent-run"
-                                       ct.spools/delegation "delegation"
-                                       ct.spools/bench "bench"}}
-          skein.spools/batteries {:skein/source-root "spools/batteries"}
-          skein.spools/workflow {:skein/source-root "spools/workflow"}
-          skein.spools/unsafe-text-search {:skein/source-root "spools/unsafe-text-search"}
-          skein.spools/chime {:skein/source-root "spools/chime"}
-          skein.spools/cron {:skein/source-root "spools/cron"}
-          skein.macros/macros {:local/root "spools/macros"}
-          codethread/devflow {:git/url "https://github.com/codethread/devflow.spool.git"
-                              :git/sha "c4a2dabc02c8649f5d3a9f71998baaf6fc909712"
-                              :git/tag "v11"
-                              :roots {codethread/devflow "."}}
-          codethread/kanban {:git/url "https://github.com/codethread/kanban.spool.git"
-                             :git/sha "e165b9b8c721653d32243fe177bd910f52325a00"
-                             :git/tag "v11"
-                             :roots {codethread/kanban "."}}}}
+{:spools {codethread/kanban
+ {:git/url "https://github.com/codethread/kanban.spool.git",
+  :git/sha "7557128d41a0c210433129633a2778a42707638f",
+  :git/tag "v12",
+  :roots {codethread/kanban "."}},
+ skein.spools/chime {:skein/source-root "spools/chime"},
+ skein.macros/macros {:local/root "spools/macros"},
+ skein.spools/unsafe-text-search
+ {:skein/source-root "spools/unsafe-text-search"},
+ codethread/devflow
+ {:git/url "https://github.com/codethread/devflow.spool.git",
+  :git/sha "c4a2dabc02c8649f5d3a9f71998baaf6fc909712",
+  :git/tag "v11",
+  :roots {codethread/devflow "."}},
+ skein.spools/batteries {:skein/source-root "spools/batteries"},
+ skein.spools/cron {:skein/source-root "spools/cron"},
+ skein.spools/workflow {:skein/source-root "spools/workflow"},
+ ct.spools/agent-run
+ {:git/url "https://github.com/codethread/agent-harness.spool.git",
+  :git/sha "0e3f43f695b0d4d1695754a59348c339220281a8",
+  :git/tag "v15",
+  :roots
+  {ct.spools/agent-run "agent-run",
+   ct.spools/delegation "delegation",
+   ct.spools/bench "bench"}}}}
