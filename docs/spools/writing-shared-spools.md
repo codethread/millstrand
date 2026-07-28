@@ -582,7 +582,7 @@ A module is one unit of activation, and its contract is split across three surfa
 - Your namespace's public `spool` var names the functions, as symbols.
 - `contribute` returns data. `reconcile` performs effects.
 
-That last split is the one to hold on to. Contribution data says what should be reachable through the blessed registries; reconciliation makes the running process's live effects and resources agree with the transition.
+The last line is the boundary the rest of this section rests on. Contribution data defines what the blessed registries expose; reconciliation applies the transition to the running process's live effects and resources.
 
 ### README activation snippet
 
@@ -591,6 +591,7 @@ Include an **Activation** section with the complete trusted `init.clj` snippet.
 The consumer owns the runtime and declares modules explicitly. The option map is closed, and every key in it is activation data: exactly one source target (`:ns` namespace symbol or workspace-relative `:file` string), plus optional `:load :image`, `:spools` for every approved root prerequisite, `:after` when one module must follow another, and `:required?` for a loud missing-prerequisite refusal. It never carries `:contribute` or `:reconcile`; those live in your `spool` var, and a declaration naming either key is refused at declaration time with a `(def spool …)` remedy.
 
 ```clojure
+;; .skein/init.clj — the consumer's trusted config
 (require '[skein.api.current.alpha :as current]
          '[skein.api.runtime.alpha :as runtime])
 
@@ -609,6 +610,7 @@ Under `:required? true`, missing or failed root prerequisites refuse refresh. Na
 Beside `contribute`/`reconcile`, declare the spool's activation entry points in one public var named `spool`:
 
 ```clojure
+;; spool source namespace, beside the two functions it names
 (def spool
   {:contribute 'contribute
    :reconcile 'reconcile})
@@ -624,33 +626,58 @@ There is no imperative `install!` companion: the module lifecycle is the one act
 
 ### Choose one contribution authoring style
 
-Before any of the schemas below matter, decide how this module source states its contribution. A module source that contributes registry entries does it in one of two styles, and it must use exactly one of them. Collected `def…` forms and a `:contribute` function are mutually exclusive; `:reconcile` is orthogonal to both.
+Before any of the schemas below matter, decide how this module source states its contribution. A module source that contributes registry entries does it in one of two styles, and it must use exactly one of them. Collecting authoring macros and a `:contribute` function are mutually exclusive; `:reconcile` is orthogonal to both.
 
-Not every module contributes. A module that only needs effects declares a reconcile-only `spool` var and contributes nothing, and a source-loading ns module with no `spool` var and no collected forms is legal too — an empty contribution is not an error (SPEC-004.C46). A `:load :image` module is the exception: image mode loads no source and so collects no forms, which leaves the `spool` var as its only contribution route, and a namespace with no resolvable `:contribute` is that module's failed outcome at evaluation. The choice below is for sources that do have entries to publish.
+Not every module contributes registry entries. A module that only needs effects declares a reconcile-only `spool` var and contributes nothing. A source-loading ns module with neither a `spool` var nor anything collected is legal too, because an empty contribution is not an error (SPEC-004.C46).
 
-**Collected forms.** Evaluating an ordinary top-level `def…` form both defines the code or data and collects a registry entry for the module currently being evaluated. It has the feel of an Emacs buffer: the source is a sequence of ordinary definitions, and the module's contribution is whatever they collected along the way. Every such form feeds the same module-evaluation collector, so which ones exist depends on which spools a world loads. `defworkflow` and `defjob` ship with the workflow and cron spools; this repo's macros spool supplies generic `defop`, `defquery`, and `defpattern` alongside a `defrule` that collects chime rule entries, which are forms you can reach for in this repo rather than a pattern to copy. A macro in a shared spool reaches the collector through blessed `skein.api.runtime.alpha/collect-entry!`, as `defworkflow` and `defjob` do; the repo-local macros expand to the internal `skein.core.weaver.module-refresh/collect-entry!`, which is not a surface a shared spool may build on. A source in this style has no `:contribute`. It often has no `spool` var at all, and declares a reconcile-only one when it needs effects:
+Image mode is different. It loads no source, so nothing collects, and the `spool` var is the module's only contribution route. An image module whose namespace has no resolvable `:contribute` reports a failed outcome at evaluation. The choice below is for sources that do have entries to publish.
+
+**Collecting authoring macros.** Ordinary `def` and `defn` forms collect nothing. What collects is a top-level *collecting authoring macro* such as `defworkflow`: the macro both defines its Var or data and calls `collect-entry!` for the module currently being evaluated. `skein.spools.cron/defjob` is the compact shipped example:
 
 ```clojure
+;; report_job.clj — a module source namespace
+(ns report-job
+  (:require [skein.spools.cron :as cron]))
+
+(defn report-tick [runtime]
+  ;; ... do the work ...
+  {:outcome :reported})
+
+(cron/defjob :nightly-report
+  {:interval-ms (* 24 60 60 1000)
+   :handler     'report-job/report-tick})
+```
+
+`defn report-tick` defines a function and contributes nothing. `cron/defjob` defines the job declaration *and* collects it under cron's job kind; that difference is the whole style. `skein.spools.workflow/defworkflow` behaves the same way and states it sharply: loading the namespace always defines the Var, and only an evaluation running under a module contribution collector also collects the entry — which is exactly why an owner that stops evaluating a `defworkflow` form drops that entry by omission at the next refresh.
+
+The style keeps a module source reading like an ordinary definition buffer, a flat sequence of top-level forms rather than one function assembling a map. Evaluating a form yourself still publishes nothing: `collect-entry!` is passive outside contribution collection, so REPL evaluation and code-only reloads define Vars and stop there. The contribution is assembled only when the coordinator evaluates the module under its collector, from whichever forms collected. A source in this style has no `:contribute`. It often has no `spool` var at all, and declares a reconcile-only one when it needs effects:
+
+```clojure
+;; spool source namespace
 (def spool
   {:reconcile 'reconcile})
 ```
 
+Which macros exist depends on which spools a world loads. A macro you write for a shared spool reaches the collector through blessed `skein.api.runtime.alpha/collect-entry!`, as `defworkflow` and `defjob` do.
+
+> This repository's own workspace additionally carries local `defop`, `defquery`, `defpattern`, and `defrule` macros for its `.skein` config. They expand to the internal `skein.core.weaver.module-refresh/collect-entry!`, so they are workspace convenience rather than precedent — do not copy them into a shared spool.
+
 **One explicit owner-complete function.** The module writes a single function returning its whole contribution as data, and names it in the `spool` var:
 
 ```clojure
+;; spool source namespace
 (defn contribute [_ctx]
   {:queries {"mine" [:= [:attr :owner] "ct"]}})
 
 (def spool
-  {:contribute 'contribute
-   :reconcile 'reconcile})
+  {:contribute 'contribute})
 ```
 
-The coordinator fails loudly when both appear in one module rather than quietly picking one. `contribute` returns the owner's *complete* partition, so entries the same source collected would be discarded; refresh refuses that combination and names the module and the kinds it collected (SPEC-004.C46). When a file grows a `defworkflow` beside a hand-written `contribute`, the fix is to author the rest of its surface too: `.skein/workflows.clj` in this repo is the worked example, with `defworkflow` for its definitions, `defop` for its one op, `defpattern` for its one pattern, and no `spool` var at all.
+The coordinator rejects a module that combines collecting macros with `:contribute`, reporting the module and the kinds it collected (SPEC-004.C46). The reason is that `contribute` returns the owner's *complete* partition, so anything the same source collected would be discarded. A source that has drifted into both picks one style and moves the rest across.
 
-A `:reconcile` symbol composes with either style, and a reconcile-only `spool` var beside collected forms is ordinary production shape.
+A `:reconcile` symbol composes with either style, and a reconcile-only `spool` var beside collecting macros is ordinary production shape.
 
-The rest of this section is the second style's contract. If you are collecting forms, the shape of what each form collects belongs to the form and to the kind it writes into.
+The rest of this section is the second style's contract. If you are using collecting macros, the shape of what each one collects belongs to that macro and to the kind it writes into.
 
 ### What `contribute` receives and returns
 
@@ -706,7 +733,7 @@ The long form is selected by presence: a value carrying `:entries` or `:override
 Five kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, and `:events`. Beyond those the set is open over whatever the running runtime declares. A domain spool declares its own kind with `skein.api.registry.alpha/declare-kind!`, and other modules then contribute entries to it. The shipped workflow executors do exactly this, mixing a domain kind and a core kind in one contribution:
 
 ```clojure
-;; skein.spools.executors.shell
+;; spool source namespace skein.spools.executors.shell
 (defn contribute [_ctx]
   {workflow/executor-kind {"shell" gate-stalled-symbol}
    :queries {"stalled-shell-gates" stalled-shell-gates-query}})
@@ -714,43 +741,48 @@ Five kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, and `
 
 A kind the running runtime has not declared fails publication, naming the module and the unknown kinds.
 
-Entry *values* are governed by each kind's registered `:entry-spec`, so there is no single entry schema to learn: what a `:queries` value may be is the query grammar's business, what an `:ops` value needs is the op registration contract's, and a domain kind answers for its own. Read the kind's contract, not a table here.
+A registry **kind** is one named class of registry entry. It is declared once with an id, an `:entry-spec` every entry value must satisfy, and a layer policy. The layer policy orders the layers owners contribute in, and it governs precedence and override intent rather than silently selecting a winner: two owners supplying one key in the same layer is a loud collision, and a higher-layer entry shadowing a lower-layer one requires declared `:overrides`. Kinds are what makes a contribution addressable: your map's top-level keys are kind ids, and each value holds entries of that kind.
 
-`contribute` is executed, and its **return value** is the publication data. That makes it the wrong place for ordinary effects: the coordinator stages and publishes what you return, so registering entries from inside `contribute` fights the publication it is feeding. Keep registration and live resources in `reconcile`.
+Entry *values* therefore have no single schema. For the five core kinds the registered `:entry-spec` is deliberately loose, and the documented entry vocabulary lives with the matching direct-registration function:
 
-One narrow exception is worth naming, because three shipped spools rely on it. A spool that owns a registry kind materialises its runtime-owned registry handle from `contribute`, so that a dependent module staged later in the same refresh finds the kind already declared — chime for its rule kind, workflow for its executor and definition kinds, cron for its job kind. All three return an empty contribution; the work is bootstrapping the kind, not registering entries into it.
+| Kind | Entry vocabulary |
+| --- | --- |
+| `:ops` | [`register-op!`](../api/weaver.api.md#skein.api.weaver.alpha/register-op!) |
+| `:queries` | [`register-query!`](../api/graph.api.md#skein.api.graph.alpha/register-query!) |
+| `:patterns` | [`register-pattern!`](../api/patterns.api.md#skein.api.patterns.alpha/register-pattern!) |
+| `:hooks` | [`register-hook!`](../api/hooks.api.md#skein.api.hooks.alpha/register-hook!) |
+| `:events` | [`register-handler!`](../api/events.api.md#skein.api.events.alpha/register-handler!) |
+
+A custom kind's entry values are whatever its owner's `:entry-spec` accepts, so read that spool's own contract; [`declare-kind!`](../api/registry.api.md#skein.api.registry.alpha/declare-kind!) is where a kind states its id, spec, and policy.
+
+`contribute` is executed, and its **return value** is the publication data. Do not register entries from inside it: the coordinator stages and publishes what you return, and a direct registration made during `contribute` conflicts with that staged publication. Registration effects and live resources go in `reconcile`.
+
+Declaring a kind is the exception, because a kind must exist before any module contributes to it. A spool that owns a kind declares it from `contribute` so the kind is present before a dependent module's contribution is staged against it. `skein.spools.cron` is the shipped example: it declares its job kind and returns an empty contribution, because the effect bootstraps the kind rather than registering entries into it. A module contributing to another spool's kind names that spool's module in `:after`.
 
 ### Moving a direct registration into a contribution
 
 Say you already have a query you registered directly:
 
 ```clojure
+;; trusted REPL
 (graph/register-query! runtime 'mine [:= [:attr :owner] "ct"])
 ```
 
 As a contribution it is one line:
 
 ```clojure
+;; spool source namespace
 (defn contribute [_ctx]
   {:queries {"mine" [:= [:attr :owner] "ct"]}})
 ```
 
 Two things changed. The name is now a string: `register-query!` accepts a simple symbol or keyword and canonicalises it to the registry key `"mine"` on your behalf, while a contribution's keys go into the registry as written, so write the canonical string key yourself. And the ownership changed: the direct call writes one entry under the direct-registration owner, whereas the contribution replaces your module's complete `:queries` partition every time it publishes.
 
-In the collected-forms style the same query is a top-level form and you write no `contribute` at all. Where a `defquery` is available it reads:
-
-```clojure
-(defquery mine
-  "Strands owned by ct."
-  {:usage "strand list --query mine"}
-  [:= [:attr :owner] "ct"])
-```
-
-Either route publishes the same entry under the same module owner.
+Had a collecting macro for named queries been loaded, the same query would be one top-level form in the other style and you would write no `contribute` at all. Either route publishes the same entry under the same module owner.
 
 ### Publication is owner-complete
 
-A contribution is the whole truth about your module, not a patch on it. When this module publishes a changed contribution, the coordinator stages your complete partition for every kind you name, then publishes it:
+Each publication replaces your module's complete owner partition for every kind it contributes. When this module publishes a changed contribution, the coordinator stages that complete partition, then publishes it:
 
 - An entry you stop returning is removed from your partition.
 - A kind you stop naming loses your partition for that kind entirely.
@@ -797,6 +829,7 @@ Its context map is larger, because a reconciler needs to know what it is transit
 Branch on `[:module/contribution :status]` and read nothing else from the outcome map as contract. The status is the normative field; the rest of the outcome is a reporting shape surfaced in refresh results and `runtime/status`, not a spec to build on.
 
 ```clojure
+;; spool source namespace
 (defn reconcile [{:keys [runtime] :as ctx}]
   (let [status (get-in ctx [:module/contribution :status])]
     (case status
@@ -828,7 +861,7 @@ Return data, not objects. The return value must satisfy the data-first grammar t
 A workspace-relative `:file` module can use the same convention when the loaded file declares one namespace. The coordinator resolves `spool` from that namespace:
 
 ```clojure
-;; .skein/acme_priority.clj
+;; .skein/acme_priority.clj — the module source the declaration below loads
 (ns acme.priority.local)
 
 (defn reconcile [ctx]
@@ -843,12 +876,15 @@ A workspace-relative `:file` module can use the same convention when the loaded 
   {:reconcile 'reconcile})
 ```
 
+The declaration is trusted config, running in `.skein/init.clj` after `rt` is bound as in the activation snippet above:
+
 ```clojure
+;; .skein/init.clj — the consumer's trusted config, with rt already bound
 (runtime/module! rt :acme/priority
   {:file "acme_priority.clj"})
 ```
 
-A file that declares no namespace remains authoring-forms-only: its collected forms may contribute, but it gets no `spool` convention lookup. Keep a convention-backed file to one declared namespace so the public var has one unambiguous owner.
+A file that declares no namespace can still contribute whatever its collecting macros gathered, but it gets no `spool` convention lookup. Keep a convention-backed file to one declared namespace so the public var has one unambiguous owner.
 
 ## Maven dependencies in a spool root
 
