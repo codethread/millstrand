@@ -334,9 +334,11 @@ Skein's discovery convention has three tiers — generated `help`, authored `abo
 3. **Ship `:about` when your op has semantics beyond its argument shapes.** Author a non-blank `:about` prose string in the op metadata (not an `about` subcommand); the builtin `strand about <op>` meta-verb projects it in a minimal `{about, source}` envelope. Keep it cross-verb narrative (purpose, conventions, attribute contracts) — never restate a node-derivable fact, that is `help`'s job.
 4. **Ship `:prime` when your spool carries working discipline.** If an agent must load conventions before acting (board lanes, handover contracts, workflow rules), author a non-blank `:prime` prose string in the op metadata; `strand prime <op>` projects it. Generate it from the same definitions the spool installs so the discipline can never drift from the installed surface.
 
-### Glossary outcomes: contribute before the ops that use them
+### Glossary outcomes belong to your reconciler
 
-Shared failure outcomes are defined **once** in the runtime glossary and referenced by name from each verb's `failure-modes`. Register your outcomes with `register-glossary-outcome!` (qualified, stable names; a collision fails loudly — a deliberate change uses `replace-glossary-outcome!` or, better, a new name) in the module contribution that also owns the referring ops. Publication validates the whole contribution before replacing the owner partition, so an op whose glossary reference is absent fails loudly and retains the prior owner state. A spool that ships its outcomes this way carries them portably wherever its module is declared.
+Shared failure outcomes are defined **once** in the runtime glossary and referenced by name from each verb's `failure-modes`. They are runtime resources rather than declaration data, so they do not go in a module contribution. Seed them with `register-glossary-outcome!` (qualified, stable names; a collision fails loudly — a deliberate change uses `replace-glossary-outcome!` or, better, a new name) from the `:applied` branch of the reconciler on the same module that owns the referring ops, as batteries does. The glossary API ships no unregister, so outcomes are process-lifetime seeds and that reconciler's `:removed` branch is deliberately effect-free.
+
+Ordering is safe: module publication does not run the direct-registration glossary-ref check, so the ops may publish before the reconciler seeds their outcomes. `help` resolves the referenced-term closure when it is read, and reports a reference it cannot resolve loudly as `discovery/glossary-ref-unresolved` instead of dropping it. A spool that ships its outcomes this way carries them portably wherever its module is declared.
 
 ### The `:about`/`:prime` metadata shape is a compatibility boundary
 
@@ -572,11 +574,21 @@ Core enforces load-boundary checks. Authoring helpers, including the batteries `
 
 If a prerequisite is a blessed `skein.api.*.alpha` namespace, document the namespace and why it is required but do not invent a family coordinate for it; blessed API namespaces ship on the selected Skein classpath. Batteries is different: it is an ordinary approved root, normally present through the `skein.spools/batteries {:skein/source-root "spools/batteries"}` entry seeded by `mill init`. Name that root in the module's `:spools` prerequisites when the module needs batteries, and use `:after` when it depends on the batteries module's published contribution. Every external source repository still gets its own family entry.
 
+## Activating a module
+
+A module is one unit of activation, and its contract is split across three surfaces that different people own:
+
+- The consumer's `runtime/module!` call is activation data: which source to load, which approved roots it needs, and how loudly to fail without them. It names no functions.
+- Your namespace's public `spool` var names the functions, as symbols.
+- `contribute` returns data. `reconcile` performs effects.
+
+That last split is the one to hold on to. Contribution data says what should be reachable through the blessed registries; reconciliation makes the running process's live effects and resources agree with the transition.
+
 ### README activation snippet
 
 Include an **Activation** section with the complete trusted `init.clj` snippet.
 
-The consumer owns the runtime and declares modules explicitly. It names a source target and world policy only — `:spools` for every approved root prerequisite, `:after` when one module depends on another, `:required?` for a loud missing-prerequisite refusal — and never mirrors the spool's `:contribute`/`:reconcile` entry points, which the spool declares in its own `spool` var (below).
+The consumer owns the runtime and declares modules explicitly. The option map is closed, and every key in it is activation data: exactly one source target (`:ns` namespace symbol or workspace-relative `:file` string), plus optional `:load :image`, `:spools` for every approved root prerequisite, `:after` when one module must follow another, and `:required?` for a loud missing-prerequisite refusal. It never carries `:contribute` or `:reconcile`; those live in your `spool` var, and a declaration naming either key is refused at declaration time with a `(def spool …)` remedy.
 
 ```clojure
 (require '[skein.api.current.alpha :as current]
@@ -604,9 +616,212 @@ Beside `contribute`/`reconcile`, declare the spool's activation entry points in 
 
 The refresh coordinator resolves this `spool` var from the loaded namespace at every module evaluation ([ADR-004](../../devflow/adrs/0004-def-spool-convention.md)), so a consumer names only a source target and world policy and never mirrors the pair. There is no declaration key that supplies an entry point instead. The public name is the point: it is the grep-friendly surface spool authors own, so a reader finds a spool's entry points by searching `def spool` in its source, and every consumer reads the same contract from the docs rather than re-deriving it from a `module!` call.
 
-The shape is `skein.api.spool.alpha/::spool`: a map with optional `:contribute` and `:reconcile` symbols, at least one present, and no `:ns` key — the namespace is implicit in where the var lives. Symbols are qualified against the spool namespace, so unqualified `'contribute` and fully qualified `'acme.priority.alpha/contribute` both resolve; fn values are rejected (ADR-002.O1), because the published declaration must stay printable data for `plan`, `status`, and shadow-by-redeclare. Validate a candidate with plain `s/valid?`/`s/explain-data` against `::spool`; the runtime enforces the same spec loudly at activation.
+The shape is `skein.api.spool.alpha/::spool`, a closed map. Both keys are singular, `:contribute` and `:reconcile`; at least one must be present, and there is no `:ns` key because the namespace is implicit in where the var lives. Both values are **symbols**: unqualified `'contribute` resolves against the namespace holding the `spool` var, and fully qualified `'acme.priority.alpha/contribute` passes through, which is how you name an entry point defined elsewhere. A fn value is rejected on sight (ADR-002.O1), because the published declaration must stay printable data for `plan`, `status`, and shadow-by-redeclare. Validate a candidate with plain `s/valid?`/`s/explain-data` against `::spool`; the runtime enforces the same spec loudly at activation.
+
+Each symbol names a one-argument function taking a context map. Neither takes the runtime as a bare first argument — it arrives in the map, and every function you call from there keeps the explicit-runtime rule.
 
 There is no imperative `install!` companion: the module lifecycle is the one activation path, and a reconciler follows the SPEC-004.C46b status contract — branch on `:applied`/`:removed` and fail loudly on anything else. Fixture-activation conventions are in [testing.md](./testing.md).
+
+### Choose one contribution authoring style
+
+Before any of the schemas below matter, decide how this module source states its contribution. A module source that contributes registry entries does it in one of two styles, and it must use exactly one of them. Collected `def…` forms and a `:contribute` function are mutually exclusive; `:reconcile` is orthogonal to both.
+
+Not every module contributes. A module that only needs effects declares a reconcile-only `spool` var and contributes nothing, and a source-loading ns module with no `spool` var and no collected forms is legal too — an empty contribution is not an error (SPEC-004.C46). A `:load :image` module is the exception: image mode loads no source and so collects no forms, which leaves the `spool` var as its only contribution route, and a namespace with no resolvable `:contribute` is that module's failed outcome at evaluation. The choice below is for sources that do have entries to publish.
+
+**Collected forms.** Evaluating an ordinary top-level `def…` form both defines the code or data and collects a registry entry for the module currently being evaluated. It has the feel of an Emacs buffer: the source is a sequence of ordinary definitions, and the module's contribution is whatever they collected along the way. Every such form feeds the same module-evaluation collector, so which ones exist depends on which spools a world loads. `defworkflow` and `defjob` ship with the workflow and cron spools; this repo's macros spool supplies generic `defop`, `defquery`, and `defpattern` alongside a `defrule` that collects chime rule entries, which are forms you can reach for in this repo rather than a pattern to copy. A macro in a shared spool reaches the collector through blessed `skein.api.runtime.alpha/collect-entry!`, as `defworkflow` and `defjob` do; the repo-local macros expand to the internal `skein.core.weaver.module-refresh/collect-entry!`, which is not a surface a shared spool may build on. A source in this style has no `:contribute`. It often has no `spool` var at all, and declares a reconcile-only one when it needs effects:
+
+```clojure
+(def spool
+  {:reconcile 'reconcile})
+```
+
+**One explicit owner-complete function.** The module writes a single function returning its whole contribution as data, and names it in the `spool` var:
+
+```clojure
+(defn contribute [_ctx]
+  {:queries {"mine" [:= [:attr :owner] "ct"]}})
+
+(def spool
+  {:contribute 'contribute
+   :reconcile 'reconcile})
+```
+
+The coordinator fails loudly when both appear in one module rather than quietly picking one. `contribute` returns the owner's *complete* partition, so entries the same source collected would be discarded; refresh refuses that combination and names the module and the kinds it collected (SPEC-004.C46). When a file grows a `defworkflow` beside a hand-written `contribute`, the fix is to author the rest of its surface too: `.skein/workflows.clj` in this repo is the worked example, with `defworkflow` for its definitions, `defop` for its one op, `defpattern` for its one pattern, and no `spool` var at all.
+
+A `:reconcile` symbol composes with either style, and a reconcile-only `spool` var beside collected forms is ordinary production shape.
+
+The rest of this section is the second style's contract. If you are collecting forms, the shape of what each form collects belongs to the form and to the kind it writes into.
+
+### What `contribute` receives and returns
+
+The coordinator calls `contribute` with exactly three keys:
+
+```clojure
+{:runtime runtime
+ :module/key :acme/priority
+ :module/declaration {:ns 'acme.priority.alpha
+                      :spools ['acme/priority]
+                      :after []
+                      :required? true}}
+```
+
+| Key | Value |
+| --- | --- |
+| `:runtime` | the explicit runtime this module is activating in — thread it, never resolve one |
+| `:module/key` | the keyword owner from the consumer's `module!` call |
+| `:module/declaration` | the normalized declaration, closed to the keys below |
+
+| Declaration key | Value |
+| --- | --- |
+| `:ns` / `:file` | exactly one is present: a namespace symbol, or a workspace-relative path string |
+| `:load` | optional, `:image` is its only accepted value, and it may only accompany `:ns` |
+| `:spools` | vector of approved root symbols; always present after normalization, possibly empty |
+| `:after` | vector of keyword module keys; always present after normalization, possibly empty |
+| `:required?` | boolean; always present after normalization |
+
+It returns a map from registry-kind keyword to your module's partition of that kind. The long form spells the partition out:
+
+```clojure
+{:queries {:entries {"mine" [:= [:attr :owner] "ct"]}
+           :overrides #{}}}
+```
+
+and the shorthand is the entries map on its own, which is what most spools write:
+
+```clojure
+{:queries {"mine" [:= [:attr :owner] "ct"]}}
+```
+
+| Position | Value |
+| --- | --- |
+| top-level key | a keyword kind id the running runtime has declared |
+| top-level value | the entries map directly, or the closed partition `{:entries … :overrides …}` |
+| `:entries` | map of entry key to a value that kind's `:entry-spec` accepts |
+| `:overrides` | set of entry keys, a subset of `:entries`' keys; defaults to `#{}` |
+
+The long form is selected by presence: a value carrying `:entries` or `:overrides` is read as a partition, and from that point any other key in it is refused. A value carrying neither is the shorthand entries map, so a kind whose own entry keys were `:entries` or `:overrides` would need the long form.
+
+`:overrides` names the entry keys your module deliberately takes over from a lower-precedence owner, and every key in it must also be a key in `:entries` — an override naming an entry you did not supply fails.
+
+Five kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, and `:events`. Beyond those the set is open over whatever the running runtime declares. A domain spool declares its own kind with `skein.api.registry.alpha/declare-kind!`, and other modules then contribute entries to it. The shipped workflow executors do exactly this, mixing a domain kind and a core kind in one contribution:
+
+```clojure
+;; skein.spools.executors.shell
+(defn contribute [_ctx]
+  {workflow/executor-kind {"shell" gate-stalled-symbol}
+   :queries {"stalled-shell-gates" stalled-shell-gates-query}})
+```
+
+A kind the running runtime has not declared fails publication, naming the module and the unknown kinds.
+
+Entry *values* are governed by each kind's registered `:entry-spec`, so there is no single entry schema to learn: what a `:queries` value may be is the query grammar's business, what an `:ops` value needs is the op registration contract's, and a domain kind answers for its own. Read the kind's contract, not a table here.
+
+`contribute` is executed, and its **return value** is the publication data. That makes it the wrong place for ordinary effects: the coordinator stages and publishes what you return, so registering entries from inside `contribute` fights the publication it is feeding. Keep registration and live resources in `reconcile`.
+
+One narrow exception is worth naming, because three shipped spools rely on it. A spool that owns a registry kind materialises its runtime-owned registry handle from `contribute`, so that a dependent module staged later in the same refresh finds the kind already declared — chime for its rule kind, workflow for its executor and definition kinds, cron for its job kind. All three return an empty contribution; the work is bootstrapping the kind, not registering entries into it.
+
+### Moving a direct registration into a contribution
+
+Say you already have a query you registered directly:
+
+```clojure
+(graph/register-query! runtime 'mine [:= [:attr :owner] "ct"])
+```
+
+As a contribution it is one line:
+
+```clojure
+(defn contribute [_ctx]
+  {:queries {"mine" [:= [:attr :owner] "ct"]}})
+```
+
+Two things changed. The name is now a string: `register-query!` accepts a simple symbol or keyword and canonicalises it to the registry key `"mine"` on your behalf, while a contribution's keys go into the registry as written, so write the canonical string key yourself. And the ownership changed: the direct call writes one entry under the direct-registration owner, whereas the contribution replaces your module's complete `:queries` partition every time it publishes.
+
+In the collected-forms style the same query is a top-level form and you write no `contribute` at all. Where a `defquery` is available it reads:
+
+```clojure
+(defquery mine
+  "Strands owned by ct."
+  {:usage "strand list --query mine"}
+  [:= [:attr :owner] "ct"])
+```
+
+Either route publishes the same entry under the same module owner.
+
+### Publication is owner-complete
+
+A contribution is the whole truth about your module, not a patch on it. When this module publishes a changed contribution, the coordinator stages your complete partition for every kind you name, then publishes it:
+
+- An entry you stop returning is removed from your partition.
+- A kind you stop naming loses your partition for that kind entirely.
+- A module omitted from a successfully collected full graph loses its partitions the same way. Omission *is* the removal path; there is no removal call.
+- Other owners are untouched. Refresh replaces affected owner partitions rather than clearing and replaying whole registries, so your module failing cannot strip anyone else's entries.
+
+Everything is validated before anything is swapped. Each of these throws while every owner keeps its previous live partition:
+
+- a kind the runtime has not declared;
+- an entry value the kind's `:entry-spec` rejects;
+- two owners in the same layer supplying the same entry key;
+- an entry that shadows a lower-layer owner's entry for the same key without your contribution naming that key in `:overrides` — override intent has to be declared, never inferred;
+- an `:overrides` key naming an entry you did not supply.
+
+A kind may additionally declare a `:candidate-validator`, which the coordinator runs once per refresh over that kind's complete effective candidate after every owner is staged. It is the seam for rules a per-entry spec cannot state — the workflow spool uses one because a checkpoint route may name another registered workflow, and whether that target still exists depends on what every owner staged. A validator that throws refuses the whole refresh before publication (SPEC-004.C46d).
+
+### What `reconcile` does
+
+Ordinary activation effects and live resources belong here: threads, sockets, schedulers, hook and event-handler registrations, `vocab/declare!` calls, durable seeds. The coordinator calls `reconcile` after publication has already succeeded, so a reconciler can trust that its module's registry entries are live.
+
+Its context map is larger, because a reconciler needs to know what it is transitioning from:
+
+```clojure
+{:runtime runtime
+ :module/key :acme/priority
+ :module/declaration declaration-or-nil
+ :module/previous {:module/declaration ...
+                   :module/contribution ...
+                   :module/outcome ...
+                   :module/resource ...}
+ :module/contribution current-outcome
+ :refresh/result provisional-refresh-result}
+```
+
+| Key | Value |
+| --- | --- |
+| `:runtime` | the explicit runtime this module is activating in |
+| `:module/key` | keyword owner |
+| `:module/declaration` | the normalized declaration, or `nil` when the module is being removed |
+| `:module/previous` | map of `:module/declaration`, `:module/contribution`, `:module/outcome`, `:module/resource`; any of them is `nil` when there is no prior state to report |
+| `:module/contribution` | this module's outcome map, whose `:status` is exactly `:applied` or `:removed` when the coordinator is the caller |
+| `:refresh/result` | the provisional result of the refresh in progress |
+
+Branch on `[:module/contribution :status]` and read nothing else from the outcome map as contract. The status is the normative field; the rest of the outcome is a reporting shape surfaced in refresh results and `runtime/status`, not a spec to build on.
+
+```clojure
+(defn reconcile [{:keys [runtime] :as ctx}]
+  (let [status (get-in ctx [:module/contribution :status])]
+    (case status
+      :applied (do (ensure-resources! runtime)
+                   {:reconciled :applied})
+      :removed (do (tear-down! runtime)
+                   {:reconciled :removed})
+      (spool/fail! "Unsupported module contribution status"
+                   {:status status
+                    :allowed #{:applied :removed}
+                    :module/key (:module/key ctx)
+                    :reconciler 'acme.priority.alpha/reconcile}))))
+```
+
+The coordinator reconciles a module only when *that module's own* contribution outcome is `:applied` or `:removed`. It compares this evaluation's contribution against the module's previous one: a content-identical contribution is `:unchanged` and skips reconcile entirely, however much else moved in the same refresh.
+
+So `:applied` means this module's contribution actually changed, and the branch ensures its effects and resources exist. `:removed` tears them down; running registration effects on `:removed` is a defect by definition. Any other status means someone called the function directly, outside the coordinator. The default branch is part of the contract (SPEC-004.C46b): it fails loudly, naming the received status, the allowed set, the module, and the reconciler it happened in.
+
+Where a domain deliberately offers no retraction — process-lifetime seeds such as glossary outcomes and vocabulary declarations — the `:removed` branch is an explicit no-effect branch that says so, rather than a missing case.
+
+Removal reconciles through the last entry-point set the coordinator resolved successfully, not a freshly resolved one: a removed module's source is never loaded again, so there is nothing to resolve from. That retention is what keeps teardown working when a module simply disappears from `init.clj`.
+
+A throw inside `reconcile` degrades that module's outcome and records the error; it does not roll back publication. The entries stay published and the module reports `:degraded` in the refresh result and in `runtime/status`.
+
+Return data, not objects. The return value must satisfy the data-first grammar the runtime shares with event and hook payloads: `nil`, strings, numbers, keywords, symbols, booleans, instants, and UUIDs, plus maps, vectors, and sets composed recursively of those. Its job is to record what happened. A compact marker like `{:reconciled :applied}` is enough, and it is what the shipped spools return. A live executor, scheduler, or socket goes in runtime-owned `spool-state` (rule 2 above), where the runtime can close it on stop, never in the reconciler's return value.
 
 ### Workspace file modules
 
@@ -635,9 +850,7 @@ A workspace-relative `:file` module can use the same convention when the loaded 
 
 A file that declares no namespace remains authoring-forms-only: its collected forms may contribute, but it gets no `spool` convention lookup. Keep a convention-backed file to one declared namespace so the public var has one unambiguous owner.
 
-**One source of contribution per module.** A module either collects authoring forms (`defop`, `defquery`, `defpattern`, `defrule`, `defjob`, `defworkflow`) or resolves a `:contribute` function, never both: `contribute` returns the owner's complete partition, so entries the same source collected would be silently discarded. Refresh refuses that combination loudly, naming the module and the kinds it collected (SPEC-004.C46). The conflict is scoped to `:contribute` — a `:reconcile`-only `spool` var composes with collected forms perfectly well. When a file grows a `defworkflow` beside a hand-written `contribute`, the fix is to author the rest of its surface too: `.skein/workflows.clj` in this repo is the worked example, with `defworkflow` for its definitions, `defop` for its one op, `defpattern` for its one pattern, and no `spool` var at all.
-
-### Maven dependencies in a spool root
+## Maven dependencies in a spool root
 
 A spool root may declare ordinary JVM library dependencies in its top-level `deps.edn :deps`. Those
 dependencies are loaded into the live weaver during refresh with the same runtime dependency path
