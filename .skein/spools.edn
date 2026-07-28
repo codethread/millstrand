@@ -9,8 +9,8 @@
  {:skein/source-root "spools/unsafe-text-search"},
  codethread/devflow
  {:git/url "https://github.com/codethread/devflow.spool.git",
-  :git/sha "c4a2dabc02c8649f5d3a9f71998baaf6fc909712",
-  :git/tag "v11",
+  :git/sha "8512b6a01891a2a5e7a4f440056672de0d9f1cb6",
+  :git/tag "v12",
   :roots {codethread/devflow "."}},
  skein.spools/batteries {:skein/source-root "spools/batteries"},
  skein.spools/cron {:skein/source-root "spools/cron"},
