@@ -285,10 +285,10 @@ For each `[module-key effect-id]`, the engine classifies:
 | Previous | Next | Action |
 | --- | --- | --- |
 | absent | present | Apply the new effect. |
-| identical | identical | Preserve its successful state; do not rerun it. |
+| identical and healthy | identical | Preserve its successful state; do not rerun it. |
 | present | changed | Replace it according to its effect kind. |
 | present | absent | Remove or clean up the retained old effect. |
-| failed/degraded | identical | Retry the incomplete phase without rerunning completed unchanged dependencies. |
+| identical but degraded | identical | Retry the incomplete phase without rerunning completed unchanged dependencies. This deliberately differs from today's contribution-unchanged fast path and would require an explicit SPEC-004.C46/C46b amendment. |
 
 A reaction declaration change runs the next declaration's applied action after the prior declaration's optional removed action. A resource change closes the retained old handle before opening the new declaration. A convergence change invokes the new convergence against the post-publication desired state. Failure behavior follows P9.
 
@@ -373,29 +373,16 @@ Refresh results include the same per-effect outcomes and retain the existing agg
 
 ### RFC-Laf-001.P11.1 Chime
 
-Chime's handler and mutation barrier are independent singleton resources, with the handler ordered after the barrier if that reflects the required observation boundary:
+Chime is a warning against splitting effects at the wrong boundary. Its current reconciler holds one monitor while it registers or unregisters the hook and handler and replaces the visible rule view. Three independently invoked effects could expose an intermediate state, so a lossless first migration keeps that atomic cluster together:
 
 ```clojure
-(defresource registration-barrier
-  "Reject mutations while Chime's effective rule view is transitioning."
-  {:open 'skein.spools.chime/register-registration-barrier!
-   :close 'skein.spools.chime/unregister-registration-barrier!})
-
-(defresource engine
-  "Dispatch graph events through Chime's effective rule view."
-  {:after #{:registration-barrier}
-   :open 'skein.spools.chime/register-engine!
-   :close 'skein.spools.chime/unregister-engine!})
-
-(defconvergence visible-rules
-  "Make Chime's visible rule view match the effective rule registry."
-  {:after #{:registration-barrier}
-   :desired 'skein.spools.chime/effective-rules
-   :actual 'skein.spools.chime/visible-rules
-   :converge 'skein.spools.chime/converge-rule-view!})
+(defresource engine-and-rule-view
+  "Keep Chime's handler, mutation barrier, and visible rules atomic."
+  {:open 'skein.spools.chime/open-engine-and-rule-view!
+   :close 'skein.spools.chime/close-engine-and-rule-view!})
 ```
 
-The current one-lock atomicity across handler registration and visible-view publication must remain expressible. The likely answer is one resource or convergence function owning that atomic cluster, not splitting it merely because forms exist. Effect decomposition follows real failure and ownership boundaries; it is not a goal by itself.
+This preserves behavior but gains no effect-level visibility inside the cluster. That is an honest limit of the proposal: authoring forms improve boundaries that already exist; they do not manufacture safe boundaries inside one lock. A prototype must prove that the resource form can carry this transition without changing Chime's concurrency behavior.
 
 ### RFC-Laf-001.P11.2 Cron
 
@@ -410,6 +397,8 @@ Cron becomes one convergence declaration. Its current diff body moves unchanged 
 ```
 
 There is no status switch. Removal changes the effective registry before this function runs, so absent jobs are cancelled by the ordinary diff.
+
+The trigger is not solved by this sketch. Cron's own lifecycle declaration can stay byte-identical while another module changes the effective Cron job kind. The lifecycle engine would need a declared dependency such as `:when-kinds #{:skein.spools.cron/jobs}`, or another validated way to rerun convergence when its desired input changes. Calling every convergence after every publication is a possible baseline but may be too broad. A prototype must establish a trigger contract before this form is considered feasible.
 
 ### RFC-Laf-001.P11.3 Process-lifetime seeds
 
@@ -463,12 +452,31 @@ After this RFC, a namespace may temporarily still contain:
   {:contribute 'contribute})
 ```
 
-That is not the desired final surface. Ops, queries, patterns, workflows, rules, jobs, and other registered kinds already have or can gain authoring forms. A separate RFC will:
+That is not the desired final surface. The current authoring forms are not yet one shipped `skein.api.*` surface: `defop`, `defquery`, `defpattern`, and `defrule` live in this repo's `.skein/spools/macros`; `defjob` and `defworkflow` correctly live in their shipped Cron and Workflow spool namespaces. A separate RFC must verify how to make authoring forms complete before proposing the `:contribute` break.
+
+### RFC-Laf-001.P13.1 Unverified migration sketch
+
+The following is a discussion sketch, not a design decision or a claim that the present APIs cover every contribution. Each step needs source archaeology, prototypes against real spools, and its own RFC:
+
+1. Complete the generic declarative kind-and-entry mechanism over the primitives already present in `skein.api.registry.alpha` and `skein.api.runtime.alpha`. The APIs already declare owner-partitioned kinds and collect entries, but provider modules such as Cron and Workflow currently use `:contribute` to materialize their runtime-owned kind registries before dependent contributions stage. Removing the callback requires a declarative kind-bootstrap path.
+2. Promote general authoring forms from `.skein/spools/macros` into shipped APIs. One possible layout colocates a form with the API whose entry it builds: `skein.api.weaver.alpha/defop`, `skein.api.graph.alpha/defquery`, `skein.api.patterns.alpha/defpattern`, `skein.api.events.alpha/defhandler`, and `skein.api.hooks.alpha/defhook`. A central `skein.api.macros.alpha` is another option. Namespace ownership has not been decided.
+3. Keep domain forms with their shipped spools. `skein.spools.cron/defjob` and `skein.spools.workflow/defworkflow` are the right ownership direction: the blessed APIs supply collection and registry primitives, while the spool defines the meaning and validation of its entry.
+4. Fill expressiveness gaps without recreating an unrestricted module-wide callback under another name. Static entries, custom kinds, overrides, candidate validation, programmatically generated entries, multi-namespace spools, empty kind-provider modules, provenance, image activation, and removal by omission all need a form or a deliberate boundary. A possible generic computed-entry form should remain scoped to one declared kind.
+5. Make the promoted forms testable through the production module path. Macro expansion, collection, invalid declarations, duplicate and override behavior, activation, removal by omission, image mode, and plan/status projections need public testing support.
+6. Migrate in-tree spools, `.skein` config, sibling spools, examples, and tests. Prove contribution and removal parity before changing the grammar.
+7. Only after the selected source universe has moved, remove `:contribute`, delete callback resolution and retention, and reject the old form with an actionable authoring-form remedy.
+
+This sequence may change once verified. In particular, a generic authoring form that accepts a function returning an arbitrary multi-kind map would merely rename `:contribute` and fail the goal.
+
+The separate RFC will therefore:
 
 - inventory every remaining explicit `:contribute` function;
+- verify which generic kind-bootstrap and collection primitives are missing;
 - decide whether existing authoring forms cover each owner-complete partition;
+- decide which general forms become shipped `skein.api.*` surface and which domain forms stay in their owning spools;
 - add forms only where a repeated contribution shape earns one;
 - resolve multi-namespace and programmatically generated contribution cases;
+- specify public testing support and prove migration parity;
 - remove `:contribute` and then remove the public `def spool` convention itself.
 
 Keeping that decision separate prevents this RFC from mixing live-resource lifecycle policy with contribution authoring and owner-partition semantics. The two changes share an end state:
@@ -513,7 +521,20 @@ One form is smaller but makes unlike lifecycle contracts branches of one open ma
 
 Rollback cannot honestly cover external actions. The engine instead records partial progress, preserves handles, retries incomplete work, and attempts teardown. Domains may implement transactional acquisition where their boundary supports it.
 
-## RFC-Laf-001.P15 Open questions
+## RFC-Laf-001.P15 Feasibility gates and open questions
+
+This RFC discusses whether replacing the callback is a worthwhile and feasible direction. It does not need to settle every execution-policy detail before acceptance. It does need to expose any boundary that could make the proposed replacement unable to preserve current behavior. Oracle review `rhmvw` identified the following gates:
+
+- **Cross-module convergence triggers:** a convergence must rerun when its declared desired input changes even if its owning module declaration does not. P11.2 records the Cron case. No trigger grammar is chosen.
+- **Atomic lifecycle clusters:** forms must permit one effect to retain Chime's current single-lock transition. P11.1 now sketches the cluster as one resource and records the visibility tradeoff.
+- **Runtime-lifetime resources:** the shell executor's worker pool survives module removal and closes at runtime stop. The proposed forms currently describe module lifetime only. A scope such as `:module` versus `:runtime`, or a separate form, must prove this behavior is expressible.
+- **Retry outside contribution change:** retrying a degraded effect while its contribution is unchanged supersedes today's unchanged-skip rule. P8.1 now states that contract change; a prototype must show how the coordinator schedules and reports the retry.
+- **Replacement ordering:** when one effect id disappears and another appears over the same singleton, cleanup must precede acquisition or the new registration may collide with the old one. The engine needs a deterministic transition order or an explicit relationship.
+- **Convergence removal:** removing the convergence declaration itself is different from removing entries in its desired registry. The form needs an explicit final-convergence or teardown contract.
+- **Governing records:** a feature proposal must enumerate the changes to ADR-003 Decisions A and D, SPEC-003.C17d, SPEC-004.C46/C46b/C74a, and the existing “no generic effect callbacks in the registry kernel” boundary. A lifecycle engine may remain coordinator machinery rather than registry-kernel callbacks, but the distinction must be made explicit.
+- **Guild-shaped behavior:** Guild resets runtime-owned declarations and republishes them from one reconciler. Its migration may expose a contribution/lifecycle boundary that the three sketched forms do not yet cover.
+
+None is presently known to make the direction impossible. Cross-module triggers, retained runtime-stop cleanup, atomic clusters, and degraded-effect scheduling all have plausible implementation seams in the current coordinator. They remain claims to test, not settled design.
 
 - **RFC-Laf-001.Q1:** Are `defreaction`, `defresource`, and `defconvergence` the right public names? The semantic split is proposed; naming should be tested against real migrations.
 - **RFC-Laf-001.Q2:** Should reactions exist in v1, or should process-lifetime seeds use a narrower `defseed` form that communicates their deliberate lack of teardown?
@@ -524,6 +545,9 @@ Rollback cannot honestly cover external actions. The engine instead records part
 - **RFC-Laf-001.Q7:** How should code-only reload interact with retained open/close vars? The current reconciler is retained by symbol and re-resolved through the spool loader; lifecycle callables need an equally explicit generation and reload contract.
 - **RFC-Laf-001.Q8:** Should convergence functions receive raw desired/actual values, or should the engine standardize a richer diff result? The first release should prefer raw values unless two migrations demonstrate a shared diff.
 - **RFC-Laf-001.Q9:** Can a resource close depend on the old module contribution after publication removed it? The retained effect context may need the previous owner partition, not only `:module/previous`.
+- **RFC-Laf-001.Q10:** How does a resource declare module lifetime versus weaver-runtime lifetime, and what happens on module removal for a runtime-lifetime resource?
+- **RFC-Laf-001.Q11:** What publication fact triggers a convergence whose desired state is contributed by other modules?
+- **RFC-Laf-001.Q12:** When an effect declaration is removed, how does a convergence express final cleanup if its desired-state reader is no longer part of the next declaration?
 
 ## RFC-Laf-001.P16 Consequences
 
