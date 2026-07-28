@@ -628,7 +628,7 @@ There is no imperative `install!` companion: the module lifecycle is the one act
 
 Before any of the schemas below matter, decide how this module source states its contribution. A module source that contributes registry entries does it in one of two styles, and it must use exactly one of them. Collecting authoring macros and a `:contribute` function are mutually exclusive; `:reconcile` is orthogonal to both.
 
-This section documents the shipped contract. [`RFC-Saf-001`](../../devflow/rfcs/2026-07-28-spool-authoring-forms.md) proposes replacing the `:contribute` branch with a complete authoring-form surface.
+This section documents the shipped contract. [`RFC-Auf-001`](../../devflow/rfcs/2026-07-28-authoring-forms.md) proposes replacing both the `:contribute` branch and the `:reconcile` callback with a complete authoring-form surface.
 
 Not every source-loaded module contributes registry entries. A source-loaded module that only needs effects declares a reconcile-only `spool` var and contributes nothing. A source-loaded ns module with neither a `spool` var nor anything collected is legal too, because an empty contribution is not an error (SPEC-004.C46).
 
@@ -760,7 +760,7 @@ A custom kind's entry values are whatever its owner's `:entry-spec` accepts, so 
 
 `contribute` is executed, and its **return value** is the publication data. Do not register entries from inside it: the coordinator stages and publishes what you return, and a direct registration made during `contribute` conflicts with that staged publication. Registration effects and live resources ordinarily go in `reconcile`.
 
-Bootstrapping a kind is the one shipped exception to that ownership rule, because a kind must exist before any module contributes to it. A spool that owns a kind establishes the required runtime state from `contribute` so the kind is present before a dependent module's contribution is staged against it. `skein.spools.cron` is the shipped example: it materializes cron's executor state slot and job-kind registry handle, then returns an empty contribution because those effects establish the domain rather than register entries into it. This exception is part of the current contract, not a general licence to put effects in `contribute`; RFC-Saf-001 proposes replacing it with an explicit pre-publication mechanism. A module contributing to another spool's kind names that spool's module in `:after`.
+Bootstrapping a kind is the one shipped exception to that ownership rule, because a kind must exist before any module contributes to it. A spool that owns a kind establishes the required runtime state from `contribute` so the kind is present before a dependent module's contribution is staged against it. `skein.spools.cron` is the shipped example: it materializes cron's executor state slot and job-kind registry handle, then returns an empty contribution because those effects establish the domain rather than register entries into it. This exception is part of the current contract, not a general licence to put effects in `contribute`; RFC-Auf-001 proposes replacing it with an explicit pre-publication mechanism. A module contributing to another spool's kind names that spool's module in `:after`.
 
 ### Moving a direct registration into a contribution
 
