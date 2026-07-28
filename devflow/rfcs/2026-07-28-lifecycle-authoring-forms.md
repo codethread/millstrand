@@ -95,9 +95,9 @@ Once these boundaries are declared separately, Skein can see partial progress. T
 - **RFC-Laf-001.NG6:** No attempt to turn every registered entry into a resource. Owner-partitioned contribution data remains distinct from live handles.
 - **RFC-Laf-001.NG7:** No cross-module effect dependency graph in the first version. Existing module `:after` edges order modules; effect dependencies order effects within one module.
 
-## RFC-Laf-001.P6 Proposed authoring surface
+## RFC-Laf-001.P6 Candidate authoring surface
 
-The examples use provisional names under `skein.api.lifecycle.alpha`. Final naming belongs to the feature proposal, but the three semantic categories are part of this RFC.
+The examples use provisional names under `skein.api.lifecycle.alpha`. Neither that namespace nor the three-form split is decided here. The forms make the discussion concrete enough to test against current reconcilers; P14 and P15 retain smaller surfaces and existing reconcile vocabulary as live alternatives.
 
 ### RFC-Laf-001.P6.1 Transition reactions
 
@@ -187,7 +187,7 @@ Application follows dependency order. Removal follows reverse dependency order, 
 
 ### RFC-Laf-001.P6.3 Desired-state convergence
 
-`defconvergence` declares how to read desired and actual state and make actual state converge:
+The provisional `defconvergence` name declares how to read desired and actual state and make actual state converge:
 
 ```clojure
 (ns acme.cron
@@ -227,7 +227,7 @@ The engine invokes the same convergence after applied and removed transitions. I
    :fingerprint 'acme.cron/job-fingerprint})
 ```
 
-That possible form is illustrative and not part of the first release.
+That possible form is illustrative and not part of the first release. The name `convergence` may itself be wrong: Skein's published word for this phase is **reconcile**, and a prototype must show whether desired-state convergence is a distinct authoring primitive or one constrained form of reconciliation before introducing new vocabulary.
 
 ## RFC-Laf-001.P7 Collected declaration shape
 
@@ -255,6 +255,8 @@ Lifecycle forms collect printable data under the owning module. A normalized mod
 This is lifecycle declaration data, not an ordinary shadowable registry kind. An effect belongs to exactly one module owner and disappears with that module. It has no defaults/workspace/direct precedence layers and cannot override another module's effect. Module ownership plus the effect id is its identity.
 
 Each authoring form expands to collection through the same target-only module collector used by `defop`, `defquery`, and other forms. Evaluation outside the selected module source fails loudly. Duplicate effect ids in one module fail during collection. Unknown keys, cycles in `:after`, missing dependencies, non-symbol callables, unresolved vars, and vars whose root values are not functions fail before contribution publication.
+
+Any shipped surface needs `clojure.spec` contracts for its declaration maps, callable contexts and results, normalized lifecycle data, plan/status/refresh projections, and closed status and phase values. Cross-entry uniqueness, dependency cycles, and other relationships that a local data spec cannot express remain explicit validators. Every failure projection must carry a common diagnostic envelope naming the module, effect, kind, callable, phase, offending value or input, and allowed alternatives when the boundary has a closed set. The examples below are sketches of those shapes, not their specifications.
 
 ## RFC-Laf-001.P8 Lifecycle engine
 
@@ -288,7 +290,7 @@ For each `[module-key effect-id]`, the engine classifies:
 | identical and healthy | identical | Preserve its successful state; do not rerun it. |
 | present | changed | Replace it according to its effect kind. |
 | present | absent | Remove or clean up the retained old effect. |
-| identical but degraded | identical | Retry the incomplete phase without rerunning completed unchanged dependencies. This deliberately differs from today's contribution-unchanged fast path and would require explicit amendments to SPEC-004.C46/C46b and ADR-003.P2's retained DELTA-OlrDrt-001.D4 constraint. |
+| identical but degraded | identical | Retry the effect from its declared boundary only if that boundary's contract makes whole-call retry safe. The engine cannot resume inside an opaque function. This deliberately differs from today's contribution-unchanged fast path and would require explicit amendments to SPEC-004.C46/C46b and ADR-003.P2's retained DELTA-OlrDrt-001.D4 constraint. |
 
 A reaction declaration change runs the next declaration's applied action after the prior declaration's optional removed action. A resource change closes the retained old handle before opening the new declaration. A convergence change invokes the new convergence against the post-publication desired state. Failure behavior follows P9.
 
@@ -314,14 +316,14 @@ Resource close adds `:resource`. Convergence adds `:desired` and `:actual`. Reac
 
 The old `[:module/contribution :status]` dispatch is not part of the author-facing context. The engine already knows the precise effect transition and calls only the function for that phase.
 
-## RFC-Laf-001.P9 Failure, retry, and teardown policy
+## RFC-Laf-001.P9 Candidate failure, retry, and teardown policy
 
-The initial policy is deliberately small:
+The following is a policy to prototype, not an accepted contract:
 
 1. Apply effects in dependency order.
 2. Stop applying a module's remaining effects after the first failure. Effects from later modules follow the existing module dependency and degraded-outcome rules.
 3. Retain every successfully opened resource, completed reaction result, convergence result, and declaration.
-4. On retry, preserve successful unchanged effects and resume from the failed effect.
+4. On retry, preserve successful unchanged effects and call the failed effect again from its public boundary. There is no implied checkpoint or mid-function resume.
 5. Remove effects in reverse dependency order.
 6. Attempt every independent removal even if one removal fails. A dependent is always attempted before its dependency.
 7. Retain a resource handle and old close callable when close fails so teardown can be retried.
@@ -337,13 +339,13 @@ monitor           failed
 initial-scan      not attempted
 ```
 
-The next refresh preserves the worker pool and handler, retries the monitor, and reaches the initial scan only after its dependencies succeed. If the module is removed first, the engine closes the handler and pool using their retained declarations and handles, and attempts cleanup for any partially acquired monitor state that the failed open explicitly returned or recorded.
+The next refresh could preserve the worker pool and handler, call the monitor's open boundary again, and reach the initial scan only after its dependencies succeed. That requires open to be retry-safe; the engine cannot infer progress inside it. If the module is removed first, the engine closes resources for which it retained declarations and handles.
 
-An open function that throws has not returned a handle. If acquisition can partially succeed, the domain must either make open transactional, record the partial handle in spool state before the risky step, or throw an `ex-info` carrying a sanctioned cleanup descriptor if the final API adopts one. The first release should not infer a handle from arbitrary exception data. This remains an open design point in P15.
+An open function that throws has not returned a handle. Allowing such a function to leave external state behind would make cleanup impossible for the engine and is not an acceptable silent convention. A viable resource form must either require transactional acquisition or define a mandatory, validated partial-cleanup protocol whose retained state appears in status. The first release must not infer a handle from arbitrary exception data. A prototype must choose and prove one of those boundaries before `defresource` is accepted.
 
 ## RFC-Laf-001.P10 Results and inspection
 
-`plan` shows the lifecycle declaration diff and intended phases without resolving actual state functions or performing effects:
+The following projections are illustrative. The owning API, qualified keys, closed status vocabulary, and specs remain to be decided. `plan` could show the lifecycle declaration diff and intended phases without resolving actual state functions or performing effects:
 
 ```clojure
 {:module/key :acme/service
@@ -367,7 +369,7 @@ An open function that throws has not returned a handle. If acquisition can parti
             :error {...}}}}
 ```
 
-Refresh results include the same per-effect outcomes and retain the existing aggregate module status. Resource handles never appear in these data-first projections.
+Refresh results would include the same per-effect outcomes and retain the existing aggregate module status. Resource handles never appear in these data-first projections. Whatever namespace owns the lifecycle declarations must also own these projected keys, register their attribute vocabulary where applicable, and generate API documentation from the same public contract.
 
 ## RFC-Laf-001.P11 Worked migrations
 
@@ -521,6 +523,16 @@ One form is smaller but makes unlike lifecycle contracts branches of one open ma
 
 Rollback cannot honestly cover external actions. The engine instead records partial progress, preserves handles, retries incomplete work, and attempts teardown. Domains may implement transactional acquisition where their boundary supports it.
 
+### RFC-Laf-001.O6 Smaller or existing authoring surfaces
+
+TEN-004 requires each proposed form to earn a public name:
+
+- A reaction could be a resource with no retained handle or one optional removal function, or direct composition of an existing event/hook API. A separate `defreaction` earns its place only if one-way transition semantics and retry reporting cannot stay clear in that smaller shape.
+- A resource cannot generally be replaced by `events/register-handler!` or `hooks/register-hook!`: those APIs own two particular registries, not arbitrary threads, subscriptions, notifiers, or external handles. Userland setup/teardown functions remain possible, but without a declared boundary the coordinator cannot retain handles or report partial progress. `defresource` is the strongest candidate for a distinct primitive.
+- Desired-state convergence may be a constrained `defreconcile`, a mode of `defresource`, or a domain-owned function called by one of those forms. A separate `defconvergence` is not justified until Cron and another independent domain demonstrate shared trigger, retry, and removal semantics.
+
+A single generic lifecycle form remains O4. A prototype should begin from the smallest surface that expresses Chime, Cron, Shell, a process-lifetime seed, and a workspace singleton, then add names only where the examples become less honest without them.
+
 ## RFC-Laf-001.P15 Feasibility gates and open questions
 
 This RFC discusses whether replacing the callback is a worthwhile and feasible direction. It does not need to settle every execution-policy detail before acceptance. It does need to expose any boundary that could make the proposed replacement unable to preserve current behavior. Oracle review `rhmvw` identified the following gates:
@@ -531,6 +543,12 @@ This RFC discusses whether replacing the callback is a worthwhile and feasible d
 - **Retry outside contribution change:** retrying a degraded effect while its contribution is unchanged supersedes today's unchanged-skip rule. P8.1 now states that contract change; a prototype must show how the coordinator schedules and reports the retry.
 - **Replacement ordering:** when one effect id disappears and another appears over the same singleton, cleanup must precede acquisition or the new registration may collide with the old one. The engine needs a deterministic transition order or an explicit relationship.
 - **Convergence removal:** removing the convergence declaration itself is different from removing entries in its desired registry. The form needs an explicit final-convergence or teardown contract.
+- **Convergence retry:** an opaque convergence function offers no checkpoints. The engine may rerun its whole boundary only under an idempotency or retry-safe contract; it cannot preserve progress inside the call.
+- **Partial resource acquisition:** a thrown open call yields no handle. The resource form needs transactional acquisition or a mandatory partial-cleanup protocol before it can claim leak-free teardown.
+- **Machine-checkable contracts:** declaration, callable, normalized state, projection, phase, status, and diagnostic shapes need public specs and tests. Prose examples are insufficient for a shipped boundary.
+- **Vocabulary ownership:** the namespace owning lifecycle declarations, projected keys, status words, vocab publication, and generated API docs is unresolved.
+- **Minimum surface:** P14.O6 records the required comparison with existing forms and composition. The three-form sketch is not yet justified as the minimum public API.
+- **Reconcile terminology:** `defconvergence` may rename an existing published concept. It stays provisional until a prototype proves a distinct semantic boundary.
 - **Governing records:** a feature proposal must enumerate the changes to ADR-003 Decisions A and D, SPEC-003.C17d, SPEC-004.C46/C46b/C74a, and the existing “no generic effect callbacks in the registry kernel” boundary. A lifecycle engine may remain coordinator machinery rather than registry-kernel callbacks, but the distinction must be made explicit.
 - **Guild-shaped behavior:** Guild resets runtime-owned declarations and republishes them from one reconciler. Its migration may expose a contribution/lifecycle boundary that the three sketched forms do not yet cover.
 
@@ -548,6 +566,8 @@ None is presently known to make the direction impossible. Cross-module triggers,
 - **RFC-Laf-001.Q10:** How does a resource declare module lifetime versus weaver-runtime lifetime, and what happens on module removal for a runtime-lifetime resource?
 - **RFC-Laf-001.Q11:** What publication fact triggers a convergence whose desired state is contributed by other modules?
 - **RFC-Laf-001.Q12:** When an effect declaration is removed, how does a convergence express final cleanup if its desired-state reader is no longer part of the next declaration?
+- **RFC-Laf-001.Q13:** Which namespace owns the public specs, projected keys, status vocabulary, and generated API documentation for lifecycle declarations?
+- **RFC-Laf-001.Q14:** Is desired-state convergence a distinct form, or should it retain the reconcile name and live behind a smaller generic lifecycle surface?
 
 ## RFC-Laf-001.P16 Consequences
 
@@ -564,7 +584,10 @@ The separate contribution RFC remains required to complete the end state. Until 
 ## RFC-Laf-001.P17 Acceptance criteria
 
 - Every current in-tree, workspace, and pinned sibling reconciler has a lossless mapping to a proposed lifecycle form or identifies a concrete missing primitive.
-- Applied, unchanged, changed, removed, failed-open, failed-close, retry, dependency order, reverse teardown, and removal-by-omission behavior have coordinator-level tests.
+- Applied, unchanged, changed, removed, failed-open, failed-close, whole-boundary retry, dependency order, reverse teardown, and removal-by-omission behavior have coordinator-level tests.
+- Public specs validate every declaration, callable context/result, normalized state, projection, phase, status, and diagnostic shape adopted by the feature.
+- A resource open contract prevents untracked partial acquisition through transactional behavior or a validated cleanup protocol.
+- A convergence adopted by the feature defines its trigger, whole-call retry requirement, and declaration-removal cleanup.
 - Refresh and status report effect-level outcomes without exposing live handles.
 - A resource successfully opened before a sibling failure is preserved on retry and closed on later module removal.
 - A failed close retains enough state to retry cleanup.
