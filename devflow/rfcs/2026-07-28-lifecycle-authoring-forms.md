@@ -4,9 +4,9 @@
 
 ## RFC-Laf-001.P1 Summary
 
-Replace the public module `:reconcile` callback with declarative lifecycle authoring forms. The initial surface has forms for transition reactions, owned resources, and desired-state convergence. Skein collects these declarations while loading the module source, validates them before publication, and runs them through one shared lifecycle engine after contribution publication.
+Explore replacing the public module `:reconcile` callback with declarative lifecycle authoring forms. Candidate forms cover transition reactions, owned resources, and desired-state reconciliation. Skein could collect these declarations while loading the module source, validate them before publication, and run them through one shared lifecycle engine after contribution publication.
 
-This is a breaking change. A public `(def spool {:reconcile 'reconcile})` is rejected after the cutover. There is no compatibility wrapper, legacy callback adapter, or deprecation period. Spool authors move each responsibility in a monolithic reconciler into the authoring form that states its lifecycle.
+If the feasibility work passes the gates in P15 and P17, the resulting feature is a breaking change. A public `(def spool {:reconcile 'reconcile})` would be rejected after the cutover, with no compatibility wrapper, legacy callback adapter, or deprecation period. This RFC does not yet accept the candidate forms or authorize that cutover.
 
 `def spool` also supports `:contribute`. Existing contribution authoring forms already cover much of that callback's role, but removing `:contribute` is outside this RFC. A separate RFC will decide that break. The intended end state is recorded here: extension namespaces contain authoring forms, not a `def spool` entry-point map, and every extension capability follows one visible, greppable authoring pattern.
 
@@ -75,10 +75,10 @@ Once these boundaries are declared separately, Skein can see partial progress. T
 
 ## RFC-Laf-001.P4 Goals
 
-- **RFC-Laf-001.G1:** Remove public `:reconcile` callbacks and the `def spool` bookkeeping required only to point at them.
+- **RFC-Laf-001.G1:** Determine whether public `:reconcile` callbacks and the `def spool` bookkeeping required only to point at them can be replaced without losing current behavior.
 - **RFC-Laf-001.G2:** Express the current reconcile behaviors through declarative, source-visible authoring forms.
 - **RFC-Laf-001.G3:** Keep setup and teardown for an owned resource in one block.
-- **RFC-Laf-001.G4:** Make effect identity, ordering, partial progress, retained handles, retry, and teardown outcomes visible to `plan`, `status`, refresh results, and tests.
+- **RFC-Laf-001.G4:** Test whether effect identity, ordering, retained handles, whole-boundary retry, and teardown outcomes can become visible to `plan`, `status`, refresh results, and tests.
 - **RFC-Laf-001.G5:** Preserve printable declaration data. Lifecycle callables remain fully qualified symbols resolved through the spool-aware classloader; declarations never hold closures.
 - **RFC-Laf-001.G6:** Preserve publication order: validate and atomically publish contributions before applying lifecycle effects.
 - **RFC-Laf-001.G7:** Fail loudly at the declaration or named effect boundary with the module key, effect id, effect kind, callable, and phase.
@@ -88,7 +88,7 @@ Once these boundaries are declared separately, Skein can see partial progress. T
 ## RFC-Laf-001.P5 Non-goals
 
 - **RFC-Laf-001.NG1:** This RFC does not remove `def spool :contribute`. A follow-up RFC will decide how every remaining explicit contribution maps to authoring forms and whether new contribution forms are needed.
-- **RFC-Laf-001.NG2:** No general workflow or arbitrary effect DSL. The initial forms cover behavior already present in reconciler implementations.
+- **RFC-Laf-001.NG2:** No general workflow or arbitrary effect DSL. Candidate forms are limited to behavior found in current reconciler implementations.
 - **RFC-Laf-001.NG3:** No automatic rollback. External effects may be irreversible, and a rollback claim would be false for notifications, subprocess actions, or remote registrations.
 - **RFC-Laf-001.NG4:** No durable replay or exactly-once guarantee. Lifecycle state supports resumption within the running weaver, in line with PHILOSOPHY's resumability rule.
 - **RFC-Laf-001.NG5:** No closure-valued callables or runtime `eval`. ADR-002's classloader and provenance constraints still apply.
@@ -217,7 +217,9 @@ The lifecycle engine calls `:desired` and `:actual` after publication, then supp
     {:jobs (vec (sort (keys desired)))}))
 ```
 
-The engine invokes the same convergence after applied and removed transitions. It does not impose a generic diff because domains differ on identity, replacement, ordering, and partial failure. A later keyed-collection form may earn its place if several domains repeat the same diff contract:
+For removal to be executable, an adopted desired-state form must retain either a final desired-state reader plus its reconcile callable or an explicit removal callable after the declaration disappears. The example does not choose between them. Merely omitting the declaration must never strand the external state it previously managed.
+
+For ordinary desired-state changes, the engine could invoke the same callable after applied and removed contribution transitions. It should not impose a generic diff unless domains prove shared identity, replacement, ordering, and failure semantics. A later keyed-collection form may earn its place if several domains repeat the same diff contract:
 
 ```clojure
 (defcollection-resource scheduled-jobs
@@ -581,7 +583,9 @@ New lifecycle forms have a high bar. They are added only when several modules re
 
 The separate contribution RFC remains required to complete the end state. Until then, `def spool` survives only for explicit `:contribute` users.
 
-## RFC-Laf-001.P17 Acceptance criteria
+## RFC-Laf-001.P17 Gates before accepting the breaking design
+
+Landing this Proposed RFC records the investigation; it does not satisfy these gates. A later spike and feature proposal must satisfy them before implementation or migration begins:
 
 - Every current in-tree, workspace, and pinned sibling reconciler has a lossless mapping to a proposed lifecycle form or identifies a concrete missing primitive.
 - Applied, unchanged, changed, removed, failed-open, failed-close, whole-boundary retry, dependency order, reverse teardown, and removal-by-omission behavior have coordinator-level tests.
@@ -600,6 +604,6 @@ The separate contribution RFC remains required to complete the end state. Until 
 
 ## RFC-Laf-001.P18 Recommendation
 
-Proceed with the breaking replacement of public module reconcilers by lifecycle authoring forms. Prototype the engine against Cron, Chime, the Shell executor, one process-lifetime seed, and one workspace singleton before fixing the final names. Those migrations cover convergence, atomic resource clusters, runtime-lifetime resources, one-way reactions, ordering, retained handles, and the current removal defect.
+Proceed to a bounded feasibility spike, not directly to the breaking replacement. Prototype the smallest lifecycle surface against Cron, Chime, the Shell executor, one process-lifetime seed, and one workspace singleton before choosing names or accepting public shapes. Those migrations cover desired-state reconciliation, atomic resource clusters, runtime-lifetime resources, one-way reactions, ordering, retained handles, and the current removal defect.
 
-Do not retain `:reconcile` as an escape hatch. Do not remove `:contribute` in this feature. Record and pursue the separate contribution-authoring RFC so the final extension surface is made entirely of authoring forms and `def spool` disappears.
+If the spike satisfies P17, return with the public specs, minimum-surface analysis, migration proof, and governing-record amendments needed to accept the break. At that point, do not retain `:reconcile` as an escape hatch. Do not remove `:contribute` in the same feature. Record and pursue the separate contribution-authoring RFC so the eventual extension surface can be made entirely of authoring forms and `def spool` can disappear.
