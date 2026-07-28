@@ -197,7 +197,8 @@ The provisional `defconvergence` name declares how to read desired and actual st
   "Make durable scheduler wakes match the effective Cron job registry."
   {:desired 'acme.cron/effective-jobs
    :actual 'acme.cron/running-jobs
-   :converge 'acme.cron/converge-jobs!})
+   :converge 'acme.cron/converge-jobs!
+   :on-removed 'acme.cron/remove-all-jobs!})
 ```
 
 The lifecycle engine calls `:desired` and `:actual` after publication, then supplies both values to `:converge`:
@@ -217,7 +218,7 @@ The lifecycle engine calls `:desired` and `:actual` after publication, then supp
     {:jobs (vec (sort (keys desired)))}))
 ```
 
-For removal to be executable, an adopted desired-state form must retain either a final desired-state reader plus its reconcile callable or an explicit removal callable after the declaration disappears. The example does not choose between them. Merely omitting the declaration must never strand the external state it previously managed.
+For removal to be executable, this candidate requires `:on-removed`. The coordinator retains the last-good declaration and resolved callable set, then invokes that removal callable when the declaration disappears. Merely omitting the declaration must never strand the external state it previously managed. A later design could prove that a retained desired-state reader plus an empty desired value is equally safe, but that optimization is not assumed here.
 
 For ordinary desired-state changes, the engine could invoke the same callable after applied and removed contribution transitions. It should not impose a generic diff unless domains prove shared identity, replacement, ordering, and failure semantics. A later keyed-collection form may earn its place if several domains repeat the same diff contract:
 
@@ -291,7 +292,7 @@ For each `[module-key effect-id]`, the engine classifies:
 | absent | present | Apply the new effect. |
 | identical and healthy | identical | Preserve its successful state; do not rerun it. |
 | present | changed | Replace it according to its effect kind. |
-| present | absent | Remove or clean up the retained old effect. |
+| present | absent | Remove through the retained old declaration. A resource closes its handle; a convergence invokes its required `:on-removed`; a reaction invokes `:on-removed` when it declared one. |
 | identical but degraded | identical | Retry the effect from its declared boundary only if that boundary's contract makes whole-call retry safe. The engine cannot resume inside an opaque function. This deliberately differs from today's contribution-unchanged fast path and would require explicit amendments to SPEC-004.C46/C46b and ADR-003.P2's retained DELTA-OlrDrt-001.D4 constraint. |
 
 A reaction declaration change runs the next declaration's applied action after the prior declaration's optional removed action. A resource change closes the retained old handle before opening the new declaration. A convergence change invokes the new convergence against the post-publication desired state. Failure behavior follows P9.
@@ -327,7 +328,7 @@ The following is a policy to prototype, not an accepted contract:
 3. Retain every successfully opened resource, completed reaction result, convergence result, and declaration.
 4. On retry, preserve successful unchanged effects and call the failed effect again from its public boundary. There is no implied checkpoint or mid-function resume.
 5. Remove effects in reverse dependency order.
-6. Attempt every independent removal even if one removal fails. A dependent is always attempted before its dependency.
+6. Attempt removals in reverse dependency order. When a dependent fails to close, do not close any dependency it may still use; mark that blocked cleanup explicitly. Continue cleanup only in independent subgraphs.
 7. Retain a resource handle and old close callable when close fails so teardown can be retried.
 8. Report every effect outcome. A module is degraded while any effect is failed or has failed cleanup.
 9. Never roll back a completed reaction or convergence action automatically.
@@ -397,10 +398,11 @@ Cron becomes one convergence declaration. Its current diff body moves unchanged 
   "Make durable scheduler wakes match effective Cron job declarations."
   {:desired 'skein.spools.cron/effective-jobs
    :actual 'skein.spools.cron/running-jobs
-   :converge 'skein.spools.cron/converge-jobs!})
+   :converge 'skein.spools.cron/converge-jobs!
+   :on-removed 'skein.spools.cron/remove-all-jobs!})
 ```
 
-There is no status switch. Removal changes the effective registry before this function runs, so absent jobs are cancelled by the ordinary diff.
+There is no status switch for ordinary job-entry changes: publication changes the effective registry before convergence runs, so absent jobs are cancelled by the ordinary diff. Removing Cron's convergence declaration itself is a different transition; the coordinator uses the retained `:on-removed` callable to cancel every job previously managed by that declaration.
 
 The trigger is not solved by this sketch. Cron's own lifecycle declaration can stay byte-identical while another module changes the effective Cron job kind. The lifecycle engine would need a declared dependency such as `:when-kinds #{:skein.spools.cron/jobs}`, or another validated way to rerun convergence when its desired input changes. Calling every convergence after every publication is a possible baseline but may be too broad. A prototype must establish a trigger contract before this form is considered feasible.
 
@@ -544,7 +546,7 @@ This RFC discusses whether replacing the callback is a worthwhile and feasible d
 - **Runtime-lifetime resources:** the shell executor's worker pool survives module removal and closes at runtime stop. The proposed forms currently describe module lifetime only. A scope such as `:module` versus `:runtime`, or a separate form, must prove this behavior is expressible.
 - **Retry outside contribution change:** retrying a degraded effect while its contribution is unchanged supersedes today's unchanged-skip rule. P8.1 now states that contract change; a prototype must show how the coordinator schedules and reports the retry.
 - **Replacement ordering:** when one effect id disappears and another appears over the same singleton, cleanup must precede acquisition or the new registration may collide with the old one. The engine needs a deterministic transition order or an explicit relationship.
-- **Convergence removal:** removing the convergence declaration itself is different from removing entries in its desired registry. The form needs an explicit final-convergence or teardown contract.
+- **Convergence removal:** the candidate in P6.3 requires a retained `:on-removed` callable when the declaration itself disappears. A prototype must prove retained resolution and removal ordering; it may propose a safe final-convergence alternative, but omission without cleanup is forbidden.
 - **Convergence retry:** an opaque convergence function offers no checkpoints. The engine may rerun its whole boundary only under an idempotency or retry-safe contract; it cannot preserve progress inside the call.
 - **Partial resource acquisition:** a thrown open call yields no handle. The resource form needs transactional acquisition or a mandatory partial-cleanup protocol before it can claim leak-free teardown.
 - **Machine-checkable contracts:** declaration, callable, normalized state, projection, phase, status, and diagnostic shapes need public specs and tests. Prose examples are insufficient for a shipped boundary.
@@ -567,7 +569,7 @@ None is presently known to make the direction impossible. Cross-module triggers,
 - **RFC-Laf-001.Q9:** Can a resource close depend on the old module contribution after publication removed it? The retained effect context may need the previous owner partition, not only `:module/previous`.
 - **RFC-Laf-001.Q10:** How does a resource declare module lifetime versus weaver-runtime lifetime, and what happens on module removal for a runtime-lifetime resource?
 - **RFC-Laf-001.Q11:** What publication fact triggers a convergence whose desired state is contributed by other modules?
-- **RFC-Laf-001.Q12:** When an effect declaration is removed, how does a convergence express final cleanup if its desired-state reader is no longer part of the next declaration?
+- **RFC-Laf-001.Q12:** Is the candidate's required retained `:on-removed` callable the smallest honest convergence cleanup contract, or can a retained desired-state reader and an explicit empty desired value prove equivalent behavior?
 - **RFC-Laf-001.Q13:** Which namespace owns the public specs, projected keys, status vocabulary, and generated API documentation for lifecycle declarations?
 - **RFC-Laf-001.Q14:** Is desired-state convergence a distinct form, or should it retain the reconcile name and live behind a smaller generic lifecycle surface?
 
@@ -592,6 +594,8 @@ Landing this Proposed RFC records the investigation; it does not satisfy these g
 - Public specs validate every declaration, callable context/result, normalized state, projection, phase, status, and diagnostic shape adopted by the feature.
 - A resource open contract prevents untracked partial acquisition through transactional behavior or a validated cleanup protocol.
 - A convergence adopted by the feature defines its trigger, whole-call retry requirement, and declaration-removal cleanup.
+- Removing a convergence declaration invokes its retained cleanup contract and cannot leave its previously managed external state running.
+- A failed dependent close blocks teardown of the dependencies it may still use while independent cleanup continues.
 - Refresh and status report effect-level outcomes without exposing live handles.
 - A resource successfully opened before a sibling failure is preserved on retry and closed on later module removal.
 - A failed close retains enough state to retry cleanup.
