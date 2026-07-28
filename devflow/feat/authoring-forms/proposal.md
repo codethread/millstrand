@@ -20,7 +20,7 @@ Verified against source on 2026-07-28 (three delegated audits; findings as run r
 
 **Census.** Inclusion rule: modules in the selected source universe — this repo's `spools/`, its tracked `.skein` config, and the pinned sibling roots in `.skein/spools.edn`. 19 modules carry a `spool` var: 13 here (batteries, cron, chime, workflow, workflow-cli, shell executor, code executor, guild, unsafe-text-search, plus the `.skein` kanban-tracker, harnesses, reviewers, and module-adapters) and 6 sibling (kanban, kanban-peering, delegation, agent-run, subagent executor, bench). 17 declare `:contribute` and 17 declare `:reconcile` (per-module verification in review note `bp5vo`). Irregulars the lifecycle design must carry: the shell executor's worker pool is a runtime-lifetime resource (survives module removal, closes at runtime stop); Guild resets and republishes runtime-owned declarations on both transitions; three `.skein` modules are unconditional singleton setters (kanban tracker, harness contracts, help transform) whose removal branch does not undo the binding; batteries, workflow, workflow-cli, and kanban have no-op removals (process-lifetime seeds).
 
-**Context.** The active feature chain `fbr4m`/`rdrw9` → `rrvnn`/`9snqu` → `rtnfv` is converting installer-era activation onto the current `def spool` convention — this program supersedes that endpoint but depends on those migrations landing first, so the universe it breaks is uniform. `ifenn-chime-engine-parity` moves Chime registration into reconcile, which the lifecycle spike then uses as its atomic-cluster case. `spool-lifecycle-docs` (PROP-Sld-001) documents the very contract this program removes; its output becomes a migration source and must be rewritten in the removal stage. The release regime permits a clean pre-v1 break for Skein itself; after a Skein v1 stamp, removal would need a new name. The siblings are already past their own v1, so their migration releases are recorded breaks under the installer-retirement precedent (TEN-000@1, explicit per-release exception), not accretive releases. The v1-stamp card (`b3v1r`, p1, hitl) is active but explicitly waiting on user direction.
+**Context.** The active feature chain `fbr4m`/`rdrw9` → `rrvnn`/`9snqu` → `rtnfv` is converting installer-era activation onto the current `def spool` convention — this program supersedes that endpoint but depends on those migrations landing first, so the universe it breaks is uniform. `ifenn-chime-engine-parity` moves Chime registration into reconcile, which the lifecycle spike then uses as its atomic-cluster case. `spool-lifecycle-docs` (PROP-Sld-001) documents the very contract this program removes; its output becomes a migration source and must be rewritten in the removal stage. User direction (2026-07-28) settles the regime question: skein-src will not stamp v1, so the program executes wholly under TEN-000@1's alpha authority, sibling spools included. Sibling migration releases still record their breaks per release (the installer-retirement precedent) rather than shipping as silent accretion. The active v1-stamp card (`b3v1r`) predates this ruling; its disposition is user-owned.
 
 ## PROP-Auf-001.P3 Goals
 
@@ -28,7 +28,7 @@ Verified against source on 2026-07-28 (three delegated audits; findings as run r
 - **PROP-Auf-001.G2:** A lifecycle authoring surface accepted only through the bounded feasibility spike and its gates (RFC-Auf-001.REC8, P16.2), prototyped against Cron, Chime, the shell executor, a process-lifetime seed, and a workspace singleton.
 - **PROP-Auf-001.G3:** Every module in the audited census migrated with proven parity — equal normalized contributions, exact removal-by-omission, lossless lifecycle behavior — including the `.skein` workspace modules and sibling releases with markers, pin bumps, floors, and per-release recorded-break compat-alarm evidence.
 - **PROP-Auf-001.G4:** One final break: `:contribute`, `:reconcile`, and the `def spool` convention removed together, old declarations rejected loudly with errors naming the replacement forms, no shims or aliases (RFC-Auf-001.P15.S3).
-- **PROP-Auf-001.G5:** The break sequenced against the v1 stamp: it lands before any Skein v1 marker stamps the accretion promise, or the stamp records the pending exception first.
+- **PROP-Auf-001.G5:** The program executes under the standing no-v1 ruling: skein-src stamps no v1 marker, and TEN-000@1 authorizes every break in the program, sibling spools included.
 - **PROP-Auf-001.G6:** Governing records amended, not orphaned: ADR-002/003/004, SPEC-003.C17c/C17d/C19, SPEC-004.C45/C46/C46b/C46c/C74a, `UBIQUITOUS-LANGUAGE.md`'s Contribute/Reconcile/`def spool` entries, the spool authoring guide, and PROP-Sld-001's documentation output.
 
 ## PROP-Auf-001.P4 Non-goals
@@ -37,7 +37,7 @@ Verified against source on 2026-07-28 (three delegated audits; findings as run r
 - **PROP-Auf-001.NG2:** No registry-kernel changes: owner-partitioned contribution semantics, collision policy, publication atomicity, and removal-by-omission are preserved (RFC-Auf-001.NG1).
 - **PROP-Auf-001.NG3:** No compatibility machinery: no alias or fallback, and no module mixing grammars. The bounded dual-grammar migration window exists only so sibling floors can reach the S1 marker (RFC-Auf-001.P15.S2); it is transitional, not a supported authoring contract.
 - **PROP-Auf-001.NG4:** No feature slicing or task detail here. Kanban feature cards are cut against this document after sign-off; their plans own implementation strategy.
-- **PROP-Auf-001.NG5:** No v1-stamp decision here. The stamp is user-owned (`b3v1r` is hitl); this program only records the sequencing constraint G5.
+- **PROP-Auf-001.NG5:** No v1-stamp work here. The user has ruled skein-src will not stamp v1; disposing of the stale v1-stamp card (`b3v1r`) and its epic is user-owned housekeeping outside this program.
 
 ## PROP-Auf-001.P5 Proposed scope
 
@@ -53,7 +53,7 @@ Constraints the post-sign-off feature breakdown must hold, stated once so cards 
 
 ## PROP-Auf-001.P7 Open questions
 
-- **PROP-Auf-001.Q1:** v1-stamp sequencing (G5): does the user hold `b3v1r` until this program's break lands, or stamp v1 with a recorded pending exception? User decision; blocks scheduling of S4 only.
+- **PROP-Auf-001.Q1:** Resolved by user direction 2026-07-28: skein-src will not stamp v1; TEN-000@1 governs the whole program, sibling breaks included. (Was: v1-stamp sequencing.)
 - **PROP-Auf-001.Q2:** The lifecycle surface itself: form names, minimum surface, and the P16.2 gate outcomes are unresolved until the S2 spike reports (RFC-Auf-001.Q6–Q19).
 - **PROP-Auf-001.Q3:** Disposition of overlapping in-flight features: does `rrvnn`/`9snqu` complete its `def spool` conversions as the stepping stone (recommended: a uniform universe migrates mechanically), or do late items re-target directly to authoring forms? Decide when the first migration feature is cut.
 - **PROP-Auf-001.Q4:** SPEC-004.C46b's disposition — unchanged, split between coordinator mechanics and lifecycle-form semantics, or replaced (RFC-Auf-001.P16.2).
