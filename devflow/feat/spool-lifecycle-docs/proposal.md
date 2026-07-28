@@ -2,7 +2,7 @@
 
 **Document ID:** `PROP-Sld-001`
 **Last Updated:** 2026-07-28
-**Related RFCs:** [`RFC-Auf-001`](../../rfcs/2026-07-28-authoring-forms.md) proposes replacing the contribution and reconcile callbacks documented here with authoring forms
+**Related RFCs:** [`RFC-Saf-001`](../../rfcs/2026-07-28-spool-authoring-forms.md) proposes replacing the contribution callback documented here with authoring forms
 **Related root specs:** [`devflow/specs/repl-api.md`](../../specs/repl-api.md) (C17c/C17d/C23/C23a/C23b), [`devflow/specs/daemon-runtime.md`](../../specs/daemon-runtime.md) (C45/C46/C46b/C46d)
 **Related proposals:** [`PROP-Dsp-001`](../uwnzl-def-spool-convention/proposal.md) (the `def spool` convention this documents)
 

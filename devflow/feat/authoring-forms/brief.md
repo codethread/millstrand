@@ -1,11 +1,14 @@
 # Brief: authoring forms replace `def spool` (authoring-forms)
 
-User brief, 2026-07-28 session (card gq2l4). The two same-day RFC drafts — spool authoring forms (RFC-Saf-001) and lifecycle authoring forms (RFC-Laf-001) — overlapped heavily and have been merged on this branch into [`RFC-Auf-001`](../../rfcs/2026-07-28-authoring-forms.md): replace both `def spool` entry points (`:contribute`, `:reconcile`) with named top-level authoring forms, ending with no `spool` var at all.
+User brief, 2026-07-28 session (card gq2l4). The two same-day RFCs — spool authoring forms ([`RFC-Saf-001`](../../rfcs/2026-07-28-spool-authoring-forms.md)) and lifecycle authoring forms ([`RFC-Laf-001`](../../rfcs/2026-07-28-lifecycle-authoring-forms.md)) — overlap heavily; the user asked for them to be considered together and carried forward as one document. That document is this folder's [proposal.md](./proposal.md): replace both `def spool` entry points (`:contribute`, `:reconcile`) with named top-level authoring forms, ending with no `spool` var at all.
 
-Standing direction from the user:
+Standing direction from the user (all 2026-07-28):
 
 - A TEN-000@1 breaking change is explicitly accepted. Minimise it by ordering, not compatibility machinery: expose all authoring forms first, migrate all sibling spools, then remove the old `(def spool {:contribute ... :reconcile ...})` API in one final break.
-- This program is too much for a single feature. The goal of this stage is a sane program-level proposal that also audits the RFC's intent against the current code (the RFC was written from two drafts; its claims about what exists — `.skein` macro prototypes, shipped `defjob`/`defworkflow`, collector seams, the reconciler census, overlapping active features — need verification before scope is frozen).
-- After proposal sign-off, break the program into kanban feature cards, which in turn get smaller tasks. Feature slicing belongs after the proposal, not in it.
+- This program is too much for a single feature. This stage produces one sane program-level proposal that audits the RFCs' intent against current code; after sign-off, break the program into kanban feature cards, which in turn get smaller tasks.
+- One proposal document, deliberately large: this is one overall change and the single document is the coordination aid.
+- The source RFCs from main stay unchanged as the record of original intent; the proposal may advance beyond them as new data comes to light, with departures marked.
+- skein-src will not stamp a v1 marker: everything breaking is OK within alpha TEN-000, sibling spools included.
+- Fact-check reviews route to sol-med; sol findings are guidance, not law — weigh them against PHILOSOPHY (introspectable and repairable at runtime, not a perfect binary).
 
-Maturity split to preserve: the contribution half of RFC-Auf-001 is proposed for acceptance; the lifecycle half is gated on a bounded feasibility spike (RFC-Auf-001.P16.2) before its form names and shapes are accepted.
+Maturity split to preserve: the contribution half is proposed for acceptance; the lifecycle half is gated on a bounded feasibility spike (PROP-Auf-001.P16.2) before its form names and shapes are accepted.
