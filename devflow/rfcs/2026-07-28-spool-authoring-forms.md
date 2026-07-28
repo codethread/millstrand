@@ -118,6 +118,7 @@ This still works because direct/REPL registration is an imperative, additive, to
 - **RFC-Saf-001.NG4:** This RFC does not require one generic macro for every kind. A common implementation protocol should support kind-specific forms with vocabulary and validation appropriate to their domain.
 - **RFC-Saf-001.NG5:** This RFC does not preserve arbitrary runtime-dependent capability selection performed inside a `contribute` callback. Retaining such a callback under another name would retain the design this RFC removes.
 - **RFC-Saf-001.NG6:** This RFC does not prescribe the private storage mechanism for replayable declarations. It specifies the observable source- and image-loading behavior that mechanism must provide.
+- **RFC-Saf-001.NG7:** This RFC does not approve a final inventory of public macros, factories, or batch forms. Names in examples describe existing precedent or candidate syntax; every new public Var still requires a TEN-004 justification in the feature proposal.
 
 ## RFC-Saf-001.P6 Required semantics
 
@@ -215,7 +216,7 @@ This ordering requires new coordinator lifecycle machinery rather than a richer 
 
 ### RFC-Saf-001.P6.5 Pure factories support generated declarations
 
-Repeated macros are the default because most capability declarations are hand-authored and deserve a named source location. Programmatically generated declarations are still legitimate. The authoring layer should expose pure constructors that return validated declaration fragments, for example:
+Repeated macros are the default because most capability declarations are hand-authored and deserve a named source location. Programmatically generated declarations are still legitimate. One candidate is a pure constructor that returns a validated declaration fragment:
 
 ```clojure
 (op/entry 'status
@@ -232,6 +233,8 @@ Kind-specific macros can be thin syntax over these constructors plus declaration
     (op/entry (service-op-name service)
       (service-op-spec service))))
 ```
+
+The constructor and batch names above are illustrative rather than accepted public surface. The requirement is that generated declarations have one validated, replayable path; the feature proposal must choose and justify the smallest surface that provides it.
 
 The batch form is not required around ordinary `defop` forms. Its purpose is to cross the compile-time authoring boundary for generated entries while retaining validation and replay. A bare top-level function call that merely returns a map cannot declare anything by itself; either an authoring form must collect the returned fragments or a macro must expand them into retained declarations.
 
