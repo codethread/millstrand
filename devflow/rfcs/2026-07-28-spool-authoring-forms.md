@@ -56,6 +56,8 @@ That mechanism has several costs:
 
 The split also leaves gaps in the authoring forms themselves. Today `collect-entry!` can record explicit override intent, but the workspace-local `defop` form cannot express it. Source evaluation can collect top-level forms, but image loading deliberately evaluates no source and therefore relies on the retained `:contribute` callback. Some domain spools use `contribute` to establish a registry kind before dependent entries publish. These are real differences in the current implementation, but none requires `:contribute` as a permanent authoring abstraction. They identify the behavior a complete authoring-form design must preserve.
 
+The current surface is also split by ownership. `defop`, `defquery`, `defpattern`, and `defrule` are prototypes in this repository's `.skein` workspace, not shipped `skein.api.*` forms, and they call an internal collector. `defworkflow` and `defjob` are shipped by their domain spools and already call the blessed `skein.api.runtime.alpha/collect-entry!`. A complete replacement therefore includes promoting supported forms for core kinds into shipped API surface while domain-specific forms remain owned by their spools. This RFC decides that scope; the feature proposal decides exact namespaces and signatures.
+
 ## RFC-Saf-001.P3 Mental model
 
 Skein owns a registry of capability kinds. The core runtime always exposes `:ops`, `:queries`, `:patterns`, `:hooks`, and `:events`. Domain spools can expose further kinds, such as workflow definitions, workflow executors, cron jobs, or chime rules.
@@ -171,12 +173,13 @@ This closes a current incidental gap. `collect-entry!` already accepts `{:overri
 
 Removing `:contribute` requires authoring forms to leave declaration data in the loaded namespace. Image evaluation must be able to reconstruct the same owner-complete normalized contribution from that retained data without evaluating source and without invoking arbitrary spool code.
 
-The retained representation may be generated Var metadata, namespace metadata, a generated namespace-owned manifest, or another private mechanism. Whichever mechanism is chosen must satisfy four observable properties:
+The retained representation may use metadata as part of its implementation, but Var or namespace metadata alone is insufficient because deleting a source form does not unmap its old Var during reload. A viable design therefore needs an epoch or cleanup mechanism, a generated namespace-owned manifest, a coordinator-owned snapshot, or another representation that can prove the current declaration set. This RFC does not choose among those viable designs. Whichever mechanism is chosen must satisfy five observable properties:
 
 1. source collection and image replay produce equivalent normalized contributions;
 2. declaration order does not alter the resulting partition except for the existing deterministic same-kind/same-key replacement rule;
 3. removing a form from source removes its entry after the next source refresh rather than leaving stale declaration metadata;
-4. ordinary code-only reloads do not publish a new partition outside module refresh.
+4. ordinary code-only reloads do not publish a new partition outside module refresh;
+5. an image namespace with no retained authoring record fails loudly, while an explicitly recorded empty declaration set remains distinguishable from missing or stale replay data.
 
 Unit tests may source-load namespaces containing authoring forms today. The missing image behavior is therefore not an inability to test macros; it is a replay gap in one activation path.
 
@@ -207,6 +210,8 @@ reconcile live effects
 ```
 
 A new kind exposed directly by core needs no spool-owned bootstrapping because core already declares it. Its convenience macro is straightforward sugar over collection. The pre-publication requirement exists for open, runtime-owned domain kinds.
+
+This ordering requires new coordinator lifecycle machinery rather than a richer macro expansion. The RFC records that architectural cost so an infeasible kind-bootstrap story cannot hide behind “authoring sugar”; the feature proposal owns the exact phase and whether today's spool-state discovery seam survives.
 
 ### RFC-Saf-001.P6.5 Pure factories support generated declarations
 
@@ -250,11 +255,11 @@ A spool's capability set should be derivable from its source declarations and ex
 - **RFC-Saf-001.REC1:** Adopt **O3**. Authoring forms become the only spool contribution syntax, while the existing owner-partitioned contribution map remains an internal normalized representation.
 - **RFC-Saf-001.REC2:** Make repeated top-level kind-specific forms the primary interface. Do not require users to wrap them in a list, a `do`, or a manifest.
 - **RFC-Saf-001.REC3:** Define a small shared authoring protocol beneath the forms: validated declaration fragments, explicit override intent, replayable namespace-owned declaration data, and normalization to the existing contribution shape.
-- **RFC-Saf-001.REC4:** Allow each capability domain to expose its own vocabulary. `defop`, `defquery`, `defpattern`, `defworkflow`, `defjob`, and `defrule` should share publication semantics without being forced through one generic user-facing `defentry`.
+- **RFC-Saf-001.REC4:** Allow each capability domain to expose its own vocabulary. Promote supported forms for core kinds from repository-local prototypes into shipped API surface, while forms for domain kinds remain exported by the spool that owns them. `defop`, `defquery`, `defpattern`, `defworkflow`, `defjob`, and `defrule` should share publication semantics without being forced through one generic user-facing `defentry`.
 - **RFC-Saf-001.REC5:** Provide pure factory functions and an optional batch authoring form for genuinely generated declarations. Keep raw normalized contribution maps private to the publication boundary.
 - **RFC-Saf-001.REC6:** Add a pre-publication authoring mechanism for open kind declarations so domain registries no longer need a `contribute` callback merely to establish their kind.
 - **RFC-Saf-001.REC7:** Treat declaration sets as static source facts. Do not replace `contribute` with another arbitrary callback.
-- **RFC-Saf-001.REC8:** Make the cutover breaking. After the complete forms and replay contract exist and first-party spools have moved, remove `:contribute` from `skein.api.spool.alpha/::spool`, reject old declarations loudly, and update the specs and authoring guide to describe only the new grammar. Do not ship an alias, silent fallback, or permanent dual-mode loader.
+- **RFC-Saf-001.REC8:** Make the cutover breaking. After the complete forms and replay contract exist and first-party spools have moved, remove `:contribute` from `skein.api.spool.alpha/::spool`, reject old declarations loudly, and update the specs and authoring guide to describe only the new grammar. No released version accepts both grammars, and no alias, silent fallback, or compatibility shim ships. Coordinating core and sibling migrations before that breaking release is landing work, not a public compatibility window; its exact order belongs in the feature proposal.
 
 ## RFC-Saf-001.P9 Author experience
 
@@ -310,20 +315,21 @@ That residual form belongs to the separate reconcile decision. It is not a reaso
 
 The recommendation is ready to become the platform contract only if the feature proposal can demonstrate:
 
-- **RFC-Saf-001.AC1:** every core and shipped domain contribution kind has a named authoring form or a documented factory-backed batch form;
+- **RFC-Saf-001.AC1:** every core and shipped domain contribution kind has a named authoring form or a documented factory-backed batch form, with core-kind forms available from shipped API surface rather than repository-local `.skein` code;
 - **RFC-Saf-001.AC2:** explicit overrides are expressible without raw contribution maps;
 - **RFC-Saf-001.AC3:** source and image activation produce equal normalized contributions for the same loaded namespace;
 - **RFC-Saf-001.AC4:** removal by omission remains exact after source refresh, including after a declaration form is deleted;
 - **RFC-Saf-001.AC5:** open domain kinds are established before dependent entries stage, without a contribution callback;
 - **RFC-Saf-001.AC6:** first-party spools and pinned external spool suites no longer rely on `:contribute`;
 - **RFC-Saf-001.AC7:** old `spool` maps containing `:contribute` fail with a direct migration error rather than being ignored;
-- **RFC-Saf-001.AC8:** public specs, API docstrings, the spool authoring guide, and discovery surfaces describe one contribution grammar.
+- **RFC-Saf-001.AC8:** public specs, API docstrings, `devflow/UBIQUITOUS-LANGUAGE.md`, the spool authoring guide, and discovery surfaces describe one contribution grammar;
+- **RFC-Saf-001.AC9:** image activation fails loudly when the loaded namespace has no retained authoring record, and distinguishes that failure from an explicitly recorded empty declaration set.
 
 These are contract gates, not an implementation plan. Work slicing, ownership, and landing order belong in the later feature proposal.
 
 ## RFC-Saf-001.P12 Open questions
 
-- **RFC-Saf-001.Q1:** What private retained representation best satisfies image replay and exact stale-declaration removal: Var metadata, namespace metadata, a generated manifest Var, or a coordinator-owned snapshot associated with the loaded namespace?
+- **RFC-Saf-001.Q1:** Which viable retained representation best satisfies image replay and exact stale-declaration removal: metadata paired with an epoch or cleanup mechanism, a generated manifest Var, or a coordinator-owned snapshot associated with the loaded namespace?
 - **RFC-Saf-001.Q2:** Should the shared factory protocol be public and generic, or should only kind-specific constructors such as `op/entry` and `query/entry` be public while normalization stays internal?
 - **RFC-Saf-001.Q3:** What should the kind-declaration authoring form be called, and which parts of a registry backend can honestly be static data rather than runtime-owned initialization?
 - **RFC-Saf-001.Q4:** Should generated batch forms define inspectable Vars for each generated entry, or is a retained declaration record with source provenance sufficient?

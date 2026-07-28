@@ -628,6 +628,8 @@ There is no imperative `install!` companion: the module lifecycle is the one act
 
 Before any of the schemas below matter, decide how this module source states its contribution. A module source that contributes registry entries does it in one of two styles, and it must use exactly one of them. Collecting authoring macros and a `:contribute` function are mutually exclusive; `:reconcile` is orthogonal to both.
 
+This section documents the shipped contract. [`RFC-Saf-001`](../../devflow/rfcs/2026-07-28-spool-authoring-forms.md) proposes replacing the `:contribute` branch with a complete authoring-form surface.
+
 Not every module contributes registry entries. A module that only needs effects declares a reconcile-only `spool` var and contributes nothing. A source-loading ns module with neither a `spool` var nor anything collected is legal too, because an empty contribution is not an error (SPEC-004.C46).
 
 Image mode is different. It loads no source, so nothing collects, and the `spool` var is the module's only contribution route. An image module whose namespace has no resolvable `:contribute` reports a failed outcome at evaluation. The choice below is for sources that do have entries to publish.
@@ -741,7 +743,7 @@ Five kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, and `
 
 A kind the running runtime has not declared fails publication, naming the module and the unknown kinds.
 
-A registry **kind** is one named class of registry entry. It is declared once with an id, an `:entry-spec` every entry value must satisfy, and a layer policy. The layer policy orders the layers owners contribute in, and it governs precedence and override intent rather than silently selecting a winner: two owners supplying one key in the same layer is a loud collision, and a higher-layer entry shadowing a lower-layer one requires declared `:overrides`. Kinds are what makes a contribution addressable: your map's top-level keys are kind ids, and each value holds entries of that kind.
+A registry **kind** is one named class of registry entry. It is declared once with an id, an `:entry-spec` every entry value must satisfy, a binding moment, and a layer policy. The layer policy orders the layers owners contribute in, and it governs precedence and override intent rather than silently selecting a winner: two owners supplying one key in the same layer is a loud collision, and a higher-layer entry shadowing a lower-layer one requires declared `:overrides`. Kinds are what makes a contribution addressable: your map's top-level keys are kind ids, and each value holds entries of that kind.
 
 Entry *values* therefore have no single schema. For the five core kinds the registered `:entry-spec` is deliberately loose, and the documented entry vocabulary lives with the matching direct-registration function:
 
@@ -757,7 +759,7 @@ A custom kind's entry values are whatever its owner's `:entry-spec` accepts, so 
 
 `contribute` is executed, and its **return value** is the publication data. Do not register entries from inside it: the coordinator stages and publishes what you return, and a direct registration made during `contribute` conflicts with that staged publication. Registration effects and live resources go in `reconcile`.
 
-Declaring a kind is the exception, because a kind must exist before any module contributes to it. A spool that owns a kind declares it from `contribute` so the kind is present before a dependent module's contribution is staged against it. `skein.spools.cron` is the shipped example: it declares its job kind and returns an empty contribution, because the effect bootstraps the kind rather than registering entries into it. A module contributing to another spool's kind names that spool's module in `:after`.
+Bootstrapping a kind is the exception, because a kind must exist before any module contributes to it. A spool that owns a kind establishes the required runtime state from `contribute` so the kind is present before a dependent module's contribution is staged against it. `skein.spools.cron` is the shipped example: it materializes cron's executor state slot and job-kind registry handle, then returns an empty contribution because those effects establish the domain rather than register entries into it. A module contributing to another spool's kind names that spool's module in `:after`.
 
 ### Moving a direct registration into a contribution
 
