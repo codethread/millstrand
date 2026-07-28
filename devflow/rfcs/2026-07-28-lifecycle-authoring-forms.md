@@ -131,7 +131,7 @@ The functions receive a common lifecycle context:
   {:emitted true})
 ```
 
-An absent transition is an explicit no-op in the declaration grammar, not a missing callback error. Reactions run again after a changed contribution or a remove/reapply cycle. Authors who require repeat suppression must model the idempotency key in their domain or runtime-owned spool state. The form does not promise exactly once.
+An absent transition is an explicit no-op in the declaration grammar, not a missing callback error. A healthy reaction with an identical lifecycle declaration is preserved when unrelated contribution data changes; it runs again after its own declaration changes or a remove/reapply cycle. A degraded reaction may be retried under P8.1. Authors who require repeat suppression across those transitions must model the idempotency key in their domain or runtime-owned spool state. The form does not promise exactly once.
 
 ### RFC-Laf-001.P6.2 Owned resources
 
@@ -288,7 +288,7 @@ For each `[module-key effect-id]`, the engine classifies:
 | identical and healthy | identical | Preserve its successful state; do not rerun it. |
 | present | changed | Replace it according to its effect kind. |
 | present | absent | Remove or clean up the retained old effect. |
-| identical but degraded | identical | Retry the incomplete phase without rerunning completed unchanged dependencies. This deliberately differs from today's contribution-unchanged fast path and would require an explicit SPEC-004.C46/C46b amendment. |
+| identical but degraded | identical | Retry the incomplete phase without rerunning completed unchanged dependencies. This deliberately differs from today's contribution-unchanged fast path and would require explicit amendments to SPEC-004.C46/C46b and ADR-003.P2's retained DELTA-OlrDrt-001.D4 constraint. |
 
 A reaction declaration change runs the next declaration's applied action after the prior declaration's optional removed action. A resource change closes the retained old handle before opening the new declaration. A convergence change invokes the new convergence against the post-publication desired state. Failure behavior follows P9.
 
@@ -577,6 +577,6 @@ The separate contribution RFC remains required to complete the end state. Until 
 
 ## RFC-Laf-001.P18 Recommendation
 
-Proceed with the breaking replacement of public module reconcilers by lifecycle authoring forms. Prototype the engine against Cron, Chime, one process-lifetime seed, and one workspace singleton before fixing the final names. Those four migrations cover convergence, paired resources, one-way reactions, ordering, retained handles, and the current removal defect.
+Proceed with the breaking replacement of public module reconcilers by lifecycle authoring forms. Prototype the engine against Cron, Chime, the Shell executor, one process-lifetime seed, and one workspace singleton before fixing the final names. Those migrations cover convergence, atomic resource clusters, runtime-lifetime resources, one-way reactions, ordering, retained handles, and the current removal defect.
 
 Do not retain `:reconcile` as an escape hatch. Do not remove `:contribute` in this feature. Record and pursue the separate contribution-authoring RFC so the final extension surface is made entirely of authoring forms and `def spool` disappears.
