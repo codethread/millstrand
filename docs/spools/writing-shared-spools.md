@@ -630,9 +630,9 @@ Before any of the schemas below matter, decide how this module source states its
 
 This section documents the shipped contract. [`RFC-Saf-001`](../../devflow/rfcs/2026-07-28-spool-authoring-forms.md) proposes replacing the `:contribute` branch with a complete authoring-form surface.
 
-Not every module contributes registry entries. A module that only needs effects declares a reconcile-only `spool` var and contributes nothing. A source-loading ns module with neither a `spool` var nor anything collected is legal too, because an empty contribution is not an error (SPEC-004.C46).
+Not every source-loaded module contributes registry entries. A source-loaded module that only needs effects declares a reconcile-only `spool` var and contributes nothing. A source-loaded ns module with neither a `spool` var nor anything collected is legal too, because an empty contribution is not an error (SPEC-004.C46).
 
-Image mode is different. It loads no source, so nothing collects, and the `spool` var is the module's only contribution route. An image module whose namespace has no resolvable `:contribute` reports a failed outcome at evaluation. The choice below is for sources that do have entries to publish.
+Image mode is different. It loads no source, so nothing collects, and the `spool` var is the module's only contribution route. Under the current image contract, a reconcile-only `spool` var is insufficient: an image module must resolve `:contribute`, even when that function deliberately returns `{}`. A namespace with no resolvable `:contribute` reports a failed outcome at evaluation. The choice below is for sources that have entries to publish.
 
 **Collecting authoring macros.** Ordinary `def` and `defn` forms collect nothing. What collects is a top-level *collecting authoring macro* such as `defworkflow`: the macro both defines its Var or data and calls `collect-entry!` for the module currently being evaluated. `skein.spools.cron/defjob` is the compact shipped example:
 
@@ -839,11 +839,12 @@ Branch on `[:module/contribution :status]` and read nothing else from the outcom
                    {:reconciled :applied})
       :removed (do (tear-down! runtime)
                    {:reconciled :removed})
-      (spool/fail! "Unsupported module contribution status"
-                   {:status status
-                    :allowed #{:applied :removed}
-                    :module/key (:module/key ctx)
-                    :reconciler 'acme.priority.alpha/reconcile}))))
+      (throw
+       (ex-info "Unsupported module contribution status"
+                {:status status
+                 :allowed #{:applied :removed}
+                 :module/key (:module/key ctx)
+                 :reconciler 'acme.priority.alpha/reconcile})))))
 ```
 
 The coordinator reconciles a module only when *that module's own* contribution outcome is `:applied` or `:removed`. It compares this evaluation's contribution against the module's previous one: a content-identical contribution is `:unchanged` and skips reconcile entirely, however much else moved in the same refresh.

@@ -256,7 +256,7 @@ A spool's capability set should be derivable from its source declarations and ex
 - **RFC-Saf-001.REC2:** Make repeated top-level kind-specific forms the primary interface. Do not require users to wrap them in a list, a `do`, or a manifest.
 - **RFC-Saf-001.REC3:** Define a small shared authoring protocol beneath the forms: validated declaration fragments, explicit override intent, replayable namespace-owned declaration data, and normalization to the existing contribution shape.
 - **RFC-Saf-001.REC4:** Allow each capability domain to expose its own vocabulary. Promote supported forms for core kinds from repository-local prototypes into shipped API surface, while forms for domain kinds remain exported by the spool that owns them. `defop`, `defquery`, `defpattern`, `defworkflow`, `defjob`, and `defrule` should share publication semantics without being forced through one generic user-facing `defentry`.
-- **RFC-Saf-001.REC5:** Provide pure factory functions and an optional batch authoring form for genuinely generated declarations. Keep raw normalized contribution maps private to the publication boundary.
+- **RFC-Saf-001.REC5:** Support genuinely generated declarations through the smallest factory-backed or batch authoring surface that satisfies P6.5. The feature proposal must justify the exact public forms and functions; raw normalized contribution maps remain private to the publication boundary.
 - **RFC-Saf-001.REC6:** Add a pre-publication authoring mechanism for open kind declarations so domain registries no longer need a `contribute` callback merely to establish their kind.
 - **RFC-Saf-001.REC7:** Treat declaration sets as static source facts. Do not replace `contribute` with another arbitrary callback.
 - **RFC-Saf-001.REC8:** Make the cutover breaking. After the complete forms and replay contract exist and first-party spools have moved, remove `:contribute` from `skein.api.spool.alpha/::spool`, reject old declarations loudly, and update the specs and authoring guide to describe only the new grammar. No released version accepts both grammars, and no alias, silent fallback, or compatibility shim ships. Coordinating core and sibling migrations before that breaking release is landing work, not a public compatibility window; its exact order belongs in the feature proposal.
@@ -323,7 +323,8 @@ The recommendation is ready to become the platform contract only if the feature 
 - **RFC-Saf-001.AC6:** first-party spools and pinned external spool suites no longer rely on `:contribute`;
 - **RFC-Saf-001.AC7:** old `spool` maps containing `:contribute` fail with a direct migration error rather than being ignored;
 - **RFC-Saf-001.AC8:** public specs, API docstrings, `devflow/UBIQUITOUS-LANGUAGE.md`, the spool authoring guide, and discovery surfaces describe one contribution grammar;
-- **RFC-Saf-001.AC9:** image activation fails loudly when the loaded namespace has no retained authoring record, and distinguishes that failure from an explicitly recorded empty declaration set.
+- **RFC-Saf-001.AC9:** image activation fails loudly when the loaded namespace has no retained authoring record, and distinguishes that failure from an explicitly recorded empty declaration set;
+- **RFC-Saf-001.AC10:** the feature proposal inventories each proposed public authoring form or factory, justifies why direct registration or composition cannot supply its module lifecycle semantics, and assigns parity coverage for image replay, omission removal, overrides, and generated entries.
 
 These are contract gates, not an implementation plan. Work slicing, ownership, and landing order belong in the later feature proposal.
 
