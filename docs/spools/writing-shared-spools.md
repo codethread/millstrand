@@ -689,7 +689,7 @@ Entry values have no single schema. Each public authoring form documents and val
 
 A custom kind's entry values are whatever its owner's `:entry-spec` accepts, so read that spool's own contract; [`declare-kind!`](../api/registry.api.md#skein.api.registry.alpha/declare-kind!) is where a kind states its id, spec, and policy.
 
-`contribute` is executed, and its **return value** is the publication data. Do not register entries from inside it: the coordinator stages and publishes what you return, and a direct registration made during `contribute` conflicts with that staged publication. Registration effects and live resources ordinarily go in `reconcile`.
+The remaining `contribute` rules describe legacy modules during the bounded migration window. New and migrated modules use the forms above. For a legacy module, `contribute` returns the publication data. Do not register entries from inside it: the coordinator stages and publishes what it returns, and a direct registration made during `contribute` conflicts with that staged publication.
 
 Bootstrapping a kind is the one shipped exception to that ownership rule, because a kind must exist before any module contributes to it. A spool that owns a kind establishes the required runtime state from `contribute` so the kind is present before a dependent module's contribution is staged against it. `skein.spools.cron` is the shipped example: it materializes cron's executor state slot and job-kind registry handle, then returns an empty contribution because those effects establish the domain rather than register entries into it. This exception is part of the current contract, not a general licence to put effects in `contribute`; RFC-Saf-001 proposes replacing it with an explicit pre-publication mechanism. A module contributing to another spool's kind names that spool's module in `:after`.
 
@@ -712,7 +712,7 @@ As a contribution it is one line:
 
 Two things changed. The name is now a string: `register-query!` accepts a simple symbol or keyword and canonicalises it to the registry key `"mine"` on your behalf, while a contribution's keys go into the registry as written, so write the canonical string key yourself. And the ownership changed: the direct call writes one entry under the direct-registration owner, whereas the contribution replaces your module's complete `:queries` partition every time it publishes.
 
-Had a collecting macro for named queries been loaded, the same query would be one top-level form in the other style and you would write no `contribute` at all. Either route publishes the same entry under the same module owner.
+The migrated form is `contribution/defquery`; it publishes the same entry under the same module owner and removes the legacy `contribute` callback.
 
 ### Publication is owner-complete
 

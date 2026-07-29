@@ -48,8 +48,18 @@
          #(or (not (contains? % :metadata)) (map? (:metadata %)))
          #(or (not (contains? % :override?)) (boolean? (:override? %)))))
 
-(s/def ::op-entry map?)
-(s/def ::query-entry (s/or :where vector? :detailed map?))
+(s/def ::op-entry
+  (s/and map?
+         #(every? #{:name :fn :provenance :doc :arg-spec :returns :stream?
+                    :deadline-class :hook-class :about :prime :annotations}
+                  (keys %))
+         #(every? (partial contains? %) [:name :fn :provenance])))
+(s/def ::query-entry
+  (s/and #(try
+            (query/validate-query-def! %)
+            true
+            (catch clojure.lang.ExceptionInfo _ false))
+         (s/or :where vector? :detailed map?)))
 (s/def ::pattern-entry
   (s/and map? #(= #{:name :fn :input-spec :doc} (set (keys %)))))
 (s/def ::hook-entry
@@ -64,12 +74,15 @@
   intent is collection metadata and is not stored in the entry."
   [op-name doc opts fn-sym]
   (require-valid! ::op-options opts "defop options are invalid")
-  (weaver/validate-op-entry!
-   (cond-> {:name (name op-name)
-            :fn fn-sym
-            :provenance (symbol (namespace fn-sym))
-            :doc doc}
-     true (merge (dissoc opts :override?)))))
+  (require-valid!
+   ::op-entry
+   (weaver/validate-op-entry!
+    (cond-> {:name (name op-name)
+             :fn fn-sym
+             :provenance (symbol (namespace fn-sym))
+             :doc doc}
+      true (merge (dissoc opts :override?))))
+   "defop declaration is invalid"))
 
 (defn query-declaration
   "Return a validated `:queries` entry.
@@ -78,8 +91,7 @@
   grammar boundary; `:usage` and override intent are authoring metadata."
   [_query-name opts definition]
   (require-valid! ::query-options opts "defquery options are invalid")
-  (query/validate-query-def! definition)
-  definition)
+  (require-valid! ::query-entry definition "defquery declaration is invalid"))
 
 (defn pattern-declaration
   "Return a validated `:patterns` entry.

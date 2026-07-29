@@ -3,7 +3,10 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is testing]]
             [skein.api.contribution.alpha :as contribution]
-            [skein.core.weaver.module-graph :as module-graph]))
+            [skein.core.weaver.module-graph :as module-graph]
+            [skein.spools.chime :as chime]
+            [skein.spools.cron :as cron]
+            [skein.spools.workflow :as workflow]))
 
 (s/def ::pattern-input (s/keys))
 
@@ -85,3 +88,23 @@
     (is (every? var?
                 (map #(ns-resolve test-ns %)
                      '[sample-op sample-query sample-pattern sample-hook sample-handler])))))
+
+(deftest domain-forms-define-callables-and-collect-override-intent
+  (let [contribution
+        (collect
+         #(eval
+           '(do
+              (workflow/defexecutor sample-executor "Sample."
+                {:override? true} [_] nil)
+              (cron/defjob :sample-job {:override? true}
+                {:interval-ms 1000
+                 :handler 'skein.api.contribution-test/sample-handler})
+              (chime/defrule sample-rule "Sample."
+                {:override? true} [_] nil))))]
+    (is (= #{"sample-executor"}
+           (get-in contribution [workflow/executor-kind :overrides])))
+    (is (= #{:sample-job} (get-in contribution [cron/job-kind :overrides])))
+    (is (= #{:sample-rule} (get-in contribution [chime/rule-kind :overrides])))
+    (is (every? var?
+                (map #(ns-resolve test-ns %)
+                     '[sample-executor-stalled? sample-rule-rule])))))
