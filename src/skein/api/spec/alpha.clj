@@ -24,8 +24,8 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]))
 
-(declare form-graph doc-enrichment contract-node keys-node key-entries key-entry
-         operator-node constraint-map constraint-value render-template entry-key
+(declare contract-template form-graph doc-enrichment contract-node keys-node key-entries
+         key-entry operator-node constraint-map constraint-value render-template entry-key
          entry-template placeholder node-hint missing-key-in-pred json-key-name
          json-path-element registered-spec require-registered fail!)
 
@@ -98,7 +98,19 @@
   optionality. An unregistered `spec-name` fails loudly as
   `:spec/unregistered`."
   [spec-name]
-  (render-template (contract spec-name) false))
+  (contract-template (contract spec-name)))
+
+(defn contract-template
+  "Return the copyable JSON skeleton for contract `node`.
+
+  Exactly what `template` renders, but from an already-built contract node
+  instead of a registered spec name. That indirection is the point: an adopting
+  surface may enrich a `contract` tree — merging authored per-key documentation
+  over the hoisted predicate-var docs, for instance — and re-render, so the
+  skeleton's placeholders speak the enriched documentation while the node
+  grammar stays owned here."
+  [node]
+  (render-template node false))
 
 (defn projection
   "Return the composite discovery bundle for registered spec `spec-name`.

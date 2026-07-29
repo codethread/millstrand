@@ -2501,6 +2501,103 @@
                (set (map #(get % "key") (get-in params [:contract "required"])))))
         (is (contains? (:template params) "scope"))))))
 
+;; --- authored :example and :param-docs --------------------------------------
+
+;; the alias collapses in the recorded form (s/form prints clojure.core/string?
+;; directly), which is exactly why docs anchor on outer keys
+(s/def ::documented-scope ::scope)
+(s/def ::authored-params (s/keys :req-un [::scope ::documented-scope]
+                                 :opt-un [::reviewer]))
+
+(workflow/defworkflow authored-build
+  "Build under authored params documentation."
+  {:entrypoints #{:start}
+   :param-spec ::authored-params
+   :example {:scope "compact queue" :documented-scope "follow-up scope"}
+   :param-docs {:scope "What to build."
+                :documented-scope "Anchored through the collapsed alias."}}
+  (workflow/workflow
+   "Authored build"
+   (workflow/step :implement "Implement" :self)))
+
+(deftest authored-example-and-param-docs-validate-at-construction
+  (testing "a valid example travels on the definition value"
+    (is (= {:scope "compact queue" :documented-scope "follow-up scope"}
+           (:example authored-build))))
+  (testing "an example the live spec rejects fails with the projection fields"
+    (let [thrown (try (workflow/workflow
+                       "bad-example"
+                       {:param-spec ::authored-params
+                        :example {:scope 42 :documented-scope "x"}}
+                       (workflow/step :a "A" :self))
+                      (catch clojure.lang.ExceptionInfo e e))
+          data (ex-data thrown)]
+      (is (= :workflow/example-invalid (:reason data)))
+      (is (= ::authored-params (:spec data)))
+      (is (re-find #"scope" (:explain data)))
+      (is (= "map" (get-in data [:contract "kind"])))))
+  (testing "a doc for an undeclared outer key is rejected"
+    (let [thrown (try (workflow/workflow
+                       "bad-doc-key"
+                       {:param-spec ::authored-params
+                        :param-docs {:scoop "typo"}}
+                       (workflow/step :a "A" :self))
+                      (catch clojure.lang.ExceptionInfo e e))
+          data (ex-data thrown)]
+      (is (= :workflow/param-docs-unknown-key (:reason data)))
+      (is (= [:scoop] (:unknown data)))
+      (is (= ["documented-scope" "reviewer" "scope"] (:declared data)))))
+  (testing "authored documentation without a param spec has nothing to anchor to"
+    (let [thrown (try (workflow/workflow
+                       "unanchored"
+                       {:example {:scope "x"}}
+                       (workflow/step :a "A" :self))
+                      (catch clojure.lang.ExceptionInfo e e))]
+      (is (= :workflow/param-authoring-unanchored (:reason (ex-data thrown))))))
+  (testing "a non-JSON example fails the options shape"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow options"
+                          (workflow/workflow
+                           "non-json"
+                           {:param-spec ::authored-params
+                            :example {:scope "x" :documented-scope :keyword}}
+                           (workflow/step :a "A" :self)))))
+  (testing "a blank doc fails the options shape"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow options"
+                          (workflow/workflow
+                           "blank-doc"
+                           {:param-spec ::authored-params
+                            :param-docs {:scope ""}}
+                           (workflow/step :a "A" :self))))))
+
+(deftest definition-view-merges-authored-docs-and-example
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-authored 'skein.spools.workflow-test/authored-build)
+      (let [params (:params (workflow/definition-view :wt-authored))
+            entry (fn [key]
+                    (first (filter #(= key (get % "key"))
+                                   (concat (get-in params [:contract "required"])
+                                           (get-in params [:contract "optional"])))))]
+        (is (= {:scope "compact queue" :documented-scope "follow-up scope"}
+               (:example params)))
+        (testing "an authored doc overrides the predicate-var docstring"
+          (is (= "What to build." (get (entry "scope") "doc")))
+          (is (= "What to build." (get-in (entry "scope") ["contract" "doc"])))
+          (is (= "<What to build.>" (get-in params [:template "scope"]))))
+        (testing "a doc anchors on an outer key whose recorded form collapsed an alias"
+          (is (= "Anchored through the collapsed alias."
+                 (get (entry "documented-scope") "doc"))))
+        (testing "an undocumented key keeps the hoisted predicate doc"
+          (is (= "Return true if x is a String" (get (entry "reviewer") "doc")))
+          (is (= "<optional Return true if x is a String>"
+                 (get-in params [:template "reviewer"]))))
+        (testing "a definition without authored fields shows none"
+          (workflow/register-workflow!
+           :wt-plain 'skein.spools.workflow-test/spec-first-build)
+          (is (not (contains? (:params (workflow/definition-view :wt-plain))
+                              :example))))))))
+
 (deftest workflow-choices-projects-live-input-contracts
   (with-runtime
     (fn [rt _]
