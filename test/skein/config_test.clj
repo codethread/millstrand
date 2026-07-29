@@ -578,6 +578,46 @@
                (get (entry "bumps") "doc"))
             "a structural key carries its authored doc in the contract entry")))))
 
+(deftest explore-workflow-drives-a-trail-first-run-to-the-fate-checkpoint
+  (with-startup-config-runtime
+    (fn [_rt]
+      (let [description (op! "workflow" ["show" "explore"])]
+        (is (= "workflows/explore" (:definition description)))
+        (is (= "workflows/explore-params" (get-in description [:params :spec]))))
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Value does not satisfy the named spec"
+           (op! "workflow" ["start" "explore-no-topic"
+                            "--workflow" "explore"
+                            "--params" (json/write-str {})]))
+          "topic is the one required parameter and its absence fails loudly")
+      (let [started (op! "workflow" ["start" "explore-fresh"
+                                     "--workflow" "explore"
+                                     "--params" (json/write-str
+                                                 {:topic "spelunk the cache"})])
+            trail (first (:ready started))]
+        (is (= "explore.leave-trail" (:action-ref trail)))
+        (is (str/includes? (:instruction trail) "Pour a kanban card")
+            "without a card param the trail step instructs pouring one")
+        (is (str/includes? (:instruction trail) "explore/card")
+            "the trail step demands the durable card stamp before completion")
+        (is (= "explore.explore"
+               (:action-ref (first (:ready (op! "workflow"
+                                                ["next" "explore-fresh"]))))))
+        (let [fate (first (:ready (op! "workflow" ["next" "explore-fresh"])))]
+          (is (= "thread-fate" (:checkpoint fate)))
+          (is (= ["promote-to-devflow-brief" "park" "abandon"]
+                 (:choices fate))))
+        (is (true? (:done (op! "workflow" ["choose" "explore-fresh" "park"])))))
+      (let [started (op! "workflow" ["start" "explore-resume"
+                                     "--workflow" "explore"
+                                     "--params" (json/write-str
+                                                 {:topic "resume the thread"
+                                                  :card "ab1cd"})])]
+        (is (str/includes? (:instruction (first (:ready started)))
+                           "Claim card `ab1cd`")
+            "an existing card id routes the trail step to claiming it")))))
+
 (deftest repo-config-publishes-no-devflow-alias-ops
   (with-startup-config-runtime
     (fn [rt]

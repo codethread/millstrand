@@ -1616,18 +1616,22 @@
                                "workflow/instruction"
                                (fn [{:keys [card]}]
                                  (format-alpha/reflow
-                                  (if card
-                                    (format
-                                     "|Claim card `%s` for this exploration: `strand kanban
-                                      |claim %s --owner <name> --branch <branch> --worktree
-                                      |<path>`, with a worktree created for the branch. The
-                                      |claim is what makes the thread discoverable and
-                                      |resumable."
-                                     card card)
-                                    "|Pour a kanban card for the topic (`strand kanban add`)
-                                     |and claim it with owner, branch, and a worktree created
-                                     |for the branch. The claim is what makes the thread
-                                     |discoverable and resumable.")))})
+                                  (str
+                                   (if card
+                                     (format
+                                      "|Claim card `%s` for this exploration: `strand kanban
+                                       |claim %s --owner <name> --branch <branch> --worktree
+                                       |<path>`, with a worktree created for the branch."
+                                      card card)
+                                     "|Pour a kanban card for the topic (`strand kanban add`)
+                                      |and claim it with owner, branch, and a worktree created
+                                      |for the branch.")
+                                   "\n|Then stamp the trail on this step before completing
+                                    |it: `strand update <this-step-id> --attributes
+                                    |'{\"explore/card\":\"<card-id>\",
+                                    |\"explore/worktree\":\"<path>\"}'` — the stamp is the
+                                    |run's durable link to the trail; a later session
+                                    |resumes from the card it names, not from prose.")))})
    (workflow/step :explore
                   (fn [{:keys [topic]}] (str "Explore: " topic))
                   :self
