@@ -9,7 +9,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [next.jdbc :as jdbc]
-            [skein.api.format.alpha :as format-alpha]
+            [skein.api.spec.alpha :as api-spec]
             [skein.core.db :as db]
             [skein.core.query :as query]
             [skein.core.weaver.access :refer [ds normalize pattern-registry pattern-store
@@ -57,19 +57,26 @@
 (defn explain
   "Describe a registered weave pattern and its input contract in `runtime`.
 
-  Missing patterns or unregistered input specs fail loudly."
+  The input contract is the shared `skein.api.spec.alpha` projection:
+  `:contract` is the nested node tree, `:template` the copyable JSON skeleton,
+  and `:spec-forms` the printed form graph, all resolved against the live spec
+  registry with no predicate invoked. Missing patterns or unregistered input
+  specs fail loudly."
   [runtime pattern-name]
   ;; :fn and :name are renamed on destructure: locals named `fn` and `name`
   ;; shadow the clojure.core vars.
   (let [{:keys [doc input-spec] fn-sym :fn registered-name :name}
-        (resolve-pattern runtime pattern-name)
-        contract (pattern-input-contract input-spec)]
+        (resolve-pattern runtime pattern-name)]
     (cond-> (merge {:name registered-name
                     :fn (str fn-sym)
-                    :input-spec (str input-spec)
-                    :spec-form (:spec-form contract)}
-                   (select-keys contract [:summary :required :optional]))
+                    :input-spec (str input-spec)}
+                   (pattern-input-contract input-spec))
       doc (assoc :doc doc))))
+
+(s/fdef explain
+  :args (s/cat :runtime map?
+               :pattern-name (s/or :keyword keyword? :symbol symbol? :string string?))
+  :ret map?)
 
 (defn weave!
   "Validate pattern input, invoke the pattern, and apply its create-only batch.
@@ -134,81 +141,60 @@
 
 ;; --- Input contract introspection and caller guidance ---
 
-(defn- spec-form [spec-name]
-  (let [form (s/form spec-name)]
-    (when (= ::s/unknown form)
-      (throw (ex-info "Pattern input spec is not registered" {:input-spec spec-name})))
-    form))
+(defn- require-registered-input-spec! [spec-name]
+  (when-not (s/get-spec spec-name)
+    (throw (ex-info "Pattern input spec is not registered" {:input-spec spec-name})))
+  spec-name)
 
-(defn- spec-summary [spec-name]
-  {:spec (str spec-name)
-   :spec-form (pr-str (spec-form spec-name))})
+(defn- pattern-input-contract
+  "Return the shared documentation projection of a registered input spec:
+  `:contract`, `:template`, and `:spec-forms` (`skein.api.spec.alpha`)."
+  [input-spec]
+  (require-registered-input-spec! input-spec)
+  (let [bundle (api-spec/projection input-spec)]
+    {:contract (get bundle "contract")
+     :template (get bundle "template")
+     :spec-forms (get bundle "spec-forms")}))
 
-(defn- key-spec-summary [key-spec]
-  (merge {:key (name key-spec)}
-         (try
-           (spec-summary key-spec)
-           (catch clojure.lang.ExceptionInfo _
-             {:spec (str key-spec)
-              :spec-form "<unregistered>"}))))
+(defn- problem-message
+  "Return one caller-guidance line for a structured spec problem.
 
-(defn- keys-spec-summary [form]
-  (when (and (seq? form) (= 'clojure.spec.alpha/keys (first form)))
-    (let [opts (apply hash-map (rest form))]
-      {:required (mapv key-spec-summary (concat (:req opts) (:req-un opts)))
-       :optional (mapv key-spec-summary (concat (:opt opts) (:opt-un opts)))})))
-
-(def ^:private input-contract-summary
-  (format-alpha/reflow
-   "|Input must satisfy this clojure.spec contract. For key specs, see
-    |required/optional entries for each key's own predicate."))
-
-(defn- pattern-input-contract [input-spec]
-  (let [form (spec-form input-spec)
-        keys-summary (keys-spec-summary form)]
-    (cond-> (spec-summary input-spec)
-      true (assoc :summary input-contract-summary)
-      keys-summary (merge keys-summary))))
-
-(defn- missing-key [problem]
-  (let [pred (pr-str (:pred problem))]
-    (when (str/includes? pred "contains?")
-      (or (last (:path problem))
-          (some->> (re-find #"contains\? % (:?[A-Za-z0-9._/-]+)" pred) second keyword)))))
-
-(defn- problem-message [contract problem]
-  (if-let [key-spec (missing-key problem)]
-    (let [key-contract (some #(when (= (name key-spec) (:key %)) %)
-                             (:required contract))]
-      (str "missing required key `" (name key-spec) "`"
-           (when key-contract
-             (str " (expected " (:spec key-contract) " " (:spec-form key-contract) ")"))))
-    (str "value at " (pr-str (:in problem)) " failed predicate " (pr-str (:pred problem)))))
-
-(defn- pattern-validation-message [canonical-name contract explain-data]
-  (let [problems (::s/problems explain-data)]
-    (str "Pattern input failed spec validation for `" canonical-name "`"
-         (when (seq problems)
-           (str ": " (str/join "; " (map #(problem-message contract %) problems)))))))
+  A missing required key names the exact JSON key to add and points at its
+  entry in the contract; anything else reports the failing location and the
+  printed predicate."
+  [contract problem]
+  (if-let [missing (get problem "missing-key")]
+    (let [entry (some #(when (= missing (get % "key")) %)
+                      (get contract "required"))]
+      (str "missing required key `" missing "`"
+           (when-let [key-spec (get entry "spec")]
+             (str " (see `" key-spec "` in the contract)"))))
+    (str "value at " (pr-str (get problem "in"))
+         " failed predicate " (get problem "pred"))))
 
 (defn- validate-pattern-input!
   "Validate weave input against the pattern's registered spec.
 
-  Throws when the spec is unregistered or the input fails it; the ex-data carries
-  the input contract and per-problem caller guidance."
+  Throws when the spec is unregistered or the input fails it. The ex-data
+  carries the shared projection fields (`:contract`, `:template`,
+  `:spec-forms`), per-problem caller guidance, and `:explain` as plain
+  `s/explain-str` text — raw `s/explain-data` never crosses this boundary."
   [canonical-name input-spec input]
-  (spec-form input-spec)
+  (require-registered-input-spec! input-spec)
   (when-not (s/valid? input-spec input)
-    (let [explain-data (s/explain-data input-spec input)
-          contract (pattern-input-contract input-spec)]
-      (throw (ex-info (pattern-validation-message canonical-name contract explain-data)
+    (let [{:keys [contract template spec-forms]} (pattern-input-contract input-spec)
+          messages (mapv #(problem-message contract %)
+                         (api-spec/problems input-spec input))]
+      (throw (ex-info (str "Pattern input failed spec validation for `" canonical-name "`"
+                           (when (seq messages) (str ": " (str/join "; " messages))))
                       {:code "pattern/input-invalid"
                        :pattern canonical-name
                        :input-spec (str input-spec)
                        :contract contract
-                       :problems (mapv #(problem-message contract %)
-                                       (::s/problems explain-data))
-                       :explain explain-data})))))
+                       :template template
+                       :spec-forms spec-forms
+                       :problems messages
+                       :explain (api-spec/explain-text input-spec input)})))))
 
 ;; --- Weave batch plumbing ---
 

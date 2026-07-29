@@ -463,6 +463,39 @@
 (s/def ::json-pattern-input #(string? (get % "title")))
 (s/def ::never-valid (constantly false))
 
+;; Benchmark shapes for the shared input projection: the pinned delegation
+;; spool's agent-plan contract (ct.spools.delegation ::agent-plan-input, v16)
+;; reproduced faithfully in an aux spec namespace so the unqualified JSON keys
+;; keep their real names, and a delegate-pipeline-style s/and root.
+(defn plan-non-blank?
+  "Non-blank string."
+  [value]
+  (and (string? value) (not (str/blank? value))))
+
+(s/def :skein.weaver-test.plan/feature plan-non-blank?)
+(s/def :skein.weaver-test.plan/title plan-non-blank?)
+(s/def :skein.weaver-test.plan/key plan-non-blank?)
+(s/def :skein.weaver-test.plan/body plan-non-blank?)
+(s/def :skein.weaver-test.plan/kind #{"task" "review"})
+(s/def :skein.weaver-test.plan/hitl boolean?)
+(s/def :skein.weaver-test.plan/depends_on
+  (s/coll-of :skein.weaver-test.plan/key :kind vector?))
+(s/def :skein.weaver-test.plan/max-attempts pos-int?)
+(s/def :skein.weaver-test.plan/task
+  (s/keys :req-un [:skein.weaver-test.plan/key :skein.weaver-test.plan/title]
+          :opt-un [:skein.weaver-test.plan/body :skein.weaver-test.plan/kind
+                   :skein.weaver-test.plan/hitl :skein.weaver-test.plan/depends_on
+                   :skein.weaver-test.plan/max-attempts]))
+(s/def :skein.weaver-test.plan/tasks
+  (s/coll-of :skein.weaver-test.plan/task :kind vector? :min-count 1))
+(s/def :skein.weaver-test.plan/input
+  (s/keys :req-un [:skein.weaver-test.plan/feature :skein.weaver-test.plan/title
+                   :skein.weaver-test.plan/tasks]
+          :opt-un [:skein.weaver-test.plan/body]))
+(s/def :skein.weaver-test.pipeline/input
+  (s/and map?
+         #(s/valid? :skein.weaver-test.plan/tasks (:tasks %))))
+
 (defn write-op-lib! [workspace lib ns-sym]
   (let [root (io/file workspace "spools" (name lib))
         ns-path (-> (str ns-sym)
@@ -3029,8 +3062,13 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Pattern doc"
                             (patterns/register-pattern! rt 'bad-doc "" 'skein.weaver-test/test-pattern ::pattern-input)))
-      (is (str/includes? (:spec-form (patterns/explain rt :dev-task))
-                         "clojure.spec.alpha/keys"))
+      (let [explained (patterns/explain rt :dev-task)]
+        (is (str/includes? (get-in explained [:spec-forms 0 "form"])
+                           "clojure.spec.alpha/keys"))
+        (is (= "map" (get-in explained [:contract "kind"])))
+        (is (= ["title"] (mapv #(get % "key")
+                               (get-in explained [:contract "required"]))))
+        (is (contains? (:template explained) "title")))
       (reset! delivered-events [])
       (events/register-handler! rt :capture-weave #{:batch/applied}
                                 'skein.weaver-test/capture-event {})
@@ -3054,6 +3092,46 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Pattern function"
                             (patterns/register-pattern! rt 'bad 'unqualified ::pattern-input))))))
+
+(deftest pattern-input-projection-benchmarks
+  (with-runtime
+    (fn [rt _]
+      (weaver/init rt)
+      (patterns/register-pattern! rt 'agent-plan-like 'skein.weaver-test/test-pattern
+                                  :skein.weaver-test.plan/input)
+      (patterns/register-pattern! rt 'pipeline-like 'skein.weaver-test/test-pattern
+                                  :skein.weaver-test.pipeline/input)
+      (testing "a nested s/keys contract projects to authorable depth"
+        (let [{:keys [contract template]} (patterns/explain rt :agent-plan-like)
+              tasks (some #(when (= "tasks" (get % "key")) %)
+                          (get contract "required"))]
+          (is (= ["feature" "title" "tasks"]
+                 (mapv #(get % "key") (get contract "required"))))
+          (is (= "coll" (get-in tasks ["contract" "kind"])))
+          (is (= "map" (get-in tasks ["contract" "item" "kind"])))
+          (is (= "Non-blank string."
+                 (get-in tasks ["contract" "item" "required" 0 "contract" "doc"]))
+              "predicate-var docs surface at depth")
+          (is (vector? (get template "tasks")))
+          (is (contains? (first (get template "tasks")) "key"))))
+      (testing "an s/and root renders its shape with the rest as constraints"
+        (let [{:keys [contract template]} (patterns/explain rt :pipeline-like)]
+          (is (= "and" (get contract "kind")))
+          (is (= "pred" (get-in contract ["shape" "kind"])))
+          (is (seq (get contract "constraints")))
+          (is (string? template))))
+      (testing "missing required keys are named as the exact JSON keys to add"
+        (let [thrown (try (patterns/weave! rt :agent-plan-like
+                                           {:title "t" :tasks [{:key "a" :title "x"}]})
+                          (catch clojure.lang.ExceptionInfo e e))
+              data (ex-data thrown)]
+          (is (= "pattern/input-invalid" (:code data)))
+          (is (some #(str/includes? % "missing required key `feature`")
+                    (:problems data)))
+          (is (string? (:explain data))
+              "explain crosses the wire as text, never raw explain-data")
+          (is (map? (:contract data)))
+          (is (map? (:template data))))))))
 
 (deftest weaver-weave-create-only-contract-remains-compatible
   (with-runtime

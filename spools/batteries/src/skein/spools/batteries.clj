@@ -1132,9 +1132,6 @@
               :params {:type :collection :items :string}
               :referenced-params {:type :collection :items :string}}})
 
-(def ^:private pattern-key-return
-  {:type :map
-   :required {:key :string :spec :string :spec-form :string}})
 
 (def ^:private op-returns
   {'add strand-return
@@ -1181,10 +1178,10 @@
                               :optional {:doc :string}}}
               "explain" {:type :map
                          :required {:name :string :operation :string :fn :string :input-spec :string
-                                    :spec-form :string :summary :string}
-                         :optional {:doc :string
-                                    :required {:type :collection :items pattern-key-return}
-                                    :optional {:type :collection :items pattern-key-return}}}}}
+                                    ;; the projection node grammar is owned by
+                                    ;; skein.api.spec.alpha, so these carry as json
+                                    :contract :json :template :json :spec-forms :json}
+                         :optional {:doc :string}}}}
    'note {:type :map :required {:id :string :target :string}}
    'notes {:type :collection
            :items {:type :map
