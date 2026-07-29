@@ -627,6 +627,24 @@
                            "Claim card `ab1cd`")
             "an existing card id routes the trail step to claiming it")))))
 
+(deftest fix-workflow-leaves-task-scope-with-the-doing-agent
+  (with-startup-config-runtime
+    (fn [_rt]
+      (let [started (op! "workflow" ["start" "fix-task-ownership"
+                                     "--workflow" "fix"
+                                     "--params" (json/write-str
+                                                 {:subject "repair the parser"
+                                                  :branch "fix-parser"
+                                                  :worktree "/tmp/fix-parser"
+                                                  :card "ab1cd"})])]
+        (is (= "fix.claim-trail" (:action-ref (first (:ready started)))))
+        (let [implement (first (:ready (op! "workflow" ["next"
+                                                        "fix-task-ownership"])))]
+          (is (= "fix.implement" (:action-ref implement)))
+          (is (str/includes? (:instruction implement) "Create a kanban task"))
+          (is (str/includes? (:instruction implement)
+                             "agent doing the work owns that task's scope")))))))
+
 (deftest repo-config-publishes-no-devflow-alias-ops
   (with-startup-config-runtime
     (fn [rt]
