@@ -4258,6 +4258,15 @@
           (is (= :image (:source/status outcome)))
           (is (= [:= [:attr :owner] "forms"]
                  (get (graph/queries rt) "image-forms"))))
+        (let [result (runtime/module! rt :other-image-forms
+                                      {:ns forms-ns :load :image})
+              outcome (get-in result [:modules :other-image-forms])]
+          (is (= :failed (:status outcome)))
+          (is (= :foreign-declaration-record
+                 (get-in outcome [:error :data :reason])))
+          (is (= :image-forms
+                 (get-in outcome [:error :data :record/module-key]))
+              "a namespace record cannot be replayed under another owner"))
 
         (write-local-spool-module! workspace root-lib empty-ns "")
         (is (= :applied

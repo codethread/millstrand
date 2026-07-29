@@ -73,6 +73,7 @@
               :ns ns-sym}))
     (alter-meta! namespace assoc declaration-record-key
                  {:version declaration-record-version
+                  :module-key module-key
                   :namespace ns-sym
                   :contribution contribution
                   :kind-declarations kind-declarations})
@@ -110,6 +111,12 @@
               :module/key module-key
               :ns ns-sym
               :record/namespace (:namespace record)}))
+    (when-not (= module-key (:module-key record))
+      (fail! "Image module authoring declaration record belongs to another module"
+             {:reason :foreign-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :record/module-key (:module-key record)}))
     (select-keys record [:contribution :kind-declarations])))
 
 (defn- informative-throwable

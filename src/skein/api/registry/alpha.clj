@@ -74,6 +74,8 @@
   Returns a `::declaration-result`; a malformed declaration fails loudly and
   leaves the registry unchanged."
   [handle declaration]
+  (require-valid! ::kind-declaration-input declaration
+                  "Registry kind declaration input is invalid")
   (let [declaration (with-layer-policy declaration)]
     (require-valid! ::kind-declaration declaration
                     "Registry kind declaration is invalid")
@@ -186,7 +188,7 @@
 (s/fdef registry? :args (s/cat :x any?) :ret boolean?)
 
 (s/fdef declare-kind!
-  :args (s/cat :handle ::registry :declaration map?)
+  :args (s/cat :handle ::registry :declaration ::kind-declaration-input)
   :ret ::declaration-result)
 
 (s/fdef replace-owner!
