@@ -15,6 +15,8 @@ Append `--` and any extra harness arguments after the prompt to pass them to `cl
 
 `ralph-codex` defaults `RALPH_MODEL` to `sol-low`, which selects `gpt-5.6-sol` with low reasoning effort. Set `RALPH_EFFORT` to override the effort or set `RALPH_MODEL` to another Codex model ID. It uses Codex's approval and sandbox bypass by default because a headless run cannot answer permission prompts; set `RALPH_SKIP_PERMISSIONS=0` to keep the configured Codex restrictions. `RALPH_LOG_DIR` overrides the transcript directory; by default each run writes to `$TMPDIR/ralph/<epic>-<timestamp>`.
 
+The harness addendum appended to the user's prompt carries loop mechanics only: orient from live state, close the epic with `strand kanban finish <epic> --outcome done` when every feature is complete, leave the world resumable, and the `RALPH-STOP` brake. Work discipline — claiming, decomposition, landing — lives on the epic card and its feature cards, which each iteration reads via `strand kanban card <epic>`; `strand ready --query kanban-epic-pending --param epic=<id>` is the preferred frontier view when the running weaver serves that query.
+
 Both loops expect the canonical coordination weaver to be running. They read the epic lifecycle between iterations, while the agent run claims and closes kanban work.
 
 `ralph-codex` exits 0 when the epic is already inactive (`closed` or `replaced`) or the loop observes it become inactive, 2 for invalid invocation or environment values, and 3 when the agent pulls the emergency brake. Missing dependencies, invalid strand data, harness failures, transcript failures, and iteration exhaustion exit 1.
