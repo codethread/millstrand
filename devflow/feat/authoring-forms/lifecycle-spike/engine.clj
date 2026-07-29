@@ -2,11 +2,11 @@
   "Bounded lifecycle-engine prototype for the authoring-forms feasibility spike."
   (:require [clojure.set :as set]))
 
-(def ^:private kinds #{:reaction :resource :reconcile})
+(def ^:private kinds #{:seed :resource :reconcile})
 (def ^:private scopes #{:module :runtime})
 (def ^:private common-keys #{:kind :after})
 (def ^:private kind-keys
-  {:reaction #{:on-applied :on-removed}
+  {:seed #{:apply}
    :resource #{:open :close :scope}
    :reconcile #{:read-desired :read-actual :apply :on-removed :trigger-kinds}})
 
@@ -18,7 +18,7 @@
   [declaration]
   (select-keys declaration
                (case (:kind declaration)
-                 :reaction [:on-applied :on-removed]
+                 :seed [:apply]
                  :resource [:open :close]
                  :reconcile [:read-desired :read-actual :apply :on-removed])))
 
@@ -53,9 +53,9 @@
                {:effect/id effect-id :effect/kind kind :effect/callable callable
                 :effect/callable-slot slot :effect/phase :validate})))
     (case kind
-      :reaction
-      (when-not (seq (callable-symbols declaration))
-        (fail! "Reaction must declare at least one transition"
+      :seed
+      (when-not (= #{:apply} (set (keys (callable-symbols declaration))))
+        (fail! "Seed requires one apply callable"
                {:effect/id effect-id :effect/kind kind :effect/phase :validate}))
 
       :resource
@@ -165,6 +165,13 @@
                  [slot resolved])))
         (callable-symbols declaration)))
 
+(defn- resolve-declarations!
+  [resolver declarations]
+  (into {}
+        (map (fn [[effect-id declaration]]
+               [effect-id (resolve-callables! resolver effect-id declaration)]))
+        declarations))
+
 (defn- data-result!
   [effect-id phase value]
   (when-not (or (nil? value)
@@ -188,16 +195,22 @@
    :effect/phase phase
    :refresh/result refresh-result})
 
+(defn- exception-data
+  [throwable]
+  (cond-> {:class (.getName (class throwable))
+           :message (ex-message throwable)}
+    (ex-data throwable) (assoc :data (ex-data throwable))
+    (ex-cause throwable) (assoc :cause {:class (.getName (class (ex-cause throwable)))
+                                        :message (ex-message (ex-cause throwable))})))
+
 (defn- apply-effect
-  [runtime module-key resolver refresh-result effect-id declaration prior]
-  (let [callables (or (:callables prior)
-                      (resolve-callables! resolver effect-id declaration))
-        context #(base-context runtime module-key effect-id declaration % refresh-result)]
+  [runtime module-key refresh-result effect-id declaration callables]
+  (let [context #(base-context runtime module-key effect-id declaration % refresh-result)]
     (try
       (case (:kind declaration)
-        :reaction
-        (let [result (when-let [callable (:on-applied callables)]
-                       (data-result! effect-id :apply (callable (context :apply))))]
+        :seed
+        (let [result (data-result! effect-id :apply
+                                   ((:apply callables) (context :apply)))]
           {:declaration declaration :callables callables :health :healthy
            :status :applied :result result})
 
@@ -218,7 +231,7 @@
          :status :failed :phase (case (:kind declaration)
                                   :resource :open
                                   :apply)
-         :error (ex-data throwable)}))))
+         :error (exception-data throwable)}))))
 
 (defn- remove-effect
   [runtime module-key refresh-result effect-id retained runtime-stop?]
@@ -231,91 +244,109 @@
                                     :remove refresh-result)
               result
               (case (:kind declaration)
-                :reaction (when-let [callable (:on-removed callables)]
-                            (callable context))
+                :seed nil
                 :resource ((:close callables) (assoc context :resource handle))
                 :reconcile ((:on-removed callables) context))]
           {:status :removed
            :result (data-result! effect-id :remove result)})
         (catch Throwable throwable
           (assoc retained :health :degraded :status :failed :phase :remove
-                 :error (ex-data throwable)))))))
+                 :error (exception-data throwable)))))))
+
+(defn- run-removals
+  [runtime module-key state refresh-result removal-order runtime-stop?]
+  (reduce
+   (fn [{:keys [effects blocked] :as acc} effect-id]
+     (let [dependents (set (for [[candidate {:keys [declaration]}] effects
+                                 :when (contains? (:after declaration #{}) effect-id)]
+                             candidate))]
+       (if (seq (set/intersection blocked dependents))
+         (-> acc
+             (update :blocked conj effect-id)
+             (assoc-in [:outcomes effect-id]
+                       {:status :blocked :phase :remove}))
+         (let [result (remove-effect runtime module-key refresh-result effect-id
+                                     (get effects effect-id) runtime-stop?)]
+           (cond
+             (= :failed (:status result))
+             (-> acc
+                 (update :blocked conj effect-id)
+                 (assoc-in [:effects effect-id] result)
+                 (assoc-in [:outcomes effect-id]
+                           (dissoc result :handle :callables :declaration)))
+
+             (= :retained (:status result))
+             (-> acc
+                 (assoc-in [:effects effect-id] result)
+                 (assoc-in [:outcomes effect-id]
+                           (dissoc result :handle :callables :declaration)))
+
+             :else
+             (-> acc
+                 (update :effects dissoc effect-id)
+                 (assoc-in [:outcomes effect-id] result)))))))
+   {:effects (:effects state {}) :outcomes {} :blocked #{}}
+   removal-order))
+
+(defn- run-applications
+  [runtime module-key resolved-callables declarations refresh-result
+   action-order removal-result]
+  (reduce
+   (fn [{:keys [halted?] :as acc} effect-id]
+     (if halted?
+       (assoc-in acc [:outcomes effect-id]
+                 {:status :not-attempted :phase :apply})
+       (let [declaration (get declarations effect-id)
+             result (apply-effect runtime module-key refresh-result effect-id declaration
+                                  (get resolved-callables effect-id))]
+         (-> acc
+             (assoc :halted? (= :failed (:status result)))
+             (assoc-in [:effects effect-id] result)
+             (assoc-in [:outcomes effect-id]
+                       (dissoc result :handle :callables :declaration))))))
+   removal-result
+   action-order))
+
+(defn- preserve-effects
+  [effects previous-effects preserved]
+  (reduce (fn [current effect-id]
+            (if (contains? current effect-id)
+              current
+              (assoc current effect-id (get previous-effects effect-id))))
+          effects
+          preserved))
 
 (defn refresh
   "Execute one prototype lifecycle refresh after an asserted publication point."
   [{:keys [runtime module-key resolver state declarations changed-kinds
            published? runtime-stop?]
     :or {state {} declarations {} changed-kinds #{} published? true}}]
-  (when-not published?
-    (fail! "Lifecycle execution requires completed contribution publication"
-           {:module/key module-key :effect/phase :publication}))
   (let [transition-plan (plan state declarations changed-kinds)
-        removals (concat (:remove transition-plan) (:replace transition-plan))
-        removed
-        (reduce
-         (fn [{:keys [effects outcomes blocked] :as acc} effect-id]
-           (let [dependents (set (for [[candidate {:keys [declaration]}] effects
-                                      :when (contains? (:after declaration #{}) effect-id)]
-                                  candidate))]
-             (if (seq (set/intersection blocked dependents))
-               (-> acc
-                   (update :blocked conj effect-id)
-                   (assoc-in [:outcomes effect-id]
-                             {:status :blocked :phase :remove}))
-               (let [result (remove-effect runtime module-key
-                                           {:publication/status :published}
-                                           effect-id (get effects effect-id)
-                                           runtime-stop?)]
-                 (cond
-                   (= :failed (:status result))
-                   (-> acc
-                       (update :blocked conj effect-id)
-                       (assoc-in [:effects effect-id] result)
-                       (assoc-in [:outcomes effect-id]
-                                 (dissoc result :handle :callables :declaration)))
-
-                   (= :retained (:status result))
-                   (-> acc
-                       (assoc-in [:effects effect-id] result)
-                       (assoc-in [:outcomes effect-id]
-                                 (dissoc result :handle :callables :declaration)))
-
-                   :else
-                   (-> acc
-                       (update :effects dissoc effect-id)
-                       (assoc-in [:outcomes effect-id] result)))))))
-         {:effects (:effects state {}) :outcomes {} :blocked #{}}
-         removals)
+        resolved-callables (resolve-declarations! resolver declarations)
+        _ (when-not published?
+            (fail! "Lifecycle execution requires completed contribution publication"
+                   {:module/key module-key :effect/phase :publication}))
+        refresh-result {:publication/status :published}
+        close-ids (set (concat (:remove transition-plan)
+                               (:replace transition-plan)))
+        removal-order (filterv close-ids
+                               (reverse
+                                (validate!
+                                 (into {}
+                                       (map (fn [[effect-id retained]]
+                                              [effect-id (:declaration retained)]))
+                                       (:effects state {})))))
+        removed (run-removals runtime module-key state refresh-result removal-order
+                              runtime-stop?)
         action-ids (set (concat (:apply transition-plan)
                                 (:replace transition-plan)
                                 (:retry transition-plan)
                                 (:reconcile transition-plan)))
         actions (filterv action-ids (validate! declarations))
-        applied
-        (reduce
-         (fn [{:keys [effects halted?] :as acc} effect-id]
-           (if halted?
-             (assoc-in acc [:outcomes effect-id]
-                       {:status :not-attempted :phase :apply})
-             (let [declaration (get declarations effect-id)
-                   result (apply-effect runtime module-key resolver
-                                        {:publication/status :published}
-                                        effect-id declaration
-                                        (get effects effect-id))]
-               (-> acc
-                   (assoc :halted? (= :failed (:status result)))
-                   (assoc-in [:effects effect-id] result)
-                   (assoc-in [:outcomes effect-id]
-                             (dissoc result :handle :callables :declaration))))))
-         removed
-         actions)
-        effects (reduce (fn [current effect-id]
-                          (if (contains? current effect-id)
-                            current
-                            (assoc current effect-id
-                                   (get-in state [:effects effect-id]))))
-                        (:effects applied)
-                        (:preserve transition-plan))]
+        applied (run-applications runtime module-key resolved-callables declarations
+                                  refresh-result actions removed)
+        effects (preserve-effects (:effects applied) (:effects state {})
+                                  (:preserve transition-plan))]
     {:state {:effects effects}
      :plan transition-plan
      :outcomes (:outcomes applied)

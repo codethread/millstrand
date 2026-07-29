@@ -11,4 +11,4 @@ Standing direction from the user (all 2026-07-28):
 - skein-src will not stamp a v1 marker: everything breaking is OK within alpha TEN-000@1, sibling spools included.
 - Fact-check reviews route to sol-med; sol findings are guidance, not law — weigh them against PHILOSOPHY (introspectable and repairable at runtime, not a perfect binary).
 
-Maturity split to preserve: the contribution half is proposed for acceptance; the lifecycle half is gated on a bounded feasibility spike (PROP-Auf-001.P16.2) before its form names and shapes are accepted.
+Maturity split at approval: the contribution half was accepted; the lifecycle half was gated on the bounded feasibility spike in PROP-Auf-001.P16.2. That gate has now passed. The accepted names, policy, census, and provider deltas are recorded in [Lifecycle authoring feasibility result](lifecycle-spike.md), which supersedes the proposal's provisional lifecycle examples without rewriting the approved proposal.

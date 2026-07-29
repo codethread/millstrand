@@ -17,16 +17,19 @@
    (fn [{:keys [effect/id]}]
      (swap! calls conj [:open-v2 id])
      {:handle id})
+   'fixture/plain-failure
+   (fn [_]
+     (throw (RuntimeException. "plain open failed")))
    'fixture/close
    (fn [{:keys [effect/id resource]}]
      (swap! calls conj [:close id (:handle resource)])
      (when (contains? @failures [:close id])
        (throw (ex-info "close failed" {:at id})))
      {:closed id})
-   'fixture/react
+   'fixture/seed
    (fn [{:keys [effect/id]}]
-     (swap! calls conj [:react id])
-     {:reacted id})
+     (swap! calls conj [:seed id])
+     {:seeded id})
    'fixture/remove
    (fn [{:keys [effect/id]}]
      (swap! calls conj [:remove id])
@@ -96,6 +99,18 @@
                           :published? false})))
     (is (empty? @calls))))
 
+(deftest callable-resolution-precedes-publication
+  (let [declarations {:pool (resource)}]
+    (try
+      (engine/refresh {:module-key :fixture/module
+                       :resolver {}
+                       :declarations declarations
+                       :published? false})
+      (is false "unresolved callable should fail")
+      (catch clojure.lang.ExceptionInfo error
+        (is (= :resolve (:effect/phase (ex-data error))))
+        (is (= 'fixture/open (:effect/callable (ex-data error))))))))
+
 (deftest apply-preserve-replace-and-removal-follow-dependency-order
   (let [calls (atom [])
         failures (atom #{})
@@ -120,15 +135,30 @@
           (is (= [[:close :handler :handler] [:close :pool :pool]] @calls))
           (is (empty? (get-in removed [:state :effects]))))))))
 
+(deftest mixed-removal-and-replacement-share-reverse-teardown-order
+  (let [calls (atom [])
+        failures (atom #{})
+        resolver (recording-resolver calls failures)
+        previous {:pool (resource)
+                  :handler (resource :after #{:pool})}
+        applied (run-refresh resolver {} previous #{})
+        next {:handler (resource :open 'fixture/open-v2)}]
+    (reset! calls [])
+    (run-refresh resolver (:state applied) next #{})
+    (is (= [[:close :handler :handler]
+            [:close :pool :pool]
+            [:open-v2 :handler]]
+           @calls))))
+
 (deftest failed-open-retries-whole-boundary-and-preserves-siblings
   (let [calls (atom [])
         failures (atom #{[:open :monitor]})
         resolver (recording-resolver calls failures)
         declarations {:pool (resource)
                       :monitor (resource :after #{:pool})
-                      :scan {:kind :reaction
+                      :scan {:kind :seed
                              :after #{:monitor}
-                             :on-applied 'fixture/react}}
+                             :apply 'fixture/seed}}
         failed (run-refresh resolver {} declarations #{})]
     (is (= [[:open :pool] [:open :monitor]] @calls))
     (is (= :degraded (:status failed)))
@@ -136,7 +166,7 @@
     (swap! failures disj [:open :monitor])
     (reset! calls [])
     (let [retried (run-refresh resolver (:state failed) declarations #{})]
-      (is (= [[:open :monitor] [:react :scan]] @calls))
+      (is (= [[:open :monitor] [:seed :scan]] @calls))
       (is (= :healthy (get-in retried [:state :effects :pool :health])))
       (is (= :applied (:status retried))))))
 
@@ -161,6 +191,18 @@
       (let [retried (run-refresh resolver (:state failed) {} #{})]
         (is (= [[:close :handler :handler] [:close :pool :pool]] @calls))
         (is (empty? (get-in retried [:state :effects])))))))
+
+(deftest ordinary-failures-retain-class-and-message
+  (let [calls (atom [])
+        failures (atom #{})
+        resolver (recording-resolver calls failures)
+        failed (run-refresh resolver {}
+                            {:pool (resource :open 'fixture/plain-failure)}
+                            #{})]
+    (is (= "java.lang.RuntimeException"
+           (get-in failed [:outcomes :pool :error :class])))
+    (is (= "plain open failed"
+           (get-in failed [:outcomes :pool :error :message])))))
 
 (deftest cross-owner-publication-triggers-reconcile-and-omission-cleans-up
   (let [calls (atom [])
