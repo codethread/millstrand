@@ -30,9 +30,18 @@
   "Dynamically bound authoring-form contribution collector, or nil."
   nil)
 
+(def ^:dynamic ^:private *kind-collector*
+  "Dynamically bound open-kind declaration collector, or nil."
+  nil)
+
 (def ^:dynamic ^:private *contribution-context*
   "Dynamically bound module/source context for contribution collection, or nil."
   nil)
+
+(def ^:private declaration-record-key
+  ::declaration-record)
+
+(def ^:private declaration-record-version 1)
 
 (defn- fail! [message data]
   (throw (ex-info message data)))
@@ -333,13 +342,97 @@
                 (update-in [kind-id :overrides] (fnil disj #{}) entry-key)))))
    value))
 
+(defn collect-kind!
+  "Record one open-kind bootstrap declaration in the active module evaluation.
+
+  `state-key` names the runtime spool-state slot that owns the registry handle.
+  Repeating the same state-key/kind id replaces the earlier declaration."
+  [state-key declaration]
+  (when-not (keyword? state-key)
+    (fail! "Kind declaration spool-state key must be a keyword"
+           {:spool-state/key state-key}))
+  (when-not (and (map? declaration) (keyword? (:id declaration)))
+    (fail! "Kind declaration must be a map with a keyword :id"
+           {:spool-state/key state-key :declaration declaration}))
+  (when *kind-collector*
+    (require-collection-source!)
+    (swap! *kind-collector* assoc [state-key (:id declaration)]
+           {:spool-state/key state-key
+            :declaration declaration}))
+  declaration)
+
 (defn with-contribution-collection
-  "Call `f` while collecting entries from exactly one module source target."
+  "Call `f` while collecting entries from exactly one module source target.
+
+  The returned contribution is owner-complete, including when it is empty."
   [context f]
   (let [collector (atom {})
+        kind-collector (atom {})
         return (binding [*contribution-collector* collector
+                         *kind-collector* kind-collector
                          *contribution-context* context]
-                 (f))]
+                 (f))
+        contribution (update-vals @collector
+                                  #(update % :overrides (fnil set #{})))]
     {:return return
-     :contribution (update-vals @collector
-                                #(update % :overrides (fnil set #{})))}))
+     :contribution contribution
+     :kind-declarations (->> @kind-collector vals
+                             (sort-by (juxt :spool-state/key
+                                            (comp :id :declaration)))
+                             vec)}))
+
+(defn retain-declarations!
+  "Replace `ns-sym`'s complete replay record.
+
+  One namespace metadata value replaces the prior declaration epoch, so forms
+  removed by source reload cannot survive as stale Vars."
+  [module-key ns-sym contribution kind-declarations]
+  (let [namespace (find-ns ns-sym)]
+    (when-not namespace
+      (fail! "Cannot retain declarations for an unloaded module namespace"
+             {:reason :namespace-not-loaded
+              :module/key module-key
+              :ns ns-sym}))
+    (alter-meta! namespace assoc declaration-record-key
+                 {:version declaration-record-version
+                  :namespace ns-sym
+                  :contribution contribution
+                  :kind-declarations kind-declarations})
+    {:contribution contribution
+     :kind-declarations kind-declarations}))
+
+(defn replay-declarations
+  "Return the retained declaration record for loaded `ns-sym`.
+
+  Missing records and records from another protocol version fail loudly.
+  An explicitly retained empty declaration set returns `{}`."
+  [module-key ns-sym]
+  (let [namespace (find-ns ns-sym)
+        record (some-> namespace meta declaration-record-key)]
+    (when-not namespace
+      (fail! "Image module namespace is not loaded"
+             {:reason :namespace-not-loaded
+              :module/key module-key
+              :ns ns-sym
+              :load :image}))
+    (when-not record
+      (fail! "Image module has no retained authoring declaration record"
+             {:reason :missing-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :load :image}))
+    (when-not (= declaration-record-version (:version record))
+      (fail! "Image module authoring declaration record is stale"
+             {:reason :stale-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :load :image
+              :record/version (:version record)
+              :expected/version declaration-record-version}))
+    (when-not (= ns-sym (:namespace record))
+      (fail! "Image module authoring declaration record names another namespace"
+             {:reason :foreign-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :record/namespace (:namespace record)}))
+    (select-keys record [:contribution :kind-declarations])))

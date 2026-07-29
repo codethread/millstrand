@@ -9,6 +9,7 @@
   (:require [clojure.set :as set]
             [clojure.tools.reader :as reader]
             [clojure.tools.reader.reader-types :as reader-types]
+            [skein.api.registry.alpha :as registry]
             [skein.core.format :as format]
             [skein.core.weaver.dispatch :as dispatch]
             [skein.core.weaver.module-graph :as module-graph]
@@ -48,6 +49,11 @@
    (module-graph/collect-entry! kind-id entry-key value))
   ([kind-id entry-key value opts]
    (module-graph/collect-entry! kind-id entry-key value opts)))
+
+(defn collect-kind!
+  "Collect one open-kind declaration for pre-publication realization."
+  [state-key declaration]
+  (module-graph/collect-kind! state-key declaration))
 
 (defn- informative-throwable
   "Return the deepest structured cause beneath compiler and loader wrappers."
@@ -417,56 +423,62 @@
            [:contribute :reconcile])))
 
 (def ^:private image-contribution-remedy
-  "The message both image-mode contribution failures state (SPEC-004.C46).
-
-  Image mode collects no authoring forms, so its `:contribute` has exactly two
-  requirements and either can be the missing one; naming both in one message
-  keeps the remedy actionable without the reader knowing which branch failed."
+  "The actionable remedy for image-mode declaration replay failures."
   (format/reflow
-   "|Image module resolves no :contribute entry point; load or require its
-    |namespace into the JVM image, and define a public spool var carrying
-    |:contribute in that namespace"))
+   "|To load or require the module namespace into the JVM image, refresh it once
+    |in source mode so authoring forms retain their declaration record; during
+    |the migration window a public spool var carrying :contribute is also
+    |accepted."))
 
 (defn- evaluate-image-module
   "Evaluate a `:load :image` module: trust the already-loaded JVM image for its
   `:ns` target with no source load and no contribution-collection scope. Entry
-  points resolve from the namespace's `spool` var; image mode collects no
-  authoring forms, so a namespace with no resolvable `:contribute` fails loudly
-  (PROP-Dsp-001.G4/G5). The outcome carries `:source/status :image`, its
-  resolved entry points, and no source stamp."
+  contribution replays from the namespace's retained authoring declaration
+  record. The outcome carries `:source/status :image` and no source stamp."
   [runtime with-loader key declaration]
   (let [ns-sym (:ns declaration)]
     (when-not (find-ns ns-sym)
       (fail! image-contribution-remedy
              {:module/key key :ns ns-sym :load :image
               :reason :namespace-not-loaded}))
-    (let [resolved (entry-points/resolve-entry-points key ns-sym)
-          contribute (:contribute resolved)]
-      (when-not contribute
-        (fail! image-contribution-remedy
-               {:module/key key :ns ns-sym :load :image
-                :reason :no-spool-contribution}))
-      (let [resolved-fns (resolve-entry-point-fns! with-loader key resolved)
-            contribution
-            (with-loader
-              #((:contribute resolved-fns)
-                {:runtime runtime
-                 :module/key key
-                 :module/declaration declaration}))]
+    (try
+      (let [resolved (entry-points/resolve-entry-points key ns-sym)
+            resolved-fns (resolve-entry-point-fns! with-loader key resolved)
+            replay
+            (try
+              (module-graph/replay-declarations key ns-sym)
+              (catch clojure.lang.ExceptionInfo throwable
+                (if (and (= :missing-declaration-record
+                            (:reason (ex-data throwable)))
+                         (:contribute resolved-fns))
+                  {:contribution
+                   (with-loader
+                     #((:contribute resolved-fns)
+                       {:runtime runtime
+                        :module/key key
+                        :module/declaration declaration}))
+                   :kind-declarations []}
+                  (throw throwable))))]
         {:status :ready
          :module/key key
          :source/status :image
          :module/resolved resolved
          :module/reconcile-fn (:reconcile resolved-fns)
-         :contribution (normalize-contribution contribution)}))))
+         :declaration/source (if (:contribute resolved-fns)
+                               :image-replay-or-legacy
+                               :image-replay)
+         :kind-declarations (:kind-declarations replay [])
+         :contribution (normalize-contribution (:contribution replay))})
+      (catch clojure.lang.ExceptionInfo throwable
+        (throw (ex-info image-contribution-remedy (ex-data throwable)))))))
 
 (defn- evaluate-module
-  [runtime with-loader key declaration previous-contribution previous-source]
+  [runtime with-loader key declaration previous-contribution previous-source dry-run?]
   (try
     (if (= :image (:load declaration))
       (evaluate-image-module runtime with-loader key declaration)
       (let [context (collection-context runtime key declaration)
-            {:keys [return] collected :contribution}
+            {:keys [return kind-declarations] collected :contribution}
             (module-graph/with-contribution-collection
               context
               #(load-source! runtime with-loader key declaration previous-source))
@@ -500,7 +512,10 @@
                            previous-contribution
 
                            :else collected)
-            normalized (normalize-contribution contribution)]
+            normalized (normalize-contribution contribution)
+            _ (when (and (not contribute-fn) (not dry-run?))
+                (module-graph/retain-declarations!
+                 key module-ns normalized kind-declarations))]
         {:status :ready
          :module/key key
          :source/status source-status
@@ -509,6 +524,8 @@
                          (source-stamp (latest-source-binding runtime ns-sym)))
          :module/resolved resolved
          :module/reconcile-fn (:reconcile resolved-fns)
+         :declaration/source (if contribute-fn :legacy-callback :source-collection)
+         :kind-declarations kind-declarations
          :contribution normalized}))
     (catch Throwable throwable
       {:status :failed
@@ -519,7 +536,7 @@
 
 (defn- evaluate-affected
   [runtime with-loader graph order root-outcomes previous-contributions
-   previous-sources]
+   previous-sources dry-run?]
   (let [unaffected (set/difference (set (keys graph)) (set order))
         seeded (into (sorted-map)
                      (map (fn [key] [key {:status :unchanged}]))
@@ -535,10 +552,29 @@
                    (retained-outcome key declaration problem)
                    (evaluate-module runtime with-loader key declaration
                                     (get previous-contributions key)
-                                    (get previous-sources key))))))
+                                    (get previous-sources key)
+                                    dry-run?)))))
       seeded
       order)
      order)))
+
+(defn- realize-kind-declarations!
+  "Realize every collected open-kind registry before backend discovery."
+  [runtime raw]
+  (doseq [[module-key outcome] raw
+          {:keys [spool-state/key declaration]} (:kind-declarations outcome)]
+    (let [handle (or (get @(:spool-state runtime) key)
+                     (let [created (registry/registry)]
+                       (get (swap! (:spool-state runtime)
+                                   #(if (contains? % key) % (assoc % key created)))
+                            key)))]
+      (when-not (registry/registry? handle)
+        (fail! "Open-kind declaration spool-state slot is not a registry handle"
+               {:module/key module-key
+                :spool-state/key key
+                :kind (:id declaration)
+                :value handle}))
+      (registry/declare-kind! handle declaration))))
 
 (defn- retained-legacy-modules
   "Return the affected pre-cutover declarations, keyed by module.
@@ -916,7 +952,8 @@
                     previous-sources (:contribution-sources state)
                     raw (evaluate-affected runtime with-loader graph order
                                            (:roots sync-result)
-                                           previous-contributions previous-sources)
+                                           previous-contributions previous-sources
+                                           (:dry-run? opts))
                     reconcile-fns
                     (into {}
                           (keep (fn [[key outcome]]
@@ -937,6 +974,8 @@
                                            [key (:module/resolved outcome)]))
                                        raw)))
                     exposed-resolved (apply dissoc resolved-entry-points removed)
+                    _ (when-not (:dry-run? opts)
+                        (realize-kind-declarations! runtime raw))
                     backends (publication/backends runtime)
                     base-candidates (reduce publication/remove-owner
                                             (publication/candidates backends)
