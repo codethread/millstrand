@@ -107,3 +107,21 @@ gates green.
 ## PLAN-Spj-001.P9 Developer Notes
 
 Append notes here. Do not rewrite earlier notes.
+
+### PLAN-Spj-001.DN1 Direct implementation — 2026-07-29
+
+- Placeholder hints prefer the predicate var's docstring over the printed symbol, so
+  clojure.core predicates render as prose (`<Return true if x is a String>`); tests pin
+  hint behavior with doc-less local predicates to stay independent of core docstring
+  wording.
+- `s/form` collapses alias chains (`::a` defined as `::b` records `::b`'s form), so an
+  intermediate spec keyword never appears in the graph; doc enrichment lands on the
+  entry that records the predicate symbol. This is also why card 7wdvg anchors authored
+  docs on outer keys.
+- The live check listed in V1 is covered by the socket-shape conformance tests
+  (`check-op-return!` over `pattern explain` and `workflow choices`) plus
+  `clojure -M:smoke`; the canonical weaver picks the new base-classpath code up at its
+  next generation, so a canonical-world `pattern explain delegate-pipeline` read shows
+  the new shape only after that cutover.
+- `workflow choices` inherits `choice-details` ambiguity semantics: any multi-item
+  frontier needs `--step`, even when only one ready item is a checkpoint.
