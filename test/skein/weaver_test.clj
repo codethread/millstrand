@@ -4231,6 +4231,151 @@
           (is (= reconciles (count @module-reconciliations))
               "an unchanged image contribution skips reconcile"))))))
 
+(deftest image-module-replays-retained-authoring-declarations
+  (with-runtime
+    (fn [rt _db-file]
+      (let [workspace (get-in rt [:metadata :config-dir])
+            suffix (str/replace (str (random-uuid)) "-" "")
+            root-lib 'test/module-root
+            forms-ns (symbol (str "test.module.image-forms-" suffix))
+            empty-ns (symbol (str "test.module.image-empty-" suffix))
+            kind-ns (symbol (str "test.module.image-kind-" suffix))
+            bad-kind-ns (symbol (str "test.module.bad-kind-" suffix))
+            bad-glossary-ns (symbol (str "test.module.bad-glossary-" suffix))
+            state-key (keyword (str "test.image-kind-" suffix))
+            bad-state-key (keyword (str "test.bad-kind-" suffix))
+            bad-glossary-state-key (keyword (str "test.bad-glossary-" suffix))]
+        (write-local-spool-module!
+         workspace root-lib forms-ns
+         (str "(skein.api.runtime.alpha/collect-entry! "
+              ":queries \"image-forms\" [:= [:attr :owner] \"forms\"] "
+              "{:override? false})"))
+        (is (= :applied
+               (:status (runtime/module! rt :image-forms
+                                         {:ns forms-ns :spools [root-lib]}))))
+        (let [result (runtime/module! rt :image-forms
+                                      {:ns forms-ns :load :image})
+              outcome (get-in result [:modules :image-forms])]
+          (is (= :unchanged (:status outcome)))
+          (is (= :image (:source/status outcome)))
+          (is (= [:= [:attr :owner] "forms"]
+                 (get (graph/queries rt) "image-forms"))))
+        (let [result (runtime/module! rt :other-image-forms
+                                      {:ns forms-ns :load :image})
+              outcome (get-in result [:modules :other-image-forms])]
+          (is (= :failed (:status outcome)))
+          (is (= :foreign-declaration-record
+                 (get-in outcome [:error :data :reason])))
+          (is (= :image-forms
+                 (get-in outcome [:error :data :record/module-key]))
+              "a namespace record cannot be replayed under another owner"))
+
+        (write-local-spool-module! workspace root-lib empty-ns "")
+        (is (= :applied
+               (:status (runtime/module! rt :image-empty
+                                         {:ns empty-ns :spools [root-lib]}))))
+        (let [result (runtime/module! rt :image-empty
+                                      {:ns empty-ns :load :image})]
+          (is (= :unchanged (get-in result [:modules :image-empty :status]))
+              "an explicitly retained empty declaration set is replayable"))
+
+        (write-local-spool-module!
+         workspace root-lib kind-ns
+         (str "(clojure.spec.alpha/def ::widget map?)\n"
+              "(skein.api.runtime.alpha/collect-kind! "
+              state-key " {:id ::widgets :entry-spec ::widget "
+              ":binding-moment :test/use})\n"
+              "(skein.api.runtime.alpha/collect-entry! "
+              "::widgets :one {:value 1})"))
+        (spit (io/file workspace "init.clj")
+              (str "(skein.core.weaver.runtime/declare-module! "
+                   "skein.core.weaver.runtime/*runtime* :image-kind "
+                   "{:ns '" kind-ns " :spools ['" root-lib "]})\n"))
+        (let [plan (runtime/plan rt)]
+          (is (= :applied (:status plan)))
+          (is (nil? (get @(:spool-state rt) state-key))
+              "plan validates a new kind against an isolated registry"))
+        (let [result (runtime/refresh! rt)
+              handle (get @(:spool-state rt) state-key)]
+          (is (= :applied (:status result)))
+          (is (= {:one {:value 1}}
+                 (registry/effective handle (keyword (str kind-ns) "widgets")))
+              "open kinds are realized before their entries stage"))
+        (is (= :unchanged
+               (:status (runtime/module! rt :image-kind
+                                         {:ns kind-ns :spools [root-lib]})))
+            "an unchanged source evaluation preserves retained open kinds")
+        (let [result (runtime/module! rt :image-kind
+                                      {:ns kind-ns :load :image})]
+          (is (= :unchanged (:status result)))
+          (is (= :image
+                 (get-in result [:modules :image-kind :source/status]))))
+
+        (write-local-spool-module!
+         workspace root-lib bad-kind-ns
+         (str "(clojure.spec.alpha/def ::widget map?)\n"
+              "(skein.api.runtime.alpha/collect-kind! "
+              bad-state-key " {:id ::widgets :entry-spec ::widget "
+              ":binding-moment :test/use})\n"
+              "(skein.api.runtime.alpha/collect-entry! ::widgets :bad 1)"))
+        (let [result (runtime/module! rt :bad-kind
+                                      {:ns bad-kind-ns :spools [root-lib]})]
+          (is (= :refused (:status result)))
+          (is (nil? (get @(:spool-state rt) bad-state-key))
+              "failed candidate validation publishes no kind handle"))
+
+        (write-local-spool-module!
+         workspace root-lib bad-glossary-ns
+         (str "(clojure.spec.alpha/def ::widget map?)\n"
+              "(skein.api.runtime.alpha/collect-kind! "
+              bad-glossary-state-key
+              " {:id ::widgets :entry-spec ::widget :binding-moment :test/use})\n"
+              "(skein.api.runtime.alpha/collect-entry! :ops \"bad-glossary\" '"
+              (pr-str {:name "bad-glossary"
+                       :fn 'skein.weaver-test/test-op
+                       :stream? false
+                       :provenance 'skein.weaver-test
+                       :arg-spec {:op "bad-glossary"
+                                  :hook-class :read
+                                  :deadline-class :standard
+                                  :annotations
+                                  {:failure-modes [(str "publication/missing-" suffix)]}}})
+              ")"))
+        (let [result (runtime/module! rt :bad-glossary
+                                      {:ns bad-glossary-ns :spools [root-lib]})]
+          (is (= :refused (:status result)) (pr-str result))
+          (is (nil? (get @(:spool-state rt) bad-glossary-state-key))
+              "post-publication refusal removes a newly staged registry handle"))
+        (let [result (runtime/module! rt :bad-glossary
+                                      {:ns bad-glossary-ns :load :image})]
+          (is (= :missing-declaration-record
+                 (get-in result
+                         [:modules :bad-glossary :error :data :reason]))
+              "a refused source refresh leaves no replayable declaration record"))))))
+
+(deftest source-reload-replaces-the-retained-declaration-set
+  (with-runtime
+    (fn [rt _db-file]
+      (let [workspace (get-in rt [:metadata :config-dir])
+            suffix (str/replace (str (random-uuid)) "-" "")
+            module-ns (symbol (str "test.module.omission-" suffix))
+            source "modules/omission.clj"
+            file (io/file workspace source)]
+        (io/make-parents file)
+        (spit file
+              (str "(ns " module-ns ")\n"
+                   "(skein.api.runtime.alpha/collect-entry! "
+                   ":queries \"omitted-q\" [:= [:attr :v] 1])\n"))
+        (is (= :applied
+               (:status (runtime/module! rt :omission {:file source}))))
+        (is (contains? (graph/queries rt) "omitted-q"))
+
+        (spit file (str "(ns " module-ns ")\n"))
+        (is (= :applied
+               (:status (runtime/module! rt :omission {:file source}))))
+        (is (not (contains? (graph/queries rt) "omitted-q"))
+            "deleting the form retracts its prior retained entry")))))
+
 (deftest image-redeclaration-drops-the-recorded-source-stamp
   (with-runtime
     (fn [rt _db-file]

@@ -8,9 +8,10 @@
   The module reads as the live-image lifecycle: read the approved/declared
   config (`approved`, `declared`, `release-marker`), edit the primary
   `spools.edn` (`upsert-spool-entry!`, `remove-spool-entry!`), declare stable
-  modules (`module!`), collect authoring-form entries from module sources
-  (`collect-entry!`), reconcile the running image against them (`refresh!`,
-  with `plan` its effect-free dry-run), inspect the joined offline picture
+  modules (`module!`), collect authoring-form entries and open kinds from
+  module sources (`collect-entry!`, `collect-kind!`), reconcile the running
+  image against them (`refresh!`, with `plan` its effect-free dry-run), inspect
+  the joined offline picture
   (`status`), reach for the advanced code-only seam (`reload-code!`), and serve
   runtime-owned state, symbol resolution, and time to trusted spools
   (`spool-state`, `resolve-var`, `clock`, `now`).
@@ -23,6 +24,7 @@
   alpha-qualified."
   (:require [clojure.spec.alpha :as s]
             [skein.api.clock.alpha :as clock-api]
+            [skein.api.registry.alpha :as registry]
             [skein.api.runtime.internal.shapes :as shapes]
             [skein.api.runtime.internal.spools-edn :as spools-edn]
             [skein.api.spool.alpha :refer [require-valid!]]
@@ -307,8 +309,10 @@
   none: the module's namespace declares a public
   `(def spool {:contribute … :reconcile …})` var, and a public `spool` var in a
   module-loadable namespace unconditionally is that module's entry-point
-  declaration. Every effective symbol is resolved and root-value-validated at
-  every module evaluation. When no `:contribute` resolves, the module's
+  declaration. Every effective symbol is resolved and root-value-validated
+  during source evaluation and the bounded missing-record image fallback.
+  Normal image replay resolves no contribution symbol. When no `:contribute`
+  resolves, the module's
   contribution is the declaration data collected from the authoring forms
   evaluated in its source, so a plain file of authoring forms is a complete
   module (DELTA-OlrRepl-001.CC3). A `spool` var supplying `:contribute` while
@@ -319,16 +323,14 @@
   refusal a directly authored declaration raises; the keys carry no alias and
   no fallback (DELTA-Dsp-003.CC1).
 
-  `:load :image` (SPEC-004.C45/C46, ADR-003.P4) trusts the
-  already-loaded JVM image for the `:ns` target: refresh performs no source
-  load for that module, and it accepts no `:file` target — that violation is
-  refused at declaration time. Its entry points resolve from the namespace's
-  `spool` var in the image; a declared namespace not loaded in the image, or one
-  with no resolvable `:contribute`, is that module's `:failed` outcome at
-  evaluation. The outcome reports `:source/status :image` and carries no source
-  stamp. Image mode never loads the declared target namespace's source; an
-  entry-point symbol deliberately qualified to a different namespace follows
-  ordinary symbol resolution and may require that callable namespace.
+  `:load :image` (SPEC-004.C45/C46, ADR-003.P4) trusts the already-loaded JVM
+  image for the `:ns` target: refresh performs no source load for that module,
+  and it accepts no `:file` target. It replays the namespace's retained
+  authoring declaration record as data. A missing or stale record fails the
+  module evaluation. During the bounded migration window, only a missing
+  record may fall back to the legacy namespace `spool` var's `:contribute`
+  callback. The outcome reports `:source/status :image` and carries no source
+  stamp.
 
   A `:reconcile` fn receives the contribution status under
   `[:module/contribution :status]` and branches: `:applied` ensures its live
@@ -390,6 +392,30 @@
                                  :entry-key any? :value any?
                                  :opts ::collect-entry-opts))
   :ret any?)
+
+(s/def ::kind-state-key keyword?)
+(s/def ::kind-declaration ::registry/kind-declaration-input)
+
+(defn collect-kind!
+  "Collect one open registry kind for the module source being evaluated.
+
+  `state-key` conforms to `::kind-state-key` and names the runtime spool-state
+  slot that owns the registry handle. `declaration` conforms to
+  `::kind-declaration`, the closed registry kind contract. Repeating one
+  state-key/kind id replaces the earlier declaration deterministically.
+  Outside module collection the call is passive. Returns `declaration`."
+  [state-key declaration]
+  (require-valid! ::kind-state-key state-key
+                  "collect-kind! state-key must be a keyword")
+  (require-valid! ::kind-declaration declaration
+                  "collect-kind! declaration is invalid")
+  ((requiring-resolve 'skein.core.weaver.module-graph/collect-kind!)
+   state-key declaration))
+
+(s/fdef collect-kind!
+  :args (s/cat :state-key ::kind-state-key
+               :declaration ::kind-declaration)
+  :ret ::kind-declaration)
 
 (defn refresh!
   "Reconcile `runtime`'s live image against its declared module graph.

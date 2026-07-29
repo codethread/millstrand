@@ -213,22 +213,48 @@
 
   Callers must build candidates solely through `remove-owner`/`stage-owner`,
   which normalize before this function runs. Each kind's readers observe one
-  immutable before-or-after snapshot; no event lane is stopped or cleared."
-  [backends candidate-map]
-  (let [changed (changed-kinds backends candidate-map)]
-    (reduce
-     (fn [published {:keys [storage] :as backend}]
-       (if (contains? published storage)
-         published
-         (let [before (backend-snapshot backend)
-               after (get candidate-map storage)]
-           (if (= before after)
-             (conj published storage)
-             (do
-               (case (:type backend)
-                 :core (publish-core! backend after)
-                 :domain (publish-domain! backend after))
-               (conj published storage))))))
-     #{}
-     (vals backends))
-    changed))
+  immutable before-or-after snapshot; no event lane is stopped or cleared.
+
+  The four-argument arity commits isolated domain handles from a staging
+  runtime while preserving existing live handle identities."
+  ([backends candidate-map]
+   (let [changed (changed-kinds backends candidate-map)]
+     (reduce
+      (fn [published {:keys [storage] :as backend}]
+        (if (contains? published storage)
+          published
+          (let [before (backend-snapshot backend)
+                after (get candidate-map storage)]
+            (if (= before after)
+              (conj published storage)
+              (do
+                (case (:type backend)
+                  :core (publish-core! backend after)
+                  :domain (publish-domain! backend after))
+                (conj published storage))))))
+      #{}
+      (vals backends))
+     changed))
+  ([runtime staged-runtime backends candidate-map]
+   (let [changed (changed-kinds backends candidate-map)]
+     (doseq [[state-key staged-handle] @(:spool-state staged-runtime)
+             :when (registry/registry? staged-handle)
+             :let [current (get @(:spool-state runtime) state-key)]
+             :when current]
+       (when-not (registry/registry? current)
+         (throw (ex-info "Staged registry target changed before publication"
+                         {:spool-state/key state-key :value current}))))
+     (doseq [{:keys [type store storage]} (vals backends)
+             :when (= :core type)
+             :let [snapshot (get candidate-map storage)]]
+       (reset! (:kernel store) snapshot))
+     (doseq [[state-key staged-handle] @(:spool-state staged-runtime)
+             :when (registry/registry? staged-handle)
+             :let [staged-storage (get staged-handle registry-state-key)
+                   snapshot (get candidate-map staged-storage)
+                   current (get @(:spool-state runtime) state-key)
+                   target (or current staged-handle)]]
+       (when-not current
+         (swap! (:spool-state runtime) assoc state-key target))
+       (reset! (get target registry-state-key) snapshot))
+     changed)))

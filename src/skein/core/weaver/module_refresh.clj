@@ -9,6 +9,7 @@
   (:require [clojure.set :as set]
             [clojure.tools.reader :as reader]
             [clojure.tools.reader.reader-types :as reader-types]
+            [skein.api.registry.alpha :as registry]
             [skein.core.format :as format]
             [skein.core.weaver.dispatch :as dispatch]
             [skein.core.weaver.module-graph :as module-graph]
@@ -21,6 +22,19 @@
   "The one honest side effect a dry-run plan still incurs (DELTA-OlrRepl-001.CC14)."
   (str "Collection may evaluate module source code; synced namespace loads may append "
        "to the load ledger. No registry publication or resource reconcile runs."))
+
+(def ^:private declaration-record-key
+  ::declaration-record)
+
+(def ^:private declaration-record-version 1)
+
+(def ^:private registry-state-key
+  :skein.api.registry.alpha/state)
+
+(def ^:dynamic *declaration-record-snapshots*
+  nil)
+
+(declare fail!)
 
 (defn initial-state
   "Return the empty runtime-owned module coordinator state."
@@ -48,6 +62,107 @@
    (module-graph/collect-entry! kind-id entry-key value))
   ([kind-id entry-key value opts]
    (module-graph/collect-entry! kind-id entry-key value opts)))
+
+(defn- staging-runtime
+  "Return `runtime` with isolated copies of every domain registry handle."
+  [runtime]
+  (assoc runtime :spool-state
+         (atom
+          (update-vals
+           @(:spool-state runtime)
+           (fn [value]
+             (if (registry/registry? value)
+               (assoc value registry-state-key
+                      (atom (registry/snapshot value)))
+               value))))))
+
+(defn- restore-staged-registry-slots!
+  "Restore registry slots affected by staged publication."
+  [runtime before staged-runtime]
+  (let [keys-to-restore (for [[state-key value] @(:spool-state staged-runtime)
+                              :when (registry/registry? value)]
+                          state-key)]
+    (swap! (:spool-state runtime)
+           (fn [current]
+             (reduce (fn [state state-key]
+                       (if (contains? before state-key)
+                         (assoc state state-key (get before state-key))
+                         (dissoc state state-key)))
+                     current
+                     keys-to-restore)))))
+
+(defn- retain-declarations!
+  "Replace `ns-sym`'s complete replay record."
+  [module-key ns-sym contribution kind-declarations]
+  (let [namespace (find-ns ns-sym)]
+    (when-not namespace
+      (fail! "Cannot retain declarations for an unloaded module namespace"
+             {:reason :namespace-not-loaded
+              :module/key module-key
+              :ns ns-sym}))
+    (when *declaration-record-snapshots*
+      (swap! *declaration-record-snapshots*
+             #(if (contains? % ns-sym)
+                %
+                (assoc % ns-sym
+                       (get (meta namespace) declaration-record-key)))))
+    (alter-meta! namespace assoc declaration-record-key
+                 {:version declaration-record-version
+                  :module-key module-key
+                  :namespace ns-sym
+                  :contribution contribution
+                  :kind-declarations kind-declarations})
+    {:contribution contribution
+     :kind-declarations kind-declarations}))
+
+(defn- restore-declaration-records!
+  "Restore declaration metadata changed during a refused refresh."
+  [snapshots]
+  (doseq [[ns-sym record] snapshots
+          :let [namespace (find-ns ns-sym)]
+          :when namespace]
+    (if record
+      (alter-meta! namespace assoc declaration-record-key record)
+      (alter-meta! namespace dissoc declaration-record-key))))
+
+(defn- replay-declarations
+  "Return the retained declaration record for loaded `ns-sym`."
+  [module-key ns-sym]
+  (let [namespace (find-ns ns-sym)
+        record (some-> namespace meta declaration-record-key)]
+    (when-not namespace
+      (fail! "Image module namespace is not loaded"
+             {:reason :namespace-not-loaded
+              :module/key module-key
+              :ns ns-sym
+              :load :image}))
+    (when-not record
+      (fail! "Image module has no retained authoring declaration record"
+             {:reason :missing-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :load :image}))
+    (when-not (= declaration-record-version (:version record))
+      (fail! "Image module authoring declaration record is stale"
+             {:reason :stale-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :load :image
+              :record/version (:version record)
+              :expected/version declaration-record-version}))
+    (when-not (= ns-sym (:namespace record))
+      (fail! "Image module authoring declaration record names another namespace"
+             {:reason :foreign-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :record/namespace (:namespace record)}))
+    (when-not (= module-key (:module-key record))
+      (fail! "Image module authoring declaration record belongs to another module"
+             {:reason :foreign-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :record/module-key (:module-key record)}))
+    (select-keys record [:contribution :kind-declarations])))
 
 (defn- informative-throwable
   "Return the deepest structured cause beneath compiler and loader wrappers."
@@ -281,11 +396,9 @@
   `synced-namespace-file`, which searches only synced roots."
   [classpath-binding]
   (when-let [source (:source classpath-binding)]
-    (try
-      (let [uri (java.net.URI. source)]
-        (when (= "file" (.getScheme uri))
-          (.getCanonicalPath (java.io.File. uri))))
-      (catch Exception _ nil))))
+    (let [uri (java.net.URI. source)]
+      (when (= "file" (.getScheme uri))
+        (.getCanonicalPath (java.io.File. uri))))))
 
 (defn- ns-source-file
   "Resolve the on-disk source path for a module `:ns` target.
@@ -294,8 +407,12 @@
   falls back to its classpath binding's source file. Returns nil when neither is
   reachable, so callers stay non-throwing over classpath-only namespaces."
   [runtime ns-sym]
-  (or (when-let [synced (try (spool-sync/synced-namespace-file runtime ns-sym)
-                             (catch Exception _ nil))]
+  (or (when-let [synced
+                 (try
+                   (spool-sync/synced-namespace-file runtime ns-sym)
+                   (catch clojure.lang.ExceptionInfo throwable
+                     (when (seq (:searched-roots (ex-data throwable)))
+                       (throw throwable))))]
         synced)
       (classpath-source-file (classpath-binding runtime ns-sym))))
 
@@ -417,56 +534,62 @@
            [:contribute :reconcile])))
 
 (def ^:private image-contribution-remedy
-  "The message both image-mode contribution failures state (SPEC-004.C46).
-
-  Image mode collects no authoring forms, so its `:contribute` has exactly two
-  requirements and either can be the missing one; naming both in one message
-  keeps the remedy actionable without the reader knowing which branch failed."
+  "The actionable remedy for image-mode declaration replay failures."
   (format/reflow
-   "|Image module resolves no :contribute entry point; load or require its
-    |namespace into the JVM image, and define a public spool var carrying
-    |:contribute in that namespace"))
+   "|To load or require the module namespace into the JVM image, refresh it once
+    |in source mode so authoring forms retain their declaration record; during
+    |the migration window a public spool var carrying :contribute is also
+    |accepted."))
 
 (defn- evaluate-image-module
   "Evaluate a `:load :image` module: trust the already-loaded JVM image for its
   `:ns` target with no source load and no contribution-collection scope. Entry
-  points resolve from the namespace's `spool` var; image mode collects no
-  authoring forms, so a namespace with no resolvable `:contribute` fails loudly
-  (PROP-Dsp-001.G4/G5). The outcome carries `:source/status :image`, its
-  resolved entry points, and no source stamp."
+  contribution replays from the namespace's retained authoring declaration
+  record. The outcome carries `:source/status :image` and no source stamp."
   [runtime with-loader key declaration]
   (let [ns-sym (:ns declaration)]
     (when-not (find-ns ns-sym)
       (fail! image-contribution-remedy
              {:module/key key :ns ns-sym :load :image
               :reason :namespace-not-loaded}))
-    (let [resolved (entry-points/resolve-entry-points key ns-sym)
-          contribute (:contribute resolved)]
-      (when-not contribute
-        (fail! image-contribution-remedy
-               {:module/key key :ns ns-sym :load :image
-                :reason :no-spool-contribution}))
-      (let [resolved-fns (resolve-entry-point-fns! with-loader key resolved)
-            contribution
-            (with-loader
-              #((:contribute resolved-fns)
-                {:runtime runtime
-                 :module/key key
-                 :module/declaration declaration}))]
+    (try
+      (let [resolved (entry-points/resolve-entry-points key ns-sym)
+            resolved-fns (resolve-entry-point-fns! with-loader key resolved)
+            replay
+            (try
+              (replay-declarations key ns-sym)
+              (catch clojure.lang.ExceptionInfo throwable
+                (if (and (= :missing-declaration-record
+                            (:reason (ex-data throwable)))
+                         (:contribute resolved-fns))
+                  {:contribution
+                   (with-loader
+                     #((:contribute resolved-fns)
+                       {:runtime runtime
+                        :module/key key
+                        :module/declaration declaration}))
+                   :kind-declarations []}
+                  (throw throwable))))]
         {:status :ready
          :module/key key
          :source/status :image
          :module/resolved resolved
          :module/reconcile-fn (:reconcile resolved-fns)
-         :contribution (normalize-contribution contribution)}))))
+         :declaration/source (if (:contribute resolved-fns)
+                               :image-replay-or-legacy
+                               :image-replay)
+         :kind-declarations (:kind-declarations replay [])
+         :contribution (normalize-contribution (:contribution replay))})
+      (catch clojure.lang.ExceptionInfo throwable
+        (throw (ex-info image-contribution-remedy (ex-data throwable)))))))
 
 (defn- evaluate-module
-  [runtime with-loader key declaration previous-contribution previous-source]
+  [runtime with-loader key declaration previous-contribution previous-source dry-run?]
   (try
     (if (= :image (:load declaration))
       (evaluate-image-module runtime with-loader key declaration)
       (let [context (collection-context runtime key declaration)
-            {:keys [return] collected :contribution}
+            {:keys [return kind-declarations] collected :contribution}
             (module-graph/with-contribution-collection
               context
               #(load-source! runtime with-loader key declaration previous-source))
@@ -477,6 +600,16 @@
             resolved (entry-points/resolve-entry-points key module-ns)
             resolved-fns (resolve-entry-point-fns! with-loader key resolved)
             contribute-fn (:contribute resolved-fns)
+            kind-declarations
+            (if (= :unchanged source-status)
+              (try
+                (:kind-declarations (replay-declarations key module-ns))
+                (catch clojure.lang.ExceptionInfo throwable
+                  (if (= :missing-declaration-record
+                         (:reason (ex-data throwable)))
+                    kind-declarations
+                    (throw throwable))))
+              kind-declarations)
             contribution (cond
                            contribute-fn
                            (do
@@ -500,7 +633,12 @@
                            previous-contribution
 
                            :else collected)
-            normalized (normalize-contribution contribution)]
+            normalized (normalize-contribution contribution)
+            _ (when (and (not contribute-fn)
+                         (not= :unchanged source-status)
+                         (not dry-run?))
+                (retain-declarations!
+                 key module-ns normalized kind-declarations))]
         {:status :ready
          :module/key key
          :source/status source-status
@@ -509,6 +647,8 @@
                          (source-stamp (latest-source-binding runtime ns-sym)))
          :module/resolved resolved
          :module/reconcile-fn (:reconcile resolved-fns)
+         :declaration/source (if contribute-fn :legacy-callback :source-collection)
+         :kind-declarations kind-declarations
          :contribution normalized}))
     (catch Throwable throwable
       {:status :failed
@@ -519,7 +659,7 @@
 
 (defn- evaluate-affected
   [runtime with-loader graph order root-outcomes previous-contributions
-   previous-sources]
+   previous-sources dry-run?]
   (let [unaffected (set/difference (set (keys graph)) (set order))
         seeded (into (sorted-map)
                      (map (fn [key] [key {:status :unchanged}]))
@@ -535,10 +675,41 @@
                    (retained-outcome key declaration problem)
                    (evaluate-module runtime with-loader key declaration
                                     (get previous-contributions key)
-                                    (get previous-sources key))))))
+                                    (get previous-sources key)
+                                    dry-run?)))))
       seeded
       order)
      order)))
+
+(defn- realize-kind-declarations!
+  "Realize every collected open-kind registry before backend discovery."
+  [runtime raw]
+  (doseq [[module-key outcome] raw
+          {:keys [spool-state/key declaration]} (:kind-declarations outcome)]
+    (let [handle (or (get @(:spool-state runtime) key)
+                     (let [created (registry/registry)]
+                       (get (swap! (:spool-state runtime)
+                                   #(if (contains? % key) % (assoc % key created)))
+                            key)))]
+      (when-not (registry/registry? handle)
+        (fail! "Open-kind declaration spool-state slot is not a registry handle"
+               {:module/key module-key
+                :spool-state/key key
+                :kind (:id declaration)
+                :value handle}))
+      (registry/declare-kind! handle declaration))))
+
+(defn- require-kind-declarations-staged!
+  "Fail the whole boundary when a kind provider's contribution cannot stage."
+  [raw outcomes]
+  (doseq [[module-key raw-outcome] raw
+          :when (seq (:kind-declarations raw-outcome))
+          :let [outcome (get outcomes module-key)]
+          :when (= :failed (:status outcome))]
+    (fail! "Open-kind provider contribution failed to stage"
+           {:module/key module-key
+            :kind/declarations (:kind-declarations raw-outcome)
+            :error (:error outcome)})))
 
 (defn- retained-legacy-modules
   "Return the affected pre-cutover declarations, keyed by module.
@@ -911,94 +1082,106 @@
               (throw (ex-info "Initial module refresh could not synchronize approved roots"
                               fatal))
               (record-refused-result! runtime opts (refused-result mode fatal)))
-            (try
-              (let [previous-contributions (:contributions state)
-                    previous-sources (:contribution-sources state)
-                    raw (evaluate-affected runtime with-loader graph order
-                                           (:roots sync-result)
-                                           previous-contributions previous-sources)
-                    reconcile-fns
-                    (into {}
-                          (keep (fn [[key outcome]]
-                                  (when-let [reconcile-fn
-                                             (:module/reconcile-fn outcome)]
-                                    [key reconcile-fn])))
-                          raw)
+            (let [record-snapshots (atom {})]
+              (binding [*declaration-record-snapshots* record-snapshots]
+                (try
+                  (let [previous-contributions (:contributions state)
+                        previous-sources (:contribution-sources state)
+                        raw (evaluate-affected runtime with-loader graph order
+                                               (:roots sync-result)
+                                               previous-contributions previous-sources
+                                               (:dry-run? opts))
+                        reconcile-fns
+                        (into {}
+                              (keep (fn [[key outcome]]
+                                      (when-let [reconcile-fn
+                                                 (:module/reconcile-fn outcome)]
+                                        [key reconcile-fn])))
+                              raw)
                     ;; Retain each module's last-good resolved entry-point set:
                     ;; a failed evaluation keeps the prior set, and removed
                     ;; modules keep theirs through the removal reconcile before
                     ;; dropping out of the exposed/stored set (PROP-Dsp-001.G2a).
-                    resolved-entry-points
-                    (merge (entry-points/legacy-resolved-entry-points state)
-                           (:resolved-entry-points state)
-                           (into {}
-                                 (keep (fn [[key outcome]]
-                                         (when (contains? outcome :module/resolved)
-                                           [key (:module/resolved outcome)]))
-                                       raw)))
-                    exposed-resolved (apply dissoc resolved-entry-points removed)
-                    backends (publication/backends runtime)
-                    base-candidates (reduce publication/remove-owner
-                                            (publication/candidates backends)
-                                            removed)
-                    staged (stage-publications backends base-candidates graph order raw
-                                               previous-contributions previous-sources)
-                    _ (publication/validate-op-candidates! backends (:candidates staged))
-                    _ (publication/validate-kind-candidates!
-                       runtime backends (:candidates staged))
-                    provisional (provisional-result mode (:roots sync-result)
-                                                    (:conflicts sync-result)
-                                                    (:remedies sync-result)
-                                                    (:shadows collection)
-                                                    (:outcomes staged)
-                                                    removed
-                                                    exposed-resolved)]
+                        resolved-entry-points
+                        (merge (entry-points/legacy-resolved-entry-points state)
+                               (:resolved-entry-points state)
+                               (into {}
+                                     (keep (fn [[key outcome]]
+                                             (when (contains? outcome :module/resolved)
+                                               [key (:module/resolved outcome)]))
+                                           raw)))
+                        exposed-resolved (apply dissoc resolved-entry-points removed)
+                        staged-runtime (staging-runtime runtime)
+                        _ (realize-kind-declarations! staged-runtime raw)
+                        backends (publication/backends staged-runtime)
+                        base-candidates (reduce publication/remove-owner
+                                                (publication/candidates backends)
+                                                removed)
+                        staged (stage-publications backends base-candidates graph order raw
+                                                   previous-contributions previous-sources)
+                        _ (require-kind-declarations-staged! raw (:outcomes staged))
+                        _ (publication/validate-op-candidates! backends (:candidates staged))
+                        _ (publication/validate-kind-candidates!
+                           runtime backends (:candidates staged))
+                        provisional (provisional-result mode (:roots sync-result)
+                                                        (:conflicts sync-result)
+                                                        (:remedies sync-result)
+                                                        (:shadows collection)
+                                                        (:outcomes staged)
+                                                        removed
+                                                        exposed-resolved)]
                 ;; A dry-run stops here: it has collected, classified, staged and
                 ;; validated candidates but publishes nothing, reconciles nothing,
                 ;; and records no coordinator state (DELTA-OlrRepl-001.CC14).
-                (if (:dry-run? opts)
-                  (plan-result runtime sync-result staged provisional backends graph)
-                  (let [live-candidates (publication/candidates backends)
-                        changed-kinds (publication/publish! backends (:candidates staged))
-                        removal-order (->> (module-graph/dependency-order old-graph)
-                                           reverse
-                                           (filter removed))
-                        reconcile-order (vec (concat removal-order order))
-                        reconciled (reconcile-modules
-                                    runtime with-loader state graph resolved-entry-points
-                                    reconcile-fns provisional reconcile-order)
-                        _ (try
-                            (publication/validate-op-glossary-refs!
-                             runtime backends (:candidates staged))
-                            (catch Throwable throwable
-                              (publication/publish! backends live-candidates)
-                              (throw throwable)))
-                        contributions (apply dissoc (:contributions staged) removed)
-                        contribution-sources (apply dissoc (:source-stamps staged) removed)
-                        loaded-status (safe-loaded-status runtime)
-                        outcomes (:outcomes reconciled)
-                        state-outcomes (-> (:outcomes state)
-                                           (merge outcomes)
-                                           (#(apply dissoc % removed)))
-                        status (top-status graph outcomes (:roots sync-result) changed-kinds)
-                        result (assoc provisional
-                                      :status status
-                                      :modules outcomes
-                                      :residuals (:residuals loaded-status)
-                                      :conflicts (vec (concat (:conflicts provisional)
-                                                              (:hard-conflicts loaded-status)))
-                                      :publication/kinds (vec (sort-by pr-str changed-kinds)))]
-                    (record-result! runtime collection contributions contribution-sources
-                                    exposed-resolved (:resources reconciled) state-outcomes
-                                    (:roots sync-result) result))))
-              (catch Throwable throwable
-                ;; Source loads may already have occurred, but no publication
-                ;; follows a coordinator-wide validation failure.
-                (if (:startup? opts)
-                  (throw throwable)
-                  (record-refused-result!
-                   runtime opts
-                   (refused-result mode (exception-data throwable))))))))))))
+                    (if (:dry-run? opts)
+                      (plan-result runtime sync-result staged provisional backends graph)
+                      (let [live-backends (publication/backends runtime)
+                            live-candidates (publication/candidates live-backends)
+                            live-spool-state @(:spool-state runtime)
+                            changed-kinds (publication/publish!
+                                           runtime staged-runtime backends (:candidates staged))
+                            removal-order (->> (module-graph/dependency-order old-graph)
+                                               reverse
+                                               (filter removed))
+                            reconcile-order (vec (concat removal-order order))
+                            reconciled (reconcile-modules
+                                        runtime with-loader state graph resolved-entry-points
+                                        reconcile-fns provisional reconcile-order)
+                            _ (try
+                                (publication/validate-op-glossary-refs!
+                                 runtime backends (:candidates staged))
+                                (catch Throwable throwable
+                                  (publication/publish! live-backends live-candidates)
+                                  (restore-staged-registry-slots!
+                                   runtime live-spool-state staged-runtime)
+                                  (throw throwable)))
+                            contributions (apply dissoc (:contributions staged) removed)
+                            contribution-sources (apply dissoc (:source-stamps staged) removed)
+                            loaded-status (safe-loaded-status runtime)
+                            outcomes (:outcomes reconciled)
+                            state-outcomes (-> (:outcomes state)
+                                               (merge outcomes)
+                                               (#(apply dissoc % removed)))
+                            status (top-status graph outcomes (:roots sync-result) changed-kinds)
+                            result (assoc provisional
+                                          :status status
+                                          :modules outcomes
+                                          :residuals (:residuals loaded-status)
+                                          :conflicts (vec (concat (:conflicts provisional)
+                                                                  (:hard-conflicts loaded-status)))
+                                          :publication/kinds (vec (sort-by pr-str changed-kinds)))]
+                        (record-result! runtime collection contributions contribution-sources
+                                        exposed-resolved (:resources reconciled) state-outcomes
+                                        (:roots sync-result) result))))
+                  (catch Throwable throwable
+                    (restore-declaration-records! @record-snapshots)
+                    ;; Source loads may already have occurred, but no publication
+                    ;; follows a coordinator-wide validation failure.
+                    (if (:startup? opts)
+                      (throw throwable)
+                      (record-refused-result!
+                       runtime opts
+                       (refused-result mode (exception-data throwable))))))))))))))
 
 (defn module!
   "Stage a module during startup collection, otherwise declare and refresh it."

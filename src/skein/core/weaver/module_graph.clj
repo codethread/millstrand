@@ -7,7 +7,9 @@
   perform source loads, registry publication, or resource reconciliation."
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [skein.api.registry.alpha :as registry]
             [skein.core.format :as format]))
 
 (def ^:private declaration-keys
@@ -28,6 +30,10 @@
 
 (def ^:dynamic *contribution-collector*
   "Dynamically bound authoring-form contribution collector, or nil."
+  nil)
+
+(def ^:dynamic ^:private *kind-collector*
+  "Dynamically bound open-kind declaration collector, or nil."
   nil)
 
 (def ^:dynamic ^:private *contribution-context*
@@ -333,13 +339,46 @@
                 (update-in [kind-id :overrides] (fnil disj #{}) entry-key)))))
    value))
 
+(defn collect-kind!
+  "Record one open-kind bootstrap declaration in the active module evaluation.
+
+  `state-key` names the runtime spool-state slot that owns the registry handle.
+  Repeating the same state-key/kind id replaces the earlier declaration."
+  [state-key declaration]
+  (when-not (keyword? state-key)
+    (fail! "Kind declaration spool-state key must be a keyword"
+           {:spool-state/key state-key}))
+  (when-not (s/valid? ::registry/kind-declaration-input declaration)
+    (fail! "Kind declaration does not conform to the registry input contract"
+           {:spool-state/key state-key :declaration declaration}))
+  (when *kind-collector*
+    (require-collection-source!)
+    (swap! *kind-collector* assoc [state-key (:id declaration)]
+           {:spool-state/key state-key
+            :declaration declaration}))
+  declaration)
+
+(s/fdef collect-kind!
+  :args (s/cat :state-key keyword?
+               :declaration ::registry/kind-declaration-input)
+  :ret ::registry/kind-declaration-input)
+
 (defn with-contribution-collection
-  "Call `f` while collecting entries from exactly one module source target."
+  "Call `f` while collecting entries from exactly one module source target.
+
+  The returned contribution is owner-complete, including when it is empty."
   [context f]
   (let [collector (atom {})
+        kind-collector (atom {})
         return (binding [*contribution-collector* collector
+                         *kind-collector* kind-collector
                          *contribution-context* context]
-                 (f))]
+                 (f))
+        contribution (update-vals @collector
+                                  #(update % :overrides (fnil set #{})))]
     {:return return
-     :contribution (update-vals @collector
-                                #(update % :overrides (fnil set #{})))}))
+     :contribution contribution
+     :kind-declarations (->> @kind-collector vals
+                             (sort-by (juxt :spool-state/key
+                                            (comp :id :declaration)))
+                             vec)}))

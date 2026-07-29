@@ -58,7 +58,7 @@ Declare or replace kind `declaration` in `handle` and publish the snapshot.
 
   Returns a `::declaration-result`; a malformed declaration fails loudly and
   leaves the registry unchanged.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L54-L81">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L54-L83">Source</a></sub></p>
 
 ## <a name="skein.api.registry.alpha/effective">`effective`</a>
 ``` clojure
@@ -71,7 +71,7 @@ Return the effective entry values for `kind-id` in `handle`.
   The result maps each live entry key to the raw value that currently wins its
   layer contest, in deterministic key order. An undeclared or unpopulated kind
   yields an empty map. Conforms to `::effective-values`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L114-L121">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L116-L123">Source</a></sub></p>
 
 ## <a name="skein.api.registry.alpha/explain">`explain`</a>
 ``` clojure
@@ -86,7 +86,7 @@ Explain the effective, shadowed, and override state for `kind-id`.
   its `:owner`, `:layer`, `:value`, and `:override?` intent, so a caller can
   show why one owner wins and which partitions it shadows. An undeclared or
   unpopulated kind yields an empty map. Conforms to `::explanation`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L123-L133">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L125-L135">Source</a></sub></p>
 
 ## <a name="skein.api.registry.alpha/layer-precedence">`layer-precedence`</a>
 
@@ -133,7 +133,7 @@ Remove the `owner` partition for `kind-id` from `handle`.
   Returns a `::mutation-result` whose `:status` is `:removed` when a partition
   existed and `:unchanged` otherwise. Removing under an undeclared kind fails
   loudly and leaves the registry unchanged.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L95-L103">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L97-L105">Source</a></sub></p>
 
 ## <a name="skein.api.registry.alpha/replace-owner!">`replace-owner!`</a>
 ``` clojure
@@ -148,7 +148,7 @@ Replace the complete `owner` partition for `kind-id` in `handle`.
   that shadows a lower one must restate its `:overrides` intent. An undeclared
   kind, invalid entry, same-layer duplicate, or missing override intent throws
   before the atom changes. Returns a `::mutation-result`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L83-L93">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L85-L95">Source</a></sub></p>
 
 ## <a name="skein.api.registry.alpha/snapshot">`snapshot`</a>
 ``` clojure
@@ -161,4 +161,4 @@ Return `handle`'s current immutable registry snapshot.
   The snapshot carries `:kinds`, `:partitions`, the derived `:effective` and
   `:owners` projections, and `:provenance`; a reader keeps the value it read
   even as later publications replace the atom. Conforms to `::snapshot`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L105-L112">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/registry/alpha.clj#L107-L114">Source</a></sub></p>
