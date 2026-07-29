@@ -1,12 +1,19 @@
-;; SPIKE — agent-harness.spool consuming a subset of devcycles.loom.
-;; It keeps its own feature-iteration workflow, runs no devflow, and adopts
-;; fix/land + attention. No tracker module (nothing to track), no queries yet.
+;; SPIKE — agent-harness.spool's .skein/init.clj consuming a devcycles subset,
+;; usage code INLINE for shape (same liberty as skein-src.init.clj: really a
+;; :file module ordered :after [:devcycles/workflows]).
+;;
+;; This world keeps its own feature-iteration workflow and runs no devflow, so
+;; it takes fix/land + attention only: no tracker module (nothing to track),
+;; and codethread/devflow is simply never approved — :requires floors bite only
+;; for roots a consumer approves.
+(require '[skein.api.current.alpha :as current]
+         '[skein.api.runtime.alpha :as runtime]
+         '[ct.spools.devcycles.workflows :as devcycles]
+         '[skein.spools.workflow :as workflow])
 
-;; spools.edn gains the same codethread/devcycles entry as skein-src, plus the
-;; prerequisites it does not have today: skein.spools/workflow already pinned;
-;; codethread/devflow NOT added — the tracker module is simply not declared, and
-;; nothing else requires it. (:requires floors only bite for roots you approve.)
+(def runtime (current/runtime))
 
+;; --- shared dev cycle, subset ------------------------------------------------
 (runtime/module! runtime :devcycles/workflows
                  {:ns 'ct.spools.devcycles.workflows
                   :spools ['ct.spools/devcycles 'skein.spools/workflow 'codethread/kanban]
@@ -18,18 +25,30 @@
                   :after [:chime]
                   :required? true})
 
-;; This repo's style: validation is `make quality`, mainline is main, no roster.
-(runtime/module! runtime :devcycles/local
-                 {:file "config/devcycles_local.clj"
-                  :spools ['ct.spools/devcycles]
-                  :after [:devcycles/workflows]
-                  :required? true})
-;; config/devcycles_local.clj contains, in full:
-;;   1. A make-quality validation target (:call entry, shell gate ["make" "quality"]).
-;;   2. A shadow of :fix re-binding {:validate #{:make-quality}}.
-;;   3. Nothing for land: the loom's gh-based defaults and {:roster "…"} params
-;;      already fit — the whole point of commands-as-bindings with sane defaults.
-;; GAP: both consumers write the same three-part local file. If that shape
-;; repeats identically in every world, the "shadow + rebind" ceremony is itself
-;; a missing primitive — e.g. bind-defers accepting world-level additions
-;; without re-registering the definition.
+;; =============================================================================
+;; Below: this repo's usage (really config/devcycles_local.clj).
+;; =============================================================================
+
+;; 1. This repo's one validation style: make quality.
+(workflow/defworkflow make-quality
+  "make quality in the fix worktree."
+  {:entrypoints #{:call}
+   :param-spec ::devcycles/fix-params}
+  (workflow/workflow
+   (fn [{:keys [branch]}] (str "Quality: " branch))
+   (workflow/gate :quality "make quality" :shell
+                  :attributes {"shell/argv" ["make" "quality"]
+                               "shell/cwd" (fn [{:keys [worktree]}] worktree)
+                               "workflow/instruction" "Terse: green closes this."})))
+
+;; 2. Shadow :fix, binding validation to it (same :overrides GAP as skein-src).
+(workflow/defworkflow fix
+  "fix validated by make quality."
+  {:entrypoints #{:start}
+   :param-spec ::devcycles/fix-params}
+  (workflow/bind-defers devcycles/fix-template {:validate #{:make-quality}}))
+
+;; 3. Land: NOTHING. The loom's gh-based defaults, mainline "main", and no
+;; roster step customization fit this repo as shipped — the payoff of
+;; commands-as-bindings with sane defaults. A run that wants a roster passes
+;; {:roster "…"} in params; the world registers no shadow.

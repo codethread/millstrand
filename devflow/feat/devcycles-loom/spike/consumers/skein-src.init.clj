@@ -1,13 +1,27 @@
-;; SPIKE — what skein-src's .skein/init.clj gains/loses after the lift.
-;; workflows.clj, kanban_tracker.clj, attention.clj and the query surface of
-;; config.clj are gone; harnesses/reviewers/nvd_scan/module_adapters/scripts stay.
-
+;; SPIKE — skein-src's .skein/init.clj after the lift, with the usage code
+;; written INLINE for shape. Liberty taken: a real init.clj stages module
+;; declarations only (no imperative effects, DELTA-OlrDrt-001.CC1); everything
+;; below the module! block would live in the devcycles_local.clj :file module.
+;;
+;; Gone from this workspace: workflows.clj (land/fix/explore/spool-bump,
+;; ~1800 lines), kanban_tracker.clj, attention.clj, config.clj's queries.
+;; Staying: harnesses.clj, reviewers.clj, nvd_scan.clj, module_adapters.clj,
+;; scripts/, dash.
+;;
 ;; spools.edn gains:
-;;   codethread/devcycles {:git/url "…/devcycles.loom.git" :git/tag "v1" :git/sha "…"
-;;                         :roots {ct.spools/devcycles "."}}
-;;   (dev: spools.local.edn {codethread/devcycles {:local/root "../devcycles.loom" :claims "v1"}})
+;;   codethread/devcycles {:git/url "…/devcycles.loom.git" :git/tag "v1"
+;;                         :git/sha "…" :roots {ct.spools/devcycles "."}}
+;;   (dev override: spools.local.edn
+;;     {codethread/devcycles {:local/root "../devcycles.loom" :claims "v1"}})
+(require '[clojure.java.io :as io]
+         '[skein.api.current.alpha :as current]
+         '[skein.api.runtime.alpha :as runtime]
+         '[ct.spools.devcycles.workflows :as devcycles]
+         '[skein.spools.workflow :as workflow])
 
-;; --- shared dev cycle, module per concern ------------------------------------
+(def runtime (current/runtime))
+
+;; --- shared dev cycle, one module per concern --------------------------------
 (runtime/module! runtime :devcycles/workflows
                  {:ns 'ct.spools.devcycles.workflows
                   :spools ['ct.spools/devcycles 'skein.spools/workflow 'codethread/kanban]
@@ -24,25 +38,59 @@
                   :after [:skein/spools-chime]
                   :required? true})
 
-;; --- repo policy over the shared definitions ---------------------------------
-;; devcycles_local.clj (a :file module) is the ONLY new repo-local surface:
-(runtime/module! runtime :devcycles/local
-                 {:file "devcycles_local.clj"
-                  :spools ['ct.spools/devcycles]
-                  :after [:devcycles/workflows :harnesses]
-                  :required? true})
-;; devcycles_local.clj contains, in full:
-;;   1. A quality-suite validation target for the fix defer, :call-entry,
-;;      gating on this repo's suite.
-;;   2. A shadow of :fix with declared :overrides, re-binding
-;;      {:validate #{:docs-check :quality-suite}} — run-time style choice
-;;      between loom docs-check and the full local suite.
-;;   3. Land bindings passed at start time (scripts stay in .skein/scripts):
-;;        strand workflow start <id> --workflow land --params '{"branch":…,
-;;          "bindings":{"land.ci.green":{"shell/argv":["sh","-c","<script text>", …]}}}'
-;;      GAP: script TEXT in params is ugly and shows in every `workflow show`;
-;;      a bindings registry keyed by action-ref (world-level, not per-run)
-;;      would let this be one registration instead of per-start ceremony.
-;;   4. The cutover shim: (def main-ci-watch devcycles.workflows/main-ci-watch)
-;;      under a `workflows` ns alias so gates poured pre-lift still resolve
-;;      "workflows/main-ci-watch"; deleted when no active land run remains.
+;; =============================================================================
+;; Below: the repo-local usage (really devcycles_local.clj, ordered
+;; :after [:devcycles/workflows :harnesses]).
+;; =============================================================================
+
+;; 1. This repo's heavyweight validation style: a second :call target for the
+;; fix :validate defer, beside the loom's docs-check.
+(workflow/defworkflow quality-suite
+  "Full locked suite in the fix worktree."
+  {:entrypoints #{:call}
+   :param-spec ::devcycles/fix-params}
+  (workflow/workflow
+   (fn [{:keys [branch]}] (str "Quality suite: " branch))
+   (workflow/gate :suite "Locked full suite" :shell
+                  :attributes {"shell/argv" ["flock" "-w" "3600" "/tmp/skein-test.lock"
+                                             "clojure" "-M:test"]
+                               "shell/cwd" (fn [{:keys [worktree]}] worktree)
+                               "workflow/instruction" "Terse: green suite closes this."})))
+
+;; 2. Widen the fix validation allowlist: the driving worker now picks the
+;; style per run — loom docs-check for a doc fix, the full suite otherwise.
+;; This SHADOWS the loom's :fix registration from the workspace layer.
+;; GAP: publication requires the shadow to declare :overrides #{:fix}, but the
+;; defworkflow authoring form has no :overrides opt today — the collected
+;; entry can't say "I mean to shadow". Missing authoring surface, found only
+;; by writing this file.
+(workflow/defworkflow fix
+  "fix with this repo's validation styles."
+  {:entrypoints #{:start}
+   :param-spec ::devcycles/fix-params}
+  (workflow/bind-defers devcycles/fix-template
+                        {:validate #{:docs-check :quality-suite}}))
+
+;; 3. Land keeps scripts local: shadow :land, overriding only :defaults so the
+;; world's bindings ride under every run's params — no per-start ceremony, no
+;; engine change. Script TEXT is embedded at load time (sh-gate precedent), so
+;; the file needs to exist only here, at config load.
+(def ^:private ci-watch-script (slurp (io/file ".skein/scripts/feature-ci-watch.sh")))
+
+(workflow/defworkflow land
+  "land with this repo's CI watch and roster."
+  {:entrypoints #{:start}
+   :param-spec ::devcycles/land-params
+   :defaults {:mainline "main"
+              :roster "change-review"
+              :bindings {"land.ci.green"
+                         {"shell/argv" ["sh" "-c" ci-watch-script "land-ci-watch"]}}}}
+  (workflow/bind-defers devcycles/land-template
+                        ;; warm-REPL teardown target elided; registered beside
+                        ;; quality-suite above in the real file.
+                        {:cleanup-extras #{:no-extra-cleanup :warm-repl-teardown}}))
+
+;; 4. Cutover shim: gates poured BEFORE the lift persisted the code/fn symbol
+;; "workflows/main-ci-watch". Keep that name resolving until no active land
+;; run remains, then delete these two lines.
+(intern (create-ns 'workflows) 'main-ci-watch devcycles/main-ci-watch)
