@@ -3831,3 +3831,14 @@
             "the loser re-resolved and found the winner's frontier, not its own point")
         (is (some? (workflow/current-root "race-1"))
             "one active root, never two under one run id")))))
+
+(deftest executor-authoring-validates-closed-options
+  (is (= {:stalled? 'skein.spools.workflow-test/exec-detail-a
+          :request-spec ::request}
+         (workflow/executor-declaration
+          {:request-spec ::request}
+          'skein.spools.workflow-test/exec-detail-a)))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow executor options"
+                        (workflow/executor-declaration
+                         {:unknown true}
+                         'skein.spools.workflow-test/exec-detail-a))))

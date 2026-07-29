@@ -28,7 +28,9 @@
 
 (declare baseline-rule! rt)
 
-(def ^:private rule-kind :skein.spools.chime/rules)
+(def rule-kind
+  "Owner-partitioned kind id for Chime notification rules."
+  :skein.spools.chime/rules)
 (def ^:private repl-owner :skein.owner/repl)
 
 (s/def ::key keyword?)
@@ -38,6 +40,44 @@
          #(and (keyword? (:key %))
                (symbol? (:fn %))
                (namespace (:fn %)))))
+(s/def ::rule-options
+  (s/and map?
+         #(every? #{:override?} (keys %))
+         #(or (not (contains? % :override?)) (boolean? (:override? %)))))
+
+(defn rule-declaration
+  "Return a validated Chime rule declaration.
+
+  `options` conforms to `::rule-options`; override intent remains collection
+  metadata."
+  [rule-key options fn-sym]
+  (when-not (s/valid? ::rule-options options)
+    (fail! "Invalid Chime rule options"
+           {:options options :explain (s/explain-data ::rule-options options)}))
+  (let [entry {:key rule-key :fn fn-sym}]
+    (when-not (s/valid? ::rule-entry entry)
+      (fail! "Invalid Chime rule declaration"
+             {:entry entry :explain (s/explain-data ::rule-entry entry)}))
+    entry))
+
+(defmacro defrule
+  "Define a notification rule and collect its Chime declaration.
+
+  Options conform to `::rule-options`; `:override? true` records explicit
+  override intent."
+  [name doc & args]
+  (let [[options argv body] (if (vector? (first args))
+                              [{} (first args) (next args)]
+                              [(first args) (second args) (nnext args)])
+        handler-name (symbol (str name "-rule"))
+        fn-sym (symbol (str (ns-name *ns*)) (str handler-name))
+        rule-key (keyword (str name))]
+    `(do
+       (defn ~handler-name ~doc ~argv ~@body)
+       (runtime/collect-entry! rule-kind ~rule-key
+                               (rule-declaration ~rule-key ~options '~fn-sym)
+                               (select-keys ~options #{:override?}))
+       (var ~handler-name))))
 
 (def ^:private state-version
   "Shape version for chime's runtime spool-state map. Bump whenever `new-state`'s

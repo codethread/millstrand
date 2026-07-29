@@ -53,7 +53,9 @@
   jobs (module_publication.clj domain-backends scans spool-state one level deep)."
   1)
 
-(def ^:private job-kind :skein.spools.cron/jobs)
+(def job-kind
+  "Owner-partitioned kind id for Cron job declarations."
+  :skein.spools.cron/jobs)
 (def ^:private repl-owner :skein.owner/repl)
 
 (s/def ::id (s/or :keyword keyword?
@@ -62,6 +64,10 @@
 (s/def ::jitter-ms nat-int?)
 (s/def ::handler qualified-symbol?)
 (s/def ::job (s/keys :req-un [::id ::interval-ms ::handler] :opt-un [::jitter-ms]))
+(s/def ::job-options
+  (s/and map?
+         #(every? #{:override?} (keys %))
+         #(or (not (contains? % :override?)) (boolean? (:override? %)))))
 
 (defn- new-job-kinds []
   (doto (registry/registry)
@@ -348,14 +354,28 @@
       (swap! (jobs-atom runtime) assoc id entry)
       (get @(jobs-atom runtime) id))))
 
+(defn job-declaration
+  "Return a validated Cron job declaration.
+
+  `options` conforms to `::job-options`; `job` conforms to `::job` after the
+  stable `id` is attached. Override intent remains collection metadata."
+  [id options job]
+  (require-valid! ::job-options options "Invalid Cron job options")
+  (reject-unknown-keys! "Cron job declaration" job-keys job)
+  (require-valid! ::job (assoc job :id id) "Invalid Cron job declaration"))
+
 (defmacro defjob
   "Collect one cron job declaration for the current runtime module.
 
   `id` is the stable cron job key and `job` is the same literal map accepted by
-  `register!`. The macro performs no scheduling itself; cron's reconciler
-  applies the complete effective declaration after publication."
-  [id job]
-  `(runtime/collect-entry! ~job-kind ~id (assoc ~job :id ~id)))
+  `register!`. The optional `options` map conforms to `::job-options`. The macro
+  performs no scheduling itself; cron's reconciler applies the complete
+  effective declaration after publication."
+  ([id job]
+   `(defjob ~id {} ~job))
+  ([id options job]
+   `(runtime/collect-entry! job-kind ~id (job-declaration ~id ~options ~job)
+                            (select-keys ~options #{:override?}))))
 
 (defn contribute
   "Materialize cron's job-kind registry handle for dependent module contributions.

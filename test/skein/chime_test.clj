@@ -474,3 +474,11 @@
    #'chime/new-state
    #{:notifier-binding :rule-registry :seen-notifications :failure-log
      :scanned-batch-ids}))
+
+(deftest rule-authoring-validates-closed-options
+  (is (= {:key :sample :fn 'skein.chime-test/phase-failed-rule}
+         (chime/rule-declaration
+          :sample {} 'skein.chime-test/phase-failed-rule)))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid Chime rule options"
+                        (chime/rule-declaration
+                         :sample {:unknown true} 'skein.chime-test/phase-failed-rule))))
