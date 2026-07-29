@@ -126,16 +126,21 @@
 
   Recursively keyword-keyed maps, vectors, and JSON scalars — exactly the
   image of the JSON boundary, so a value satisfying this is one a CLI caller
-  can actually supply as a `--params` object."
+  can actually supply as a `--params` object. Numbers are held to the JSON
+  number domain the decoder emits — integers and finite doubles — so ratios
+  and non-finite values that JSON cannot carry are rejected."
   [value]
   (and (map? value)
-       (letfn [(json-image? [v]
+       (letfn [(json-number? [v]
+                 (or (integer? v)
+                     (and (double? v) (Double/isFinite ^double v))))
+               (json-image? [v]
                  (cond
                    (map? v) (every? (fn [[k nested]]
                                       (and (keyword? k) (json-image? nested)))
                                     v)
                    (vector? v) (every? json-image? v)
-                   :else (or (string? v) (number? v) (boolean? v) (nil? v))))]
+                   :else (or (string? v) (json-number? v) (boolean? v) (nil? v))))]
          (json-image? value))))
 
 (defn contract-views

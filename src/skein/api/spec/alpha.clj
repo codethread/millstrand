@@ -108,7 +108,9 @@
   surface may enrich a `contract` tree — merging authored per-key documentation
   over the hoisted predicate-var docs, for instance — and re-render, so the
   skeleton's placeholders speak the enriched documentation while the node
-  grammar stays owned here."
+  grammar stays owned here. `node` must keep the shape `contract` documents —
+  that docstring is the node-grammar authority (SPEC-003.C19a); enrichment may
+  add or replace `doc` values but not invent node kinds."
   [node]
   (render-template node false))
 

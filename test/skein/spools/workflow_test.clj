@@ -2561,6 +2561,14 @@
                            {:param-spec ::authored-params
                             :example {:scope "x" :documented-scope :keyword}}
                            (workflow/step :a "A" :self)))))
+  (testing "a number outside the JSON wire domain fails the options shape"
+    (doseq [outlaw [1/2 Double/NaN Double/POSITIVE_INFINITY]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow options"
+                            (workflow/workflow
+                             "non-json-number"
+                             {:param-spec ::authored-params
+                              :example {:scope "x" :documented-scope outlaw}}
+                             (workflow/step :a "A" :self))))))
   (testing "a blank doc fails the options shape"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid workflow options"
                           (workflow/workflow

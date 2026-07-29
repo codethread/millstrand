@@ -78,8 +78,10 @@ Return the copyable JSON skeleton for contract `node`.
   surface may enrich a `contract` tree — merging authored per-key documentation
   over the hoisted predicate-var docs, for instance — and re-render, so the
   skeleton's placeholders speak the enriched documentation while the node
-  grammar stays owned here.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L103-L113">Source</a></sub></p>
+  grammar stays owned here. `node` must keep the shape `contract` documents —
+  that docstring is the node-grammar authority (SPEC-003.C19a); enrichment may
+  add or replace `doc` values but not invent node kinds.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L103-L115">Source</a></sub></p>
 
 ## <a name="skein.api.spec.alpha/explain-text">`explain-text`</a>
 ``` clojure
@@ -92,7 +94,7 @@ Return `s/explain-str` for `spec-name` and `value` as plain JSON-safe text.
   The printed explanation is what crosses the wire; raw `s/explain-data`
   stays available to trusted Clojure (PROP-Wcd-001.S9). An unregistered
   `spec-name` fails loudly as `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L128-L136">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L130-L138">Source</a></sub></p>
 
 ## <a name="skein.api.spec.alpha/problems">`problems`</a>
 ``` clojure
@@ -108,7 +110,7 @@ Return the structured spec problems for invalid `value` under `spec-name`.
   check. Detection walks the predicate *form* as data (no string matching,
   nothing invoked). Returns `[]` when the value satisfies the spec. An
   unregistered `spec-name` fails loudly as `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L138-L155">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L140-L157">Source</a></sub></p>
 
 ## <a name="skein.api.spec.alpha/projection">`projection`</a>
 ``` clojure
@@ -121,7 +123,7 @@ Return the composite discovery bundle for registered spec `spec-name`.
   `{"spec" <qualified-name> "spec-forms" <spec-forms> "contract"
   <contract> "template" <template>}` — the named fields every adopting wire
   surface embeds, so discovery and failure speak one vocabulary.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L115-L126">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L117-L128">Source</a></sub></p>
 
 ## <a name="skein.api.spec.alpha/spec-forms">`spec-forms`</a>
 ``` clojure

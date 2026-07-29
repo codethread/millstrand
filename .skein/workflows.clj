@@ -1043,12 +1043,18 @@
              :worktree "/abs/path/to/skein-src__bump-kanban-devflow"
              :direct-user-request false}
    :param-docs {:bumps
-                "One {family, version} record per spool family; version is latest or an annotated vN release marker."
+                (format-alpha/reflow
+                 "|One {family, version} record per spool family; version is
+                  |latest or an annotated vN release marker.")
                 :branch "Bump branch to create for the change."
                 :worktree
-                "Absolute feature worktree path for the branch; its .skein directory is the selected workspace the bump runs against."
+                (format-alpha/reflow
+                 "|Absolute feature worktree path for the branch; its .skein
+                  |directory is the selected workspace the bump runs against.")
                 :direct-user-request
-                "True only when the user asked for this bump directly; gates the final canonical weaver stop/start step."}}
+                (format-alpha/reflow
+                 "|True only when the user asked for this bump directly; gates
+                  |the final canonical weaver stop/start step.")}}
   (workflow/workflow
    (fn [{:keys [bumps]}]
      (str "Spool bump: " (str/join ", " (map :family bumps))))

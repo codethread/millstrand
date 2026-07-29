@@ -1,7 +1,7 @@
 # Live workflow registry and worker CLI proposal
 
 **Document ID:** `PROP-Wcd-001`
-**Last Updated:** 2026-07-24
+**Last Updated:** 2026-07-29
 **Related RFCs:** None
 **Related root specs:** [CLI Surface](../../specs/cli.md), [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
 **Related spool contract:** [Workflow](../../../spools/workflow.md)
