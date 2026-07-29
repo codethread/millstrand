@@ -65,6 +65,12 @@
 (s/def ::tree (s/keys :req-un [::value] :opt-un [::children]))
 (s/def ::odd-op (s/fspec :args (s/cat :x int?) :ret int?))
 
+;; A dotted var name sends `ns-resolve` down its class-lookup branch, which
+;; answers nil rather than the interned var: the projection must read that as
+;; ordinary non-resolution, never as an error.
+(declare dotted.pred)
+(s/def ::dotted skein.api.spec.alpha-test/dotted.pred)
+
 (defn- entry-for
   [entries json-key]
   (some #(when (= json-key (get % "key")) %) entries))
@@ -133,6 +139,12 @@
     (is (= "First line of documentation." (get node "doc")))
     (is (nil? (get node "private")))
     (is (true? (get hidden "private")))))
+
+(deftest dotted-name-class-lookup-miss-is-plain-non-resolution
+  (let [node (spec-alpha/contract ::dotted)]
+    (is (= "pred" (get node "kind")))
+    (is (str/includes? (get node "form") "dotted.pred"))
+    (is (nil? (get node "doc")))))
 
 (deftest no-predicate-is-ever-invoked
   (reset! invocations 0)

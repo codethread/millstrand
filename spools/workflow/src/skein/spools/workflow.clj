@@ -1021,9 +1021,10 @@
   A point read, so it answers for any definition regardless of entrypoints,
   including a call-only component the default catalogue omits. The view carries
   the catalogue fields, the param contract (`:param-spec` identity with its live
-  `s/form` graph plus `:defaults`), and the declared summary: entry items, loops,
-  gates, checkpoint choice keys, calls, defers with their bound targets, and the
-  registered workflows the definition routes to.
+  `s/form` graph, the shared `skein.api.spec.alpha` nested `contract` tree and
+  copyable `template` skeleton, plus `:defaults`), and the declared summary:
+  entry items, loops, gates, checkpoint choice keys, calls, defers with their
+  bound targets, and the registered workflows the definition routes to.
 
   It stays topology-lazy. Nothing is expanded, rendered, or evaluated: an
   expansion needs params that do not exist yet, and a defer cannot be described
@@ -1789,10 +1790,27 @@
           :opt-un [:skein.spools.workflow.view/detail]))
 
 ;; `choices` answers with the stored detail maps (string-keyed, the
-;; `detail-view` shape) whose input specs carry the live shared projection; the
-;; node grammar inside them is owned by `skein.api.spec.alpha`.
+;; `detail-view` shape) whose input specs carry the live shared projection.
+;; String-keyed wire maps sit outside `s/keys`, so the closed key sets and the
+;; per-key carrier types are spelled out here, mirroring the `spec-form` view
+;; spec above; the `contract`/`template` node grammar inside an input spec is
+;; owned by `skein.api.spec.alpha`, so only its JSON carrier types are
+;; constrained (spec-projection DELTA-Spj-003.CC2).
+(s/def :skein.spools.workflow.view.choices/input-spec
+  (s/and (s/map-of #{"spec" "doc" "registered" "spec-forms" "contract" "template"} any?)
+         #(non-blank-string? (get % "spec"))
+         #(boolean? (get % "registered"))
+         #(every? string? (vals (select-keys % ["doc"])))
+         #(every? vector? (vals (select-keys % ["spec-forms"])))
+         #(every? map? (vals (select-keys % ["contract"])))))
+(s/def :skein.spools.workflow.view.choices/detail
+  (s/and (s/map-of #{"label" "description" "next" "revise" "input-spec"} any?)
+         #(every? string? (vals (select-keys % ["label" "description" "next"])))
+         #(every? map? (vals (select-keys % ["revise"])))
+         #(every? (partial s/valid? :skein.spools.workflow.view.choices/input-spec)
+                  (vals (select-keys % ["input-spec"])))))
 (s/def :skein.spools.workflow.view.choices/choices
-  (s/map-of non-blank-string? (s/map-of string? any?)))
+  (s/map-of non-blank-string? :skein.spools.workflow.view.choices/detail))
 (s/def ::choices-result
   (s/keys :req-un [:skein.spools.workflow.view/operation
                    :skein.spools.workflow.view/run-id

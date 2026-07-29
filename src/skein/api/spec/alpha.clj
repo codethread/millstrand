@@ -179,12 +179,14 @@
   resolving to an already-loaded var; `{}` otherwise.
 
   Resolution never loads code: an unloaded namespace simply yields no
-  enrichment, and nothing is invoked."
+  enrichment, and nothing is invoked. `ns-resolve` answers every miss with
+  nil — including a dotted name it reads as a class lookup — so resolution
+  failure is a nil branch here and anything thrown is a real defect that
+  propagates."
   [form]
   (or (when (qualified-symbol? form)
         (when-let [ns-obj (find-ns (symbol (namespace form)))]
-          (when-let [var-obj (try (ns-resolve ns-obj (symbol (name form)))
-                                  (catch Exception _ nil))]
+          (when-let [var-obj (ns-resolve ns-obj (symbol (name form)))]
             (let [{:keys [doc private]} (meta var-obj)]
               (cond-> {}
                 doc (assoc "doc" (first (str/split-lines doc)))

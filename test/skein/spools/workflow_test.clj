@@ -2528,6 +2528,22 @@
           (finally
             (s/def ::approval-input (s/keys :req-un [::approval-note]))))))))
 
+(deftest choices-view-spec-rejects-malformed-details
+  (let [choices :skein.spools.workflow.view.choices/choices]
+    (is (s/valid? choices {"approve" {"label" "Approve"
+                                      "input-spec" {"spec" "x/y"
+                                                    "registered" true
+                                                    "spec-forms" []
+                                                    "contract" {}
+                                                    "template" {}}}}))
+    (is (not (s/valid? choices {"approve" {"unknown" 1}}))
+        "detail keys are a closed set")
+    (is (not (s/valid? choices {"approve" {"input-spec" {"spec" "x/y"}}}))
+        "a projected input spec must say whether it is registered")
+    (is (not (s/valid? choices {"approve" {"input-spec" {"spec" "x/y"
+                                                         "registered" "yes"}}}))
+        "registered is a boolean, not a string")))
+
 (deftest checkpoint-input-spec-resolves-the-live-spec-not-the-recorded-form
   (with-runtime
     (fn [rt _]
