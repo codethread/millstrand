@@ -45,6 +45,7 @@
 
 (s/def ::approved-result :skein.core.weaver.spool-sync/approved-result)
 (s/def ::declared-result :skein.core.weaver.spool-sync/declared-result)
+(s/def ::pending-generation :skein.core.weaver.spool-sync/pending-generation)
 (s/def ::running-marker (s/or :marker string?
                               :unavailable #{:none}
                               :deferred nil?))
@@ -271,6 +272,8 @@
          #(map? (:contributions %))
          #(s/valid? ::resolved-entry-points (:resolved/entry-points %))
          #(map? (:loaded %))
+         #(contains? % :pending-generation)
+         #(s/valid? (s/nilable ::pending-generation) (:pending-generation %))
          #(contains? % :last-refresh)))
 
 (s/def ::reload-code-result
