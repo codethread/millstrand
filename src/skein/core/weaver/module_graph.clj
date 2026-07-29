@@ -38,11 +38,6 @@
   "Dynamically bound module/source context for contribution collection, or nil."
   nil)
 
-(def ^:private declaration-record-key
-  ::declaration-record)
-
-(def ^:private declaration-record-version 1)
-
 (defn- fail! [message data]
   (throw (ex-info message data)))
 
@@ -380,59 +375,3 @@
                              (sort-by (juxt :spool-state/key
                                             (comp :id :declaration)))
                              vec)}))
-
-(defn retain-declarations!
-  "Replace `ns-sym`'s complete replay record.
-
-  One namespace metadata value replaces the prior declaration epoch, so forms
-  removed by source reload cannot survive as stale Vars."
-  [module-key ns-sym contribution kind-declarations]
-  (let [namespace (find-ns ns-sym)]
-    (when-not namespace
-      (fail! "Cannot retain declarations for an unloaded module namespace"
-             {:reason :namespace-not-loaded
-              :module/key module-key
-              :ns ns-sym}))
-    (alter-meta! namespace assoc declaration-record-key
-                 {:version declaration-record-version
-                  :namespace ns-sym
-                  :contribution contribution
-                  :kind-declarations kind-declarations})
-    {:contribution contribution
-     :kind-declarations kind-declarations}))
-
-(defn replay-declarations
-  "Return the retained declaration record for loaded `ns-sym`.
-
-  Missing records and records from another protocol version fail loudly.
-  An explicitly retained empty declaration set returns `{}`."
-  [module-key ns-sym]
-  (let [namespace (find-ns ns-sym)
-        record (some-> namespace meta declaration-record-key)]
-    (when-not namespace
-      (fail! "Image module namespace is not loaded"
-             {:reason :namespace-not-loaded
-              :module/key module-key
-              :ns ns-sym
-              :load :image}))
-    (when-not record
-      (fail! "Image module has no retained authoring declaration record"
-             {:reason :missing-declaration-record
-              :module/key module-key
-              :ns ns-sym
-              :load :image}))
-    (when-not (= declaration-record-version (:version record))
-      (fail! "Image module authoring declaration record is stale"
-             {:reason :stale-declaration-record
-              :module/key module-key
-              :ns ns-sym
-              :load :image
-              :record/version (:version record)
-              :expected/version declaration-record-version}))
-    (when-not (= ns-sym (:namespace record))
-      (fail! "Image module authoring declaration record names another namespace"
-             {:reason :foreign-declaration-record
-              :module/key module-key
-              :ns ns-sym
-              :record/namespace (:namespace record)}))
-    (select-keys record [:contribution :kind-declarations])))

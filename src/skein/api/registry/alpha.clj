@@ -140,12 +140,24 @@
 
 ;; Boundary and stored shapes reuse the kernel grammar, keeping their qualified
 ;; keys promised from alpha (SPEC-003.C19a).
+(s/def ::id :skein.core.weaver.owner-registry/id)
+(s/def ::entry-spec :skein.core.weaver.owner-registry/entry-spec)
+(s/def ::binding-moment :skein.core.weaver.owner-registry/binding-moment)
+(s/def ::layer-policy :skein.core.weaver.owner-registry/layer-policy)
+(s/def ::candidate-validator :skein.core.weaver.owner-registry/candidate-validator)
 (s/def ::kind-id :skein.core.weaver.owner-registry/kind-id)
 (s/def ::kind :skein.core.weaver.owner-registry/kind)
 (s/def ::owner :skein.core.weaver.owner-registry/owner)
 (s/def ::entry-key :skein.core.weaver.owner-registry/entry-key)
 (s/def ::value :skein.core.weaver.owner-registry/value)
 (s/def ::kind-declaration :skein.core.weaver.owner-registry/kind-declaration)
+(s/def ::kind-declaration-input
+  (s/and
+   (s/keys :req-un [::id ::entry-spec ::binding-moment]
+           :opt-un [::layer-policy ::candidate-validator])
+   #(every? #{:id :entry-spec :binding-moment
+              :layer-policy :candidate-validator}
+            (keys %))))
 (s/def ::partition :skein.core.weaver.owner-registry/partition)
 (s/def ::snapshot :skein.core.weaver.owner-registry/snapshot)
 (s/def ::status :skein.core.weaver.owner-registry/status)

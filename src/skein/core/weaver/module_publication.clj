@@ -68,6 +68,22 @@
                       {:kinds (vec (sort-by pr-str duplicate))})))
     (merge core domain)))
 
+(defn staging-runtime
+  "Return `runtime` with isolated copies of every domain registry handle.
+
+  Domain kind declarations and owner partitions mutate only copied snapshot
+  atoms until `publish-staged!` commits validated candidates."
+  [runtime]
+  (assoc runtime :spool-state
+         (atom
+          (update-vals
+           @(:spool-state runtime)
+           (fn [value]
+             (if (registry/registry? value)
+               (assoc value registry-state-key
+                      (atom (registry/snapshot value)))
+               value))))))
+
 (defn- backend-snapshot [{:keys [type store handle]}]
   (case type
     :core (core-registry/snapshot store)
@@ -231,4 +247,29 @@
                (conj published storage))))))
      #{}
      (vals backends))
+    changed))
+
+(defn publish-staged!
+  "Publish validated candidates from `staged-runtime` into `runtime`.
+
+  Existing domain handles keep their identity. Newly declared handles enter
+  spool-state with their final validated snapshot."
+  [runtime staged-runtime backends candidate-map]
+  (let [changed (changed-kinds backends candidate-map)]
+    (doseq [{:keys [type store storage]} (vals backends)
+            :when (= :core type)
+            :let [snapshot (get candidate-map storage)]]
+      (reset! (:kernel store) snapshot))
+    (doseq [[state-key staged-handle] @(:spool-state staged-runtime)
+            :when (registry/registry? staged-handle)
+            :let [staged-storage (get staged-handle registry-state-key)
+                  snapshot (get candidate-map staged-storage)
+                  current (get @(:spool-state runtime) state-key)
+                  target (or current staged-handle)]]
+      (when (and current (not (registry/registry? current)))
+        (throw (ex-info "Staged registry target changed before publication"
+                        {:spool-state/key state-key :value current})))
+      (when-not current
+        (swap! (:spool-state runtime) assoc state-key target))
+      (reset! (get target registry-state-key) snapshot))
     changed))

@@ -23,6 +23,13 @@
   (str "Collection may evaluate module source code; synced namespace loads may append "
        "to the load ledger. No registry publication or resource reconcile runs."))
 
+(def ^:private declaration-record-key
+  ::declaration-record)
+
+(def ^:private declaration-record-version 1)
+
+(declare fail!)
+
 (defn initial-state
   "Return the empty runtime-owned module coordinator state."
   []
@@ -54,6 +61,56 @@
   "Collect one open-kind declaration for pre-publication realization."
   [state-key declaration]
   (module-graph/collect-kind! state-key declaration))
+
+(defn- retain-declarations!
+  "Replace `ns-sym`'s complete replay record."
+  [module-key ns-sym contribution kind-declarations]
+  (let [namespace (find-ns ns-sym)]
+    (when-not namespace
+      (fail! "Cannot retain declarations for an unloaded module namespace"
+             {:reason :namespace-not-loaded
+              :module/key module-key
+              :ns ns-sym}))
+    (alter-meta! namespace assoc declaration-record-key
+                 {:version declaration-record-version
+                  :namespace ns-sym
+                  :contribution contribution
+                  :kind-declarations kind-declarations})
+    {:contribution contribution
+     :kind-declarations kind-declarations}))
+
+(defn- replay-declarations
+  "Return the retained declaration record for loaded `ns-sym`."
+  [module-key ns-sym]
+  (let [namespace (find-ns ns-sym)
+        record (some-> namespace meta declaration-record-key)]
+    (when-not namespace
+      (fail! "Image module namespace is not loaded"
+             {:reason :namespace-not-loaded
+              :module/key module-key
+              :ns ns-sym
+              :load :image}))
+    (when-not record
+      (fail! "Image module has no retained authoring declaration record"
+             {:reason :missing-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :load :image}))
+    (when-not (= declaration-record-version (:version record))
+      (fail! "Image module authoring declaration record is stale"
+             {:reason :stale-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :load :image
+              :record/version (:version record)
+              :expected/version declaration-record-version}))
+    (when-not (= ns-sym (:namespace record))
+      (fail! "Image module authoring declaration record names another namespace"
+             {:reason :foreign-declaration-record
+              :module/key module-key
+              :ns ns-sym
+              :record/namespace (:namespace record)}))
+    (select-keys record [:contribution :kind-declarations])))
 
 (defn- informative-throwable
   "Return the deepest structured cause beneath compiler and loader wrappers."
@@ -446,7 +503,7 @@
             resolved-fns (resolve-entry-point-fns! with-loader key resolved)
             replay
             (try
-              (module-graph/replay-declarations key ns-sym)
+              (replay-declarations key ns-sym)
               (catch clojure.lang.ExceptionInfo throwable
                 (if (and (= :missing-declaration-record
                             (:reason (ex-data throwable)))
@@ -514,7 +571,7 @@
                            :else collected)
             normalized (normalize-contribution contribution)
             _ (when (and (not contribute-fn) (not dry-run?))
-                (module-graph/retain-declarations!
+                (retain-declarations!
                  key module-ns normalized kind-declarations))]
         {:status :ready
          :module/key key
@@ -575,6 +632,18 @@
                 :kind (:id declaration)
                 :value handle}))
       (registry/declare-kind! handle declaration))))
+
+(defn- require-kind-declarations-staged!
+  "Fail the whole boundary when a kind provider's contribution cannot stage."
+  [raw outcomes]
+  (doseq [[module-key raw-outcome] raw
+          :when (seq (:kind-declarations raw-outcome))
+          :let [outcome (get outcomes module-key)]
+          :when (= :failed (:status outcome))]
+    (fail! "Open-kind provider contribution failed to stage"
+           {:module/key module-key
+            :kind/declarations (:kind-declarations raw-outcome)
+            :error (:error outcome)})))
 
 (defn- retained-legacy-modules
   "Return the affected pre-cutover declarations, keyed by module.
@@ -974,14 +1043,15 @@
                                            [key (:module/resolved outcome)]))
                                        raw)))
                     exposed-resolved (apply dissoc resolved-entry-points removed)
-                    _ (when-not (:dry-run? opts)
-                        (realize-kind-declarations! runtime raw))
-                    backends (publication/backends runtime)
+                    staged-runtime (publication/staging-runtime runtime)
+                    _ (realize-kind-declarations! staged-runtime raw)
+                    backends (publication/backends staged-runtime)
                     base-candidates (reduce publication/remove-owner
                                             (publication/candidates backends)
                                             removed)
                     staged (stage-publications backends base-candidates graph order raw
                                                previous-contributions previous-sources)
+                    _ (require-kind-declarations-staged! raw (:outcomes staged))
                     _ (publication/validate-op-candidates! backends (:candidates staged))
                     _ (publication/validate-kind-candidates!
                        runtime backends (:candidates staged))
@@ -997,8 +1067,11 @@
                 ;; and records no coordinator state (DELTA-OlrRepl-001.CC14).
                 (if (:dry-run? opts)
                   (plan-result runtime sync-result staged provisional backends graph)
-                  (let [live-candidates (publication/candidates backends)
-                        changed-kinds (publication/publish! backends (:candidates staged))
+                  (let [live-backends (publication/backends runtime)
+                        live-candidates (publication/candidates live-backends)
+                        changed-kinds (publication/publish-staged!
+                                       runtime staged-runtime backends
+                                       (:candidates staged))
                         removal-order (->> (module-graph/dependency-order old-graph)
                                            reverse
                                            (filter removed))
@@ -1010,7 +1083,7 @@
                             (publication/validate-op-glossary-refs!
                              runtime backends (:candidates staged))
                             (catch Throwable throwable
-                              (publication/publish! backends live-candidates)
+                              (publication/publish! live-backends live-candidates)
                               (throw throwable)))
                         contributions (apply dissoc (:contributions staged) removed)
                         contribution-sources (apply dissoc (:source-stamps staged) removed)

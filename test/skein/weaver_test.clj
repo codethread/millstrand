@@ -4240,7 +4240,9 @@
             forms-ns (symbol (str "test.module.image-forms-" suffix))
             empty-ns (symbol (str "test.module.image-empty-" suffix))
             kind-ns (symbol (str "test.module.image-kind-" suffix))
-            state-key (keyword (str "test.image-kind-" suffix))]
+            bad-kind-ns (symbol (str "test.module.bad-kind-" suffix))
+            state-key (keyword (str "test.image-kind-" suffix))
+            bad-state-key (keyword (str "test.bad-kind-" suffix))]
         (write-local-spool-module!
          workspace root-lib forms-ns
          (str "(skein.api.runtime.alpha/collect-entry! "
@@ -4269,13 +4271,20 @@
         (write-local-spool-module!
          workspace root-lib kind-ns
          (str "(clojure.spec.alpha/def ::widget map?)\n"
-              "(skein.core.weaver.module-refresh/collect-kind! "
+              "(skein.api.runtime.alpha/collect-kind! "
               state-key " {:id ::widgets :entry-spec ::widget "
               ":binding-moment :test/use})\n"
               "(skein.api.runtime.alpha/collect-entry! "
               "::widgets :one {:value 1})"))
-        (let [result (runtime/module! rt :image-kind
-                                      {:ns kind-ns :spools [root-lib]})
+        (spit (io/file workspace "init.clj")
+              (str "(skein.core.weaver.runtime/declare-module! "
+                   "skein.core.weaver.runtime/*runtime* :image-kind "
+                   "{:ns '" kind-ns " :spools ['" root-lib "]})\n"))
+        (let [plan (runtime/plan rt)]
+          (is (= :applied (:status plan)))
+          (is (nil? (get @(:spool-state rt) state-key))
+              "plan validates a new kind against an isolated registry"))
+        (let [result (runtime/refresh! rt)
               handle (get @(:spool-state rt) state-key)]
           (is (= :applied (:status result)))
           (is (= {:one {:value 1}}
@@ -4285,7 +4294,20 @@
                                       {:ns kind-ns :load :image})]
           (is (= :unchanged (:status result)))
           (is (= :image
-                 (get-in result [:modules :image-kind :source/status]))))))))
+                 (get-in result [:modules :image-kind :source/status]))))
+
+        (write-local-spool-module!
+         workspace root-lib bad-kind-ns
+         (str "(clojure.spec.alpha/def ::widget map?)\n"
+              "(skein.api.runtime.alpha/collect-kind! "
+              bad-state-key " {:id ::widgets :entry-spec ::widget "
+              ":binding-moment :test/use})\n"
+              "(skein.api.runtime.alpha/collect-entry! ::widgets :bad 1)"))
+        (let [result (runtime/module! rt :bad-kind
+                                      {:ns bad-kind-ns :spools [root-lib]})]
+          (is (= :refused (:status result)))
+          (is (nil? (get @(:spool-state rt) bad-state-key))
+              "failed candidate validation publishes no kind handle"))))))
 
 (deftest source-reload-replaces-the-retained-declaration-set
   (with-runtime

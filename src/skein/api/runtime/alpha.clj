@@ -8,9 +8,10 @@
   The module reads as the live-image lifecycle: read the approved/declared
   config (`approved`, `declared`, `release-marker`), edit the primary
   `spools.edn` (`upsert-spool-entry!`, `remove-spool-entry!`), declare stable
-  modules (`module!`), collect authoring-form entries from module sources
-  (`collect-entry!`), reconcile the running image against them (`refresh!`,
-  with `plan` its effect-free dry-run), inspect the joined offline picture
+  modules (`module!`), collect authoring-form entries and open kinds from
+  module sources (`collect-entry!`, `collect-kind!`), reconcile the running
+  image against them (`refresh!`, with `plan` its effect-free dry-run), inspect
+  the joined offline picture
   (`status`), reach for the advanced code-only seam (`reload-code!`), and serve
   runtime-owned state, symbol resolution, and time to trusted spools
   (`spool-state`, `resolve-var`, `clock`, `now`).
@@ -23,6 +24,7 @@
   alpha-qualified."
   (:require [clojure.spec.alpha :as s]
             [skein.api.clock.alpha :as clock-api]
+            [skein.api.registry.alpha :as registry]
             [skein.api.runtime.internal.shapes :as shapes]
             [skein.api.runtime.internal.spools-edn :as spools-edn]
             [skein.api.spool.alpha :refer [require-valid!]]
@@ -390,6 +392,29 @@
                                  :entry-key any? :value any?
                                  :opts ::collect-entry-opts))
   :ret any?)
+
+(s/def ::kind-state-key keyword?)
+(s/def ::kind-declaration ::registry/kind-declaration-input)
+
+(defn collect-kind!
+  "Collect one open registry kind for the module source being evaluated.
+
+  `state-key` conforms to `::kind-state-key` and names the runtime spool-state
+  slot that owns the registry handle. `declaration` conforms to
+  `::kind-declaration`, the closed registry kind contract. Repeating one
+  state-key/kind id replaces the earlier declaration deterministically.
+  Outside module collection the call is passive. Returns `declaration`."
+  [state-key declaration]
+  (require-valid! ::kind-state-key state-key
+                  "collect-kind! state-key must be a keyword")
+  (require-valid! ::kind-declaration declaration
+                  "collect-kind! declaration is invalid")
+  (weaver-runtime/collect-module-kind! state-key declaration))
+
+(s/fdef collect-kind!
+  :args (s/cat :state-key ::kind-state-key
+               :declaration ::kind-declaration)
+  :ret ::kind-declaration)
 
 (defn refresh!
   "Reconcile `runtime`'s live image against its declared module graph.
