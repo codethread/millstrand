@@ -1,0 +1,6 @@
+;; Advisory producer manifest — the core loader never reads this.
+{:spool/format 1
+ :roots {ct.spools/devcycles {:root "."}}
+ :requires {codethread/devflow "v13"
+            codethread/kanban "v15"
+            ct.spools/agent-run "v16"}}
