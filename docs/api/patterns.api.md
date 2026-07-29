@@ -22,8 +22,12 @@ Function.
 
 Describe a registered weave pattern and its input contract in `runtime`.
 
-  Missing patterns or unregistered input specs fail loudly.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L57-L72">Source</a></sub></p>
+  The input contract is the shared `skein.api.spec.alpha` projection:
+  `:contract` is the nested node tree, `:template` the copyable JSON skeleton,
+  and `:spec-forms` the printed form graph, all resolved against the live spec
+  registry with no predicate invoked. Missing patterns or unregistered input
+  specs fail loudly.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L57-L74">Source</a></sub></p>
 
 ## <a name="skein.api.patterns.alpha/patterns">`patterns`</a>
 ``` clojure
@@ -71,4 +75,4 @@ Validate pattern input, invoke the pattern, and apply its create-only batch.
   The four-argument arity threads an explicit request-context map for trusted
   callers (the connected-client tier); the three-argument arity derives its own
   weave context.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L74-L108">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L81-L115">Source</a></sub></p>

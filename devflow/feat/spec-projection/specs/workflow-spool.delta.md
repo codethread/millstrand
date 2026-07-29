@@ -3,7 +3,7 @@
 **Document ID:** `DELTA-Spj-003`
 **Contract doc:** [spools/workflow.md](../../../../spools/workflow.md)
 **Feature:** [../proposal.md](../proposal.md)
-**Status:** Draft
+**Status:** Merged
 **Last Updated:** 2026-07-29
 **Configuration identification:** Document IDs must be ordered as document type, short
 name, sequential id, then optional version. Prefix every nested point ID with the full

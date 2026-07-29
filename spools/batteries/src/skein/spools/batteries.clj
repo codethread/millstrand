@@ -1132,7 +1132,6 @@
               :params {:type :collection :items :string}
               :referenced-params {:type :collection :items :string}}})
 
-
 (def ^:private op-returns
   {'add strand-return
    'update strand-return
