@@ -1,7 +1,9 @@
 # Authoring forms program proposal
 
 **Document ID:** `PROP-Auf-001`
-**Last Updated:** 2026-07-28
+**Status:** Approved
+**Approved:** 2026-07-29
+**Last Updated:** 2026-07-29
 **Related RFCs:** [`RFC-Saf-001`](../../rfcs/2026-07-28-spool-authoring-forms.md) (spool authoring forms), [`RFC-Laf-001`](../../rfcs/2026-07-28-lifecycle-authoring-forms.md) (lifecycle authoring forms) — the source decision records this proposal merges and advances; kept unchanged as the intent history
 **Related decisions:** [ADR-002](../../adrs/0002-no-inline-module-lifecycle-macro.md) (rejected inline callback sugar), [ADR-003](../../adrs/0003-spool-activation-lifecycle.md) (one activation path and the reconcile contract), [ADR-004](../../adrs/0004-def-spool-convention.md) (`def spool` entry-point convention), [RFC-020: readability macros](../../rfcs/2026-07-08-skein-readability-macros.md)
 **Related root specs:** [`repl-api.md`](../../specs/repl-api.md) (C17c/C17d/C19), [`daemon-runtime.md`](../../specs/daemon-runtime.md) (C45/C46/C46b/C46c/C74a), [`alpha-surface.md`](../../specs/alpha-surface.md)
@@ -851,4 +853,4 @@ Constraints the post-sign-off feature breakdown must hold, stated once so cards 
 
 ## PROP-Auf-001.P20 Outcome
 
-- **PROP-Auf-001.OUT1:** Pending user sign-off at the devflow checkpoint. The proposed ruling is REC1–REC9: replace `:contribute` with a complete family of replayable contribution authoring forms, run the bounded lifecycle spike and accept lifecycle forms only through the P16.2 gates, and execute the staged TEN-000@1 cutover in P15 so the `def spool` convention is removed in one final break after every first-party and sibling spool has migrated.
+- **PROP-Auf-001.OUT1:** Approved by ct at the devflow checkpoint on 2026-07-29. The approved ruling is REC1–REC9: replace `:contribute` with a complete family of replayable contribution authoring forms, run the bounded lifecycle spike and accept lifecycle forms only through the P16.2 gates, and execute the staged TEN-000@1 cutover in P15 so the `def spool` convention is removed in one final break after every first-party and sibling spool has migrated.
