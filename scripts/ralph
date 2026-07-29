@@ -6,7 +6,9 @@
 # harness addendum covering the two loop exits: the agent must finish the epic
 # card (`strand kanban finish <epic> --outcome done`) when every feature under
 # it is complete, and may emit the exact marker `RALPH-STOP: <reason>` as its final
-# line to halt the loop on a blocker it cannot work around. The loop itself
+# line to halt the loop on a blocker it cannot work around. The addendum is
+# loop mechanics only — work discipline belongs on the epic card and its
+# feature cards, which the prompt points each iteration at. The loop itself
 # only ever reads state; all mutation happens inside the agent runs.
 #
 # This is deliberately a watchable foreground script, not a background strand
@@ -83,15 +85,18 @@ $prompt
 
 --- ralph harness (scripts/ralph, iteration $1) ---
 You are one iteration of "ralph", a foreground loop driving epic $epic ("$epic_title").
-Every iteration starts with fresh context: orient from live state first
-(strand show $epic, strand kanban card $epic, strand kanban board), not from memory.
+Every iteration starts with fresh context: orient from live state, not memory.
+\`strand kanban card $epic\` always works and carries the epic's work discipline;
+\`strand ready --query kanban-epic-pending --param epic=$epic\` is the preferred
+frontier view when the weaver serves that query (it may not yet — fall back to
+the card view rather than treating the query as required).
 The loop re-invokes you until the epic strand is closed, so:
 - CRITICAL: when every feature under the epic is complete, close the epic with
   \`strand kanban finish $epic --outcome done\` — the loop runs forever otherwise.
   (Kanban finish is the right close: it records the outcome and leaves clean
   board semantics; a bare state update does not.)
-- Leave the world resumable before you finish: notes on the doing task, work
-  committed and pushed. The next iteration knows only what the strands say.
+- Leave the world resumable before you finish: work committed and pushed, live
+  state updated. The next iteration knows only what the strands say.
 - EMERGENCY BRAKE: if you hit a blocker you cannot work around, end your reply
   with a final line of exactly: RALPH-STOP: <one-line reason>
   Use it only for hard blockers; it halts the loop immediately.
