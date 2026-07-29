@@ -282,7 +282,7 @@
 (defn collect-module-kind!
   "Collect one open-kind declaration for the module source being evaluated."
   [state-key declaration]
-  ((requiring-resolve 'skein.core.weaver.module-refresh/collect-kind!)
+  ((requiring-resolve 'skein.core.weaver.module-graph/collect-kind!)
    state-key declaration))
 
 (defn refresh-modules!

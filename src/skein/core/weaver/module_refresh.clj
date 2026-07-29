@@ -57,11 +57,6 @@
   ([kind-id entry-key value opts]
    (module-graph/collect-entry! kind-id entry-key value opts)))
 
-(defn collect-kind!
-  "Collect one open-kind declaration for pre-publication realization."
-  [state-key declaration]
-  (module-graph/collect-kind! state-key declaration))
-
 (defn- retain-declarations!
   "Replace `ns-sym`'s complete replay record."
   [module-key ns-sym contribution kind-declarations]
