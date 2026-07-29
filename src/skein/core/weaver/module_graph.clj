@@ -7,7 +7,9 @@
   perform source loads, registry publication, or resource reconciliation."
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [skein.api.registry.alpha :as registry]
             [skein.core.format :as format]))
 
 (def ^:private declaration-keys
@@ -346,8 +348,8 @@
   (when-not (keyword? state-key)
     (fail! "Kind declaration spool-state key must be a keyword"
            {:spool-state/key state-key}))
-  (when-not (and (map? declaration) (keyword? (:id declaration)))
-    (fail! "Kind declaration must be a map with a keyword :id"
+  (when-not (s/valid? ::registry/kind-declaration-input declaration)
+    (fail! "Kind declaration does not conform to the registry input contract"
            {:spool-state/key state-key :declaration declaration}))
   (when *kind-collector*
     (require-collection-source!)
@@ -355,6 +357,11 @@
            {:spool-state/key state-key
             :declaration declaration}))
   declaration)
+
+(s/fdef collect-kind!
+  :args (s/cat :state-key keyword?
+               :declaration ::registry/kind-declaration-input)
+  :ret ::registry/kind-declaration-input)
 
 (defn with-contribution-collection
   "Call `f` while collecting entries from exactly one module source target.

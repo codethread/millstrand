@@ -279,12 +279,6 @@
    ((requiring-resolve 'skein.core.weaver.module-refresh/collect-entry!)
     kind-id entry-key value opts)))
 
-(defn collect-module-kind!
-  "Collect one open-kind declaration for the module source being evaluated."
-  [state-key declaration]
-  ((requiring-resolve 'skein.core.weaver.module-graph/collect-kind!)
-   state-key declaration))
-
 (defn refresh-modules!
   "Run the internal full or targeted live-module refresh coordinator."
   ([runtime]

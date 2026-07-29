@@ -396,11 +396,9 @@
   `synced-namespace-file`, which searches only synced roots."
   [classpath-binding]
   (when-let [source (:source classpath-binding)]
-    (try
-      (let [uri (java.net.URI. source)]
-        (when (= "file" (.getScheme uri))
-          (.getCanonicalPath (java.io.File. uri))))
-      (catch Exception _ nil))))
+    (let [uri (java.net.URI. source)]
+      (when (= "file" (.getScheme uri))
+        (.getCanonicalPath (java.io.File. uri))))))
 
 (defn- ns-source-file
   "Resolve the on-disk source path for a module `:ns` target.
@@ -409,8 +407,7 @@
   falls back to its classpath binding's source file. Returns nil when neither is
   reachable, so callers stay non-throwing over classpath-only namespaces."
   [runtime ns-sym]
-  (or (when-let [synced (try (spool-sync/synced-namespace-file runtime ns-sym)
-                             (catch Exception _ nil))]
+  (or (when-let [synced (spool-sync/synced-namespace-file runtime ns-sym)]
         synced)
       (classpath-source-file (classpath-binding runtime ns-sym))))
 

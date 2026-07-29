@@ -409,7 +409,8 @@
                   "collect-kind! state-key must be a keyword")
   (require-valid! ::kind-declaration declaration
                   "collect-kind! declaration is invalid")
-  (weaver-runtime/collect-module-kind! state-key declaration))
+  ((requiring-resolve 'skein.core.weaver.module-graph/collect-kind!)
+   state-key declaration))
 
 (s/fdef collect-kind!
   :args (s/cat :state-key ::kind-state-key
