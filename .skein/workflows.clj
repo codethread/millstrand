@@ -2,7 +2,7 @@
   "This repo's hand-authored coordination workflows and their command surface:
   the coordinator `land` workflow (family \"land\") with its `land` op, the
   third-party `spool-bump` workflow, the module-shaping `story` workflow, the
-  light `explore` workflow for open-ended exploration, and the
+  light `explore` and `fix` workflows for the two low-ceremony modes, and the
   `delegate-pipeline` weave pattern for sequential delegated subagent gates.
 
   Every workflow here is a static `defworkflow` Var: a definition a worker can
@@ -1672,3 +1672,132 @@
                                      |finish <card> --outcome abandoned`, and remove the
                                      |worktree.")}]
                         :attributes {"workflow/decision-point" "explore-thread-fate"})))
+
+;; ---------------------------------------------------------------------------
+;; fix: the light bug-fix workflow (family "fix")
+;;
+;; Less ceremony than devflow, but the doc discipline is structural: after the
+;; implementation step, a docs-sync step owns the spec-delta and CLAUDE.md
+;; judgment and a machine shell gate proves `make docs-check` green
+;; (PHILOSOPHY: prose guides, code decides). The branch and worktree are
+;; poured params so that gate has a cwd; the claim step creates them. The run
+;; ends by handing the branch to the coordinator land workflow.
+;; ---------------------------------------------------------------------------
+
+(s/def ::fix-params (s/keys :req-un [::subject ::branch ::worktree]
+                            :opt-un [::card]))
+
+(workflow/defworkflow fix
+  "Run the light BUG-FIX workflow (family \"fix\").
+
+  The low-ceremony path for a bug fix, direct or picking up an existing
+  card: claim a card and worktree, implement with a regression lock,
+  then face the doc discipline as structure — a docs-sync step for the
+  spec-delta and CLAUDE.md judgment, and a machine gate that proves
+  `make docs-check` green — before validating and handing the branch to
+  the coordinator `land` workflow. Params: `subject` (one-line statement
+  of the bug), `branch` and `worktree` (the pair the claim step
+  creates), `card` (optional existing card id to claim instead of
+  pouring one)."
+  {:entrypoints #{:start}
+   :param-spec ::fix-params
+   :defaults {}
+   :example {:subject "strand list drops --limit on named queries"
+             :branch "fix-list-limit"
+             :worktree "/abs/path/to/skein-src__fix-list-limit"
+             :card "ab1cd"}
+   :param-docs {:subject "One-line statement of the bug being fixed."
+                :branch "Fix branch the claim step creates."
+                :worktree
+                (format-alpha/reflow
+                 "|Absolute worktree path the claim step creates for the
+                  |branch; the docs-check gate runs `make docs-check` there.")
+                :card "Optional existing kanban card id to pick up."}}
+  (workflow/workflow
+   (fn [{:keys [subject]}] (str "Fix: " subject))
+   {:attributes {"workflow/family" "fix"}}
+   (workflow/step :claim-trail
+                  (fn [{:keys [subject]}] (str "Card + worktree trail for: " subject))
+                  :self
+                  :attributes {"workflow/action-ref" "fix.claim-trail"
+                               "workflow/instruction"
+                               (fn [{:keys [card branch worktree]}]
+                                 (format-alpha/reflow
+                                  (str
+                                   (if card
+                                     (format
+                                      "|Claim card `%s` for this fix: `strand kanban claim %s
+                                       |--owner <name> --branch %s --worktree %s`, with the
+                                       |worktree created for the branch."
+                                      card card branch worktree)
+                                     (format
+                                      "|Pour a kanban card for the bug (`strand kanban add`)
+                                       |and claim it with owner, branch `%s`, and worktree
+                                       |`%s` created for the branch."
+                                      branch worktree))
+                                   "\n|Then stamp the card on this step before completing
+                                    |it: `strand update <this-step-id> --attributes
+                                    |'{\"fix/card\":\"<card-id>\"}'` — the stamp is the run's
+                                    |durable link to the card the land hand-off names.")))})
+   (workflow/step :implement
+                  (fn [{:keys [subject]}] (str "Fix: " subject))
+                  :self
+                  :depends-on [:claim-trail]
+                  :attributes {"workflow/action-ref" "fix.implement"
+                               "workflow/instruction"
+                               (fn [_]
+                                 (format-alpha/reflow
+                                  "|Fix the bug in the worktree with a regression lock where
+                                   |feasible: a focused test that fails before the fix and
+                                   |passes after (cold run green). Note findings and decisions
+                                   |on the card's doing-task as you go — the notes are the
+                                   |handover. Commit the work to the branch before
+                                   |completing."))})
+   (workflow/step :docs-sync
+                  (fn [_] "Sync specs and CLAUDE.md with the changed behavior")
+                  :self
+                  :depends-on [:implement]
+                  :attributes {"workflow/action-ref" "fix.docs-sync"
+                               "workflow/instruction"
+                               (fn [_]
+                                 (format-alpha/reflow
+                                  "|The doc discipline, judged here and proven by the next
+                                   |gate: when shipped behavior changed, the relevant root
+                                   |spec in devflow/specs/ gets its delta, and CLAUDE.md stays
+                                   |in sync when the working surface moved. When nothing
+                                   |shipped changed, record that judgment explicitly in a note
+                                   |before completing — the judgment is recorded either way."))})
+   (workflow/gate :docs-check
+                  (fn [_] "Prove the docs gates green in the fix worktree")
+                  :shell
+                  :depends-on [:docs-sync]
+                  :attributes {"workflow/action-ref" "fix.docs-check"
+                               "shell/argv" ["make" "docs-check"]
+                               "shell/cwd" (fn [{:keys [worktree]}] worktree)
+                               "shell/timeout-secs" 1200
+                               "workflow/instruction"
+                               (format-alpha/reflow
+                                "|Machine gate: `make docs-check` runs in the fix worktree —
+                                 |the AGENTS.md budget, regenerated api docs with no diff,
+                                 |and a clean docs-site build. A failure stamps `gate/error`
+                                 |with captured output: fix the docs, commit, then remove the
+                                 |stamp (`strand update <gate-id> --attributes
+                                 |'{\"gate/error\":null}'`) to re-run.")})
+   (workflow/step :validate-handoff
+                  (fn [{:keys [branch]}] (str "Validate " branch " and hand off to landing"))
+                  :self
+                  :depends-on [:docs-check]
+                  :attributes {"workflow/action-ref" "fix.validate-handoff"
+                               "workflow/instruction"
+                               (fn [{:keys [branch worktree]}]
+                                 (format-alpha/reflow
+                                  (format
+                                   "|Run the focused cold tests for the touched namespaces and
+                                    |the blocking quality gates per CLAUDE.md; commit everything
+                                    |to the branch. Then hand off to the coordinator land
+                                    |workflow: `strand workflow start <new-land-run-id>
+                                    |--workflow land --params '{\"feature\":\"<card>\",
+                                    |\"branch\":\"%s\",\"worktree\":\"%s\",
+                                    |\"card\":\"<card>\"}'` — the land run owns review, merge,
+                                    |and the card finish. Then close this run."
+                                   branch worktree)))})))
