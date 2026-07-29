@@ -497,16 +497,23 @@
             |before choose rather than learning the contract from a rejected
             |payload.")
    :prime (fmt/reflow
-           "|Run workflow list before choosing a routine and workflow show
-            |<name> before supplying params; the param contract it prints is the
-            |one the engine will judge your invocation against. Then start the
-            |run and work its frontier: use next when one ordinary step or
-            |checkpoint is ready, or use complete, choose, and defer for
-            |role-specific control. Pass --step when the selected verb says the
-            |frontier is ambiguous, and always to close a gate, which also needs
-            |--by. If a mutation fails as
+           "|Run `strand workflow list` to see the registered routines, then
+            |`strand workflow show intake` (or any listed name) before supplying
+            |params: in its JSON, params.contract names every key with its docs,
+            |params.template is a copyable skeleton to fill in, and
+            |params.example is an authored params object already validated
+            |against the spec. Start the run with
+            |`strand workflow start <run-id> --workflow intake --params '{...}'`
+            |— you choose the run-id positional, and the registered name rides
+            |the --workflow flag. Then work the frontier:
+            |`strand workflow next <run-id>` advances the one ready ordinary
+            |step or checkpoint, complete/choose/defer give role-specific
+            |control, and `strand workflow choices <run-id>` projects a ready
+            |checkpoint's input contracts before choose. Pass --step when the
+            |selected verb says the frontier is ambiguous, and always to close
+            |a gate, which also needs --by. If a mutation fails as
             |workflow/frontier-stale, another worker moved the run: re-read
-            |workflow ready and act on what is there now.")})
+            |`strand workflow ready <run-id>` and act on what is there now.")})
 
 (def ^:private workflow-glossary
   [{:name "workflow/ready-next-absent"
