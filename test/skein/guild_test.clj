@@ -111,9 +111,40 @@
         (weaver/op! rt 'gate.close.v1 [(json-arg {:wrong "x"})])
         (is false "expected spec validation failure")
         (catch clojure.lang.ExceptionInfo e
-          (is (= :operation/input-invalid (:code (ex-data e))))
-          (is (= "gate.close.v1" (:operation (ex-data e))))
-          (is (= ":skein.guild-test/close-input" (:input-spec (ex-data e)))))))))
+          (let [data (ex-data e)]
+            (is (= :operation/input-invalid (:code data)))
+            (is (= "gate.close.v1" (:operation data)))
+            (testing "the failure speaks the shared projection vocabulary"
+              (is (= "skein.guild-test/close-input" (:spec data)))
+              (is (= "map" (get-in data [:contract "kind"])))
+              (is (= ["task"]
+                     (mapv #(get % "key") (get-in data [:contract "required"]))))
+              (is (contains? (:template data) "task"))
+              (is (vector? (:spec-forms data)))
+              (is (string? (:explain data))))))))))
+
+(deftest input-spec-projects-through-help
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-guild 'skein.spools.guild)
+      (guild/register-op! rt 'gate.close.v1
+                          {:doc "Close a peer gate" :input-spec ::close-input :returns close-return
+                           :hook-class :mutating :deadline-class :standard}
+                          'skein.guild-test/close-handler)
+      (testing "strand help projects the declared input contract (SPEC-003.C70)"
+        (let [input (-> (weaver/op! rt 'help ["gate.close.v1"])
+                        (get-in [:node :invocation :positionals])
+                        first)]
+          (is (= "skein.guild-test/close-input" (:spec input)))
+          (is (= "map" (get-in input [:contract "kind"])))
+          (is (contains? (:template input) "task"))))
+      (testing "a deprecation stub stops projecting the retired contract"
+        (guild/deprecate! rt 'gate.close.v1 {:replacement "gate.close.v2"})
+        (let [input (-> (weaver/op! rt 'help ["gate.close.v1"])
+                        (get-in [:node :invocation :positionals])
+                        first)]
+          (is (nil? (:spec input)))
+          (is (not (contains? input :contract))))))))
 
 (deftest guild-list-reports-active-and-deprecated-ops
   (with-runtime
@@ -135,7 +166,7 @@
         (is (= "guild list" (:operation listing)))
         (is (= [{:name "gate.close.v2"
                  :doc "Close v2"
-                 :input-spec ":skein.guild-test/close-input"}]
+                 :input-spec "skein.guild-test/close-input"}]
                (:active listing)))
         (is (= [{:name "gate.close.v1"
                  :replacement "gate.close.v2"

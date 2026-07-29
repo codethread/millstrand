@@ -22,7 +22,7 @@ Reference spool for declaring a versioned public weaver operation API.
 Function.
 
 Return Guild's owner-complete built-in operation contribution.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L267-L278">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L294-L305">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/deprecate!">`deprecate!`</a>
 ``` clojure
@@ -34,7 +34,7 @@ Replace a registered guild operation in `runtime` with a loud deprecation stub.
 
   `opts` requires `:replacement` and may include `:since`. Deprecated ops never
   return success; invocation throws ex-info with `:code :operation/deprecated`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L228-L249">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L252-L276">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/deprecated-op">`deprecated-op`</a>
 ``` clojure
@@ -43,7 +43,7 @@ Replace a registered guild operation in `runtime` with a loud deprecation stub.
 Function.
 
 Fail loudly for a deprecated guild operation.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L171-L180">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L189-L198">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/dispatch-op">`dispatch-op`</a>
 ``` clojure
@@ -52,7 +52,7 @@ Fail loudly for a deprecated guild operation.
 Function.
 
 Dispatch a guild-declared operation after parsing and validating input.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L163-L169">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L181-L187">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/ops">`ops`</a>
 ``` clojure
@@ -61,7 +61,7 @@ Dispatch a guild-declared operation after parsing and validating input.
 Function.
 
 Return JSON-safe metadata describing the registered guild API.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L251-L265">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L278-L292">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/reconcile">`reconcile`</a>
 ``` clojure
@@ -76,7 +76,7 @@ Reconcile Guild's runtime-owned declarations per the module contract.
   republishing clears every prior declaration, which is both
   fresh-application hygiene and complete teardown (SPEC-004.C46b). Any other
   status is a direct-call error and fails loudly.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L280-L301">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L307-L328">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/register-op!">`register-op!`</a>
 ``` clojure
@@ -95,7 +95,12 @@ Register a guild operation in `runtime`'s CLI operation registry.
   Guild-specific schema. `fn-sym` must be a fully qualified symbol resolving in
   the weaver JVM. The handler receives the usual op context plus parsed JSON
   input at `:guild/input`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L182-L220">Source</a></sub></p>
+
+  A declared `:input-spec` is discoverable over the wire: it rides the generic
+  arg `:spec` convention (SPEC-003.C70), so `strand help <op>` projects the
+  registered spec's contract and template, and invalid input fails with the
+  same projection fields plus explain text.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L200-L244">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/set-fallback-guild-name!">`set-fallback-guild-name!`</a>
 ``` clojure
@@ -110,7 +115,7 @@ Record `guild-name` as the fallback guild name in `runtime`'s state.
   trusted config and tests call this after activation. Passing nil clears
   the fallback; a non-nil value must be a non-blank string and anything else
   fails loudly with the offending value.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L303-L315">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L330-L342">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/spool">`spool`</a>
 
@@ -125,4 +130,4 @@ Entry-point declaration for the guild spool (PROP-Dsp-001 `def spool`
   and world policy (`{:ns 'skein.spools.guild :spools [...]}`) and never mirrors
   the pair. Unqualified symbols resolve against this namespace; fn values are
   rejected (ADR-002.O1).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L317-L327">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L344-L354">Source</a></sub></p>
