@@ -1776,12 +1776,13 @@
                                "workflow/instruction"
                                (fn [_]
                                  (format-alpha/reflow
-                                  "|Fix the bug in the worktree with a regression lock where
-                                   |feasible: a focused test that fails before the fix and
-                                   |passes after (cold run green). Note findings and decisions
-                                   |on the card's doing-task as you go — the notes are the
-                                   |handover. Commit the work to the branch before
-                                   |completing."))})
+                                  "|Create a kanban task under the card for the slice you choose;
+                                   |the agent doing the work owns that task's scope. Fix the bug
+                                   |in the worktree with a regression lock where feasible: a
+                                   |focused test that fails before the fix and passes after (cold
+                                   |run green). Note findings and decisions on that doing-task as
+                                   |you go — the notes are the handover. Commit the work to the
+                                   |branch before completing."))})
    (workflow/step :docs-sync
                   (fn [_] "Sync specs and CLAUDE.md with the changed behavior")
                   :self
