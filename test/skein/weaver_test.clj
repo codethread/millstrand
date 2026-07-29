@@ -4345,7 +4345,13 @@
                                       {:ns bad-glossary-ns :spools [root-lib]})]
           (is (= :refused (:status result)) (pr-str result))
           (is (nil? (get @(:spool-state rt) bad-glossary-state-key))
-              "post-publication refusal removes a newly staged registry handle"))))))
+              "post-publication refusal removes a newly staged registry handle"))
+        (let [result (runtime/module! rt :bad-glossary
+                                      {:ns bad-glossary-ns :load :image})]
+          (is (= :missing-declaration-record
+                 (get-in result
+                         [:modules :bad-glossary :error :data :reason]))
+              "a refused source refresh leaves no replayable declaration record"))))))
 
 (deftest source-reload-replaces-the-retained-declaration-set
   (with-runtime

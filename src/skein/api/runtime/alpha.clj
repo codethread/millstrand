@@ -309,8 +309,10 @@
   none: the module's namespace declares a public
   `(def spool {:contribute … :reconcile …})` var, and a public `spool` var in a
   module-loadable namespace unconditionally is that module's entry-point
-  declaration. Every effective symbol is resolved and root-value-validated at
-  every module evaluation. When no `:contribute` resolves, the module's
+  declaration. Every effective symbol is resolved and root-value-validated
+  during source evaluation and the bounded missing-record image fallback.
+  Normal image replay resolves no contribution symbol. When no `:contribute`
+  resolves, the module's
   contribution is the declaration data collected from the authoring forms
   evaluated in its source, so a plain file of authoring forms is a complete
   module (DELTA-OlrRepl-001.CC3). A `spool` var supplying `:contribute` while

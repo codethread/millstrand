@@ -237,6 +237,13 @@
      changed))
   ([runtime staged-runtime backends candidate-map]
    (let [changed (changed-kinds backends candidate-map)]
+     (doseq [[state-key staged-handle] @(:spool-state staged-runtime)
+             :when (registry/registry? staged-handle)
+             :let [current (get @(:spool-state runtime) state-key)]
+             :when current]
+       (when-not (registry/registry? current)
+         (throw (ex-info "Staged registry target changed before publication"
+                         {:spool-state/key state-key :value current}))))
      (doseq [{:keys [type store storage]} (vals backends)
              :when (= :core type)
              :let [snapshot (get candidate-map storage)]]
@@ -247,9 +254,6 @@
                    snapshot (get candidate-map staged-storage)
                    current (get @(:spool-state runtime) state-key)
                    target (or current staged-handle)]]
-       (when (and current (not (registry/registry? current)))
-         (throw (ex-info "Staged registry target changed before publication"
-                         {:spool-state/key state-key :value current})))
        (when-not current
          (swap! (:spool-state runtime) assoc state-key target))
        (reset! (get target registry-state-key) snapshot))
