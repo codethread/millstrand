@@ -249,3 +249,12 @@
    ;; white-box read of the private new-state builder var, intentional here.
    #'cron/new-state
    #{:executor :jobs :failure-log :rng :in-flight-count :close-fn}))
+
+(deftest job-authoring-validates-closed-options-and-job-shape
+  (is (= {:id :sample :interval-ms 1000 :handler 'skein.cron-test/fire-ok}
+         (cron/job-declaration
+          :sample {} {:interval-ms 1000 :handler 'skein.cron-test/fire-ok})))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid Cron job options"
+                        (cron/job-declaration
+                         :sample {:unknown true}
+                         {:interval-ms 1000 :handler 'skein.cron-test/fire-ok}))))

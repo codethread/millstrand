@@ -928,6 +928,42 @@
   "Owner-partitioned kind id for gate-waiter -> stall-predicate-symbol declarations."
   registry/executor-kind)
 
+(s/def ::executor-options
+  (s/and map?
+         #(every? #{:request-spec :override?} (keys %))
+         #(or (not (contains? % :request-spec)) (qualified-keyword? (:request-spec %)))
+         #(or (not (contains? % :override?)) (boolean? (:override? %)))))
+
+(s/def ::executor-entry
+  :skein.spools.workflow.internal.registry/executor-entry)
+
+(defn executor-declaration
+  "Return a validated workflow executor declaration.
+
+  `options` conforms to `::executor-options`. The returned entry conforms to
+  `::executor-entry`; override intent remains collection metadata."
+  [options stalled-sym]
+  (require-valid! ::executor-options options "Invalid workflow executor options")
+  (require-valid! ::executor-entry
+                  (cond-> {:stalled? stalled-sym}
+                    (:request-spec options) (assoc :request-spec (:request-spec options)))
+                  "Invalid workflow executor declaration"))
+
+(defmacro defexecutor
+  "Define a gate stall predicate and collect its workflow executor declaration.
+
+  `options` conforms to `::executor-options`. The waiter key is the unqualified
+  form name and `:override? true` records explicit override intent."
+  [name doc options argv & body]
+  (let [handler-name (symbol (str name "-stalled?"))
+        qualified (symbol (str (ns-name *ns*)) (str handler-name))]
+    `(do
+       (defn ~handler-name ~doc ~argv ~@body)
+       (runtime/collect-entry!
+        executor-kind ~(str name) (executor-declaration ~options '~qualified)
+        (select-keys ~options #{:override?}))
+       (var ~handler-name))))
+
 (defn register-workflow!
   "Register a workflow definition under a stable keyword `name`.
 

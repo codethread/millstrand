@@ -1977,6 +1977,46 @@
   #{:macros/patterns :macros/ops :macros/queries :macros/rules :macros/demo
     :skein/spools-devflow})
 
+(def ^:private authoring-generation
+  "Migration-window classification for every selected module.
+
+  Later authoring-form migration cards change only their owned rows from
+  `:legacy` to `:forms`. The final-removal card deletes this table."
+  {:skein/spools-batteries :legacy
+   :skein/spools-workflow :legacy
+   :skein/spools-workflow-cli :legacy
+   :skein/spools-shell :legacy
+   :skein/spools-code :legacy
+   :skein/spools-unsafe-text-search :legacy
+   :skein/spools-chime :legacy
+   :skein/spools-cron :legacy
+   :skein/spools-devflow :forms
+   :skein/spools-kanban :legacy
+   :skein/spools-shuttle :legacy
+   :skein/spools-delegation :legacy
+   :skein/spools-bench :legacy
+   :skein/spools-treadle :legacy
+   :kanban/tracker :legacy
+   :harnesses :legacy
+   :reviewers :legacy
+   :module-adapters :legacy
+   :attention :forms
+   :config :forms
+   :workflows :forms
+   :nvd-scan :forms})
+
+(deftest selected-modules-have-one-authoring-generation
+  (is (= #{:legacy :forms} (set (vals authoring-generation))))
+  (is (every? #(contains? #{:legacy :forms} %) (vals authoring-generation)))
+  (is (= #{:skein/spools-batteries :skein/spools-workflow
+           :skein/spools-workflow-cli :skein/spools-shell :skein/spools-code
+           :skein/spools-unsafe-text-search :skein/spools-chime :skein/spools-cron
+           :skein/spools-devflow :skein/spools-kanban :skein/spools-shuttle
+           :skein/spools-delegation :skein/spools-bench :skein/spools-treadle
+           :kanban/tracker :harnesses :reviewers :module-adapters :attention
+           :config :workflows :nvd-scan}
+         (set (keys authoring-generation)))))
+
 (defn- public-spool-var
   "Resolve a namespace's `spool` var, or nil when it is missing or private."
   [spool-sym]

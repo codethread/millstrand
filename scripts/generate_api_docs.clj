@@ -17,7 +17,7 @@
 ;; the behavior contracts stay in the root specs.
 (def alpha-api-docs
   (concat
-   (for [nm ["batch" "cli" "clock" "current" "events" "format" "graph" "hooks"
+   (for [nm ["batch" "cli" "clock" "contribution" "current" "events" "format" "graph" "hooks"
              "notes" "patterns" "peers" "registry" "relations" "return-shape"
              "runtime" "scheduler" "spec" "spool" "vocab" "weaver"]]
      {:name nm
