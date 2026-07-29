@@ -4241,8 +4241,10 @@
             empty-ns (symbol (str "test.module.image-empty-" suffix))
             kind-ns (symbol (str "test.module.image-kind-" suffix))
             bad-kind-ns (symbol (str "test.module.bad-kind-" suffix))
+            bad-glossary-ns (symbol (str "test.module.bad-glossary-" suffix))
             state-key (keyword (str "test.image-kind-" suffix))
-            bad-state-key (keyword (str "test.bad-kind-" suffix))]
+            bad-state-key (keyword (str "test.bad-kind-" suffix))
+            bad-glossary-state-key (keyword (str "test.bad-glossary-" suffix))]
         (write-local-spool-module!
          workspace root-lib forms-ns
          (str "(skein.api.runtime.alpha/collect-entry! "
@@ -4320,7 +4322,30 @@
                                       {:ns bad-kind-ns :spools [root-lib]})]
           (is (= :refused (:status result)))
           (is (nil? (get @(:spool-state rt) bad-state-key))
-              "failed candidate validation publishes no kind handle"))))))
+              "failed candidate validation publishes no kind handle"))
+
+        (write-local-spool-module!
+         workspace root-lib bad-glossary-ns
+         (str "(clojure.spec.alpha/def ::widget map?)\n"
+              "(skein.api.runtime.alpha/collect-kind! "
+              bad-glossary-state-key
+              " {:id ::widgets :entry-spec ::widget :binding-moment :test/use})\n"
+              "(skein.api.runtime.alpha/collect-entry! :ops \"bad-glossary\" '"
+              (pr-str {:name "bad-glossary"
+                       :fn 'skein.weaver-test/test-op
+                       :stream? false
+                       :provenance 'skein.weaver-test
+                       :arg-spec {:op "bad-glossary"
+                                  :hook-class :read
+                                  :deadline-class :standard
+                                  :annotations
+                                  {:failure-modes [(str "publication/missing-" suffix)]}}})
+              ")"))
+        (let [result (runtime/module! rt :bad-glossary
+                                      {:ns bad-glossary-ns :spools [root-lib]})]
+          (is (= :refused (:status result)) (pr-str result))
+          (is (nil? (get @(:spool-state rt) bad-glossary-state-key))
+              "post-publication refusal removes a newly staged registry handle"))))))
 
 (deftest source-reload-replaces-the-retained-declaration-set
   (with-runtime

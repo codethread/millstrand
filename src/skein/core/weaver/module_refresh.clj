@@ -28,6 +28,9 @@
 
 (def ^:private declaration-record-version 1)
 
+(def ^:private registry-state-key
+  :skein.api.registry.alpha/state)
+
 (declare fail!)
 
 (defn initial-state
@@ -56,6 +59,34 @@
    (module-graph/collect-entry! kind-id entry-key value))
   ([kind-id entry-key value opts]
    (module-graph/collect-entry! kind-id entry-key value opts)))
+
+(defn- staging-runtime
+  "Return `runtime` with isolated copies of every domain registry handle."
+  [runtime]
+  (assoc runtime :spool-state
+         (atom
+          (update-vals
+           @(:spool-state runtime)
+           (fn [value]
+             (if (registry/registry? value)
+               (assoc value registry-state-key
+                      (atom (registry/snapshot value)))
+               value))))))
+
+(defn- restore-staged-registry-slots!
+  "Restore registry slots affected by staged publication."
+  [runtime before staged-runtime]
+  (let [keys-to-restore (for [[state-key value] @(:spool-state staged-runtime)
+                              :when (registry/registry? value)]
+                          state-key)]
+    (swap! (:spool-state runtime)
+           (fn [current]
+             (reduce (fn [state state-key]
+                       (if (contains? before state-key)
+                         (assoc state state-key (get before state-key))
+                         (dissoc state state-key)))
+                     current
+                     keys-to-restore)))))
 
 (defn- retain-declarations!
   "Replace `ns-sym`'s complete replay record."
@@ -1057,7 +1088,7 @@
                                            [key (:module/resolved outcome)]))
                                        raw)))
                     exposed-resolved (apply dissoc resolved-entry-points removed)
-                    staged-runtime (publication/staging-runtime runtime)
+                    staged-runtime (staging-runtime runtime)
                     _ (realize-kind-declarations! staged-runtime raw)
                     backends (publication/backends staged-runtime)
                     base-candidates (reduce publication/remove-owner
@@ -1083,9 +1114,9 @@
                   (plan-result runtime sync-result staged provisional backends graph)
                   (let [live-backends (publication/backends runtime)
                         live-candidates (publication/candidates live-backends)
-                        changed-kinds (publication/publish-staged!
-                                       runtime staged-runtime backends
-                                       (:candidates staged))
+                        live-spool-state @(:spool-state runtime)
+                        changed-kinds (publication/publish!
+                                       runtime staged-runtime backends (:candidates staged))
                         removal-order (->> (module-graph/dependency-order old-graph)
                                            reverse
                                            (filter removed))
@@ -1098,6 +1129,8 @@
                              runtime backends (:candidates staged))
                             (catch Throwable throwable
                               (publication/publish! live-backends live-candidates)
+                              (restore-staged-registry-slots!
+                               runtime live-spool-state staged-runtime)
                               (throw throwable)))
                         contributions (apply dissoc (:contributions staged) removed)
                         contribution-sources (apply dissoc (:source-stamps staged) removed)
