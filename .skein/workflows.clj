@@ -1036,7 +1036,25 @@
   indirect maintenance runs end with a pending-generation handover."
   {:entrypoints #{:start}
    :param-spec ::spool-bump-params
-   :defaults {}}
+   :defaults {}
+   :example {:bumps [{:family "codethread/kanban" :version "latest"}
+                     {:family "codethread/devflow" :version "v12"}]
+             :branch "bump-kanban-devflow"
+             :worktree "/abs/path/to/skein-src__bump-kanban-devflow"
+             :direct-user-request false}
+   :param-docs {:bumps
+                (format-alpha/reflow
+                 "|One {family, version} record per spool family; version is
+                  |latest or an annotated vN release marker.")
+                :branch "Bump branch to create for the change."
+                :worktree
+                (format-alpha/reflow
+                 "|Absolute feature worktree path for the branch; its .skein
+                  |directory is the selected workspace the bump runs against.")
+                :direct-user-request
+                (format-alpha/reflow
+                 "|True only when the user asked for this bump directly; gates
+                  |the final canonical weaver stop/start step.")}}
   (workflow/workflow
    (fn [{:keys [bumps]}]
      (str "Spool bump: " (str/join ", " (map :family bumps))))

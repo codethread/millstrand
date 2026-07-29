@@ -173,18 +173,25 @@
   current `s/form` graph plus the nested `:contract` and copyable `:template`
   views (spec-projection DELTA-Spj-003.CC1) — so a spec redefined since the
   definition was authored documents itself as it is now, and one that has since
-  been deleted fails loudly instead of reading as an unconstrained workflow."
+  been deleted fails loudly instead of reading as an unconstrained workflow.
+  Authored `:param-docs` merge over the projection's hoisted predicate-var
+  docs in both views, and an authored `:example` — validated against the spec
+  at definition construction — rides beside them as a copyable params object."
   [definition]
-  (let [param-spec (:param-spec definition)
-        defaults (or (:defaults definition) {})]
+  (let [{:keys [param-spec example param-docs]} definition
+        defaults (or (:defaults definition) {})
+        key-docs (into {}
+                       (map (fn [[k doc]] [(specs/outer-key-name k) doc]))
+                       param-docs)]
     (if param-spec
-      (let [views (specs/contract-views param-spec)]
-        {:kind "spec"
-         :defaults defaults
-         :spec (subs (str param-spec) 1)
-         :spec-forms (specs/spec-forms param-spec)
-         :contract (get views "contract")
-         :template (get views "template")})
+      (let [views (specs/contract-views param-spec key-docs)]
+        (cond-> {:kind "spec"
+                 :defaults defaults
+                 :spec (subs (str param-spec) 1)
+                 :spec-forms (specs/spec-forms param-spec)
+                 :contract (get views "contract")
+                 :template (get views "template")}
+          example (assoc :example example)))
       {:kind "none" :defaults defaults})))
 
 ;; --- discovery reads ----------------------------------------------------------

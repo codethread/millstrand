@@ -46,7 +46,7 @@
 (declare non-blank-string? defer-step?
          explain-step explain-gate explain-checkpoint explain-call explain-workflow
          explain-definition explain-defer
-         reject-unknown-keys! step* bind-defer-step
+         reject-unknown-keys! validate-param-authoring! step* bind-defer-step
          step-opt-keys checkpoint-opt-keys call-opt-keys workflow-opt-keys
          defer-opt-keys advance-opt-keys
          choice-name choice-details-attr reject-unknown-choice-keys!
@@ -263,12 +263,14 @@
   The returned map is the same data shape accepted by `compile`, but avoids a
   separate TOML/JSON formula language. An optional leading options map may carry
   `:attributes`, `:state`, and `:form`, plus the registration contract a static
-  definition declares about itself: `:doc`, `:entrypoints`, `:param-spec`, and
-  `:defaults` (see `defworkflow`). Options and the complete assembled definition
-  are both validated here, so a malformed nested step, choice, or call fails at
-  the builder rather than at the pour — as does a defer carrying a `:condition`,
-  a `:loop`, or an authored `workflow/defer-path`, none of which a shape spec can
-  express."
+  definition declares about itself: `:doc`, `:entrypoints`, `:param-spec`,
+  `:defaults`, and the authored params documentation `:example` and
+  `:param-docs` (see `defworkflow`). Options and the complete assembled
+  definition are both validated here, so a malformed nested step, choice, or
+  call fails at the builder rather than at the pour — as does a defer carrying
+  a `:condition`, a `:loop`, an authored `workflow/defer-path`, an `:example`
+  the live `:param-spec` rejects, or a `:param-docs` key the spec never
+  declares, none of which a shape spec can express."
   [name & body]
   (let [[opts steps] (if (and (map? (first body))
                               (not (contains? (first body) :id)))
@@ -278,6 +280,7 @@
     (require-valid! ::workflow-options opts "Invalid workflow options")
     (-> (require-valid! ::definition (merge opts {:name name :steps (vec steps)})
                         "Invalid workflow definition")
+        validate-param-authoring!
         defs/validate-defer-declarations!)))
 
 (defn compile
@@ -883,14 +886,18 @@
   Splits `defworkflow`'s three declaration surfaces — the docstring, the
   registration options, and the built workflow — into one self-describing value,
   which is the whole point of a static definition: `:doc`, `:entrypoints`,
-  `:param-spec`, and `:defaults` travel with the workflow instead of living in a
-  registry entry beside it."
+  `:param-spec`, `:defaults`, and the authored `:example` and `:param-docs`
+  travel with the workflow instead of living in a registry entry beside it.
+  The authored documentation is judged here against the live `:param-spec`, so
+  a definition that constructs cannot carry a drifted example or a doc for an
+  undeclared key."
   [doc options definition]
   (require-valid! ::doc doc "Workflow definition :doc must be a non-blank string")
   (reject-unknown-keys! options workflow-opt-keys :defworkflow)
   (require-valid! ::workflow-options options "Invalid workflow options")
   (-> (require-valid! ::definition (merge definition options {:doc doc})
                       "Invalid workflow definition")
+      validate-param-authoring!
       defs/validate-defer-declarations!))
 
 (defmacro defworkflow
@@ -899,9 +906,10 @@
   Ordinary Clojure semantics first: this is a `def`, so loading the namespace
   defines `name` and nothing else — a code-only reload redefines the Var without
   touching the live registry. `options` carries the registration contract
-  (`:entrypoints`, `:param-spec`, `:defaults`) and merges into the built
-  `definition`, so the Var alone answers what the workflow is for and how it may
-  be invoked.
+  (`:entrypoints`, `:param-spec`, `:defaults`, and the authored `:example` and
+  `:param-docs`) and merges into the built `definition`, so the Var alone
+  answers what the workflow is for, how it may be invoked, and what a valid
+  invocation looks like.
 
   Only while a module contribution collector is active does the form also
   contribute `name`'s qualified symbol under `definition-kind`, keyed by
@@ -1022,7 +1030,9 @@
   including a call-only component the default catalogue omits. The view carries
   the catalogue fields, the param contract (`:param-spec` identity with its live
   `s/form` graph, the shared `skein.api.spec.alpha` nested `contract` tree and
-  copyable `template` skeleton, plus `:defaults`), and the declared summary:
+  copyable `template` skeleton — both carrying authored `:param-docs` over the
+  hoisted predicate docs — plus `:defaults` and the authored `:example` when
+  the definition ships one), and the declared summary:
   entry items, loops, gates, checkpoint choice keys, calls, defers with their
   bound targets, and the registered workflows the definition routes to.
 
@@ -1486,12 +1496,21 @@
 ;; default some keys and still require the caller to supply the rest, so this
 ;; owns their shape only. The whole merged map answers to `:param-spec`.
 (s/def ::defaults (s/map-of keyword? any?))
+;; Authored params documentation. The example is the exact image of the JSON
+;; boundary so a caller can copy it into `--params` verbatim; the docs anchor
+;; on the outer keys a caller writes. `validate-param-authoring!` owns the
+;; live-spec judgements these shapes cannot express: the example satisfying
+;; `:param-spec` whole, and every documented key being declared.
+(s/def ::example specs/json-params-image?)
+(s/def ::param-docs (s/map-of keyword? ::doc :min-count 1))
 (s/def ::workflow-options
   (s/keys :opt-un [::attributes ::state ::form
-                   ::doc ::entrypoints ::param-spec ::defaults]))
+                   ::doc ::entrypoints ::param-spec ::defaults
+                   ::example ::param-docs]))
 (s/def ::definition
   (s/merge ::workflow
-           (s/keys :opt-un [::doc ::entrypoints ::param-spec ::defaults])))
+           (s/keys :opt-un [::doc ::entrypoints ::param-spec ::defaults
+                            ::example ::param-docs])))
 (s/def ::registry-name keyword?)
 (s/def ::definition-symbol qualified-symbol?)
 
@@ -1572,13 +1591,15 @@
 (s/def :skein.spools.workflow.view.params/defaults (s/map-of keyword? any?))
 (s/def :skein.spools.workflow.view.params/contract (s/map-of string? any?))
 (s/def :skein.spools.workflow.view.params/template any?)
+(s/def :skein.spools.workflow.view.params/example ::example)
 (s/def :skein.spools.workflow.view/params
   (s/keys :req-un [:skein.spools.workflow.view.params/kind]
           :opt-un [:skein.spools.workflow.view.params/spec
                    :skein.spools.workflow.view.params/spec-forms
                    :skein.spools.workflow.view.params/contract
                    :skein.spools.workflow.view.params/template
-                   :skein.spools.workflow.view.params/defaults]))
+                   :skein.spools.workflow.view.params/defaults
+                   :skein.spools.workflow.view.params/example]))
 
 ;; Declared summary, with one nested shape per declared role. Each carries the
 ;; declaration and nothing derived from params: a loop names where its items come
@@ -1992,10 +2013,11 @@
    :contract (spec-entry ::definition
                          (fmt/reflow "
                          |A definition is a workflow plus the optional registration
-                         |contract :doc, :entrypoints, :param-spec, and :defaults. The
-                         |same options may be passed to the workflow builder directly;
-                         |defworkflow additionally collects the Var's qualified symbol
-                         |while a module contribution collector is active.")
+                         |contract :doc, :entrypoints, :param-spec, :defaults,
+                         |:example, and :param-docs. The same options may be passed to
+                         |the workflow builder directly; defworkflow additionally
+                         |collects the Var's qualified symbol while a module
+                         |contribution collector is active.")
                          '(defworkflow build
                             "Build an agreed feature scope."
                             {:entrypoints #{:start :continue}
@@ -2017,7 +2039,18 @@
             :defaults (fmt/reflow "
                        |Partial keyword-keyed overlay merged under caller params. Values
                        |must be JSON-compatible; it need not satisfy :param-spec on its
-                       |own, because the caller supplies the rest.")}
+                       |own, because the caller supplies the rest.")
+            :example (fmt/reflow "
+                      |One complete JSON-compatible params map, validated whole against
+                      |the live :param-spec at definition construction so it cannot
+                      |drift. Discovery shows it beside the contract as a copyable
+                      |--params object. Requires :param-spec.")
+            :param-docs (fmt/reflow "
+                         |Keyword map from the outer keys the :param-spec s/keys form
+                         |declares to non-blank intent strings. A doc for an undeclared
+                         |key fails at construction; an authored doc overrides the
+                         |predicate-var docstring in the discovery contract and
+                         |template views. Requires :param-spec.")}
    :resolution (fmt/reflow "
                 |A registered symbol must resolve to a static definition map. One
                 |resolving to anything else — a function, a vector, a string — fails
@@ -2118,7 +2151,40 @@
 (def ^:private defer-opt-keys #{:description :attributes :depends-on :title})
 (def ^:private advance-opt-keys #{:choice :input :step :by :attributes})
 (def ^:private workflow-opt-keys
-  #{:attributes :state :form :doc :entrypoints :param-spec :defaults})
+  #{:attributes :state :form :doc :entrypoints :param-spec :defaults
+    :example :param-docs})
+
+(defn- validate-param-authoring!
+  "Validate authored `:example` and `:param-docs` against the live
+  `:param-spec`; return `definition`.
+
+  Construction is the only honest time to judge authored documentation: an
+  example validated here cannot drift from the spec silently, and a doc for a
+  key the spec never declares is a typo, not documentation. Both options
+  therefore require a `:param-spec` to anchor to; the example must satisfy the
+  live spec whole (the failure carries the projection fields and explain text,
+  like any params failure), and every documented key must be an outer key the
+  spec's `s/keys` form declares."
+  [{:keys [param-spec example param-docs] :as definition}]
+  (when (or example param-docs)
+    (when-not param-spec
+      (fail! "Workflow :example and :param-docs require a :param-spec to anchor to"
+             {:reason :workflow/param-authoring-unanchored
+              :example example
+              :param-docs param-docs}))
+    (specs/require-spec! param-spec :workflow/spec-missing {})
+    (when param-docs
+      (let [declared (specs/declared-outer-keys param-spec)
+            unknown (remove (comp declared specs/outer-key-name) (keys param-docs))]
+        (when (seq unknown)
+          (fail! "Workflow :param-docs documents keys its :param-spec never declares"
+                 {:reason :workflow/param-docs-unknown-key
+                  :spec param-spec
+                  :unknown (vec unknown)
+                  :declared (vec (sort declared))}))))
+    (when example
+      (specs/require-conformant! param-spec example :workflow/example-invalid {})))
+  definition)
 (def ^:private choice-opt-keys #{:key :label :description :next :input :revise})
 (def ^:private choice-input-spec-opt-keys #{:spec :doc})
 

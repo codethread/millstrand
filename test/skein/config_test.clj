@@ -12,6 +12,7 @@
             [clojure.test :refer [deftest is testing]]
             [skein.core.db-test :as db-test]
             [skein.api.current.alpha :as current]
+            [skein.api.format.alpha :as fmt]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :as spool-api]
             [skein.api.graph.alpha :as graph]
@@ -538,6 +539,44 @@
                                          :version "latest"}]
                                 :branch "bump-demo"
                                 :worktree "/tmp/bump-demo"})])))))))
+
+(deftest spool-bump-workflow-show-carries-authored-example-and-docs
+  (with-startup-config-runtime
+    (fn [_rt]
+      (let [params (:params (op! "workflow" ["show" "spool-bump"]))
+            entry (fn [key]
+                    (first (filter #(= key (get % "key"))
+                                   (get-in params [:contract "required"]))))]
+        (is (= {:bumps [{:family "codethread/kanban" :version "latest"}
+                        {:family "codethread/devflow" :version "v12"}]
+                :branch "bump-kanban-devflow"
+                :worktree "/abs/path/to/skein-src__bump-kanban-devflow"
+                :direct-user-request false}
+               (:example params))
+            "the authored example is the copyable --params object")
+        (is (= {"bumps" [{"family" "<Return true when v is a non-blank string.>"
+                          "version"
+                          (str "<" (fmt/reflow
+                                    "|Return true for the latest release
+                                     |selector or an annotated vN marker.") ">")}]
+                "branch" "<Bump branch to create for the change.>"
+                "worktree"
+                (str "<" (fmt/reflow
+                          "|Absolute feature worktree path for the branch; its
+                           |.skein directory is the selected workspace the bump
+                           |runs against.") ">")
+                "direct-user-request"
+                (str "<" (fmt/reflow
+                          "|True only when the user asked for this bump
+                           |directly; gates the final canonical weaver
+                           |stop/start step.") ">")}
+               (:template params))
+            "authored docs render as the template placeholders")
+        (is (= (fmt/reflow
+                "|One {family, version} record per spool family; version is
+                 |latest or an annotated vN release marker.")
+               (get (entry "bumps") "doc"))
+            "a structural key carries its authored doc in the contract entry")))))
 
 (deftest repo-config-publishes-no-devflow-alias-ops
   (with-startup-config-runtime

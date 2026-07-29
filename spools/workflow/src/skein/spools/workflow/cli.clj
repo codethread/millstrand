@@ -212,8 +212,8 @@
                        |is a workflow show away.")]}}
     "show" {:doc (fmt/reflow
                   "|Show one registered workflow definition in full: the param
-                   |contract, template, defaults, spec forms, and declared
-                   |shape.")
+                   |contract, template, defaults, spec forms, authored example
+                   |and per-key docs, and declared shape.")
             :hook-class :read
             :deadline-class :standard
             :positionals [{:name :workflow
