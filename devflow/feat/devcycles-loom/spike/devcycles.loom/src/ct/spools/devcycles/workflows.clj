@@ -6,6 +6,7 @@
   as bindings data, and defer points whose default `:call` targets ship
   in this spool so nothing needs a consumer registration to load."
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [skein.spools.workflow :as workflow]))
 
 ;; --- params ------------------------------------------------------------------
@@ -45,15 +46,29 @@
                     "shell/timeout-secs" 5400}
    "land.merge" {"shell/argv" ["gh" "pr" "merge" "--squash" "--auto"]}})
 
+(def ^:private owned-prefixes
+  "Action-ref prefixes whose validation this surface owns. Foreign-prefixed
+  bindings flow through UNvalidated: a run binds every style once at start,
+  and refs for a deferred/nested definition (e.g. \"cleanup.teardown\") pass
+  here to be judged by the definition that owns their prefix."
+  #{"land." "fix."})
+
 (defn- binds-declared-surface?
-  "True when every bound action-ref and attr key exists in `bindable` —
-  a typo fails at `workflow start` (TEN-003), never silently merges into
-  an attribute nothing reads."
+  "Strict for owned prefixes — an owned action-ref must exist in `bindable`
+  with only declared attr keys, so a typo fails at `workflow start`
+  (TEN-003) — permissive for foreign prefixes (see `owned-prefixes`)."
   [bindings]
   (every? (fn [[action-ref attrs]]
-            (when-let [declared (get bindable action-ref)]
-              (every? (set (keys declared)) (keys attrs))))
+            (if (some #(str/starts-with? action-ref %) owned-prefixes)
+              (when-let [declared (get bindable action-ref)]
+                (every? (set (keys declared)) (keys attrs)))
+              true))
           bindings))
+;; Trade named: a typo inside a FOREIGN prefix ("cleanp.teardown") is caught
+;; by nobody until no definition claims it — the flow-through window. The
+;; workflow/bound promotion closes it globally: with every definition's
+;; surface registered, validation can refuse a ref no loaded definition
+;; declares while still letting cross-definition bindings ride one params map.
 
 (defn gate-attr
   "Return a render thunk for one bound gate attribute: the consumer's
