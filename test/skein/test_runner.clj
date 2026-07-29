@@ -24,6 +24,7 @@
    ;; pure findings logic over its own temp-dir fixtures — no shared state.
    'skein.quality.conventions-check-test
    'skein.api.return-shape.alpha-test
+   'skein.api.spec.alpha-test
    'skein.api.clock.alpha-test
    'skein.api.format.alpha-test
    ;; drives its own unpublished runtime per test — no JVM-global state.
