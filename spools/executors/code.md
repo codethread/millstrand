@@ -34,7 +34,7 @@ Reconciliation scans durable ready gates immediately.
 | `code/params` | yes | JSON object poured with the gate. Missing or non-object values fail loudly. |
 | `code/timeout-secs` | no | Positive-integer wall-clock bound. Invalid values fail loudly. |
 
-The executor consults the named specs `:skein.spools.executors.code/fn`, `:skein.spools.executors.code/params`, and `:skein.spools.executors.code/timeout-secs` before invocation. Their combined request contract is `:skein.spools.executors.code/request`. Successful return values must satisfy `:skein.spools.executors.code/result`.
+The executor consults the named specs `:code/fn`, `:code/params`, and `:code/timeout-secs` — registered under the attribute names themselves — before invocation. Their combined request contract is `:skein.spools.executors.code/request`, declared on the executor's registry entry, so `strand workflow executors` projects the contract, a copyable attribute template, and the printed form graph without reading this spool's source. Successful return values must satisfy `:skein.spools.executors.code/result`.
 
 Request attributes are snapshots. Function resolution happens when the gate executes, so a Var redefinition can repair an already-poured stalled gate after `gate/error` is cleared. The poured params do not change.
 

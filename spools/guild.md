@@ -62,10 +62,12 @@ At invocation time, `guild list` prefers the runtime metadata name published by 
 |---|---|
 | `runtime` | The weaver runtime to register into. |
 | `name` | Simple unqualified symbol or keyword. By convention use a dotted, version-suffixed handle such as `gate.status.v1`. |
-| `opts` | Map supporting `:doc`, optional `:input-spec`, and optional output `:returns`. Unknown keys fail loudly. |
+| `opts` | Map satisfying the owning `::register-op-opts` spec: required `:hook-class` (`:read` or `:mutating`) and `:deadline-class` (`:standard` or `:unbounded`), plus optional `:doc`, `:input-spec`, and output `:returns`. Unknown keys fail loudly. |
 | `fn-sym` | Fully qualified symbol resolving to the handler function in the weaver JVM. |
 
 Guild op invocation accepts zero arguments or one JSON input argument. The spool parses that JSON to `:guild/input`, validates it against `:input-spec` when supplied, and then calls the resolved handler with the ordinary op context plus `:guild/input`.
+
+A declared `:input-spec` is discoverable before invocation: it rides the generic arg `:spec` convention (SPEC-003.C70), so `strand help <op>` projects the registered spec's nested contract and a copyable JSON template on the `input` positional. Invalid input fails with the same projection fields (`spec`, `spec-forms`, `contract`, `template`) plus `explain` text, so a worker gets the contract and the violation in one payload.
 
 `:returns` uses the shared registry return declaration from
 [`skein.api.return-shape.alpha`](../docs/api/return-shape.api.md). It describes
@@ -102,7 +104,7 @@ Peers call `guild list` through the ordinary `op` socket operation. It returns J
 ```clojure
 {:guild "backend"
  :operation "guild list"
- :active [{:name "gate.status.v1" :doc "Return whether the named gate is satisfied." :input-spec ":backend/gate-status-input"}]
+ :active [{:name "gate.status.v1" :doc "Return whether the named gate is satisfied." :input-spec "backend/gate-status-input"}]
  :deprecated [{:name "gate.old.v1" :replacement "gate.status.v1" :since "2026-07-02"}]}
 ```
 

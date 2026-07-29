@@ -11,6 +11,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.registry.alpha :as registry]
+            [skein.api.spec.alpha :as spec-alpha]
             [skein.api.weaver.alpha :as weaver]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :as spool :refer [fail!]]))
@@ -72,8 +73,17 @@
 (def ^:private register-op-opt-keys #{:doc :input-spec :returns :hook-class :deadline-class})
 (def ^:private deprecate-opt-keys #{:replacement :since})
 
-(def ^:private hook-classes #{:read :mutating})
-(def ^:private deadline-classes #{:standard :unbounded})
+(s/def ::hook-class #{:read :mutating})
+(s/def ::deadline-class #{:standard :unbounded})
+(s/def ::doc string?)
+(s/def ::input-spec (s/or :keyword keyword? :symbol symbol?))
+;; :returns shape authority is skein.api.return-shape.alpha at op registration;
+;; this spec owns only presence-with-value.
+(s/def ::returns some?)
+
+(s/def ::register-op-opts
+  (s/keys :req-un [::hook-class ::deadline-class]
+          :opt-un [::doc ::input-spec ::returns]))
 
 (defn- require-spec-name! [spec-name]
   (when-not (or (keyword? spec-name) (symbol? spec-name))
@@ -87,20 +97,31 @@
     (json/read-str input :key-fn keyword)
     {}))
 
+(defn- spec-name-str
+  "The canonical wire spelling of a spec name: `ns/name`, no leading colon —
+  the same spelling the help projection's `spec` field uses (SPEC-003.C23c)."
+  [spec-name]
+  (if (keyword? spec-name)
+    (subs (str spec-name) 1)
+    (str spec-name)))
+
 (defn- input-spec-summary [spec-name]
   (when spec-name
-    {:input-spec (str spec-name)}))
+    {:input-spec (spec-name-str spec-name)}))
 
 (defn- validate-input! [name spec-name input]
   (when spec-name
     (require-spec-name! spec-name)
     (when-not (s/valid? spec-name input)
-      (let [explain (s/explain-data spec-name input)]
+      (let [bundle (spec-alpha/projection spec-name)]
         (fail! "Guild op input failed spec validation"
                {:code :operation/input-invalid
                 :operation name
-                :input-spec (str spec-name)
-                :explain explain}))))
+                :spec (get bundle "spec")
+                :spec-forms (get bundle "spec-forms")
+                :contract (get bundle "contract")
+                :template (get bundle "template")
+                :explain (spec-alpha/explain-text spec-name input)}))))
   input)
 
 (defn- op-registered? [runtime name]
@@ -111,13 +132,18 @@
       false)))
 
 (defn- op-arg-spec
-  "Return a parser arg-spec for a guild op."
-  [name doc hook-class deadline-class]
+  "Return a parser arg-spec for a guild op.
+
+  A declared `:input-spec` rides the generic arg `:spec` convention
+  (SPEC-003.C70): `strand help <op>` then projects the input contract, so
+  guild needs no shape-discovery verb of its own."
+  [name doc hook-class deadline-class input-spec]
   {:op (clojure.core/name name)
    :doc doc
-   :positionals [{:name :input
-                  :type :string
-                  :doc "Optional JSON object input."}]
+   :positionals [(cond-> {:name :input
+                          :type :string
+                          :doc "Optional JSON object input."}
+                   input-spec (assoc :spec input-spec))]
    :hook-class hook-class
    :deadline-class deadline-class})
 
@@ -156,9 +182,10 @@
      (if (op-registered? runtime name)
        (weaver/replace-op! runtime name metadata handler-sym)
        (weaver/register-op! runtime name metadata handler-sym))))
-  ([runtime name doc handler-sym returns hook-class deadline-class]
+  ([runtime name doc handler-sym returns hook-class deadline-class input-spec]
    (register-or-replace-op! runtime name doc handler-sym
-                            (op-arg-spec name doc hook-class deadline-class) returns)))
+                            (op-arg-spec name doc hook-class deadline-class input-spec)
+                            returns)))
 
 (defn dispatch-op
   "Dispatch a guild-declared operation after parsing and validating input."
@@ -183,22 +210,29 @@
   "Register a guild operation in `runtime`'s CLI operation registry.
 
   `name` is a simple unqualified registry handle, conventionally dotted and
-  version-suffixed such as `gate.close.v1`. `opts` requires caller-supplied
-  leaf `:hook-class` (`:read` or `:mutating`) and `:deadline-class` (`:standard`
-  or `:unbounded`), plus supports `:doc`, optional `:input-spec`, and optional
-  `:returns`; unknown options fail loudly. Guild supplies no class defaults.
+  version-suffixed such as `gate.close.v1`. `opts` must satisfy the owning
+  `::register-op-opts` spec: caller-supplied leaf `:hook-class` (`:read` or
+  `:mutating`) and `:deadline-class` (`:standard` or `:unbounded`), plus
+  optional `:doc`, `:input-spec`, and `:returns`; unknown options fail
+  loudly. Guild supplies no class defaults.
   `:returns` is the shared registry return-shape declaration, not a
   Guild-specific schema. `fn-sym` must be a fully qualified symbol resolving in
   the weaver JVM. The handler receives the usual op context plus parsed JSON
-  input at `:guild/input`."
+  input at `:guild/input`.
+
+  A declared `:input-spec` is discoverable over the wire: it rides the generic
+  arg `:spec` convention (SPEC-003.C70), so `strand help <op>` projects the
+  registered spec's contract and template, and invalid input fails with the
+  same projection fields plus explain text."
   [runtime name opts fn-sym]
   (when-not (map? opts)
     (fail! "Guild op opts must be a map" {:opts opts}))
   (spool/reject-unknown-keys! "guild/register-op!" register-op-opt-keys opts)
-  (when-not (hook-classes (:hook-class opts))
-    (fail! "Guild op requires :hook-class :read or :mutating" {:opts opts}))
-  (when-not (deadline-classes (:deadline-class opts))
-    (fail! "Guild op requires :deadline-class :standard or :unbounded" {:opts opts}))
+  (when-not (s/valid? ::register-op-opts opts)
+    (fail! "Guild op opts failed spec validation"
+           {:opts opts
+            :spec (spec-name-str ::register-op-opts)
+            :explain (s/explain-str ::register-op-opts opts)}))
   (when-not (and (symbol? fn-sym) (namespace fn-sym))
     (fail! "Guild op handler must be a fully qualified symbol" {:handler fn-sym}))
   (requiring-resolve fn-sym)
@@ -206,7 +240,8 @@
     (require-spec-name! input-spec))
   (let [registered (register-or-replace-op! runtime name (:doc opts)
                                             'skein.spools.guild/dispatch-op (:returns opts)
-                                            (:hook-class opts) (:deadline-class opts))
+                                            (:hook-class opts) (:deadline-class opts)
+                                            (:input-spec opts))
         entry (cond-> {:name (:name registered)
                        :handler fn-sym
                        :hook-class (:hook-class opts)
@@ -242,7 +277,10 @@
         deprecated (select-keys opts [:replacement :since])]
     (register-or-replace-op! runtime name (:doc entry)
                              'skein.spools.guild/deprecated-op (:returns entry)
-                             (:hook-class entry) (:deadline-class entry))
+                             (:hook-class entry) (:deadline-class entry)
+                             ;; a deprecation stub never validates input, so it
+                             ;; stops projecting the retired input contract
+                             nil)
     (swap! (guild-ops runtime) dissoc (:name entry))
     (swap! (deprecated-ops runtime) assoc (:name entry) (assoc deprecated :doc (:doc entry)))
     (publish-declarations! runtime)

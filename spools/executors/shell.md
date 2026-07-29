@@ -39,6 +39,8 @@ Reconciliation runs an initial gate scan, so any durable ready `:shell` gate is 
 
 All `shell/*` values are plain JSON `TEXT` on the gate strand, authored in the trusted workflow definition (pour-time params supply only the data the definition interpolates).
 
+The contract is spec-backed: the executor consults the named specs `:shell/argv`, `:shell/cwd`, and `:shell/timeout-secs` — registered under the attribute names themselves — and their combined request contract `:skein.spools.executors.shell/request` before any process spawns. The request spec is declared on the executor's registry entry, so `strand workflow executors` projects the contract, a copyable attribute template, and the printed form graph without reading this spool's source; an invalid request stamps `gate/error` with the spec identity and its explain text.
+
 | Attribute | Required | Meaning |
 |---|---|---|
 | `workflow/gate` = `"shell"` | yes | Marks a ready workflow gate for shell-executor fulfillment. Other waiters are ignored. |

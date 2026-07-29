@@ -1291,23 +1291,43 @@
     (cons (str (indent depth) label ":")
           (map #(str (indent (inc depth)) "- " %) items))))
 
-(defn- flag-line
-  "Render one declared flag as a single readable line."
-  [depth {:keys [flag type required repeat parse doc]}]
-  (str (indent depth) flag " <" type ">"
-       (when required " (required)")
+(defn- arg-markers
+  "Render the shared trailing markers of a flag or positional line."
+  [{:keys [required repeat variadic parse spec doc]}]
+  (str (when required " (required)")
        (when repeat " (repeatable)")
-       (when parse (str " {parse " parse "}"))
-       (when (seq doc) (str "  " doc))))
-
-(defn- positional-line
-  "Render one declared positional as a single readable line."
-  [depth {:keys [name type required variadic parse doc]}]
-  (str (indent depth) "<" name "> <" type ">"
-       (when required " (required)")
        (when variadic " (variadic)")
        (when parse (str " {parse " parse "}"))
+       (when spec (str " {spec " spec "}"))
        (when (seq doc) (str "  " doc))))
+
+(declare shape-lines)
+
+(defn- template-lines
+  "Render a declared-spec copyable template block under its arg line, or nil."
+  [depth template]
+  (when (some? template)
+    (cons (str (indent depth) "template:")
+          (shape-lines (inc depth) template))))
+
+(defn- flag-lines
+  "Render one declared flag: its line, then any declared-spec template block.
+
+  A presence `:boolean` flag takes no value on the command line, so its line
+  renders the bare token with no value placeholder; every value-consuming type
+  keeps its `<type>` form."
+  [depth {:keys [flag type template] :as entry}]
+  (cons (str (indent depth) flag
+             (when-not (= type "boolean") (str " <" type ">"))
+             (arg-markers entry))
+        (template-lines (inc depth) template)))
+
+(defn- positional-lines
+  "Render one declared positional: its line, then any declared-spec template
+  block."
+  [depth {:keys [name type template] :as entry}]
+  (cons (str (indent depth) "<" name "> <" type ">" (arg-markers entry))
+        (template-lines (inc depth) template)))
 
 (defn- shape-lines
   "Render one JSON-safe return-shape value as indented readable lines.
@@ -1360,10 +1380,10 @@
        [(str (indent field) "hook-class: " hook-class "   deadline: " deadline-class)])
      (when (seq (:flags invocation))
        (cons (str (indent field) "flags:")
-             (map #(flag-line entry %) (:flags invocation))))
+             (mapcat #(flag-lines entry %) (:flags invocation))))
      (when (seq (:positionals invocation))
        (cons (str (indent field) "positionals:")
-             (map #(positional-line entry %) (:positionals invocation))))
+             (mapcat #(positional-lines entry %) (:positionals invocation))))
      (when returns
        (cons (str (indent field) "returns:")
              (shape-lines entry returns)))

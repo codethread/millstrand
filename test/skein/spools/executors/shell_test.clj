@@ -186,6 +186,9 @@
                                              (when (attr g :gate/error) g)))]
             (is (= "active" (:state errored)) (str "case " i))
             (is (str/includes? (attr errored :gate/error) expected) (str "case " i))
+            (is (str/includes? (attr errored :gate/error)
+                               "skein.spools.executors.shell/request")
+                (str "case " i ": the stamped detail names the request spec"))
             ;; no process ran: no exit code and no captured output
             (is (nil? (attr errored :shell/exit-code)) (str "case " i))
             (is (nil? (attr errored :shell/output)) (str "case " i))))))))
@@ -281,7 +284,9 @@
   (with-runtime
     (fn [rt _]
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
-      (is (= {workflow/executor-kind {"shell" 'skein.spools.executors.shell/gate-stalled?}
+      (is (= {workflow/executor-kind
+              {"shell" {:stalled? 'skein.spools.executors.shell/gate-stalled?
+                        :request-spec :skein.spools.executors.shell/request}}
               :queries {"stalled-shell-gates" shell/stalled-shell-gates-query}}
              (shell/contribute {:runtime rt}))))))
 

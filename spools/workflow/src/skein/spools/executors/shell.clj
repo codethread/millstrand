@@ -13,9 +13,10 @@
   only adapter that knows both the workflow gate contract and process
   execution."
   (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.spools.workflow :as workflow]
-            [skein.api.spool.alpha :refer [fail! attr-get]]
+            [skein.api.spool.alpha :refer [fail! attr-get require-valid!]]
             [skein.api.weaver.alpha :as weaver]
             [skein.api.events.alpha :as events]
             [skein.api.current.alpha :as current]
@@ -105,18 +106,47 @@
 ;; ---------------------------------------------------------------------------
 ;; Gate attribute contract
 
+(defn non-blank-string?
+  "Non-blank string."
+  [value]
+  (and (string? value) (not (str/blank? value))))
+
+(s/def :shell/argv (s/coll-of string? :kind sequential? :min-count 1))
+(s/def :shell/cwd non-blank-string?)
+(s/def :shell/timeout-secs pos-int?)
+(s/def ::request
+  (s/keys :req [:shell/argv] :opt [:shell/cwd :shell/timeout-secs]))
+(s/def ::id string?)
+(s/def ::gate-view (s/keys :req-un [::id]))
+(s/def ::gate string?)
+(s/def ::error any?)
+(s/def ::stall-detail (s/nilable (s/keys :req-un [::gate ::error])))
+
+(defn- require-request!
+  "Validate the gate's `shell/*` request attributes against `::request` before
+  any process spawns, failing loudly (TEN-003) with the shared explain
+  vocabulary so the stamped `gate/error` names the spec and the failed keys."
+  [gate]
+  (let [request (cond-> {:shell/argv (attr gate :shell/argv)}
+                  (stamped? gate :shell/cwd)
+                  (assoc :shell/cwd (attr gate :shell/cwd))
+                  (stamped? gate :shell/timeout-secs)
+                  (assoc :shell/timeout-secs (attr gate :shell/timeout-secs)))]
+    (when-not (s/valid? ::request request)
+      (fail! "shell gate request must satisfy shell/argv, shell/cwd, and shell/timeout-secs"
+             {:gate (:id gate) :value request :spec ::request
+              :explain (s/explain-str ::request request)}))))
+
 (defn- parse-argv
   "Return the gate's `shell/argv` as a validated `List<String>`, or fail loudly
   (TEN-003) so no process spawns. Missing, non-array, empty, or non-string-element
   argv is a hard error stamped onto `gate/error`."
   [gate]
   (let [argv (attr gate :shell/argv)]
-    (when-not (sequential? argv)
-      (fail! "shell/argv must be a JSON array of strings" {:gate (:id gate) :argv argv}))
-    (when (empty? argv)
-      (fail! "shell/argv must be a non-empty array" {:gate (:id gate)}))
-    (when-not (every? string? argv)
-      (fail! "shell/argv elements must all be strings" {:gate (:id gate) :argv argv}))
+    (when-not (s/valid? :shell/argv argv)
+      (fail! "shell/argv must be a non-empty JSON array of strings"
+             {:gate (:id gate) :value argv :spec :shell/argv
+              :explain (s/explain-str :shell/argv argv)}))
     (vec argv)))
 
 (defn- parse-timeout
@@ -127,8 +157,10 @@
   (let [v (attr gate :shell/timeout-secs)]
     (cond
       (nil? v) nil
-      (and (integer? v) (pos? v)) (long v)
-      :else (fail! "shell/timeout-secs must be a positive integer" {:gate (:id gate) :value v}))))
+      (s/valid? :shell/timeout-secs v) (long v)
+      :else (fail! "shell/timeout-secs must be a positive integer"
+                   {:gate (:id gate) :value v :spec :shell/timeout-secs
+                    :explain (s/explain-str :shell/timeout-secs v)}))))
 
 (defn- parse-cwd
   "Return the optional `shell/cwd` string, or fail loudly on malformed values."
@@ -136,8 +168,10 @@
   (let [v (attr gate :shell/cwd)]
     (cond
       (nil? v) nil
-      (and (string? v) (not (str/blank? v))) v
-      :else (fail! "shell/cwd must be a non-blank string" {:gate (:id gate) :value v}))))
+      (s/valid? :shell/cwd v) v
+      :else (fail! "shell/cwd must be a non-blank string"
+                   {:gate (:id gate) :value v :spec :shell/cwd
+                    :explain (s/explain-str :shell/cwd v)}))))
 
 ;; ---------------------------------------------------------------------------
 ;; Process execution (worker thread only)
@@ -242,6 +276,7 @@
   [run-id gate-id]
   (try
     (let [gate (weaver/show (rt) gate-id)
+          _ (require-request! gate)
           argv (parse-argv gate)
           timeout-secs (parse-timeout gate)
           cwd (parse-cwd gate)
@@ -312,9 +347,11 @@
   the subagent executor — there is no `delegates`-edge join back to a separate
   run row."
   [gate-view]
-  (let [gate (weaver/show (rt) (:id gate-view))]
-    (when (stamped? gate :gate/error)
-      {:gate (:id gate) :error (attr gate :gate/error)})))
+  (require-valid! ::gate-view gate-view "Invalid shell gate view")
+  (let [gate (weaver/show (rt) (:id gate-view))
+        result (when (stamped? gate :gate/error)
+                 {:gate (:id gate) :error (attr gate :gate/error)})]
+    (require-valid! ::stall-detail result "Invalid shell gate stall detail")))
 
 ;; ---------------------------------------------------------------------------
 ;; Owner declarations and resource reconciliation
@@ -361,11 +398,14 @@
   `stalled-shell-gates` query, published owner-complete.
 
   Both disappear by omission when this module is refreshed away
-  (DELTA-OlrDrt-001.CC2). The executor entry is the stall predicate symbol; its
-  resolution to a function value happens per gate evaluation (CC10). The event
-  handler and worker pool are not declarative data — `reconcile` owns them."
+  (DELTA-OlrDrt-001.CC2). The executor entry declares the stall predicate
+  symbol — resolved to a function value per gate evaluation (CC10) — and the
+  `::request` gate-request spec, which `workflow executor-catalog` projects as
+  the discoverable `shell/*` contract. The event handler and worker pool are
+  not declarative data — `reconcile` owns them."
   [_ctx]
-  {workflow/executor-kind {"shell" gate-stalled-symbol}
+  {workflow/executor-kind {"shell" {:stalled? gate-stalled-symbol
+                                    :request-spec ::request}}
    :queries {"stalled-shell-gates" stalled-shell-gates-query}})
 
 (defn reconcile

@@ -1865,6 +1865,71 @@
         (is (= {:by :a} (snapshot {}))
             "a value captured for an in-flight call keeps its snapshot")))))
 
+(deftest executor-unresolved-stall-symbol-fails-loudly
+  ;; A declared stall symbol whose Var no longer exists must not read as an
+  ;; absent executor: both lookup paths name the waiter and symbol.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-executor! :exec-gone 'skein.spools.workflow-test/no-such-predicate)
+      (let [err (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                      #"stall symbol does not resolve"
+                                      (wf-registry/executor-for rt "exec-gone")))]
+        (is (= "exec-gone" (:waiter (ex-data err))))
+        (is (= 'skein.spools.workflow-test/no-such-predicate (:stalled? (ex-data err)))))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"stall symbol does not resolve"
+                            (wf-registry/executor-map rt))))))
+
+(s/def :decl-exec/target string?)
+(s/def ::decl-exec-request (s/keys :req [:decl-exec/target]))
+
+(deftest executor-declaration-map-registers-and-projects
+  ;; A declaration-map entry names the stall predicate and the gate-request
+  ;; spec; the catalogue projects the contract while gate evaluation resolves
+  ;; the same predicate a bare symbol would.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-executor!
+       :decl-exec {:stalled? 'skein.spools.workflow-test/exec-detail-a
+                   :request-spec ::decl-exec-request})
+      (is (= {:by :a} ((wf-registry/executor-for rt "decl-exec") {}))
+          "gate evaluation resolves the declared stall predicate")
+      (is (contains? (workflow/executors) :decl-exec))
+      (let [item (first (filter #(= "decl-exec" (:waiter %))
+                                (workflow/executor-catalog)))]
+        (is (= "skein.spools.workflow-test/exec-detail-a" (:stall-predicate item)))
+        (is (= "skein.spools.workflow-test/decl-exec-request"
+               (get-in item [:request :spec])))
+        (is (= ["decl-exec/target"]
+               (mapv #(get % "key")
+                     (get-in item [:request :contract "required"])))
+            "the projected contract names the exact qualified attribute key")
+        (is (contains? (get-in item [:request :template]) "decl-exec/target")
+            "the template is keyed by the attribute spelling an author writes")))))
+
+(deftest executor-declaration-map-with-bad-shape-fails-loudly
+  ;; A map is ifn?, so a mistyped declaration must fail loudly rather than
+  ;; silently register as a lookup predicate.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Executor declaration map"
+                            (workflow/register-executor!
+                             :bad-decl {:stalledd? 'skein.spools.workflow-test/exec-detail-a}))))))
+
+(deftest executor-catalog-fails-loudly-on-an-unresolvable-request-spec
+  ;; A declared spec that no longer resolves must not read as an executor with
+  ;; no contract.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-executor!
+       :stale-decl {:stalled? 'skein.spools.workflow-test/exec-detail-a
+                    :request-spec ::never-registered-request})
+      (is (= :workflow/spec-missing
+             (failure-reason workflow/executor-catalog))))))
+
 (deftest workflow-owner-refresh-removes-omitted-definitions-and-executors
   ;; DW2 / kxhd4 R4 per-domain deletion completeness: an owner-complete
   ;; replacement removes any route or executor the new partition omits, and

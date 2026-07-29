@@ -49,11 +49,14 @@
     :repeat?   truthy -> repeatable, values collect into a vector
     :required? truthy -> must appear
     :parse     :json | :jsonl ; parse the resolved string value
+    :spec      qualified keyword or symbol naming a registered clojure.spec
+               of the parsed value — documentation the help projection
+               embeds (SPEC-003.C23c); the parser never consults it
     :doc       <string>
 
   A positional-spec is a map with :name (keyword), :type, :required?,
   :variadic? (trailing only, collects remaining tokens into a vector), :parse,
-  and :doc.
+  :spec, and :doc.
 
   Payload references (SPEC-003-D003.C2): after argv parsing, any whole string
   value equal to `:stdin` or `:payload/<name>` resolves to the matching entry in

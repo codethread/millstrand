@@ -829,8 +829,8 @@
             "choices is checkpoint discovery: a read, never a mutation")
         (is (= [:read :unbounded] ((juxt :hook-class :deadline-class) (leaf "await")))
             "await blocks by design and writes nothing")
-        (is (= #{"list" "show" "start" "ready" "choices" "complete" "choose" "next"
-                 "defer" "await"}
+        (is (= #{"list" "show" "executors" "start" "ready" "choices" "complete"
+                 "choose" "next" "defer" "await"}
                (set (keys (:subcommands (:arg-spec entry))))))
         (is (= (set (keys (:subcommands (:arg-spec entry))))
                (set (keys (:subcommands (:returns entry))))))))))

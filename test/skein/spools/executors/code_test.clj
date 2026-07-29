@@ -358,7 +358,8 @@
     (fn [rt _]
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
       (is (= {workflow/executor-kind
-              {"code" 'skein.spools.executors.code/gate-stalled?}
+              {"code" {:stalled? 'skein.spools.executors.code/gate-stalled?
+                       :request-spec :skein.spools.executors.code/request}}
               :queries
               {"stalled-code-gates"
                [:and [:= :state "active"]

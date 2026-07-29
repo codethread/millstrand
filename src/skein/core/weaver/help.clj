@@ -58,6 +58,7 @@
             [skein.api.cli.alpha :as cli]
             [skein.api.format.alpha :as format-alpha]
             [skein.api.return-shape.alpha :as return-shape]
+            [skein.api.spec.alpha :as spec-alpha]
             [skein.core.weaver.core-registry :as core-registry]))
 
 (def ^:private schema-version
@@ -189,21 +190,66 @@
   [entry explained]
   (or (:doc explained) (:doc entry)))
 
+(defn- projected-arg
+  "Embed the spec projection on one rendered flag/positional help entry.
+
+  A rendered entry whose source arg spec declared `:spec` accretes the blessed
+  projection fields (SPEC-003.C23c): `spec-forms`, `contract`, and `template` —
+  the same vocabulary every adopting wire surface speaks. The projection reads
+  the live spec registry at envelope build so the view tracks the current
+  spec; an unresolvable name FAILS LOUDLY (`discovery/arg-spec-unresolved`,
+  TEN-003) rather than silently dropping the declared contract."
+  [entry rendered raw-spec]
+  (if-let [spec-name (:spec raw-spec)]
+    (let [bundle (try
+                   (spec-alpha/projection spec-name)
+                   (catch clojure.lang.ExceptionInfo e
+                     (if (= :spec/unregistered (:reason (ex-data e)))
+                       (throw (ex-info
+                               "Declared arg :spec is not a registered spec at help projection"
+                               {:code "discovery/arg-spec-unresolved"
+                                :operation (:name entry)
+                                :arg (:name rendered)
+                                :spec (pr-str spec-name)}
+                               e))
+                       (throw e))))]
+      (assoc rendered
+             :spec-forms (get bundle "spec-forms")
+             :contract (get bundle "contract")
+             :template (get bundle "template")))
+    rendered))
+
+(defn- projected-flags
+  "Project `explained-flags` help entries, enriching each declared `:spec`.
+
+  Rendered flag entries carry only the flag's bare name, so the declared spec
+  ident is recovered from the raw node's `:flags` map by that name."
+  [entry raw explained-flags]
+  (let [raw-flags (into {} (map (fn [[k v]] [(name k) v])) (:flags raw))]
+    (mapv #(projected-arg entry % (get raw-flags (:name %))) explained-flags)))
+
+(defn- projected-positionals
+  "Project `explained-positionals` help entries, enriching each declared
+  `:spec`; rendered entries align with the raw `:positionals` vector by order."
+  [entry raw explained-positionals]
+  (mapv #(projected-arg entry %1 %2) explained-positionals (:positionals raw)))
+
 (defn- arg-node
   "Project one arg-spec node into the uniform fractal node, recursing over its
   declared subcommands to any depth (DELTA-Lhc-001.CC5).
 
-  `raw` is the arg-spec node (the source of annotations and leaf class
-  metadata), `explained` its `cli/explain` projection, and `returns` the
-  return-tree node mirroring this position (nil when the op declares none) —
-  an interior return node routes to the children, a leaf case renders."
+  `raw` is the arg-spec node (the source of annotations, leaf class metadata,
+  and declared arg `:spec` idents), `explained` its `cli/explain` projection,
+  and `returns` the return-tree node mirroring this position (nil when the op
+  declares none) — an interior return node routes to the children, a leaf case
+  renders."
   [entry node-name doc raw explained returns]
   (let [interior? (contains? raw :subcommands)
         routed-returns? (and (map? returns) (contains? returns :subcommands))]
     (node node-name doc
           {:mode "declared"
-           :flags (:flags explained)
-           :positionals (:positionals explained)}
+           :flags (projected-flags entry raw (:flags explained))
+           :positionals (projected-positionals entry raw (:positionals explained))}
           (when (and (not interior?) (some? returns) (not routed-returns?))
             (return-shape/explain returns))
           (:annotations raw)

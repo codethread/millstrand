@@ -16,7 +16,7 @@ This is userland spool code, not a separate scheduler or persistence system. Wor
 
 Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `defer`, `bind-defers`, `compile`, `pour!`, `wisp!`, and `explain`.
 
-The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `defer!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see [§5](#5-checkpoints-and-routing)), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see [§5b](#5b-registry-discovery)). That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`choices`/`complete`/`choose`/`next`/`defer`/`await` over the run lifecycle (see [§5c](#5c-driving-a-run)). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
+The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `defer!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see [§5](#5-checkpoints-and-routing)), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see [§5b](#5b-registry-discovery)); registered gate executors are read back with `executors`/`executor-catalog` or `workflow executors`. That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`choices`/`complete`/`choose`/`next`/`defer`/`await` over the run lifecycle (see [§5c](#5c-driving-a-run)). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
 
 Every run-mutating op (`start!`, `complete!`, `choose!`, `defer!`, `advance!`) returns one `{:ready [step-view ...] :done boolean}` map: `:ready` is the run's ready step views (as `ready` would return them) and `:done` is its done-ness, so an empty `:ready` never leaves a caller guessing whether the run finished or merely stalled. The pure queries `ready`/`ready-step` still return step views directly.
 
@@ -268,12 +268,17 @@ It returns `{:reason :done|:checkpoint|:defer|:step|:gate|:stalled|:timeout :rea
 - `:waiting` — the whole ready frontier is executor-owned gates whose
   predicates report no detail; nothing to do but keep polling.
 
-Executor registration is keyed by gate `waiter` name via `register-executor!` (a keyword/symbol/non-blank-string matching the `gate` waiter hint, e.g. `:subagent`, never `:self`), mirroring `register-workflow!` as weaver-lifetime runtime state. Invalid waiter values and non-invokable predicates fail at registration time:
+Executor registration is keyed by gate `waiter` name via `register-executor!` (a keyword/symbol/non-blank-string matching the `gate` waiter hint, e.g. `:subagent`, never `:self`), mirroring `register-workflow!` as weaver-lifetime runtime state. The registered value is a fully qualified stall-predicate symbol, a declaration map — the symbol under `:stalled?` plus an optional `:request-spec` naming the executor's registered gate-request spec — or a bare predicate function value. Invalid waiter values, malformed declaration maps, and non-invokable predicates fail at registration time:
 
 ```clojure
 (workflow/register-executor! :subagent gate-stalled?)   ; pred: ready gate view -> truthy detail | nil
+(workflow/register-executor! :shell {:stalled? 'skein.spools.executors.shell/gate-stalled?
+                                     :request-spec :skein.spools.executors.shell/request})
 (workflow/executors)                          ; => {:subagent gate-stalled? ...}
+(workflow/executor-catalog)                   ; discovery view: waiter, predicate, projected request contract
 ```
+
+A declared `:request-spec` is what makes the executor's gate attributes discoverable: `executor-catalog` (and the CLI `workflow executors`, [§5b](#5b-registry-discovery)) projects it through the shared `skein.api.spec.alpha` documentation projection, resolved live, and fails loudly when the name no longer resolves.
 
 This keeps the workflow namespace free of any executor's vocabulary: a waiter with no registered
 executor always surfaces as `:gate` immediately, and adapters such as the
@@ -527,6 +532,21 @@ The declared summary is exactly that: a summary of what the definition declares.
 Failures carry the reason and what to do about it: an unregistered name fails as `workflow/definition-unregistered` listing the registered names, and a definition whose Var has vanished since publication fails as `workflow/definition-unresolvable` with the owner and the three repair choices ([§5](#5-checkpoints-and-routing)). A `list` read fails the same way rather than quietly returning one workflow fewer.
 
 There is no family filter, pagination, JSON Schema projection, or registry mutation on this surface. Registration stays a trusted-Clojure and module-publication concern.
+
+### `workflow executors`
+
+The gate-authoring read: one item per registered gate waiter, in waiter order.
+
+```console
+$ strand workflow executors
+{"operation":"workflow executors",
+ "executors":[{"waiter":"shell",
+               "stall-predicate":"skein.spools.executors.shell/gate-stalled?",
+               "request":{"spec":"skein.spools.executors.shell/request",
+                          "spec-forms":[...],"contract":{...},"template":{"shell/argv":["<...>"],...}}}]}
+```
+
+Each item names the waiter and its stall-predicate symbol (`null` for a raw function value, which carries no declaration). An executor that declares a `:request-spec` also carries `request` — the shared `skein.api.spec.alpha` projection of its gate-request contract, whose `contract` and `template` are keyed by the exact attribute spellings a gate author writes. The projection resolves against the live spec registry at read time, and a declared spec that no longer resolves fails loudly as `workflow/spec-missing` rather than reading as an executor with no contract. An executor with no declared request spec lists without `request`; its gate attributes are documented by its own spool.
 
 ## 5c. Driving a run
 

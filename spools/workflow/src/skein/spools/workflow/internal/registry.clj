@@ -12,9 +12,11 @@
   Binding time follows DELTA-OlrDrt-001.CC10. Definition entries are qualified
   symbols resolved at each named route transition, so devflow's live route
   re-pointing takes effect on the next transition while a run already between
-  stages keeps the value it started with. Executor entries are qualified symbols
-  resolved to a function value at each gate evaluation; that resolution is the
-  per-evaluation snapshot.
+  stages keeps the value it started with. An executor entry is either a bare
+  stall-predicate symbol or a declaration map (`:stalled?` plus an optional
+  `:request-spec` naming the executor's registered gate-request spec); the
+  stall symbol is resolved to a function value at each gate evaluation, and
+  that resolution is the per-evaluation snapshot.
 
   A raw executor predicate *function value* carries no symbol — the unavoidable
   direct/REPL case (review note `vovp1` finding 3). Rather than store a function
@@ -41,16 +43,32 @@
   (DELTA-OlrDrt-001.CC3), matching the core registries' `:skein.owner/repl`."
   :skein.owner/repl)
 
-;; Entry specs the kinds validate against. Definitions and executors are both
-;; fully qualified symbols; a raw function value never reaches the kind.
+;; Entry specs the kinds validate against. Definitions are fully qualified
+;; symbols; an executor entry is a stall-predicate symbol or a declaration map,
+;; and a raw function value never reaches the kind.
 (s/def ::definition-symbol qualified-symbol?)
 (s/def ::executor-symbol qualified-symbol?)
+(s/def ::stalled? qualified-symbol?)
+(s/def ::request-spec qualified-keyword?)
+
+(defn- executor-decl-keys?
+  "True when a declaration map carries only the declared executor keys."
+  [decl]
+  (every? #{:stalled? :request-spec} (keys decl)))
+
+(s/def ::executor-decl
+  (s/and (s/keys :req-un [::stalled?] :opt-un [::request-spec])
+         executor-decl-keys?))
+
+(s/def ::executor-entry
+  (s/or :symbol ::executor-symbol
+        :decl ::executor-decl))
 
 (def ^:private registry-state-version
   "Shape version for the workflow registry handle. Bump when the declared kinds
   change: spool-state survives refresh, so a version mismatch reinitializes
   rather than reuse a stale handle."
-  2)
+  3)
 
 (defn- new-registry-handle []
   (doto (registry/registry)
@@ -65,7 +83,7 @@
       :candidate-validator
       'skein.spools.workflow.internal.definitions/validate-candidates!})
     (registry/declare-kind! {:id executor-kind
-                             :entry-spec ::executor-symbol
+                             :entry-spec ::executor-entry
                              :binding-moment :gate-evaluation})))
 
 (defn registry-handle
@@ -155,18 +173,19 @@
                                 :overrides (set (keys remaining))})
       remaining)))
 
-(defn register-executor-symbol!
-  "Register executor predicate symbol `sym` for `waiter` at the direct layer.
+(defn register-executor-entry!
+  "Register executor `entry` (symbol or declaration map) for `waiter` at the
+  direct layer.
 
   Replaces any prior direct entry for `waiter`; other direct executors are
   retained. Also drops any raw function value previously held for `waiter` so
   the two sources never disagree. Returns the waiter as a keyword."
-  [rt waiter sym]
+  [rt waiter entry]
   (let [handle (registry-handle rt)
         key (waiter-key waiter)]
     (swap! (executor-fns rt) dissoc key)
     (registry/replace-owner! handle executor-kind repl-owner
-                             (direct-partition handle executor-kind key sym))
+                             (direct-partition handle executor-kind key entry))
     (keyword key)))
 
 (defn register-executor-fn!
@@ -215,25 +234,75 @@
   (get-in (registry/explain (registry-handle rt) definition-kind)
           [name :effective :owner]))
 
+(defn entry-stalled-symbol
+  "Return the stall-predicate symbol a declared executor `entry` names.
+
+  An entry is a bare qualified symbol or a declaration map carrying
+  `:stalled?`."
+  [entry]
+  (if (map? entry) (:stalled? entry) entry))
+
+(defn entry-request-spec
+  "Return the registered gate-request spec name `entry` declares, or nil.
+
+  Only a declaration-map entry can carry `:request-spec`; a bare symbol
+  declares no request contract."
+  [entry]
+  (when (map? entry) (:request-spec entry)))
+
+(defn- resolve-stalled!
+  "Resolve a declared executor `entry`'s stall symbol to its current Var.
+
+  A declaration whose symbol no longer names a Var fails loudly with the
+  waiter, symbol, and declaring owner (TEN-003) rather than reading as an
+  absent executor and leaving its gates waiting with no diagnostic."
+  [rt key entry]
+  (let [sym (entry-stalled-symbol entry)]
+    (or (requiring-resolve sym)
+        (fail! "Registered executor stall symbol does not resolve"
+               {:reason :workflow/executor-unresolved
+                :waiter key
+                :stalled? sym
+                :owner (get-in (registry/explain (registry-handle rt) executor-kind)
+                               [key :effective :owner])}))))
+
 (defn executor-for
   "Return the stall predicate for a ready gate's `waiter`, or nil.
 
-  A raw direct/REPL function value wins; otherwise the effective executor symbol
-  is resolved to its current Var, the per-gate-evaluation snapshot
-  (DELTA-OlrDrt-001.CC10)."
+  A raw direct/REPL function value wins; otherwise the effective entry's stall
+  symbol is resolved to its current Var, the per-gate-evaluation snapshot
+  (DELTA-OlrDrt-001.CC10). A declared symbol that no longer resolves fails
+  loudly rather than reading as an absent executor."
   [rt waiter]
   (let [key (waiter-key waiter)]
     (or (get @(executor-fns rt) key)
-        (when-let [sym (get (registry/effective (registry-handle rt) executor-kind) key)]
-          (requiring-resolve sym)))))
+        (when-let [entry (get (registry/effective (registry-handle rt) executor-kind) key)]
+          (resolve-stalled! rt key entry)))))
 
 (defn executor-map
   "Return the merged waiter-string -> predicate map of every effective executor.
 
-  Effective symbols resolve to their current Var; raw function values shadow a
-  same-waiter symbol."
+  Effective entries resolve their stall symbol to its current Var, failing
+  loudly on a symbol that no longer resolves; raw function values shadow a
+  same-waiter declaration."
   [rt]
   (merge (into {}
-               (map (fn [[key sym]] [key (requiring-resolve sym)]))
+               (map (fn [[key entry]] [key (resolve-stalled! rt key entry)]))
                (registry/effective (registry-handle rt) executor-kind))
          @(executor-fns rt)))
+
+(defn executor-entries
+  "Return the discovery view of every registered executor, keyed by waiter.
+
+  Effective declaration entries carry their stall symbol and any declared
+  `:request-spec`; a raw direct/REPL function value appears with a nil symbol,
+  because a bare function carries no declaration to report."
+  [rt]
+  (merge (into {}
+               (map (fn [[key entry]]
+                      [key {:stalled? (entry-stalled-symbol entry)
+                            :request-spec (entry-request-spec entry)}]))
+               (registry/effective (registry-handle rt) executor-kind))
+         (into {}
+               (map (fn [[key _]] [key {:stalled? nil :request-spec nil}]))
+               @(executor-fns rt))))

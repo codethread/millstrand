@@ -250,3 +250,39 @@
                     :workflow/definition-view-invalid
                     "Workflow definition view is invalid"
                     {:name name})))
+
+;; --- executor discovery -------------------------------------------------------
+
+(defn- executor-request-view
+  "Return the projected gate-request contract view for `spec-name`.
+
+  The same four fields the param contract view carries — spec identity, the
+  `s/form` documentation graph, the nested contract, and the copyable template
+  — resolved live through the shared projection, so the view documents the
+  spec as it is now."
+  [spec-name]
+  (let [views (specs/contract-views spec-name)]
+    {:spec (subs (str spec-name) 1)
+     :spec-forms (specs/spec-forms spec-name)
+     :contract (get views "contract")
+     :template (get views "template")}))
+
+(defn executor-catalog
+  "Return the ordered discovery view of every registered gate executor.
+
+  One item per waiter, in waiter order: the stall-predicate symbol (nil for a
+  raw direct/REPL function value, which carries no declaration) and — when the
+  executor declares a `:request-spec` — the projected gate-request contract. A
+  declared spec that no longer resolves fails loudly (`workflow/spec-missing`)
+  rather than reading as an executor with no contract."
+  [rt]
+  (mapv (fn [[waiter {:keys [stalled? request-spec]}]]
+          (require-shape! :skein.spools.workflow/executor-view
+                          (cond-> {:waiter waiter
+                                   :stall-predicate (some-> stalled? str)}
+                            request-spec
+                            (assoc :request (executor-request-view request-spec)))
+                          :workflow/executor-view-invalid
+                          "Workflow executor view is invalid"
+                          {:waiter waiter}))
+        (sort-by key (registry/executor-entries rt))))
