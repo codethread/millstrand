@@ -41,7 +41,8 @@
                                "shell/cwd" (fn [{:keys [worktree]}] worktree)
                                "workflow/instruction" "Terse: green closes this."})))
 
-;; 2. Shadow :fix, binding validation to it (same :overrides GAP as skein-src).
+;; 2. Shadow :fix, binding validation to it (same :override? GAP as skein-src:
+;; blessed collector supports the intent, defworkflow doesn't forward it).
 (workflow/defworkflow fix
   "fix validated by make quality."
   {:entrypoints #{:start}

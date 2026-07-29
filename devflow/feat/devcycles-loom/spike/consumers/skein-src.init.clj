@@ -60,10 +60,13 @@
 ;; 2. Widen the fix validation allowlist: the driving worker now picks the
 ;; style per run — loom docs-check for a doc fix, the full suite otherwise.
 ;; This SHADOWS the loom's :fix registration from the workspace layer.
-;; GAP: publication requires the shadow to declare :overrides #{:fix}, but the
-;; defworkflow authoring form has no :overrides opt today — the collected
-;; entry can't say "I mean to shadow". Missing authoring surface, found only
-;; by writing this file.
+;; GAP (sharpened): publication requires the shadow to declare :overrides
+;; #{:fix}. The blessed collect-entry! already accepts {:override? true}
+;; (alpha.clj 4-arity, closed opts spec) but defworkflow calls the 3-arity and
+;; exposes no opt — a thin workflow-spool accretion closes it today.
+;; PROP-Auf-001.P6.2/AC2 lands the same intent across every authoring form in
+;; its first stage (Draft, unsigned); either route works, the accretion is
+;; smaller and unblocks this feature.
 (workflow/defworkflow fix
   "fix with this repo's validation styles."
   {:entrypoints #{:start}
