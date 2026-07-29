@@ -13,7 +13,7 @@ description: always use for authoring clojure code; also use for reviewing, audi
 - Keep side effects at system boundaries: DB, files, sockets, subprocesses, REPL/runtime state.
 - Fail loudly on invalid input. Do not silently coerce, default, or tolerate malformed data unless the contract explicitly says so.
 - Public behavior should be discoverable from namespace organization, docstrings, specs where useful, and tests.
-- When auditing existing Clojure, evaluate it against this desired style even if the file predates the skill. Report concrete deviations; do not only summarize architecture or positives.
+- When writing existing Clojure, evaluate it against this desired style even if the file predates the current work. Fix poor code as you go.
 
 ### Idiomatic specs
 
@@ -35,6 +35,29 @@ Usually skip specs for:
 A good default rule:
 
 > Spec data contracts broadly; spec function contracts selectively where generated inputs or API documentation will catch real bugs.
+
+Runtime validation and function specs have different jobs:
+
+- At untrusted, dynamic, persistence, process, and extension boundaries, use
+  explicit runtime validation such as `require-valid!`. Boundary validation must
+  not depend on optional spec instrumentation being enabled.
+- Use `s/fdef` when a concrete consumer justifies it: useful instrumentation,
+  generative tests with realistic generators, an input/output relation, or API
+  tooling that reads function specs.
+- Do not add `s/fdef` merely because a function is public or already performs
+  runtime validation. That duplicates the contract and creates drift without
+  adding enforcement.
+- Pure transformations with meaningful properties are often better `s/fdef`
+  candidates than stateful public orchestration. They may live in an internal
+  namespace when they are not a supported public API.
+- `clojure.spec.test.alpha/instrument` is an opt-in development and test aid. It
+  checks arguments on calls through instrumented Vars; it is not production
+  validation and does not replace explicit return validation.
+
+When an `s/fdef` is justified, place it immediately after the function it
+specifies. This keeps the callable contract attached to the implementation
+instead of collecting function specs in a detached block at the bottom of the
+namespace. Define prerequisite data specs before the specified functions.
 
 ### Property-based testing with spec
 
@@ -88,9 +111,9 @@ Hard limit: no docstring or string literal line may extend past column 180. Long
 
 When a value is prose (op payloads, `about` surfaces, rule descriptions, delegation bodies), do not build it from `(str ...)` fragments or one long literal. Author it as a `|`-margin block and reflow it with the shipped helpers:
 
-- `skein.api.format.alpha` — the blessed surface for every tier, spools included: trusted config (`.skein/`), userland, core. (`skein.spools.format` is deleted; SPEC-005.C3.)
+- `skein.api.format.alpha` — the blessed surface for every tier, spools included: trusted config (`.skein/`)
 
-`(fill block)` returns a vector of item strings (bare `|` line separates items; indented-past-the-bar lines keep an item verbatim for command samples). `(reflow block)` soft-wraps one paragraph into one string. Contract: `docs/spools/writing-shared-spools.md`.
+`(fill block)` returns a vector of item strings (bare `|` line separates items; indented-past-the-bar lines keep an item verbatim for command samples). `(reflow block)` soft-wraps one paragraph into one string.
 
 ```clojure
 (format-alpha/reflow
@@ -98,24 +121,11 @@ When a value is prose (op payloads, `about` surfaces, rule descriptions, delegat
   |single source line, soft-wrapped at authoring time.")
 ```
 
-Docstrings cannot use runtime helpers: wrap them by hand well short of the limit (match the surrounding namespace, usually ~80). Converted `skein.api.*` modules carry a hard 96-column bound on every source line, enforced by `quality.api-form` (SPEC-003.C19a).
-
-### Audit red flags
-
-When scanning Clojure conformity, actively look for and report these before listing positives:
-
-- Any docstring or string literal line past column 180, or long prose built from `(str ...)` fragments instead of a `|`-margin block through `skein.api.format.alpha`.
-- Public namespace lacks an `ns` docstring and has a non-trivial public role.
-- Public `defn`, `defmacro`, protocol, record/type, or important public `def` lacks a useful docstring.
-- Boundary data is validated only ad hoc when a reusable spec would clarify the shipped contract or enable generated checks.
-- Pure invariant-heavy behavior lacks property/spec tests where generators would be meaningful.
-- Invalid input silently becomes a no-op, default value, SQL three-valued-logic surprise, coercion, or misleading empty result instead of failing loudly.
-- Public functions or `def` values appear unused, under-tested, or accidentally public. Constants, SQL fragments, dynamic compiler state, and implementation tables should normally be `^:private` unless they are intentional API and documented.
-- Tests only cover examples when a broad invariant would be better captured by property testing.
+Docstrings cannot use runtime helpers: wrap them by hand well short of the limit (match the surrounding namespace, usually ~80).
 
 ### The story-file shape (api modules)
 
-A public namespace should read as a story: the promised fns lead, and each body shows the meat of its algorithm as named, composed steps. Placement of helpers — file-local privates below the publics, or a sibling `internal` namespace — is taste; what is not negotiable is that the public body surfaces the shape of the problem. SPEC-003.C19a holds converted `skein.api.*` modules to this.
+A public namespace should read as a story in CleanCode style: the public fns lead, and each body shows the meat of its algorithm as named, composed steps. The public body surfaces the shape of the problem.
 
 ```clojure
 ;; GOOD: the public fn IS the pipeline; helpers are named steps below it.
@@ -158,7 +168,7 @@ Concurrency shape is part of the story. Where calls run in sequence, where they 
     (render-dashboard @profile @boards prefs)))
 ```
 
-Method: write the split first, merge back by measurement. Draft the module as `alpha` composing `internal/<concern>` files — the compiler exposes coupling that imagination fudges — and write tests against the public surface only. Then measure: at roughly 500 lines or under, fold the concerns back into one story-ordered file (publics leading, section-commented private clusters, leaf mechanics last, one `declare` block as the accepted cost); over that, the split stands. The public-surface tests must pass unchanged through the fold, and watch for names that only made sense behind an alias (`case*` is a compiler special form someone hit this way). Recursion clusters stay together on whichever side they live; a public fn may run long when that keeps one story in one place. The worked example is `skein.api.return-shape.alpha`, folded to a single file after living as per-concern files.
+Keep modules under 500 lines, then break out to `internal/<concern>` files. Ensure tests are still against the public surface
 
 ### Public vs private helpers
 
@@ -185,147 +195,7 @@ If uncertain, prefer documenting over privatizing and report the visibility ques
 
 Follow common Clojure community style unless local code establishes a stronger pattern:
 
-- 2-space indentation, no tabs.
-- `kebab-case` vars/functions/namespaces.
-- Predicate names end in `?`; mutating/side-effecting operations may use `!` when that communicates danger or state change.
 - Prefer `let`, threading macros, and small named helpers over dense nested forms.
 - Prefer maps and plain data over unnecessary records/classes.
 - Prefer explicit requires with aliases; avoid broad `:refer :all` outside tests/REPL-oriented namespaces.
 - Keep public functions near the top-level flow where practical; keep private helpers close enough to their use to aid reading.
-- Use `clj-kondo`/editor diagnostics as the baseline style and correctness feedback.
-
-## Decisions
-
-Entry state: CLASSIFY_CHANGE
-
-### CLASSIFY_CHANGE
-
-- guard: auditing existing Clojure files → AUDIT_EXISTING
-- guard: adding or changing public Clojure API → PUBLIC_API
-- guard: adding or changing boundary data shape, DSL, config, wire payload, DB entity, graph operation, parser/printer, normalization, or round-trip behavior → SPEC_CANDIDATE
-- guard: adding or changing tests → TESTING
-- guard: private/internal implementation only → INTERNAL_CODE
-
-### AUDIT_EXISTING
-
-- action: inspect public vars, namespace purpose, boundary validation, spec/property-test candidates, fail-loud behavior, tests, and style.
-- guard: concrete deviations exist → REPORT_DEVIATIONS
-- guard: no concrete deviations found → REPORT_CONFORMS
-
-### REPORT_DEVIATIONS
-
-- action: report file path, symbol/line when possible, violated rule, and preferred fix.
-- always → VALIDATE
-
-### REPORT_CONFORMS
-
-- action: briefly state that no conformity deviations were found, with only the strongest supporting evidence.
-- always → VALIDATE
-
-### PUBLIC_API
-
-- action: add or update docstrings and consider `s/fdef` if the contract is non-obvious or useful for generated checks.
-- always → TESTING
-
-### SPEC_CANDIDATE
-
-- action: define/update data specs and add targeted `s/fdef` only where properties or public contracts earn it.
-- guard: meaningful generated properties exist → PROPERTY_TESTING
-- guard: generated properties would be weak/noisy → EXAMPLE_TESTING
-
-### PROPERTY_TESTING
-
-- action: add `stest/check` coverage or generator-backed tests for the specific invariant.
-- always → VALIDATE
-
-### EXAMPLE_TESTING
-
-- action: add focused example/regression tests for important cases and failures.
-- always → VALIDATE
-
-### TESTING
-
-- action: choose property tests for broad invariants and example tests for concrete behavior/regressions.
-- always → VALIDATE
-
-### INTERNAL_CODE
-
-- action: keep code small, clear, data-oriented, and fail-loud; add private docstrings/specs only when they clarify subtle invariants.
-- always → VALIDATE
-
-### VALIDATE
-
-- action: run relevant Clojure tests/lint where available.
-- terminal state.
-
-## Procedures
-
-### Authoring Clojure code
-
-1. Read the surrounding namespace and tests before editing; match local idioms unless they conflict with this skill or project rules.
-2. Shape the code around plain data and small pure functions.
-3. Put validation at boundaries and fail loudly with useful errors.
-4. Add public docstrings for public vars introduced or materially changed.
-5. Add specs for boundary data and selected public/pure functions where contracts or generated tests are valuable.
-6. Add tests at the right level:
-   - property/spec tests for invariants over many inputs;
-   - example tests for workflows, edge cases, regressions, and I/O behavior.
-7. Run relevant validation before reporting completion.
-
-### Fixing Clojure conformity in one file
-
-1. Apply all high-confidence mechanical fixes in the file, not just the first category found.
-2. Add or improve the namespace docstring when the namespace has a public role.
-3. Add docstrings to every intentional public `defn`/`defmacro`/protocol/record/type/important `def`, including functions declared earlier with `declare` and defined later.
-4. Mark accidental public implementation vars `^:private`, especially dynamic compiler state, SQL fragments, schema constants, helper tables, and internal defaults.
-5. Leave intentionally public vars public, but document them.
-6. Do not introduce broad specs or property tests in a drive-by conformity fix unless the user asked for behavior/test work; report those as follow-up candidates.
-7. Run relevant validation before reporting completion.
-
-### Auditing Clojure conformity
-
-1. List public top-level vars in the audited files; flag missing or unhelpful docstrings for public API vars.
-2. Classify each public var as intentional API or accidental exposure; flag implementation constants, SQL strings, state vars, helper tables, and internal utilities that should be `^:private`.
-3. Identify boundary data shapes and pure invariant-heavy functions; flag missing specs/property tests only when they would provide real contract or generated-test value.
-4. Check fail-loud behavior: explicit invalid input should throw useful `ex-info` or equivalent, not silently no-op, coerce, default, or produce misleading results.
-5. Check tests: broad invariants should have property/spec coverage when practical; concrete regressions and I/O workflows should have example tests.
-6. Check style: namespace docstring, requires, naming, side-effect boundaries, dense forms, dead public functions, and linter-obvious issues.
-7. Report findings as deviations with severity when useful. Avoid long positive inventories unless no deviations exist.
-
-### Writing specs
-
-1. Prefer namespaced spec names that mirror the domain concept, e.g. `::strand`, `::edge`, `::query`.
-2. Keep data specs composable: define leaf specs, then compose map/vector/tuple specs.
-3. For `s/fdef`, include `:args` and `:ret`; include `:fn` when a meaningful input/output relation exists.
-4. Add custom generators only when the default generators are unrealistic or too weak.
-5. Avoid making specs stricter than the shipped contract unless intentionally tightening behavior.
-
-### Writing docstrings
-
-1. Start with a one-line summary that stands alone in REPL `doc` output.
-2. Add details only when they clarify arguments, return values, side effects, invariants, or failure modes.
-3. Mention important domain semantics, not implementation trivia.
-4. Keep private helper docstrings optional and purposeful.
-
-## Constraints
-
-- Do not spec every function by default.
-- Do not let any docstring or string literal line pass column 180; author long prose as `|`-margin blocks via `skein.api.format.alpha`.
-- Do not omit public docstrings for public Clojure API without a good local reason.
-- Do not leave implementation vars public by accident; make them private or document them as supported API.
-- Do not add weak property tests that only exercise trivial/generated happy paths.
-- Do not silently fall back to defaults for invalid data; fail loudly.
-- Do not introduce broad compatibility shims or deprecated paths unless explicitly requested.
-- Do not let specs replace tests; specs support tests and documentation, but concrete regressions still deserve direct tests.
-
-## Validation
-
-Before reporting success on Clojure code changes, verify as applicable:
-
-- [ ] Public vars added or changed have useful docstrings.
-- [ ] No docstring or string literal line passes column 180; prose values use the `|`-margin format helpers.
-- [ ] Boundary data shapes have specs when useful.
-- [ ] `s/fdef` is used selectively for public contracts or property-testable pure functions.
-- [ ] Property tests assert real invariants, especially via `:fn` or explicit property assertions.
-- [ ] Relevant Clojure tests pass.
-- [ ] Linter/editor diagnostics do not report obvious namespace, arity, or unused-var issues.
