@@ -17,8 +17,9 @@ Spec-over-wire documentation projection for registered clojure.spec contracts.
     and numbers.
 
   The interpreted operators are `s/keys`, `s/coll-of`/`s/every`, `s/and`
-  (first form as the structural shape, remaining predicates as printed
-  constraints), `s/or`, `s/nilable`, `s/map-of`, and `s/tuple`. A qualified
+  (the first interpreted structural form as its shape, or its first form when
+  none exists; every other form stays a printed constraint), `s/or`,
+  `s/nilable`, `s/map-of`, and `s/tuple`. A qualified
   keyword that names a registered spec expands in place; re-entering a spec
   already being expanded emits a `ref` node instead (the cycle cut), while
   repeated sibling references expand again.
@@ -50,8 +51,9 @@ Return the nested contract node tree for registered spec `spec-name`.
     `"constraints"`, a map of the printed keyword options.
   - `"map-of"` — `"key"` and `"value"` nodes plus `"constraints"`.
   - `"tuple"` — `"items"` node vector.
-  - `"and"` — `"shape"` (first form's node) and `"constraints"`, the
-    remaining forms printed verbatim.
+  - `"and"` — `"shape"` (the first interpreted structural form, falling
+    back to the first form) and `"constraints"`, every other form printed
+    verbatim.
   - `"or"` — `"branches"`, each `{"tag" <name> "contract" node}`.
   - `"nilable"` — `"of"` node.
   - `"pred"` — a predicate symbol terminal: `"form"` plus `"doc"`/
@@ -63,7 +65,7 @@ Return the nested contract node tree for registered spec `spec-name`.
   A node expanded from a registered spec reference also carries `"spec"`,
   its qualified name. An unregistered `spec-name` fails loudly as
   `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L52-L84">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L53-L86">Source</a></sub></p>
 
 ## <a name="skein.api.spec.alpha/contract-template">`contract-template`</a>
 ``` clojure
@@ -81,7 +83,7 @@ Return the copyable JSON skeleton for contract `node`.
   grammar stays owned here. `node` must keep the shape `contract` documents —
   that docstring is the node-grammar authority (SPEC-003.C19a); enrichment may
   add or replace `doc` values but not invent node kinds.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L103-L115">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L105-L117">Source</a></sub></p>
 
 ## <a name="skein.api.spec.alpha/explain-text">`explain-text`</a>
 ``` clojure
@@ -94,7 +96,7 @@ Return `s/explain-str` for `spec-name` and `value` as plain JSON-safe text.
   The printed explanation is what crosses the wire; raw `s/explain-data`
   stays available to trusted Clojure (PROP-Wcd-001.S9). An unregistered
   `spec-name` fails loudly as `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L130-L138">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L132-L140">Source</a></sub></p>
 
 ## <a name="skein.api.spec.alpha/problems">`problems`</a>
 ``` clojure
@@ -110,7 +112,7 @@ Return the structured spec problems for invalid `value` under `spec-name`.
   check. Detection walks the predicate *form* as data (no string matching,
   nothing invoked). Returns `[]` when the value satisfies the spec. An
   unregistered `spec-name` fails loudly as `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L140-L157">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L142-L159">Source</a></sub></p>
 
 ## <a name="skein.api.spec.alpha/projection">`projection`</a>
 ``` clojure
@@ -123,7 +125,7 @@ Return the composite discovery bundle for registered spec `spec-name`.
   `{"spec" <qualified-name> "spec-forms" <spec-forms> "contract"
   <contract> "template" <template>}` — the named fields every adopting wire
   surface embeds, so discovery and failure speak one vocabulary.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L117-L128">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L119-L130">Source</a></sub></p>
 
 ## <a name="skein.api.spec.alpha/spec-forms">`spec-forms`</a>
 ``` clojure
@@ -146,7 +148,7 @@ Return the ordered printed-form graph rooted at registered spec `spec-name`.
   interpret spec operators, so a keyword literal that happens to name a spec
   is reported the same way as a real key reference. An unregistered
   `spec-name` fails loudly as `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L32-L50">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L33-L51">Source</a></sub></p>
 
 ## <a name="skein.api.spec.alpha/template">`template`</a>
 ``` clojure
@@ -167,4 +169,4 @@ Return a copyable JSON skeleton for registered spec `spec-name`.
   structures under an optional key render as-is and rely on `contract` for
   optionality. An unregistered `spec-name` fails loudly as
   `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L86-L101">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L88-L103">Source</a></sub></p>

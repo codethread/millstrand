@@ -489,9 +489,11 @@
 (s/def :skein.weaver-test.plan/tasks
   (s/coll-of :skein.weaver-test.plan/task :kind vector? :min-count 1))
 (s/def :skein.weaver-test.plan/input
-  (s/keys :req-un [:skein.weaver-test.plan/feature :skein.weaver-test.plan/title
-                   :skein.weaver-test.plan/tasks]
-          :opt-un [:skein.weaver-test.plan/body]))
+  (s/and map?
+         #(every? #{:feature :title :tasks :body} (keys %))
+         (s/keys :req-un [:skein.weaver-test.plan/feature :skein.weaver-test.plan/title
+                          :skein.weaver-test.plan/tasks]
+                 :opt-un [:skein.weaver-test.plan/body])))
 (s/def :skein.weaver-test.pipeline/input
   (s/and map?
          #(s/valid? :skein.weaver-test.plan/tasks (:tasks %))))
@@ -3179,10 +3181,12 @@
                                   :skein.weaver-test.pipeline/input)
       (testing "a nested s/keys contract projects to authorable depth"
         (let [{:keys [contract template]} (patterns/explain rt :agent-plan-like)
+              shape (get contract "shape")
               tasks (some #(when (= "tasks" (get % "key")) %)
-                          (get contract "required"))]
+                          (get shape "required"))]
+          (is (= "and" (get contract "kind")))
           (is (= ["feature" "title" "tasks"]
-                 (mapv #(get % "key") (get contract "required"))))
+                 (mapv #(get % "key") (get shape "required"))))
           (is (= "coll" (get-in tasks ["contract" "kind"])))
           (is (= "map" (get-in tasks ["contract" "item" "kind"])))
           (is (= "Non-blank string."

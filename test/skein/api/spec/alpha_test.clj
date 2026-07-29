@@ -60,6 +60,8 @@
 (s/def ::pair (s/tuple plain-str? plain-int?))
 (s/def ::lookup (s/map-of plain-str? plain-int?))
 (s/def ::guarded (s/and plain-map? #(contains? % :x)))
+(s/def ::guarded-object
+  (s/and plain-map? tracked-pred? (s/keys :req-un [::title] :opt-un [::count])))
 (s/def ::value string?)
 (s/def ::children (s/coll-of ::tree :kind vector?))
 (s/def ::tree (s/keys :req-un [::value] :opt-un [::children]))
@@ -119,6 +121,21 @@
     (is (= "skein.api.spec.alpha-test/plain-int?" (get-in map-node ["value" "form"])))
     (is (= ["skein.api.spec.alpha-test/plain-str?" "skein.api.spec.alpha-test/plain-int?"]
            (mapv #(get % "form") (get tuple-node "items"))))))
+
+(deftest and-prefers-an-interpreted-structural-form
+  (reset! invocations 0)
+  (let [node (spec-alpha/contract ::guarded-object)
+        skeleton (spec-alpha/template ::guarded-object)]
+    (is (= "and" (get node "kind")))
+    (is (= "map" (get-in node ["shape" "kind"])))
+    (is (= ["title"]
+           (mapv #(get % "key") (get-in node ["shape" "required"]))))
+    (is (= 2 (count (get node "constraints"))))
+    (is (some #(str/includes? % "plain-map?") (get node "constraints")))
+    (is (some #(str/includes? % "tracked-pred?") (get node "constraints")))
+    (is (map? skeleton))
+    (is (contains? skeleton "title"))
+    (is (zero? @invocations))))
 
 (deftest recursive-reference-emits-ref-node
   (let [node (spec-alpha/contract ::tree)
