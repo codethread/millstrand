@@ -56,6 +56,8 @@
    ;; dispatch suites — so there is no JVM-global timer or shared-lane state.
    'skein.scheduler-runtime-test 'skein.api.scheduler.alpha-test 'skein.scheduler-e2e-test
    'skein.cron-test 'skein.cron-e2e-test
+   ;; isolated pure coordinator prototype; injected callables own all effects.
+   'skein.lifecycle-spike-test
    'skein.spools.executors.shell-test 'skein.spools.executors.code-test
    'skein.chime-test
    'skein.weaver-test])
