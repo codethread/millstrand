@@ -4,6 +4,7 @@
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [skein.api.cli.alpha :as cli-alpha]
             [skein.api.runtime.alpha :as runtime]
@@ -188,7 +189,17 @@
               (is (= :standard (:deadline-class leaf))))))
         (testing "op-level narrative stays at the about/prime tier"
           (is (re-find #"worker surface" (:about entry)))
-          (is (re-find #"workflow list" (:prime entry))))))))
+          (testing "prime is a runbook of fully qualified invocations"
+            (let [prime (:prime entry)]
+              (is (str/includes? prime "strand workflow list"))
+              (is (str/includes? prime "strand workflow show intake"))
+              (is (str/includes?
+                   prime
+                   "strand workflow start <run-id> --workflow intake --params '{...}'")
+                  "the start example carries the run-id positional and --workflow flag")
+              (doseq [field ["params.contract" "params.template" "params.example"]]
+                (is (str/includes? prime field)
+                    (str "prime points at the show field " field))))))))))
 
 (deftest the-cli-module-owns-the-whole-workflow-op-partition
   ;; Opting back out is the same publication mechanism as opting in: the module
