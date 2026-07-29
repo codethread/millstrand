@@ -51,7 +51,7 @@ Return the normalized approved spool roots for `runtime`'s config dir.
 Function.
 
 Return `runtime`'s installed `skein.api.clock.alpha/Clock`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L491-L494">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L492-L495">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.alpha/collect-entry!">`collect-entry!`</a>
 ``` clojure
@@ -161,7 +161,7 @@ Return the current java.time.Instant from `runtime`'s clock seam.
 
   Defaults to the real wall clock; deterministic tests inject an advanceable
   clock through `skein.test.alpha/set-clock!`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L500-L506">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L501-L507">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.alpha/plan">`plan`</a>
 ``` clojure
@@ -244,7 +244,7 @@ Make `root-lib`'s current synced source live in dependency order (code only).
   the namespaces reloaded with their sources, and the residual and hard-conflict
   outcomes from the post-reload classification, conforming to
   `::reload-code-result` (DELTA-OlrRepl-001.CC9).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L461-L481">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L462-L482">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.alpha/remove-spool-entry!">`remove-spool-entry!`</a>
 ``` clojure
@@ -272,7 +272,7 @@ Resolve fully qualified `sym` to its Var under `runtime`'s spool classloader.
   to it. Returns the Var, or nil when its namespace loads but defines nothing
   under that name; a namespace that cannot be loaded at all throws, carrying the
   load error as its cause.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L512-L523">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L513-L524">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.alpha/spool-state">`spool-state`</a>
 ``` clojure
@@ -299,7 +299,7 @@ Return runtime-owned state for a spool key, creating it with `init-fn` once.
   once a version is declared. Opts conform to
   `:skein.api.runtime.alpha/spool-state-opts`; a malformed map fails loudly at
   the call site rather than degrading to the unversioned path.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L542-L596">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L543-L597">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.alpha/status">`status`</a>
 ``` clojure
@@ -312,11 +312,12 @@ Return `runtime`'s offline, read-only joined module status.
   Reports desired modules and their declaration layers/shadows, active
   contributions, module and resource outcomes, root outcomes, and the joined
   loaded-code picture (current bindings, prior bindings, residuals, hard
-  conflicts) with the last refresh result. It performs no network access, file
-  write, source load, registration, or reconcile. The result conforms to
+  conflicts), the nullable `:pending-generation` record for a refused
+  non-additive sync, and the last refresh result. It performs no network access,
+  file write, source load, registration, or reconcile. The result conforms to
   `::status-result`, including `::resolved-entry-points`
   (DELTA-OlrRepl-001.CC8, DELTA-OlrDrt-001.CC15).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L444-L455">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/alpha.clj#L444-L456">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.alpha/upsert-spool-entry!">`upsert-spool-entry!`</a>
 ``` clojure

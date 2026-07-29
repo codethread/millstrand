@@ -447,8 +447,9 @@
   Reports desired modules and their declaration layers/shadows, active
   contributions, module and resource outcomes, root outcomes, and the joined
   loaded-code picture (current bindings, prior bindings, residuals, hard
-  conflicts) with the last refresh result. It performs no network access, file
-  write, source load, registration, or reconcile. The result conforms to
+  conflicts), the nullable `:pending-generation` record for a refused
+  non-additive sync, and the last refresh result. It performs no network access,
+  file write, source load, registration, or reconcile. The result conforms to
   `::status-result`, including `::resolved-entry-points`
   (DELTA-OlrRepl-001.CC8, DELTA-OlrDrt-001.CC15)."
   [runtime]
