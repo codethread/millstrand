@@ -127,6 +127,8 @@
               :definitions (workflow/catalog (list-request args))}
       "show" (assoc (workflow/definition-view (keyword target))
                     :operation "workflow show")
+      "executors" {:operation "workflow executors"
+                   :executors (workflow/executor-catalog)}
       "start" (workflow/run-start!
                (-> {:run-id (:run-id args) :workflow (keyword target)}
                    (with-json-object args :params :params)))
@@ -150,7 +152,7 @@
                (carry {:run-id (:run-id args)} args :timeout-secs :timeout-secs))
       (throw (ex-info "Unsupported workflow subcommand"
                       {:subcommand subcommand
-                       :allowed ["list" "show" "start" "ready" "choices"
+                       :allowed ["list" "show" "executors" "start" "ready" "choices"
                                  "complete" "choose" "next" "defer" "await"]})))))
 
 (def ^:private workflow-doc
@@ -230,6 +232,24 @@
                        |continuations are reported as declared, never expanded,
                        |and no render function or spec predicate is
                        |executed.")]}}
+    "executors" {:doc (fmt/reflow
+                       "|List registered gate executors: each waiter, its stall
+                        |predicate, and the projected gate-request contract
+                        |where the executor declares one.")
+                 :hook-class :read
+                 :deadline-class :standard
+                 :annotations
+                 {:notes [(fmt/reflow
+                           "|Run this before authoring a gate for an external
+                            |waiter: a declared request contract carries the
+                            |exact attribute keys, a copyable template, and the
+                            |printed form graph, resolved against the live spec
+                            |registry.")
+                          (fmt/reflow
+                           "|An executor that declares no request spec lists
+                            |with no contract (a raw function value also lists
+                            |a null stall predicate); its gate attributes are
+                            |documented by its own spool.")]}}
     "start" {:doc (fmt/reflow
                    "|Pour a registered workflow as a new run and return its
                     |opening ready frontier.")
@@ -457,6 +477,13 @@
                        ;; schema language would be a copy free to disagree.
                        :params :json
                        :declared :json}}
+    "executors" {:type :map
+                 :required {:operation :string
+                            ;; Each item is validated before emission by the
+                            ;; engine's ::executor-view spec; the projected
+                            ;; request contract rides the skein.api.spec.alpha
+                            ;; node grammar.
+                            :executors :json}}
     "start" run-result-return
     "ready" run-result-return
     "choices" {:type :map
@@ -495,7 +522,9 @@
             |discovery read: the ready checkpoint's declared inputs projected
             |against the live spec registry, so a worker authors valid input
             |before choose rather than learning the contract from a rejected
-            |payload.")
+            |payload. executors is the gate-authoring read: each registered
+            |waiter with its projected gate-request contract, where the
+            |executor declares one.")
    :prime (fmt/reflow
            "|Run `strand workflow list` to see the registered routines, then
             |`strand workflow show intake` (or any listed name) before supplying

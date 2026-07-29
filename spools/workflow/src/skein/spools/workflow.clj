@@ -973,18 +973,29 @@
   executor is still fulfilling the gate, or truthy detail when coordinator
   attention is needed. A fully qualified *symbol* is an owner-complete
   declaration at the direct/REPL layer, resolved to a function value at each gate
-  evaluation (DELTA-OlrDrt-001.CC10). A bare function *value* — the case with no
+  evaluation (DELTA-OlrDrt-001.CC10). A declaration *map* — `{:stalled? sym}`
+  plus an optional `:request-spec` naming the executor's registered gate-request
+  spec — declares the same predicate and makes the request contract discoverable
+  through `executor-catalog`. A bare function *value* — the case with no
   resolvable symbol — is held as runtime-owned resource state instead of
-  owner-partition declaration data (DELTA-OlrDrt-001.CC8). Returns the registered
+  owner-partition declaration data (DELTA-OlrDrt-001.CC8). Maps are checked
+  before invokables on purpose: a map is `ifn?`, and a mistyped declaration must
+  fail loudly rather than register as a lookup predicate. Returns the registered
   waiter as a keyword."
   [waiter pred]
   (when-not (s/valid? ::external-waiter waiter)
     (fail! "Executor waiter must be a keyword, symbol, or non-blank string other than :self"
            {:waiter waiter :explain (s/explain-data ::external-waiter waiter)}))
   (cond
-    (qualified-symbol? pred) (registry/register-executor-symbol! (current/runtime) waiter pred)
+    (qualified-symbol? pred) (registry/register-executor-entry! (current/runtime) waiter pred)
+    (map? pred) (do (when-not (s/valid? :skein.spools.workflow.internal.registry/executor-decl pred)
+                      (fail! "Executor declaration map must carry :stalled? (and optionally :request-spec)"
+                             {:waiter waiter :pred pred
+                              :explain (s/explain-str
+                                        :skein.spools.workflow.internal.registry/executor-decl pred)}))
+                    (registry/register-executor-entry! (current/runtime) waiter pred))
     (ifn? pred) (registry/register-executor-fn! (current/runtime) waiter pred)
-    :else (fail! "Executor predicate must be a fully qualified symbol or an invokable value"
+    :else (fail! "Executor predicate must be a fully qualified symbol, a declaration map, or an invokable value"
                  {:waiter waiter :pred pred})))
 
 (defn executors
@@ -992,6 +1003,18 @@
   []
   (into {} (map (fn [[k v]] [(keyword k) v]))
         (registry/executor-map (current/runtime))))
+
+(defn executor-catalog
+  "Return the discovery catalogue of registered gate executors, in waiter order.
+
+  Each item names the waiter, the stall-predicate symbol (nil for a raw
+  direct/REPL function value, which carries no declaration), and — when the
+  executor declares a `:request-spec` — the shared `skein.api.spec.alpha`
+  projection of its gate-request contract, resolved live so the view documents
+  the spec as it is now. A declared spec that no longer resolves fails loudly
+  rather than reading as an executor with no contract."
+  []
+  (discovery/executor-catalog (current/runtime)))
 
 (defn workflow-definition
   "Return the definition symbol registered under keyword `name`, failing loudly
@@ -1671,6 +1694,23 @@
                                    :skein.spools.workflow.view/declared]))
          #(= #{:name :doc :entrypoints :definition :params :declared}
              (set (keys %)))))
+
+;; Executor catalogue. One item per registered gate waiter: who fulfils it
+;; and — when the executor declares a request spec — the projected gate-request
+;; contract, carried in the same projection fields the param view uses.
+(s/def :skein.spools.workflow.view.executor/waiter non-blank-string?)
+(s/def :skein.spools.workflow.view.executor/stall-predicate
+  (s/nilable non-blank-string?))
+(s/def :skein.spools.workflow.view.executor/request
+  (s/keys :req-un [:skein.spools.workflow.view.params/spec
+                   :skein.spools.workflow.view.params/spec-forms
+                   :skein.spools.workflow.view.params/contract
+                   :skein.spools.workflow.view.params/template]))
+(s/def ::executor-view
+  (s/and (s/keys :req-un [:skein.spools.workflow.view.executor/waiter
+                          :skein.spools.workflow.view.executor/stall-predicate]
+                 :opt-un [:skein.spools.workflow.view.executor/request])
+         #(every? #{:waiter :stall-predicate :request} (keys %))))
 
 ;; --- run lifecycle request and result shapes ------------------------------
 

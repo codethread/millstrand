@@ -39,10 +39,14 @@
   "Shape version for the code executor's runtime spool-state map."
   2)
 
-(defn- qualified-symbol-string? [value]
+(defn qualified-symbol-string?
+  "String spelling a fully qualified symbol."
+  [value]
   (and (string? value) (qualified-symbol? (symbol value))))
 
-(defn- json-safe? [value]
+(defn json-safe?
+  "JSON-image value: nil, boolean, number, string, or a composition of them."
+  [value]
   (or (nil? value)
       (boolean? value)
       (number? value)
@@ -52,15 +56,11 @@
            (every? json-safe? (vals value)))
       (and (sequential? value) (every? json-safe? value))))
 
-(s/def ::fn qualified-symbol-string?)
-(s/def ::params (s/and map? json-safe?))
-(s/def ::timeout-secs pos-int?)
+(s/def :code/fn qualified-symbol-string?)
+(s/def :code/params (s/and map? json-safe?))
+(s/def :code/timeout-secs pos-int?)
 (s/def ::request
-  (s/and map?
-         #(s/valid? ::fn (get % "code/fn"))
-         #(s/valid? ::params (get % "code/params"))
-         #(or (not (contains? % "code/timeout-secs"))
-              (s/valid? ::timeout-secs (get % "code/timeout-secs")))))
+  (s/keys :req [:code/fn :code/params] :opt [:code/timeout-secs]))
 (s/def ::result json-safe?)
 (s/def ::contribute-context map?)
 (s/def ::contribution
@@ -72,12 +72,11 @@
                      (get-in % [:module/contribution :status]))))
 (s/def ::reconcile-result
   #(contains? #{:applied :removed} (:reconciled %)))
-(s/def ::gate-view (s/and map? #(string? (:id %))))
-(s/def ::stall-detail
-  (s/nilable
-   (s/and map?
-          #(string? (:gate %))
-          #(contains? % :error))))
+(s/def ::id string?)
+(s/def ::gate-view (s/keys :req-un [::id]))
+(s/def ::gate string?)
+(s/def ::error any?)
+(s/def ::stall-detail (s/nilable (s/keys :req-un [::gate ::error])))
 
 (declare attr stamped? scan! declare-code-vocab! register-code-handler!
          ensure-resources! state)
@@ -101,7 +100,8 @@
   [ctx]
   (require-valid! ::contribute-context ctx "Invalid code executor contribution context")
   (let [result {workflow/executor-kind
-                {"code" 'skein.spools.executors.code/gate-stalled?}
+                {"code" {:stalled? 'skein.spools.executors.code/gate-stalled?
+                         :request-spec ::request}}
                 :queries
                 {"stalled-code-gates"
                  [:and [:= :state "active"]
@@ -206,10 +206,10 @@
   (weaver/update! (rt) id {:attributes attributes}))
 
 (defn- require-request! [gate]
-  (let [request (cond-> {"code/fn" (attr gate :code/fn)
-                         "code/params" (attr gate :code/params)}
+  (let [request (cond-> {:code/fn (attr gate :code/fn)
+                         :code/params (attr gate :code/params)}
                   (stamped? gate :code/timeout-secs)
-                  (assoc "code/timeout-secs" (attr gate :code/timeout-secs)))]
+                  (assoc :code/timeout-secs (attr gate :code/timeout-secs)))]
     (when-not (s/valid? ::request request)
       (fail! "code gate request must satisfy code/fn, code/params, and code/timeout-secs"
              {:gate (:id gate) :value request :spec ::request
@@ -218,28 +218,28 @@
 (defn- parse-fn-symbol [gate]
   (let [value (attr gate :code/fn)
         sym (when (string? value) (symbol value))]
-    (when-not (s/valid? ::fn value)
+    (when-not (s/valid? :code/fn value)
       (fail! "code/fn must be a fully qualified symbol"
-             {:gate (:id gate) :value value :spec ::fn
-              :explain (s/explain-str ::fn value)}))
+             {:gate (:id gate) :value value :spec :code/fn
+              :explain (s/explain-str :code/fn value)}))
     sym))
 
 (defn- parse-params [gate]
   (let [value (attr gate :code/params)]
-    (when-not (s/valid? ::params value)
+    (when-not (s/valid? :code/params value)
       (fail! "code/params must be a JSON object with JSON-safe values"
-             {:gate (:id gate) :value value :spec ::params
-              :explain (s/explain-str ::params value)}))
+             {:gate (:id gate) :value value :spec :code/params
+              :explain (s/explain-str :code/params value)}))
     value))
 
 (defn- parse-timeout [gate]
   (let [value (attr gate :code/timeout-secs)]
     (cond
       (nil? value) nil
-      (s/valid? ::timeout-secs value) (long value)
+      (s/valid? :code/timeout-secs value) (long value)
       :else (fail! "code/timeout-secs must be a positive integer"
-                   {:gate (:id gate) :value value :spec ::timeout-secs
-                    :explain (s/explain-str ::timeout-secs value)}))))
+                   {:gate (:id gate) :value value :spec :code/timeout-secs
+                    :explain (s/explain-str :code/timeout-secs value)}))))
 
 (defn- resolve-callable [sym]
   (let [resolved (runtime/resolve-var (rt) sym)

@@ -737,7 +737,8 @@ Five kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, and `
 ```clojure
 ;; spool source namespace skein.spools.executors.shell
 (defn contribute [_ctx]
-  {workflow/executor-kind {"shell" gate-stalled-symbol}
+  {workflow/executor-kind {"shell" {:stalled? gate-stalled-symbol
+                                    :request-spec ::request}}
    :queries {"stalled-shell-gates" stalled-shell-gates-query}})
 ```
 

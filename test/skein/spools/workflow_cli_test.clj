@@ -442,6 +442,55 @@
 
 ;; --- op wiring --------------------------------------------------------------
 
+;; --- executors: gate-executor discovery --------------------------------------
+
+(defn never-stalled
+  "Stall predicate fixture that reports a healthy gate."
+  [_gate-view]
+  nil)
+
+(deftest executors-projects-declared-request-contracts
+  ;; The gate-authoring read: every registered waiter in order, each carrying
+  ;; its stall predicate and — where the executor declares a request spec — the
+  ;; projected contract with the exact attribute keys an author writes.
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (test-support/activate-spool! rt :skein/spools-shell 'skein.spools.executors.shell
+                                    :after [:skein/spools-workflow])
+      (workflow/register-executor! :bare-sym 'skein.spools.workflow-cli-test/never-stalled)
+      (workflow/register-executor! :raw-fn (constantly nil))
+      (let [result (cli/workflow-op {:op/args {:subcommand ["executors"]}})
+            items (:executors result)
+            by-waiter (into {} (map (juxt :waiter identity)) items)]
+        (is (= "workflow executors" (:operation result)))
+        (is (= ["bare-sym" "raw-fn" "shell"] (mapv :waiter items))
+            "one item per waiter, in waiter order")
+        (testing "a declared executor projects its gate-request contract"
+          (let [item (by-waiter "shell")
+                request (:request item)]
+            (is (= "skein.spools.executors.shell/gate-stalled?"
+                   (:stall-predicate item)))
+            (is (= "skein.spools.executors.shell/request" (:spec request)))
+            (is (= ["shell/argv"]
+                   (mapv #(get % "key") (get-in request [:contract "required"])))
+                "shell/argv is the one required attribute, qualified spelling")
+            (is (= ["shell/cwd" "shell/timeout-secs"]
+                   (mapv #(get % "key") (get-in request [:contract "optional"]))))
+            (is (= #{"shell/argv" "shell/cwd" "shell/timeout-secs"}
+                   (set (keys (:template request))))
+                "the template is keyed by the attribute spelling an author writes")
+            (is (vector? (get (:template request) "shell/argv"))
+                "the argv skeleton renders as a JSON array")
+            (is (seq (:spec-forms request)))))
+        (testing "a bare-symbol executor lists with no contract"
+          (is (= {:waiter "bare-sym"
+                  :stall-predicate "skein.spools.workflow-cli-test/never-stalled"}
+                 (by-waiter "bare-sym"))))
+        (testing "a raw function value lists with a null stall predicate"
+          (is (= {:waiter "raw-fn" :stall-predicate nil}
+                 (by-waiter "raw-fn"))))))))
+
 (deftest workflow-op-returns-match-their-declaration
   (with-runtime
     (fn [rt _]
@@ -453,7 +502,11 @@
                                      (wire-value list-result)))
       (doseq [target [:spike]]
         (test-alpha/check-op-return! rt 'workflow {:subcommand ["show"]}
-                                     (wire-value (shown target)))))))
+                                     (wire-value (shown target))))
+      (workflow/register-executor! :bare-sym 'skein.spools.workflow-cli-test/never-stalled)
+      (test-alpha/check-op-return!
+       rt 'workflow {:subcommand ["executors"]}
+       (wire-value (cli/workflow-op {:op/args {:subcommand ["executors"]}}))))))
 
 (deftest declared-args-carry-argv-to-the-verbs
   ;; The op is reached as argv, so the declared arg-spec is the real entrance:
@@ -467,6 +520,7 @@
         (is (= {:subcommand ["list"]} (parse ["list"])))
         (is (= {:subcommand ["list"] :entrypoint "call"} (parse ["list" "--entrypoint" "call"])))
         (is (= {:subcommand ["show"] :workflow "spike"} (parse ["show" "spike"])))
+        (is (= {:subcommand ["executors"]} (parse ["executors"])))
         (is (= ["build" "review"]
                (mapv :name (listed (parse ["list" "--entrypoint" "call"])))))
         (is (= "spike" (:name (cli/workflow-op {:op/args (parse ["show" "spike"])}))))

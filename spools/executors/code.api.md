@@ -22,7 +22,7 @@ Fulfil workflow `:code` gates by invoking trusted Clojure functions.
 Function.
 
 Contribute the `:code` workflow executor and its stalled-gates query.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L99-L110">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L98-L110">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.code/gate-stalled?">`gate-stalled?`</a>
 ``` clojure
@@ -31,7 +31,16 @@ Contribute the `:code` workflow executor and its stalled-gates query.
 Function.
 
 Return durable stall detail for a ready `:code` gate view, or nil.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L90-L97">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L89-L96">Source</a></sub></p>
+
+## <a name="skein.spools.executors.code/json-safe?">`json-safe?`</a>
+``` clojure
+(json-safe? value)
+```
+Function.
+
+JSON-image value: nil, boolean, number, string, or a composition of them.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L47-L57">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.code/on-event">`on-event`</a>
 ``` clojure
@@ -40,7 +49,16 @@ Return durable stall detail for a ready `:code` gate view, or nil.
 Function.
 
 Scan for newly ready code gates after a graph mutation.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L85-L88">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L84-L87">Source</a></sub></p>
+
+## <a name="skein.spools.executors.code/qualified-symbol-string?">`qualified-symbol-string?`</a>
+``` clojure
+(qualified-symbol-string? value)
+```
+Function.
+
+String spelling a fully qualified symbol.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L42-L45">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.code/reconcile">`reconcile`</a>
 ``` clojure
