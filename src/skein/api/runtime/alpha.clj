@@ -45,6 +45,7 @@
 
 (s/def ::approved-result :skein.core.weaver.spool-sync/approved-result)
 (s/def ::declared-result :skein.core.weaver.spool-sync/declared-result)
+(s/def ::pending-generation :skein.core.weaver.spool-sync/pending-generation)
 (s/def ::running-marker (s/or :marker string?
                               :unavailable #{:none}
                               :deferred nil?))
@@ -271,6 +272,8 @@
          #(map? (:contributions %))
          #(s/valid? ::resolved-entry-points (:resolved/entry-points %))
          #(map? (:loaded %))
+         #(contains? % :pending-generation)
+         #(s/valid? (s/nilable ::pending-generation) (:pending-generation %))
          #(contains? % :last-refresh)))
 
 (s/def ::reload-code-result
@@ -444,8 +447,9 @@
   Reports desired modules and their declaration layers/shadows, active
   contributions, module and resource outcomes, root outcomes, and the joined
   loaded-code picture (current bindings, prior bindings, residuals, hard
-  conflicts) with the last refresh result. It performs no network access, file
-  write, source load, registration, or reconcile. The result conforms to
+  conflicts), the nullable `:pending-generation` record for a refused
+  non-additive sync, and the last refresh result. It performs no network access,
+  file write, source load, registration, or reconcile. The result conforms to
   `::status-result`, including `::resolved-entry-points`
   (DELTA-OlrRepl-001.CC8, DELTA-OlrDrt-001.CC15)."
   [runtime]

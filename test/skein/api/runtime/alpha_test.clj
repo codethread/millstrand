@@ -252,9 +252,12 @@
     (let [status {:modules {} :declaration/layers {} :declaration/shadows {}
                   :contributions {} :module/outcomes {} :resource/outcomes {}
                   :root/outcomes {} :resolved/entry-points {}
-                  :loaded {} :last-refresh nil}]
+                  :loaded {} :pending-generation nil :last-refresh nil}]
       (is (s/valid? ::runtime/status-result status))
       (is (not (s/valid? ::runtime/status-result (dissoc status :last-refresh))))
+      (is (not (s/valid? ::runtime/status-result (dissoc status :pending-generation))))
+      (is (not (s/valid? ::runtime/status-result
+                         (assoc status :pending-generation :bogus))))
       (is (not (s/valid? ::runtime/status-result (assoc status :loaded :nope))))
       (is (not (s/valid? ::runtime/status-result
                          (assoc status :resolved/entry-points

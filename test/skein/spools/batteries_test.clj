@@ -427,6 +427,20 @@
         (is (s/valid? ::batteries/spool-status-result result))
         (is (= {:marker "v5" :provenance :claimed} (:release-marker result)))))))
 
+(deftest spool-status-reports-pending-generation
+  (with-batteries
+    (fn [rt]
+      (let [status runtime/status
+            pending {:status :pending
+                     :generation "test-generation"
+                     :diff {}
+                     :approved-spools #{}
+                     :remedy "restart"}]
+        (with-redefs [runtime/status #(assoc (status %) :pending-generation pending)]
+          (let [result (weaver/op! rt 'spool ["status"])]
+            (is (= pending (:pending-generation result)))
+            (is (s/valid? ::batteries/spool-status-result result))))))))
+
 (deftest spool-status-projects-implicit-root-for-rootless-local-family
   ;; di00f: a bare {:local/root ...} family declares no :roots. Normalization
   ;; synthesizes the implicit {family "."} sole-root, so status must project that
