@@ -321,16 +321,14 @@
   refusal a directly authored declaration raises; the keys carry no alias and
   no fallback (DELTA-Dsp-003.CC1).
 
-  `:load :image` (SPEC-004.C45/C46, ADR-003.P4) trusts the
-  already-loaded JVM image for the `:ns` target: refresh performs no source
-  load for that module, and it accepts no `:file` target — that violation is
-  refused at declaration time. Its entry points resolve from the namespace's
-  `spool` var in the image; a declared namespace not loaded in the image, or one
-  with no resolvable `:contribute`, is that module's `:failed` outcome at
-  evaluation. The outcome reports `:source/status :image` and carries no source
-  stamp. Image mode never loads the declared target namespace's source; an
-  entry-point symbol deliberately qualified to a different namespace follows
-  ordinary symbol resolution and may require that callable namespace.
+  `:load :image` (SPEC-004.C45/C46, ADR-003.P4) trusts the already-loaded JVM
+  image for the `:ns` target: refresh performs no source load for that module,
+  and it accepts no `:file` target. It replays the namespace's retained
+  authoring declaration record as data. A missing or stale record fails the
+  module evaluation. During the bounded migration window, only a missing
+  record may fall back to the legacy namespace `spool` var's `:contribute`
+  callback. The outcome reports `:source/status :image` and carries no source
+  stamp.
 
   A `:reconcile` fn receives the contribution status under
   `[:module/contribution :status]` and branches: `:applied` ensures its live

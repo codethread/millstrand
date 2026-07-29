@@ -546,6 +546,16 @@
             resolved (entry-points/resolve-entry-points key module-ns)
             resolved-fns (resolve-entry-point-fns! with-loader key resolved)
             contribute-fn (:contribute resolved-fns)
+            kind-declarations
+            (if (= :unchanged source-status)
+              (try
+                (:kind-declarations (replay-declarations key module-ns))
+                (catch clojure.lang.ExceptionInfo throwable
+                  (if (= :missing-declaration-record
+                         (:reason (ex-data throwable)))
+                    kind-declarations
+                    (throw throwable))))
+              kind-declarations)
             contribution (cond
                            contribute-fn
                            (do
@@ -570,7 +580,9 @@
 
                            :else collected)
             normalized (normalize-contribution contribution)
-            _ (when (and (not contribute-fn) (not dry-run?))
+            _ (when (and (not contribute-fn)
+                         (not= :unchanged source-status)
+                         (not dry-run?))
                 (retain-declarations!
                  key module-ns normalized kind-declarations))]
         {:status :ready

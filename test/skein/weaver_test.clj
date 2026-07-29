@@ -4290,6 +4290,10 @@
           (is (= {:one {:value 1}}
                  (registry/effective handle (keyword (str kind-ns) "widgets")))
               "open kinds are realized before their entries stage"))
+        (is (= :unchanged
+               (:status (runtime/module! rt :image-kind
+                                         {:ns kind-ns :spools [root-lib]})))
+            "an unchanged source evaluation preserves retained open kinds")
         (let [result (runtime/module! rt :image-kind
                                       {:ns kind-ns :load :image})]
           (is (= :unchanged (:status result)))
