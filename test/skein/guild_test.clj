@@ -1,6 +1,7 @@
 (ns skein.guild-test
   "Tests for the guild reference spool's op declaration and deprecation API."
   (:require [clojure.set :as set]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [clojure.spec.alpha :as s]
             [clojure.data.json :as json]
@@ -200,13 +201,16 @@
                               (guild/register-op! rt 'gate.close.v1 {:doc "x" :extra true
                                                                      :hook-class :read :deadline-class :standard}
                                                   'skein.guild-test/close-handler))))
-      (testing "leaf classes are required from the guild caller"
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"requires :hook-class"
-                              (guild/register-op! rt 'missing.hook.v1 {:doc "x" :deadline-class :standard}
-                                                  'skein.guild-test/close-handler)))
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"requires :deadline-class"
-                              (guild/register-op! rt 'missing.deadline.v1 {:doc "x" :hook-class :read}
-                                                  'skein.guild-test/close-handler))))
+      (testing "leaf classes are required by the owning opts spec"
+        (let [err (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts failed spec validation"
+                                        (guild/register-op! rt 'missing.hook.v1 {:doc "x" :deadline-class :standard}
+                                                            'skein.guild-test/close-handler)))]
+          (is (= "skein.spools.guild/register-op-opts" (:spec (ex-data err))))
+          (is (str/includes? (:explain (ex-data err)) ":hook-class")))
+        (let [err (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts failed spec validation"
+                                        (guild/register-op! rt 'missing.deadline.v1 {:doc "x" :hook-class :read}
+                                                            'skein.guild-test/close-handler)))]
+          (is (str/includes? (:explain (ex-data err)) ":deadline-class"))))
       (testing "namespaced registry names are rejected by the public registry"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"simple symbols or keywords"
                               (guild/register-op! rt 'gate/close.v1 {:doc "x"

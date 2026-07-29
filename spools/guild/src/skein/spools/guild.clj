@@ -73,8 +73,17 @@
 (def ^:private register-op-opt-keys #{:doc :input-spec :returns :hook-class :deadline-class})
 (def ^:private deprecate-opt-keys #{:replacement :since})
 
-(def ^:private hook-classes #{:read :mutating})
-(def ^:private deadline-classes #{:standard :unbounded})
+(s/def ::hook-class #{:read :mutating})
+(s/def ::deadline-class #{:standard :unbounded})
+(s/def ::doc string?)
+(s/def ::input-spec (s/or :keyword keyword? :symbol symbol?))
+;; :returns shape authority is skein.api.return-shape.alpha at op registration;
+;; this spec owns only presence-with-value.
+(s/def ::returns some?)
+
+(s/def ::register-op-opts
+  (s/keys :req-un [::hook-class ::deadline-class]
+          :opt-un [::doc ::input-spec ::returns]))
 
 (defn- require-spec-name! [spec-name]
   (when-not (or (keyword? spec-name) (symbol? spec-name))
@@ -201,10 +210,11 @@
   "Register a guild operation in `runtime`'s CLI operation registry.
 
   `name` is a simple unqualified registry handle, conventionally dotted and
-  version-suffixed such as `gate.close.v1`. `opts` requires caller-supplied
-  leaf `:hook-class` (`:read` or `:mutating`) and `:deadline-class` (`:standard`
-  or `:unbounded`), plus supports `:doc`, optional `:input-spec`, and optional
-  `:returns`; unknown options fail loudly. Guild supplies no class defaults.
+  version-suffixed such as `gate.close.v1`. `opts` must satisfy the owning
+  `::register-op-opts` spec: caller-supplied leaf `:hook-class` (`:read` or
+  `:mutating`) and `:deadline-class` (`:standard` or `:unbounded`), plus
+  optional `:doc`, `:input-spec`, and `:returns`; unknown options fail
+  loudly. Guild supplies no class defaults.
   `:returns` is the shared registry return-shape declaration, not a
   Guild-specific schema. `fn-sym` must be a fully qualified symbol resolving in
   the weaver JVM. The handler receives the usual op context plus parsed JSON
@@ -218,10 +228,11 @@
   (when-not (map? opts)
     (fail! "Guild op opts must be a map" {:opts opts}))
   (spool/reject-unknown-keys! "guild/register-op!" register-op-opt-keys opts)
-  (when-not (hook-classes (:hook-class opts))
-    (fail! "Guild op requires :hook-class :read or :mutating" {:opts opts}))
-  (when-not (deadline-classes (:deadline-class opts))
-    (fail! "Guild op requires :deadline-class :standard or :unbounded" {:opts opts}))
+  (when-not (s/valid? ::register-op-opts opts)
+    (fail! "Guild op opts failed spec validation"
+           {:opts opts
+            :spec (spec-name-str ::register-op-opts)
+            :explain (s/explain-str ::register-op-opts opts)}))
   (when-not (and (symbol? fn-sym) (namespace fn-sym))
     (fail! "Guild op handler must be a fully qualified symbol" {:handler fn-sym}))
   (requiring-resolve fn-sym)

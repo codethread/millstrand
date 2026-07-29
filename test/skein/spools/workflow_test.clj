@@ -1865,6 +1865,21 @@
         (is (= {:by :a} (snapshot {}))
             "a value captured for an in-flight call keeps its snapshot")))))
 
+(deftest executor-unresolved-stall-symbol-fails-loudly
+  ;; A declared stall symbol whose Var no longer exists must not read as an
+  ;; absent executor: both lookup paths name the waiter and symbol.
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-executor! :exec-gone 'skein.spools.workflow-test/no-such-predicate)
+      (let [err (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                      #"stall symbol does not resolve"
+                                      (wf-registry/executor-for rt "exec-gone")))]
+        (is (= "exec-gone" (:waiter (ex-data err))))
+        (is (= 'skein.spools.workflow-test/no-such-predicate (:stalled? (ex-data err)))))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"stall symbol does not resolve"
+                            (wf-registry/executor-map rt))))))
+
 (s/def :decl-exec/target string?)
 (s/def ::decl-exec-request (s/keys :req [:decl-exec/target]))
 

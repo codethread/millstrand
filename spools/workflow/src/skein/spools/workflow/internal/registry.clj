@@ -250,26 +250,44 @@
   [entry]
   (when (map? entry) (:request-spec entry)))
 
+(defn- resolve-stalled!
+  "Resolve a declared executor `entry`'s stall symbol to its current Var.
+
+  A declaration whose symbol no longer names a Var fails loudly with the
+  waiter, symbol, and declaring owner (TEN-003) rather than reading as an
+  absent executor and leaving its gates waiting with no diagnostic."
+  [rt key entry]
+  (let [sym (entry-stalled-symbol entry)]
+    (or (requiring-resolve sym)
+        (fail! "Registered executor stall symbol does not resolve"
+               {:reason :workflow/executor-unresolved
+                :waiter key
+                :stalled? sym
+                :owner (get-in (registry/explain (registry-handle rt) executor-kind)
+                               [key :effective :owner])}))))
+
 (defn executor-for
   "Return the stall predicate for a ready gate's `waiter`, or nil.
 
   A raw direct/REPL function value wins; otherwise the effective entry's stall
   symbol is resolved to its current Var, the per-gate-evaluation snapshot
-  (DELTA-OlrDrt-001.CC10)."
+  (DELTA-OlrDrt-001.CC10). A declared symbol that no longer resolves fails
+  loudly rather than reading as an absent executor."
   [rt waiter]
   (let [key (waiter-key waiter)]
     (or (get @(executor-fns rt) key)
         (when-let [entry (get (registry/effective (registry-handle rt) executor-kind) key)]
-          (requiring-resolve (entry-stalled-symbol entry))))))
+          (resolve-stalled! rt key entry)))))
 
 (defn executor-map
   "Return the merged waiter-string -> predicate map of every effective executor.
 
-  Effective entries resolve their stall symbol to its current Var; raw function
-  values shadow a same-waiter declaration."
+  Effective entries resolve their stall symbol to its current Var, failing
+  loudly on a symbol that no longer resolves; raw function values shadow a
+  same-waiter declaration."
   [rt]
   (merge (into {}
-               (map (fn [[key entry]] [key (requiring-resolve (entry-stalled-symbol entry))]))
+               (map (fn [[key entry]] [key (resolve-stalled! rt key entry)]))
                (registry/effective (registry-handle rt) executor-kind))
          @(executor-fns rt)))
 

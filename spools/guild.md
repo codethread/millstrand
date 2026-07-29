@@ -62,7 +62,7 @@ At invocation time, `guild list` prefers the runtime metadata name published by 
 |---|---|
 | `runtime` | The weaver runtime to register into. |
 | `name` | Simple unqualified symbol or keyword. By convention use a dotted, version-suffixed handle such as `gate.status.v1`. |
-| `opts` | Map supporting `:doc`, optional `:input-spec`, and optional output `:returns`. Unknown keys fail loudly. |
+| `opts` | Map satisfying the owning `::register-op-opts` spec: required `:hook-class` (`:read` or `:mutating`) and `:deadline-class` (`:standard` or `:unbounded`), plus optional `:doc`, `:input-spec`, and output `:returns`. Unknown keys fail loudly. |
 | `fn-sym` | Fully qualified symbol resolving to the handler function in the weaver JVM. |
 
 Guild op invocation accepts zero arguments or one JSON input argument. The spool parses that JSON to `:guild/input`, validates it against `:input-spec` when supplied, and then calls the resolved handler with the ordinary op context plus `:guild/input`.

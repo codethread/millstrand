@@ -39,12 +39,12 @@
   "Shape version for the code executor's runtime spool-state map."
   2)
 
-(defn qualified-symbol-string?
+(defn- qualified-symbol-string?
   "String spelling a fully qualified symbol."
   [value]
   (and (string? value) (qualified-symbol? (symbol value))))
 
-(defn json-safe?
+(defn- json-safe?
   "JSON-image value: nil, boolean, number, string, or a composition of them."
   [value]
   (or (nil? value)
