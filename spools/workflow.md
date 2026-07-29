@@ -16,7 +16,7 @@ This is userland spool code, not a separate scheduler or persistence system. Wor
 
 Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `defer`, `bind-defers`, `compile`, `pour!`, `wisp!`, and `explain`.
 
-The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `defer!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see [§5](#5-checkpoints-and-routing)), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see [§5b](#5b-registry-discovery)). That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`complete`/`choose`/`next`/`defer`/`await` over the run lifecycle (see [§5c](#5c-driving-a-run)). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
+The generic runtime API is `start!`, `ready`, `ready-step`, `ready-gates`, `ready-checkpoint`, `complete!`, `choose!`, `defer!`, `advance!`, `choice-detail`, `choice-details`, and `done?`, keyed by `workflow/run-id`. Workflows can be registered under stable names with `register-workflow!`/`unregister-workflow!`/`workflow-definition`/`workflows`/`resolve-workflow` (see [§5](#5-checkpoints-and-routing)), and read back with `catalog`/`definition-view` or the opt-in `workflow list`/`workflow show` CLI (see [§5b](#5b-registry-discovery)). That same opt-in module publishes the generic worker verbs `workflow start`/`ready`/`choices`/`complete`/`choose`/`next`/`defer`/`await` over the run lifecycle (see [§5c](#5c-driving-a-run)). Higher-level spools such as `ct.spools.devflow` should define opinionated workflow definitions and thin convenience wrappers around this namespace.
 
 Every run-mutating op (`start!`, `complete!`, `choose!`, `defer!`, `advance!`) returns one `{:ready [step-view ...] :done boolean}` map: `:ready` is the run's ready step views (as `ready` would return them) and `:done` is its done-ness, so an empty `:ready` never leaves a caller guessing whether the run finished or merely stalled. The pure queries `ready`/`ready-step` still return step views directly.
 
@@ -77,9 +77,9 @@ The value is self-describing, which is the point: `:doc`, `:entrypoints`, `:para
 
 A `call` target reached by registered name is judged the same way, at the same boundary that requires its `:call` entrypoint: its defaults merge under the merged parent and call-site params, and its `:param-spec` validates the result before the procedure expands. A target written as a raw value, Var, or symbol is trusted past the entrypoint check, though whatever contract its definition map declares still applies. Params that round-trip through `workflow/context` come back JSON-shaped — a keyword value was stringified on the way in — so a spec a run starts with must also accept what a later `:revise` or `:next` reads back.
 
-Whole-map is the whole point. A required-key list cannot say that one key's value constrains another's, and deriving per-key rules out of a spec would be a second schema interpreter that eventually disagrees with the first. `(workflow/spec-forms ::build-params)` returns the ordered form graph documenting one of these specs: the root first, then every registered spec its printed forms name, in qualified-name order and emitted once. A root that is not currently registered fails as `:workflow/spec-missing` rather than returning an empty graph, so a stale identity is never read as a spec with nothing to say. `s/keys` names its key specs rather than inlining them, so a single form is never the whole contract. The walk reads form data and the spec registry and runs no predicate, and a `keyword-reference` relation says only that a qualified keyword in a form also names a registered spec — a set member that happens to be one is reported the same way as a real key reference.
+Whole-map is the whole point. A required-key list cannot say that one key's value constrains another's, and deriving per-key rules out of a spec would be a second schema interpreter that eventually disagrees with the first. `(workflow/spec-forms ::build-params)` returns the ordered form graph documenting one of these specs: the root first, then every registered spec its printed forms name, in qualified-name order and emitted once; an entry whose form is a resolvable predicate symbol carries the var's docstring first line and private flag (`skein.api.spec.alpha`). The discovery surfaces pair that graph with the shared projection's nested `contract` tree and copyable JSON `template`, whose node grammar `skein.api.spec.alpha` owns. A root that is not currently registered fails as `:workflow/spec-missing` rather than returning an empty graph, so a stale identity is never read as a spec with nothing to say. `s/keys` names its key specs rather than inlining them, so a single form is never the whole contract. The walk reads form data and the spec registry and runs no predicate, and a `keyword-reference` relation says only that a qualified keyword in a form also names a registered spec — a set member that happens to be one is reported the same way as a real key reference.
 
-A worker that arrives over JSON crosses the boundary first: `(workflow/json->params obj)` keywordizes object keys recursively, so `"feature"` satisfies an `s/keys :req-un` entry and `"acme.workflows/feature"` addresses a `:req` key, arrays become vectors, and scalars keep their ordinary Clojure values. A non-object top level or a blank key fails loudly. The conversion is total, so a spec that requires string-keyed or mixed-keyed maps is reachable only from trusted Clojure in v1. Rejections carry `s/explain-str` as plain text; raw `s/explain-data` stays in Clojure, where a caller can read Clojure values without a wire normalizer inventing a JSON shape for them.
+A worker that arrives over JSON crosses the boundary first: `(workflow/json->params obj)` keywordizes object keys recursively, so `"feature"` satisfies an `s/keys :req-un` entry and `"acme.workflows/feature"` addresses a `:req` key, arrays become vectors, and scalars keep their ordinary Clojure values. A non-object top level or a blank key fails loudly. The conversion is total, so a spec that requires string-keyed or mixed-keyed maps is reachable only from trusted Clojure in v1. Rejections carry the same named projection fields discovery shows — the spec identity, enriched `spec-forms`, `contract`, and `template` — plus `s/explain-str` as plain text; raw `s/explain-data` stays in Clojure, where a caller can read Clojure values without a wire normalizer inventing a JSON shape for them.
 
 ### Conditions
 
@@ -517,7 +517,7 @@ The default lists definitions declaring the `:start` entrypoint, which is the qu
 
 | Field | Contents |
 |---|---|
-| `params` | `{"kind":"spec"}` with the `:param-spec` identity, its live `spec-forms` graph, and `defaults`; or `{"kind":"none"}` with `defaults` alone, when the definition constrains nothing. |
+| `params` | `{"kind":"spec"}` with the `:param-spec` identity, its live `spec-forms` graph, the shared projection's nested `contract` tree and copyable JSON `template` (`skein.api.spec.alpha`), and `defaults`; or `{"kind":"none"}` with `defaults` alone, when the definition constrains nothing. |
 | `declared` | `entry` (items waiting for nothing), `loops`, `gates`, `checkpoints` with their choice keys, `calls` with their target and how it is named, `defers` with their bound targets and `"call"` entrypoint, and `routes` — the registered names checkpoint choices route to. |
 
 The declared summary is exactly that: a summary of what the definition declares. Loops, calls, and continuations are never expanded, because an expansion depends on params that do not exist yet and a deferred exit cannot be described before a worker fills it. Use `describe` ([§6a](#6a-describing-and-archiving)) when you have params and want the shape they would pour.
@@ -528,7 +528,7 @@ There is no family filter, pagination, JSON Schema projection, or registry mutat
 
 ## 5c. Driving a run
 
-The same opt-in module publishes seven verbs over the lifecycle in [§4](#4-run-lifecycle): `start`, `ready`, `complete`, `choose`, `next`, `defer`, and `await`. They add no engine semantics. Each validates a named request spec and delegates to the trusted-Clojure operation behind it. The item mutations narrow the ready frontier to what they can act on and pass the engine an explicit step; `ready` reports the whole frontier and `start` and `await` act on the run rather than an item in it. Their Clojure entry points are `run-start!`, `run-ready`, `run-complete!`, `run-choose!`, `run-next!`, `run-defer!`, and `run-await`, each taking one request map. `next` is the worker verb and request vocabulary; trusted Clojure retains `advance!` as the engine convenience that it delegates to.
+The same opt-in module publishes eight verbs over the lifecycle in [§4](#4-run-lifecycle): `start`, `ready`, `choices`, `complete`, `choose`, `next`, `defer`, and `await`. They add no engine semantics. Each validates a named request spec and delegates to the trusted-Clojure operation behind it. The item mutations narrow the ready frontier to what they can act on and pass the engine an explicit step; `ready` and `choices` are reads, and `start` and `await` act on the run rather than an item in it. Their Clojure entry points are `run-start!`, `run-ready`, `run-choices`, `run-complete!`, `run-choose!`, `run-next!`, `run-defer!`, and `run-await`, each taking one request map. `next` is the worker verb and request vocabulary; trusted Clojure retains `advance!` as the engine convenience that it delegates to.
 
 ### One result shape
 
@@ -585,6 +585,24 @@ An ordinary step takes no choice. A checkpoint requires `--choice` and accepts t
 A defer cannot be advanced because its request must name another registered workflow and that workflow's params. The failure directs the worker to `workflow defer`.
 
 This is one engine mutation, not a client-side `ready` followed by `complete` or `choose`. The engine resolves the role before and after taking the run guard, so another worker cannot move the frontier between a client's read and mutation and cause `next` to act on a different item. The role-specific verbs remain available when the caller already knows what it is closing.
+
+### `workflow choices` before `workflow choose`
+
+The ready frontier stays lean: a checkpoint item carries its choice names and a defer item its allowed workflow names, nothing more. `choices` is the point read behind that leanness — run it before `choose` when a choice declares an input contract:
+
+```console
+$ strand workflow choices feat-x
+{"operation":"workflow choices","run-id":"feat-x",
+ "choices":{"approved":{"label":"Approve",
+                        "input-spec":{"spec":"acme.workflows/approval-input","registered":true,
+                                      "contract":{...},"template":{"approval-note":"<Record why. — non-blank string>"},
+                                      "spec-forms":[...]}},
+            "rework":{"label":"Send it back","next":":build"}}}
+```
+
+Each spec-first choice input is re-projected against the *currently* registered spec — identity, doc, and the shared `contract`/`template`/`spec-forms` views — so what you read is the contract `choose` will actually judge your `--input` against, not the graph recorded at pour. A stored spec that no longer resolves is reported with `"registered": false` and its pour-time record; `choose` is where that absence fails loudly as `workflow/input-spec-missing`. `--step` selects among multiple ready checkpoints, and a frontier whose only checkpoint sits beside other ready items still needs `--step`, matching `choice-details`.
+
+Defer targets get the same discipline from the definition side: a ready defer lists its allowed workflow names only, and a worker reads a target's param contract with `workflow show <target>` before filling it with `workflow defer`.
 
 ### Recording an outcome on `complete`
 

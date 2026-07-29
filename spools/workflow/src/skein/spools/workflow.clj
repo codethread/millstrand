@@ -82,7 +82,9 @@
   Entries are JSON-safe `{\"spec\" … \"relation\" \"root\"|\"keyword-reference\"
   \"form\" …}` maps: the named spec first, then every qualified keyword reachable
   through the printed forms that also names a registered spec, in qualified-name
-  order and emitted once. `s/keys` names its key specs rather than inlining
+  order and emitted once. An entry whose form is a resolvable predicate symbol
+  accretes `\"doc\"` and `\"private\"` from var metadata
+  (`skein.api.spec.alpha`). `s/keys` names its key specs rather than inlining
   them, so one form is never the whole contract.
 
   This is documentation of what is registered *now*, not an evaluable schema and
@@ -1019,9 +1021,10 @@
   A point read, so it answers for any definition regardless of entrypoints,
   including a call-only component the default catalogue omits. The view carries
   the catalogue fields, the param contract (`:param-spec` identity with its live
-  `s/form` graph plus `:defaults`), and the declared summary: entry items, loops,
-  gates, checkpoint choice keys, calls, defers with their bound targets, and the
-  registered workflows the definition routes to.
+  `s/form` graph, the shared `skein.api.spec.alpha` nested `contract` tree and
+  copyable `template` skeleton, plus `:defaults`), and the declared summary:
+  entry items, loops, gates, checkpoint choice keys, calls, defers with their
+  bound targets, and the registered workflows the definition routes to.
 
   It stays topology-lazy. Nothing is expanded, rendered, or evaluated: an
   expansion needs params that do not exist yet, and a defer cannot be described
@@ -1097,6 +1100,51 @@
   (let [rt (current/runtime)]
     (require-valid! ::ready-request request "Invalid workflow ready request")
     (runs/result rt "workflow ready" (:run-id request))))
+
+(defn- live-choice-view
+  "Return a stored choice detail with its input contract re-projected live.
+
+  A spec-first input gains `\"registered\" true` and the current
+  `spec-forms`/`contract`/`template` projection; a stored identity that no
+  longer resolves is reported as `\"registered\" false` with its pour-time
+  record intact, because a read should surface the absence while `choose!` is
+  where it fails loudly."
+  [detail]
+  (if-let [declared (get detail "input-spec")]
+    (let [spec-name (keyword (get declared "spec"))]
+      (assoc detail "input-spec"
+             (if (specs/registered? spec-name)
+               (merge declared
+                      {"registered" true
+                       "spec-forms" (specs/spec-forms spec-name)}
+                      (specs/contract-views spec-name))
+               (assoc declared "registered" false))))
+    detail))
+
+(defn run-choices
+  "Return the ready checkpoint's choice explanations with live input contracts.
+
+  The CLI discovery read behind `workflow choices` (spec-projection
+  DELTA-Spj-003.CC2): the checkpoint's choices keyed by name — label,
+  description, and routing hints as stored — with each spec-first choice input
+  re-projected against the *currently* registered spec, so a worker reads the
+  contract `choose!` will actually judge input against rather than the graph
+  recorded at pour. Selection mirrors `choice-details`: `:step` selects among
+  multiple ready checkpoints, and without it exactly one checkpoint must be
+  ready. `::choices-request` owns the request shape and `::choices-result` the
+  answer."
+  [request]
+  (let [{:keys [run-id] :as parsed}
+        (require-valid! ::choices-request request "Invalid workflow choices request")
+        details (choice-details run-id (select-keys parsed [:step]))]
+    (require-valid! ::choices-result
+                    {:operation "workflow choices"
+                     :run-id run-id
+                     :choices (into {}
+                                    (map (fn [[choice detail]]
+                                           [choice (live-choice-view detail)]))
+                                    details)}
+                    "Invalid workflow choices result")))
 
 (defn run-complete!
   "Close the ready ordinary step of `request`'s run and return the run result.
@@ -1508,18 +1556,28 @@
          #(= #{:name :doc :entrypoints :definition} (set (keys %)))))
 
 ;; Param contract view. `:spec-forms` is the documentation graph `spec-forms`
-;; returns, carried verbatim in its string-keyed wire shape.
+;; returns, carried verbatim in its string-keyed wire shape; entries may accrete
+;; the shared projection's "doc"/"private" enrichment. `:contract` and
+;; `:template` are the `skein.api.spec.alpha` nested and skeleton views
+;; (spec-projection DELTA-Spj-003.CC1); their node grammar is owned by that
+;; module, so this spec constrains only their JSON carrier types.
 (s/def :skein.spools.workflow.view.params/kind #{"spec" "none"})
 (s/def :skein.spools.workflow.view.params/spec non-blank-string?)
 (s/def :skein.spools.workflow.view.params/spec-form
-  (s/map-of #{"spec" "relation" "form"} string? :count 3))
+  (s/and (s/map-of #{"spec" "relation" "form" "doc" "private"} any?)
+         #(every? string? (vals (select-keys % ["spec" "relation" "form"])))
+         #(= 3 (count (select-keys % ["spec" "relation" "form"])))))
 (s/def :skein.spools.workflow.view.params/spec-forms
   (s/coll-of :skein.spools.workflow.view.params/spec-form :kind vector?))
 (s/def :skein.spools.workflow.view.params/defaults (s/map-of keyword? any?))
+(s/def :skein.spools.workflow.view.params/contract (s/map-of string? any?))
+(s/def :skein.spools.workflow.view.params/template any?)
 (s/def :skein.spools.workflow.view/params
   (s/keys :req-un [:skein.spools.workflow.view.params/kind]
           :opt-un [:skein.spools.workflow.view.params/spec
                    :skein.spools.workflow.view.params/spec-forms
+                   :skein.spools.workflow.view.params/contract
+                   :skein.spools.workflow.view.params/template
                    :skein.spools.workflow.view.params/defaults]))
 
 ;; Declared summary, with one nested shape per declared role. Each carries the
@@ -1620,6 +1678,9 @@
           :opt-un [:skein.spools.workflow.request/params]))
 (s/def ::ready-request
   (s/keys :req-un [:skein.spools.workflow.request/run-id]))
+(s/def ::choices-request
+  (s/keys :req-un [:skein.spools.workflow.request/run-id]
+          :opt-un [:skein.spools.workflow.request/step]))
 (s/def ::complete-request
   (s/keys :req-un [:skein.spools.workflow.request/run-id]
           :opt-un [:skein.spools.workflow.request/step
@@ -1727,6 +1788,33 @@
                    :skein.spools.workflow.view/ready
                    :skein.spools.workflow.view/done]
           :opt-un [:skein.spools.workflow.view/detail]))
+
+;; `choices` answers with the stored detail maps (string-keyed, the
+;; `detail-view` shape) whose input specs carry the live shared projection.
+;; String-keyed wire maps sit outside `s/keys`, so the closed key sets and the
+;; per-key carrier types are spelled out here, mirroring the `spec-form` view
+;; spec above; the `contract`/`template` node grammar inside an input spec is
+;; owned by `skein.api.spec.alpha`, so only its JSON carrier types are
+;; constrained (spec-projection DELTA-Spj-003.CC2).
+(s/def :skein.spools.workflow.view.choices/input-spec
+  (s/and (s/map-of #{"spec" "doc" "registered" "spec-forms" "contract" "template"} any?)
+         #(non-blank-string? (get % "spec"))
+         #(boolean? (get % "registered"))
+         #(every? string? (vals (select-keys % ["doc"])))
+         #(every? vector? (vals (select-keys % ["spec-forms"])))
+         #(every? map? (vals (select-keys % ["contract"])))))
+(s/def :skein.spools.workflow.view.choices/detail
+  (s/and (s/map-of #{"label" "description" "next" "revise" "input-spec"} any?)
+         #(every? string? (vals (select-keys % ["label" "description" "next"])))
+         #(every? map? (vals (select-keys % ["revise"])))
+         #(every? (partial s/valid? :skein.spools.workflow.view.choices/input-spec)
+                  (vals (select-keys % ["input-spec"])))))
+(s/def :skein.spools.workflow.view.choices/choices
+  (s/map-of non-blank-string? :skein.spools.workflow.view.choices/detail))
+(s/def ::choices-result
+  (s/keys :req-un [:skein.spools.workflow.view/operation
+                   :skein.spools.workflow.view/run-id
+                   :skein.spools.workflow.view.choices/choices]))
 
 ;; --- explain topic builders -----------------------------------------------
 

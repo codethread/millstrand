@@ -19,7 +19,7 @@
   (concat
    (for [nm ["batch" "cli" "clock" "current" "events" "format" "graph" "hooks"
              "notes" "patterns" "peers" "registry" "relations" "return-shape"
-             "runtime" "scheduler" "spool" "vocab" "weaver"]]
+             "runtime" "scheduler" "spec" "spool" "vocab" "weaver"]]
      {:name nm
       :source (str "src/skein/api/" (if (= nm "return-shape") "return_shape" nm) "/alpha.clj")
       :outfile (str "docs/api/" nm ".api.md")})

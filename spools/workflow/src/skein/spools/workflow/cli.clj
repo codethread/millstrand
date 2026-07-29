@@ -131,6 +131,8 @@
                (-> {:run-id (:run-id args) :workflow (keyword target)}
                    (with-json-object args :params :params)))
       "ready" (workflow/run-ready {:run-id (:run-id args)})
+      "choices" (workflow/run-choices (-> {:run-id (:run-id args)}
+                                          (carry args :step :step)))
       "complete" (workflow/run-complete!
                   (-> (with-attributes (run-request args) args argv)
                       (with-json-object args :context :context)))
@@ -148,8 +150,8 @@
                (carry {:run-id (:run-id args)} args :timeout-secs :timeout-secs))
       (throw (ex-info "Unsupported workflow subcommand"
                       {:subcommand subcommand
-                       :allowed ["list" "show" "start" "ready" "complete"
-                                 "choose" "next" "defer" "await"]})))))
+                       :allowed ["list" "show" "start" "ready" "choices"
+                                 "complete" "choose" "next" "defer" "await"]})))))
 
 (def ^:private workflow-doc
   (fmt/reflow
@@ -209,8 +211,9 @@
                        |name, doc, entrypoints, and definition; everything else
                        |is a workflow show away.")]}}
     "show" {:doc (fmt/reflow
-                  "|Show one registered workflow definition in full: params,
-                   |defaults, spec forms, and declared shape.")
+                  "|Show one registered workflow definition in full: the param
+                   |contract, template, defaults, spec forms, and declared
+                   |shape.")
             :hook-class :read
             :deadline-class :standard
             :positionals [{:name :workflow
@@ -257,6 +260,24 @@
                        "|Reports every ready item of every role, so a worker can
                         |see the siblings its own verb would filter out. Every
                         |mutation returns this same shape.")]}}
+    "choices" {:doc (fmt/reflow
+                     "|Show the ready checkpoint's choices with each declared
+                      |input contract, projected live.")
+               :hook-class :read
+               :deadline-class :standard
+               :positionals [run-id-positional]
+               :flags {:step step-flag}
+               :annotations
+               {:notes [(fmt/reflow
+                         "|Run this before workflow choose: a spec-first choice
+                          |input carries the current contract, a copyable JSON
+                          |template, and the printed form graph, resolved
+                          |against the live spec registry rather than the graph
+                          |recorded when the checkpoint poured.")
+                        (fmt/reflow
+                         "|A stored input spec that no longer resolves is
+                          |reported with registered false; choose is where that
+                          |absence fails loudly.")]}}
     "complete" {:doc "Close the ready ordinary step of a run."
                 :hook-class :mutating
                 :deadline-class :standard
@@ -438,6 +459,13 @@
                        :declared :json}}
     "start" run-result-return
     "ready" run-result-return
+    "choices" {:type :map
+               :required {:operation :string
+                          :run-id :string
+                          ;; Choice details and the projected input contracts
+                          ;; are owned by the engine's ::choices-result spec
+                          ;; and the skein.api.spec.alpha node grammar.
+                          :choices :json}}
     "complete" run-result-return
     "choose" run-result-return
     "next" run-result-return
@@ -463,7 +491,11 @@
             |choose, next, defer, and await drive a run: they share one
             |result shape — the run, its current root, its complete ready
             |frontier, and whether it is done — so every call tells you what
-            |you may do next without a second read.")
+            |you may do next without a second read. choices is the checkpoint
+            |discovery read: the ready checkpoint's declared inputs projected
+            |against the live spec registry, so a worker authors valid input
+            |before choose rather than learning the contract from a rejected
+            |payload.")
    :prime (fmt/reflow
            "|Run workflow list before choosing a routine and workflow show
             |<name> before supplying params; the param contract it prints is the

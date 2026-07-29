@@ -169,16 +169,23 @@
 
   `:kind` is `\"spec\"` when the definition names a whole-map `:param-spec`, and
   `\"none\"` when it constrains nothing.
-  The spec is resolved live and reported through its current `s/form` graph, so a
-  spec redefined since the definition was authored documents itself as it is
-  now — and one that has since been deleted fails loudly instead of reading as an
-  unconstrained workflow."
+  The spec is resolved live and reported through the shared projection — its
+  current `s/form` graph plus the nested `:contract` and copyable `:template`
+  views (spec-projection DELTA-Spj-003.CC1) — so a spec redefined since the
+  definition was authored documents itself as it is now, and one that has since
+  been deleted fails loudly instead of reading as an unconstrained workflow."
   [definition]
-  (let [param-spec (:param-spec definition)]
-    (cond-> {:kind (if param-spec "spec" "none")
-             :defaults (or (:defaults definition) {})}
-      param-spec (assoc :spec (subs (str param-spec) 1)
-                        :spec-forms (specs/spec-forms param-spec)))))
+  (let [param-spec (:param-spec definition)
+        defaults (or (:defaults definition) {})]
+    (if param-spec
+      (let [views (specs/contract-views param-spec)]
+        {:kind "spec"
+         :defaults defaults
+         :spec (subs (str param-spec) 1)
+         :spec-forms (specs/spec-forms param-spec)
+         :contract (get views "contract")
+         :template (get views "template")})
+      {:kind "none" :defaults defaults})))
 
 ;; --- discovery reads ----------------------------------------------------------
 

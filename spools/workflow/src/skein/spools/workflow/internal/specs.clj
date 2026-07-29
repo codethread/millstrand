@@ -13,11 +13,13 @@
   never substitutes `s/conform` output — a workflow compiles with the map its
   caller supplied, not with a conformed rewrite of it.
 
-  `spec-forms` is documentation, not schema. It walks the data `s/form` returns
-  and the registry, never invoking a predicate, and says only that a qualified
-  keyword in a form also names a registered spec (PROP-Wcd-001.S11)."
+  The documentation views themselves — the printed-form graph, the nested
+  contract tree, and the JSON template — are owned by `skein.api.spec.alpha`
+  (PROP-Wcd-001.S11 and its spec-projection delta); this namespace wraps them
+  with the spool's own fail-loud reasons and failure payloads."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [skein.api.spec.alpha :as api-spec]
             [skein.api.spool.alpha :refer [fail!]]))
 
 (defn- non-blank-string?
@@ -42,45 +44,6 @@
   [spec-name]
   (and (qualified-keyword? spec-name) (some? (s/get-spec spec-name))))
 
-(defn- referenced-keywords
-  "Return the qualified keywords appearing anywhere in `form`'s data.
-
-  A pure data walk over what `s/form` returned: no spec operator is
-  interpreted, so this finds `s/keys` entries and bare keyword literals alike.
-  What that means is decided by the caller — here, only that the keyword also
-  names a registered spec."
-  [form]
-  (cond
-    (qualified-keyword? form) [form]
-    (map? form) (mapcat referenced-keywords (interleave (keys form) (vals form)))
-    (coll? form) (mapcat referenced-keywords form)
-    :else nil))
-
-(defn- form-graph
-  "Return the ordered form graph reachable from `spec-name`, which the caller has
-  already established is registered."
-  [spec-name]
-  (loop [queue [[spec-name "root"]]
-         seen #{}
-         out []]
-    (if-let [[current relation] (first queue)]
-      (let [remaining (subvec queue 1)]
-        (if-let [spec (and (not (contains? seen current)) (s/get-spec current))]
-          (let [form (s/form spec)
-                references (->> (referenced-keywords form)
-                                (filter registered?)
-                                (remove #(= % current))
-                                distinct
-                                sort
-                                (mapv (fn [reference] [reference "keyword-reference"])))]
-            (recur (into remaining references)
-                   (conj seen current)
-                   (conj out {"spec" (subs (str current) 1)
-                              "relation" relation
-                              "form" (pr-str form)})))
-          (recur remaining seen out)))
-      out)))
-
 (defn require-spec!
   "Return the registered spec for `spec-name`, failing loudly with `reason` when
   the name resolves to nothing.
@@ -95,26 +58,29 @@
 (defn spec-forms
   "Return the ordered `s/form` documentation graph rooted at `spec-name`.
 
-  Each entry is the JSON-safe `{\"spec\" <qualified-name> \"relation\"
-  \"root\"|\"keyword-reference\" \"form\" <printed form>}`. The root comes first;
-  every other entry is reached because some already-emitted form contains a
-  qualified keyword that itself names a registered spec, visited in
-  qualified-name order and emitted once. `s/keys` names its key specs rather
-  than inlining them, which is why one form is never the whole contract.
-
-  `relation` is deliberately not a dependency claim. The walk does not interpret
-  spec operators, so a keyword literal that happens to name a spec is reported
-  the same way as a real key reference — supplementary documentation, judged by
-  the reader. Nothing here executes a predicate, and a cycle terminates because
-  a spec is emitted at most once.
+  The shared `skein.api.spec.alpha/spec-forms` view behind the spool's own
+  fail-loud reason: each entry is the JSON-safe `{\"spec\" <qualified-name>
+  \"relation\" \"root\"|\"keyword-reference\" \"form\" <printed form>}` map,
+  accreting `\"doc\"`/`\"private\"` where a form is a resolvable predicate
+  symbol. Nothing here executes a predicate.
 
   A root that is not a currently registered qualified keyword fails loudly as
   `workflow/spec-missing`: a stale or mistyped identity is the one thing an
-  empty graph must not be confused with. A registered spec with no references
-  documents itself in a single entry."
+  empty graph must not be confused with."
   [spec-name]
   (require-spec! spec-name :workflow/spec-missing {})
-  (form-graph spec-name))
+  (api-spec/spec-forms spec-name))
+
+(defn contract-views
+  "Return the nested `\"contract\"` and `\"template\"` views for `spec-name`.
+
+  The shared documentation projection the discovery and failure surfaces embed
+  beside `spec-forms` (spec-projection DELTA-Spj-003). Fails loudly as
+  `workflow/spec-missing` when the name resolves to nothing."
+  [spec-name]
+  (require-spec! spec-name :workflow/spec-missing {})
+  {"contract" (api-spec/contract spec-name)
+   "template" (api-spec/template spec-name)})
 
 (defn explain-str
   "Return `s/explain-str` for `spec-name` and `value` as plain JSON-safe text.
@@ -130,17 +96,22 @@
 
   The returned value is the caller's own map, never `s/conform` output: a
   workflow compiles and pours with what its caller supplied. The failure carries
-  the spec identity, its current form graph, and `s/explain-str`, so a worker
-  gets the contract and the violation in one payload."
+  the same named projection fields discovery shows — the spec identity, its
+  current form graph, nested contract, and template — plus `s/explain-str`, so
+  a worker gets the contract and the violation in one payload
+  (spec-projection DELTA-Spj-003.CC4)."
   [spec-name value reason context]
   (if (s/valid? spec-name value)
     value
-    (fail! "Value does not satisfy the named spec"
-           (assoc context
-                  :reason reason
-                  :spec spec-name
-                  :spec-forms (spec-forms spec-name)
-                  :explain (explain-str spec-name value)))))
+    (let [views (contract-views spec-name)]
+      (fail! "Value does not satisfy the named spec"
+             (assoc context
+                    :reason reason
+                    :spec spec-name
+                    :spec-forms (spec-forms spec-name)
+                    :contract (get views "contract")
+                    :template (get views "template")
+                    :explain (explain-str spec-name value))))))
 
 (defn- json-key
   [k context]

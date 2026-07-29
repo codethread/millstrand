@@ -2408,6 +2408,10 @@
           (is (= :wt-spec-build (:name data)))
           (is (re-find #"scope" (:explain data)))
           (is (= "root" (get-in data [:spec-forms 0 "relation"])))
+          ;; the failure carries the same named projection fields discovery
+          ;; shows (DELTA-Spj-003.CC4)
+          (is (= "map" (get-in data [:contract "kind"])))
+          (is (contains? (:template data) "scope"))
           (is (nil? (workflow/current-root "spec-missing"))
               "nothing pours when params are rejected")))
       (testing "a wrong-typed value fails the same way"
@@ -2459,13 +2463,16 @@
               declared (get detail "input-spec")]
           (is (= "skein.spools.workflow-test/approval-input" (get declared "spec")))
           (is (= "Record why this was approved." (get declared "doc")))
+          ;; entries may accrete "doc"/"private" var-metadata enrichment on top
+          ;; of the stable spec/relation/form triple (skein.api.spec.alpha)
           (is (= [{"spec" "skein.spools.workflow-test/approval-input"
                    "relation" "root"
                    "form" (pr-str (s/form ::approval-input))}
                   {"spec" "skein.spools.workflow-test/approval-note"
                    "relation" "keyword-reference"
                    "form" (pr-str (s/form ::approval-note))}]
-                 (get declared "spec-forms")))))
+                 (mapv #(select-keys % ["spec" "relation" "form"])
+                       (get declared "spec-forms"))))))
       (testing "invalid input fails before mutation with the current contract"
         (let [step-id (:id (workflow/ready-checkpoint "input-run"))
               thrown (try (workflow/choose! "input-run" :approve {})
@@ -2480,6 +2487,62 @@
       (testing "valid input records the choice"
         (workflow/start! "input-ok" #'spec-first-signoff {})
         (is (:done (workflow/choose! "input-ok" :approve {:approval-note "scope agreed"})))))))
+
+(deftest definition-view-params-carry-the-shared-projection
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/register-workflow! :wt-spec-build 'skein.spools.workflow-test/spec-first-build)
+      (let [params (:params (workflow/definition-view :wt-spec-build))]
+        (is (= "spec" (:kind params)))
+        (is (= "root" (get-in params [:spec-forms 0 "relation"])))
+        (is (= "map" (get-in params [:contract "kind"])))
+        (is (= #{"scope" "reviewer"}
+               (set (map #(get % "key") (get-in params [:contract "required"])))))
+        (is (contains? (:template params) "scope"))))))
+
+(deftest workflow-choices-projects-live-input-contracts
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
+      (workflow/start! "choices-run" #'spec-first-signoff {})
+      (testing "a spec-first choice input carries the live projection"
+        (let [result (workflow/run-choices {:run-id "choices-run"})
+              declared (get-in result [:choices "approve" "input-spec"])]
+          (is (= "workflow choices" (:operation result)))
+          (is (= "choices-run" (:run-id result)))
+          (is (true? (get declared "registered")))
+          (is (= "map" (get-in declared ["contract" "kind"])))
+          (is (contains? (get declared "template") "approval-note"))
+          (is (= "root" (get-in declared ["spec-forms" 0 "relation"])))
+          (is (nil? (get-in result [:choices "reject" "input-spec"]))
+              "a choice with no declared input has no contract to project")))
+      (testing "a stored spec that no longer resolves reports registered false"
+        (try
+          (s/def ::approval-input nil)
+          (let [declared (get-in (workflow/run-choices {:run-id "choices-run"})
+                                 [:choices "approve" "input-spec"])]
+            (is (false? (get declared "registered")))
+            (is (some? (get declared "spec-forms"))
+                "the pour-time record stays readable"))
+          (finally
+            (s/def ::approval-input (s/keys :req-un [::approval-note]))))))))
+
+(deftest choices-view-spec-rejects-malformed-details
+  (let [choices :skein.spools.workflow.view.choices/choices]
+    (is (s/valid? choices {"approve" {"label" "Approve"
+                                      "input-spec" {"spec" "x/y"
+                                                    "registered" true
+                                                    "spec-forms" []
+                                                    "contract" {}
+                                                    "template" {}}}}))
+    (is (not (s/valid? choices {"approve" {"unknown" 1}}))
+        "detail keys are a closed set")
+    (is (not (s/valid? choices {"approve" {"input-spec" {"spec" "x/y"}}}))
+        "a projected input spec must say whether it is registered")
+    (is (not (s/valid? choices {"approve" {"input-spec" {"spec" "x/y"
+                                                         "registered" "yes"}}}))
+        "registered is a boolean, not a string")))
 
 (deftest checkpoint-input-spec-resolves-the-live-spec-not-the-recorded-form
   (with-runtime

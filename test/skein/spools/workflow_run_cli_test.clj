@@ -825,9 +825,11 @@
           (is (= :mutating (:hook-class (leaf verb))) verb)
           (is (= :standard (:deadline-class (leaf verb))) verb))
         (is (= [:read :standard] ((juxt :hook-class :deadline-class) (leaf "ready"))))
+        (is (= [:read :standard] ((juxt :hook-class :deadline-class) (leaf "choices")))
+            "choices is checkpoint discovery: a read, never a mutation")
         (is (= [:read :unbounded] ((juxt :hook-class :deadline-class) (leaf "await")))
             "await blocks by design and writes nothing")
-        (is (= #{"list" "show" "start" "ready" "complete" "choose" "next"
+        (is (= #{"list" "show" "start" "ready" "choices" "complete" "choose" "next"
                  "defer" "await"}
                (set (keys (:subcommands (:arg-spec entry))))))
         (is (= (set (keys (:subcommands (:arg-spec entry))))
@@ -844,6 +846,9 @@
         (check "start" (started "run-returns" :mixed))
         (check "ready" (verb "ready" "run-returns"))
         (check "complete" (verb "complete" "run-returns"))
+        (check "choices" (invoke {:subcommand ["choices"] :run-id "run-returns"
+                                  :step (item-id (verb "ready" "run-returns")
+                                                 "Sign the work off")}))
         (check "choose" (invoke {:subcommand ["choose"] :run-id "run-returns"
                                  :choice "ship" :input {"verdict" "pass"}}))
         (check "next" (verb "next" "run-returns"
