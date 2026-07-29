@@ -851,7 +851,7 @@
         (let [detail (weaver/op! rt 'help ["query"])]
           (is (= ["explain" "list"] (mapv :name (get-in detail [:node :children]))))
           (is (= [{:name "name" :type "string" :required true
-                   :variadic false :parse nil :doc "Query name."}]
+                   :variadic false :parse nil :spec nil :doc "Query name."}]
                  (->> (get-in detail [:node :children])
                       (filter #(= "explain" (:name %)))
                       first
@@ -1045,6 +1045,53 @@
       (is (< (head-indent lines "root — root doc")
              (head-indent lines "mid — middle doc")
              (head-indent lines "leaf — deepest leaf doc"))))))
+
+(deftest reference-renderer-projects-declared-arg-specs
+  (let [node (-> (synthetic-node "chooser" "choose doc" [])
+                 (assoc :invocation
+                        {:mode "declared"
+                         :flags [{:name "input" :flag "--input" :type "string"
+                                  :required true :repeat false :parse "json"
+                                  :spec "my.ns/input"
+                                  :template {"reason" "<reason text>"}
+                                  :doc "Choice input"}
+                                 {:name "force" :flag "--force" :type "boolean"
+                                  :required false :repeat false :parse nil
+                                  :spec nil :doc "Skip checks"}
+                                 {:name "fresh" :flag "--fresh" :type "boolean-token"
+                                  :required false :repeat false :parse nil
+                                  :spec nil :doc "Explicit token"}]
+                         :positionals [{:name "choice" :type "string" :required true
+                                        :variadic false :parse nil
+                                        :spec "my.ns/choice"
+                                        :template "<approved | abort>"
+                                        :doc "Choice key"}]}
+                        :hook-class "mutating"
+                        :deadline-class "standard"))
+        envelope {:schema-version 2
+                  :operation {:name "chooser" :provenance "test" :stream? false
+                              :raw-envelope false}
+                  :source nil
+                  :glossary {}
+                  :node node}
+        rendered (batteries/default-help-transform envelope)
+        lines (str/split-lines rendered)]
+    (testing "a presence boolean flag renders its bare token, no value placeholder"
+      (is (str/includes? rendered "--force  Skip checks"))
+      (is (not (str/includes? rendered "--force <boolean>"))))
+    (testing "a value-consuming boolean-token keeps its value form"
+      (is (str/includes? rendered "--fresh <boolean-token>")))
+    (testing "declared specs render as {spec name} markers on their arg lines"
+      (is (str/includes? rendered
+                         (str "--input <string> (required) {parse json} "
+                              "{spec my.ns/input}  Choice input")))
+      (is (str/includes? rendered
+                         "<choice> <string> (required) {spec my.ns/choice}  Choice key")))
+    (testing "a declared-spec template block renders nested under its arg line"
+      (is (str/includes? rendered "template:"))
+      (is (str/includes? rendered "reason: <reason text>"))
+      (is (str/includes? rendered "<approved | abort>"))
+      (is (< (head-indent lines "--input") (head-indent lines "template:"))))))
 
 (deftest batteries-adopts-discovery-tier-pattern
   (with-batteries

@@ -212,8 +212,10 @@
       (is (true? (:required owner))))
     (let [edge (first (filter #(= "edge" (:name %)) (:flags e)))]
       (is (true? (:repeat edge))))
-    (is (= [{:name "title" :type "string" :required true :variadic false :parse nil :doc "Title"}
-            {:name "note" :type "string" :required false :variadic false :parse nil :doc "Optional note"}]
+    (is (= [{:name "title" :type "string" :required true :variadic false :parse nil :spec nil
+             :doc "Title"}
+            {:name "note" :type "string" :required false :variadic false :parse nil :spec nil
+             :doc "Optional note"}]
            (:positionals e)))))
 
 (deftest explain-renders-parse-declarations
@@ -221,6 +223,36 @@
         data (first (filter #(= "data" (:name %)) (:flags e)))]
     (is (= "json" (:parse data)))
     (is (= "jsonl" (:parse (first (:positionals e)))))))
+
+(def spec-ref-spec
+  {:op :choose
+   :doc "Choose with declared value specs"
+   :hook-class :mutating
+   :deadline-class :standard
+   :flags {:input {:type :string :parse :json :spec :my.ns/input :doc "Input"}}
+   :positionals [{:name :choice :required? true :spec :my.ns/choice :doc "Choice"}]})
+
+(deftest explain-renders-declared-specs
+  (let [e (cli/explain spec-ref-spec)]
+    (is (= "my.ns/input" (:spec (first (:flags e)))))
+    (is (= "my.ns/choice" (:spec (first (:positionals e)))))
+    (testing "a declared qualified symbol renders as its printed name"
+      (is (= "my.ns/sym-spec"
+             (:spec (first (:flags (cli/explain
+                                    (assoc-in spec-ref-spec
+                                              [:flags :input :spec]
+                                              'my.ns/sym-spec))))))))))
+
+(deftest declared-spec-must-be-a-qualified-ident
+  (doseq [bad [:input "my.ns/input" 'input 42]]
+    (is (= :invalid-spec-ref
+           (reason #(cli/validate! (assoc-in spec-ref-spec
+                                             [:flags :input :spec] bad))))
+        (pr-str bad)))
+  (testing "positional :spec validates the same way"
+    (is (= :invalid-spec-ref
+           (reason #(cli/validate! (assoc-in spec-ref-spec
+                                             [:positionals 0 :spec] "nope")))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Subcommands (fractal, arity-N — DELTA-Lhc-001.CC1/CC2/CC3)
@@ -535,10 +567,13 @@
     (is (= ["add" "list" "tag"] (mapv :name (:subcommands e))))
     (let [add (first (:subcommands e))]
       (is (= "Add a thing" (:doc add)))
-      (is (= [{:name "data" :flag "--data" :type "string" :required false :repeat false :parse "json" :doc "JSON data"}
-              {:name "force" :flag "--force" :type "boolean" :required false :repeat false :parse nil :doc "Skip checks"}]
+      (is (= [{:name "data" :flag "--data" :type "string" :required false :repeat false
+               :parse "json" :spec nil :doc "JSON data"}
+              {:name "force" :flag "--force" :type "boolean" :required false :repeat false
+               :parse nil :spec nil :doc "Skip checks"}]
              (:flags add)))
-      (is (= [{:name "title" :type "string" :required true :variadic false :parse nil :doc "Title"}]
+      (is (= [{:name "title" :type "string" :required true :variadic false :parse nil :spec nil
+               :doc "Title"}]
              (:positionals add))))))
 
 (deftest explain-renders-nested-subcommands-recursively
@@ -573,10 +608,13 @@
                           :required (boolean (:required? v))
                           :repeat (boolean (:repeat? v))
                           :parse (some-> (:parse v) name)
+                          :spec nil
                           :doc (:doc v)})
                        (sort-by key (:flags add-spec)))
-          :positionals [{:name "title" :type "string" :required true :variadic false :parse nil :doc "Title"}
-                        {:name "note" :type "string" :required false :variadic false :parse nil :doc "Optional note"}]}
+          :positionals [{:name "title" :type "string" :required true :variadic false
+                         :parse nil :spec nil :doc "Title"}
+                        {:name "note" :type "string" :required false :variadic false
+                         :parse nil :spec nil :doc "Optional note"}]}
          (cli/explain add-spec))))
 
 (deftest declared-parse-kinds-are-validated-up-front

@@ -2581,10 +2581,10 @@
           (is (= "Echo argv" (:doc node)))
           (is (= "declared" (get-in node [:invocation :mode])))
           (is (= [{:name "limit" :flag "--limit" :type "int" :required false
-                   :repeat false :parse nil :doc "Max"}]
+                   :repeat false :parse nil :spec nil :doc "Max"}]
                  (get-in node [:invocation :flags])))
           (is (= [{:name "name" :type "string" :required false
-                   :variadic false :parse nil :doc nil}]
+                   :variadic false :parse nil :spec nil :doc nil}]
                  (get-in node [:invocation :positionals])))
           (is (= {:type "collection" :items "string"} (:returns node)))
           ;; a flat op's root node is its leaf: node metadata populates classes.
@@ -2610,9 +2610,11 @@
                   :doc "Add an item"
                   :invocation {:mode "declared"
                                :flags [{:name "force" :flag "--force" :type "boolean"
-                                        :required false :repeat false :parse nil :doc "Force add"}]
+                                        :required false :repeat false :parse nil :spec nil
+                                        :doc "Force add"}]
                                :positionals [{:name "title" :type "string" :required true
-                                              :variadic false :parse nil :doc "Item title"}]}
+                                              :variadic false :parse nil :spec nil
+                                              :doc "Item title"}]}
                   :returns {:type "map" :required {"id" "integer"} :optional {}}
                   :hook-class "mutating"
                   :deadline-class "standard"
@@ -2879,6 +2881,80 @@
           (is (= "discovery/glossary-ref-unresolved" (:code data)))
           (is (= "annotated" (:operation data)))
           (is (some #{"lifecycle/timeout"} (:unresolved-outcomes data))))))))
+
+(s/def ::reason string?)
+(s/def ::choice-input (s/keys :req-un [::reason]))
+(s/def ::choice-name #{"approved" "abort"})
+
+(deftest weaver-op-help-projects-declared-arg-specs
+  (with-runtime
+    (fn [rt _]
+      (weaver/register-op! rt 'chooser
+                           {:doc "Choose op"
+                            :arg-spec {:op "chooser"
+                                       :hook-class :mutating
+                                       :deadline-class :standard
+                                       :flags {:input {:type :string :parse :json
+                                                       :spec ::choice-input
+                                                       :doc "Choice input"}
+                                               :plain {:type :string :doc "No spec"}}
+                                       :positionals [{:name :choice :required? true
+                                                      :spec ::choice-name
+                                                      :doc "Choice"}]}}
+                           'skein.weaver-test/context-echo-op)
+      (testing "help embeds the projection fields on spec-declaring args (SPEC-003.C23c)"
+        (let [node (:node (weaver/op! rt 'help ["chooser"]))
+              flags (get-in node [:invocation :flags])
+              input (first (filter #(= "input" (:name %)) flags))
+              plain (first (filter #(= "plain" (:name %)) flags))
+              choice (first (get-in node [:invocation :positionals]))]
+          (is (= "skein.weaver-test/choice-input" (:spec input)))
+          (is (= "map" (get-in input [:contract "kind"])))
+          (is (= ["reason"] (mapv #(get % "key") (get-in input [:contract "required"]))))
+          (is (contains? (:template input) "reason"))
+          (is (vector? (:spec-forms input)))
+          (is (= "skein.weaver-test/choice-input"
+                 (get-in input [:spec-forms 0 "spec"])))
+          (testing "a positional's declared enum spec projects too"
+            (is (= "skein.weaver-test/choice-name" (:spec choice)))
+            (is (= "opaque" (get-in choice [:contract "kind"])))
+            (is (string? (:template choice))))
+          (testing "an undeclared arg carries a nil spec and no projection fields"
+            (is (nil? (:spec plain)))
+            (is (not (contains? plain :contract)))
+            (is (not (contains? plain :template)))
+            (is (not (contains? plain :spec-forms))))))
+      (testing "registration fails loudly on an unregistered :spec"
+        (let [e (is (thrown-with-msg?
+                     clojure.lang.ExceptionInfo
+                     #"does not name a registered spec"
+                     (weaver/register-op!
+                      rt 'bad-spec
+                      {:doc "Bad"
+                       :arg-spec {:op "bad-spec"
+                                  :hook-class :read
+                                  :deadline-class :standard
+                                  :flags {:x {:spec ::never-registered}}}}
+                      'skein.weaver-test/test-op)))]
+          (is (= "bad-spec" (:operation (ex-data e))))
+          (is (= ::never-registered (:spec (ex-data e))))))
+      (testing "a spec unregistered after registration fails help loudly, never silently"
+        (s/def ::vanishing string?)
+        (weaver/register-op! rt 'vanisher
+                             {:doc "Vanishing spec"
+                              :arg-spec {:op "vanisher"
+                                         :hook-class :read
+                                         :deadline-class :standard
+                                         :flags {:v {:spec ::vanishing}}}}
+                             'skein.weaver-test/test-op)
+        (s/def ::vanishing nil)
+        (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                      #"not a registered spec"
+                                      (weaver/op! rt 'help ["vanisher"])))
+              data (ex-data e)]
+          (is (= "discovery/arg-spec-unresolved" (:code data)))
+          (is (= "vanisher" (:operation data)))
+          (is (= "v" (:arg data))))))))
 
 (deftest weaver-raw-envelope-root-annotations
   ;; A raw-envelope op declares no arg-spec, so its root annotation surface lives

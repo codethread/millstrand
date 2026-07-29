@@ -71,6 +71,27 @@
                       :value spec
                       :supported-types (vec (sort-by name supported-arg-types))})))))
 
+(defn validate-declared-spec!
+  "Validate a flag or positional declared :spec when one is present.
+
+  Structural only: `:spec` must be a qualified keyword or qualified symbol
+  naming a registered clojure.spec of the parsed value. Whether the name
+  actually resolves is a registration/projection concern (the op registry and
+  help projection hold the live registry); this pure validator cannot and does
+  not consult it."
+  [op path field arg spec]
+  (when (contains? spec :spec)
+    (let [spec-name (:spec spec)]
+      (when-not (qualified-ident? spec-name)
+        (shared/fail!
+         :invalid-spec-ref
+         (str ":spec must be a qualified keyword or symbol, got " (pr-str spec-name))
+         (node-context op path
+                       {:field field
+                        :arg arg
+                        :spec spec-name
+                        :value spec}))))))
+
 (def annotation-keys
   "The closed key set of an arg-spec node's authored annotation sub-map: each is
   an optional array of strings; `failure-modes` entries are glossary
@@ -137,7 +158,8 @@
          "Flag specs must be maps"
          (node-context op path {:field :flags :arg flag :value spec})))
       (validate-declared-type! op path :flags flag spec)
-      (validate-declared-parse! op path :flags flag spec))))
+      (validate-declared-parse! op path :flags flag spec)
+      (validate-declared-spec! op path :flags flag spec))))
 
 (defn validate-positionals!
   "Validate a :positionals container and its entries for the node at `path`."
@@ -165,7 +187,8 @@
          "Positional name :subcommand is reserved"
          (node-context op path {:arg :subcommand :kind :positional})))
       (validate-declared-type! op path :positionals (:name spec) spec)
-      (validate-declared-parse! op path :positionals (:name spec) spec))))
+      (validate-declared-parse! op path :positionals (:name spec) spec)
+      (validate-declared-spec! op path :positionals (:name spec) spec))))
 
 (defn- validate-leaf-classes!
   "Require and validate a leaf node's `:hook-class`/`:deadline-class` metadata."

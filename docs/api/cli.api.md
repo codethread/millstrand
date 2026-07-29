@@ -53,11 +53,14 @@ Blessed declarative argv parser for weaver ops (SPEC-003-D003.C1/C2).
     :repeat?   truthy -> repeatable, values collect into a vector
     :required? truthy -> must appear
     :parse     :json | :jsonl ; parse the resolved string value
+    :spec      qualified keyword or symbol naming a registered clojure.spec
+               of the parsed value — documentation the help projection
+               embeds (SPEC-003.C23c); the parser never consults it
     :doc       <string>
 
   A positional-spec is a map with :name (keyword), :type, :required?,
   :variadic? (trailing only, collects remaining tokens into a vector), :parse,
-  and :doc.
+  :spec, and :doc.
 
   Payload references (SPEC-003-D003.C2): after argv parsing, any whole string
   value equal to `:stdin` or `:payload/<name>` resolves to the matching entry in
@@ -81,7 +84,7 @@ Render `arg-spec` as JSON-safe help data.
   Includes arguments, types, docs, required flags, and payload-parse
   declarations for the `help <op>` projection; nested subcommands render
   recursively to their declared depth (DELTA-Lhc-001.CC3).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L149-L156">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L152-L159">Source</a></sub></p>
 
 ## <a name="skein.api.cli.alpha/parse">`parse`</a>
 ``` clojure
@@ -101,7 +104,7 @@ Parse `argv` against `arg-spec`, resolving payload references from `payloads`.
   trailing unconsumed tokens, missing/unknown subcommands (with the canonical
   `:op`/`:path`/`:token`/`:available` context), dangling or unused payload
   references, and malformed :json/:jsonl payloads.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L113-L133">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L116-L136">Source</a></sub></p>
 
 ## <a name="skein.api.cli.alpha/reserved-subcommand-names">`reserved-subcommand-names`</a>
 
@@ -116,7 +119,7 @@ Subcommand names reserved from op declaration for the help grammar.
   forms (`--help`/`-h`) of a trailing token to the `help` op
   (DELTA-Dtf-002.CC3); the bare word `help` stays reserved but is the retired
   sugar that flows to normal parsing.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L72-L81">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L75-L84">Source</a></sub></p>
 
 ## <a name="skein.api.cli.alpha/resolve-leaf">`resolve-leaf`</a>
 ``` clojure
@@ -133,7 +136,7 @@ Walk `argv`'s routing tokens through `arg-spec` to the invoked leaf node.
   arg-spec resolves to its own root at path `[]`. Missing or unknown routing
   tokens fail loudly with the canonical `:op`/`:path`/`:token`/`:available`
   context.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L135-L147">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L138-L150">Source</a></sub></p>
 
 ## <a name="skein.api.cli.alpha/validate!">`validate!`</a>
 ``` clojure
@@ -149,7 +152,7 @@ Validate any parser arg-spec shape, returning it unchanged on success.
   level, and an empty `:subcommands {}` is invalid. Throws structured `ex-info`
   on malformed specs so op registration fails before help or invocation can
   drift from the contract.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L83-L98">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L86-L101">Source</a></sub></p>
 
 ## <a name="skein.api.cli.alpha/validate-annotations!">`validate-annotations!`</a>
 ``` clojure
@@ -165,4 +168,4 @@ Structurally validate a standalone annotation sub-map for `op`, returning it.
   declares outside any arg-spec (DELTA-Dtf-002.MI1a). Purely structural: the
   glossary-ref existence check for `failure-modes` names runs at registration
   (DELTA-Dtf-003.CC2).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L100-L111">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/cli/alpha.clj#L103-L114">Source</a></sub></p>

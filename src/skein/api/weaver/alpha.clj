@@ -45,7 +45,7 @@
 (declare apply-edges! reject-unknown-update-keys! supersede-context
          require-archive-result! require-lean-result!
          validated-op-entry validate-op-annotations! check-op-glossary-refs!
-         operation-label)
+         check-arg-spec-refs! operation-label)
 
 ;; A runtime is an opaque, non-nil handle; callers select it and pass it first.
 (s/def ::runtime some?)
@@ -693,7 +693,8 @@
     (when (:doc opts)
       (op-entry/validate-op-doc! (:doc opts)))
     (when (some? (:arg-spec opts))
-      (validate-op-arg-spec! op-name (:arg-spec opts)))
+      (validate-op-arg-spec! op-name (:arg-spec opts))
+      (check-arg-spec-refs! op-name (:arg-spec opts)))
     (op-entry/validate-op-classes! op-name opts)
     (when (some? (:arg-spec opts))
       (op-entry/validate-stream-leaf-deadlines! op-name stream? (:arg-spec opts)))
@@ -767,6 +768,34 @@
                        :failure-mode outcome-name
                        :available-outcomes (mapv :name
                                                  (glossary/glossary-outcomes runtime))})))))
+
+(defn- arg-spec-spec-refs
+  "Return every declared arg `:spec` name across `arg-spec`'s flags and
+  positionals, walking the fractal node tree to every depth
+  (DELTA-Lhc-001.CC5)."
+  [arg-spec]
+  (when (map? arg-spec)
+    (-> []
+        (into (keep :spec) (vals (:flags arg-spec)))
+        (into (keep :spec) (:positionals arg-spec))
+        (into (mapcat (fn [[_ nested]] (arg-spec-spec-refs nested)))
+              (:subcommands arg-spec)))))
+
+(defn- check-arg-spec-refs!
+  "Fail loudly unless every declared arg `:spec` in `arg-spec` names a
+  registered clojure.spec.
+
+  Runs at registration and publication validation, mirroring the glossary-ref
+  discipline (SPEC-003.C67): a spool's specs load with its namespaces before
+  its ops register, so an unresolved name here is an authoring error, not a
+  load-order race. The ambient clojure.spec registry is process-global and
+  monotonic, so no runtime is needed."
+  [op-name arg-spec]
+  (doseq [spec-name (arg-spec-spec-refs arg-spec)]
+    (when-not (s/get-spec spec-name)
+      (throw (ex-info "Declared arg :spec does not name a registered spec"
+                      {:operation (op-entry/canonical-op-name op-name)
+                       :spec spec-name})))))
 
 ;; -- op dispatch helpers --
 
