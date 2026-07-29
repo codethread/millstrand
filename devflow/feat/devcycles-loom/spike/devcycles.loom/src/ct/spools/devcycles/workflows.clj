@@ -15,7 +15,8 @@
 (s/def ::worktree string?)
 (s/def ::mainline string?)
 (s/def ::roster string?)
-(s/def ::bindings map?)
+;; ::bindings is defined beside `bindable` below; s/keys resolves the keyword
+;; at validation time, so the forward reference is fine.
 (s/def ::land-params (s/keys :req-un [::branch ::worktree]
                              :opt-un [::mainline ::roster ::bindings]))
 (s/def ::fix-params (s/keys :req-un [::branch ::worktree]))
@@ -31,16 +32,41 @@
 ;; values exist only where THIS template's render fns compute them from that
 ;; data. The bindings-registry kind idea is demoted to nice-to-have; advice
 ;; (see ../../advice-sketch.clj) would retire gate-attr plumbing entirely.
-(def default-bindings
+;; One declared surface, three derivations — defaults, the ::bindings spec,
+;; and the render thunks all come from `bindable`, so the contract cannot
+;; drift and the authoring pain collapses to one map:
+(def bindable
+  "Published binding surface: action-ref -> gate attr -> loom default.
+
+  This IS the consumer contract: ::bindings is derived from it, so
+  `workflow show land` projects exactly what may be bound without the
+  consumer reading source."
   {"land.ci.green" {"shell/argv" ["gh" "pr" "checks" "--watch" "--fail-fast"]
                     "shell/timeout-secs" 5400}
    "land.merge" {"shell/argv" ["gh" "pr" "merge" "--squash" "--auto"]}})
 
+(defn- binds-declared-surface?
+  "True when every bound action-ref and attr key exists in `bindable` —
+  a typo fails at `workflow start` (TEN-003), never silently merges into
+  an attribute nothing reads."
+  [bindings]
+  (every? (fn [[action-ref attrs]]
+            (when-let [declared (get bindable action-ref)]
+              (every? (set (keys declared)) (keys attrs))))
+          bindings))
+
 (defn gate-attr
-  "Resolve one gate attribute: consumer binding wins over loom default."
-  [params action-ref k]
-  (get-in (merge-with merge default-bindings (:bindings params))
-          [action-ref k]))
+  "Return a render thunk for one bound gate attribute: the consumer's
+  :bindings param wins over the declared default."
+  [action-ref k]
+  (fn [params]
+    (get-in (merge-with merge bindable (:bindings params)) [action-ref k])))
+
+(s/def ::bindings (s/and map? binds-declared-surface?))
+;; Candidate workflow/* promotion: `(workflow/bound action-ref k default)`
+;; with the default inline at point of use would delete `bindable` too, let
+;; registration validate refs against the definition's own steps, and let
+;; `describe` report the bindable surface for every registered workflow.
 
 ;; --- fix: validation style is a defer ---------------------------------------
 ;; The default target: a docs-check gate, registered with :call so the defer
@@ -100,7 +126,8 @@
                                  (str "Terse: push; draft PR against " mainline "."))})
    (workflow/gate :ci-green "Watch CI to green" :shell
                   :depends-on [:push-draft-pr]
-                  :attributes {"shell/argv" (fn [params] (gate-attr params "land.ci.green" "shell/argv"))
+                  :attributes {"shell/argv" (gate-attr "land.ci.green" "shell/argv")
+                               "shell/timeout-secs" (gate-attr "land.ci.green" "shell/timeout-secs")
                                "shell/cwd" (fn [{:keys [worktree]}] worktree)
                                "workflow/instruction" "Terse: all checks green closes this."})
    (workflow/step :signoff-review
