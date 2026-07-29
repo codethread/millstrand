@@ -321,7 +321,15 @@
                                {"spec" "skein.spools.workflow-cli-test/scope"
                                 "relation" "keyword-reference"
                                 "form" "clojure.core/string?"}]}
-                 (:params view))))
+                 (-> (:params view)
+                     (dissoc :contract :template)
+                     (update :spec-forms
+                             (partial mapv #(select-keys % ["spec" "relation" "form"])))))))
+        (testing "params carry the shared nested contract and copyable template"
+          (is (= "map" (get-in view [:params :contract "kind"])))
+          (is (= ["scope"] (mapv #(get % "key")
+                                 (get-in view [:params :contract "required"]))))
+          (is (contains? (get-in view [:params :template]) "scope")))
         (testing "the declared summary reports roles without expanding one"
           (is (= {:kind "static"
                   :entry ["inspect"]
