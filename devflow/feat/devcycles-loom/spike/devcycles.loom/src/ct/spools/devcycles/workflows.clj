@@ -23,10 +23,14 @@
 ;; --- bindings ----------------------------------------------------------------
 ;; workflow.md's forge-agnostic pattern: action-ref -> gate attrs as data. The
 ;; loom ships repo-agnostic gh commands; a consumer overrides any subset.
-;; GAP: bindings ride params, so they cannot carry render fns — only data. A
-;; consumer wanting a computed argv has no seam short of shadowing the whole
-;; registration. A registered per-action-ref bindings kind, consulted at render
-;; time, would make this a first-class primitive instead of a convention.
+;; RESOLVED (was a GAP): no per-start ceremony and no new primitive needed — a
+;; world shadows the registration and carries its bindings in :defaults, one
+;; registration per world (see consumers/skein-src.init.clj; needs only the
+;; defworkflow :override? accretion). Residue that stands: bindings must stay
+;; JSON-safe data because resolved params ride workflow/context, so computed
+;; values exist only where THIS template's render fns compute them from that
+;; data. The bindings-registry kind idea is demoted to nice-to-have; advice
+;; (see ../../advice-sketch.clj) would retire gate-attr plumbing entirely.
 (def default-bindings
   {"land.ci.green" {"shell/argv" ["gh" "pr" "checks" "--watch" "--fail-fast"]
                     "shell/timeout-secs" 5400}
@@ -62,10 +66,10 @@
                   :attributes {"workflow/instruction" "Terse: fix + failing-first test, commit."})
    (workflow/defer :validate "Choose how this fix is validated"
      :depends-on [:implement])
-   ;; GAP: the defer target receives only its own defaults plus explicit params
-   ;; (PROP-Dfr-001.NG6) — the worker must re-pass worktree/branch by hand when
-   ;; filling. A declared param-forwarding list on the defer point is a missing
-   ;; primitive this spike would immediately use.
+   ;; GAP (the one that still stands, advice or not): the defer target receives
+   ;; only its own defaults plus explicit params (PROP-Dfr-001.NG6) — the worker
+   ;; must re-pass worktree/branch by hand when filling. A declared
+   ;; param-forwarding list on the defer point is the missing primitive.
    (workflow/step :handoff "Hand the branch to land" :self
                   :depends-on [:validate]
                   :attributes {"workflow/instruction" "Terse: start land with the same branch/worktree."})))
@@ -113,9 +117,9 @@
                         ;; spool (elided in the spike), never as consumer homework.
                         :choices [{:key :approved :label "Approve" :next :land-merge}
                                   {:key :abort :label "Abort" :next :land-abort}])
-   ;; GAP: the merge-lock acquire/release and kanban lane moves live in the
-   ;; `land` op (policy over the engine). They lift as-is; nothing here needs a
-   ;; new primitive, but the op's namespace name becomes contractual on day one.
+   ;; NOTE (not a gap): the merge-lock acquire/release and kanban lane moves
+   ;; live in the `land` op (policy over the engine). They lift as-is; the only
+   ;; consequence is the op's namespace name becomes contractual on day one.
    (workflow/defer :cleanup-extras "Repo-specific cleanup after merge"
      :depends-on [:signoff])))
 
