@@ -407,7 +407,12 @@
   falls back to its classpath binding's source file. Returns nil when neither is
   reachable, so callers stay non-throwing over classpath-only namespaces."
   [runtime ns-sym]
-  (or (when-let [synced (spool-sync/synced-namespace-file runtime ns-sym)]
+  (or (when-let [synced
+                 (try
+                   (spool-sync/synced-namespace-file runtime ns-sym)
+                   (catch clojure.lang.ExceptionInfo throwable
+                     (when (seq (:searched-roots (ex-data throwable)))
+                       (throw throwable))))]
         synced)
       (classpath-source-file (classpath-binding runtime ns-sym))))
 
