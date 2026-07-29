@@ -1687,6 +1687,57 @@
 (s/def ::fix-params (s/keys :req-un [::subject ::branch ::worktree]
                             :opt-un [::card]))
 
+(defn- fix-claim-instruction
+  "Return the claim-trail instruction for a fix run's card mode."
+  [{:keys [card branch worktree]}]
+  (if card
+    (format-alpha/reflow
+     (format
+      "|Claim card `%s` for this fix: `strand kanban claim %s --owner <name>
+       |--branch %s --worktree %s`, with the worktree created for the branch.
+       |Then stamp the card on this step before completing it: `strand update
+       |<this-step-id> --attributes '{\"fix/card\":\"%s\"}'` — the stamp is the
+       |run's durable link to the card the land hand-off names."
+      card card branch worktree card))
+    (format-alpha/reflow
+     (format
+      "|Pour a kanban card for the bug (`strand kanban add`) and claim it with
+       |owner, branch `%s`, and worktree `%s` created for the branch. Then
+       |stamp the card on this step before completing it: `strand update
+       |<this-step-id> --attributes '{\"fix/card\":\"<card-id>\"}'` — the stamp
+       |is the run's durable link to the card the land hand-off names."
+      branch worktree))))
+
+(defn- fix-handoff-instruction
+  "Return the validate-handoff instruction with a concrete land card identity.
+
+  A run started with the `card` param interpolates it directly; a cardless run
+  derives the identity from the `fix/card` stamp the claim-trail step recorded."
+  [{:keys [card branch worktree]}]
+  (if card
+    (format-alpha/reflow
+     (format
+      "|Run the focused cold tests for the touched namespaces and the blocking
+       |quality gates per CLAUDE.md; commit everything to the branch. Then hand
+       |off to the coordinator land workflow: `strand workflow start
+       |<new-land-run-id> --workflow land --params
+       |'{\"feature\":\"%s\",\"branch\":\"%s\",\"worktree\":\"%s\",\"card\":\"%s\"}'`
+       |— the land run owns review, merge, and the card finish. Then close this
+       |run."
+      card branch worktree card))
+    (format-alpha/reflow
+     (format
+      "|Run the focused cold tests for the touched namespaces and the blocking
+       |quality gates per CLAUDE.md; commit everything to the branch. Then hand
+       |off to the coordinator land workflow, naming as both `feature` and
+       |`card` the card id this run stamped as `fix/card` on the claim-trail
+       |step (`strand show <claim-trail-step-id>`): `strand workflow start
+       |<new-land-run-id> --workflow land --params
+       |'{\"feature\":\"<fix/card>\",\"branch\":\"%s\",\"worktree\":\"%s\",\"card\":\"<fix/card>\"}'`
+       |— the land run owns review, merge, and the card finish. Then close this
+       |run."
+      branch worktree))))
+
 (workflow/defworkflow fix
   "Run the light BUG-FIX workflow (family \"fix\").
 
@@ -1720,25 +1771,7 @@
                   (fn [{:keys [subject]}] (str "Card + worktree trail for: " subject))
                   :self
                   :attributes {"workflow/action-ref" "fix.claim-trail"
-                               "workflow/instruction"
-                               (fn [{:keys [card branch worktree]}]
-                                 (format-alpha/reflow
-                                  (str
-                                   (if card
-                                     (format
-                                      "|Claim card `%s` for this fix: `strand kanban claim %s
-                                       |--owner <name> --branch %s --worktree %s`, with the
-                                       |worktree created for the branch."
-                                      card card branch worktree)
-                                     (format
-                                      "|Pour a kanban card for the bug (`strand kanban add`)
-                                       |and claim it with owner, branch `%s`, and worktree
-                                       |`%s` created for the branch."
-                                      branch worktree))
-                                   "\n|Then stamp the card on this step before completing
-                                    |it: `strand update <this-step-id> --attributes
-                                    |'{\"fix/card\":\"<card-id>\"}'` — the stamp is the run's
-                                    |durable link to the card the land hand-off names.")))})
+                               "workflow/instruction" fix-claim-instruction})
    (workflow/step :implement
                   (fn [{:keys [subject]}] (str "Fix: " subject))
                   :self
@@ -1788,16 +1821,4 @@
                   :self
                   :depends-on [:docs-check]
                   :attributes {"workflow/action-ref" "fix.validate-handoff"
-                               "workflow/instruction"
-                               (fn [{:keys [branch worktree]}]
-                                 (format-alpha/reflow
-                                  (format
-                                   "|Run the focused cold tests for the touched namespaces and
-                                    |the blocking quality gates per CLAUDE.md; commit everything
-                                    |to the branch. Then hand off to the coordinator land
-                                    |workflow: `strand workflow start <new-land-run-id>
-                                    |--workflow land --params '{\"feature\":\"<card>\",
-                                    |\"branch\":\"%s\",\"worktree\":\"%s\",
-                                    |\"card\":\"<card>\"}'` — the land run owns review, merge,
-                                    |and the card finish. Then close this run."
-                                   branch worktree)))})))
+                               "workflow/instruction" fix-handoff-instruction})))
