@@ -365,6 +365,15 @@
   ;; agent-plan is spool-owned now; a real startup wires the agents spool in
   ;; via init.clj, so it must still be registered end to end
   (is (some #(= "agent-plan" (:name %)) (patterns/patterns rt)))
+  (let [agent-plan (patterns/explain rt :agent-plan)
+        plan-shape (get-in agent-plan [:contract "shape"])
+        delegate-pipeline (patterns/explain rt :delegate-pipeline)]
+    (is (= ["feature" "title" "tasks"]
+           (mapv #(get % "key") (get plan-shape "required"))))
+    (is (map? (:template agent-plan)))
+    (is (= ["run_id" "tasks"]
+           (mapv #(get % "key") (get-in delegate-pipeline [:contract "required"]))))
+    (is (vector? (get-in delegate-pipeline [:template "tasks"]))))
   ;; agent review must consume the one authoritative policy text by default;
   ;; the text ships from ct.spools.delegation, the accessor stays on agent-run
   (is (= (var-get (requiring-resolve 'ct.spools.delegation/review-contract))

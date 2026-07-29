@@ -13,8 +13,9 @@
     and numbers.
 
   The interpreted operators are `s/keys`, `s/coll-of`/`s/every`, `s/and`
-  (first form as the structural shape, remaining predicates as printed
-  constraints), `s/or`, `s/nilable`, `s/map-of`, and `s/tuple`. A qualified
+  (the first interpreted structural form as its shape, or its first form when
+  none exists; every other form stays a printed constraint), `s/or`,
+  `s/nilable`, `s/map-of`, and `s/tuple`. A qualified
   keyword that names a registered spec expands in place; re-entering a spec
   already being expanded emits a `ref` node instead (the cycle cut), while
   repeated sibling references expand again.
@@ -25,9 +26,9 @@
             [clojure.string :as str]))
 
 (declare contract-template form-graph doc-enrichment contract-node keys-node key-entries
-         key-entry operator-node constraint-map constraint-value render-template entry-key
-         entry-template placeholder node-hint missing-key-in-pred json-key-name
-         json-path-element registered-spec require-registered fail!)
+         key-entry operator-node and-node structural-form? constraint-map constraint-value
+         render-template entry-key entry-template placeholder node-hint missing-key-in-pred
+         json-key-name json-path-element registered-spec require-registered fail!)
 
 (defn spec-forms
   "Return the ordered printed-form graph rooted at registered spec `spec-name`.
@@ -65,8 +66,9 @@
     `\"constraints\"`, a map of the printed keyword options.
   - `\"map-of\"` — `\"key\"` and `\"value\"` nodes plus `\"constraints\"`.
   - `\"tuple\"` — `\"items\"` node vector.
-  - `\"and\"` — `\"shape\"` (first form's node) and `\"constraints\"`, the
-    remaining forms printed verbatim.
+  - `\"and\"` — `\"shape\"` (the first interpreted structural form, falling
+    back to the first form) and `\"constraints\"`, every other form printed
+    verbatim.
   - `\"or\"` — `\"branches\"`, each `{\"tag\" <name> \"contract\" node}`.
   - `\"nilable\"` — `\"of\"` node.
   - `\"pred\"` — a predicate symbol terminal: `\"form\"` plus `\"doc\"`/
@@ -278,9 +280,7 @@
                "constraints" (constraint-map (drop 2 args))}
       :tuple {"kind" "tuple"
               "items" (mapv #(contract-node % active) args)}
-      :and {"kind" "and"
-            "shape" (contract-node (first args) active)
-            "constraints" (mapv pr-str (rest args))}
+      :and (and-node args active)
       :or {"kind" "or"
            "branches" (mapv (fn [[tag branch]]
                               {"tag" (name tag)
@@ -288,6 +288,39 @@
                             (partition 2 args))}
       :nilable {"kind" "nilable"
                 "of" (contract-node (first args) active)})))
+
+(defn- and-node
+  "Project the richest structural form in `s/and`; retain every other form."
+  [args active]
+  (let [shape-index (or (first (keep-indexed (fn [index form]
+                                               (when (structural-form? form active)
+                                                 index))
+                                             args))
+                        0)]
+    {"kind" "and"
+     "shape" (contract-node (nth args shape-index) active)
+     "constraints" (->> args
+                        (keep-indexed (fn [index form]
+                                        (when (not= index shape-index)
+                                          (pr-str form))))
+                        vec)}))
+
+(defn- structural-form?
+  "Return true when `form` has an interpreted container or branching shape."
+  [form active]
+  (cond
+    (qualified-keyword? form)
+    (when-let [spec (registered-spec form)]
+      (and (not (contains? active form))
+           (structural-form? (s/form spec) (conj active form))))
+
+    (and (seq? form) (contains? operator-kinds (first form)))
+    (let [kind (operator-kinds (first form))]
+      (if (= :and kind)
+        (boolean (some #(structural-form? % active) (rest form)))
+        true))
+
+    :else false))
 
 (defn- keys-node
   [args active]

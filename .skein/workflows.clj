@@ -210,20 +210,16 @@
 (s/def ::pipeline-task (s/keys :req-un [::id ::title]
                                :opt-un [::body ::harness ::cwd ::max-attempts]))
 (s/def ::pipeline-tasks (s/coll-of ::pipeline-task :kind vector? :min-count 1))
+(s/def ::tasks ::pipeline-tasks)
 (s/def ::delegate-pipeline-input
-  (s/and map?
-         #(s/valid? ::run_id (:run_id %))
-         #(s/valid? ::pipeline-tasks (:tasks %))
-         #(or (not (contains? % :harness)) (s/valid? ::harness (:harness %)))
-         #(or (not (contains? % :cwd)) (s/valid? ::cwd (:cwd %)))
-         #(or (not (contains? % :accept)) (s/valid? ::accept (:accept %)))))
+  (s/keys :req-un [::run_id ::tasks]
+          :opt-un [::harness ::cwd ::accept]))
 
 ;; The compiled pipeline's param contract: one whole-map spec over the params
 ;; the workflow renders against, the same shape the land and story definitions
 ;; declare. Optional keys are absent rather than nil when the pattern input
 ;; omits them, so the spec judges exactly what a run carries.
 (s/def ::run-id ::non-blank-string)
-(s/def ::tasks ::pipeline-tasks)
 (s/def ::delegate-pipeline-params
   (s/keys :req-un [::run-id ::tasks] :opt-un [::harness ::cwd]))
 
