@@ -64,10 +64,17 @@
     (publication/publish! backends candidates)))
 
 (defn- load-module-source!
-  "Load one workspace authoring file and publish its complete contribution."
+  "Load one workspace authoring file and publish its complete contribution.
+
+  The owning namespace is derived from the filename through Clojure's own
+  munging, so `workflows_land.clj` reports `workflows-land` and satisfies the
+  module-graph guard that every authoring form come from its module's namespace."
   [rt module-key file]
   (let [path (.getCanonicalPath (io/file file))
-        ns-sym (symbol (str/replace (str/replace file #"^\.skein/" "") #"\.clj$" ""))]
+        ns-sym (symbol (-> file
+                           (str/replace #"^\.skein/" "")
+                           (str/replace #"\.clj$" "")
+                           (str/replace "_" "-")))]
     (publish-contribution!
      rt module-key
      (:contribution
@@ -99,7 +106,8 @@
 
   Loads the split config modules the way init.clj orders them: config.clj
   first (workflows.clj references its public CLI-tail helpers at load time),
-  then harnesses.clj and workflows.clj. attention.clj and nvd_scan.clj are
+  then harnesses.clj, workflows.clj, and the land policy op beside it in
+  workflows_land.clj. attention.clj and nvd_scan.clj are
   deliberately not loaded here — chime rules are asserted through the full
   startup fixture, and the NVD job must never register from a direct load."
   [f]
@@ -129,6 +137,7 @@
             ((requiring-resolve 'harnesses/open-review-contract!) {:runtime rt})
             ((requiring-resolve 'harnesses/open-task-contract!) {:runtime rt})
             (load-module-source! rt :workflows ".skein/workflows.clj")
+            (load-module-source! rt :workflows-land ".skein/workflows_land.clj")
             (f rt)))
         (finally
           (weaver-runtime/stop! rt)
@@ -139,7 +148,7 @@
   "Copy the repo-local config files into a temporary config dir."
   [target]
   (.mkdirs (io/file target))
-  (doseq [name ["init.clj" "config.clj" "workflows.clj" "harnesses.clj"
+  (doseq [name ["init.clj" "config.clj" "workflows.clj" "workflows_land.clj" "harnesses.clj"
                 "attention.clj" "nvd_scan.clj" "reviewers.clj"
                 "kanban_tracker.clj" "module_adapters.clj" "spools.edn"]]
     (io/copy (io/file ".skein" name) (io/file target name)))
@@ -263,6 +272,15 @@
                [:and [:= :state "active"] [:= [:attr "kind"] "merge-lock"]]
                {}))
 
+(defn- active-merge-queue
+  "Return the queued land run ids in the train's FIFO order."
+  []
+  (->> (weaver/list (current/runtime)
+                    [:and [:= :state "active"] [:= [:attr "kind"] "merge-queue-entry"]]
+                    {})
+       (sort-by (juxt #(get-in % [:attributes :queue/queued-at]) :id))
+       (mapv #(get-in % [:attributes :land/run-id]))))
+
 (def ^:private config-op-names
   "The config-owned CLI ops whose generated help the baseline covers.
 
@@ -273,7 +291,7 @@
 (def ^:private named-query-names
   "The config-owned named queries whose registered definitions the surface
   baseline preserves, authored as `defquery` blocks in .skein/config.clj."
-  ["run-active" "workflow-runs" "devflow-runs" "merge-lock" "work"])
+  ["run-active" "workflow-runs" "devflow-runs" "merge-lock" "merge-queue" "work"])
 
 (defn- portable-source
   "Rewrite an op-help envelope's absolute `:source` file to a repo-relative path.
@@ -335,7 +353,7 @@
   "Assert the repo-local query/op/pattern registrations are present."
   [rt]
   (doseq [query-name ["kanban-cards" "kanban-pending" "run-active" "workflow-runs"
-                      "devflow-runs" "merge-lock" "work"]]
+                      "devflow-runs" "merge-lock" "merge-queue" "work"]]
     (is (contains? (graph/queries rt) query-name)))
   (is (contains? (graph/queries rt) "bench-runs"))
   (doseq [op-name ["kanban" "land" "workflow"
@@ -1514,6 +1532,159 @@
         (is (= "claimed"
                (get-in (weaver/show rt claimed-card) [:attributes :kanban/lane])))))))
 
+(defn- signed-off-land!
+  "Drive a fresh land run as far as its sign-off checkpoint, ready to approve."
+  [run-id pr-number]
+  (start-land! run-id run-id (str "/tmp/" run-id))
+  (op! "land" ["complete" run-id "--pr-number" (str pr-number)])
+  (shell-gate-complete! run-id "checks green")
+  (op! "workflow" ["complete" run-id]))
+
+(defn- approve!
+  "Approve a land run at its sign-off checkpoint."
+  [run-id subject]
+  (op! "land" ["choose" run-id "approved" "--input"
+               (json/write-str {:subject subject :body "Squashed commits: abc123"})]))
+
+(deftest land-await-enqueues-and-grants-the-head-of-the-train
+  (with-config-runtime
+    (fn [_rt]
+      (signed-off-land! "land-first" 501)
+      (signed-off-land! "land-second" 502)
+      ;; awaiting an empty queue grants immediately, and nothing has landed yet
+      (let [first-turn (op! "land" ["await" "land-first" "--timeout-secs" "0"])]
+        (is (= "land await" (:operation first-turn)))
+        (is (true? (:granted first-turn)))
+        (is (zero? (:position first-turn)))
+        (is (empty? (:landed-since first-turn)))
+        (is (str/includes? (:message first-turn) "head the merge train")))
+      (is (= ["land-first"] (active-merge-queue)))
+      ;; the second run joins behind the first and is told who blocks it
+      (let [second-turn (op! "land" ["await" "land-second" "--timeout-secs" "0"])
+            head (first (:ahead second-turn))]
+        (is (false? (:granted second-turn)))
+        (is (= 1 (:position second-turn)))
+        (is (= "land-first" (:land/run-id head)))
+        (is (zero? (:position head)))
+        (is (= "active" (:run-state head)))
+        (is (false? (:holds-lock head)))
+        (is (= "signoff" (:stage head)))
+        (is (some? (:updated-at head)))
+        (is (str/includes? (:message second-turn) "Waiting behind 1 run")))
+      (is (= ["land-first" "land-second"] (active-merge-queue)))
+      ;; re-awaiting keeps the original place rather than going to the back
+      (let [again (op! "land" ["await" "land-second" "--timeout-secs" "0"])]
+        (is (= 1 (:position again)))
+        (is (= ["land-first" "land-second"] (active-merge-queue)))))))
+
+(deftest land-approval-requires-heading-the-merge-train
+  (with-config-runtime
+    (fn [_rt]
+      (signed-off-land! "land-ahead" 511)
+      (signed-off-land! "land-behind" 512)
+      (op! "land" ["await" "land-ahead" "--timeout-secs" "0"])
+      (op! "land" ["await" "land-behind" "--timeout-secs" "0"])
+      ;; the run behind cannot jump the train even though the lock is still free
+      (is (empty? (active-merge-locks)))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"another land run heads the merge queue"
+                            (approve! "land-behind" "feat: behind")))
+      (is (= ["merge-lock"]
+             (do (approve! "land-ahead" "feat: ahead")
+                 (mapv #(get-in % [:attributes :kind]) (active-merge-locks)))))
+      ;; an approval that never awaited still joins the train, so the record of
+      ;; what merged stays complete
+      (is (= ["land-ahead" "land-behind"] (active-merge-queue))))))
+
+(deftest land-approval-without-awaiting-enqueues-itself-at-the-head
+  (with-config-runtime
+    (fn [_rt]
+      (signed-off-land! "land-solo" 521)
+      (is (empty? (active-merge-queue)))
+      (approve! "land-solo" "feat: solo")
+      (is (= ["land-solo"] (active-merge-queue))))))
+
+(deftest land-await-reports-a-head-whose-run-has-gone
+  (with-config-runtime
+    (fn [rt]
+      (signed-off-land! "land-gone" 531)
+      (signed-off-land! "land-waiter" 532)
+      (op! "land" ["await" "land-gone" "--timeout-secs" "0"])
+      (op! "land" ["await" "land-waiter" "--timeout-secs" "0"])
+      (weaver/update! rt
+                      (:id ((requiring-resolve 'skein.spools.workflow/current-root) "land-gone"))
+                      {:state "closed"})
+      (let [waiting (op! "land" ["await" "land-waiter" "--timeout-secs" "0"])
+            head (first (:ahead waiting))]
+        (is (= "missing" (:run-state head)))
+        (is (not (contains? head :stage)))
+        (is (str/includes? (:message waiting) "its land run is gone")))
+      ;; breaking clears the dead head even though it never took the lock
+      (let [broken (op! "land" ["break-lock" "--reason" "head run is gone"])]
+        (is (nil? (:broken broken)))
+        (is (= "closed" (get-in broken [:evicted :state])))
+        (is (= ["land-waiter"] (active-merge-queue))))
+      (let [granted (op! "land" ["await" "land-waiter" "--timeout-secs" "0"])]
+        (is (true? (:granted granted)))))))
+
+(deftest land-await-reports-what-landed-while-it-waited
+  (with-config-runtime
+    (fn [_rt]
+      (signed-off-land! "land-lands" 541)
+      (signed-off-land! "land-follows" 542)
+      (op! "land" ["await" "land-lands" "--timeout-secs" "0"])
+      (op! "land" ["await" "land-follows" "--timeout-secs" "0"])
+      (approve! "land-lands" "feat: the one ahead")
+      ;; drive the head all the way through its terminal bookkeeping
+      (doseq [message ["PR merged" "main fast-forwarded"]]
+        (shell-gate-complete! "land-lands" message))
+      (code-gate-complete! "land-lands" "main runs green")
+      (shell-gate-complete! "land-lands" "branch and worktree removed")
+      (op! "workflow" ["complete" "land-lands"])
+      (op! "land" ["complete" "land-lands"])
+      (is (= ["land-follows"] (active-merge-queue)))
+      (let [granted (op! "land" ["await" "land-follows" "--timeout-secs" "0"])
+            landed (first (:landed-since granted))]
+        (is (true? (:granted granted)))
+        (is (= 1 (count (:landed-since granted))))
+        (is (= "land-lands" (:land/run-id landed)))
+        (is (= 541 (:pr-number landed)))
+        (is (= "feat: the one ahead" (:subject landed)))
+        (is (str/includes? (:message granted) "landed-since")
+            "the granted message must point at the commits to absorb")))))
+
+(deftest land-abort-leaves-the-merge-train
+  (with-config-runtime
+    (fn [_rt]
+      (signed-off-land! "land-quits" 551)
+      (signed-off-land! "land-stays" 552)
+      (op! "land" ["await" "land-quits" "--timeout-secs" "0"])
+      (op! "land" ["await" "land-stays" "--timeout-secs" "0"])
+      (is (= ["land-quits" "land-stays"] (active-merge-queue)))
+      (op! "land" ["choose" "land-quits" "abort" "--input"
+                   (json/write-str {:reason "reviewer withdrew sign-off"})])
+      (is (= ["land-stays"] (active-merge-queue)))
+      (let [granted (op! "land" ["await" "land-stays" "--timeout-secs" "0"])]
+        (is (true? (:granted granted)))
+        (is (empty? (:landed-since granted))
+            "an aborted run never merged, so it owes the train no commits")))))
+
+(deftest land-await-rejoins-the-train-after-an-eviction
+  (with-config-runtime
+    (fn [_rt]
+      (signed-off-land! "land-evicted" 561)
+      (signed-off-land! "land-took-over" 562)
+      (op! "land" ["await" "land-evicted" "--timeout-secs" "0"])
+      (op! "land" ["break-lock" "--reason" "operator cleared the train"])
+      (is (empty? (active-merge-queue)))
+      ;; eviction is not a ban: the evicted run rejoins, but at the back of
+      ;; whatever train has formed since
+      (op! "land" ["await" "land-took-over" "--timeout-secs" "0"])
+      (let [rejoined (op! "land" ["await" "land-evicted" "--timeout-secs" "0"])]
+        (is (false? (:granted rejoined)))
+        (is (= 1 (:position rejoined)))
+        (is (= ["land-took-over" "land-evicted"] (active-merge-queue)))))))
+
 (deftest land-failed-approval-retains-a-reused-same-run-lock
   (with-config-runtime
     (fn [rt]
@@ -1635,14 +1806,19 @@
                             (op! "land" ["break-lock" "--reason" ""])))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required flag --reason"
                             (op! "land" ["break-lock"])))
+      ;; approving enqueued the run as well as locking, so breaking clears both
+      ;; halves of the front of the train in one intervention
       (let [broken (op! "land" ["break-lock" "--reason" "coordinator confirmed stale lock"])]
         (is (= "land break-lock" (:operation broken)))
         (is (= "closed" (get-in broken [:broken :state])))
         (is (= "coordinator confirmed stale lock"
                (get-in broken [:broken :attributes :land/broken-reason])))
-        (is (empty? (active-merge-locks))))
+        (is (= "closed" (get-in broken [:evicted :state])))
+        (is (= "evicted" (get-in broken [:evicted :attributes :queue/outcome])))
+        (is (empty? (active-merge-locks)))
+        (is (empty? (active-merge-queue))))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                            #"no active merge lock to break"
+                            #"no active merge lock or queued run to break"
                             (op! "land" ["break-lock" "--reason"
                                          "must not report a nonexistent intervention"]))))))
 
@@ -1679,7 +1855,7 @@
       (let [help (op! "help" ["land"])
             subs (get-in help [:node :children])
             by-name (into {} (map (juxt :name identity)) subs)]
-        (is (= #{"complete" "choose" "break-lock"}
+        (is (= #{"complete" "choose" "await" "break-lock"}
                (set (map :name subs))))
         (is (str/starts-with? (get-in help [:node :doc])
                               "Enforce the cross-domain policy boundaries"))
