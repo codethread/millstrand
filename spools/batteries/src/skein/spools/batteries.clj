@@ -613,28 +613,6 @@
      "|Status performs no remote Git calls. It reports the running runtime's
       |declared and adopted state without attempting sync or reload.")]})
 
-(defn- spool-handler
-  "Dispatch validated `strand spool about|add|bump|status` inputs and results.
-
-  Input uses `::spool-op-context`; results use `::spool-about-result`,
-  `::spool-add-result`, `::spool-bump-result`, or `::spool-status-result`.
-  Producer manifests use `::advisory-manifest`. Each closed result/manifest map
-  also uses the named `exact-keys?` predicate because `clojure.spec.alpha/keys`
-  accepts extra keys. The `status` read leaf keeps the retired `spool-status`
-  op's offline, no-network, closed-result contract verbatim
-  (DELTA-Lhc-001.CC8)."
-  [ctx]
-  (require-valid! ::spool-op-context ctx "spool received an invalid operation context")
-  (case (first (:subcommand (:op/args ctx)))
-    "about" (require-valid! ::spool-about-result (spool-about)
-                            "spool about returned an invalid result")
-    "add" (require-valid! ::spool-add-result (assoc (add-spool-op ctx) :operation "spool add")
-                          "spool add returned an invalid result")
-    "bump" (require-valid! ::spool-bump-result (assoc (bump-spool-op ctx) :operation "spool bump")
-                           "spool bump returned an invalid result")
-    "status" (require-valid! ::spool-status-result
-                             (assoc (spool-status (:op/runtime ctx)) :operation "spool status")
-                             "spool status returned an invalid result")))
 
 ;; The blessed parser's :parse :json uses clojure.data.json/read-str, which
 ;; silently returns the first value and ignores trailing input, so it cannot
@@ -724,164 +702,19 @@
 
 ;; --- op handlers ------------------------------------------------------------
 
-(defn- add-handler
-  "Create a strand with merged attributes, optional state, and outgoing edges."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        args (:op/args ctx)
-        {:keys [title state attr attributes edge]} args]
-    (check-attr-duplicates! (:op/argv ctx))
-    (let [merged (merge (when (contains? args :attributes) (attributes->map attributes))
-                        (or attr {}))
-          edges (parse-edges edge)]
-      (weaver/add! rt
-                   (cond-> {:title title :attributes merged}
-                     (some? state) (assoc :state (validate-generic-state state))
-                     (seq edges) (assoc :edges edges))
-                   (request-context :add)))))
 
-(defn- update-handler
-  "Patch one strand's title, state, attributes, and outgoing edges.
 
-  Attributes are a JSON Merge Patch: `--attr` string values merge on top of the
-  typed `--attributes` object (add precedence), and a JSON null in `--attributes`
-  removes that key. Passing no attribute flag leaves the attribute map untouched."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        args (:op/args ctx)
-        {:keys [id title state attr attributes edge]} args]
-    (check-attr-duplicates! (:op/argv ctx))
-    (let [edges (parse-edges edge)
-          attribute-patch? (or (contains? args :attr) (contains? args :attributes))
-          patch (cond-> {}
-                  (seq edges) (assoc :edges edges)
-                  (some? title) (assoc :title title)
-                  (some? state) (assoc :state (validate-generic-state state))
-                  attribute-patch? (assoc :attributes
-                                          (merge (when (contains? args :attributes)
-                                                   (attributes->map attributes))
-                                                 (or attr {}))))]
-      (weaver/update! rt id patch (request-context :update)))))
 
-(defn- show-handler
-  "Return one normalized strand by id."
-  [ctx]
-  (weaver/show (:op/runtime ctx) (:id (:op/args ctx))))
 
-(defn- supersede-handler
-  "Replace one strand with another and return the supersession result."
-  [ctx]
-  (let [{:keys [old-id replacement-id]} (:op/args ctx)]
-    (weaver/supersede! (:op/runtime ctx) old-id replacement-id (request-context :supersede))))
 
-(defn- burn-handler
-  "Physically delete one strand by id and return the burn summary."
-  [ctx]
-  (graph/burn-by-ids! (:op/runtime ctx) [(:id (:op/args ctx))] (request-context :burn)))
 
-(defn- list-handler
-  "List lean-projected strands, optionally filtered by lifecycle state and/or a named query."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [state query param limit]} (:op/args ctx)
-        params (or param {})
-        limit (effective-read-limit rt limit)]
-    (when state (validate-readable-state state))
-    (if query
-      (do (when (str/blank? query)
-            (throw (ex-info "--query requires a non-empty name" {})))
-          (run-named-query rt weaver/list-lean query params state limit))
-      (do (when (seq params)
-            (throw (ex-info "--param requires --query" {})))
-          (weaver/list-lean rt lean-attribute-byte-floor (if state [:= :state state] [:exists :id]) {} limit)))))
 
-(defn- ready-handler
-  "List lean-projected ready strands, optionally from the result set of a named query."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [query param limit]} (:op/args ctx)
-        params (or param {})
-        limit (effective-read-limit rt limit)]
-    (if query
-      (do (when (str/blank? query)
-            (throw (ex-info "--query requires a non-empty name" {})))
-          (run-named-ready-lean rt query params limit))
-      (do (when (seq params)
-            (throw (ex-info "--param requires --query" {})))
-          (weaver/ready-lean rt lean-attribute-byte-floor [:exists :id] {} limit)))))
 
-(defn- subgraph-handler
-  "Return a relation-scoped subgraph rooted at one strand."
-  [ctx]
-  (let [{:keys [root-id relation]} (:op/args ctx)
-        {:keys [root-ids strands edges]}
-        (graph/subgraph (:op/runtime ctx) [root-id]
-                        (cond-> {} relation (assoc :type relation)))]
-    {"root_ids" root-ids
-     "strands" strands
-     "edges" edges}))
 
-(defn- weave-handler
-  "Apply a registered create-only weave pattern to one JSON input value."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [pattern input]} (:op/args ctx)]
-    (patterns/weave! rt
-                     pattern
-                     (walk/keywordize-keys (read-single-json input))
-                     (request-context :weave))))
 
-(defn- query-handler
-  "Introspect registered named queries: list all metadata or explain one."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [subcommand] nm :name} (:op/args ctx)]
-    (case (first subcommand)
-      "list" (json-safe-value (query-list-entries rt))
-      "explain" (do (when (str/blank? nm)
-                      (throw (ex-info "query explain requires a query name" {})))
-                    (json-safe-value (graph/query-explain rt nm))))))
 
-(defn- pattern-handler
-  "Introspect registered weave patterns: list all metadata or explain one."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [subcommand] nm :name} (:op/args ctx)]
-    (case (first subcommand)
-      "list" (patterns/patterns rt)
-      "explain" (do (when (str/blank? nm)
-                      (throw (ex-info "pattern explain requires a pattern name" {})))
-                    (patterns/explain rt nm)))))
 
-(defn- note-handler
-  "Append a note to a target strand's memory via the note primitive.
 
-  Its `note/text`/`note/at` content is storage-enforced write-once (SPEC-001.P4);
-  the note strand stays open to decorating attrs. Returns the primitive's
-  `{:id :target}` shape, where `target` is a projection of the `notes` edge rather
-  than a stored attribute."
-  [ctx]
-  (let [{:keys [id text by round attr]} (:op/args ctx)]
-    (check-attr-duplicates! (:op/argv ctx))
-    ;; note! folds every non-:by/:round opt into decorating attrs, so the
-    ;; string-keyed --attr map lands as ordinary strand attrs on the note.
-    (notes/note! (:op/runtime ctx) id text (merge (or attr {}) {:by by :round round}))))
-
-(defn- notes-handler
-  "Return a target strand's notes from every primitive writer in note/at order,
-  optionally filtered to one review round."
-  [ctx]
-  (let [{:keys [id round]} (:op/args ctx)]
-    (notes/notes (:op/runtime ctx) id {:round round})))
-
-(defn- vocab-handler
-  "List the runtime's vocabulary declarations as an ordered array of C1 maps,
-  string-keyed at the wire boundary, optionally narrowed to one --kind."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [kind]} (:op/args ctx)]
-    (json-safe-value
-     (vocab/declarations rt (when kind {:kind (validate-vocab-kind kind)})))))
 
 ;; --- arg-specs --------------------------------------------------------------
 
@@ -1472,91 +1305,179 @@
   "Create a strand with merged attributes, optional state, and outgoing edges."
   (op-options 'add add-arg-spec add-meta)
   [ctx]
-  (add-handler ctx))
+  (let [rt (:op/runtime ctx)
+        args (:op/args ctx)
+        {:keys [title state attr attributes edge]} args]
+    (check-attr-duplicates! (:op/argv ctx))
+    (let [merged (merge (when (contains? args :attributes) (attributes->map attributes))
+                        (or attr {}))
+          edges (parse-edges edge)]
+      (weaver/add! rt
+                   (cond-> {:title title :attributes merged}
+                     (some? state) (assoc :state (validate-generic-state state))
+                     (seq edges) (assoc :edges edges))
+                   (request-context :add)))))
 
 (skein/defop update
   "Patch one strand's title, state, attributes, and outgoing edges."
   (op-options 'update update-arg-spec)
   [ctx]
-  (update-handler ctx))
+  (let [rt (:op/runtime ctx)
+        args (:op/args ctx)
+        {:keys [id title state attr attributes edge]} args]
+    (check-attr-duplicates! (:op/argv ctx))
+    (let [edges (parse-edges edge)
+          attribute-patch? (or (contains? args :attr) (contains? args :attributes))
+          patch (cond-> {}
+                  (seq edges) (assoc :edges edges)
+                  (some? title) (assoc :title title)
+                  (some? state) (assoc :state (validate-generic-state state))
+                  attribute-patch? (assoc :attributes
+                                          (merge (when (contains? args :attributes)
+                                                   (attributes->map attributes))
+                                                 (or attr {}))))]
+      (weaver/update! rt id patch (request-context :update)))))
 
 (skein/defop show
   "Return one normalized strand by id."
   (op-options 'show show-arg-spec)
   [ctx]
-  (show-handler ctx))
+  (weaver/show (:op/runtime ctx) (:id (:op/args ctx))))
 
 (skein/defop supersede
   "Replace one strand with another and return the supersession result."
   (op-options 'supersede supersede-arg-spec)
   [ctx]
-  (supersede-handler ctx))
+  (let [{:keys [old-id replacement-id]} (:op/args ctx)]
+    (weaver/supersede! (:op/runtime ctx) old-id replacement-id (request-context :supersede))))
 
 (skein/defop burn
   "Physically delete one strand by id and return the burn summary."
   (op-options 'burn burn-arg-spec)
   [ctx]
-  (burn-handler ctx))
+  (graph/burn-by-ids! (:op/runtime ctx) [(:id (:op/args ctx))] (request-context :burn)))
 
 (skein/defop list
   "List lean-projected strands, optionally filtered by lifecycle state or a named query."
   (op-options 'list list-arg-spec)
   [ctx]
-  (list-handler ctx))
+  (let [rt (:op/runtime ctx)
+        {:keys [state query param limit]} (:op/args ctx)
+        params (or param {})
+        limit (effective-read-limit rt limit)]
+    (when state (validate-readable-state state))
+    (if query
+      (do (when (str/blank? query)
+            (throw (ex-info "--query requires a non-empty name" {})))
+          (run-named-query rt weaver/list-lean query params state limit))
+      (do (when (seq params)
+            (throw (ex-info "--param requires --query" {})))
+          (weaver/list-lean rt lean-attribute-byte-floor (if state [:= :state state] [:exists :id]) {} limit)))))
 
 (skein/defop ready
   "List lean-projected ready strands, optionally from a named query result set."
   (op-options 'ready ready-arg-spec)
   [ctx]
-  (ready-handler ctx))
+  (let [rt (:op/runtime ctx)
+        {:keys [query param limit]} (:op/args ctx)
+        params (or param {})
+        limit (effective-read-limit rt limit)]
+    (if query
+      (do (when (str/blank? query)
+            (throw (ex-info "--query requires a non-empty name" {})))
+          (run-named-ready-lean rt query params limit))
+      (do (when (seq params)
+            (throw (ex-info "--param requires --query" {})))
+          (weaver/ready-lean rt lean-attribute-byte-floor [:exists :id] {} limit)))))
 
 (skein/defop subgraph
   "Return a relation-scoped subgraph rooted at one strand."
   (op-options 'subgraph subgraph-arg-spec)
   [ctx]
-  (subgraph-handler ctx))
+  (let [{:keys [root-id relation]} (:op/args ctx)
+        {:keys [root-ids strands edges]}
+        (graph/subgraph (:op/runtime ctx) [root-id]
+                        (cond-> {} relation (assoc :type relation)))]
+    {"root_ids" root-ids
+     "strands" strands
+     "edges" edges}))
 
 (skein/defop weave
   "Apply a registered create-only weave pattern to one JSON input value."
   (op-options 'weave weave-arg-spec weave-meta)
   [ctx]
-  (weave-handler ctx))
+  (let [rt (:op/runtime ctx)
+        {:keys [pattern input]} (:op/args ctx)]
+    (patterns/weave! rt
+                     pattern
+                     (walk/keywordize-keys (read-single-json input))
+                     (request-context :weave))))
 
 (skein/defop query
   "Introspect registered named queries: list all metadata or explain one."
   (op-options 'query query-arg-spec)
   [ctx]
-  (query-handler ctx))
+  (let [rt (:op/runtime ctx)
+        {:keys [subcommand] nm :name} (:op/args ctx)]
+    (case (first subcommand)
+      "list" (json-safe-value (query-list-entries rt))
+      "explain" (do (when (str/blank? nm)
+                      (throw (ex-info "query explain requires a query name" {})))
+                    (json-safe-value (graph/query-explain rt nm))))))
 
 (skein/defop pattern
   "Introspect registered weave patterns: list all metadata or explain one."
   (op-options 'pattern pattern-arg-spec)
   [ctx]
-  (pattern-handler ctx))
+  (let [rt (:op/runtime ctx)
+        {:keys [subcommand] nm :name} (:op/args ctx)]
+    (case (first subcommand)
+      "list" (patterns/patterns rt)
+      "explain" (do (when (str/blank? nm)
+                      (throw (ex-info "pattern explain requires a pattern name" {})))
+                    (patterns/explain rt nm)))))
 
 (skein/defop note
   "Append a note to a target strand's memory via the note primitive."
   (op-options 'note note-arg-spec)
   [ctx]
-  (note-handler ctx))
+  (let [{:keys [id text by round attr]} (:op/args ctx)]
+    (check-attr-duplicates! (:op/argv ctx))
+    ;; note! folds every non-:by/:round opt into decorating attrs, so the
+    ;; string-keyed --attr map lands as ordinary strand attrs on the note.
+    (notes/note! (:op/runtime ctx) id text (merge (or attr {}) {:by by :round round}))))
 
 (skein/defop notes
   "Return a target strand's notes in note/at order."
   (op-options 'notes notes-arg-spec)
   [ctx]
-  (notes-handler ctx))
+  (let [{:keys [id round]} (:op/args ctx)]
+    (notes/notes (:op/runtime ctx) id {:round round})))
 
 (skein/defop vocab
   "List the runtime's vocabulary declarations, optionally narrowed to one kind."
   (op-options 'vocab vocab-arg-spec)
   [ctx]
-  (vocab-handler ctx))
+  (let [rt (:op/runtime ctx)
+        {:keys [kind]} (:op/args ctx)]
+    (json-safe-value
+     (vocab/declarations rt (when kind {:kind (validate-vocab-kind kind)})))))
 
 (skein/defop spool
   "Dispatch validated `strand spool about|add|bump|status` inputs and results."
   (op-options 'spool spool-arg-spec)
   [ctx]
-  (spool-handler ctx))
+  (require-valid! ::spool-op-context ctx "spool received an invalid operation context")
+  (case (first (:subcommand (:op/args ctx)))
+    "about" (require-valid! ::spool-about-result (spool-about)
+                            "spool about returned an invalid result")
+    "add" (require-valid! ::spool-add-result (assoc (add-spool-op ctx) :operation "spool add")
+                          "spool add returned an invalid result")
+    "bump" (require-valid! ::spool-bump-result (assoc (bump-spool-op ctx) :operation "spool bump")
+                           "spool bump returned an invalid result")
+    "status" (require-valid! ::spool-status-result
+                             (assoc (spool-status (:op/runtime ctx)) :operation "spool status")
+                             "spool status returned an invalid result")))
 
 (s/def ::runtime some?)
 (s/def ::seed-context (s/keys :req-un [::runtime]))
