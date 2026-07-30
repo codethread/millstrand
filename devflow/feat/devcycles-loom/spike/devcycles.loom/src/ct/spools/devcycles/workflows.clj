@@ -166,6 +166,12 @@
    ;; NOTE (not a gap): the merge-lock acquire/release and kanban lane moves
    ;; live in the `land` op (policy over the engine). They lift as-is; the only
    ;; consequence is the op's namespace name becomes contractual on day one.
+   ;; KNOWN WRONG as drawn (review g7il2): the merge happens in the land-merge
+   ;; continuation, so a defer hanging off :signoff either never resumes or
+   ;; fires concurrent with the merge — "after merge" is unexpressible from
+   ;; this molecule. Owner-confirmed fix direction: merge becomes a RETURNING
+   ;; call so the declaring molecule resumes and this defer truly follows it
+   ;; (the returning-from-workflows gap discussed at proposal review).
    (workflow/defer :cleanup-extras "Repo-specific cleanup after merge"
      :depends-on [:signoff])))
 

@@ -22,9 +22,11 @@
 ;;      exists because there is nothing to forward — the context flows whole
 ;;      and each spec names what it consumes.
 ;;
-;; Isolation survives as a *visible* contract: NG6's "no silent caller
-;; coupling" becomes "a target reads only what its qualified param-spec
-;; declares, validated at fill" — the spec is the declaration, on the target
+;; Isolation is a *documented* contract, not an enforced one (owner ruling,
+;; TEN-001/TEN-002): the qualified param-spec declares and validates what a
+;; target NEEDS; nothing stops a target destructuring keys it never declared,
+;; and no engine-side projection will be built to prevent it. Trusted agents
+;; simply don't do that. The spec is still the declaration, on the target
 ;; where it belongs, instead of :forward lists on every defer point.
 
 (ns ct.spools.devcycles.namespaced-context-sketch
@@ -73,10 +75,19 @@
 ;;     contract change, and PROP-Dfr-001.S12 is explicit that those are cold
 ;;     cutovers, never live-refresh pickups. :forward by contrast is additive
 ;;     per-definition data. Cheap-now vs right-later.
-;;   - JSON round-trip: qualified keywords must survive the wire as
-;;     "vcs/branch" both ways. Card xf1vb records a namespace-dropping wire
-;;     bug on the error path — the params path needs the same audit before
-;;     any of this is trusted.
+;;   - JSON round-trip: AUDITED (2026-07-30) and the params path is already
+;;     contractual for qualified KEYS at every hop — `json->params` documents
+;;     "acme.workflows/feature" addressing an `s/keys :req` entry
+;;     (workflow/internal/specs.clj json->params), `skein.core.db/json-key`
+;;     names qualified keys "a fixed point of the JSON round-trip", the
+;;     `complete!` merge is keyword-keyed over that persistence, and
+;;     `outer-key-name` projects qualified spelling in contracts. One real
+;;     residue, both value-side: `json-safe-context-value`
+;;     (workflow/internal/compile.clj) coerces keyword VALUES via `name`,
+;;     silently dropping a qualified value's namespace (same class as card
+;;     xf1vb's error-path bug) — fix is render "ns/name" or fail loudly
+;;     (TEN-003); plus one integration test pinning the full start -> context
+;;     -> merge -> show round trip so the invariant is a test, not a docstring.
 ;;   - Last-write-wins is safe across STAGES because keys are qualified; two
 ;;     parallel sibling molecules writing the same shared key remains a race
 ;;     the vocabulary tier must warn about (shared keys should be written by

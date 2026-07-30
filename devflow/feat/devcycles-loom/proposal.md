@@ -36,10 +36,12 @@ these workflows with its own merge, CI, review, or validation behavior.
   (`v<int>` markers, compat alarm, accretion-only under a name).
 - **PROP-Dcl-001.G2:** skein-src's `.skein` consumes devcycles.loom; what remains locally is
   thin repo policy (harness seats, reviewer rosters, repo cron jobs, per-developer bindings).
-- **PROP-Dcl-001.G3:** Sibling spool repos can activate the same dev cycle per-module in
-  their own `.skein` worlds (tracker binding alone, attention alone, workflows alone), and
-  devcycles.loom's own workspace runs on it via the `:local/root ".."` self-coordinate that
-  devflow.spool already uses.
+- **PROP-Dcl-001.G3:** Sibling spool repos activate the same dev cycle in their own
+  `.skein` worlds. Per-concern modules keep activation legible, but the family root's
+  dependency floors (devflow, kanban, agent-run) are required by every consumer — the
+  loom shares the owner's whole practice, and consumers customize repo specifics within
+  the devflow/kanban remit, never the dependency set. devcycles.loom's own workspace runs
+  on it via the `:local/root ".."` self-coordinate that devflow.spool already uses.
 - **PROP-Dcl-001.G4:** Shared definitions are consumer-shapable through the engine's
   existing seams. Repo-varying values ride params with defaults, tool commands ride
   bindings supplied as data, and whole styles of work ride `defer` points bound by each
@@ -77,8 +79,11 @@ these workflows with its own merge, CI, review, or validation behavior.
 
 - **PROP-Dcl-001.S1:** New repo `devcycles.loom`, one family entry (working name
   `codethread/devcycles`), namespaces under `ct.spools.devcycles.*` (not `skein.spools.*`),
-  with per-concern modules so consumers opt in independently: workflows, tracker binding,
-  attention rules, named queries.
+  with per-concern modules for activation clarity: workflows, tracker binding, attention
+  rules, named queries. All modules share the one root and its dependency floors; a
+  consumer that activates any of them accepts devflow, kanban, and agent-run pins
+  (owner decision resolving review finding ulp1o/9s12g: no root split, the shared whole
+  practice is the point).
 
 - **PROP-Dcl-001.S2:** Lift wholesale, with one repair: the devflow↔kanban tracker binding,
   the chime attention rules (with the parked-run threshold as declared data), and the named
@@ -166,8 +171,9 @@ these workflows with its own merge, CI, review, or validation behavior.
 - **PROP-Dcl-001.Q2:** Beyond the two defer points fixed in S3 (`land` cleanup, `fix`
   validation), should `land`'s CI-watch style also be a defer rather than a binding? A
   binding changes the command; a defer changes the whole verification workflow.
-- **PROP-Dcl-001.Q3:** RFC-Saf-001 timing: author the loom against today's collecting
-  macros + `:contribute` and accept migration, or sequence the queries/rules modules behind
-  that RFC's blessed authoring forms?
+- **PROP-Dcl-001.Q3:** DECIDED (owner ruling at review): assume the authoring-forms work
+  (RFC-Saf-001 / PROP-Auf-001) lands with full API richness; the queries/rules modules
+  author against its blessed forms and this feature does not hedge for its absence. The
+  workspace-local macros root stays undistributed (NG6) with no fallback path here.
 - **PROP-Dcl-001.Q4:** Should `explore`'s promote route gain a binding so worlds without
   devflow can still use it, or is instruction prose naming intake acceptable for v1?
