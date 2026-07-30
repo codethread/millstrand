@@ -36,10 +36,7 @@ single timing view.
 run every so often for the lifetime of the weaver. You also want spread so many
 weavers or many jobs do not fire on the same tick.
 
-**Composition.** Call `register!` with `:interval-ms`, optional `:jitter-ms`, and
-a `:handler` symbol resolving to `(fn [runtime] ..)`. This is the direct
-trusted-Clojure seam. Module sources should use the `defjob` recipe below so
-owner-complete publication and omission drive the job lifecycle.
+**Composition.** Call `register!` with `:interval-ms`, optional `:jitter-ms`, and a `:handler` symbol resolving to `(fn [runtime] ..)`. This is the direct trusted-Clojure seam. Module sources should use the `defjob` recipe below so owner-complete publication and omission drive the job lifecycle.
 
 ```clojure
 (ns my.jobs
@@ -87,10 +84,7 @@ Honest source: the job shape in [`cron/README.md`](./cron/README.md) and
 network read. Your main config file also loads under test, and you do not want
 that test to touch the real world.
 
-**Composition.** Give the job a dedicated startup-file module. Cron's module
-declares the open jobs kind and the scheduling lifecycle effect but contributes
-no jobs. The job file holds the `:handler` plus the `defjob` declaration.
-`init.clj` wires it as its own module.
+**Composition.** Give the job a dedicated startup-file module. Cron's module declares the open jobs kind and the scheduling lifecycle effect but contributes no jobs. The job file holds the `:handler` plus the `defjob` declaration. `init.clj` wires it as its own module.
 
 ```clojure
 ;; report_job.clj (ns report-job) — the job's handler and registration live together.
@@ -114,14 +108,10 @@ no jobs. The job file holds the `:handler` plus the `defjob` declaration.
 
 **Why this shape.**
 
-- **The main config test stops before job registration.** Keeping the `register!`
-  call in the job module avoids accidental real-world side effects in broad
-  config tests.
+- **The main config test stops before job scheduling.** Keeping the `defjob` declaration in a separate module leaves broad config tests free to load shared helpers without publishing the job or running Cron's lifecycle effect.
 - **Behavior and cadence stay together.** One file holds what the job does and
   when it runs.
-- **Reloads keep cadence.** Republishing the same declaration leaves the
-  managed job untouched. Changing its cadence or handler replaces its wake;
-  omitting it cancels the wake.
+- **Reloads keep cadence.** Republishing the same declaration leaves the managed job untouched. Changing its cadence or handler replaces its wake; omitting it cancels the wake.
 
 Honest source: this repo's [`.skein/nvd_scan.clj`](../.skein/nvd_scan.clj), wired
 as `:nvd-scan` in [`.skein/init.clj`](../.skein/init.clj).

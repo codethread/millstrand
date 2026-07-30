@@ -15,6 +15,7 @@
             [skein.api.runtime.alpha :as runtime]
             [skein.api.registry.alpha :as registry]
             [skein.api.scheduler.alpha :as scheduler]
+            [skein.core.weaver.lifecycle-effects :as lifecycle-effects]
             [skein.spools.cron :as cron]
             [skein.spools.test-support :as test-support]
             [skein.test.alpha :as test-alpha])
@@ -158,6 +159,62 @@
           (is (nil? (cron-wake rt "cron/owned"))
               "owner removal cancels the durable cron wake")
           (is (empty? (cron/jobs rt))))))))
+
+(deftest owner-reconciliation-names-the-failing-job
+  (with-cron
+    (fn [rt]
+      (let [job {:id :broken
+                 :interval-ms 1000
+                 :handler 'skein.cron-test/missing-handler}
+            error (is (thrown-with-msg?
+                       clojure.lang.ExceptionInfo
+                       #"Cron job reconciliation failed"
+                       (cron/apply-jobs! {:runtime rt
+                                          :desired {:broken job}
+                                          :actual {}})))]
+        (is (= {:job :broken
+                :operation :apply
+                :declaration job
+                :wake-key "cron/broken"
+                :remedy "Repair the named Cron declaration or durable wake, then refresh the owning module."}
+               (ex-data error)))))))
+
+(deftest lifecycle-effect-converges-on-kind-change-and-removal
+  (with-cron
+    (fn [rt]
+      (let [handle (#'cron/job-kinds rt)
+            declaration (deref (ns-resolve 'skein.spools.cron 'scheduled-jobs))
+            declarations {:scheduled-jobs declaration}
+            resolver {'skein.spools.cron/desired-jobs cron/desired-jobs
+                      'skein.spools.cron/actual-jobs cron/actual-jobs
+                      'skein.spools.cron/apply-jobs! cron/apply-jobs!
+                      'skein.spools.cron/remove-jobs! cron/remove-jobs!}]
+        (registry/replace-owner!
+         handle cron/job-kind :test/owner
+         {:layer :workspace
+          :entries {:scheduled {:id :scheduled
+                                :interval-ms 1000
+                                :handler 'skein.cron-test/fire-ok}}
+          :overrides #{}})
+        (let [applied (lifecycle-effects/refresh
+                       {:runtime rt
+                        :module-key :skein/spools-cron
+                        :resolver resolver
+                        :declarations declarations
+                        :changed-kinds #{cron/job-kind}})]
+          (is (= [:scheduled] (mapv :id (cron/jobs rt))))
+          (is (some? (cron-wake rt "cron/scheduled")))
+          (let [removed (lifecycle-effects/refresh
+                         {:runtime rt
+                          :module-key :skein/spools-cron
+                          :resolver resolver
+                          :state (:state applied)
+                          :declarations {}
+                          :changed-kinds #{cron/job-kind}})]
+            (is (= :removed
+                   (get-in removed [:outcomes :scheduled-jobs :status])))
+            (is (empty? (cron/jobs rt)))
+            (is (nil? (cron-wake rt "cron/scheduled")))))))))
 
 (deftest fires-records-result-and-continues-cadence
   (with-cron
