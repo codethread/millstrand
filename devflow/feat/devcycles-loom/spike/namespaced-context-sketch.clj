@@ -35,7 +35,7 @@
             [skein.spools.workflow :as workflow]))
 
 ;; Shared run vocabulary — declared once, owner-checked like attribute
-;; namespaces; the loom is the natural owner of :vcs/* and :run/*.
+;; namespaces; the devcycles spool is the natural owner of :vcs/* and :run/*.
 (s/def :vcs/branch string?)
 (s/def :vcs/worktree string?)
 (s/def :run/card (s/nilable string?))
@@ -94,4 +94,4 @@
 ;;     the root/claim steps, not by parallel branches).
 ;;   - Every existing definition uses :req-un/unqualified keys; migrating a
 ;;     published definition's param contract is a break under the accretion
-;;     rule. Pre-v1 loom definitions can ship qualified from day one.
+;;     rule. Pre-v1 devcycles definitions can ship qualified from day one.

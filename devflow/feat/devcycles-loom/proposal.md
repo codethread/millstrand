@@ -1,4 +1,4 @@
-# devcycles.loom Proposal
+# devcycles.spool Proposal
 
 **Document ID:** `PROP-Dcl-001`
 **Status:** Draft
@@ -31,16 +31,16 @@ these workflows with its own merge, CI, review, or validation behavior.
 
 ## PROP-Dcl-001.P2 Goals
 
-- **PROP-Dcl-001.G1:** A new external sibling spool repository, `devcycles.loom`, owns the
+- **PROP-Dcl-001.G1:** A new external sibling spool repository, `devcycles.spool`, owns the
   shared dev-cycle composition and is released under the shared-spool discipline
   (`v<int>` markers, compat alarm, accretion-only under a name).
-- **PROP-Dcl-001.G2:** skein-src's `.skein` consumes devcycles.loom; what remains locally is
+- **PROP-Dcl-001.G2:** skein-src's `.skein` consumes devcycles.spool; what remains locally is
   thin repo policy (harness seats, reviewer rosters, repo cron jobs, per-developer bindings).
 - **PROP-Dcl-001.G3:** Sibling spool repos activate the same dev cycle in their own
   `.skein` worlds. Per-concern modules keep activation legible, but the family root's
   dependency floors (devflow, kanban, agent-run) are required by every consumer — the
-  loom shares the owner's whole practice, and consumers customize repo specifics within
-  the devflow/kanban remit, never the dependency set. devcycles.loom's own workspace runs
+  spool shares the owner's whole practice, and consumers customize repo specifics within
+  the devflow/kanban remit, never the dependency set. devcycles.spool's own workspace runs
   on it via the `:local/root ".."` self-coordinate that devflow.spool already uses.
 - **PROP-Dcl-001.G4:** Shared definitions are consumer-shapable through the engine's
   existing seams. Repo-varying values ride params with defaults, tool commands ride
@@ -57,13 +57,13 @@ these workflows with its own merge, CI, review, or validation behavior.
 
 - **PROP-Dcl-001.NG1:** `.skein/scripts/` and the dash TUI stay in skein-src (explicit user
   carve-out). The shared definitions reach script behavior only through consumer-bound
-  seams; moving the repo-agnostic scripts into the loom is a possible later accretion.
+  seams; moving the repo-agnostic scripts into the devcycles spool is a possible later accretion.
 - **PROP-Dcl-001.NG2:** The `story` workflow does not lift. Its instruction prose is
   skein-src's Clojure module form (SPEC-003.C19a, `make api-docs`, `internal/<concern>`
   layout) end to end; sharing its skeleton without that prose is a different feature.
 - **PROP-Dcl-001.NG3:** Repo policy content does not lift: harness seat definitions and rate
   cards, reviewer roster briefs, `nvd_scan.clj`, `module_adapters.clj`, `init.local.clj`.
-  The loom may document the shapes; consumers author their own content.
+  The devcycles spool may document the shapes; consumers author their own content.
 - **PROP-Dcl-001.NG4:** No change to the workflow engine contract. Defer, bindings, params,
   and executor registries are used as shipped; anything the lift cannot express with them is
   raised as its own feature, not patched into the engine here.
@@ -77,7 +77,7 @@ these workflows with its own merge, CI, review, or validation behavior.
 
 ## PROP-Dcl-001.P4 Proposed scope
 
-- **PROP-Dcl-001.S1:** New repo `devcycles.loom`, one family entry (working name
+- **PROP-Dcl-001.S1:** New repo `devcycles.spool`, one family entry (working name
   `codethread/devcycles`), namespaces under `ct.spools.devcycles.*` (not `skein.spools.*`),
   with per-concern modules for activation clarity: workflows, tracker binding, attention
   rules, named queries. All modules share the one root and its dependency floors; a
@@ -96,7 +96,7 @@ these workflows with its own merge, CI, review, or validation behavior.
 
 - **PROP-Dcl-001.S3:** Lift with seams. Each definition's consumer interface is fixed here:
 
-  | Lifted item | Seam | Loom default |
+  | Lifted item | Seam | devcycles default |
   | --- | --- | --- |
   | `land` family + `land` op + merge lock | params: mainline ref, roster name; bindings: merge/CI-watch/cleanup gate commands | `main`; `change-review`; repo-agnostic gh-based commands |
   | `land` post-merge cleanup hook | defer `:cleanup-extras` | bound to a no-op target; skein-src binds its warm-REPL teardown |
@@ -107,16 +107,16 @@ these workflows with its own merge, CI, review, or validation behavior.
   | `main-ci-watch` | params: worktree, poll interval (already declared) | as today |
   | `work` query | declared exclusion data (which roles/lanes/kinds are "not actionable") | current exclusion set |
 
-  Defer targets ship in the loom itself, registered with `:call`, so every route and
+  Defer targets ship in the devcycles spool itself, registered with `:call`, so every route and
   binding the shared definitions name is satisfied without consumer registrations;
   a consumer replaces a binding to change behavior, never to make the spool load. As a
-  concrete shape: the loom ships `fix` with `(workflow/defer :validate "Validate before
+  concrete shape: the devcycles spool ships `fix` with `(workflow/defer :validate "Validate before
   handoff")` bound by default to its own `docs-check` target, and skein-src's world may
   rebind `{:validate #{:docs-check :full-quality-suite}}` in its own module.
 
 - **PROP-Dcl-001.S4:** skein-src cutover surface: `.skein/workflows.clj`,
   `kanban_tracker.clj`, `attention.clj`, and the query surface of `config.clj` are replaced
-  by loom module activations, one registered name moving owner per commit. Acceptance
+  by devcycles module activations, one registered name moving owner per commit. Acceptance
   includes the full documentation and test re-route of every live reference to the replaced
   files: `test/skein/config_test.clj`, `CLAUDE.md`/`AGENTS.md`, `README.md`,
   `docs/reference.md`, `docs/clojure-crash-course.md`, `spools/README.md`,
@@ -125,8 +125,8 @@ these workflows with its own merge, CI, review, or validation behavior.
 
 - **PROP-Dcl-001.S5:** Live-cutover procedure for the persisted `code/fn` symbol
   `workflows/main-ci-watch`: skein-src keeps a one-var shim module owning the `workflows`
-  namespace name, delegating to the loom implementation, activated in the same refresh that
-  removes `workflows.clj`. New pours persist the loom symbol; the shim exists solely for
+  namespace name, delegating to the devcycles spool implementation, activated in the same refresh that
+  removes `workflows.clj`. New pours persist the devcycles spool symbol; the shim exists solely for
   gates poured before the cutover and is deleted once `strand list` shows no active strand
   carrying the old symbol (in practice: no active `land` family run). If review finds the
   shim insufficient, the fallback is a declared quiesce window: no new `land` starts, drain
@@ -138,7 +138,7 @@ these workflows with its own merge, CI, review, or validation behavior.
   (unmarked source-root — the README activation snippet documents the prerequisite) and no
   `:skein/min` while Skein itself is unmarked (ADR-004 Phase B precedent). skein-src
   develops against the sibling checkout via `spools.local.edn` + `:claims`; the committed
-  pin stays the tested truth. Because no prerequisite is fetched transitively, the loom
+  pin stays the tested truth. Because no prerequisite is fetched transitively, the devcycles spool
   README carries a numbered consumer bootstrap: (1) add the five family entries to
   `.skein/spools.edn` (config file, shown complete), (2) declare the wanted modules in
   `.skein/init.clj` with the given `:after` edges (config file, snippet per module),
@@ -156,18 +156,19 @@ these workflows with its own merge, CI, review, or validation behavior.
   - dresser.loom: extend the `skein-workspace` templates with the devcycles family entry
     and module snippets; a dresser release with its own acceptance.
 
-- **PROP-Dcl-001.S8:** The loom repo carries the shared-spool furniture required by
+- **PROP-Dcl-001.S8:** The devcycles spool repo carries the shared-spool furniture required by
   writing-shared-spools from day one: the doc triad, README activation snippets per module,
   advisory `spool.edn`, `bin/compat-alarm`, test tiers including a consumer-workspace
   fixture synced in an embedded `:publish? false` runtime, and its own `.skein` world
-  consuming the loom itself.
+  consuming the devcycles spool itself.
 
 ## PROP-Dcl-001.P5 Open questions
 
-- **PROP-Dcl-001.Q1:** Repo and family naming: repo `devcycles.loom` with family
-  `codethread/devcycles`? No written naming rule exists for `.loom` vs `.spool`; if the
-  distinction (behavior woven into a world vs apparatus that composes one) is worth
-  keeping, it should be recorded in writing-shared-spools as part of this feature.
+- **PROP-Dcl-001.Q1:** DECIDED (owner): repo `devcycles.spool` with family
+  `codethread/devcycles`, following the existing sibling `.spool` convention. The `.loom`
+  suffix (dresser.loom precedent) is not adopted here; if the distinction (behavior woven
+  into a world vs apparatus that composes one) is ever worth codifying, that's a
+  writing-shared-spools accretion, not this feature's problem.
 - **PROP-Dcl-001.Q2:** Beyond the two defer points fixed in S3 (`land` cleanup, `fix`
   validation), should `land`'s CI-watch style also be a defer rather than a binding? A
   binding changes the command; a defer changes the whole verification workflow.

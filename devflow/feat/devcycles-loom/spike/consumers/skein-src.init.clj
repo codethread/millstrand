@@ -9,10 +9,10 @@
 ;; scripts/, dash.
 ;;
 ;; spools.edn gains:
-;;   codethread/devcycles {:git/url "…/devcycles.loom.git" :git/tag "v1"
+;;   codethread/devcycles {:git/url "…/devcycles.spool.git" :git/tag "v1"
 ;;                         :git/sha "…" :roots {ct.spools/devcycles "."}}
 ;;   (dev override: spools.local.edn
-;;     {codethread/devcycles {:local/root "../devcycles.loom" :claims "v1"}})
+;;     {codethread/devcycles {:local/root "../devcycles.spool" :claims "v1"}})
 (require '[clojure.java.io :as io]
          '[skein.api.current.alpha :as current]
          '[skein.api.runtime.alpha :as runtime]
@@ -44,7 +44,7 @@
 ;; =============================================================================
 
 ;; 1. This repo's heavyweight validation style: a second :call target for the
-;; fix :validate defer, beside the loom's docs-check.
+;; fix :validate defer, beside the devcycles spool's docs-check.
 (workflow/defworkflow quality-suite
   "Full locked suite in the fix worktree."
   {:entrypoints #{:call}
@@ -58,8 +58,8 @@
                                "workflow/instruction" "Terse: green suite closes this."})))
 
 ;; 2. Widen the fix validation allowlist: the driving worker now picks the
-;; style per run — loom docs-check for a doc fix, the full suite otherwise.
-;; This SHADOWS the loom's :fix registration from the workspace layer.
+;; style per run — devcycles docs-check for a doc fix, the full suite otherwise.
+;; This SHADOWS the devcycles spool's :fix registration from the workspace layer.
 ;; GAP (sharpened): publication requires the shadow to declare :overrides
 ;; #{:fix}. The blessed collect-entry! already accepts {:override? true}
 ;; (alpha.clj 4-arity, closed opts spec) but defworkflow calls the 3-arity and

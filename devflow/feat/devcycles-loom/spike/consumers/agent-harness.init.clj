@@ -49,7 +49,7 @@
    :param-spec ::devcycles/fix-params}
   (workflow/bind-defers devcycles/fix-template {:validate #{:make-quality}}))
 
-;; 3. Land: NOTHING. The loom's gh-based defaults, mainline "main", and no
+;; 3. Land: NOTHING. The devcycles spool's gh-based defaults, mainline "main", and no
 ;; roster step customization fit this repo as shipped — the payoff of
 ;; commands-as-bindings with sane defaults. A run that wants a roster passes
 ;; {:roster "…"} in params; the world registers no shadow.

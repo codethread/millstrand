@@ -10,7 +10,7 @@
             [skein.spools.workflow :as workflow]))
 
 ;; --- params ------------------------------------------------------------------
-;; Repo-varying values are params with loom defaults. `:bindings` is plain data
+;; Repo-varying values are params with devcycles defaults. `:bindings` is plain data
 ;; (it must survive the params JSON round-trip), deep-merged over the defaults.
 (s/def ::branch string?)
 (s/def ::worktree string?)
@@ -24,7 +24,7 @@
 
 ;; --- bindings ----------------------------------------------------------------
 ;; workflow.md's forge-agnostic pattern: action-ref -> gate attrs as data. The
-;; loom ships repo-agnostic gh commands; a consumer overrides any subset.
+;; spool ships repo-agnostic gh commands; a consumer overrides any subset.
 ;; RESOLVED (was a GAP): no per-start ceremony and no new primitive needed — a
 ;; world shadows the registration and carries its bindings in :defaults, one
 ;; registration per world (see consumers/skein-src.init.clj; needs only the
@@ -38,7 +38,7 @@
 ;; and the render thunks all come from `bindable`, so the contract cannot
 ;; drift and the authoring pain collapses to one map:
 (def bindable
-  "Published binding surface: action-ref -> gate attr -> loom default.
+  "Published binding surface: action-ref -> gate attr -> devcycles default.
 
   This IS the consumer contract: ::bindings is derived from it, so
   `workflow show land` projects exactly what may be bound without the
