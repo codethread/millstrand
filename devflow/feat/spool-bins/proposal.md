@@ -42,7 +42,7 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
 ## PROP-Sbn-001.P4 Proposed scope
 
-- **PROP-Sbn-001.S1 (the core `:bins` kind, the `defbin` form, and the `bins` protocol):** Core declares `:bins` as a sixth owner-partitioned registry kind and ships `defbin` as the sixth core authoring form, beside `defop`, `defquery`, `defpattern`, `defhook`, and `defhandler` in `skein.api.skein.alpha` (PROP-Auf-001.REC4; AC1 requires every core kind to have a named form). `:bins` is Skein's kind rather than a domain vocabulary a spool owns, which is what puts both the kind and its form in core (S9). Any active module may declare entries, and core owns their validation end to end — the form's shape checks, owner-root resolution, and the path checks — because all three apply identically to every declaring module. S3 splits that work between the form and the kind's candidate validator.
+- **PROP-Sbn-001.S1 (the core `:bins` kind, the `defbin` form, and the `bins` protocol):** Core declares `:bins` as a sixth owner-partitioned registry kind and ships `defbin` as the sixth core authoring form, beside `defop`, `defquery`, `defpattern`, `defhook`, and `defhandler` in `skein.api.skein.alpha` (PROP-Auf-001.REC4; AC1 requires every core kind to have a named form). `:bins` is Skein's kind rather than a domain vocabulary a spool owns, which is what puts both the kind and its form in core (S9). Any active module may declare entries, and core owns the one shape check they get, because it applies identically to every declaring module.
 
   Core also registers the read-only `bins` op. `bins list` returns the effective winning declarations after overrides, and `bins plan <name>` returns the S7 exec plan. Both are `:read` hook-class. `mill bin list` relays `bins list`; `mill bin build` reads the same plan and runs the recipe; `mill bin run` calls `bins plan` and execs the result. `strand bins list` remains an ordinary op call for clients that want JSON without execution.
 
@@ -56,38 +56,43 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
   (skein/defbin kanban-dash
     "Interactive kanban board TUI over the live workspace."
-    {:executable "bin/kanban-dash"
-     :build      ["bun" "install" "--frozen-lockfile"]})
+    {:executable "../../../../bin/kanban-dash"
+     :build      ["bun" "install" "--cwd" "../../../../scripts/kanban-export"
+                  "--frozen-lockfile"]})
   ```
+
+  The leading `..` segments are the honest cost of resolving against the declaring file: `ct.spools.kanban.dash` lives at `src/ct/spools/kanban/dash.clj`, four levels below the checkout that holds `bin/`. A shallower namespace shortens the path, and moving the namespace deeper breaks it, so an author who dislikes that coupling keeps the declaration in a shallow namespace. `mill bin list` prints the resolved absolute path, which is what makes a stale one visible.
 
   The form is `[form-name doc opts]`. A bin names a file rather than a handler, so like `defquery` it defines the declaration Var and no function. The entry key is the form name as a string, which is also the name the operator passes to `mill bin run`. The docstring sits where it does in every other core form. Authoring at a form narrows bin names to what `def` accepts, so a bin is named like a Clojure symbol and interns a Var of that name in the declaring namespace. Nothing in scope wants a name outside that set, and `kanban-dash` is the shape an operator would type anyway. `:name` and `:provenance` are derived, the first from the form name and the second from the defining namespace, and the owner is the collecting module, so no author writes any of the three. `:override? true` in the options map records explicit override intent exactly as it does for the other five core forms. Collection normalizes to the owner-complete partition the publication kernel already understands:
 
   ```clojure
   {:bins {:entries {"kanban-dash" {:name       "kanban-dash"
                                    :doc        "Interactive kanban board TUI over the live workspace."
-                                   :executable "bin/kanban-dash"
-                                   :build      ["bun" "install" "--frozen-lockfile"]
+                                   :executable "../../../../bin/kanban-dash"
+                                   :build      ["bun" "install" "--cwd"
+                                                "../../../../scripts/kanban-export"
+                                                "--frozen-lockfile"]
                                    :provenance 'ct.spools.kanban.dash}}
           :overrides #{}}}
   ```
 
   That map is internal to publication; it is shown here because S3's registration checks and S7's plan read it, not because a bin author writes it.
 
-  `:executable` is one non-empty relative path beneath the owning root. It is not argv and has no interpolation or path mini-language. The named file may be a committed compiled program, an executable script with a shebang, or the output of the entry's own `:build` recipe.
+  `:executable` is one non-empty string naming a program, resolved the way a shell resolves a command. A name with no separator is looked up on `PATH` at spawn time. A name containing a separator is a path: `./x` and `../x` resolve against the directory of the file that declared the form, `~/x` expands to the caller's home directory, and an absolute path is taken as given. There is no environment interpolation and no path mini-language beyond those four cases. The named file may be a committed compiled program, an executable script with a shebang, the output of the entry's own `:build` recipe, or a program the consumer already has installed.
 
-  `:build` is an optional argv vector of plain strings — never a shell string, with no interpolation and no path mini-language. It runs with the owning root as cwd, so relative paths in a recipe are ordinary relative paths, and its first element resolves like any spawned command: a path runs directly, a bare name is the OS's `PATH` lookup at spawn time. Its absence means there is nothing to build, the normal case for a shell script. Authors who prefer a committed wrapper that performs its own setup may still ship one; `:build` is the declared alternative that makes the step discoverable instead of documented.
+  Resolving against the declaring file rather than a registry root is what makes the surface work for real spools. Roots are per-library subdirectories of a multi-root family checkout, but a `bin/` directory serves the whole repository — `agent-harness.spool` puts `bin/strand-harness` beside its nine library roots, not inside one — so any rule anchored on the owning root cannot name the executables this proposal exists to reach. The declaring file needs no owner-to-root mapping, which also disposes of the question of what a module with several `:spools` prerequisites is relative to.
+
+  `:build` is an optional argv vector of plain strings — never a shell string, with no interpolation and no path mini-language. It runs with the declaring file's directory as cwd, so relative paths in a recipe are ordinary relative paths, and its first element resolves like any spawned command: a path runs directly, a bare name is the OS's `PATH` lookup at spawn time. Its absence means there is nothing to build, the normal case for a shell script. Authors who prefer a committed wrapper that performs its own setup may still ship one; `:build` is the declared alternative that makes the step discoverable instead of documented.
 
   Names are flat, collide loudly across owners, and resolve through the declaring form's `:override? true` exactly as ops do. Files do not become public because they live under `bin/` or carry an executable bit; only declared entries appear in `bins list`. Removal is by omission: an owner that stops evaluating a `defbin` form drops the bin at the next refresh, and image activation replays the retained declaration record, so a bin behaves like every other collected entry.
 
-- **PROP-Sbn-001.S3 (path validation and arguments):** `defbin` validates the declaration data itself. Checks that need the owning root or the filesystem belong to the kind's `:candidate-validator`, and the kernel `:entry-spec` stays coarse. That is the split the five existing core kinds already use.
+- **PROP-Sbn-001.S3 (path validation and arguments):** Skein does not police where a bin's path leads. A declaration naming `/usr/local/bin/x` or a path walking out of its spool is accepted, because the spool's own Clojure could open that file already and the seat's sandbox is where enforcement belongs (N2). There is no containment rule to state, no owner-to-root resolution to define, and no case in which registration refuses a path. What remains is a convenience for shipping non-Clojure code, and the correctness stance is P3's: the user sees the failure and acts on it.
 
-  `bin-declaration` and the `::bin-options` grammar live in `skein.core.contribution` beside the other five core constructors, closed to `:executable`, `:build`, and `:override?`. They require `:executable` to be a non-empty relative path and `:build`, when present, to be a vector of non-empty strings. A malformed declaration throws while the named top-level form is being evaluated, so the failure points at that form rather than at a module-wide callback. It surfaces on the ordinary module evaluation-failure channel (SPEC-004.C46) rather than as one of S8's op outcomes, and the shipped constructors name the failing form rather than the entry, so this proposal claims no richer error data than `defop` and `defquery` already produce.
+  `bin-declaration` and the `::bin-options` grammar live in `skein.core.contribution` beside the other five core constructors, closed to `:executable`, `:build`, and `:override?`. They require `:executable` to be a non-empty string and `:build`, when present, to be a vector of non-empty strings. That is the whole of declaration validation. A malformed declaration throws while the named top-level form is being evaluated, so the failure points at that form rather than at a module-wide callback. It surfaces on the ordinary module evaluation-failure channel (SPEC-004.C46) rather than as one of S8's op outcomes, and the shipped constructors name the failing form rather than the entry, so this proposal claims no richer error data than `defop` and `defquery` already produce.
 
-  Root containment and filesystem state are not visible at the form: only the coordinator knows the owning root. Registration therefore requires the declaring owner to resolve to a materialized root at all, `:executable` to remain beneath that root after canonicalization, and, for a bin without `:build`, to name an existing regular file carrying an executable bit. These checks live in the kind's `:candidate-validator` (SPEC-004.C46d); an invalid declaration fails the candidate refresh while every owner keeps its previous live partition.
+  With no path rule to enforce, the kind needs no `:candidate-validator` and registration performs no filesystem check on any bin. Every filesystem question moves to `bins plan`, which evaluates one runnable predicate — the resolved path names an existing regular file carrying an executable bit — and reports the result. This is the one place a bin's readiness is ever consulted, so a bin whose recipe has not run, whose file was deleted after registration, and whose spool was re-materialized at a new pin all reach the same predicate by the same route. A bare `PATH` name is not stattable without a lookup Skein does not perform, so the plan reports its runnability as unknown and lets exec fail loudly.
 
-  The rootless case is real rather than theoretical: `defbin` is public, so a workspace configuration namespace with no spool root can evaluate it. Such a declaration has no base for a relative path and is refused at registration (S8). Resolving an owner to its root is the one piece of plumbing this kind needs that the other five core kinds do not, because only bins name files on disk; the implementing feature's plan owns the mechanism, since the validator receives owner keywords while the coordinator keys materialized roots by lib symbol.
-
-  A bin with `:build` may name an executable that is absent from a fresh materialized root by construction, so registration performs no filesystem check on it. Instead `bins plan` evaluates one runnable predicate — the resolved path names an existing regular file carrying an executable bit — and reports the result in the plan. The plan itself always resolves and always carries the recipe, because `mill bin build` needs it exactly when the predicate fails. `mill bin run` refuses `bin/not-built` when the predicate fails for a bin declaring `:build`, naming the build command as the remedy (S8). For a buildless bin the same predicate was enforced at registration; if the file has since changed on disk, exec simply fails loudly as `bin/exec-failed`.
+  The plan always resolves and always carries the recipe, because `mill bin build` needs it exactly when the predicate fails. `mill bin run` refuses when the predicate is false: `bin/not-built` for a bin declaring `:build`, naming the build command as the remedy, and `bin/not-runnable` otherwise, naming the resolved path (S8).
 
   Planning resolves `:executable` to its canonical absolute path. `mill` appends every user argument after the bin name without parsing, resolving, or inspecting it. Beyond the OS resolving a bare recipe command at spawn time, there is no `PATH` lookup and no shebang parsing in Skein. If the kernel cannot start the file or its declared interpreter, exec fails loudly with the host error.
 
@@ -95,11 +100,11 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
   ```
   mill bin list                    # list declared bins, owners, docs, executable paths, and build recipes
-  mill bin build <bin>             # run the declared :build argv in the owning root
+  mill bin build <bin>             # run the declared :build argv where the form was declared
   mill bin run <bin> [args...]     # resolve a plan and execve into it
   ```
 
-  `list` emits JSON machine output per SPEC-002.C4 and TEN-001. `build` spawns the recipe as a child process with the owning root as cwd and the caller's environment plus the S7 overlay, leaves its stdio on the caller's terminal, waits, and reports the exit in a JSON envelope. It runs whenever asked — no stamp, no lock, no staleness check; re-running is both the upgrade path and the recovery path. A recipe process that cannot be started at all fails `bin/build-start-failed` with the host cause (S8). `run` emits nothing after a successful exec because mill is gone and the bin owns the stream. It emits a JSON failure envelope only when it never reaches exec.
+  `list` emits JSON machine output per SPEC-002.C4 and TEN-001. `build` spawns the recipe as a child process with the declaring file's directory as cwd and the caller's environment plus the S7 overlay, leaves its stdio on the caller's terminal, waits, and reports the exit in a JSON envelope. It runs whenever asked — no stamp, no lock, no staleness check; re-running is both the upgrade path and the recovery path. A recipe process that cannot be started at all fails `bin/build-start-failed` with the host cause (S8). `run` emits nothing after a successful exec because mill is gone and the bin owns the stream. It emits a JSON failure envelope only when it never reaches exec.
 
   `run` stops parsing flags after `<bin>`, so `mill bin run kanban-dash --help` passes `--help` to the dashboard. `mill` flags, including `--workspace`, must precede the bin name. `mill bin --help` and `mill bin run --help` describe the Skein surface because neither invocation names a bin. Listing an empty registry returns an empty collection.
 
@@ -123,8 +128,9 @@ The correctness stance for this whole surface: failures are acceptable provided 
    "runnable": false,
    "exec": {"path": "/Users/ct/.cache/skein/spools/603fa7b8…/bin/kanban-dash",
             "env": {"SKEIN_WORKSPACE": "/Users/ct/dev/projects/skein-src/.skein"}},
-   "build": {"argv": ["bun", "install", "--frozen-lockfile"],
-             "cwd":  "/Users/ct/.cache/skein/spools/603fa7b8…"}}
+   "build": {"argv": ["bun", "install", "--cwd", "../../../../scripts/kanban-export",
+                      "--frozen-lockfile"],
+             "cwd":  "/Users/ct/.cache/skein/spools/603fa7b8…/src/ct/spools/kanban"}}
   ```
 
   `runnable` is the S3 predicate's result at resolution time; the plan resolves whether or not it holds, so `mill bin build` always has the recipe. It is `mill bin run` that acts on a false value.
@@ -133,13 +139,13 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
   `mill bin` dials its mill daemon and relays through the existing invoke path (`cli/cmd/mill/forward.go:21`). Because the client may hold both mill-daemon and relayed-weaver connections, S6 closes every non-stdio descriptor it owns before exec.
 
-- **PROP-Sbn-001.S8 (failure modes):** The surface fails loudly at registration, lookup, relay, and exec:
+- **PROP-Sbn-001.S8 (failure modes):** The surface fails loudly at lookup, planning, relay, build, and exec. Registration is not among them: a declaration that parses is published, and a malformed `defbin` form throws during module evaluation and is reported on that channel (S3). Existing owner-registry collision and override errors apply unchanged during publication.
 
   | Outcome | Raised when |
   | ------- | ----------- |
   | `bin/unknown` | No active declaration carries the requested name. |
-  | `bin/declaration-invalid` | The candidate validator refuses a declaration: its owner resolves no materialized root, its `:executable` escapes that root, or — for a buildless bin — that path is absent, non-regular, or non-executable. Existing owner-registry collision and override errors apply unchanged during publication. A malformed `defbin` form is not this outcome; it throws during module evaluation and is reported on that channel (S3). |
   | `bin/not-built` | `mill bin run` on a bin declaring `:build` whose plan reports the S3 runnable predicate false; the error names `mill bin build <bin>` as the remedy. |
+  | `bin/not-runnable` | `mill bin run` on a bin declaring no `:build` whose plan reports the same predicate false; the error names the resolved path. |
   | `bin/no-build-recipe` | `mill bin build` named a bin that declares no `:build`. |
   | `bin/build-start-failed` | The recipe process could not be started — a bare command absent from the caller's `PATH`, or an unstartable path; the error preserves the recipe argv and host cause. |
   | `bin/build-failed` | The recipe started and exited non-zero; the error preserves the exit code. The recipe's own output is the diagnosis, and re-running the build after acting on it is the recovery. |
@@ -148,15 +154,15 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
   Skein does not preflight interpreters or dependencies. Those failures remain normal executable failures, or the script may check them and print its own remedy.
 
-- **PROP-Sbn-001.S9 (spec and contract accounting):** SPEC-002.P1 currently draws the mill/strand line as "`mill` owns everything that must work without a running weaver; `strand` is a pure dispatcher for everything that needs one." `mill bin` requires a live weaver, so SPEC-002 changes that principle to distinguish privileged client-side behavior from pure relay. SPEC-002 also owns the three verbs, flag cutover, exec behavior, `build`'s child-process contract and result envelope, outcomes, typed Go decoding of the plan, and `SKEIN_WORKSPACE` child-environment contract. SPEC-004 owns the core `:bins` kind, its candidate validation, the `bins` read protocol, and the named consulted specs for the list and plan result shapes. SPEC-003 owns `defbin` as the sixth public form in `skein.api.skein.alpha`.
+- **PROP-Sbn-001.S9 (spec and contract accounting):** SPEC-002.P1 currently draws the mill/strand line as "`mill` owns everything that must work without a running weaver; `strand` is a pure dispatcher for everything that needs one." `mill bin` requires a live weaver, so SPEC-002 changes that principle to distinguish privileged client-side behavior from pure relay. SPEC-002 also owns the three verbs, flag cutover, exec behavior, `build`'s child-process contract and result envelope, outcomes, typed Go decoding of the plan, and `SKEIN_WORKSPACE` child-environment contract. SPEC-004 owns the core `:bins` kind, the `bins` read protocol, path resolution against the declaring file, and the named consulted specs for the list and plan result shapes. SPEC-003 owns `defbin` as the sixth public form in `skein.api.skein.alpha`.
 
   Adding a public Var to that namespace needs its own TEN-004 justification, and PROP-Auf-001.AC1 does not supply it: AC1 binds core and shipped domain kinds alike, and accepts a documented factory-backed batch form in place of a named form, so it settles neither where `:bins` lives nor that it needs a macro. The justification is the one S1 states — `:bins` is Skein's own kind, sitting beside `:ops`, `:queries`, `:patterns`, `:hooks`, and `:events`, rather than a domain vocabulary some spool owns. Its consequence is what makes the choice load-bearing: the domain route would put the kind in a spool, and every executable-shipping spool would then take a hard dependency and a module-ordering edge on that owner merely to declare a bin, exactly as `.skein/nvd_scan.clj:180` does for cron's `defjob`. That would leave a core `mill` verb family depending on a deletable spool (SPEC-004.C50a). Once the kind is core, the form is core with it, and AC1 then requires that the form be shipped API surface rather than repository-local `.skein` code.
 
   The form's option grammar and declaration constructor stay internal in `skein.core.contribution`, and the kind's kernel `:entry-spec` stays permissive, matching the five existing core kinds. `test/skein/api/skein_test.clj` pins that namespace's publics to exactly the five shipped forms, so the feature amends that assertion deliberately rather than discovering it. The alpha-surface index publishes the form and the result spec names; `make api-docs` regenerates `docs/api/skein.api.md` from the `defbin` docstring. The spool authoring guide gains bins in its "Author contributions with kind-specific forms" section, explains how to ship an executable wrapper and consume `SKEIN_WORKSPACE`, and `devflow/UBIQUITOUS-LANGUAGE.md` gains the word "bin".
 
-- **PROP-Sbn-001.S10 (demonstration):** The kanban dashboard moves from `scripts/agent-dash/` into `kanban.spool` as an executable `bin/kanban-dash` declaring `:build ["bun" "install" "--frozen-lockfile"]`. This downstream move demonstrates the surface but is not an acceptance gate for this repository.
+- **PROP-Sbn-001.S10 (demonstration):** The kanban dashboard moves from `scripts/agent-dash/` into `kanban.spool` as an executable `bin/kanban-dash`, joining the renderer whose `package.json` and `bun.lock` already live under `scripts/kanban-export/`. Its recipe carries that directory itself, through Bun's own `--cwd`, because `:build` has no cwd field and runs where the declaring file sits. This downstream move demonstrates the surface but is not an acceptance gate for this repository.
 
-- **PROP-Sbn-001.S11 (validation):** Clojure tests prove `defbin` collects the normalized partition through the production module path and that the handlers validate list and plan results against their named specs. The form's own coverage matches the other five core forms and the contribution acceptance conditions it inherits: expansion and collection, malformed options failing during evaluation of the form, `:override? true` producing the override intent a bare redeclaration correctly refuses (AC2), removal by omission after a form is deleted from source (AC4), and image replay producing a partition equal to source collection (AC3) — including AC9's two failure cases, an image namespace with no retained record and an explicitly recorded empty one. Beyond the form, tests cover two independent non-batteries declarations, an empty registry, plan resolution, collision overrides, root containment, and candidate-validator refusal for a rootless owner and for absent, non-regular, and non-executable files while previous live partitions remain intact — plus acceptance of a `:build` bin whose executable is absent, and plans reporting the runnable predicate false for absent, non-regular, and non-executable files while still carrying the recipe. Go tests cover typed rejection of malformed plans, list relay, flag cutover after `<bin>`, plan argument appending, cwd preservation, caller-environment inheritance plus `SKEIN_WORKSPACE` overlay, descriptor cleanup, and loud exec failure with the path and host cause; for `build`, running the recipe with the owning root as cwd and the caller's environment, the JSON exit envelope, `bin/build-start-failed` preserving the recipe argv and host cause, `bin/build-failed` preserving a non-zero exit, and `bin/no-build-recipe`; and end to end, that a fresh root's unrunnable build-bin yields `bin/not-built` from `run`, a successful `mill bin build` from that same plan, and a subsequent runnable plan. A manual terminal check covers raw mode, resize, alt-screen, and Ctrl-C.
+- **PROP-Sbn-001.S11 (validation):** Clojure tests prove `defbin` collects the normalized partition through the production module path and that the handlers validate list and plan results against their named specs. The form's own coverage matches the other five core forms and the contribution acceptance conditions it inherits: expansion and collection, malformed options failing during evaluation of the form, `:override? true` producing the override intent a bare redeclaration correctly refuses (AC2), removal by omission after a form is deleted from source (AC4), and image replay producing a partition equal to source collection (AC3) — including AC9's two failure cases, an image namespace with no retained record and an explicitly recorded empty one. Beyond the form, tests cover two independent non-batteries declarations, an empty registry, collision overrides, and each of S2's four resolutions: a bare name left to `PATH` with unknown runnability, `./` and `../` resolved against the declaring file's directory including a path leaving the spool root, `~` expansion, and an absolute path taken as given. Plan tests prove a declaration is published whatever its path leads to, and that the runnable predicate reports false for absent, non-regular, and non-executable files while the plan still resolves and still carries the recipe. Go tests cover typed rejection of malformed plans, list relay, flag cutover after `<bin>`, plan argument appending, cwd preservation, caller-environment inheritance plus `SKEIN_WORKSPACE` overlay, descriptor cleanup, and loud exec failure with the path and host cause; for `build`, running the recipe with the declaring file's directory as cwd and the caller's environment, the JSON exit envelope, `bin/build-start-failed` preserving the recipe argv and host cause, `bin/build-failed` preserving a non-zero exit, and `bin/no-build-recipe`; and end to end, that a freshly materialized spool's unrunnable build-bin yields `bin/not-built` from `run`, a successful `mill bin build` from that same plan, and a subsequent runnable plan. A manual terminal check covers raw mode, resize, alt-screen, and Ctrl-C.
 
 ### PROP-Sbn-001.EX1 A consumer runs a shipped dashboard
 
@@ -169,7 +175,7 @@ $ mill bin list
    "spool":"codethread/kanban",
    "doc":"Interactive kanban board TUI over the live workspace.",
    "executable":"/Users/ct/.cache/skein/spools/603fa7b8…/bin/kanban-dash",
-   "build":["bun","install","--frozen-lockfile"]}
+   "build":["bun","install","--cwd","../../../../scripts/kanban-export","--frozen-lockfile"]}
 ]}
 
 $ mill bin run kanban-dash
@@ -192,7 +198,7 @@ Nothing recorded that the build happened; the S3 runnable predicate is the only 
 ```clojure
 (skein/defbin strand-harness
   "Open a coding agent in this terminal as a tracked interactive run."
-  {:executable "bin/strand-harness"})
+  {:executable "../../../../bin/strand-harness"})
 ```
 
 ```console
