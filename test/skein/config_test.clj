@@ -129,19 +129,11 @@
             (publish-module-contribution!
              rt :skein/spools-shuttle
              (requiring-resolve 'ct.spools.agent-run/contribute))
-            ((requiring-resolve 'skein.spools.workflow/contribute)
-             {:runtime rt :module/key :skein/spools-workflow})
-            ((requiring-resolve 'skein.spools.workflow/reconcile)
-             {:runtime rt :module/key :skein/spools-workflow
-              :module/contribution {:status :applied}})
-            (load-module-namespace! rt :skein/spools-workflow-cli
-                                    'skein.spools.workflow.cli)
-            (publish-module-contribution!
-             rt :skein/spools-workflow-cli
-             (requiring-resolve 'skein.spools.workflow.cli/contribute))
-            ((requiring-resolve 'skein.spools.workflow.cli/reconcile)
-             {:runtime rt :module/key :skein/spools-workflow-cli
-              :module/contribution {:status :applied}})
+            (test-support/activate-spool! rt :skein/spools-workflow
+                                          'skein.spools.workflow)
+            (test-support/activate-spool! rt :skein/spools-workflow-cli
+                                          'skein.spools.workflow.cli
+                                          :after [:skein/spools-workflow])
             (load-module-namespace! rt :skein/spools-devflow 'ct.spools.devflow)
             (load-module-source! rt :config ".skein/config.clj")
             (load-file ".skein/harnesses.clj")
