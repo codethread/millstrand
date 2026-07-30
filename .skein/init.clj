@@ -84,6 +84,7 @@
 (runtime/module! runtime :skein/spools-devflow
                  {:ns 'ct.spools.devflow
                   :spools ['codethread/devflow]
+                  :after [:skein/spools-workflow]
                   :required? true})
 
 ;; --- peer coordination spools -----------------------------------------------
