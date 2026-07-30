@@ -3,11 +3,10 @@
 `ct.spools.kanban` has moved to the external git-distributed spool repo:
 [`codethread/kanban.spool`](https://github.com/codethread/kanban.spool).
 
-The contract doc and cookbook live there:
-[`kanban.md`](https://github.com/codethread/kanban.spool/blob/dfd6948afb5db9c8ca30778cb1ba329a3afff877/kanban.md)
-and
-[`kanban.cookbook.md`](https://github.com/codethread/kanban.spool/blob/dfd6948afb5db9c8ca30778cb1ba329a3afff877/kanban.cookbook.md)
-(snapshot links at the pinned release commit).
+The v16 contract doc and cookbook are snapshot links pinned to the release's peeled commit
+`93fa591c1a64e30a79ebbc99d8b1456b88c4e85c`:
+[`kanban.md`](https://github.com/codethread/kanban.spool/blob/93fa591c1a64e30a79ebbc99d8b1456b88c4e85c/kanban.md)
+and [`kanban.cookbook.md`](https://github.com/codethread/kanban.spool/blob/93fa591c1a64e30a79ebbc99d8b1456b88c4e85c/kanban.cookbook.md).
 
 This checkout pins the spool in `.skein/spools.edn`. [External spool
 consumption](./README.md#external-spool-consumption) in the spool index explains how this repo

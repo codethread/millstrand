@@ -561,8 +561,8 @@ distinct from the consumer's plural `spools.edn`:
 The pinned
 [agent-harness.spool manifest](https://github.com/codethread/agent-harness.spool/blob/d01e6ce6555d370dc5c9e4e0371cdabe10fab491/spool.edn)
 is a real multi-root example. The
-[kanban.spool manifest](https://github.com/codethread/kanban.spool/blob/dfd6948afb5db9c8ca30778cb1ba329a3afff877/spool.edn)
-shows the single-root form.
+[Kanban v16 family entry](../../.skein/spools.edn)
+shows a single-root consumer coordinate instead.
 
 This follows the package.el split. Authoring helpers may read it to prepare a consumer family entry;
 the core loader never reads it. The committed `spools.edn` remains the consumer's explicit consent

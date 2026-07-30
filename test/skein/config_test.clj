@@ -1948,19 +1948,14 @@
   Guild ships in-tree but is not activated in this workspace."
   {:skein/spools-chime 'skein.spools.chime/spool})
 
-(def ^:private sibling-spool-vars
-  "The pinned sibling modules `.skein/init.clj` activates, keyed as init.clj keys
-  them, each mapped to the released namespace's public `def spool` var."
-  {:skein/spools-kanban 'ct.spools.kanban/spool})
-
 (def ^:private forms-only-ns-modules
   "The init.clj `:ns` modules that legally declare no `spool` var because their
   whole contribution is collected from top-level authoring forms."
   #{:skein/spools-batteries :skein/spools-workflow :skein/spools-workflow-cli
     :skein/spools-shell :skein/spools-code
     :skein/spools-unsafe-text-search :skein/spools-cron :skein/spools-devflow
-    :skein/spools-shuttle :skein/spools-delegation :skein/spools-bench
-    :skein/spools-treadle})
+    :skein/spools-kanban :skein/spools-shuttle :skein/spools-delegation
+    :skein/spools-bench :skein/spools-treadle})
 
 (def ^:private authoring-generation
   "Migration-window classification for every selected module.
@@ -1976,7 +1971,7 @@
    :skein/spools-chime :legacy
    :skein/spools-cron :forms
    :skein/spools-devflow :forms
-   :skein/spools-kanban :legacy
+   :skein/spools-kanban :forms
    :skein/spools-shuttle :forms
    :skein/spools-delegation :forms
    :skein/spools-bench :forms
@@ -2008,6 +2003,35 @@
   (when-let [spool-var (requiring-resolve spool-sym)]
     (when-not (:private (meta spool-var)) spool-var)))
 
+(deftest pinned-kanban-release-activates-from-source-and-image
+  (with-config-runtime
+    (fn [rt]
+      (let [source-result
+            (test-support/activate-spool!
+             rt :skein/spools-kanban 'ct.spools.kanban)
+            [source-entry :as source-entries]
+            (filter #(= "kanban" (:name %)) (weaver/ops rt))
+            image-result
+            (test-support/activate-spool!
+             rt :skein/spools-kanban 'ct.spools.kanban :load :image)
+            [image-entry :as image-entries]
+            (filter #(= "kanban" (:name %)) (weaver/ops rt))]
+        (is (= :loaded
+               (get-in source-result
+                       [:modules :skein/spools-kanban :source/status])))
+        (is (= :image
+               (get-in image-result
+                       [:modules :skein/spools-kanban :source/status])))
+        (is (= 1 (count source-entries))
+            "source activation publishes exactly one Kanban operation")
+        (is (= 1 (count image-entries))
+            "image replay publishes exactly one Kanban operation")
+        (is (= source-entry image-entry)
+            "image replay publishes the source-collected Kanban operation")
+        (is (= 'ct.spools.kanban (:provenance source-entry)))
+        (is (nil? (ns-resolve 'ct.spools.kanban 'spool))
+            "the forms-only Kanban module exposes no legacy entry point")))))
+
 (deftest init-modules-resolve-entry-points-by-convention
   ;; PROP-Dsp-001.G7/P7.1: the literal-mirror triples are retired outright —
   ;; init.clj names only a source target and world policy, and the coordinator
@@ -2015,25 +2039,21 @@
   ;; var. This guards that conversion from both sides. First, NO init.clj module
   ;; — in-tree spool, pinned sibling, or workspace file — declares an explicit
   ;; `:contribute`/`:reconcile`; that is the invariant the retired sibling parity
-  ;; test used to police from the other direction. Second, every `:ns` module
-  ;; expected to contribute — in-tree spool AND pinned sibling — resolves a public
+  ;; test used to police from the other direction. Second, every legacy `:ns`
+  ;; module expected to contribute through an entry point resolves a public
   ;; `spool` var that is a valid `::spool-api/spool` carrying at least a
-  ;; `:contribute` entry point. Without that second half a pin bump to a sibling
-  ;; that renamed, privatised, or malformed its var lands as a silently empty
-  ;; contribution and then a startup failure of the coordination world, not a test
-  ;; failure. It runs inside a started world so the pinned sibling roots are on
-  ;; the classpath and their vars resolve. Cardinality is asserted first, so a
-  ;; deleted, duplicated, or re-keyed declaration fails before any per-module
-  ;; check, and an added `:ns` module must be classified as contributing or as
-  ;; forms-only before it can pass. Workspace `:file` modules are deliberately
-  ;; outside the var requirement: a file's whole contribution may be the authoring
-  ;; forms its load collects.
+  ;; `:contribute` entry point. Cardinality is asserted first, so a deleted,
+  ;; duplicated, or re-keyed declaration fails before any per-module check, and
+  ;; an added `:ns` module must be classified as contributing or as forms-only
+  ;; before it can pass. Workspace `:file` modules are deliberately outside the
+  ;; var requirement: a file's whole contribution may be the authoring forms its
+  ;; load collects.
   (with-startup-config-runtime
     (fn [_rt]
       (let [declarations (->> (read-all-forms ".skein/init.clj")
                               (filter module-form?)
                               (map parse-module-form))
-            expected-vars (merge in-tree-spool-vars sibling-spool-vars)
+            expected-vars in-tree-spool-vars
             ns-keys (->> declarations (filter :ns) (map :key))]
         (is (seq declarations) "parsed at least one init.clj module! form")
         (is (every? #(= 1 (count %)) (vals (group-by :key declarations)))
