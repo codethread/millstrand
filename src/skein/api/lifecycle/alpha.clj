@@ -3,21 +3,29 @@
 
   Lifecycle declarations are printable source facts collected with a module's
   owner-complete contribution. The coordinator resolves their fully qualified
-  callable symbols before publication and owns all retained live state."
+  callable symbols before publication and owns all retained live state.
+  Malformed declarations fail at definition; unresolved or non-callable
+  symbols fail validation before the candidate image is published."
   (:require [clojure.spec.alpha :as s]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :refer [require-valid!]]))
 
 (def kinds
-  "Closed lifecycle declaration kinds."
+  "Closed lifecycle declaration kinds: `:seed`, `:resource`, and `:reconcile`."
   #{:seed :resource :reconcile})
 
 (def phases
-  "Closed lifecycle execution phases."
+  "Closed lifecycle execution phases.
+
+  The coordinator reports `:validate`, `:resolve`, `:open`, `:apply`, `:close`,
+  `:remove`, or `:runtime-stop` when a projection has a phase."
   #{:validate :resolve :open :apply :close :remove :runtime-stop})
 
 (def statuses
-  "Closed lifecycle effect projection statuses."
+  "Closed lifecycle effect projection statuses.
+
+  A projection is `:planned`, `:applied`, `:preserved`, `:retained`,
+  `:degraded`, `:blocked`, `:removed`, or `:not-attempted`."
   #{:planned :applied :preserved :retained :degraded :blocked :removed
     :not-attempted})
 
@@ -72,13 +80,20 @@
           :opt-un [::phase ::result ::error]))
 
 (defn seed-declaration
-  "Return a validated seed declaration from `opts`."
+  "Return a validated seed declaration from `opts`.
+
+  `opts` requires `:apply`, a fully qualified callable symbol. It may include
+  `:after`, a set of lifecycle effect ids that must run first."
   [opts]
   (require-valid! ::seed-options opts "defseed options are invalid")
   (assoc opts :kind :seed :after (get opts :after #{})))
 
 (defn resource-declaration
-  "Return a validated resource declaration from `opts`."
+  "Return a validated resource declaration from `opts`.
+
+  `opts` requires fully qualified `:open` and `:close` callable symbols. It may
+  include `:after`, a set of lifecycle effect ids, and `:scope`, either
+  `:module` (the default) or `:runtime`."
   [opts]
   (require-valid! ::resource-options opts "defresource options are invalid")
   (assoc opts :kind :resource
@@ -86,7 +101,11 @@
          :scope (get opts :scope :module)))
 
 (defn reconcile-declaration
-  "Return a validated reconcile declaration from `opts`."
+  "Return a validated reconcile declaration from `opts`.
+
+  `opts` requires fully qualified `:read-desired`, `:read-actual`, `:apply`,
+  and `:on-removed` callable symbols. It may include `:trigger-kinds` and
+  `:after`, both sets of keywords."
   [opts]
   (require-valid! ::reconcile-options opts "defreconcile options are invalid")
   (assoc opts :kind :reconcile
@@ -94,7 +113,10 @@
          :trigger-kinds (get opts :trigger-kinds #{})))
 
 (defmacro defseed
-  "Define and collect one process-lifetime idempotent seed effect."
+  "Define and collect one process-lifetime idempotent seed effect.
+
+  The form is `(defseed name doc {:apply qualified-symbol, :after #{ids}})`.
+  `:after` is optional."
   [form-name doc opts]
   `(do
      (def ~form-name ~doc (seed-declaration ~opts))
@@ -102,7 +124,11 @@
      (var ~form-name)))
 
 (defmacro defresource
-  "Define and collect one paired resource acquisition and release effect."
+  "Define and collect one paired resource acquisition and release effect.
+
+  The form is `(defresource name doc {:open qualified-symbol,
+  :close qualified-symbol, :scope :module-or-runtime, :after #{ids}})`.
+  `:scope` defaults to `:module`; `:after` is optional."
   [form-name doc opts]
   `(do
      (def ~form-name ~doc (resource-declaration ~opts))
@@ -110,7 +136,12 @@
      (var ~form-name)))
 
 (defmacro defreconcile
-  "Define and collect one repeated desired-state reconciliation effect."
+  "Define and collect one repeated desired-state reconciliation effect.
+
+  The form is `(defreconcile name doc {:read-desired qualified-symbol,
+  :read-actual qualified-symbol, :apply qualified-symbol,
+  :on-removed qualified-symbol, :trigger-kinds #{keywords}, :after #{ids}})`.
+  `:trigger-kinds` and `:after` are optional."
   [form-name doc opts]
   `(do
      (def ~form-name ~doc (reconcile-declaration ~opts))

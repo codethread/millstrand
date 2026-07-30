@@ -250,7 +250,8 @@
           {:status :removed
            :result (data-result! effect-id phase result)})
         (catch Throwable throwable
-          (assoc retained :health :degraded :status :degraded :phase :remove
+          (assoc retained :health :degraded :status :degraded
+                 :phase (if runtime-stop? :runtime-stop :remove)
                  :error (exception-data throwable)))))))
 
 (defn- run-removals
