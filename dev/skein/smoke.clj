@@ -19,6 +19,9 @@
 (def checkout-root (.getAbsolutePath (java.io.File. ".")))
 (def stream-op-fixture (str checkout-root "/test/fixtures/stream-op-init.clj"))
 (def help-transform-fixture (str checkout-root "/test/fixtures/help-transform-init.clj"))
+;; Approved as a spool root rather than load-file'd: authoring forms only collect
+;; while a module source is evaluated, so the fixture has to be a real module.
+(def authoring-spool-root (str checkout-root "/test/fixtures/smoke-authoring"))
 (def smoke-run-root
   (doto (java.io.File. "/tmp" (str "sk" (.pid (java.lang.ProcessHandle/current))))
     (.mkdirs)))
@@ -232,6 +235,12 @@
         bare (run-process! "Bare strand prints help" [strand-bin])
         version (run-process! "Go CLI version succeeds" [strand-bin "--version"])
         mill-root (run-process! "Go mill root help succeeds" [mill-bin "--help"])
+        ;; Run from outside the checkout so only SKEIN_SOURCE can resolve the
+        ;; manifest the prime text is rendered from.
+        skein-prime (run-process! "mill skein prime succeeds" (outside-repo-dir) nil
+                                  [mill-bin "skein" "prime"])
+        strand-prime (run-process! "mill strand prime succeeds" (outside-repo-dir) nil
+                                   [mill-bin "strand" "prime"])
         dry-run (run-process! "Go CLI dry-run assembles an envelope"
                               [strand-bin "--workspace" "/tmp/smoke-dry-run" "--dry-run"
                                "add" "Dry run strand" "--attr" "owner=ct"])]
@@ -241,8 +250,12 @@
     (assert= root bare "bare strand prints the same static help as --help")
     (assert-contains version "bin_version" "Go CLI --version reports the bin version")
     (assert-contains version "protocol_version" "Go CLI --version reports the protocol version")
-    (doseq [needle ["init" "weaver" "start"]]
-      (assert-contains mill-root needle "Go mill root help shows the lifecycle subcommands"))
+    (doseq [needle ["init" "weaver" "start" "skein" "strand"]]
+      (assert-contains mill-root needle "Go mill root help shows the lifecycle and orientation subcommands"))
+    (assert-contains skein-prime checkout-root
+                     "mill skein prime renders the manifest topic with the resolved source substituted")
+    (assert (clojure.string/includes? strand-prime "strand")
+            (str "mill strand prime renders its manifest topic\n" strand-prime))
     (doseq [needle ["\"operation\":\"invoke\"" "\"name\":\"add\""]]
       (assert-contains dry-run needle "Go CLI --dry-run prints the assembled invoke envelope without contacting a weaver"))))
 
@@ -364,7 +377,9 @@
                         ":spools ['skein.spools/batteries]"]]
           (assert-contains init-contents needle "clean bootstrap creates the guarded batteries module init.clj template"))
         ;; The seeded declaration carries a source target and world policy only:
-        ;; entry points resolve from the batteries namespace's public `spool` var.
+        ;; the module's contribution is the declaration data the batteries
+        ;; authoring forms collect, so the removed entry-point keys — which the
+        ;; runtime now refuses outright — must never reappear in the template.
         (doseq [removed [":contribute" ":reconcile"]]
           (assert (not (clojure.string/includes? init-contents removed))
                   (str "clean bootstrap seeds no removed entry-point key\nfound: " removed "\nin: " init-contents)))
@@ -372,6 +387,9 @@
                 "clean bootstrap does not create a bare batteries require"))
       (assert (.isDirectory (java.io.File. workspace "spools")) "clean bootstrap creates spools directory")
       (assert (not (.exists (java.io.File. workspace ".git"))) "clean bootstrap does not run git init")
+      (doseq [ignored ["state/" "data/" "*.sqlite"]]
+        (assert-contains (slurp (java.io.File. workspace ".gitignore")) ignored
+                         "clean bootstrap seeds the workspace gitignore"))
       (let [strand-id (cli-add-config! workspace "Bootstrap clean strand" "--attr" "owner=ct")]
         (assert= "Bootstrap clean strand"
                  (:title (parse-json (run-strand-config! workspace "show" strand-id)))
@@ -567,6 +585,156 @@
         (stop-weaver-config! workspace)
         (delete-tree! (smoke-workspace (str db-file ".startup-transform")))))))
 
+;; --- Authoring forms -------------------------------------------------------
+;; The owner-complete path: a module's whole contribution is the declaration
+;; data its authoring forms collect while its source loads. That is only
+;; expressible from a real module source, so the fixture is approved as a spool
+;; root rather than load-file'd from init.clj, and dropping the module from the
+;; init.clj graph is what removes every entry it published.
+
+(defn authoring-spools-edn
+  "Return spools.edn approving batteries plus the authoring-forms fixture root."
+  []
+  (str "{:spools {skein.spools/batteries {:skein/source-root \"spools/batteries\"}\n"
+       "          smoke/authoring {:local/root " (pr-str authoring-spool-root) "}}}\n"))
+
+(defn authoring-init-forms
+  "Return the authoring-forms init.clj forms.
+
+  `fixture?` false omits the fixture module entirely, which is how whole-module
+  removal is expressed: the next refresh collects a full graph without it."
+  [fixture?]
+  (cond-> ['(require '[skein.api.current.alpha :as current]
+                     '[skein.api.runtime.alpha :as runtime])
+           '(def runtime (current/runtime))
+           '(runtime/module! runtime :skein/spools-batteries
+                             {:ns 'skein.spools.batteries
+                              :spools ['skein.spools/batteries]})]
+    fixture?
+    (conj '(runtime/module! runtime :smoke/authoring
+                            {:ns 'skein.smoke.fixtures.authoring
+                             :spools ['smoke/authoring]}))))
+
+(defn refresh-live-weaver!
+  "Refresh the running weaver's module graph from its config, through mill."
+  [workspace]
+  (run-mill-config-stdin!
+   workspace
+   (source-file/render-forms
+    ['(do
+        (require '[skein.api.current.alpha :as current]
+                 '[skein.api.runtime.alpha :as runtime])
+        (runtime/refresh! (current/runtime))
+        :refreshed)])
+   "weaver" "repl" "--stdin"))
+
+(defn smoke-authoring-forms! [db-file]
+  (let [workspace (bootstrap-workspace db-file "authoring")
+        init-path (java.io.File. workspace "init.clj")]
+    (delete-tree! (smoke-workspace (str db-file ".authoring")))
+    (write-client-config-to-dir! workspace)
+    (spit (java.io.File. workspace "spools.edn") (authoring-spools-edn))
+    (source-file/spit-forms! init-path (authoring-init-forms true))
+    (start-weaver-config! workspace)
+    (try
+      (assert= "hello"
+               (:echoed (parse-json (run-strand-config! workspace "smoke-echo" "hello")))
+               "defop publishes an op invocable at the strand CLI root")
+      (assert (some #(= "smoke-echo" (get-in % [:operation :name]))
+                    (:ops (parse-json (run-strand-config! workspace "help" "--json"))))
+              "defop's op joins the live help catalogue")
+      ;; The fixture resource records its phases as strands, so both the query
+      ;; and the module's open phase are provable from one lean list.
+      (let [opened (parse-json (run-strand-config! workspace "list" "--query" "smoke-authored"))]
+        (assert= ["smoke-authoring open"] (titles opened)
+                 "defquery publishes a named query and defresource ran its open phase")
+        (source-file/spit-forms! init-path (authoring-init-forms false))
+        (refresh-live-weaver! workspace)
+        (assert-contains (run-strand-config-fails! workspace "smoke-echo" "hello")
+                         "Operation not found"
+                         "omitting the module removes its collected op by omission")
+        (assert-contains (run-strand-config-fails! workspace "list" "--query" "smoke-authored")
+                         "Query not found: smoke-authored"
+                         "omitting the module removes its collected query by omission")
+        ;; The close marker carries the handle open returned, so the resource is
+        ;; proved to have been closed with its own live state rather than a
+        ;; freshly reopened one.
+        (let [closed (first (filter #(= "smoke-authoring close" (:title %))
+                                    (parse-json (run-strand-config! workspace "list"))))]
+          (assert (some? closed)
+                  "removal by omission runs the module resource's close phase")
+          (assert= (:id (first opened))
+                   (get-in closed [:attributes :opened])
+                   "the close phase receives the handle its own open phase returned")))
+      (finally
+        (stop-weaver-config! workspace)
+        (delete-tree! (smoke-workspace (str db-file ".authoring")))))))
+
+;; --- Workflow worker CLI ----------------------------------------------------
+;; The workflow engine and its root `workflow` op ship from this checkout, so
+;; the round trip below is the only coverage that crosses the full
+;; strand -> mill -> weaver boundary the in-JVM engine tests never reach.
+
+(defn workflow-spools-edn
+  "Return spools.edn approving batteries, the workflow spool, and the fixture."
+  []
+  (str "{:spools {skein.spools/batteries {:skein/source-root \"spools/batteries\"}\n"
+       "          skein.spools/workflow {:skein/source-root \"spools/workflow\"}\n"
+       "          smoke/authoring {:local/root " (pr-str authoring-spool-root) "}}}\n"))
+
+(defn workflow-init-forms
+  "Return init.clj forms activating the workflow engine, its CLI, and the fixture."
+  []
+  ['(require '[skein.api.current.alpha :as current]
+             '[skein.api.runtime.alpha :as runtime])
+   '(def runtime (current/runtime))
+   '(runtime/module! runtime :skein/spools-batteries
+                     {:ns 'skein.spools.batteries
+                      :spools ['skein.spools/batteries]})
+   '(runtime/module! runtime :skein/spools-workflow
+                     {:ns 'skein.spools.workflow
+                      :spools ['skein.spools/workflow]})
+   ;; The engine ships no verbs; this second module is what puts the root
+   ;; `workflow` op on the CLI.
+   '(runtime/module! runtime :skein/spools-workflow-cli
+                     {:ns 'skein.spools.workflow.cli
+                      :spools ['skein.spools/workflow]
+                      :after [:skein/spools-workflow]})
+   '(runtime/module! runtime :smoke/flow
+                     {:ns 'skein.smoke.fixtures.flow
+                      :spools ['smoke/authoring 'skein.spools/workflow]
+                      :after [:skein/spools-workflow]})])
+
+(defn smoke-workflow-cli! [db-file]
+  (let [workspace (bootstrap-workspace db-file "workflow-cli")
+        run-id "smoke-round-run"]
+    (delete-tree! (smoke-workspace (str db-file ".workflow-cli")))
+    (write-client-config-to-dir! workspace)
+    (spit (java.io.File. workspace "spools.edn") (workflow-spools-edn))
+    (source-file/spit-forms! (java.io.File. workspace "init.clj") (workflow-init-forms))
+    (start-weaver-config! workspace)
+    (try
+      (assert (some #(= "smoke-round" (:name %))
+                    (:definitions (parse-json (run-strand-config! workspace "workflow" "list"))))
+              "defworkflow registers the fixture definition in the live catalogue")
+      (assert= "smoke-round"
+               (:name (parse-json (run-strand-config! workspace "workflow" "show" "smoke-round")))
+               "workflow show returns the registered definition")
+      (let [started (parse-json (run-strand-config! workspace "workflow" "start" run-id
+                                                    "--workflow" "smoke-round"))]
+        (assert= ["Do the first half"] (mapv :title (:ready started))
+                 "workflow start pours the run and returns only its unblocked opening step")
+        (assert= false (:done started) "a freshly poured run is not done"))
+      (let [advanced (parse-json (run-strand-config! workspace "workflow" "next" run-id "--by" "smoke"))]
+        (assert= ["Do the second half"] (mapv :title (:ready advanced))
+                 "workflow next closes the ready step and advances the frontier"))
+      (let [finished (parse-json (run-strand-config! workspace "workflow" "next" run-id "--by" "smoke"))]
+        (assert= [] (mapv :title (:ready finished)) "the frontier empties at the end of the run")
+        (assert= true (:done finished) "workflow next completes the run"))
+      (finally
+        (stop-weaver-config! workspace)
+        (delete-tree! (smoke-workspace (str db-file ".workflow-cli")))))))
+
 (defn wait-for-repo-weaver! [repo]
   (loop [attempts 50]
     (when (zero? attempts)
@@ -584,6 +752,20 @@
     (.mkdirs repo)
     (run-process! "smoke repo git init succeeds" repo nil ["git" "init"])
     (run-process! "repo bootstrap initializes .skein through mill" repo nil [mill-bin "init"])
+    ;; The repo-local form of `mill init` is the only one that seeds agent
+    ;; guidance, and it creates AGENTS.md when the repo has none. Re-running it
+    ;; must not duplicate the marker-guarded block.
+    (run-process! "repo bootstrap is idempotent" repo nil [mill-bin "init"])
+    (assert-file-contents (java.io.File. repo ".skein/.gitignore")
+                          "config.local.json\ninit.local.clj\nspools.local.edn\nstate/\ndata/\nweaver.*\n*.sqlite\n*.sqlite-*\n"
+                          "repo bootstrap seeds the .skein gitignore so runtime artifacts stay untracked")
+    (let [guidance (slurp (java.io.File. repo "AGENTS.md"))]
+      (assert-contains guidance "<!-- mill:skein-prime -->"
+                       "repo bootstrap injects the marker-guarded orientation block")
+      (doseq [needle ["mill strand prime" "mill skein prime" "<!-- /mill:skein-prime -->"]]
+        (assert-contains guidance needle "repo bootstrap routes a cold agent at the prime commands"))
+      (assert= 1 (count (re-seq #"<!-- mill:skein-prime -->" guidance))
+               "repeated repo bootstrap does not duplicate the orientation block"))
     (run-process! "repo weaver start succeeds" repo nil [mill-bin "weaver" "start"])
     (wait-for-repo-weaver! repo)
     (try
@@ -602,7 +784,9 @@
   (smoke-bootstrap-clean-config! db-file)
   (smoke-bootstrap-dirty-config! db-file)
   (smoke-dispatcher-surface! db-file)
-  (smoke-startup-transformations! db-file))
+  (smoke-startup-transformations! db-file)
+  (smoke-authoring-forms! db-file)
+  (smoke-workflow-cli! db-file))
 
 (defn smoke-cli! [db-file]
   (clean-runtime-artifacts! db-file)
