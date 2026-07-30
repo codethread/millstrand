@@ -229,13 +229,10 @@ export function DetailView({
 
   const meta = [
     `state ${row.state}`,
-    row.phase ? `phase ${row.phase}` : null,
     `branch ${row.branch}`,
     `created ${row.createdAt}`,
     `updated ${row.updatedAt}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  ].join(" · ");
 
   return (
     <Box flexDirection="column">

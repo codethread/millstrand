@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["bun-types"]
   },
-  "include": ["*.ts", "*.tsx", "tabs/*.tsx"]
+  "include": ["*.ts", "*.tsx"]
 }

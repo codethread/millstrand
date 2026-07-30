@@ -17,7 +17,6 @@ export type DetailRow = {
   id: string;
   title?: string;
   state: string;
-  phase?: string;
   branch: string;
   createdAt: string;
   updatedAt: string;
@@ -121,7 +120,6 @@ export function editorFileFor(row: DetailRow): string {
     id: row.id,
     ...(row.title !== undefined ? { title: row.title } : {}),
     state: row.state,
-    ...(row.phase !== undefined ? { phase: row.phase } : {}),
     branch: row.branch,
     created: row.createdAt,
     updated: row.updatedAt,
