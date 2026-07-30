@@ -626,14 +626,15 @@ There is no imperative `install!` companion: the module lifecycle is the one act
 
 ### Author contributions with kind-specific forms
 
-Module sources publish registry entries through kind-specific authoring forms. The five core kinds use `skein.api.contribution.alpha/defop`, `defquery`, `defpattern`, `defhook`, and `defhandler`. Workflow, Cron, and Chime own `defworkflow`/`defexecutor`, `defjob`, and `defrule`. Each form validates its kind's closed declaration grammar before collection.
+Module sources publish registry entries through kind-specific authoring forms. The five core kinds use `skein.api.skein.alpha/defop`, `defquery`, `defpattern`, `defhook`, and `defhandler`. Workflow, Cron, and Chime own `defworkflow`/`defexecutor`, `defjob`, and `defrule`. Each form validates its kind's closed declaration grammar before collection.
 
 Ordinary `def` and `defn` forms collect nothing. A contribution form defines its ordinary Var or function and calls `collect-entry!` for the module currently being evaluated. `skein.spools.cron/defjob` is a compact example:
 
 ```clojure
 ;; report_job.clj — a module source namespace
 (ns report-job
-  (:require [skein.spools.cron :as cron]))
+  (:require [skein.api.skein.alpha :as skein]
+            [skein.spools.cron :as cron]))
 
 (defn report-tick [runtime]
   ;; ... do the work ...
@@ -667,7 +668,7 @@ Five kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, and `
   [step]
   (gate-stalled? step))
 
-(contribution/defquery stalled-shell-gates
+(skein/defquery stalled-shell-gates
   "Return active shell gates whose executor needs attention."
   {}
   stalled-shell-gates-query)
@@ -712,7 +713,7 @@ As a contribution it is one line:
 
 Two things changed. The name is now a string: `register-query!` accepts a simple symbol or keyword and canonicalises it to the registry key `"mine"` on your behalf, while a contribution's keys go into the registry as written, so write the canonical string key yourself. And the ownership changed: the direct call writes one entry under the direct-registration owner, whereas the contribution replaces your module's complete `:queries` partition every time it publishes.
 
-The migrated form is `contribution/defquery`; it publishes the same entry under the same module owner and removes the legacy `contribute` callback.
+The migrated form is `skein/defquery`; it publishes the same entry under the same module owner and removes the legacy `contribute` callback.
 
 ### Publication is owner-complete
 

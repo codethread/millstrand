@@ -22,14 +22,17 @@
                         fn hooks.project-rules/no-fn-keys-destructure
                         clojure.core/defn hooks.project-rules/no-fn-keys-destructure
                         defn hooks.project-rules/no-fn-keys-destructure
-                        skein.api.contribution.alpha/defop hooks.project-rules/defop
-                        skein.api.contribution.alpha/defquery hooks.project-rules/defquery
+                        skein.api.skein.alpha/defop hooks.project-rules/defop
+                        skein.api.skein.alpha/defquery hooks.project-rules/defquery
                         skein.macros.queries/defquery hooks.project-rules/defquery
                         skein.macros.ops/defop hooks.project-rules/defop
                         skein.macros.rules/defrule hooks.project-rules/defrule}}
  :linters {:project/ns-docstring {:level :error}
            :project/no-spool-module-atom {:level :error}
            :project/no-fn-keys-destructure {:level :error}
+           ;; This require is consumed only by syntax-quoted authoring forms in
+           ;; eval; kondo cannot resolve that runtime alias.
+           :unused-namespace {:exclude [skein.api.skein.alpha]}
            ;; These test-local private vars are workflow constructors and chime
            ;; rule handlers referenced only by fully-qualified quoted symbol
            ;; (register-workflow!/defrule!), which kondo cannot track — they are

@@ -1488,7 +1488,7 @@
 
   A blessed spool may not reach the weaver's internal op-entry plumbing
   (SPEC-003.C19a), so this mirrors the assembly the eager `register-op!` path
-  performs (the same shape as `skein.api.contribution.alpha/op-declaration`): a
+  performs (the same shape as `skein.api.skein.alpha/op-declaration`): a
   string `:name`,
   the handler `:fn`, provenance, and authored arg-spec node metadata, keyed by the
   canonical string op name so the effective registry stays string-keyed."

@@ -39,6 +39,7 @@ Two conventions hold across the tier:
 | Namespace | Reach for it when |
 | --- | --- |
 | [`patterns`](./patterns.api.md) | Agents should submit intent and your config decides the graph shape: spec-checked, create-only weave patterns invokable from the CLI. |
+| [`skein`](./skein.api.md) | Authoring core registry entries with `defop`, `defquery`, `defpattern`, `defhook`, and `defhandler`. |
 | [`cli`](./cli.api.md) | Declaring an op's argv shape as data — the parser and help renderer behind every registered op; never hand-write usage strings. |
 | [`return-shape`](./return-shape.api.md) | Declaring and checking the JSON-compatible values returned by registered ops. |
 | [`spec`](./spec.api.md) | Documenting a registered clojure.spec over the wire: the printed form graph, nested contract tree, copyable JSON template, and structured problems — never a schema, never invoking a predicate. |
