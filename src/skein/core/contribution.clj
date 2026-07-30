@@ -1,13 +1,7 @@
-(ns skein.api.contribution.alpha
-  "Authoring forms for owner-complete core runtime contributions.
-
-  Each form defines an ordinary Clojure Var and collects one validated declaration
-  while a runtime module source is evaluated. The retained declaration record is
-  replayed for image modules, so source and image activation publish the same
-  owner-complete partitions."
+(ns skein.core.contribution
+  "Constructs and validates collected declarations for Skein's core kinds."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :refer [require-valid!]]
             [skein.api.weaver.alpha :as weaver]
             [skein.core.query :as query]))
@@ -128,68 +122,3 @@
                    :fn fn-sym
                    :metadata (get opts :metadata {})}
                   "defhandler declaration is invalid"))
-
-(defmacro defop
-  "Define an operation handler and collect its validated `:ops` declaration.
-
-  Options conform to `::op-options`; `:override? true` records explicit override
-  intent without entering the registry value."
-  [form-name doc opts argv & body]
-  (let [handler-name (symbol (str form-name "-op"))
-        fn-sym (symbol (str (ns-name *ns*)) (str handler-name))]
-    `(do
-       (defn ~handler-name ~doc ~argv ~@body)
-       (runtime/collect-entry! :ops ~(str form-name)
-                               (op-declaration '~form-name ~doc ~opts '~fn-sym)
-                               (select-keys ~opts #{:override?}))
-       (var ~handler-name))))
-
-(defmacro defquery
-  "Define a named query and collect its validated `:queries` declaration.
-
-  Options conform to `::query-options`; `:override? true` records override intent."
-  [form-name doc opts definition]
-  `(do
-     (def ~form-name ~doc (query-declaration '~form-name ~opts ~definition))
-     (runtime/collect-entry! :queries ~(str/replace (str form-name) #"-query$" "")
-                             ~form-name (select-keys ~opts #{:override?}))
-     (var ~form-name)))
-
-(defmacro defpattern
-  "Define a weave handler and collect its validated `:patterns` declaration.
-
-  Options conform to `::pattern-options` and require a named input `:spec`."
-  [form-name doc opts argv & body]
-  (let [fn-sym (symbol (str (ns-name *ns*)) (str form-name))]
-    `(do
-       (defn ~form-name ~doc ~argv ~@body)
-       (runtime/collect-entry! :patterns ~(str form-name)
-                               (pattern-declaration '~form-name ~doc ~opts '~fn-sym)
-                               (select-keys ~opts #{:override?}))
-       (var ~form-name))))
-
-(defmacro defhook
-  "Define a lifecycle hook and collect its validated `:hooks` declaration.
-
-  Options conform to `::hook-options`."
-  [form-name doc opts argv & body]
-  (let [fn-sym (symbol (str (ns-name *ns*)) (str form-name))]
-    `(do
-       (defn ~form-name ~doc ~argv ~@body)
-       (runtime/collect-entry! :hooks ~(keyword form-name)
-                               (hook-declaration ~(keyword form-name) ~opts '~fn-sym)
-                               (select-keys ~opts #{:override?}))
-       (var ~form-name))))
-
-(defmacro defhandler
-  "Define an event handler and collect its validated `:events` declaration.
-
-  Options conform to `::handler-options`."
-  [form-name doc opts argv & body]
-  (let [fn-sym (symbol (str (ns-name *ns*)) (str form-name))]
-    `(do
-       (defn ~form-name ~doc ~argv ~@body)
-       (runtime/collect-entry! :events ~(keyword form-name)
-                               (handler-declaration ~(keyword form-name) ~opts '~fn-sym)
-                               (select-keys ~opts #{:override?}))
-       (var ~form-name))))

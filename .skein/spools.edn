@@ -4,7 +4,6 @@
   :git/tag "v15",
   :roots {codethread/kanban "."}},
  skein.spools/chime {:skein/source-root "spools/chime"},
- skein.macros/macros {:local/root "spools/macros"},
  skein.spools/unsafe-text-search
  {:skein/source-root "spools/unsafe-text-search"},
  codethread/devflow

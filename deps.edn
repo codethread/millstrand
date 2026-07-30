@@ -12,8 +12,7 @@
  ;; "scripts" is on the test path so the one-shot cutover scripts under
  ;; scripts/cutover can be exercised by a registered test namespace rather than
  ;; only standalone; the runner's registry, not the classpath, decides what runs.
- {:test {:extra-paths ["test" "scripts" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "spools/chime/src" "spools/cron/src"
-                       ".skein/spools/macros/src"]
+ {:test {:extra-paths ["test" "scripts" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "spools/chime/src" "spools/cron/src"]
          :extra-deps {;; Test-only ergonomics: readable nested-map/JSON assertions
                       ;; (match?) and spec-driven property tests (defspec). Kept
                       ;; off the main src/weaver classpath.

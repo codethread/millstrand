@@ -626,7 +626,7 @@ There is no imperative `install!` companion: the module lifecycle is the one act
 
 ### Author contributions with kind-specific forms
 
-Module sources publish registry entries through kind-specific authoring forms. The five core kinds use `skein.api.contribution.alpha/defop`, `defquery`, `defpattern`, `defhook`, and `defhandler`. Workflow, Cron, and Chime own `defworkflow`/`defexecutor`, `defjob`, and `defrule`. Each form validates its kind's closed declaration grammar before collection.
+Module sources publish registry entries through kind-specific authoring forms. The five core kinds use `skein.api.skein.alpha/defop`, `defquery`, `defpattern`, `defhook`, and `defhandler`. Workflow, Cron, and Chime own `defworkflow`/`defexecutor`, `defjob`, and `defrule`. Each form validates its kind's closed declaration grammar before collection.
 
 Ordinary `def` and `defn` forms collect nothing. A contribution form defines its ordinary Var or function and calls `collect-entry!` for the module currently being evaluated. `skein.spools.cron/defjob` is a compact example:
 
@@ -656,18 +656,22 @@ A form-authored source has no `:contribute`. During the migration window it may 
   {:reconcile 'reconcile})
 ```
 
-Use the public declaration constructors beside each form for generated entries. They validate the same kind-specific fragments before generated code calls `skein.api.runtime.alpha/collect-entry!`. Do not assemble raw contribution maps in author code.
+Core forms are the public grammar for hand-authored core entries. Their declaration constructors and normalized maps are internal plumbing, not an authoring escape hatch. A domain that genuinely needs generated entries exposes its own validated factory or batch form.
 
 Five kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, and `:events`. Beyond those the set is open over whatever the running runtime declares. A domain spool declares its own kind with `skein.api.registry.alpha/declare-kind!`, and other modules then contribute entries to it. The shipped workflow executors do exactly this, mixing a domain kind and a core kind in one contribution:
 
 ```clojure
+(ns shell-executor
+  (:require [skein.api.skein.alpha :as skein]
+            [skein.spools.workflow :as workflow]))
+
 (workflow/defexecutor shell
   "Return detail when a shell-backed gate needs coordinator attention."
   {:request-spec ::request}
   [step]
   (gate-stalled? step))
 
-(contribution/defquery stalled-shell-gates
+(skein/defquery stalled-shell-gates
   "Return active shell gates whose executor needs attention."
   {}
   stalled-shell-gates-query)
@@ -712,7 +716,7 @@ As a contribution it is one line:
 
 Two things changed. The name is now a string: `register-query!` accepts a simple symbol or keyword and canonicalises it to the registry key `"mine"` on your behalf, while a contribution's keys go into the registry as written, so write the canonical string key yourself. And the ownership changed: the direct call writes one entry under the direct-registration owner, whereas the contribution replaces your module's complete `:queries` partition every time it publishes.
 
-The migrated form is `contribution/defquery`; it publishes the same entry under the same module owner and removes the legacy `contribute` callback.
+The migrated form is `skein/defquery`; it publishes the same entry under the same module owner and removes the legacy `contribute` callback.
 
 ### Publication is owner-complete
 

@@ -3,7 +3,7 @@
 **Document ID:** `PROP-Auf-001`
 **Status:** Approved
 **Approved:** 2026-07-29
-**Last Updated:** 2026-07-29
+**Last Updated:** 2026-07-30
 **Related RFCs:** [`RFC-Saf-001`](../../rfcs/2026-07-28-spool-authoring-forms.md) (spool authoring forms), [`RFC-Laf-001`](../../rfcs/2026-07-28-lifecycle-authoring-forms.md) (lifecycle authoring forms) — the source decision records this proposal merges and advances; kept unchanged as the intent history
 **Related decisions:** [ADR-002](../../adrs/0002-no-inline-module-lifecycle-macro.md) (rejected inline callback sugar), [ADR-003](../../adrs/0003-spool-activation-lifecycle.md) (one activation path and the reconcile contract), [ADR-004](../../adrs/0004-def-spool-convention.md) (`def spool` entry-point convention), [RFC-020: readability macros](../../rfcs/2026-07-08-skein-readability-macros.md)
 **Related root specs:** [`repl-api.md`](../../specs/repl-api.md) (C17c/C17d/C19), [`daemon-runtime.md`](../../specs/daemon-runtime.md) (C45/C46/C46b/C46c/C74a), [`alpha-surface.md`](../../specs/alpha-surface.md)
@@ -695,28 +695,26 @@ A finished spool reads as ordinary definitions plus explicit Skein authoring for
 
 ```clojure
 (ns acme.delivery
-  (:require [skein.api.ops.alpha :refer [defop]]
-            [skein.api.patterns.alpha :refer [defpattern]]
-            [skein.api.queries.alpha :refer [defquery]]
-            [skein.api.lifecycle.alpha :refer [defresource]]))
+  (:require [skein.api.lifecycle.alpha :as lifecycle]
+            [skein.api.skein.alpha :as skein]))
 
-(defquery mine
+(skein/defquery mine
   "Work owned by ct."
   {:usage "strand ready --query mine"}
   [:= [:attr :owner] "ct"])
 
-(defop ship
+(skein/defop ship
   "Ship the selected release."
   {:arg-spec ship-arg-spec}
   [ctx]
   (ship! ctx))
 
-(defpattern release
+(skein/defpattern release
   "Create a release strand."
-  {:input release-input}
+  {:spec ::release-input}
   ...)
 
-(defresource monitor
+(lifecycle/defresource monitor
   "Run the delivery monitor while this module is active."
   {:open 'acme.delivery/start-monitor!
    :close 'acme.delivery/stop-monitor!})
@@ -751,7 +749,7 @@ During the migration window (P15.S2), unmigrated spools still carry their old `s
 - **PROP-Auf-001.REC1:** Adopt **O3** for contributions. Authoring forms become the only spool contribution syntax, while the existing owner-partitioned contribution map remains an internal normalized representation.
 - **PROP-Auf-001.REC2:** Make repeated top-level kind-specific forms the primary interface. Do not require users to wrap them in a list, a `do`, or a manifest.
 - **PROP-Auf-001.REC3:** Define a small shared authoring protocol beneath the forms: validated declaration fragments, explicit override intent, replayable namespace-owned declaration data, and normalization to the existing contribution shape. Lifecycle forms collect through the same target-only module collector.
-- **PROP-Auf-001.REC4:** Allow each capability domain to expose its own vocabulary. Promote supported forms for core kinds from repository-local prototypes into shipped API surface — whether colocated with the API whose entry each builds (`skein.api.weaver.alpha/defop`, `skein.api.graph.alpha/defquery`, ...) or in a central macros namespace is the implementing feature's plan's call — while forms for domain kinds remain exported by the spool that owns them, as `skein.spools.cron/defjob` and `skein.spools.workflow/defworkflow` already are. `defop`, `defquery`, `defpattern`, `defworkflow`, `defjob`, and `defrule` should share publication semantics without being forced through one generic user-facing `defentry`.
+- **PROP-Auf-001.REC4:** Allow each capability domain to expose its own vocabulary. The five Skein core-kind forms live together in `skein.api.skein.alpha`, conventionally required `:as skein`; authors write `skein/defop`, `skein/defquery`, `skein/defpattern`, `skein/defhook`, and `skein/defhandler`. Their constructors and validation specs stay internal in `skein.core.contribution`. Forms for domain kinds remain exported by the spool that owns them, as `skein.spools.cron/defjob` and `skein.spools.workflow/defworkflow` already are. The forms share publication semantics without being forced through one generic user-facing `defentry`.
 - **PROP-Auf-001.REC5:** Support genuinely generated declarations through the smallest factory-backed or batch authoring surface that satisfies P6.5. The implementing feature's plan must justify the exact public forms and functions; raw normalized contribution maps remain private to the publication boundary.
 - **PROP-Auf-001.REC6:** Add a pre-publication authoring mechanism for open kind declarations so domain registries no longer need a `contribute` callback merely to establish their kind.
 - **PROP-Auf-001.REC7:** Treat declaration sets as static source facts. Do not replace either callback with another arbitrary callback; in particular, a generic form that accepts a function returning an arbitrary multi-kind map would merely rename `:contribute` and fail the goal.
@@ -764,7 +762,7 @@ TEN-000@1 permits the clean break, and the user has accepted it. The break is mi
 
 This withdrawal breaks the `skein.api.*.alpha` accretion promise (SPEC-003.C19) where the entry-point grammar lives: `skein.api.spool.alpha`'s `::spool` shape (SPEC-003.C17c) and the coordinator resolution behind it (SPEC-004.C45/C46). As with the prior `def spool` cutover, whose exception the root spec already records beside SPEC-003.C19, the feature must record this exception explicitly rather than hide it behind a parallel alias namespace. Sequencing is settled by user direction (2026-07-28): skein-src will not stamp a v1 marker and stays alpha, so TEN-000@1 authorizes the break outright. The same ruling covers the sibling migrations — the siblings carry their own post-v1 markers, and their entry-point removals ship as recorded breaks rather than accretion (P15.S2).
 
-- **PROP-Auf-001.S1 — Surface.** Ship the complete authoring surface while the old keys still resolve. For contributions: promote core-kind forms into shipped `skein.api.*` namespaces; add explicit override intent, the replayable declaration record and image replay, the pre-publication kind declaration, and the factory/batch path for generated entries; keep domain forms with their owning spools; close the remaining expressiveness gaps (static entries, custom kinds, candidate validation, multi-namespace spools, empty kind-provider modules, provenance) without recreating an unrestricted module-wide callback; and make the forms testable through the production module path — macro expansion, collection, invalid declarations, duplicate and override behavior, activation, removal by omission, image mode, and plan/status projections all need public testing support. For lifecycle: run the REC8 spike, then implement the accepted forms, collection, validation, retained state, engine execution, and inspection.
+- **PROP-Auf-001.S1 — Surface.** Ship the complete authoring surface while the old keys still resolve. For contributions: put the five core-kind forms in `skein.api.skein.alpha` and their declaration plumbing in `skein.core.contribution`; add explicit override intent, the replayable declaration record and image replay, the pre-publication kind declaration, and justified domain factory/batch paths for generated entries; keep domain forms with their owning spools; close the remaining expressiveness gaps (static entries, custom kinds, candidate validation, multi-namespace spools, empty kind-provider modules, provenance) without recreating an unrestricted module-wide callback; and make the forms testable through the production module path — macro expansion, collection, invalid declarations, duplicate and override behavior, activation, removal by omission, image mode, and plan/status projections all need public testing support. For lifecycle: run the REC8 spike, then implement the accepted forms, collection, validation, retained state, engine execution, and inspection.
 - **PROP-Auf-001.S2 — Migration.** Convert every in-tree spool, the repo `.skein` config, examples, and tests to authoring forms; coordinate sibling spool releases and pin bumps so the selected source universe contains no `:contribute` or `:reconcile` declaration. Prove parity before the break: equal normalized contributions, exact removal by omission, and lossless lifecycle behavior for each migrated reconciler. Sibling migrations are developed and validated against skein-src main — the pinned spool-suite gate holds them green against this checkout — and ship as sibling marker releases consumed by pin bumps. Removing the old entry points from a sibling's published surface is a recorded break authorized by the ruling above, following the installer-retirement precedent with its per-release `bin/compat-alarm` evidence; no `:skein/min` floor machinery is involved because skein-src stamps no markers. The interval in which both grammars load on main is a migration window, not a supported authoring contract: docs and quality gates teach only the new grammar, no compatibility machinery ships, and within one module the grammars never mix — collected authoring forms and a `:contribute` entry point are mutually exclusive, already the shipped rule (SPEC-004.C46c), which the window keeps.
 - **PROP-Auf-001.S3 — Removal.** Remove both keys and the public `def spool` convention from the `::spool` grammar and the convention resolver; delete callback resolution and retention once declaration retention covers removal-by-omission; update root specs, ADR lineage, the spool authoring guide, testing helpers, generated API docs, and quality checks; and reject a `def spool` var with an actionable error naming the replacement forms. No released version accepts the old grammar after this stage.
 
@@ -814,7 +812,7 @@ The lifecycle half does not need every execution-policy detail settled to procee
 ## PROP-Auf-001.P17 Open questions
 
 - **PROP-Auf-001.Q1:** Which viable retained representation best satisfies image replay and exact stale-declaration removal: metadata paired with an epoch or cleanup mechanism, a generated manifest Var, or a coordinator-owned snapshot associated with the loaded namespace?
-- **PROP-Auf-001.Q2:** Should the shared factory protocol be public and generic, or should only kind-specific constructors such as `op/entry` and `query/entry` be public while normalization stays internal?
+- **PROP-Auf-001.Q2:** Resolved: normalized contribution data, core declaration constructors, and their specs stay internal in `skein.core.contribution`. The public core grammar is the five forms in `skein.api.skein.alpha`; domains justify their own factory or batch surface when generated authoring is a real use case.
 - **PROP-Auf-001.Q3:** What should the kind-declaration authoring form be called, and which parts of a registry backend can honestly be static data rather than runtime-owned initialization?
 - **PROP-Auf-001.Q4:** Should generated batch forms define inspectable Vars for each generated entry, or is a retained declaration record with source provenance sufficient?
 - **PROP-Auf-001.Q5:** Which authoring forms belong in core API namespaces and which should be exported by the domain spool that owns the kind?

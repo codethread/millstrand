@@ -53,7 +53,7 @@ The reasons to decline are four boundaries the sugar cannot cross:
 
 1. **A source target is still mandatory.** `module!` requires exactly one of `:ns`/`:file`; a declaration with neither fails loudly. So even a pure-effect inline module still points at some source file — the sugar removes the *separate fn file*, not the *source requirement*. "One form, zero other files" is not actually reached without a deeper `module!` change.
 
-2. **The ergonomic `:contribute` path cannot inline.** An explicit `:contribute` fn lifts fine, but the idiomatic way modules contribute is *authoring forms* (`defop`/`defquery`/`defrule`/`defp`) collected during source **load**. Those macros only work in a file the module system loads. To contribute inline you must hand-assemble the raw contribution map — losing the authoring macros that are the point.
+2. **The ergonomic `:contribute` path cannot inline.** An explicit `:contribute` fn lifts fine, but authoring forms (`defop`/`defquery`/`defpattern`/`defrule`) collect during source **load**. Those forms only work in a file the module system loads. To contribute inline you must hand-assemble the raw contribution map, losing the authoring forms that are the point.
 
 3. **Spool access from an inline fn is a trap that fails at two different times.** The inline fn compiles at *collection* time, before any spool is synced onto the classpath:
    - A top-level `(require '[skein.spools.batteries :as b])` in `init.clj` → **`FileNotFoundException` at startup** (verified) — the spool root is not on the classpath during collection.

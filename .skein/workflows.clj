@@ -3,7 +3,8 @@
   the coordinator `land` workflow (family \"land\") with its `land` op, the
   third-party `spool-bump` workflow, the module-shaping `story` workflow, the
   light `explore` and `fix` workflows for the two low-ceremony modes, and the
-  `delegate-pipeline` weave pattern for sequential delegated subagent gates.
+  `delegate-pipeline` weave pattern for sequential delegated subagent gates,
+  and the small `macros-demo` pattern retained as an authoring-form example.
 
   Every workflow here is a static `defworkflow` Var: a definition a worker can
   read through `strand workflow show <name>` before starting a run, with its
@@ -19,8 +20,7 @@
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [skein.macros.ops :refer [defop]]
-            [skein.macros.patterns :refer [defpattern]]
+            [skein.api.skein.alpha :as skein]
             [skein.api.current.alpha :as current]
             [skein.api.format.alpha :as format-alpha]
             [skein.api.weaver.alpha :as weaver]
@@ -193,17 +193,38 @@
   [v]
   (and (string? v) (not (str/blank? v))))
 
+(s/def ::non-blank-string non-blank-string?)
+(s/def ::title ::non-blank-string)
+(s/def ::owner ::non-blank-string)
+
+;; ---------------------------------------------------------------------------
+;; macros-demo weave pattern
+;; ---------------------------------------------------------------------------
+
+(s/def ::macros-demo-input
+  (s/keys :req-un [::title] :opt-un [::owner]))
+
+(skein/defpattern macros-demo
+  "Create a tiny two-step dependency chain as a workspace authoring example."
+  {:spec ::macros-demo-input}
+  [{:keys [input]}]
+  (let [owner (or (:owner input) "ct")]
+    [{:ref 'start
+      :title (:title input)
+      :attributes {:kind "macros-demo" :phase "start" :owner owner}}
+     {:ref 'finish
+      :title (str "Finish: " (:title input))
+      :attributes {:kind "macros-demo" :phase "finish" :owner owner}
+      :edges [{:type "depends-on" :to 'start}]}]))
+
 ;; ---------------------------------------------------------------------------
 ;; delegate-pipeline weave pattern
 ;; ---------------------------------------------------------------------------
 
-(s/def ::non-blank-string non-blank-string?)
-(s/def ::title ::non-blank-string)
 (s/def ::body ::non-blank-string)
 (s/def ::harness ::non-blank-string)
 (s/def ::cwd ::non-blank-string)
 (s/def ::max-attempts pos-int?)
-
 (s/def ::id ::non-blank-string)
 (s/def ::run_id ::non-blank-string)
 (s/def ::accept boolean?)
@@ -255,7 +276,7 @@
                 (seq edge-specs) (assoc :edges edge-specs))))
           strands)))
 
-(defpattern delegate-pipeline
+(skein/defpattern delegate-pipeline
   "Create a sequential chain-loop workflow of subagent gates. Input:
   {run_id,tasks:[{id,title,body?,harness?,cwd?,max-attempts?}],harness?,cwd?,accept?}."
   {:spec ::delegate-pipeline-input}
@@ -902,7 +923,7 @@
                              :extra :json}]))
          (keys (:subcommands land-arg-spec)))})
 
-(defop land
+(skein/defop land
   "Enforce coordinator landing policy across workflows, kanban, and merge locks.
 
   Use the generic `workflow` op for every operation that does not cross those

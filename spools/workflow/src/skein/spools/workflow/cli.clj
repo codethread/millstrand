@@ -25,7 +25,7 @@
          :spools ['skein.spools/workflow]
          :after [:skein/spools-workflow]})"
   (:require [clojure.string :as str]
-            [skein.api.contribution.alpha :as contribution]
+            [skein.api.skein.alpha :as skein]
             [skein.api.format.alpha :as fmt]
             [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.runtime.glossary.alpha :as glossary]
@@ -528,7 +528,7 @@
    {:name "workflow/step-not-defer"
     :definition "The step named for workflow defer holds another role."}])
 
-(contribution/defop workflow
+(skein/defop workflow
   "Discover and drive the workflows this weaver has registered: list the catalogue, show one definition, then start a run and move it through its ready frontier."
   (merge {:arg-spec workflow-arg-spec
           :returns workflow-returns
