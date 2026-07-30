@@ -109,10 +109,98 @@ these workflows with its own merge, CI, review, or validation behavior.
 
   Defer targets ship in the devcycles spool itself, registered with `:call`, so every route and
   binding the shared definitions name is satisfied without consumer registrations;
-  a consumer replaces a binding to change behavior, never to make the spool load. As a
-  concrete shape: the devcycles spool ships `fix` with `(workflow/defer :validate "Validate before
-  handoff")` bound by default to its own `docs-check` target, and skein-src's world may
-  rebind `{:validate #{:docs-check :full-quality-suite}}` in its own module.
+  a consumer replaces a binding to change behavior, never to make the spool load.
+
+- **PROP-Dcl-001.S3a:** Worked shapes. The following code is illustrative (spiked at
+  `spike/` on this branch, refined through two review rounds); the engine API calls are
+  real, the definitions are terse stand-ins. Three shapes carry the whole seam design.
+
+  **One declared binding surface, three derivations.** Gate commands are data under
+  published action-refs. The surface map is the single source: registration defaults,
+  the `::bindings` params spec, and the gate render thunks all derive from it, so the
+  consumer contract cannot drift from the implementation and `workflow show land`
+  projects exactly what may be bound:
+
+  ```clojure
+  (def bindable
+    "Published binding surface: action-ref -> gate attr -> devcycles default."
+    {"land.ci.green" {"shell/argv"         ["gh" "pr" "checks" "--watch" "--fail-fast"]
+                      "shell/timeout-secs" 5400}
+     "land.merge"    {"shell/argv" ["gh" "pr" "merge" "--squash" "--auto"]}})
+
+  ;; gate-attr returns the render fn for one attr: consumer binding wins,
+  ;; devcycles default otherwise. Validation is prefix-scoped: refs under an
+  ;; owned prefix ("land." / "fix.") must exist in bindable with declared attr
+  ;; keys only — a typo dies at workflow start (TEN-003) — while foreign refs
+  ;; flow through to be judged by the definition owning their prefix, so one
+  ;; :bindings map at start can carry every style for the whole run.
+  (workflow/gate :ci-green "Watch CI to green" :shell
+                 :attributes {"shell/argv"         (gate-attr "land.ci.green" "shell/argv")
+                              "shell/timeout-secs" (gate-attr "land.ci.green" "shell/timeout-secs")
+                              "shell/cwd"          (fn [{:keys [worktree]}] worktree)})
+  ```
+
+  **Exported template + default-bound registration.** Each definition exports an unbound
+  template var (the published API a consumer world re-binds) and registers a
+  default-bound name so the spool works with zero consumer configuration:
+
+  ```clojure
+  (def fix-template
+    (workflow/workflow
+     (fn [{:keys [branch]}] (str "Fix: " branch))
+     (workflow/step :implement "Implement with a regression lock" :self)
+     (workflow/defer :validate "Choose how this fix is validated"
+       :depends-on [:implement])
+     (workflow/step :handoff "Hand the branch to land" :self
+                    :depends-on [:validate])))
+
+  (workflow/defworkflow fix
+    "Light bug-fix flow; validation style selected at run time."
+    {:entrypoints #{:start} :param-spec ::fix-params}
+    (workflow/bind-defers fix-template {:validate #{:docs-check}}))
+  ```
+
+  **Consumer worlds shadow the registration, nothing else.** skein-src widens the
+  validation allowlist and rides its local CI script in as a binding default — script
+  text embedded at config load, so `.skein/scripts/` never leaves this repo (NG1):
+
+  ```clojure
+  ;; skein-src's world module (shadows :fix and :land; needs the defworkflow
+  ;; :overrides slot from the authoring-forms work — see Q3)
+  (workflow/defworkflow fix
+    "fix with this repo's validation styles."
+    {:entrypoints #{:start} :param-spec ::devcycles/fix-params}
+    (workflow/bind-defers devcycles/fix-template
+                          {:validate #{:docs-check :quality-suite}}))
+
+  (def ^:private ci-watch-script
+    (slurp (io/file ".skein/scripts/feature-ci-watch.sh")))
+
+  (workflow/defworkflow land
+    "land with this repo's CI watch and roster."
+    {:entrypoints #{:start}
+     :param-spec ::devcycles/land-params
+     :defaults {:mainline "main"
+                :roster   "change-review"
+                :bindings {"land.ci.green"
+                           {"shell/argv" ["sh" "-c" ci-watch-script "land-ci-watch"]}}}}
+    (workflow/bind-defers devcycles/land-template
+                          {:cleanup-extras #{:no-extra-cleanup :warm-repl-teardown}}))
+  ```
+
+  The payoff case is the consumer that writes nothing: agent-harness.spool activates
+  the workflows module, registers one `make-quality` `:call` target, binds
+  `{:validate #{:make-quality}}` — and takes `land` exactly as shipped, because the
+  gh-based binding defaults and `main` mainline already fit. It activates a module
+  subset (no tracker — it runs no devflow) while still pinning the root's full
+  dependency floors: activation is the subset knob, the dependency set is not (G3).
+
+  One known topology repair rides with the lift: `land`'s `:cleanup-extras` defer
+  currently hangs off the `:signoff` checkpoint while the merge happens in the
+  `land-merge` continuation, so "after merge" is unexpressible from the declaring
+  molecule. The fix direction (merge as a returning call) is an engine feature filed
+  separately (S7); until it lands, cleanup poured by the continuation is the honest
+  shape.
 
 - **PROP-Dcl-001.S4:** skein-src cutover surface: `.skein/workflows.clj`,
   `kanban_tracker.clj`, `attention.clj`, and the query surface of `config.clj` are replaced
@@ -131,7 +219,17 @@ these workflows with its own merge, CI, review, or validation behavior.
   carrying the old symbol (in practice: no active `land` family run). If review finds the
   shim insufficient, the fallback is a declared quiesce window: no new `land` starts, drain
   active land runs, then cut over. In plain terms: no in-flight land run fails because its
-  CI gate names a function that moved.
+  CI gate names a function that moved. The shim is two lines in the world module:
+
+  ```clojure
+  ;; keep the pre-cutover persisted symbol resolving; delete once no active
+  ;; strand carries "workflows/main-ci-watch" (exact attribute query, not
+  ;; "no active land run" — review 8w7o3)
+  (intern (create-ns 'workflows) 'main-ci-watch devcycles/main-ci-watch)
+  ```
+
+  Acceptance includes a cold-generation test: a gate poured before cutover must resolve
+  the old symbol on a later weaver generation loading devcycles + shim (review 9s12g).
 
 - **PROP-Dcl-001.S6:** Release/pinning posture: `:requires` floors on `codethread/devflow`,
   `codethread/kanban`, and `ct.spools/agent-run`; no floor on `skein.spools/workflow`
@@ -143,7 +241,23 @@ these workflows with its own merge, CI, review, or validation behavior.
   `.skein/spools.edn` (config file, shown complete), (2) declare the wanted modules in
   `.skein/init.clj` with the given `:after` edges (config file, snippet per module),
   (3) `mill weaver start` or `runtime/refresh!` (shell / REPL, labeled), (4) verify with
-  `strand help` listing the new ops.
+  `strand help` listing the new ops. The consumer-side shapes:
+
+  ```clojure
+  ;; .skein/spools.edn (consumer pin; dev override via spools.local.edn)
+  {codethread/devcycles {:git/url "…/devcycles.spool.git" :git/tag "v1" :git/sha "…"
+                         :roots   {ct.spools/devcycles "."}}}
+  ;; spools.local.edn while developing against the sibling checkout:
+  {codethread/devcycles {:local/root "../devcycles.spool" :claims "v1"}}
+
+  ;; .skein/init.clj (one module! per concern; tracker shown, same shape for
+  ;; workflows/attention/queries)
+  (runtime/module! runtime :devcycles/tracker
+                   {:ns 'ct.spools.devcycles.tracker
+                    :spools ['ct.spools/devcycles 'codethread/kanban 'codethread/devflow]
+                    :after [:skein/spools-kanban :skein/spools-devflow]
+                    :required? true})
+  ```
 
 - **PROP-Dcl-001.S7:** Named follow-up deliverables, filed as cards at this feature's
   close (adoption itself is out of scope per NG5):
@@ -155,6 +269,24 @@ these workflows with its own merge, CI, review, or validation behavior.
     `feature-iteration`; recorded as a refinement card.
   - dresser.loom: extend the `skein-workspace` templates with the devcycles family entry
     and module snippets; a dresser release with its own acceptance.
+
+  Already filed under the devcycles epic (kanban `b2etv`), surfaced by the spike and
+  review rounds — engine work this feature depends on directionally but does not ship
+  (NG4 holds):
+  - kanban `qwo4q` (pending): qualified keyword *values* silently lose namespaces at
+    `json-safe-context-value`; fix plus a round-trip test pinning qualified keys
+    end-to-end. Prerequisite for the namespaced-run-context candidate below.
+  - kanban `rnoh3` (refinement): returning workflow calls, so a continuation can resume
+    the declaring molecule — unlocks true post-merge `:cleanup-extras` (S3a) and stops
+    the context map dying with the pour.
+  - Candidate primitive, deliberately not scoped here: the **namespaced run context**
+    (`spike/namespaced-context-sketch.clj`) — qualify context keys (`:vcs/branch`,
+    destructured `{:vcs/keys [branch]}`, `s/keys :req` specs) and the engine's existing
+    context accretion becomes safe, dissolving defer `:forward` and the prefix-scoped
+    bindings validation entirely. The wire already supports it: qualified JSON keys are
+    a documented fixed point of `json->params` and `skein.core.db/json-key`. Isolation
+    stays a documented contract, not an enforced one (TEN-001/TEN-002 owner ruling).
+    If adopted, pre-v1 devcycles definitions ship qualified from day one.
 
 - **PROP-Dcl-001.S8:** The devcycles spool repo carries the shared-spool furniture required by
   writing-shared-spools from day one: the doc triad, README activation snippets per module,

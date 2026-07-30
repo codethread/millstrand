@@ -3,9 +3,11 @@
 ;; :file module ordered :after [:devcycles/workflows]).
 ;;
 ;; This world keeps its own feature-iteration workflow and runs no devflow, so
-;; it takes fix/land + attention only: no tracker module (nothing to track),
-;; and codethread/devflow is simply never approved — :requires floors bite only
-;; for roots a consumer approves.
+;; it ACTIVATES fix/land + attention only — no tracker module (nothing to
+;; track). It still pins and approves the root's full dependency floors
+;; (devflow, kanban, agent-run): activation is the subset knob, the dependency
+;; set is not (owner ruling on review finding ulp1o — the spool shares the
+;; whole practice).
 (require '[skein.api.current.alpha :as current]
          '[skein.api.runtime.alpha :as runtime]
          '[ct.spools.devcycles.workflows :as devcycles]
