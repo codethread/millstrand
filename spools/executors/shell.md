@@ -117,4 +117,4 @@ The spool also registers the `stalled-shell-gates` named query for coordinator i
 - ``test/skein/spools/executors/shell_test.clj`` —
   executable contract tests.
 
-[subagent-contract]: https://github.com/codethread/agent-harness.spool/blob/d01e6ce6555d370dc5c9e4e0371cdabe10fab491/agent-run/subagent.md
+[subagent-contract]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/agent-run/subagent.md

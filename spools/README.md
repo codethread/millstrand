@@ -81,17 +81,17 @@ spools](../docs/spools/writing-shared-spools.md#publishing-a-shared-spool-with-g
 | `ct.spools.devflow` | git, sha-pinned (see below) | [devflow.md](https://github.com/codethread/devflow.spool/blob/c77486955825e5d4918a4928914578cad61ed08f/devflow.md) | — | Reference devflow lifecycle built on the workflow engine: intake → proposal → spec/plan → tasks/implementation stages with HITL checkpoints. |
 | `skein.spools.dresser` | *(none approved in this repo)* | [dresser.md](https://github.com/codethread/dresser.loom/blob/fea1d340be3591d008cf0ddeb72b0091d95a380d/dresser.md) | — | Brings a repo onto shared working conventions and surfaces convention upgrades later. Two flavours: scaffold a new shared-spool repo, or install a self-contained `.skein/` workspace into any host repo. Applied versions are recorded in the target at `.skein/conventions.edn`. |
 
-[agent-run-contract]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/agent-run/README.md
-[agent-run-api]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/agent-run/agent-run.api.md
-[agent-run-cookbook]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/agent-run/agent-run.cookbook.md
-[delegation-contract]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/delegation/README.md
-[delegation-api]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/delegation/delegation.api.md
-[delegation-cookbook]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/delegation/delegation.cookbook.md
-[subagent-contract]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/agent-run/subagent.md
-[subagent-api]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/agent-run/subagent.api.md
-[subagent-cookbook]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/agent-run/subagent.cookbook.md
-[bench-contract]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/bench/README.md
-[bench-api]: https://github.com/codethread/agent-harness.spool/blob/2f54926ec8c25bd82eb33bfe42f01d5052d48837/bench/bench.api.md
+[agent-run-contract]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/agent-run/README.md
+[agent-run-api]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/agent-run/agent-run.api.md
+[agent-run-cookbook]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/agent-run/agent-run.cookbook.md
+[delegation-contract]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/delegation/README.md
+[delegation-api]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/delegation/delegation.api.md
+[delegation-cookbook]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/delegation/delegation.cookbook.md
+[subagent-contract]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/agent-run/subagent.md
+[subagent-api]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/agent-run/subagent.api.md
+[subagent-cookbook]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/agent-run/subagent.cookbook.md
+[bench-contract]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/bench/README.md
+[bench-api]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/bench/bench.api.md
 
 `guild` is a never-activated reference root. This repo carries its source and tests because
 kanban.spool's peering layer depends on it, but adds no `.skein/spools.edn` coordinate. A downstream
