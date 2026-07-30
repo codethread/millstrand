@@ -1,18 +1,18 @@
-// Core plumbing for the agent dashboard: CLI/argv parsing, workspace
-// resolution, and the strand JSON access primitives that tab modules build
-// their own fetchers on. Everything reaches the coordination world through the
-// public strand JSON CLI (TEN-006 — the CLI is the safe consumption surface;
-// no trusted REPL eval needed). The weaver transport is one JSON response per
-// request — there is no streaming — so tabs poll strandJson() themselves.
+// Core plumbing for the dashboard: CLI/argv parsing, workspace resolution, and
+// the strand JSON access primitives the view module builds its own fetchers on.
+// Everything reaches the coordination world through the public strand JSON CLI
+// (TEN-006 — the CLI is the safe consumption surface; no trusted REPL eval
+// needed). The weaver transport is one JSON response per request — there is no
+// streaming — so the view polls strandJson() itself.
 
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stringify as stringifyYaml } from "yaml";
 
-// Fields every tab's detail view reads. Each tab's row type extends this so the
-// shared DetailView stays strand-generic; a new tab only adds its list columns.
+// Fields the detail view reads. A view module's row type extends this so the
+// shared DetailView stays strand-generic and only adds its own list columns.
 export type DetailRow = {
   id: string;
   title?: string;
@@ -25,7 +25,7 @@ export type DetailRow = {
 };
 
 // The `strand show` / `strand list` record: attributes plus the timestamps and
-// identity every tab reads. Tabs narrow the JSON to this shared shape rather
+// identity the views read. Fetchers narrow the JSON to this shared shape rather
 // than re-typing it inline.
 export type StrandRecord = {
   id: string;
@@ -95,26 +95,6 @@ export async function strandJson(args: string[]): Promise<unknown> {
   return JSON.parse(res.out);
 }
 
-export async function strandShow(id: string): Promise<StrandRecord> {
-  return (await strandJson(["show", id])) as StrandRecord;
-}
-
-// Fold a strand record into the shared DetailView row. branch and phase are
-// joined in by the caller — they come from git / the run summary, not the strand
-// record itself.
-export function detailRowFrom(rec: StrandRecord, extra: { branch: string; phase?: string }): DetailRow {
-  return {
-    id: rec.id,
-    title: rec.title,
-    state: rec.state,
-    phase: extra.phase,
-    branch: extra.branch,
-    createdAt: rec.created_at,
-    updatedAt: rec.updated_at,
-    attrs: rec.attributes,
-  };
-}
-
 // $EDITOR (falling back to $VISUAL then vi), split into its command and any
 // leading args so callers can append the file. A shared editor entrypoint like
 // "code -w" is preserved as separate argv entries.
@@ -154,30 +134,6 @@ export function editorFileFor(row: DetailRow): string {
   const file = join(tmpdir(), `agent-run-${row.id}.md`);
   writeFileSync(file, content);
   return file;
-}
-
-// Render Graphviz DOT to preformatted boxart via the graph-easy binary on PATH.
-// DOT is written to a throwaway temp file (never the child's stdin) so the spawn
-// keeps the same no-controlling-pty discipline as every other child here — a
-// child handed the pty resets terminal modes and drops Ink out of raw mode. The
-// result is captured async; graph-easy can be slow on large graphs, so callers
-// fold the returned lines in without blocking the render loop. A missing binary
-// (ENOENT) or a non-zero exit returns an `error` for the caller's fallback path
-// rather than throwing, so the pane never goes blank.
-export async function renderBoxart(dot: string, format = "boxart"): Promise<{ lines: string[] | null; error: string | null }> {
-  let dir: string | null = null;
-  try {
-    dir = mkdtempSync(join(tmpdir(), "agent-dash-graph-"));
-    const file = join(dir, "graph.dot");
-    writeFileSync(file, dot);
-    const res = await run(["graph-easy", file, "--as", format], repoRoot);
-    if (res.code !== 0) return { lines: null, error: (res.err || res.out).trim() || `graph-easy exited ${res.code}` };
-    return { lines: res.out.replace(/\n+$/, "").split("\n"), error: null };
-  } catch (e) {
-    return { lines: null, error: e instanceof Error ? e.message : String(e) };
-  } finally {
-    if (dir) rmSync(dir, { recursive: true, force: true });
-  }
 }
 
 // Copy `text` to a clipboard reachable from wherever the dash runs, returning the
@@ -221,15 +177,6 @@ export async function copyToClipboard(text: string): Promise<string | null> {
     ok.push("xsel");
   }
   return ok.length ? ok.join("+") : null;
-}
-
-export async function branchFor(cwd: string, cache: Map<string, string>): Promise<string> {
-  const hit = cache.get(cwd);
-  if (hit !== undefined) return hit;
-  const res = await run(["git", "-C", cwd, "branch", "--show-current"], repoRoot);
-  const branch = res.code === 0 ? res.out.trim() || "(detached)" : "-";
-  cache.set(cwd, branch);
-  return branch;
 }
 
 export function parseInstant(s: string | undefined): Date | undefined {

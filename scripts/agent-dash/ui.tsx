@@ -1,7 +1,7 @@
-// Shared presentation kit for the agent dashboard: text-fitting helpers, the
-// header/failure chrome, the list windowing/footer primitives every tab reuses,
-// and the strand-generic DetailView. Tab modules render over these; tab-specific
-// columns and colour maps live in each tab's own file.
+// Shared presentation kit for the dashboard: text-fitting helpers, the
+// header/failure chrome, the list windowing/footer primitives, and the
+// strand-generic DetailView. The view module renders over these; its columns and
+// colour maps live in its own file.
 
 import React from "react";
 import { Box, Text } from "ink";
@@ -78,12 +78,14 @@ export function useTerminalSize() {
 // (which pins the frame to the terminal height) does not account for. A transient
 // `flash` (a y-copy result) takes over the info half in green so the confirmation
 // lands where the eye already is, without stealing a layout row.
+const TITLE = "kanban";
+
 export function Header({ all, noun, refreshedAt, cols, flash }: { all: boolean; noun: string; refreshedAt: Date; cols: number; flash?: string | null }) {
   const info = ` ${workspaceRoot} · ${all ? "all" : "active"} ${noun} · every ${opts.interval}s · ${refreshedAt.toLocaleTimeString()}`;
-  const tail = Math.max(0, cols - "agents".length);
+  const tail = Math.max(0, cols - TITLE.length);
   return (
     <Text>
-      <Text bold>agents</Text>
+      <Text bold>{TITLE}</Text>
       {flash ? <Text color="green">{clip(` ${flash}`, tail)}</Text> : <Text dimColor>{clip(info, tail)}</Text>}
     </Text>
   );
@@ -106,16 +108,6 @@ export function Failure({ failure, cols = 120 }: { failure: string; cols?: numbe
   );
 }
 
-export type ListProps<R extends DetailRow = DetailRow> = {
-  rows: R[];
-  selected: number;
-  interactive: boolean;
-  cols: number;
-  termRows: number;
-  all: boolean;
-  loaded: boolean;
-};
-
 export const fitCol = (name: string, values: string[], cap: number) =>
   Math.min(cap, Math.max(name.length, ...values.map((v) => stringWidth(v))));
 
@@ -125,20 +117,18 @@ export const fitCol = (name: string, values: string[], cap: number) =>
 // Overshooting overflows the pinned root and corrupts the frame, so both
 // viewports derive from one accounting rather than scattered magic numbers.
 //
-//   SHELL   header + tab bar + the content wrapper's top margin (app.tsx)
+//   SHELL   header + tab strip + the content wrapper's top margin (app.tsx)
 //   LIST    the column header + the footer's top margin; the footer's own text
 //           rows vary with how far its hint wraps, so callers pass that count in
 //           (hintRows) rather than it being baked in here.
 //   DETAIL  the id/title line, the meta line, the attribute block's top margin,
 //           and the footer (its own top margin + text)
-//   GRAPH   the legend line plus the footer (its own top margin + text).
 //   SLACK   one row left unwritten so a full frame never lands on the terminal's
 //           last cell and nudges an autoscroll.
-const CHROME = { shell: 3, list: 2, detail: 5, graph: 3, slack: 1 };
+const CHROME = { shell: 3, list: 2, detail: 5, slack: 1 };
 export const listViewport = (termRows: number, footerRows = 1) =>
   Math.max(3, termRows - CHROME.shell - CHROME.list - footerRows - CHROME.slack);
 export const detailViewport = (termRows: number) => Math.max(3, termRows - CHROME.shell - CHROME.detail - CHROME.slack);
-export const graphViewport = (termRows: number) => Math.max(3, termRows - CHROME.shell - CHROME.graph - CHROME.slack);
 
 // Space held for the scroll counter ListFooter appends, so the footer's height is
 // a function of the hint and width alone. Reserving it up front is what keeps the
@@ -156,7 +146,6 @@ export const hintRows = (hint: string, cols: number): number =>
 // row so a tiny terminal still moves.
 export const listPage = (termRows: number, footerRows = 1) => Math.max(1, Math.floor(listViewport(termRows, footerRows) / 2));
 export const detailPage = (termRows: number) => Math.max(1, Math.floor(detailViewport(termRows) / 2));
-export const graphPage = (termRows: number) => Math.max(1, Math.floor(graphViewport(termRows) / 2));
 
 // The visible slice centred on the selection, plus off-screen counts for the
 // scroll hint.

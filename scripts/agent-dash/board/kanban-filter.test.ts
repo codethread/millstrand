@@ -4,16 +4,20 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   applyFilter,
-  commitViews,
+  deleteView,
   describeView,
   emptyView,
   isBlank,
   loadFilterState,
   matches,
   negateTerm,
-  removeSlot,
+  posOf,
   saveFilterState,
+  saveView,
+  stepPos,
+  stripLabels,
   toggleTerm,
+  viewAt,
   withTerm,
   type FilterView,
 } from "./kanban-filter";
@@ -107,15 +111,43 @@ describe("editing terms", () => {
   });
 });
 
-describe("committing overlay slots", () => {
-  test("blank slots are dropped and the cursor slot becomes active", () => {
-    const views = [view({ name: "a", terms: { tests: "include" } }), emptyView(), view({ name: "b" })];
-    expect(commitViews(views, 2)).toEqual({ views: [views[0]!, views[2]!], active: 1 });
+describe("the tab strip", () => {
+  test("ALL leads, the saved views follow in order, and the new-view slot trails", () => {
+    expect(stripLabels([view({ name: "tests" }), view({ name: "  " })])).toEqual(["ALL", "tests", "(unnamed)", "+"]);
+    expect(stripLabels([])).toEqual(["ALL", "+"]);
   });
 
-  test("committing on the blank trailing slot clears the filter", () => {
-    const views = [view({ name: "a" }), emptyView()];
-    expect(commitViews(views, 1)).toEqual({ views: [views[0]!], active: null });
+  test("the active filter and its strip position are the same place", () => {
+    expect(posOf(null)).toBe(0);
+    expect(posOf(1)).toBe(2);
+    expect(viewAt(0, 2)).toBeNull();
+    expect(viewAt(2, 2)).toBe(1);
+    expect(viewAt(3, 2)).toBe("new");
+  });
+
+  test("⇥ and ⇧⇥ ring through ALL, every view, and the new-view slot", () => {
+    const walk = (back: boolean) => {
+      const seen: number[] = [];
+      let pos = 0;
+      for (let i = 0; i < 4; i++) seen.push((pos = stepPos(pos, 2, back)));
+      return seen;
+    };
+    expect(walk(false)).toEqual([1, 2, 3, 0]);
+    expect(walk(true)).toEqual([3, 2, 1, 0]);
+  });
+});
+
+describe("saving a view", () => {
+  test("a new view is appended and becomes the active tab", () => {
+    const views = [view({ name: "a" })];
+    const added = view({ name: "b" });
+    expect(saveView(views, null, added)).toEqual({ views: [views[0]!, added], active: 1 });
+  });
+
+  test("editing a tab replaces it in place and stays on it", () => {
+    const views = [view({ name: "a" }), view({ name: "b" })];
+    const edited = view({ name: "a", terms: { tests: "include" } });
+    expect(saveView(views, 0, edited)).toEqual({ views: [edited, views[1]!], active: 0 });
   });
 
   test("a named view with no terms is a keepable bookmark, an unnamed termless one is not", () => {
@@ -125,25 +157,11 @@ describe("committing overlay slots", () => {
   });
 });
 
-describe("deleting a slot", () => {
-  test("a saved view is dropped and the cursor clamps into what is left", () => {
-    const views = [view({ name: "a" }), view({ name: "b" }), emptyView()];
-    expect(removeSlot(views, 0)).toEqual({ views: [views[1]!, views[2]!], slot: 0 });
-    expect(removeSlot(views, 1)).toEqual({ views: [views[0]!, views[2]!], slot: 1 });
-  });
-
-  test("the trailing blank slot is not deletable — it is how a new view is started", () => {
-    const views = [view({ name: "a" }), emptyView()];
-    expect(removeSlot(views, 1)).toEqual({ views, slot: 1 });
-  });
-
-  test("deleting a filled trailing slot leaves a fresh blank behind it", () => {
+describe("deleting a view", () => {
+  test("the tab is dropped and the board falls back to ALL, not a neighbouring filter", () => {
     const views = [view({ name: "a" }), view({ name: "b" })];
-    expect(removeSlot(views, 1)).toEqual({ views: [views[0]!, emptyView()], slot: 1 });
-  });
-
-  test("deleting the only saved view leaves a single blank slot", () => {
-    expect(removeSlot([view({ name: "a" })], 0)).toEqual({ views: [emptyView()], slot: 0 });
+    expect(deleteView(views, 0)).toEqual({ views: [views[1]!], active: null });
+    expect(deleteView(views, 1)).toEqual({ views: [views[0]!], active: null });
   });
 });
 
@@ -156,9 +174,9 @@ describe("describing a view", () => {
 });
 
 describe("the saved-view store", () => {
-  test("a round trip preserves views, the active slot, and the enabled flag", () => {
+  test("a round trip preserves the views and which tab was active", () => {
     const file = tempStore();
-    const state = { views: [view({ name: "test only", terms: { tests: "include" } })], active: 0, enabled: false };
+    const state = { views: [view({ name: "test only", terms: { tests: "include" } })], active: 0 };
 
     expect(saveFilterState(file, "/repo", state)).toBeNull();
     expect(loadFilterState(file, "/repo")).toEqual({ state, error: null });
@@ -166,8 +184,8 @@ describe("the saved-view store", () => {
 
   test("workspaces keep separate views in one store", () => {
     const file = tempStore();
-    saveFilterState(file, "/one", { views: [view({ name: "one" })], active: 0, enabled: true });
-    saveFilterState(file, "/two", { views: [view({ name: "two" })], active: 0, enabled: true });
+    saveFilterState(file, "/one", { views: [view({ name: "one" })], active: 0 });
+    saveFilterState(file, "/two", { views: [view({ name: "two" })], active: 0 });
 
     expect(loadFilterState(file, "/one").state.views[0]?.name).toBe("one");
     expect(loadFilterState(file, "/two").state.views[0]?.name).toBe("two");
@@ -175,14 +193,14 @@ describe("the saved-view store", () => {
 
   test("a never-written store is empty without an error", () => {
     expect(loadFilterState(tempStore(), "/repo")).toEqual({
-      state: { views: [], active: null, enabled: true },
+      state: { views: [], active: null },
       error: null,
     });
   });
 
   test("a corrupt store degrades to no views but names the file", () => {
     const file = tempStore();
-    saveFilterState(file, "/repo", { views: [], active: null, enabled: true });
+    saveFilterState(file, "/repo", { views: [], active: null });
     writeFileSync(file, "{not json");
 
     const { state, error } = loadFilterState(file, "/repo");
@@ -192,9 +210,19 @@ describe("the saved-view store", () => {
 
   test("a workspace with no saved entry is not an error", () => {
     const file = tempStore();
-    saveFilterState(file, "/one", { views: [view({ name: "one" })], active: 0, enabled: true });
+    saveFilterState(file, "/one", { views: [view({ name: "one" })], active: 0 });
 
-    expect(loadFilterState(file, "/other")).toEqual({ state: { views: [], active: null, enabled: true }, error: null });
+    expect(loadFilterState(file, "/other")).toEqual({ state: { views: [], active: null }, error: null });
+  });
+
+  // The tabs replaced the ⇧f park switch, so a store written before them still
+  // loads — its views and active tab are honoured and the dead flag is dropped.
+  test("a legacy enabled flag is accepted and dropped", () => {
+    const file = tempStore();
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify({ "/repo": { views: [{ name: "x", mode: "and", terms: {} }], active: 0, enabled: false } }));
+
+    expect(loadFilterState(file, "/repo")).toEqual({ state: { views: [view({ name: "x" })], active: 0 }, error: null });
   });
 
   // TEN-003: a value we did not expect is reported, never coerced into a
@@ -205,38 +233,38 @@ describe("the saved-view store", () => {
     writeFileSync(file, JSON.stringify({ "/repo": entry }));
 
     const { state, error } = loadFilterState(file, "/repo");
-    expect(state).toEqual({ views: [], active: null, enabled: true });
+    expect(state).toEqual({ views: [], active: null });
     expect(error).toContain(expected);
   };
 
   test("an unknown mode is rejected rather than defaulted to AND", () => {
-    rejects({ active: null, enabled: true, views: [{ name: "x", mode: "nonsense", terms: {} }] }, 'mode must be "and" or "or"');
+    rejects({ active: null, views: [{ name: "x", mode: "nonsense", terms: {} }] }, 'mode must be "and" or "or"');
   });
 
   test("an unknown term value is rejected rather than dropped", () => {
-    rejects({ active: null, enabled: true, views: [{ name: "x", mode: "and", terms: { a: "maybe" } }] }, '"include" or "exclude"');
+    rejects({ active: null, views: [{ name: "x", mode: "and", terms: { a: "maybe" } }] }, '"include" or "exclude"');
   });
 
-  test("an out-of-range active slot is rejected rather than nulled", () => {
-    rejects({ active: 7, enabled: true, views: [] }, "must be null or an index into views");
+  test("an out-of-range active tab is rejected rather than nulled", () => {
+    rejects({ active: 7, views: [] }, "must be null or an index into views");
+  });
+
+  test("a missing active tab is rejected rather than assumed to be ALL", () => {
+    rejects({ views: [] }, "must be null or an index into views");
   });
 
   test("a non-string name and unexpected keys are both rejected", () => {
-    rejects({ active: null, enabled: true, views: [{ name: 7, mode: "and", terms: {} }] }, "name must be a string");
-    rejects({ active: null, enabled: true, views: [{ name: "x", mode: "and", terms: {}, colour: "red" }] }, "unexpected keys: colour");
-  });
-
-  test("a missing enabled flag is rejected rather than assumed true", () => {
-    rejects({ active: null, views: [] }, "enabled must be a boolean");
+    rejects({ active: null, views: [{ name: 7, mode: "and", terms: {} }] }, "name must be a string");
+    rejects({ active: null, views: [{ name: "x", mode: "and", terms: {}, colour: "red" }] }, "unexpected keys: colour");
   });
 
   test("a store that failed to read is never overwritten — other workspaces survive", () => {
     const file = tempStore();
-    saveFilterState(file, "/one", { views: [view({ name: "one" })], active: 0, enabled: true });
+    saveFilterState(file, "/one", { views: [view({ name: "one" })], active: 0 });
     const intact = readFileSync(file, "utf8");
     writeFileSync(file, "{not json");
 
-    const error = saveFilterState(file, "/two", { views: [view({ name: "two" })], active: 0, enabled: true });
+    const error = saveFilterState(file, "/two", { views: [view({ name: "two" })], active: 0 });
     expect(error).toContain("refusing to overwrite");
     // The unreadable bytes are left exactly as found rather than replaced by a
     // store carrying only /two — that rewrite would destroy /one's saved views.

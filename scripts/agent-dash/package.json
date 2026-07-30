@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test tabs",
+    "test": "bun test board",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
