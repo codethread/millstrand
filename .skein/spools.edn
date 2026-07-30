@@ -1,7 +1,7 @@
 {:spools {codethread/kanban
  {:git/url "https://github.com/codethread/kanban.spool.git",
-  :git/sha "0cd3bdcdb8df94400d7b203c0328b9689afdee2b",
-  :git/tag "v17",
+  :git/sha "44ba711f898f0dcc3d5ce2c8b64f16ffd837158b",
+  :git/tag "v18",
   :roots {codethread/kanban "."}},
  skein.spools/chime {:skein/source-root "spools/chime"},
  skein.spools/unsafe-text-search
@@ -16,8 +16,8 @@
  skein.spools/workflow {:skein/source-root "spools/workflow"},
  ct.spools/agent-run
  {:git/url "https://github.com/codethread/agent-harness.spool.git",
-  :git/sha "7ffaac7541329f9f4c5643ad1560e2d68ced8b2c",
-  :git/tag "v20",
+  :git/sha "9834f630488052d1600b1ded7c041dcdde78ebf3",
+  :git/tag "v22",
   :roots
   {ct.spools/agent-run "agent-run",
    ct.spools/delegation "delegation",

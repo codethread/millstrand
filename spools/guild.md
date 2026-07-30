@@ -195,4 +195,4 @@ From the frontend weaver (or a manager weaver), discover the backend by its port
 - [Weaver Runtime spec](../devflow/specs/daemon-runtime.md) — local weaver peering contract (SPEC-004.P10c).
 - [REPL API spec](../devflow/specs/repl-api.md) — blessed `skein.api.peers.alpha` helper listing.
 
-[subagent-contract]: https://github.com/codethread/agent-harness.spool/blob/7ffaac7541329f9f4c5643ad1560e2d68ced8b2c/agent-run/subagent.md
+[subagent-contract]: https://github.com/codethread/agent-harness.spool/blob/9834f630488052d1600b1ded7c041dcdde78ebf3/agent-run/subagent.md
