@@ -16,6 +16,8 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.spools.workflow :as workflow]
+            [skein.api.lifecycle.alpha :as lifecycle]
+            [skein.api.skein.alpha :as skein]
             [skein.api.spool.alpha :refer [fail! attr-get require-valid!]]
             [skein.api.weaver.alpha :as weaver]
             [skein.api.events.alpha :as events]
@@ -340,12 +342,12 @@
   [_event]
   (scan!))
 
-(defn gate-stalled?
-  "Return durable stall detail for a ready `:shell` gate view, or nil.
+;; ---------------------------------------------------------------------------
+;; Owner declarations and resource reconciliation
 
-  The failure detail lives on the gate itself (`gate/error`), so — unlike
-  the subagent executor — there is no `delegates`-edge join back to a separate
-  run row."
+(workflow/defexecutor shell
+  "Return durable stall detail for a ready `:shell` gate view, or nil."
+  {:request-spec ::request}
   [gate-view]
   (require-valid! ::gate-view gate-view "Invalid shell gate view")
   (let [gate (weaver/show (rt) (:id gate-view))
@@ -353,21 +355,9 @@
                  {:gate (:id gate) :error (attr gate :gate/error)})]
     (require-valid! ::stall-detail result "Invalid shell gate stall detail")))
 
-;; ---------------------------------------------------------------------------
-;; Owner declarations and resource reconciliation
-
-(def gate-stalled-symbol
-  "The `:shell` executor's stall predicate symbol, declared into the workflow
-  executor kind and resolved to a function value at each gate evaluation
-  (DELTA-OlrDrt-001.CC10)."
-  'skein.spools.executors.shell/gate-stalled?)
-
-;; The coordinator attention surface for stuck shell gates: an active `:shell`
-;; gate carrying a `gate/error` attribute. Presence is the stall; a coordinator
-;; re-arms by removing the key (nil patch / JSON null), never by blanking it. No
-;; delegates-edge join is needed because the failure detail lives on the gate itself.
-(def stalled-shell-gates-query
-  "Named query behind `stalled-shell-gates`, contributed to the core query kind."
+(skein/defquery stalled-shell-gates-query
+  "Return active shell gates carrying a durable error stamp."
+  {}
   [:and [:= :state "active"]
    [:= [:attr "workflow/gate"] "shell"]
    [:exists [:attr "gate/error"]]])
@@ -393,57 +383,68 @@
                             'skein.spools.executors.shell/on-event
                             {:spool "shell"}))
 
-(defn contribute
-  "Module contribution: the `:shell` workflow executor and the
-  `stalled-shell-gates` query, published owner-complete.
+(s/def ::runtime some?)
+(s/def ::resource map?)
+(s/def ::open-context (s/keys :req-un [::runtime]))
+(s/def ::close-context (s/keys :req-un [::resource]))
+(s/def ::handler-close-context (s/keys :req-un [::runtime]))
+(s/def ::pool-handle
+  #(= #{:scan-monitor :worker-executor :close-fn} (set (keys %))))
+(s/def ::registered #{:shell/engine})
+(s/def ::unregistered #{:shell/engine})
+(s/def ::closed #{:shell-pool})
 
-  Both disappear by omission when this module is refreshed away
-  (DELTA-OlrDrt-001.CC2). The executor entry declares the stall predicate
-  symbol — resolved to a function value per gate evaluation (CC10) — and the
-  `::request` gate-request spec, which `workflow executor-catalog` projects as
-  the discoverable `shell/*` contract. The event handler and worker pool are
-  not declarative data — `reconcile` owns them."
-  [_ctx]
-  {workflow/executor-kind {"shell" {:stalled? gate-stalled-symbol
-                                    :request-spec ::request}}
-   :queries {"stalled-shell-gates" stalled-shell-gates-query}})
+(defn open-shell-pool!
+  "Open the runtime-lifetime shell worker pool."
+  [ctx]
+  (require-valid! ::open-context ctx "Invalid shell pool open context")
+  (let [runtime (:runtime ctx)
+        result (current/with-runtime runtime
+                 (binding [*runtime* runtime]
+                   (state)))]
+    (require-valid! ::pool-handle result "Invalid shell pool handle")))
 
-(defn reconcile
-  "Reconcile the shell executor's non-declarative resources.
+(defn close-shell-pool!
+  "Close the runtime-lifetime shell worker pool."
+  [ctx]
+  (require-valid! ::close-context ctx "Invalid shell pool close context")
+  ((:close-fn (:resource ctx)))
+  (require-valid! (s/keys :req-un [::closed])
+                  {:closed :shell-pool}
+                  "Invalid shell pool close result"))
 
-  On an applied contribution: seed the `shell` vocabulary, register the
-  graph-change event handler, materialize the runtime-owned worker pool, and run
-  one initial scan — content-identical refreshes skip reconcile, so no duplicate
-  scan occurs. On removal: drop the event handler so no further scan is
-  triggered; the executor and query are already gone by kernel omission. The
-  worker pool retains identity and is closed at runtime stop
-  (DELTA-OlrDrt-001.CC7/CC8)."
-  [{:keys [runtime] :as ctx}]
-  (binding [*runtime* runtime]
-    (let [status (get-in ctx [:module/contribution :status])]
-      (case status
-        :applied (do (declare-shell-vocab! runtime)
-                     (register-shell-handler! runtime)
-                     (state)
-                     (scan!)
-                     {:reconciled :applied})
-        :removed (do (events/unregister-handler! runtime :shell/engine)
-                     {:reconciled :removed})
-        (fail! "Unsupported module contribution status"
-               {:status status
-                :allowed #{:applied :removed}
-                :module/key (:module/key ctx)
-                :reconciler 'skein.spools.executors.shell/reconcile})))))
+(defn open-shell-handler!
+  "Declare shell vocabulary, register scanning, and run the initial scan."
+  [ctx]
+  (require-valid! ::open-context ctx "Invalid shell handler open context")
+  (let [runtime (:runtime ctx)
+        result (current/with-runtime runtime
+                 (binding [*runtime* runtime]
+                   (declare-shell-vocab! runtime)
+                   (register-shell-handler! runtime)
+                   (scan!)
+                   {:registered :shell/engine}))]
+    (require-valid! (s/keys :req-un [::registered])
+                    result
+                    "Invalid shell handler open result")))
 
-(def spool
-  "Entry-point declaration for the shell executor (PROP-Dsp-001 `def spool`
-  convention).
+(defn close-shell-handler!
+  "Unregister shell scanning when the module is removed."
+  [ctx]
+  (require-valid! ::handler-close-context ctx "Invalid shell handler close context")
+  (events/unregister-handler! (:runtime ctx) :shell/engine)
+  (require-valid! (s/keys :req-un [::unregistered])
+                  {:unregistered :shell/engine}
+                  "Invalid shell handler close result"))
 
-  The refresh coordinator resolves `:contribute`/`:reconcile` from this public
-  var at every module evaluation, so a consumer declares only a source target
-  and world policy and never mirrors the pair. Callers still order it after the
-  workflow module with an `:after` edge on the workflow module's key (the
-  executor kind must exist before this contribution publishes). Unqualified
-  symbols resolve against this namespace; fn values are rejected (ADR-002.O1)."
-  {:contribute 'contribute
-   :reconcile 'reconcile})
+(lifecycle/defresource shell-pool
+  "Own the shell worker pool for the lifetime of the runtime."
+  {:open 'skein.spools.executors.shell/open-shell-pool!
+   :close 'skein.spools.executors.shell/close-shell-pool!
+   :scope :runtime})
+
+(lifecycle/defresource shell-handler
+  "Own the shell event handler for the lifetime of the module."
+  {:open 'skein.spools.executors.shell/open-shell-handler!
+   :close 'skein.spools.executors.shell/close-shell-handler!
+   :after #{:shell-pool}})

@@ -90,7 +90,7 @@
         (is (= [gate-id] (mapv :id (filter #(= "shell" (:gate %)) (workflow/ready "fail")))))
         (is (nil? (attr (weaver/show rt gate-id) :workflow/outcome-by)))
         ;; discoverable through both the stall predicate and the coordinator query
-        (is (= gate-id (:gate (shell/gate-stalled? (ready-shell-gate "fail")))))
+        (is (= gate-id (:gate (shell/shell-stalled? (ready-shell-gate "fail")))))
         (is (some #(= gate-id (:id %)) (weaver/list-query rt 'stalled-shell-gates {})))))))
 
 (deftest errored-gate-is-not-rerun-until-error-cleared
@@ -165,7 +165,7 @@
         (let [decoy (weaver/add! rt {:title "Blank decoy"
                                      :attributes {"workflow/gate" "shell"
                                                   "gate/error" ""}})]
-          (is (= (:id decoy) (:gate (shell/gate-stalled? {:id (:id decoy)}))))
+          (is (= (:id decoy) (:gate (shell/shell-stalled? {:id (:id decoy)}))))
           (is (some #(= (:id decoy) (:id %))
                     (weaver/list-query rt 'stalled-shell-gates {}))))))))
 
@@ -277,36 +277,21 @@
    #'shell/new-state
    #{:scan-monitor :worker-executor :close-fn}))
 
-(deftest module-contribute-declares-executor-and-query-owner-complete
-  ;; TASK-Olr-007 MI4/MI5: the shell module contributes the :shell executor and
-  ;; the stalled-shell-gates query as owner-complete declarations; both disappear
-  ;; by omission when the module is refreshed away.
+(deftest module-forms-publish-and-preserve-runtime-pool
   (with-runtime
     (fn [rt _]
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
-      (is (= {workflow/executor-kind
-              {"shell" {:stalled? 'skein.spools.executors.shell/gate-stalled?
-                        :request-spec :skein.spools.executors.shell/request}}
-              :queries {"stalled-shell-gates" shell/stalled-shell-gates-query}}
-             (shell/contribute {:runtime rt}))))))
-
-(deftest module-reconcile-preserves-worker-pool-and-cleans-up-on-removal
-  ;; TASK-Olr-007 MI3/MI4: reconcile registers the event handler and materializes
-  ;; the worker pool on an applied contribution and preserves its identity across
-  ;; refreshes (no state-atom swap); removal drops the event handler so no further
-  ;; scan is triggered.
-  (with-runtime
-    (fn [rt _]
-      (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
-      (is (= {:reconciled :applied}
-             (shell/reconcile {:runtime rt :module/contribution {:status :applied}})))
+      (test-support/activate-spool! rt :skein/spools-shell 'skein.spools.executors.shell
+                                    :after [:skein/spools-workflow])
       (let [pool (binding [shell/*runtime* rt] (:worker-executor (#'shell/state)))]
         (is (some #(= :shell/engine (:key %)) (events/handlers rt))
             "the graph-change event handler is registered")
-        (shell/reconcile {:runtime rt :module/contribution {:status :applied}})
+        (is (= "shell" (:waiter (first (workflow/executor-catalog)))))
+        (is (= shell/stalled-shell-gates-query
+               [:and [:= :state "active"]
+                [:= [:attr "workflow/gate"] "shell"]
+                [:exists [:attr "gate/error"]]]))
+        (test-support/activate-spool! rt :skein/spools-shell 'skein.spools.executors.shell
+                                      :after [:skein/spools-workflow])
         (is (identical? pool (binding [shell/*runtime* rt] (:worker-executor (#'shell/state))))
-            "refresh does not replace the runtime-owned worker pool")
-        (is (= {:reconciled :removed}
-               (shell/reconcile {:runtime rt :module/contribution {:status :removed}})))
-        (is (not-any? #(= :shell/engine (:key %)) (events/handlers rt))
-            "removal unregisters the event handler")))))
+            "unchanged refresh preserves the runtime-owned worker pool")))))

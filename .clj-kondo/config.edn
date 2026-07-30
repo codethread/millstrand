@@ -24,6 +24,7 @@
                         defn hooks.project-rules/no-fn-keys-destructure
                         skein.api.skein.alpha/defop hooks.project-rules/defop
                         skein.api.skein.alpha/defquery hooks.project-rules/defquery
+                        skein.spools.workflow/defexecutor hooks.project-rules/defexecutor
                         skein.macros.queries/defquery hooks.project-rules/defquery
                         skein.macros.ops/defop hooks.project-rules/defop
                         skein.macros.rules/defrule hooks.project-rules/defrule}}

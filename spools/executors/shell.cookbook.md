@@ -166,7 +166,7 @@ test in ``test/skein/spools/executors/shell_test.clj``.
 
 **Situation.** A shell check failed — the command exited non-zero, timed out, or the argv was malformed. The gate is stuck with `gate/error` and the shell executor is skipping it. You've fixed the underlying problem and want the check to run again.
 
-**Composition.** Discovery is the `stalled-shell-gates` named query (or the `gate-stalled?` predicate on a gate view). Recovery is a single mutation: **remove the gate's `gate/error` attribute** (optionally rewriting `shell/argv` or `shell/cwd`). Removal means the key is *absent*, not blank — trusted Clojure passes a nil patch (`{"gate/error" nil}`); from the CLI, `strand update <gate-id> --attributes '{"gate/error":null}'`. `--attr gate/error=` stores `""`, which is present data and leaves the gate stalled. The next scan finds a ready, un-errored, un-claimed `:shell` gate and re-runs the deterministic check.
+**Composition.** Discovery is the `stalled-shell-gates` named query (or the `shell-stalled?` predicate on a gate view). Recovery is a single mutation: **remove the gate's `gate/error` attribute** (optionally rewriting `shell/argv` or `shell/cwd`). Removal means the key is *absent*, not blank — trusted Clojure passes a nil patch (`{"gate/error" nil}`); from the CLI, `strand update <gate-id> --attributes '{"gate/error":null}'`. `--attr gate/error=` stores `""`, which is present data and leaves the gate stalled. The next scan finds a ready, un-errored, un-claimed `:shell` gate and re-runs the deterministic check.
 
 ```clojure
 (require '[skein.api.weaver.alpha :as weaver]
