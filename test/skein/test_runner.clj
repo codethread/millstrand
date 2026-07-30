@@ -27,7 +27,7 @@
    'skein.api.spec.alpha-test
    'skein.api.clock.alpha-test
    'skein.api.format.alpha-test
-   'skein.api.contribution-test
+   'skein.api.skein-test
    'skein.api.lifecycle.alpha-test
    ;; drives its own unpublished runtime per test — no JVM-global state.
    'skein.api.runtime.glossary.alpha-test

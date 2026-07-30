@@ -1,8 +1,9 @@
-(ns skein.api.contribution-test
-  "Production-boundary tests for core contribution authoring forms."
+(ns skein.api.skein-test
+  "Production-boundary tests for Skein's core authoring forms."
   (:require [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is testing]]
-            [skein.api.contribution.alpha :as contribution]
+            [skein.api.skein.alpha :as skein]
+            [skein.core.contribution :as contribution]
             [skein.core.weaver.module-graph :as module-graph]
             [skein.spools.chime :as chime]
             [skein.spools.cron :as cron]
@@ -10,7 +11,7 @@
 
 (s/def ::pattern-input (s/keys))
 
-(def ^:private test-ns (the-ns 'skein.api.contribution-test))
+(def ^:private test-ns (the-ns 'skein.api.skein-test))
 
 (def ^:private collection-context
   {:module/key :test/contribution
@@ -28,21 +29,21 @@
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"defop options are invalid"
                           (contribution/op-declaration
                            'sample "Sample." {:arg-spec {} :unknown true}
-                           'skein.api.contribution-test/sample-op)))
+                           'skein.api.skein-test/sample-op)))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"defquery options are invalid"
                           (contribution/query-declaration 'sample {:unknown true} [])))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"defpattern options are invalid"
                           (contribution/pattern-declaration
                            'sample "Sample." {:spec ::pattern-input :unknown true}
-                           'skein.api.contribution-test/sample)))
+                           'skein.api.skein-test/sample)))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"defhook options are invalid"
                           (contribution/hook-declaration
                            :sample {:types #{:strand/added} :unknown true}
-                           'skein.api.contribution-test/sample)))
+                           'skein.api.skein-test/sample)))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"defhandler options are invalid"
                           (contribution/handler-declaration
                            :sample {:types #{:strand/added} :unknown true}
-                           'skein.api.contribution-test/sample)))))
+                           'skein.api.skein-test/sample)))))
 
 (deftest generated-declarations-collect-values-and-override-intent
   (let [query [:= :state "active"]
@@ -57,33 +58,37 @@
              :patterns "sample"
              (contribution/pattern-declaration
               'sample "Sample." {:spec ::pattern-input}
-              'skein.api.contribution-test/sample))))]
+              'skein.api.skein-test/sample))))]
     (is (= query (get-in contribution [:queries :entries "sample"])))
     (is (= #{"sample"} (get-in contribution [:queries :overrides])))
-    (is (= 'skein.api.contribution-test/sample
+    (is (= 'skein.api.skein-test/sample
            (get-in contribution [:patterns :entries "sample" :fn])))))
+
+(deftest public-namespace-exposes-only-core-authoring-forms
+  (is (= '#{defhandler defhook defop defpattern defquery}
+         (set (keys (ns-publics 'skein.api.skein.alpha))))))
 
 (deftest source-forms-define-vars-and-collect-every-core-kind
   (let [contribution
         (collect
          #(eval
            '(do
-              (contribution/defop sample "Sample."
+              (skein/defop sample "Sample."
                 {:arg-spec {:op "sample" :doc "Sample."
                             :hook-class :read :deadline-class :standard}
                  :override? true}
                 [_] :ok)
-              (contribution/defquery sample-query "Sample." {}
+              (skein/defquery sample-query "Sample." {}
                 [:= :state "active"])
-              (contribution/defpattern sample-pattern "Sample."
+              (skein/defpattern sample-pattern "Sample."
                 {:spec ::pattern-input} [_] [])
-              (contribution/defhook sample-hook "Sample."
+              (skein/defhook sample-hook "Sample."
                 {:types #{:strand/added}} [_] nil)
-              (contribution/defhandler sample-handler "Sample."
+              (skein/defhandler sample-handler "Sample."
                 {:types #{:strand/added}} [_] nil))))]
     (is (= #{:ops :queries :patterns :hooks :events} (set (keys contribution))))
     (is (= #{"sample"} (get-in contribution [:ops :overrides])))
-    (is (= 'skein.api.contribution-test/sample-op
+    (is (= 'skein.api.skein-test/sample-op
            (get-in contribution [:ops :entries "sample" :fn])))
     (is (every? var?
                 (map #(ns-resolve test-ns %)
@@ -98,7 +103,7 @@
                 {:override? true} [_] nil)
               (cron/defjob :sample-job {:override? true}
                 {:interval-ms 1000
-                 :handler 'skein.api.contribution-test/sample-handler})
+                 :handler 'skein.api.skein-test/sample-handler})
               (chime/defrule sample-rule "Sample."
                 {:override? true} [_] nil))))]
     (is (= #{"sample-executor"}
