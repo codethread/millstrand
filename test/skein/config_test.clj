@@ -1945,15 +1945,16 @@
 (def ^:private in-tree-spool-vars
   "The in-tree spool modules `.skein/init.clj` activates, keyed as init.clj
   keys them, each mapped to the namespace's public `def spool` declaration var.
-  Guild ships in-tree but is not activated in this workspace."
-  {:skein/spools-chime 'skein.spools.chime/spool})
+  Guild and Chime ship in-tree but use authoring forms instead."
+  {})
 
 (def ^:private forms-only-ns-modules
   "The init.clj `:ns` modules that legally declare no `spool` var because their
   whole contribution is collected from top-level authoring forms."
   #{:skein/spools-batteries :skein/spools-workflow :skein/spools-workflow-cli
     :skein/spools-shell :skein/spools-code
-    :skein/spools-unsafe-text-search :skein/spools-cron :skein/spools-devflow
+    :skein/spools-unsafe-text-search :skein/spools-chime :skein/spools-cron
+    :skein/spools-devflow
     :skein/spools-kanban :skein/spools-shuttle :skein/spools-delegation
     :skein/spools-bench :skein/spools-treadle})
 
@@ -1968,7 +1969,7 @@
    :skein/spools-shell :forms
    :skein/spools-code :forms
    :skein/spools-unsafe-text-search :forms
-   :skein/spools-chime :legacy
+   :skein/spools-chime :forms
    :skein/spools-cron :forms
    :skein/spools-devflow :forms
    :skein/spools-kanban :forms

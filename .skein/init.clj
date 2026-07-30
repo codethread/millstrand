@@ -129,7 +129,9 @@
 ;; Chime is vocabulary-agnostic; attention.clj contributes this repo's attention
 ;; rules (HITL checkpoints, agent failures, gate errors, kanban lifecycle, parked
 ;; runs) with defrule, and each developer binds how they are notified in
-;; gitignored init.local.clj. Unbound chime records loud notifier-missing errors.
+;; gitignored init.local.clj. Chime's defresource owns its handler, mutation
+;; barrier, and visible rule view as one atomic boundary. Unbound chime records
+;; loud notifier-missing errors.
 (runtime/module! runtime :skein/spools-chime
                  {:ns 'skein.spools.chime
                   :spools ['skein.spools/chime]

@@ -9,10 +9,11 @@
             [skein.api.current.alpha :as current]
             [skein.api.events.alpha :as events]
             [skein.api.hooks.alpha :as hooks]
-            [skein.api.weaver.alpha :as weaver]
+            [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.registry.alpha :as registry]
             [skein.api.runtime.alpha :as runtime]
-            [skein.api.spool.alpha :refer [fail!]])
+            [skein.api.spool.alpha :refer [fail! require-valid!]]
+            [skein.api.weaver.alpha :as weaver])
   (:import [java.io OutputStreamWriter]
            [java.time Instant]))
 
@@ -87,16 +88,6 @@
   test fails loudly if `new-state` and this version drift apart."
   3)
 
-(def ^:private rule-kinds-version
-  "Shape version for the directly stored owner-registry handle."
-  1)
-
-(defn- new-rule-kinds []
-  (doto (registry/registry)
-    (registry/declare-kind! {:id rule-kind
-                             :entry-spec ::rule-entry
-                             :binding-moment :chime/scan})))
-
 (defn- new-state []
   {:notifier-binding (atom nil)
    ;; Only this map is read by event scans. Module publication updates the
@@ -107,15 +98,19 @@
    :failure-log (atom [])
    :scanned-batch-ids (atom [])})
 
+(defn- new-rule-kinds []
+  (doto (registry/registry)
+    (registry/declare-kind! {:id rule-kind
+                             :entry-spec ::rule-entry
+                             :binding-moment :chime/scan})))
+
 (defn- state []
   (runtime/spool-state (rt) ::state {:version state-version} new-state))
 
 (defn- notifier-binding [] (:notifier-binding (state)))
 (defn- rule-registry [] (:rule-registry (state)))
 (defn- rule-kinds []
-  (runtime/spool-state (rt) ::rule-kinds
-                       {:version rule-kinds-version}
-                       new-rule-kinds))
+  (runtime/spool-state (rt) ::rule-kinds new-rule-kinds))
 (defn- seen-notifications [] (:seen-notifications (state)))
 (defn- failure-log [] (:failure-log (state)))
 (defn- scanned-batch-ids [] (:scanned-batch-ids (state)))
@@ -416,13 +411,10 @@
   (locking (rule-registry) nil)
   nil)
 
-(defn contribute
-  "Materialize Chime's rule kind for dependent module contributions."
-  [{:keys [runtime]}]
-  (binding [*runtime* runtime]
-    (runtime/spool-state runtime ::state {:version state-version} new-state)
-    (rule-kinds))
-  {})
+(runtime/collect-kind! ::rule-kinds
+                       {:id rule-kind
+                        :entry-spec ::rule-entry
+                        :binding-moment :chime/scan})
 
 (defn- reconcile-rule-view!
   "Baseline changed rules in `effective`, then publish it as the visible view.
@@ -443,56 +435,79 @@
              #(into #{} (remove (fn [[rule-key _]] (contains? removed rule-key))) %)))
     (reset! visible effective)))
 
-(defn reconcile
-  "Reconcile chime's engine and visible rule view for a module transition.
+(s/def ::runtime #(and (map? %) (contains? % :spool-state)))
+(s/def ::lifecycle-context
+  (s/and map?
+         #(s/valid? ::runtime (:runtime %))))
+(s/def ::engine-handle #{:chime/engine})
+(s/def ::reconciled #{:applied :removed})
+(s/def ::lifecycle-result
+  (s/and map?
+         #(= #{:reconciled} (set (keys %)))
+         #(s/valid? ::reconciled (:reconciled %))))
 
-  Publication has already validated every owner partition. On an applied
-  contribution: register the mutation-barrier pre-commit hook and the
-  `:chime/engine` event handler, then baseline changed effective rules and
-  publish the complete view — repeats stay idempotent because duplicate hook
-  and handler keys replace prior entries (SPEC-004.C65/C76). On removal:
-  unregister both, then publish an empty visible view; direct `register!`
-  rules survive under the repl owner, so deactivation is view-level and a
-  later reapplication re-baselines and republishes them. Every branch holds
-  the visible-view monitor that scans, registration, and the mutation barrier
-  share, so no mutation or event lane observes a half-applied transition. Any
-  other contribution status fails loudly: the module kernel only reconciles
-  applied and removed outcomes, so anything else is a caller error."
-  [{:keys [runtime] :as ctx}]
+(defn- register-engine!
+  [runtime visible]
+  (hooks/register-hook! runtime :chime/registration-barrier
+                        mutation-hook-types
+                        'skein.spools.chime/mutation-registration-barrier!
+                        {:order Long/MAX_VALUE :spool "chime"})
+  (events/register-handler! runtime :chime/engine event-types
+                            'skein.spools.chime/on-event
+                            {:spool "chime"})
+  (reconcile-rule-view! visible
+                        (registry/effective (rule-kinds) rule-kind)))
+
+(defn- unregister-engine!
+  [runtime visible]
+  (events/unregister-handler! runtime :chime/engine)
+  (hooks/unregister-hook! runtime :chime/registration-barrier)
+  (reconcile-rule-view! visible {}))
+
+(defn open-engine!
+  "Open Chime's atomic engine boundary for a validated lifecycle context.
+
+  The handler, mutation barrier, and visible rule view change under their
+  shared monitor. A failed open compensates back to the inactive boundary so a
+  lifecycle retry never inherits a half-open engine."
+  [{:keys [runtime] :as context}]
+  (require-valid! ::lifecycle-context context "Invalid Chime lifecycle context")
   (binding [*runtime* runtime]
-    (let [visible (rule-registry)
-          status (get-in ctx [:module/contribution :status])]
-      (case status
-        :applied (locking visible
-                   (hooks/register-hook! runtime :chime/registration-barrier
-                                         mutation-hook-types
-                                         'skein.spools.chime/mutation-registration-barrier!
-                                         {:order Long/MAX_VALUE :spool "chime"})
-                   (events/register-handler! runtime :chime/engine event-types
-                                             'skein.spools.chime/on-event
-                                             {:spool "chime"})
-                   (reconcile-rule-view! visible
-                                         (registry/effective (rule-kinds) rule-kind))
-                   {:reconciled :applied})
-        :removed (locking visible
-                   (events/unregister-handler! runtime :chime/engine)
-                   (hooks/unregister-hook! runtime :chime/registration-barrier)
-                   (reconcile-rule-view! visible {})
-                   {:reconciled :removed})
-        (fail! "Unsupported module contribution status"
-               {:status status
-                :allowed #{:applied :removed}
-                :module/key (:module/key ctx)
-                :reconciler 'skein.spools.chime/reconcile})))))
+    (let [visible (rule-registry)]
+      (locking visible
+        (try
+          (register-engine! runtime visible)
+          :chime/engine
+          (catch Throwable t
+            (unregister-engine! runtime visible)
+            (throw (ex-info "Chime engine open failed and was reverted"
+                            {:effect/id (:effect/id context)}
+                            t))))))))
 
-(def spool
-  "Entry-point declaration for the chime spool (PROP-Dsp-001 `def spool`
-  convention).
+(defn close-engine!
+  "Close Chime's atomic engine boundary for a validated lifecycle context.
 
-  The refresh coordinator resolves `:contribute`/`:reconcile` from this public
-  var at every module evaluation, so a consumer declares only a source target
-  and world policy (`{:ns 'skein.spools.chime :spools [...]}`) and never mirrors
-  the pair. Unqualified symbols resolve against this namespace; fn values are
-  rejected (ADR-002.O1)."
-  {:contribute 'contribute
-   :reconcile 'reconcile})
+  A failed close restores the active cluster before surfacing the failure. The
+  retained resource handle can therefore be retried without exposing a
+  half-closed handler, barrier, or rule view."
+  [{:keys [runtime resource] :as context}]
+  (require-valid! ::lifecycle-context context "Invalid Chime lifecycle context")
+  (require-valid! ::engine-handle resource "Invalid Chime engine handle")
+  (binding [*runtime* runtime]
+    (let [visible (rule-registry)]
+      (locking visible
+        (try
+          (unregister-engine! runtime visible)
+          (require-valid! ::lifecycle-result
+                          {:reconciled :removed}
+                          "Invalid Chime lifecycle result")
+          (catch Throwable t
+            (register-engine! runtime visible)
+            (throw (ex-info "Chime engine close failed and was restored"
+                            {:effect/id (:effect/id context)}
+                            t))))))))
+
+(lifecycle/defresource engine
+  "Own Chime's handler, mutation barrier, and visible rule view atomically."
+  {:open 'skein.spools.chime/open-engine!
+   :close 'skein.spools.chime/close-engine!})

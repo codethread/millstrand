@@ -31,15 +31,10 @@ Activate it from trusted startup config after syncing approved roots:
    :required? true})
 ```
 
-The module reconciler maintains the graph-event handler and registration
-barrier. A useful setup then layers two
-things on top:
+The module's `defresource` maintains the graph-event handler, registration barrier, and visible rule view under one shared monitor. A useful setup then layers two things on top:
 
-- shared config (`init.clj` / a workspace spool) registers the workspace's
-  rules with `register!`, so the repo decides what needs attention;
-- each developer binds their notifier in gitignored `init.local.clj` with
-  `set-notifier!`, so how you get told (a notification daemon, `osascript`,
-  a bell) stays a personal choice.
+- shared config (`init.clj` / a workspace spool) authors the workspace's rules with `defrule`, so the repo decides what needs attention;
+- each developer binds their notifier in gitignored `init.local.clj` with `set-notifier!`, so how you get told (a notification daemon, `osascript`, a bell) stays a personal choice.
 
 ## Notifier binding
 
@@ -78,9 +73,10 @@ Worked example — notify when a strand that parents other work is closed:
 ```clojure
 (ns my.rules
   "Workspace notification rules."
-  (:require [skein.repl :as repl]))
+  (:require [skein.repl :as repl]
+            [skein.spools.chime :as chime]))
 
-(defn parent-completed
+(chime/defrule parent-completed
   "Notify when a strand with parent-of children reaches closed."
   [{:keys [strand]}]
   (when (and (= "closed" (:state strand))
@@ -89,11 +85,7 @@ Worked example — notify when a strand that parents other work is closed:
      :body (str "Strand " (:id strand) " and the work it parents are finished.")}))
 ```
 
-```clojure
-(chime/register! :parent-completed 'my.rules/parent-completed)
-(chime/rules)
-(chime/unregister! :parent-completed)
-```
+Loading this module publishes `:parent-completed` under its module owner. Omission retracts it on refresh. Trusted REPL callers can still use `register!` and `unregister!` for direct, runtime-local rules.
 
 When a rule is registered, chime treats its currently matching strands as an
 initial seen baseline. Restarting a weaver therefore does not replay every
