@@ -633,8 +633,7 @@ Ordinary `def` and `defn` forms collect nothing. A contribution form defines its
 ```clojure
 ;; report_job.clj — a module source namespace
 (ns report-job
-  (:require [skein.api.skein.alpha :as skein]
-            [skein.spools.cron :as cron]))
+  (:require [skein.spools.cron :as cron]))
 
 (defn report-tick [runtime]
   ;; ... do the work ...
@@ -657,7 +656,7 @@ A form-authored source has no `:contribute`. During the migration window it may 
   {:reconcile 'reconcile})
 ```
 
-Use the public declaration constructors beside each form for generated entries. They validate the same kind-specific fragments before generated code calls `skein.api.runtime.alpha/collect-entry!`. Do not assemble raw contribution maps in author code.
+Core forms are the public grammar for hand-authored core entries. Their declaration constructors and normalized maps are internal plumbing, not an authoring escape hatch. A domain that genuinely needs generated entries exposes its own validated factory or batch form.
 
 Five kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, and `:events`. Beyond those the set is open over whatever the running runtime declares. A domain spool declares its own kind with `skein.api.registry.alpha/declare-kind!`, and other modules then contribute entries to it. The shipped workflow executors do exactly this, mixing a domain kind and a core kind in one contribution:
 

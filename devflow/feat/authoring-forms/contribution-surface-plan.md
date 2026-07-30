@@ -4,13 +4,13 @@ Card `obacf` builds on contribution replay commit `c24dfffd7fdb0348dbc8c40a06e9c
 
 ## Selected-universe inventory
 
-| Kind ID | Provider module | Existing form | Retained public route | Owning namespace and spec | Files owned here |
+| Kind ID | Provider module | Existing form | Retained public route | Internal grammar | Files owned here |
 | --- | --- | --- | --- | --- | --- |
-| `:ops` | core runtime | workspace `defop` prototype | `defop` | `skein.api.skein.alpha/defop`, `::op-options`, `::op-entry` | Skein API and tests |
-| `:queries` | core runtime | workspace `defquery` prototype | `defquery` | `skein.api.skein.alpha/defquery`, `::query-options`, `::query-entry` | Skein API and tests |
-| `:patterns` | core runtime | workspace `defpattern`/`defp` prototypes | `defpattern`; no short alias | `skein.api.skein.alpha/defpattern`, `::pattern-options`, `::pattern-entry` | Skein API and tests |
-| `:hooks` | core runtime | raw contribution maps | `defhook` | `skein.api.skein.alpha/defhook`, `::hook-options`, `::hook-entry` | Skein API and tests |
-| `:events` | core runtime | raw contribution maps | `defhandler` | `skein.api.skein.alpha/defhandler`, `::handler-options`, `::event-entry` | Skein API and tests |
+| `:ops` | core runtime | workspace `defop` prototype | `skein.api.skein.alpha/defop` | `skein.core.contribution/::op-options`, `::op-entry` | Skein API and tests |
+| `:queries` | core runtime | workspace `defquery` prototype | `skein.api.skein.alpha/defquery` | `skein.core.contribution/::query-options`, `::query-entry` | Skein API and tests |
+| `:patterns` | core runtime | workspace `defpattern`/`defp` prototypes | `skein.api.skein.alpha/defpattern`; no short alias | `skein.core.contribution/::pattern-options`, `::pattern-entry` | Skein API and tests |
+| `:hooks` | core runtime | raw contribution maps | `skein.api.skein.alpha/defhook` | `skein.core.contribution/::hook-options`, `::hook-entry` | Skein API and tests |
+| `:events` | core runtime | raw contribution maps | `skein.api.skein.alpha/defhandler` | `skein.core.contribution/::handler-options`, `::event-entry` | Skein API and tests |
 | `:skein.spools.workflow/definitions` | Workflow | `defworkflow` | `defworkflow` | `skein.spools.workflow/defworkflow`, `::workflow-options`, `::definition` | Workflow form/spec tests and docs |
 | `:skein.spools.workflow/executors` | Workflow | raw contribution maps | `defexecutor` | `skein.spools.workflow/defexecutor`, `::executor-options`, `::executor-entry` | Workflow form/spec tests and docs |
 | `:skein.spools.cron/jobs` | Cron | `defjob` | `defjob` | `skein.spools.cron/defjob`, `::job-options`, `::job` | Cron form/spec tests and docs |
@@ -20,11 +20,11 @@ Guild's declaration kind is outside the selected migration program. It remains c
 
 ## Surface decisions
 
-`skein.api.skein.alpha` is the small common home for the five core kinds. Each form validates its closed option map and complete entry before calling `collect-entry!`. It adds owner-complete source/image replay and omission semantics that direct registration and ordinary function composition do not provide. `collect-entry!` stays the low-level generated-entry seam. `declare-kind!` remains the provider seam and does not author entries.
+`skein.api.skein.alpha` is the small public home for the five core kinds and is conventionally required `:as skein`. It exposes only `defop`, `defquery`, `defpattern`, `defhook`, and `defhandler`. Each form validates its closed option map and complete entry through internal `skein.core.contribution` plumbing before calling `collect-entry!`. The split keeps the author-facing namespace about Skein vocabulary rather than publication representation. `collect-entry!` stays the low-level generated-entry seam for provider implementations. `declare-kind!` remains the provider seam and does not author entries.
 
 Workflow, Cron, and Chime retain domain-owned forms because their declaration vocabularies and specs belong to those providers. `defpattern` remains the only pattern form; the workspace-only `defp` alias does not earn a second public name. No generic `defentry` is added.
 
-Generated code calls the public, kind-specific declaration constructors before `collect-entry!`. This gives generated batches the same closed grammar and registry-owned candidate validation as source forms.
+Generated core entries are not a second public authoring grammar. Skein and provider implementations may use the internal kind-specific constructors before `collect-entry!`; a domain that needs user-authored generated entries exposes and validates its own domain factory or batch form.
 
 ## Migration-window manifest
 
