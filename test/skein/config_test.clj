@@ -2009,17 +2009,23 @@
       (let [source-result
             (test-support/activate-spool!
              rt :skein/spools-kanban 'ct.spools.kanban)
-            source-entry (first (filter #(= "kanban" (:name %)) (weaver/ops rt)))
+            [source-entry :as source-entries]
+            (filter #(= "kanban" (:name %)) (weaver/ops rt))
             image-result
             (test-support/activate-spool!
              rt :skein/spools-kanban 'ct.spools.kanban :load :image)
-            image-entry (first (filter #(= "kanban" (:name %)) (weaver/ops rt)))]
+            [image-entry :as image-entries]
+            (filter #(= "kanban" (:name %)) (weaver/ops rt))]
         (is (= :loaded
                (get-in source-result
                        [:modules :skein/spools-kanban :source/status])))
         (is (= :image
                (get-in image-result
                        [:modules :skein/spools-kanban :source/status])))
+        (is (= 1 (count source-entries))
+            "source activation publishes exactly one Kanban operation")
+        (is (= 1 (count image-entries))
+            "image replay publishes exactly one Kanban operation")
         (is (= source-entry image-entry)
             "image replay publishes the source-collected Kanban operation")
         (is (= 'ct.spools.kanban (:provenance source-entry)))
