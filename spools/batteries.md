@@ -347,10 +347,7 @@ opts into:
 - **`strand prime <op>`** returns the op's orientation prose for the ops that declare `:prime` (today
   `add` and `weave`): what to run first, what to prefer.
 
-`failure-modes` carry glossary outcome **names** only; the envelope resolves each to its definition
-once, in its `glossary` map. Batteries owns and seeds these outcomes (e.g.
-`batteries/state-invalid`, `batteries/query-unknown`, `batteries/spool-release-unresolved`) from
-its module reconcile, so the definitions travel with the spool.
+`failure-modes` carry glossary outcome **names** only; the envelope resolves each to its definition once, in its `glossary` map. Batteries owns and seeds these outcomes (for example, `batteries/state-invalid`, `batteries/query-unknown`, and `batteries/spool-release-unresolved`) through a process-lifetime `lifecycle/defseed` declaration, so the definitions travel with the spool.
 
 Batteries also **exports** `default-help-transform`, a reference renderer that turns the raw help
 envelope into readable text. It is a single recursive function over the uniform node — the op root, a
