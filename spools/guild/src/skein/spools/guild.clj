@@ -16,7 +16,7 @@
             [skein.api.skein.alpha :as skein]
             [skein.api.spec.alpha :as spec-alpha]
             [skein.api.weaver.alpha :as weaver]
-            [skein.api.spool.alpha :as spool :refer [fail!]]))
+            [skein.api.spool.alpha :as spool :refer [fail! require-valid!]]))
 
 (def ^:private state-version
   "Bump whenever new-state's key set changes."
@@ -79,6 +79,13 @@
 (s/def ::deadline-class #{:standard :unbounded})
 (s/def ::doc string?)
 (s/def ::input-spec (s/or :keyword keyword? :symbol symbol?))
+(s/def ::runtime #(and (map? %) (contains? % :spool-state)))
+(s/def ::lifecycle-context (s/keys :req-un [::runtime]))
+(s/def ::reset #{:guild})
+(s/def ::reset-result
+  (s/and map?
+         #(= #{:reset} (set (keys %)))
+         #(s/valid? ::reset (:reset %))))
 ;; :returns shape authority is skein.api.return-shape.alpha at op registration;
 ;; this spec owns only presence-with-value.
 (s/def ::returns some?)
@@ -292,10 +299,10 @@
   "Record `guild-name` as the fallback guild name in `runtime`'s state.
 
   The guild name is normally read from runtime metadata; the fallback covers
-  contexts without it. Module reconcile resets the fallback to nil, so
-  trusted config and tests call this after activation. Passing nil clears
-  the fallback; a non-nil value must be a non-blank string and anything else
-  fails loudly with the offending value."
+  contexts without it. The `guild-state` resource resets the fallback when its
+  module opens or closes; preserving a healthy resource preserves the current
+  fallback. Passing nil clears the fallback; a non-nil value must be a
+  non-blank string and anything else fails loudly with the offending value."
   [runtime guild-name]
   (when (and (some? guild-name) (not (and (string? guild-name) (not (str/blank? guild-name)))))
     (fail! "Guild name must be a non-blank string" {:guild/name guild-name}))
@@ -305,15 +312,18 @@
 (defn reset-guild!
   "Reset Guild's runtime-owned declarations during module open and close.
 
-  Guild is the irregular lifecycle boundary: both transitions clear its active
-  and deprecated operations, fallback name, and published declaration owner.
-  The coordinator retains this callable for omission cleanup."
-  [{:keys [runtime]}]
-  (reset! (guild-ops runtime) {})
-  (reset! (deprecated-ops runtime) {})
-  (reset! (fallback-guild-name runtime) nil)
-  (publish-declarations! runtime)
-  {:reset :guild})
+  `context` must conform to `::lifecycle-context`; the result conforms to
+  `::reset-result`. Guild is the irregular lifecycle boundary: both transitions
+  clear its active and deprecated operations, fallback name, and published
+  declaration owner. The coordinator retains this callable for omission cleanup."
+  [context]
+  (let [{:keys [runtime]}
+        (require-valid! ::lifecycle-context context "Invalid Guild lifecycle context")]
+    (reset! (guild-ops runtime) {})
+    (reset! (deprecated-ops runtime) {})
+    (reset! (fallback-guild-name runtime) nil)
+    (publish-declarations! runtime)
+    (require-valid! ::reset-result {:reset :guild} "Invalid Guild reset result")))
 
 (skein/defop guild
   "Return JSON-safe metadata describing the registered Guild API."

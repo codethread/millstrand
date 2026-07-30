@@ -276,3 +276,12 @@
   (is (nil? (ns-resolve 'skein.spools.guild 'spool)))
   (is (nil? (ns-resolve 'skein.spools.guild 'contribute)))
   (is (nil? (ns-resolve 'skein.spools.guild 'reconcile))))
+
+(deftest lifecycle-reset-rejects-an-invalid-context
+  (try
+    (guild/reset-guild! {})
+    (is false "expected lifecycle context validation failure")
+    (catch clojure.lang.ExceptionInfo error
+      (is (= "Invalid Guild lifecycle context" (ex-message error)))
+      (is (= {} (:value (ex-data error))))
+      (is (map? (:explain (ex-data error)))))))

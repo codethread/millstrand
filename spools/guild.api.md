@@ -25,7 +25,7 @@ Replace a registered guild operation in `runtime` with a loud deprecation stub.
 
   `opts` requires `:replacement` and may include `:since`. Deprecated ops never
   return success; invocation throws ex-info with `:code :operation/deprecated`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L265-L289">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L272-L296">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/deprecated-op">`deprecated-op`</a>
 ``` clojure
@@ -34,7 +34,7 @@ Replace a registered guild operation in `runtime` with a loud deprecation stub.
 Function.
 
 Fail loudly for a deprecated guild operation.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L200-L209">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L207-L216">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/dispatch-op">`dispatch-op`</a>
 ``` clojure
@@ -43,7 +43,7 @@ Fail loudly for a deprecated guild operation.
 Function.
 
 Dispatch a guild-declared operation after parsing and validating input.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L192-L198">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L199-L205">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/guild-op">`guild-op`</a>
 ``` clojure
@@ -52,7 +52,7 @@ Dispatch a guild-declared operation after parsing and validating input.
 Function.
 
 Return JSON-safe metadata describing the registered Guild API.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L318-L335">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L328-L345">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/guild-state">`guild-state`</a>
 
@@ -60,7 +60,7 @@ Return JSON-safe metadata describing the registered Guild API.
 
 
 Own Guild's reset and publication boundary for the module lifetime.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L337-L340">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L347-L350">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/register-op!">`register-op!`</a>
 ``` clojure
@@ -85,20 +85,21 @@ Register a guild operation in `runtime`'s CLI operation registry.
   arg `:spec` convention (SPEC-003.C70), so `strand help <op>` projects the
   registered spec's contract and template, and invalid input fails with the
   same projection fields plus explain text.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L211-L257">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L218-L264">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/reset-guild!">`reset-guild!`</a>
 ``` clojure
-(reset-guild! {:keys [runtime]})
+(reset-guild! context)
 ```
 Function.
 
 Reset Guild's runtime-owned declarations during module open and close.
 
-  Guild is the irregular lifecycle boundary: both transitions clear its active
-  and deprecated operations, fallback name, and published declaration owner.
-  The coordinator retains this callable for omission cleanup.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L305-L316">Source</a></sub></p>
+  `context` must conform to `::lifecycle-context`; the result conforms to
+  `::reset-result`. Guild is the irregular lifecycle boundary: both transitions
+  clear its active and deprecated operations, fallback name, and published
+  declaration owner. The coordinator retains this callable for omission cleanup.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L312-L326">Source</a></sub></p>
 
 ## <a name="skein.spools.guild/set-fallback-guild-name!">`set-fallback-guild-name!`</a>
 ``` clojure
@@ -109,8 +110,8 @@ Function.
 Record `guild-name` as the fallback guild name in `runtime`'s state.
 
   The guild name is normally read from runtime metadata; the fallback covers
-  contexts without it. Module reconcile resets the fallback to nil, so
-  trusted config and tests call this after activation. Passing nil clears
-  the fallback; a non-nil value must be a non-blank string and anything else
-  fails loudly with the offending value.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L291-L303">Source</a></sub></p>
+  contexts without it. The `guild-state` resource resets the fallback when its
+  module opens or closes; preserving a healthy resource preserves the current
+  fallback. Passing nil clears the fallback; a non-nil value must be a
+  non-blank string and anything else fails loudly with the offending value.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L298-L310">Source</a></sub></p>
