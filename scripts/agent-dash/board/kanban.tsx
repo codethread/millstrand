@@ -784,6 +784,14 @@ export const kanbanDash = defineDash<KanbanView>({
     }
     const rows = tree(v);
     if (v.s.view === "detail") {
+      // ⇥ means "show me that tab's board" wherever it is pressed, so it drops the
+      // detail on the way: the card under it may not be among the rows the tab
+      // being switched to keeps, and a detail pane left open over a card the board
+      // no longer lists is a dead end reachable by one keystroke.
+      if (key.tab) {
+        const next = stepTab(v, key.shift);
+        return { ...next, s: { ...next.s, view: "list", detailScroll: 0 } };
+      }
       const r = reduceScrollKeys(v.s.detailScroll, input, key, detailMaxScroll(cardAt(rows, v.s.selected), ctx.cols, ctx.termRows), detailPage(ctx.termRows));
       if (r === "back") return { ...v, s: { ...v.s, view: "list" } };
       if (r !== null) return { ...v, s: { ...v.s, detailScroll: r } };

@@ -253,7 +253,7 @@ export function DetailView({
         ))}
       </Box>
       <Box marginTop={1}>
-        <Text dimColor>{clip(`↑↓/jk scroll · ⌃d/⌃u page · ⌃g open · y copy · esc back · q quit${maxScroll > 0 ? ` · ${from}↑ ${maxScroll - from}↓` : ""}`, cols)}</Text>
+        <Text dimColor>{clip(`↑↓/jk scroll · ⌃d/⌃u page · ⌃g open · y copy · ⇥/⇧⇥ filter tab · esc back · q quit${maxScroll > 0 ? ` · ${from}↑ ${maxScroll - from}↓` : ""}`, cols)}</Text>
       </Box>
     </Box>
   );
