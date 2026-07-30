@@ -279,6 +279,12 @@
    ((requiring-resolve 'skein.core.weaver.module-refresh/collect-entry!)
     kind-id entry-key value opts)))
 
+(defn collect-lifecycle!
+  "Collect one lifecycle declaration for the module source being evaluated."
+  [effect-id declaration]
+  ((requiring-resolve 'skein.core.weaver.module-refresh/collect-lifecycle!)
+   effect-id declaration))
+
 (defn refresh-modules!
   "Run the internal full or targeted live-module refresh coordinator."
   ([runtime]
@@ -291,6 +297,13 @@
   "Return offline joined state for the internal live-module coordinator."
   [runtime]
   ((requiring-resolve 'skein.core.weaver.module-refresh/status) runtime))
+
+(defn- close-module-lifecycle!
+  "Close runtime-scoped module lifecycle resources before spool state."
+  [runtime]
+  ((requiring-resolve
+    'skein.core.weaver.module-refresh/close-runtime-lifecycle!)
+   runtime))
 
 (defn install-built-in-ops!
   "Install Skein's built-in CLI ops, resolving the api-tier registrar dynamically.
@@ -680,6 +693,7 @@
     (nrepl/stop-server server))
   ;; Spool state closes before storage so runtime-owned schedulers/workers can
   ;; cancel or join their work while storage is still valid.
+  (close-module-lifecycle! runtime)
   (close-spool-state! runtime)
   ;; Storage closes only after transports, event dispatch, and spool-owned
   ;; workers stop, so no in-flight weaver work can observe closed storage.

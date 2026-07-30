@@ -251,11 +251,46 @@
 (s/def ::refresh-mode #{:full :targeted})
 (s/def ::resolved-entry-points
   (s/map-of ::module-key ::entry-points/resolved-entry-points))
+
+(defn- valid-lifecycle-projection?
+  [{:keys [status phase] :as projection}]
+  (and (map? projection)
+       (contains? #{:planned :applied :preserved :retained :degraded :blocked
+                    :removed :not-attempted}
+                  status)
+       (or (nil? phase)
+           (contains? #{:validate :resolve :open :apply :close :remove
+                        :runtime-stop}
+                      phase))))
+
+(defn- valid-lifecycle-outcomes?
+  "True when every present per-effect projection has closed status data."
+  [modules]
+  (every?
+   (fn [module]
+     (let [outcomes (:lifecycle/outcomes module)]
+       (or (nil? outcomes)
+           (and (map? outcomes)
+                (every? valid-lifecycle-projection? (vals outcomes))))))
+   (vals modules)))
+
+(defn- valid-lifecycle-status?
+  "True when every offline lifecycle projection satisfies lifecycle API specs."
+  [outcomes]
+  (or (nil? outcomes)
+      (and (map? outcomes)
+           (every?
+            (fn [effects]
+              (and (map? effects)
+                   (every? valid-lifecycle-projection? (vals effects))))
+            (vals outcomes)))))
+
 (s/def ::refresh-result
   (s/and map?
          #(s/valid? ::refresh-status (:status %))
          #(s/valid? ::refresh-mode (:mode %))
          #(map? (:modules %))
+         #(valid-lifecycle-outcomes? (:modules %))
          #(map? (:roots %))
          #(s/valid? ::resolved-entry-points (:resolved/entry-points %))
          #(vector? (:residuals %))
@@ -272,6 +307,7 @@
   (s/and map?
          #(map? (:modules %))
          #(map? (:contributions %))
+         #(valid-lifecycle-status? (:lifecycle/outcomes %))
          #(s/valid? ::resolved-entry-points (:resolved/entry-points %))
          #(map? (:loaded %))
          #(contains? % :pending-generation)
@@ -392,6 +428,55 @@
                                  :entry-key any? :value any?
                                  :opts ::collect-entry-opts))
   :ret any?)
+
+(s/def ::lifecycle-effect-id keyword?)
+(s/def ::lifecycle-declaration
+  (s/and
+   map?
+   #(contains? #{:seed :resource :reconcile} (:kind %))
+   (fn [{:keys [kind] :as declaration}]
+     (let [options (dissoc declaration :kind)
+           qualified-callable? qualified-symbol?]
+       (case kind
+         :seed
+         (and (every? #{:apply :after} (keys options))
+              (qualified-callable? (:apply options))
+              (set? (get options :after #{})))
+
+         :resource
+         (and (every? #{:open :close :after :scope} (keys options))
+              (every? qualified-callable? ((juxt :open :close) options))
+              (set? (get options :after #{}))
+              (contains? #{:module :runtime} (get options :scope :module)))
+
+         :reconcile
+         (and (every? #{:read-desired :read-actual :apply :on-removed
+                        :trigger-kinds :after}
+                      (keys options))
+              (every? qualified-callable?
+                      ((juxt :read-desired :read-actual :apply :on-removed)
+                       options))
+              (set? (get options :trigger-kinds #{}))
+              (set? (get options :after #{})))
+
+         false)))))
+
+(defn collect-lifecycle!
+  "Collect one validated lifecycle declaration from the current module source.
+
+  Duplicate ids fail at collection. Outside module source collection the call
+  is passive, allowing code-only reloads to define declaration Vars."
+  [effect-id declaration]
+  (require-valid! ::lifecycle-effect-id effect-id
+                  "collect-lifecycle! effect-id must be a keyword")
+  (require-valid! ::lifecycle-declaration declaration
+                  "collect-lifecycle! declaration is invalid")
+  (weaver-runtime/collect-lifecycle! effect-id declaration))
+
+(s/fdef collect-lifecycle!
+  :args (s/cat :effect-id ::lifecycle-effect-id
+               :declaration ::lifecycle-declaration)
+  :ret ::lifecycle-declaration)
 
 (s/def ::kind-state-key keyword?)
 (s/def ::kind-declaration ::registry/kind-declaration-input)

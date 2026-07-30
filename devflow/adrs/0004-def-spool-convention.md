@@ -86,3 +86,7 @@ There is exactly one new seam, and it exists only to keep an existing behavior w
 
 - If a `:file` module's uniform `spool` name (Decision A applies it to non-spool workspace file modules too) proves confusing in practice, revisit whether file modules deserve a second var name. Uniformity — one name, one rule — was chosen over forking the convention; the misnomer is recorded consciously (`PROP-Dsp-001.Q4`).
 - If stale `spool` vars after in-place reload cause a real incident, revisit var cleanup. Today the behavior keeps exact parity with today's symbol resolution — a deleted `contribute` fn resolves the same way from a stale image — and the pickup ladder in `docs/spools/customisation.md` is the documented remedy in both worlds. No var-cleanup machinery ships for a parity property that already exists.
+
+## ADR-004.P9 Lifecycle migration amendment
+
+`def spool` remains transitional while production modules still use its `:reconcile` entry. New lifecycle forms are collected beside contribution declarations and replay through the same source/image declaration record. A module cannot carry both the legacy reconciler and collected lifecycle declarations. The final authoring-forms cutover removes `def spool` only after contribution and lifecycle migrations leave no entry points in the selected source universe.

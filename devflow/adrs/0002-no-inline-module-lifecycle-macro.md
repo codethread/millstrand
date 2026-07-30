@@ -79,3 +79,7 @@ Reopen if the ergonomic pain recurs across *many* modules rather than the single
 2. **A classloader-aware spool-handle injection** the runtime hands into the reconcile ctx, resolving `:spools`/`:after` roots through the same loader the module system uses — so inline access is correct for git-distributed spools, not just source-root ones.
 
 Both are core-mechanics work on `module!` itself. Until the pain justifies that, the parked design asset is a desugaring macro plus these two runtime changes, not a bolt-on macro over today's grammar.
+
+## ADR-002.P7 Lifecycle forms amendment
+
+The lifecycle authoring feasibility spike accepted `defseed`, `defresource`, and `defreconcile`. This does not reverse the rejection of inline closure-valued module options. The forms collect printable declarations whose callables are fully qualified symbols, and the coordinator resolves those symbols through the selected spool loader before publication. Ordinary Clojure composition remains in named source functions. Runtime evaluation and closure-valued declarations remain rejected.

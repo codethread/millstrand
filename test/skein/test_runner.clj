@@ -28,6 +28,7 @@
    'skein.api.clock.alpha-test
    'skein.api.format.alpha-test
    'skein.api.contribution-test
+   'skein.api.lifecycle.alpha-test
    ;; drives its own unpublished runtime per test — no JVM-global state.
    'skein.api.runtime.glossary.alpha-test
    ;; drives its own unpublished runtime per test — no JVM-global state.
@@ -59,6 +60,8 @@
    'skein.cron-test 'skein.cron-e2e-test
    ;; isolated pure coordinator prototype; injected callables own all effects.
    'skein.lifecycle-spike-test
+   ;; production lifecycle transition engine is pure over injected callables.
+   'skein.core.weaver.lifecycle-effects-test
    'skein.spools.executors.shell-test 'skein.spools.executors.code-test
    'skein.chime-test
    'skein.weaver-test])
