@@ -203,6 +203,14 @@ Function.
 Cancel every managed job for a validated `::lifecycle-context`.
 <p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L444-L452">Source</a></sub></p>
 
+## <a name="skein.spools.cron/scheduled-jobs">`scheduled-jobs`</a>
+
+
+
+
+Keep durable Cron wakes converged on the effective published job registry.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L454-L460">Source</a></sub></p>
+
 ## <a name="skein.spools.cron/unregister!">`unregister!`</a>
 ``` clojure
 (unregister! runtime id)
