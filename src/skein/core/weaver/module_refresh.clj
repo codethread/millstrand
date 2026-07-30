@@ -559,7 +559,9 @@
          :lifecycle (:lifecycle replay {})
          :contribution (normalize-contribution (:contribution replay))})
       (catch clojure.lang.ExceptionInfo throwable
-        (throw (ex-info image-contribution-remedy (ex-data throwable)))))))
+        (if (= :removed-def-spool (:reason (ex-data throwable)))
+          (throw throwable)
+          (throw (ex-info image-contribution-remedy (ex-data throwable))))))))
 
 (defn- evaluate-module
   [runtime with-loader key declaration previous-contribution previous-source dry-run?]

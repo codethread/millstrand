@@ -663,11 +663,9 @@ Entry values have no single schema. Each public authoring form documents and val
 
 A custom kind's entry values are whatever its owner's `:entry-spec` accepts, so read that spool's own contract; [`declare-kind!`](../api/registry.api.md#skein.api.registry.alpha/declare-kind!) is where a kind states its id, spec, and policy.
 
-The remaining `contribute` rules describe legacy modules during the bounded migration window. New and migrated modules use the forms above. For a legacy module, `contribute` returns the publication data. Do not register entries from inside it: the coordinator stages and publishes what it returns, and a direct registration made during `contribute` conflicts with that staged publication.
+A kind provider declares its open kind through a kind declaration form before dependent entries stage. `skein.spools.cron` is the shipped example. A module contributing to another spool's kind names that spool's module in `:after`.
 
-Bootstrapping a kind is the one shipped exception to that ownership rule, because a kind must exist before any module contributes to it. A spool that owns a kind establishes the required runtime state from `contribute` so the kind is present before a dependent module's contribution is staged against it. `skein.spools.cron` is the shipped example: it materializes cron's executor state slot and job-kind registry handle, then returns an empty contribution because those effects establish the domain rather than register entries into it. This exception is part of the current contract, not a general licence to put effects in `contribute`; RFC-Saf-001 proposes replacing it with an explicit pre-publication mechanism. A module contributing to another spool's kind names that spool's module in `:after`.
-
-### Moving a direct registration into a contribution
+### Moving a direct registration into an authoring form
 
 Say you already have a query you registered directly:
 
@@ -680,13 +678,13 @@ As a contribution it is one line:
 
 ```clojure
 ;; spool source namespace
-(defn contribute [_ctx]
-  {:queries {"mine" [:= [:attr :owner] "ct"]}})
+(skein/defquery mine
+  "Return strands owned by ct."
+  {}
+  [:= [:attr :owner] "ct"])
 ```
 
-Two things changed. The name is now a string: `register-query!` accepts a simple symbol or keyword and canonicalises it to the registry key `"mine"` on your behalf, while a contribution's keys go into the registry as written, so write the canonical string key yourself. And the ownership changed: the direct call writes one entry under the direct-registration owner, whereas the contribution replaces your module's complete `:queries` partition every time it publishes.
-
-The migrated form is `skein/defquery`; it publishes the same entry under the same module owner and removes the legacy `contribute` callback.
+Two things changed. The name is now a string: `register-query!` accepts a simple symbol or keyword and canonicalises it to the registry key `"mine"` on your behalf, while an authoring form writes the canonical string key. And the ownership changed: the direct call writes one entry under the direct-registration owner, whereas the form replaces your module's complete `:queries` partition every time it publishes.
 
 ### Publication is owner-complete
 

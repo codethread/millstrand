@@ -491,7 +491,9 @@
               outcome (get-in result [:modules :image])]
           (is (= :partial (:status result)))
           (is (s/valid? ::runtime/module-result result))
-          (is (= :removed-def-spool (get-in outcome [:error :data :reason])))))
+          (is (= :removed-def-spool (get-in outcome [:error :data :reason])))
+          (is (str/includes? (get-in outcome [:error :message])
+                             "removed public spool entry point"))))
       (testing "an image namespace with no spool var fails at evaluation"
         (let [result (runtime/module! rt :image-bare
                                       {:ns 'skein.api.runtime.alpha-test :load :image})
