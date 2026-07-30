@@ -181,10 +181,10 @@
 (runtime/module! runtime :config
                  {:file "config.clj"
                   :required? true})
-;; workflows.clj authors land/story definitions, the narrow land policy op, and
-;; the delegate-pipeline and macros-demo patterns. It reuses config.clj's public
-;; validation helper, so it orders after :config as well as the workflow and
-;; delegation spools.
+;; workflows.clj authors the land/story definitions and the delegate-pipeline and
+;; macros-demo patterns. The land policy op is its sibling below. It reuses
+;; config.clj's public validation helper, so it orders after :config as well as
+;; the workflow and delegation spools.
 (runtime/module! runtime :workflows
                  {:file "workflows.clj"
                   :spools ['skein.spools/workflow 'ct.spools/delegation]

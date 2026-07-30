@@ -1,10 +1,11 @@
 (ns workflows
-  "This repo's hand-authored coordination workflows and their command surface:
-  the coordinator `land` workflow (family \"land\") with its `land` op, the
-  third-party `spool-bump` workflow, the module-shaping `story` workflow, the
-  light `explore` and `fix` workflows for the two low-ceremony modes, and the
-  `delegate-pipeline` weave pattern for sequential delegated subagent gates,
-  and the small `macros-demo` pattern retained as an authoring-form example.
+  "This repo's hand-authored coordination workflow definitions: the coordinator
+  `land` workflow (family \"land\"), whose policy op is the sibling
+  workflows-land module, the third-party `spool-bump` workflow, the
+  module-shaping `story` workflow, the light `explore` and `fix` workflows for
+  the two low-ceremony modes, the `delegate-pipeline` weave pattern for
+  sequential delegated subagent gates, and the small `macros-demo` pattern
+  retained as an authoring-form example.
 
   Every workflow here is a static `defworkflow` Var: a definition a worker can
   read through `strand workflow show <name>` before starting a run, with its

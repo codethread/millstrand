@@ -25,6 +25,10 @@
 (s/def ::run-id ::non-blank)
 (s/def ::reason ::non-blank)
 (s/def ::pr-number pos-int?)
+;; zero is meaningful — it asks for the queue picture without blocking — but a
+;; negative budget has no reading, and the poll skeleton would reject it far
+;; from the flag the operator typed.
+(s/def ::timeout-secs (s/and int? (complement neg?)))
 
 (def ^:private merge-lock-kind
   "Singleton strand kind for the repo-wide land merge sentinel."
@@ -137,6 +141,22 @@
   []
   (weaver/list (current/runtime) [:= [:attr "kind"] merge-queue-kind] {}))
 
+(defn- require-sequenced!
+  "Return entries once every one carries a numeric `queue/sequence`.
+
+  `context` names the read in the failure. Skipping a malformed value would
+  hand out a number the corrupt history may already hold, so an unreadable
+  history stops the train rather than quietly extending it."
+  [context entries]
+  (let [malformed (remove #(number? (attr-value % :queue/sequence)) entries)]
+    (when (seq malformed)
+      (throw (ex-info "merge queue entry carries no usable sequence; train order is unknowable"
+                      {:context context
+                       :entries (mapv (juxt :id #(attr-value % :queue/sequence)) malformed)
+                       :expected "a number"
+                       :recovery "strand land break-lock --reason \"<reason>\""}))))
+  entries)
+
 (defn- queue-entries
   "Return the active merge-queue entries in FIFO order.
 
@@ -145,17 +165,21 @@
   instant, and a tie broken by strand id would silently reorder the train. The
   timestamp stays for readers; the sequence is the contract.
 
-  An entry without a sequence cannot be placed, so it fails here rather than
-  sorting to an arbitrary position and quietly breaking the order this promises."
+  An entry that cannot be placed — no sequence, or one shared with a sibling —
+  fails here rather than sorting to an arbitrary position and quietly breaking
+  the order this promises."
   []
-  (let [entries (weaver/list (current/runtime)
-                             [:and
-                              [:= :state "active"]
-                              [:= [:attr "kind"] merge-queue-kind]]
-                             {})]
-    (when-let [unsequenced (seq (remove #(number? (attr-value % :queue/sequence)) entries))]
-      (throw (ex-info "merge queue entry carries no sequence; train order is unknowable"
-                      {:entries (mapv :id unsequenced)
+  (let [entries (require-sequenced!
+                 :ordering
+                 (weaver/list (current/runtime)
+                              [:and
+                               [:= :state "active"]
+                               [:= [:attr "kind"] merge-queue-kind]]
+                              {}))
+        sequences (mapv #(attr-value % :queue/sequence) entries)]
+    (when-not (= (count sequences) (count (distinct sequences)))
+      (throw (ex-info "merge queue holds duplicate sequences; train order is ambiguous"
+                      {:entries (mapv (juxt :id #(attr-value % :queue/sequence)) entries)
                        :recovery "strand land break-lock --reason \"<reason>\""})))
     (vec (sort-by #(attr-value % :queue/sequence) entries))))
 
@@ -166,7 +190,11 @@
   reuse a number an active entry still holds. Callers must hold the acquisition
   lock, which is what makes the read-then-write safe."
   []
-  (inc (reduce max -1 (keep #(attr-value % :queue/sequence) (all-queue-entries)))))
+  (->> (all-queue-entries)
+       (require-sequenced! :allocation)
+       (map #(attr-value % :queue/sequence))
+       (reduce max -1)
+       inc))
 
 (defn- queue-entry-for
   "Return feature's entry among entries, or nil when it is not queued."
@@ -417,6 +445,19 @@
                         "missing" "its land run is gone — evict it"
                         (str "at " (:stage head) ", last updated " (:updated-at head))))}))
 
+(defn- require-await-timeout!
+  "Return the await budget in seconds, defaulting when the flag is absent."
+  [timeout-secs]
+  (if (nil? timeout-secs)
+    default-await-timeout-secs
+    (do (when-not (s/valid? ::timeout-secs timeout-secs)
+          (throw (ex-info "--timeout-secs must be a non-negative integer"
+                          {:argument :timeout-secs
+                           :value timeout-secs
+                           :spec ::timeout-secs
+                           :explain (s/explain-data ::timeout-secs timeout-secs)})))
+        timeout-secs)))
+
 (defn- await-merge-turn!
   "Enqueue feature and block until it heads the merge train or time runs out.
 
@@ -559,7 +600,8 @@
                         |stage and last update. Confirm a stalled head cannot
                         |resume before breaking the lock on its behalf.")]}
              :flags {:timeout-secs {:type :int
-                                    :doc (format "Seconds to block before returning the queue picture (default %d)."
+                                    :spec ::timeout-secs
+                                    :doc (format "Non-negative seconds to block before returning the queue picture (default %d)."
                                                  default-await-timeout-secs)}}
              :positionals [{:name :run-id :required? true :doc "Land run id."}]}
     "break-lock" {:doc (format-alpha/reflow
@@ -591,7 +633,7 @@
     (case verb
       "await"
       (await-merge-turn! (require-land-input! ::run-id :run-id run-id)
-                         (or timeout-secs default-await-timeout-secs))
+                         (require-await-timeout! timeout-secs))
 
       "complete"
       (let [feature (require-land-input! ::run-id :run-id run-id)

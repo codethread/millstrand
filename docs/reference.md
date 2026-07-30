@@ -136,7 +136,7 @@ The **merge train** is the queue in front of that lock. `strand land await <land
 
 The train does not remove the rebase. The strict up-to-date policy still applies, so a granted turn means rebasing onto `origin/main` and re-establishing green CI at the new HEAD before merging. What it removes is the repetition: without a queue, every coordinator races, one wins, and each loser rebases and re-runs ten checks before racing again. A granted return carries `landed-since` — the PR number and subject of everything that merged while this run waited — so the single rebase is a known quantity and conflicts can be checked for before the turn arrives.
 
-An ungranted return lists the runs ahead with the evidence needed to judge them: queue position, current stage, whether they hold the lock, and when their land run last changed. A head that has stopped moving blocks everyone behind it. Confirm its owner cannot resume, then break it. A run whose land root has gone reports `run-state: missing` rather than a stage, which is the clearest signal to evict. 
+An ungranted return lists the runs ahead with the evidence needed to judge them: queue position, current stage, whether they hold the lock, and when their land run last changed. A head that has stopped moving blocks everyone behind it. Confirm its owner cannot resume, then break it. A run whose land root has gone reports `run-state: missing` rather than a stage, which is the clearest signal to evict.
 
 ## Weaver
 

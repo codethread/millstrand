@@ -1617,6 +1617,18 @@
       (is (= ["land-in-time"] (active-merge-queue)))
       rt)))
 
+(deftest land-await-refuses-a-negative-timeout-at-the-flag
+  (with-config-runtime
+    (fn [_rt]
+      (signed-off-land! "land-bad-budget" 591)
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"--timeout-secs must be a non-negative integer"
+                            (op! "land" ["await" "land-bad-budget" "--timeout-secs" "-1"])))
+      (is (empty? (active-merge-queue))
+          "a rejected budget must not leave the run queued")
+      ;; zero is the meaningful boundary: ask for the picture without blocking
+      (is (true? (:granted (op! "land" ["await" "land-bad-budget" "--timeout-secs" "0"])))))))
+
 (deftest land-train-order-survives-a-clock-that-cannot-separate-arrivals
   (with-config-runtime
     (fn [rt]
