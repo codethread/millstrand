@@ -470,6 +470,31 @@
         (is (= [] (engine-handler-entries rt)))
         (is (= [] (barrier-hook-entries rt)))
         (is (= [] (chime/rules))))
+      (testing "compensation preserves the primary failure and reports rollback failures"
+        (let [failure
+              (with-redefs [events/register-handler!
+                            (fn [& _]
+                              (throw (ex-info "handler registration failed"
+                                              {:stage :open})))
+                            hooks/unregister-hook!
+                            (fn [& _]
+                              (throw (ex-info "barrier rollback failed"
+                                              {:stage :compensation})))]
+                (try
+                  (chime/open-engine! {:runtime rt :effect/id :engine})
+                  nil
+                  (catch clojure.lang.ExceptionInfo t
+                    t)))]
+          (is (= "handler registration failed" (ex-message (ex-cause failure))))
+          (is (= [{:action :barrier
+                   :error {:class "clojure.lang.ExceptionInfo"
+                           :message "barrier rollback failed"
+                           :data {:stage :compensation}}}]
+                 (:compensation/errors (ex-data failure))))
+          (is (= [] (engine-handler-entries rt)))
+          (is (= [] (chime/rules))))
+        ;; The intentionally failed compensation left only the barrier behind.
+        (hooks/unregister-hook! rt :chime/registration-barrier))
       (chime/open-engine! {:runtime rt :effect/id :engine})
       (testing "a failed close restores the fully active boundary"
         (with-redefs [hooks/unregister-hook!

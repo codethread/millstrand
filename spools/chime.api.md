@@ -28,10 +28,13 @@ Function.
 
 Close Chime's atomic engine boundary for a validated lifecycle context.
 
+  `context` conforms to `::lifecycle-context`; its `:resource` conforms to
+  `::engine-handle`, and the return value conforms to `::lifecycle-result`.
+
   A failed close restores the active cluster before surfacing the failure. The
   retained resource handle can therefore be retried without exposing a
   half-closed handler, barrier, or rule view.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L489-L510">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L515-L550">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/defrule">`defrule`</a>
 ``` clojure
@@ -51,7 +54,7 @@ Define a notification rule and collect its Chime declaration.
 
 
 Own Chime's handler, mutation barrier, and visible rule view atomically.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L512-L515">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L552-L555">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/mutation-registration-barrier!">`mutation-registration-barrier!`</a>
 ``` clojure
@@ -102,10 +105,13 @@ Function.
 
 Open Chime's atomic engine boundary for a validated lifecycle context.
 
+  `context` conforms to `::lifecycle-context`; the returned handle conforms to
+  `::engine-handle`.
+
   The handler, mutation barrier, and visible rule view change under their
   shared monitor. A failed open compensates back to the inactive boundary so a
   lifecycle retry never inherits a half-open engine.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L469-L487">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L489-L513">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/recent-failures">`recent-failures`</a>
 ``` clojure

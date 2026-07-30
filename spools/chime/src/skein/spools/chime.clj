@@ -191,33 +191,33 @@
     (fail! "Notification :body must be a string when present" {:body (:body notification)}))
   notification)
 
-(defn- process-thread! [notifier notification result]
+(defn- notifier-thread [notifier notification result]
   (let [argv (conj (:argv notifier) (:title notification))
         runtime (rt)]
-    (doto (Thread.
-           (fn []
-             (binding [*runtime* runtime]
-               (try
-                 (let [process (.start (ProcessBuilder. ^java.util.List argv))]
-                   (with-open [writer (OutputStreamWriter. (.getOutputStream process) "UTF-8")]
-                     (.write writer (str (or (:body notification) ""))))
-                   (let [exit (.waitFor process)]
-                     (swap! result assoc :exit-code exit)
-                     (when-not (zero? exit)
-                       (record-failure! {:kind :process
-                                         :argv argv
-                                         :exit-code exit
-                                         :title (:title notification)}))))
-                 (catch Throwable t
-                   (swap! result assoc :error (ex-message t))
-                   (record-failure! {:kind :process
-                                     :argv argv
-                                     :title (:title notification)
-                                     :message (ex-message t)
-                                     :data (ex-data t)})))))
-           (str "chime-notify-" (System/nanoTime)))
-      (.setDaemon true)
-      (.start))))
+    (doto
+     (Thread.
+      (fn []
+        (binding [*runtime* runtime]
+          (try
+            (let [process (.start (ProcessBuilder. ^java.util.List argv))]
+              (with-open [writer (OutputStreamWriter. (.getOutputStream process) "UTF-8")]
+                (.write writer (str (or (:body notification) ""))))
+              (let [exit (.waitFor process)]
+                (swap! result assoc :exit-code exit)
+                (when-not (zero? exit)
+                  (record-failure! {:kind :process
+                                    :argv argv
+                                    :exit-code exit
+                                    :title (:title notification)}))))
+            (catch Throwable t
+              (swap! result assoc :error (ex-message t))
+              (record-failure! {:kind :process
+                                :argv argv
+                                :title (:title notification)
+                                :message (ex-message t)
+                                :data (ex-data t)})))))
+      (str "chime-notify-" (System/nanoTime)))
+      (.setDaemon true))))
 
 (defn notify!
   "Send one notification through the current binding.
@@ -230,7 +230,7 @@
       (let [result (atom {:status :started
                           :argv (conj (:argv notifier) (:title notification))
                           :title (:title notification)})]
-        (process-thread! notifier notification result)
+        (.start ^Thread (notifier-thread notifier notification result))
         @result)
       (let [failure (record-failure! {:kind :notifier-missing
                                       :title (:title notification)
@@ -466,8 +466,31 @@
   (hooks/unregister-hook! runtime :chime/registration-barrier)
   (reconcile-rule-view! visible {}))
 
+(defn- throwable-data [throwable]
+  (cond-> {:class (.getName (class throwable))
+           :message (ex-message throwable)}
+    (ex-data throwable) (assoc :data (ex-data throwable))))
+
+(defn- compensate!
+  [message data cause actions]
+  (let [errors (into []
+                     (keep (fn [[action compensate]]
+                             (try
+                               (compensate)
+                               nil
+                               (catch Throwable t
+                                 {:action action :error (throwable-data t)}))))
+                     actions)]
+    (throw (ex-info message
+                    (cond-> data
+                      (seq errors) (assoc :compensation/errors errors))
+                    cause))))
+
 (defn open-engine!
   "Open Chime's atomic engine boundary for a validated lifecycle context.
+
+  `context` conforms to `::lifecycle-context`; the returned handle conforms to
+  `::engine-handle`.
 
   The handler, mutation barrier, and visible rule view change under their
   shared monitor. A failed open compensates back to the inactive boundary so a
@@ -481,13 +504,19 @@
           (register-engine! runtime visible)
           :chime/engine
           (catch Throwable t
-            (unregister-engine! runtime visible)
-            (throw (ex-info "Chime engine open failed and was reverted"
-                            {:effect/id (:effect/id context)}
-                            t))))))))
+            (compensate!
+             "Chime engine open failed and was reverted"
+             {:effect/id (:effect/id context)}
+             t
+             [[:handler #(events/unregister-handler! runtime :chime/engine)]
+              [:barrier #(hooks/unregister-hook! runtime :chime/registration-barrier)]
+              [:rule-view #(reconcile-rule-view! visible {})]])))))))
 
 (defn close-engine!
   "Close Chime's atomic engine boundary for a validated lifecycle context.
+
+  `context` conforms to `::lifecycle-context`; its `:resource` conforms to
+  `::engine-handle`, and the return value conforms to `::lifecycle-result`.
 
   A failed close restores the active cluster before surfacing the failure. The
   retained resource handle can therefore be retried without exposing a
@@ -504,10 +533,21 @@
                           {:reconciled :removed}
                           "Invalid Chime lifecycle result")
           (catch Throwable t
-            (register-engine! runtime visible)
-            (throw (ex-info "Chime engine close failed and was restored"
-                            {:effect/id (:effect/id context)}
-                            t))))))))
+            (compensate!
+             "Chime engine close failed and was restored"
+             {:effect/id (:effect/id context)}
+             t
+             [[:barrier #(hooks/register-hook!
+                          runtime :chime/registration-barrier mutation-hook-types
+                          'skein.spools.chime/mutation-registration-barrier!
+                          {:order Long/MAX_VALUE :spool "chime"})]
+              [:handler #(events/register-handler!
+                          runtime :chime/engine event-types
+                          'skein.spools.chime/on-event
+                          {:spool "chime"})]
+              [:rule-view #(reconcile-rule-view!
+                            visible
+                            (registry/effective (rule-kinds) rule-kind))]])))))))
 
 (lifecycle/defresource engine
   "Own Chime's handler, mutation barrier, and visible rule view atomically."
