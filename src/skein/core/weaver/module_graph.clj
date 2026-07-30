@@ -32,6 +32,10 @@
   "Dynamically bound authoring-form contribution collector, or nil."
   nil)
 
+(def ^:dynamic *lifecycle-collector*
+  "Dynamically bound lifecycle declaration collector, or nil."
+  nil)
+
 (def ^:dynamic ^:private *kind-collector*
   "Dynamically bound open-kind declaration collector, or nil."
   nil)
@@ -339,6 +343,25 @@
                 (update-in [kind-id :overrides] (fnil disj #{}) entry-key)))))
    value))
 
+(defn collect-lifecycle!
+  "Record one lifecycle declaration in the active module source evaluation.
+
+  Duplicate ids fail loudly because silently replacing an effect would make its
+  resource boundary depend on source evaluation order. Outside collection the
+  form is passive, matching contribution authoring forms during code reload."
+  [effect-id declaration]
+  (when *lifecycle-collector*
+    (require-collection-source!)
+    (swap! *lifecycle-collector*
+           (fn [declarations]
+             (when (contains? declarations effect-id)
+               (fail! "Lifecycle effect id is declared more than once"
+                      {:effect/id effect-id
+                       :effect/phase :validate
+                       :module/key (:module/key *contribution-context*)}))
+             (assoc declarations effect-id declaration))))
+  declaration)
+
 (defn collect-kind!
   "Record one open-kind bootstrap declaration in the active module evaluation.
 
@@ -369,8 +392,10 @@
   The returned contribution is owner-complete, including when it is empty."
   [context f]
   (let [collector (atom {})
+        lifecycle-collector (atom {})
         kind-collector (atom {})
         return (binding [*contribution-collector* collector
+                         *lifecycle-collector* lifecycle-collector
                          *kind-collector* kind-collector
                          *contribution-context* context]
                  (f))
@@ -378,6 +403,7 @@
                                   #(update % :overrides (fnil set #{})))]
     {:return return
      :contribution contribution
+     :lifecycle @lifecycle-collector
      :kind-declarations (->> @kind-collector vals
                              (sort-by (juxt :spool-state/key
                                             (comp :id :declaration)))

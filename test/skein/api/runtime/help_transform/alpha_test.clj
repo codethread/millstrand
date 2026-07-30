@@ -64,6 +64,21 @@
           (is (= revised (transform/replace-default-help-transform! rt revised)))
           (is (= :owner-b (:owner (transform/default-help-transform rt)))))))))
 
+(deftest unregister-is-owner-checked
+  (with-runtime
+    (fn [rt _]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo #"cannot unregister"
+           (transform/unregister-default-help-transform! rt :owner-a)))
+      (let [decl (registration :owner-a)]
+        (transform/register-default-help-transform! rt decl)
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo #"another owner"
+             (transform/unregister-default-help-transform! rt :owner-b)))
+        (is (= decl
+               (transform/unregister-default-help-transform! rt :owner-a)))
+        (is (nil? (transform/default-help-transform rt)))))))
+
 (deftest refresh-preserves-the-direct-slot
   (with-runtime
     (fn [rt _]

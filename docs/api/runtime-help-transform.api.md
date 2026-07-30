@@ -38,7 +38,7 @@ Return `runtime`'s registered default-help-transform registration map, or nil.
 
   The read/introspection projection: reports whether a transform is registered
   (`some?`) and its provenance (`:owner`), reading the runtime store explicitly.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/help_transform/alpha.clj#L71-L77">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/help_transform/alpha.clj#L89-L95">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.help-transform.alpha/default-help-transform-registered?">`default-help-transform-registered?`</a>
 ``` clojure
@@ -47,7 +47,7 @@ Return `runtime`'s registered default-help-transform registration map, or nil.
 Function.
 
 True when `runtime`'s default-help-transform slot holds a transform.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/help_transform/alpha.clj#L83-L86">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/help_transform/alpha.clj#L101-L104">Source</a></sub></p>
 
 ## <a name="skein.api.runtime.help-transform.alpha/register-default-help-transform!">`register-default-help-transform!`</a>
 ``` clojure
@@ -78,3 +78,15 @@ Replace `runtime`'s registered default help transform, failing loudly when
   override for an occupied slot; unlike the register path it requires a transform
   to already be registered.
 <p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/help_transform/alpha.clj#L55-L65">Source</a></sub></p>
+
+## <a name="skein.api.runtime.help-transform.alpha/unregister-default-help-transform!">`unregister-default-help-transform!`</a>
+``` clojure
+(unregister-default-help-transform! runtime owner)
+```
+Function.
+
+Remove `owner`'s registered default help transform and return it.
+
+  The slot must be occupied by the same owner. An empty slot or another owner
+  fails loudly, so lifecycle cleanup cannot remove a replacement registration.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/help_transform/alpha.clj#L71-L83">Source</a></sub></p>

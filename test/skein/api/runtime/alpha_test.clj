@@ -352,6 +352,43 @@
                     body "\n"))
     file))
 
+(deftest lifecycle-forms-run-through-the-production-coordinator
+  (with-started-runtime
+    nil
+    {}
+    (fn [rt world]
+      (let [config-dir (io/file (:config-dir world))
+            ns-sym 'skein.runtime.alpha-test.lifecycle-module
+            source
+            (str "(defonce calls (atom []))\n"
+                 "(defn open! [_] (swap! calls conj :open) :handle)\n"
+                 "(defn close! [{:keys [resource]}] "
+                 "(swap! calls conj [:close resource]) {:closed true})\n"
+                 "(require '[skein.api.lifecycle.alpha :as lifecycle])\n"
+                 "(lifecycle/defresource worker \"Worker.\" "
+                 "{:open 'skein.runtime.alpha-test.lifecycle-module/open! "
+                 ":close 'skein.runtime.alpha-test.lifecycle-module/close!})")]
+        (.mkdirs config-dir)
+        (write-module-source! config-dir "modules/lifecycle.clj" ns-sym source)
+        (let [applied
+              (runtime/module! rt :lifecycle {:file "modules/lifecycle.clj"})
+              calls-var (ns-resolve ns-sym 'calls)]
+          (is (= :applied (:status applied)))
+          (is (= [:open] @(var-get calls-var)))
+          (is (= :applied
+                 (get-in applied
+                         [:modules :lifecycle :lifecycle/status]))))
+        (let [planned (runtime/plan rt {:only [:lifecycle]})]
+          (is (= [:worker]
+                 (get-in planned
+                         [:modules :lifecycle :lifecycle/plan :preserve])))
+          (is (= [:open] @(var-get (ns-resolve ns-sym 'calls)))
+              "plan runs no lifecycle effect"))
+        (write-module-source! config-dir "modules/lifecycle.clj" ns-sym "")
+        (runtime/refresh! rt {:only [:lifecycle]})
+        (is (= [:open [:close :handle]]
+               @(var-get (ns-resolve ns-sym 'calls))))))))
+
 (deftest new-surface-declares-refreshes-plans-and-reports-one-module
   (with-started-runtime
     nil

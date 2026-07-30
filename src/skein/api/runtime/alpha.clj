@@ -393,6 +393,26 @@
                                  :opts ::collect-entry-opts))
   :ret any?)
 
+(s/def ::lifecycle-effect-id keyword?)
+(s/def ::lifecycle-declaration map?)
+
+(defn collect-lifecycle!
+  "Collect one validated lifecycle declaration from the current module source.
+
+  Duplicate ids fail at collection. Outside module source collection the call
+  is passive, allowing code-only reloads to define declaration Vars."
+  [effect-id declaration]
+  (require-valid! ::lifecycle-effect-id effect-id
+                  "collect-lifecycle! effect-id must be a keyword")
+  (require-valid! ::lifecycle-declaration declaration
+                  "collect-lifecycle! declaration must be a map")
+  (weaver-runtime/collect-lifecycle! effect-id declaration))
+
+(s/fdef collect-lifecycle!
+  :args (s/cat :effect-id ::lifecycle-effect-id
+               :declaration ::lifecycle-declaration)
+  :ret ::lifecycle-declaration)
+
 (s/def ::kind-state-key keyword?)
 (s/def ::kind-declaration ::registry/kind-declaration-input)
 

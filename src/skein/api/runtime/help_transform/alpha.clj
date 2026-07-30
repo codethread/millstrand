@@ -24,7 +24,7 @@
             [skein.api.spool.alpha :refer [reject-unknown-keys! require-valid!]]
             [skein.core.weaver.access :as access]))
 
-(declare set-transform replace-transform validate-registration!)
+(declare clear-transform set-transform replace-transform validate-registration!)
 
 (def ^:private registration-keys
   "The closed key set of a default-help-transform registration map."
@@ -66,6 +66,24 @@
 
 (s/fdef replace-default-help-transform!
   :args (s/cat :runtime map? :registration ::registration)
+  :ret ::registration)
+
+(defn unregister-default-help-transform!
+  "Remove `owner`'s registered default help transform and return it.
+
+  The slot must be occupied by the same owner. An empty slot or another owner
+  fails loudly, so lifecycle cleanup cannot remove a replacement registration."
+  [runtime owner]
+  (require-valid! ::owner owner "Help transform owner is invalid")
+  (let [removed (volatile! nil)]
+    (swap! (access/help-transform-slot runtime)
+           (fn [slot]
+             (vreset! removed slot)
+             (clear-transform slot owner)))
+    @removed))
+
+(s/fdef unregister-default-help-transform!
+  :args (s/cat :runtime map? :owner ::owner)
   :ret ::registration)
 
 (defn default-help-transform
@@ -124,3 +142,15 @@
     (throw (ex-info "No default help transform registered; cannot replace"
                     {:attempted-owner owner})))
   registration)
+
+(defn- clear-transform
+  "Slot update fn: remove the registration only when `owner` owns it."
+  [slot owner]
+  (when-not slot
+    (throw (ex-info "No default help transform registered; cannot unregister"
+                    {:attempted-owner owner})))
+  (when-not (= owner (:owner slot))
+    (throw (ex-info "Default help transform belongs to another owner"
+                    {:existing-owner (:owner slot)
+                     :attempted-owner owner})))
+  nil)

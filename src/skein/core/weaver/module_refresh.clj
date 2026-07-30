@@ -12,6 +12,7 @@
             [skein.api.registry.alpha :as registry]
             [skein.core.format :as format]
             [skein.core.weaver.dispatch :as dispatch]
+            [skein.core.weaver.lifecycle-effects :as lifecycle-effects]
             [skein.core.weaver.module-graph :as module-graph]
             [skein.core.weaver.module-publication :as publication]
             [skein.core.weaver.module-refresh.entry-points :as entry-points]
@@ -26,7 +27,7 @@
 (def ^:private declaration-record-key
   ::declaration-record)
 
-(def ^:private declaration-record-version 1)
+(def ^:private declaration-record-version 2)
 
 (def ^:private registry-state-key
   :skein.api.registry.alpha/state)
@@ -46,6 +47,7 @@
    :contributions (sorted-map)
    :contribution-sources (sorted-map)
    :resolved-entry-points (sorted-map)
+   :lifecycle (sorted-map)
    :resources (sorted-map)
    :outcomes (sorted-map)
    :root-outcomes (sorted-map)
@@ -62,6 +64,11 @@
    (module-graph/collect-entry! kind-id entry-key value))
   ([kind-id entry-key value opts]
    (module-graph/collect-entry! kind-id entry-key value opts)))
+
+(defn collect-lifecycle!
+  "Collect one lifecycle declaration for the module source being evaluated."
+  [effect-id declaration]
+  (module-graph/collect-lifecycle! effect-id declaration))
 
 (defn- staging-runtime
   "Return `runtime` with isolated copies of every domain registry handle."
@@ -93,7 +100,7 @@
 
 (defn- retain-declarations!
   "Replace `ns-sym`'s complete replay record."
-  [module-key ns-sym contribution kind-declarations]
+  [module-key ns-sym contribution kind-declarations lifecycle-declarations]
   (let [namespace (find-ns ns-sym)]
     (when-not namespace
       (fail! "Cannot retain declarations for an unloaded module namespace"
@@ -111,9 +118,11 @@
                   :module-key module-key
                   :namespace ns-sym
                   :contribution contribution
-                  :kind-declarations kind-declarations})
+                  :kind-declarations kind-declarations
+                  :lifecycle lifecycle-declarations})
     {:contribution contribution
-     :kind-declarations kind-declarations}))
+     :kind-declarations kind-declarations
+     :lifecycle lifecycle-declarations}))
 
 (defn- restore-declaration-records!
   "Restore declaration metadata changed during a refused refresh."
@@ -162,7 +171,7 @@
               :module/key module-key
               :ns ns-sym
               :record/module-key (:module-key record)}))
-    (select-keys record [:contribution :kind-declarations])))
+    (select-keys record [:contribution :kind-declarations :lifecycle])))
 
 (defn- informative-throwable
   "Return the deepest structured cause beneath compiler and loader wrappers."
@@ -570,6 +579,10 @@
                         :module/declaration declaration}))
                    :kind-declarations []}
                   (throw throwable))))]
+        (when (and (:reconcile resolved) (seq (:lifecycle replay)))
+          (fail! "Module cannot mix legacy :reconcile with lifecycle forms"
+                 {:module/key key :module/namespace ns-sym
+                  :reason :mixed-lifecycle-grammar}))
         {:status :ready
          :module/key key
          :source/status :image
@@ -579,6 +592,7 @@
                                :image-replay-or-legacy
                                :image-replay)
          :kind-declarations (:kind-declarations replay [])
+         :lifecycle (:lifecycle replay {})
          :contribution (normalize-contribution (:contribution replay))})
       (catch clojure.lang.ExceptionInfo throwable
         (throw (ex-info image-contribution-remedy (ex-data throwable)))))))
@@ -589,7 +603,7 @@
     (if (= :image (:load declaration))
       (evaluate-image-module runtime with-loader key declaration)
       (let [context (collection-context runtime key declaration)
-            {:keys [return kind-declarations] collected :contribution}
+            {:keys [return kind-declarations lifecycle] collected :contribution}
             (module-graph/with-contribution-collection
               context
               #(load-source! runtime with-loader key declaration previous-source))
@@ -610,6 +624,16 @@
                     kind-declarations
                     (throw throwable))))
               kind-declarations)
+            lifecycle
+            (if (= :unchanged source-status)
+              (try
+                (:lifecycle (replay-declarations key module-ns))
+                (catch clojure.lang.ExceptionInfo throwable
+                  (if (= :missing-declaration-record
+                         (:reason (ex-data throwable)))
+                    lifecycle
+                    (throw throwable))))
+              lifecycle)
             contribution (cond
                            contribute-fn
                            (do
@@ -634,11 +658,16 @@
 
                            :else collected)
             normalized (normalize-contribution contribution)
+            _ (when (and (:reconcile resolved) (seq lifecycle))
+                (fail! "Module cannot mix legacy :reconcile with lifecycle forms"
+                       {:module/key key :module/namespace module-ns
+                        :reason :mixed-lifecycle-grammar}))
+            _ (lifecycle-effects/validate! lifecycle)
             _ (when (and (not contribute-fn)
                          (not= :unchanged source-status)
                          (not dry-run?))
                 (retain-declarations!
-                 key module-ns normalized kind-declarations))]
+                 key module-ns normalized kind-declarations lifecycle))]
         {:status :ready
          :module/key key
          :source/status source-status
@@ -649,6 +678,7 @@
          :module/reconcile-fn (:reconcile resolved-fns)
          :declaration/source (if contribute-fn :legacy-callback :source-collection)
          :kind-declarations kind-declarations
+         :lifecycle lifecycle
          :contribution normalized}))
     (catch Throwable throwable
       {:status :failed
@@ -893,6 +923,91 @@
     :resources (:resources state)}
    order))
 
+(defn- lifecycle-symbols
+  [declarations]
+  (into #{}
+        (comp (mapcat vals)
+              (filter qualified-symbol?))
+        (vals declarations)))
+
+(defn- resolve-lifecycle-callables!
+  "Resolve every staged lifecycle callable before contribution publication."
+  [with-loader raw]
+  (into {}
+        (keep
+         (fn [[module-key outcome]]
+           (when (and (= :ready (:status outcome))
+                      (seq (:lifecycle outcome)))
+             [module-key
+              (with-loader
+                #(into {}
+                       (map (fn [callable]
+                              (let [resolved-var (requiring-resolve callable)
+                                    resolved (some-> resolved-var deref)]
+                                (when-not (ifn? resolved)
+                                  (fail! "Lifecycle callable does not resolve to a function"
+                                         {:module/key module-key
+                                          :effect/callable callable
+                                          :effect/phase :resolve}))
+                                [callable resolved])))
+                       (lifecycle-symbols (:lifecycle outcome))))])))
+        raw))
+
+(defn- reconcile-lifecycle
+  [runtime state graph raw result changed-kinds order resolvers]
+  (reduce
+   (fn [{:keys [outcomes lifecycle-state]} module-key]
+     (let [outcome (get outcomes module-key)
+           previous (get lifecycle-state module-key)
+           declarations (if (= :removed (:status outcome))
+                          {}
+                          (get-in raw [module-key :lifecycle]))
+           executable? (and (#{:applied :removed :unchanged} (:status outcome))
+                            (or (seq declarations)
+                                (seq (:effects previous))))]
+       (if-not executable?
+         {:outcomes outcomes :lifecycle-state lifecycle-state}
+         (let [execution
+               (lifecycle-effects/refresh
+                {:runtime runtime
+                 :module-key module-key
+                 :resolver (get resolvers module-key {})
+                 :state (or previous {})
+                 :declarations (or declarations {})
+                 :changed-kinds changed-kinds
+                 :context
+                 {:module/declaration (get graph module-key)
+                  :module/previous (previous-module state module-key)
+                  :module/previous-contribution
+                  (get-in state [:contributions module-key])
+                  :module/contribution outcome}
+                 :published? true})
+               projected-outcomes (:outcomes execution)
+               module-status (:status execution)
+               lifecycle-changed?
+               (some seq
+                     (vals (select-keys (:plan execution)
+                                        [:apply :retry :replace :reconcile :remove])))
+               next-state (:state execution)]
+           {:outcomes
+            (assoc outcomes module-key
+                   (cond-> (assoc outcome
+                                  :lifecycle/status module-status
+                                  :lifecycle/outcomes projected-outcomes
+                                  :lifecycle/plan (:plan execution))
+                     (= :degraded module-status) (assoc :status :degraded)
+                     (and lifecycle-changed?
+                          (= :applied module-status)
+                          (= :unchanged (:status outcome)))
+                     (assoc :status :applied)))
+            :lifecycle-state
+            (if (seq (:effects next-state))
+              (assoc lifecycle-state module-key next-state)
+              (dissoc lifecycle-state module-key))}))))
+   {:outcomes (:modules result)
+    :lifecycle-state (:lifecycle state)}
+   order))
+
 (defn- top-status [graph outcomes roots changed-kinds]
   (let [module-values (vals outcomes)
         failures (filter #(#{:failed :degraded :refused} (:status %))
@@ -935,13 +1050,25 @@
   loaded code, and returns a refresh-result-shaped map flagged `:dry-run?` with
   the honest caveat. No registry publication, resource reconcile, or coordinator
   state write occurs; source loads during collection already happened."
-  [runtime sync-result staged provisional backends graph]
+  [runtime state sync-result staged provisional backends graph raw]
   (let [changed-kinds (publication/changed-kinds backends (:candidates staged))
         loaded-status (safe-loaded-status runtime)
-        outcomes (:modules provisional)
+        outcomes
+        (reduce-kv
+         (fn [planned module-key outcome]
+           (let [declarations (:lifecycle outcome)
+                 retained (get-in state [:lifecycle module-key])]
+             (if (or (seq declarations) (seq (:effects retained)))
+               (assoc-in planned [module-key :lifecycle/plan]
+                         (lifecycle-effects/plan
+                          (or retained {}) (or declarations {}) changed-kinds))
+               planned)))
+         (:modules provisional)
+         raw)
         status (top-status graph outcomes (:roots sync-result) changed-kinds)]
     (assoc provisional
            :status status
+           :modules outcomes
            :dry-run? true
            :caveat plan-caveat
            :residuals (:residuals loaded-status)
@@ -951,7 +1078,7 @@
 
 (defn- record-result!
   [runtime collection contributions contribution-sources resolved-entry-points
-   resources outcomes roots result]
+   resources lifecycle-state outcomes roots result]
   (swap! (:module-state runtime)
          (fn [state]
            (-> state
@@ -964,6 +1091,7 @@
                       :contribution-sources (into (sorted-map) contribution-sources)
                       :resolved-entry-points (into (sorted-map) resolved-entry-points)
                       :resources (into (sorted-map) resources)
+                      :lifecycle (into (sorted-map) lifecycle-state)
                       :outcomes (into (sorted-map) outcomes)
                       :root-outcomes (into (sorted-map) roots)
                       :last-refresh result))))
@@ -1091,6 +1219,8 @@
                                                (:roots sync-result)
                                                previous-contributions previous-sources
                                                (:dry-run? opts))
+                        lifecycle-resolvers
+                        (resolve-lifecycle-callables! with-loader raw)
                         reconcile-fns
                         (into {}
                               (keep (fn [[key outcome]]
@@ -1134,7 +1264,8 @@
                 ;; validated candidates but publishes nothing, reconciles nothing,
                 ;; and records no coordinator state (DELTA-OlrRepl-001.CC14).
                     (if (:dry-run? opts)
-                      (plan-result runtime sync-result staged provisional backends graph)
+                      (plan-result runtime state sync-result staged provisional
+                                   backends graph raw)
                       (let [live-backends (publication/backends runtime)
                             live-candidates (publication/candidates live-backends)
                             live-spool-state @(:spool-state runtime)
@@ -1147,6 +1278,11 @@
                             reconciled (reconcile-modules
                                         runtime with-loader state graph resolved-entry-points
                                         reconcile-fns provisional reconcile-order)
+                            lifecycle-reconciled
+                            (reconcile-lifecycle
+                             runtime state graph raw
+                             (assoc provisional :modules (:outcomes reconciled))
+                             changed-kinds reconcile-order lifecycle-resolvers)
                             _ (try
                                 (publication/validate-op-glossary-refs!
                                  runtime backends (:candidates staged))
@@ -1158,7 +1294,7 @@
                             contributions (apply dissoc (:contributions staged) removed)
                             contribution-sources (apply dissoc (:source-stamps staged) removed)
                             loaded-status (safe-loaded-status runtime)
-                            outcomes (:outcomes reconciled)
+                            outcomes (:outcomes lifecycle-reconciled)
                             state-outcomes (-> (:outcomes state)
                                                (merge outcomes)
                                                (#(apply dissoc % removed)))
@@ -1171,7 +1307,8 @@
                                                                   (:hard-conflicts loaded-status)))
                                           :publication/kinds (vec (sort-by pr-str changed-kinds)))]
                         (record-result! runtime collection contributions contribution-sources
-                                        exposed-resolved (:resources reconciled) state-outcomes
+                                        exposed-resolved (:resources reconciled)
+                                        (:lifecycle-state lifecycle-reconciled) state-outcomes
                                         (:roots sync-result) result))))
                   (catch Throwable throwable
                     (restore-declaration-records! @record-snapshots)
@@ -1207,8 +1344,44 @@
      :resolved/entry-points resolved-entry-points
      :module/outcomes (:outcomes state)
      :resource/outcomes (:resources state)
+     :lifecycle/outcomes
+     (into (sorted-map)
+           (map (fn [[module-key lifecycle-state]]
+                  [module-key
+                   (into (sorted-map)
+                         (map (fn [[effect-id effect]]
+                                [effect-id
+                                 (-> (select-keys effect
+                                                  [:status :phase :result :error])
+                                     (assoc :kind
+                                            (get-in effect
+                                                    [:declaration :kind])))])
+                              (:effects lifecycle-state)))]))
+           (:lifecycle state))
      :root/outcomes (:root-outcomes state)
      :pending-generation @(:pending-spool-generation runtime)
      :scheduler/wakes (scheduler/wake-status runtime)
      :loaded loaded
      :last-refresh (:last-refresh state)}))
+
+(defn close-runtime-lifecycle!
+  "Close retained runtime-scoped lifecycle resources during runtime stop."
+  [runtime]
+  (let [state @(:module-state runtime)
+        results
+        (into (sorted-map)
+              (map
+               (fn [[module-key retained]]
+                 [module-key
+                  (lifecycle-effects/refresh
+                   {:runtime runtime
+                    :module-key module-key
+                    :resolver {}
+                    :state retained
+                    :declarations {}
+                    :changed-kinds #{}
+                    :published? true
+                    :runtime-stop? true})]))
+              (:lifecycle state))]
+    (swap! (:module-state runtime) assoc :lifecycle (sorted-map))
+    results))

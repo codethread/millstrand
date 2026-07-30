@@ -102,3 +102,7 @@ The consequences below record the original delivery. ADR-004.P3 supersedes decis
 - If `{:load :image}`'s explicit-`:contribute` requirement becomes the common friction — many spools authoring contribution fns solely to satisfy image mode — revisit whether collection can honestly serve image-owned namespaces. Do not revisit by relaxing the loud failures. *Resolved 2026-07-24 by [ADR-004](0004-def-spool-convention.md).P3:* image evaluation resolves `<ns>/spool` from the loaded image, retains a Phase A explicit `:contribute` fallback, and reports a loud evaluation-time `:failed` outcome when neither supplies contribution.
 - If a future domain genuinely needs kernel-level teardown hooks, that is a `registry.alpha` kind-policy discussion (per CC13's boundary), not a reason to add callbacks to the publication kernel.
 - If byte-exact classpath load provenance ever exists (a JVM or tooling change), the JVM-wide source-stamp fast path rejected in P4 becomes worth re-evaluating.
+
+## ADR-003.P10 Lifecycle declaration amendment
+
+Collected lifecycle declarations replace the monolithic reconcile callback after module migrations. Contribution publication still completes first. Retained lifecycle state is per effect: identical healthy effects preserve, degraded effects retry their whole boundary, changed resources close before reopening, and omission cleans up from retained old declarations and callables. The legacy `:reconcile` entry remains accepted during the migration window, but one module cannot mix it with lifecycle forms.
