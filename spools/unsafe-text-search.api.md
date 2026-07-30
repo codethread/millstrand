@@ -41,23 +41,6 @@ UNSAFE: uses skein.core.db for substring search over strand titles and
 
 
 
-## <a name="skein.spools.unsafe-text-search/contribute">`contribute`</a>
-``` clojure
-(contribute _ctx)
-```
-Function.
-
-Return unsafe-text-search's complete unsafe search-operation contribution.
-
-  The operation retains its documented direct `skein.core.db` dependency; only
-  publication changes from eager registration to owner-complete declaration. The
-  entry is assembled into the canonical `::op-entry` shape (string key, `:name`,
-  the handler `:fn`, provenance) exactly as `register-op!` would — mirrored here
-  because a blessed spool may not reach the weaver's internal op-entry plumbing
-  (SPEC-003.C19a) — so the effective op registry stays string-keyed across the
-  eager and module paths.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L216-L235">Source</a></sub></p>
-
 ## <a name="skein.spools.unsafe-text-search/default-search-limit">`default-search-limit`</a>
 
 
@@ -72,7 +55,7 @@ Default row cap for `search`. Overflow fails loudly rather than truncating,
   governs the silently-truncating `list`/`ready` reads, and this op's cap is a
   different contract — it fails on overflow instead of truncating. A workspace
   that raises its read limit does not thereby widen `search`; pass `:limit`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L45-L55">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L46-L56">Source</a></sub></p>
 
 ## <a name="skein.spools.unsafe-text-search/search">`search`</a>
 ``` clojure
@@ -96,7 +79,7 @@ Return strand rows whose title or an attribute value contains `substring`.
   Read-only. Fails loudly (TEN-003) on malformed opts or overflow: `search`
   fetches one row past `:limit` and, if the result exceeds it, throws naming
   `--limit` and query-narrowing rather than silently truncating.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L127-L169">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L128-L170">Source</a></sub></p>
 
 ## <a name="skein.spools.unsafe-text-search/search-op">`search-op`</a>
 ``` clojure
@@ -104,23 +87,6 @@ Return strand rows whose title or an attribute value contains `substring`.
 ```
 Function.
 
-Handle `strand search ...`, threading parsed args into `search`.
-
-  The registered op handler; resolved by symbol at dispatch time, so it is public
-  like the other spools' op handlers.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L171-L182">Source</a></sub></p>
-
-## <a name="skein.spools.unsafe-text-search/spool">`spool`</a>
-
-
-
-
-Entry-point declaration for the unsafe-text-search spool (PROP-Dsp-001
-  `def spool` convention).
-
-  The refresh coordinator resolves `:contribute` from this public var at every
-  module evaluation, so a consumer declares only a source target and world
-  policy (`{:ns 'skein.spools.unsafe-text-search :spools [...]}`). The spool
-  owns no live resources, so it declares no `:reconcile`. Unqualified symbols
-  resolve against this namespace; fn values are rejected (ADR-002.O1).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L237-L246">Source</a></sub></p>
+UNSAFE substring search over strand titles and attribute values, including
+  archived rows.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L204-L216">Source</a></sub></p>

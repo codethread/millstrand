@@ -1953,7 +1953,6 @@
   {:skein/spools-batteries 'skein.spools.batteries/spool
    :skein/spools-shell 'skein.spools.executors.shell/spool
    :skein/spools-code 'skein.spools.executors.code/spool
-   :skein/spools-unsafe-text-search 'skein.spools.unsafe-text-search/spool
    :skein/spools-chime 'skein.spools.chime/spool})
 
 (def ^:private sibling-spool-vars
@@ -1971,8 +1970,8 @@
 (def ^:private forms-only-ns-modules
   "The init.clj `:ns` modules that legally declare no `spool` var because their
   whole contribution is collected from top-level authoring forms."
-  #{:skein/spools-workflow :skein/spools-workflow-cli :skein/spools-cron
-    :skein/spools-devflow})
+  #{:skein/spools-workflow :skein/spools-workflow-cli
+    :skein/spools-unsafe-text-search :skein/spools-cron :skein/spools-devflow})
 
 (def ^:private authoring-generation
   "Migration-window classification for every selected module.
@@ -1984,7 +1983,7 @@
    :skein/spools-workflow-cli :forms
    :skein/spools-shell :legacy
    :skein/spools-code :legacy
-   :skein/spools-unsafe-text-search :legacy
+   :skein/spools-unsafe-text-search :forms
    :skein/spools-chime :legacy
    :skein/spools-cron :forms
    :skein/spools-devflow :forms

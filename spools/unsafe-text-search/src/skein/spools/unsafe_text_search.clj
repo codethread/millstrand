@@ -36,11 +36,12 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.format.alpha :as format-alpha]
+            [skein.api.skein.alpha :as skein]
+            [skein.api.spool.alpha :refer [fail!]]
             ;; UNSAFE: physical-table access. A blessed spool builds on
             ;; skein.api.*.alpha only; this one reaches past the contract on
             ;; purpose (see the ns docstring).
-            [skein.core.db :as db]
-            [skein.api.spool.alpha :refer [fail!]]))
+            [skein.core.db :as db]))
 
 (def default-search-limit
   "Default row cap for `search`. Overflow fails loudly rather than truncating,
@@ -168,19 +169,6 @@
                                    :snippet (:snippet row)})
                                 rows))))
 
-(defn search-op
-  "Handle `strand search ...`, threading parsed args into `search`.
-
-  The registered op handler; resolved by symbol at dispatch time, so it is public
-  like the other spools' op handlers."
-  [ctx]
-  (let [{:keys [substring archived attr-key limit]} (:op/args ctx)]
-    (search (:op/runtime ctx)
-            (cond-> {:substring substring}
-              (some? archived) (assoc :archived? archived)
-              attr-key (assoc :attr-key attr-key)
-              limit (assoc :limit limit)))))
-
 (def ^:private search-doc
   "UNSAFE substring search over strand titles and attribute values, including archived rows.")
 
@@ -213,34 +201,16 @@
                       :attr-key [:nullable :string]
                       :snippet :string}}})
 
-(defn contribute
-  "Return unsafe-text-search's complete unsafe search-operation contribution.
-
-  The operation retains its documented direct `skein.core.db` dependency; only
-  publication changes from eager registration to owner-complete declaration. The
-  entry is assembled into the canonical `::op-entry` shape (string key, `:name`,
-  the handler `:fn`, provenance) exactly as `register-op!` would — mirrored here
-  because a blessed spool may not reach the weaver's internal op-entry plumbing
-  (SPEC-003.C19a) — so the effective op registry stays string-keyed across the
-  eager and module paths."
-  [_ctx]
-  {:ops {:entries {"search" {:name "search"
-                             :fn 'skein.spools.unsafe-text-search/search-op
-                             :stream? false
-                             ;; Classes live on the arg-spec leaf; duplicating them
-                             ;; here would make registration metadata invalid.
-                             :provenance 'skein.spools.unsafe-text-search
-                             :doc search-doc
-                             :arg-spec search-arg-spec
-                             :returns search-return}}}})
-
-(def spool
-  "Entry-point declaration for the unsafe-text-search spool (PROP-Dsp-001
-  `def spool` convention).
-
-  The refresh coordinator resolves `:contribute` from this public var at every
-  module evaluation, so a consumer declares only a source target and world
-  policy (`{:ns 'skein.spools.unsafe-text-search :spools [...]}`). The spool
-  owns no live resources, so it declares no `:reconcile`. Unqualified symbols
-  resolve against this namespace; fn values are rejected (ADR-002.O1)."
-  {:contribute 'contribute})
+(skein/defop search
+  "UNSAFE substring search over strand titles and attribute values, including
+  archived rows."
+  {:arg-spec search-arg-spec
+   :returns search-return
+   :stream? false}
+  [ctx]
+  (let [{:keys [substring archived attr-key limit]} (:op/args ctx)]
+    (search (:op/runtime ctx)
+            (cond-> {:substring substring}
+              (some? archived) (assoc :archived? archived)
+              attr-key (assoc :attr-key attr-key)
+              limit (assoc :limit limit)))))

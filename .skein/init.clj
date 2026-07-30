@@ -70,7 +70,8 @@
 ;; skein.core.db to LIKE-search titles and attribute values, including archived
 ;; rows the query language cannot see. It is a maintained, in-the-open example of
 ;; rule-breaking (see spools/unsafe-text-search.md), activated here so it stays
-;; exercised. It contributes its query and needs no resource reconcile.
+;; exercised. Its `skein/defop` form contributes the search operation; it owns no
+;; live resource and therefore declares no lifecycle effect.
 (runtime/module! runtime :skein/spools-unsafe-text-search
                  {:ns 'skein.spools.unsafe-text-search
                   :spools ['skein.spools/unsafe-text-search]})
