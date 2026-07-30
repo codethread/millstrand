@@ -19,8 +19,7 @@
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [skein.macros.ops :refer [defop]]
-            [skein.macros.patterns :refer [defpattern]]
+            [skein.api.contribution.alpha :as contribution]
             [skein.api.current.alpha :as current]
             [skein.api.format.alpha :as format-alpha]
             [skein.api.weaver.alpha :as weaver]
@@ -255,7 +254,7 @@
                 (seq edge-specs) (assoc :edges edge-specs))))
           strands)))
 
-(defpattern delegate-pipeline
+(contribution/defpattern delegate-pipeline
   "Create a sequential chain-loop workflow of subagent gates. Input:
   {run_id,tasks:[{id,title,body?,harness?,cwd?,max-attempts?}],harness?,cwd?,accept?}."
   {:spec ::delegate-pipeline-input}
@@ -902,7 +901,7 @@
                              :extra :json}]))
          (keys (:subcommands land-arg-spec)))})
 
-(defop land
+(contribution/defop land
   "Enforce coordinator landing policy across workflows, kanban, and merge locks.
 
   Use the generic `workflow` op for every operation that does not cross those

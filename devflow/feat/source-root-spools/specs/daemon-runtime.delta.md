@@ -40,4 +40,4 @@ Add a third approved spool coordinate kind, `{:skein/source-root "spools/<name>"
 
 ## SPEC-004-D006.P3 Unchanged
 
-`SPEC-004.C44a`/`C44b`/`C44d`/`C44e`, git acquisition (`C91`/`C92`/`C93`), `SPEC-004.C50` blessed-namespace loading (beyond the added `C50b` resolution authority), and all classpath classification and base/inherited ledger machinery for blessed and inherited namespaces are unchanged. `skein.macros/macros {:local/root "spools/macros"}` and other genuinely workspace-local `:local/root` entries keep their existing semantics.
+`SPEC-004.C44a`/`C44b`/`C44d`/`C44e`, git acquisition (`C91`/`C92`/`C93`), `SPEC-004.C50` blessed-namespace loading (beyond the added `C50b` resolution authority), and all classpath classification and base/inherited ledger machinery for blessed and inherited namespaces are unchanged. Genuinely workspace-local `:local/root` entries keep their existing semantics.

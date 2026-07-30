@@ -8,7 +8,7 @@
             [skein.api.runtime.alpha :as runtime]
             [skein.api.graph.alpha :as graph]
             [skein.api.weaver.alpha :as weaver]
-            [skein.macros.rules :refer [defrule]]
+            [skein.spools.chime :refer [defrule]]
             [ct.spools.agent-run :as shuttle]))
 
 (defn- config-attr

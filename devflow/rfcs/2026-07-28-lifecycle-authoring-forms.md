@@ -458,14 +458,14 @@ After this RFC, a namespace may temporarily still contain:
   {:contribute 'contribute})
 ```
 
-That is not the desired final surface. The current authoring forms are not yet one shipped `skein.api.*` surface: `defop`, `defquery`, `defpattern`, and `defrule` live in this repo's `.skein/spools/macros`; `defjob` and `defworkflow` correctly live in their shipped Cron and Workflow spool namespaces. A separate RFC must verify how to make authoring forms complete before proposing the `:contribute` break.
+That is not the desired final surface. The shipped core forms now live in `skein.api.contribution.alpha`, Chime owns `defrule`, and Cron and Workflow own `defjob` and `defworkflow`. A separate RFC must verify how to make authoring forms complete before proposing the `:contribute` break.
 
 ### RFC-Laf-001.P13.1 Unverified migration sketch
 
 The following is a discussion sketch, not a design decision or a claim that the present APIs cover every contribution. Each step needs source archaeology, prototypes against real spools, and its own RFC:
 
 1. Complete the generic declarative kind-and-entry mechanism over the primitives already present in `skein.api.registry.alpha` and `skein.api.runtime.alpha`. The APIs already declare owner-partitioned kinds and collect entries, but provider modules such as Cron and Workflow currently use `:contribute` to materialize their runtime-owned kind registries before dependent contributions stage. Removing the callback requires a declarative kind-bootstrap path.
-2. Promote general authoring forms from `.skein/spools/macros` into shipped APIs. One possible layout colocates a form with the API whose entry it builds: `skein.api.weaver.alpha/defop`, `skein.api.graph.alpha/defquery`, `skein.api.patterns.alpha/defpattern`, `skein.api.events.alpha/defhandler`, and `skein.api.hooks.alpha/defhook`. A central `skein.api.macros.alpha` is another option. Namespace ownership has not been decided.
+2. Build lifecycle forms on the existing shipped contribution surface without reopening a workspace-local prototype layer.
 3. Keep domain forms with their shipped spools. `skein.spools.cron/defjob` and `skein.spools.workflow/defworkflow` are the right ownership direction: the blessed APIs supply collection and registry primitives, while the spool defines the meaning and validation of its entry.
 4. Fill expressiveness gaps without recreating an unrestricted module-wide callback under another name. Static entries, custom kinds, overrides, candidate validation, programmatically generated entries, multi-namespace spools, empty kind-provider modules, provenance, image activation, and removal by omission all need a form or a deliberate boundary. A possible generic computed-entry form should remain scoped to one declared kind.
 5. Make the promoted forms testable through the production module path. Macro expansion, collection, invalid declarations, duplicate and override behavior, activation, removal by omission, image mode, and plan/status projections need public testing support.

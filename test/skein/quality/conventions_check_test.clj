@@ -216,12 +216,9 @@
   (let [engine {:from 'skein.core.weaver :to 'skein.core.db
                 :filename "src/skein/core/weaver.clj" :row 3}
         test-use {:from 'skein.spools.tidy-test :to 'skein.core.db
-                  :filename "spools/tidy/test/skein/spools/tidy_test.clj" :row 3}
-        local-spool {:from 'skein.macros.rules :to 'skein.core.weaver.module-refresh
-                     :filename ".skein/spools/macros/src/skein/macros/rules.clj"
-                     :row 3}]
+                  :filename "spools/tidy/test/skein/spools/tidy_test.clj" :row 3}]
     (is (empty? (spool-tiers/findings
-                 {:namespace-usages [engine test-use local-spool]}
+                 {:namespace-usages [engine test-use]}
                  #{"tidy"})))))
 
 (deftest own-spool-unsafe-require-is-permitted-cross-spool-is-not

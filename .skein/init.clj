@@ -85,35 +85,6 @@
                   :spools ['codethread/devflow]
                   :required? true})
 
-;; --- workspace authoring macros (skein.macros/macros root) ------------------
-;; Each macro namespace is declared so it is ledger-loaded before the workspace
-;; files that require its macro cascade-require it (defop/defquery/defrule/defp);
-;; the macro-defining namespaces carry no authoring forms, so their default
-;; contribution is empty.
-(runtime/module! runtime :macros/patterns
-                 {:ns 'skein.macros.patterns
-                  :spools ['skein.macros/macros]
-                  :required? true})
-(runtime/module! runtime :macros/ops
-                 {:ns 'skein.macros.ops
-                  :spools ['skein.macros/macros]
-                  :required? true})
-(runtime/module! runtime :macros/queries
-                 {:ns 'skein.macros.queries
-                  :spools ['skein.macros/macros]
-                  :required? true})
-(runtime/module! runtime :macros/rules
-                 {:ns 'skein.macros.rules
-                  :spools ['skein.macros/macros]
-                  :required? true})
-;; macros.demo authors patterns with the defp macro, so its contribution is the
-;; collected pattern entries; it requires macros.patterns for the macro.
-(runtime/module! runtime :macros/demo
-                 {:ns 'skein.macros.demo
-                  :spools ['skein.macros/macros]
-                  :after [:macros/patterns]
-                  :required? true})
-
 ;; --- peer coordination spools -----------------------------------------------
 (runtime/module! runtime :skein/spools-shuttle
                  {:ns 'ct.spools.agent-run
@@ -161,8 +132,8 @@
                   :required? true})
 (runtime/module! runtime :attention
                  {:file "attention.clj"
-                  :spools ['skein.macros/macros 'ct.spools/agent-run]
-                  :after [:skein/spools-chime :macros/rules :skein/spools-shuttle]
+                  :spools ['skein.spools/chime 'ct.spools/agent-run]
+                  :after [:skein/spools-chime :skein/spools-shuttle]
                   :required? true})
 
 ;; --- kanban board + devflow tracker binding ---------------------------------
@@ -200,8 +171,6 @@
 ;; drop the query surface.
 (runtime/module! runtime :config
                  {:file "config.clj"
-                  :spools ['skein.macros/macros]
-                  :after [:macros/queries]
                   :required? true})
 ;; workflows.clj authors land/story definitions, the narrow land policy op, and
 ;; the delegate-pipeline pattern. It reuses config.clj's public validation
@@ -209,10 +178,9 @@
 ;; and authoring macros.
 (runtime/module! runtime :workflows
                  {:file "workflows.clj"
-                  :spools ['skein.spools/workflow 'ct.spools/delegation
-                           'skein.macros/macros]
+                  :spools ['skein.spools/workflow 'ct.spools/delegation]
                   :after [:skein/spools-workflow :skein/spools-delegation
-                          :macros/ops :macros/patterns :config]
+                          :config]
                   :required? true})
 
 ;; The code executor scans ready gates during reconcile. It must load after

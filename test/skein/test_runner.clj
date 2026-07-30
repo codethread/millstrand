@@ -41,7 +41,6 @@
    ;; each test drives its own disposable runtime and registry — no shared state.
    'skein.spools.workflow-cli-test 'skein.spools.workflow-run-cli-test
    'skein.spools.batteries-test 'skein.api.spool-test 'skein.config-ops-test
-   'skein.macros.queries-test 'skein.macros.ops-test 'skein.macros.rules-test 'skein.macros.patterns-test
    ;; large-attr load harness structural smoke: boots its own :publish? false
    ;; world and hand-SQL fixtures in temp dirs — no JVM-global or shared state.
    'skein.large-attr-benchmark-test

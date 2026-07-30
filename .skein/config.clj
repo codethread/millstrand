@@ -11,13 +11,13 @@
   NVD scan cron job in nvd_scan.clj, and reviewer rosters in reviewers.clj."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
-            [skein.macros.queries :refer [defquery]]))
+            [skein.api.contribution.alpha :as contribution]))
 
 ;; ---------------------------------------------------------------------------
 ;; Named queries
 ;; ---------------------------------------------------------------------------
 
-(defquery run-active-query
+(contribution/defquery run-active-query
   "Parameterized query for the active strands of one workflow run."
   {:usage "strand list --query run-active --param run-id=<run-id>"}
   {:params [:run-id]
@@ -25,14 +25,14 @@
            [:= :state "active"]
            [:= [:attr "workflow/run-id"] [:param :run-id]]]})
 
-(defquery workflow-runs-query
+(contribution/defquery workflow-runs-query
   "Query for active workflow roots (any family)."
   {:usage "strand list --query workflow-runs --limit 500"}
   [:and
    [:= :state "active"]
    [:= [:attr "workflow/role"] "root"]])
 
-(defquery devflow-runs-query
+(contribution/defquery devflow-runs-query
   "Query for active devflow lifecycle roots."
   {:usage "strand list --query devflow-runs"}
   [:and
@@ -40,14 +40,14 @@
    [:= [:attr "workflow/role"] "root"]
    [:= [:attr "workflow/family"] "devflow"]])
 
-(defquery merge-lock-query
+(contribution/defquery merge-lock-query
   "Query for the active singleton landing lock."
   {:usage "strand list --query merge-lock"}
   [:and
    [:= :state "active"]
    [:= [:attr "kind"] "merge-lock"]])
 
-(defquery work-query
+(contribution/defquery work-query
   "Query for active actionable work, excluding workflow plumbing, agent run records, and inert kanban refinement cards."
   {:usage "strand ready --query work"}
   [:and

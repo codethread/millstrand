@@ -22,7 +22,7 @@ The costs are structural, not cosmetic. Batteries is invisible in `spools.edn` a
 
 ## PROP-Srs-001.P3 Non-goals
 
-- **PROP-Srs-001.NG1:** No change to `:git` or genuine workspace-local `:local/root` semantics (e.g. `skein.macros/macros {:local/root "spools/macros"}` stays as-is).
+- **PROP-Srs-001.NG1:** No change to `:git` or genuine workspace-local `:local/root` semantics.
 - **PROP-Srs-001.NG2:** No preservation of the C50a "zero-config base surface" guarantee: a hand-rolled `{:spools {}}` world without the seeded entry deliberately has no batteries ops (accepted trade under TEN-000@1; no migration shim).
 - **PROP-Srs-001.NG3:** No general "load arbitrary source paths" escape hatch: the new kind resolves only beneath the checkout's `spools/` directory, enforced by canonical containment after symlink resolution.
 - **PROP-Srs-001.NG4:** No packaging/distribution change for externally-published spools (devflow, kanban, agent-run stay git-pinned), and no weakening of C44c/C44f non-additive classes.

@@ -1734,14 +1734,13 @@
           (str id " must opt into skein.spools/workflow")))
     (is (= [:skein/spools-workflow] (:after (get modules :skein/spools-workflow-cli)))
         "the opt-in worker CLI orders after the engine module it contributes beside")
-    (is (= ['skein.macros/macros]
-           (:spools (get modules :config)))
-        ":config must guard every spool coordinate its config.clj ns requires")
+    (is (= [] (:spools (get modules :config)))
+        ":config's shipped contribution form needs no spool coordinate guard")
     (is (true? (:required? (get modules :config)))
         ":config must remain required or its query surface can disappear")
-    (is (= ['skein.spools/workflow 'ct.spools/delegation 'skein.macros/macros]
+    (is (= ['skein.spools/workflow 'ct.spools/delegation]
            (:spools (get modules :workflows)))
-        ":workflows must opt into skein.spools/workflow, ct.spools/delegation, and the authoring macros")
+        ":workflows must opt into skein.spools/workflow and ct.spools/delegation")
     (is (= [:skein/spools-workflow :workflows]
            (:after (get modules :skein/spools-code)))
         "the code executor scans only after workflows/main-ci-watch is loaded")
@@ -1869,12 +1868,11 @@
        (mapcat rest)
        (map #(if (sequential? %) (first %) %))))
 
-(defn- spool-or-macros-ns?
-  "True when sym names a skein.spools.* or skein.macros.* namespace."
+(defn- spool-ns?
+  "True when sym names a skein.spools.* namespace."
   [sym]
   (let [n (name sym)]
-    (or (str/starts-with? n "skein.spools.")
-        (str/starts-with? n "skein.macros."))))
+    (str/starts-with? n "skein.spools.")))
 
 (defn- coordinate-source-roots
   "Map each loaded/available synced coordinate to its deps.edn :paths source dirs.
@@ -1910,7 +1908,7 @@
   ;; A synced root resolves through the spool classloader whether or not a
   ;; module! declares :spools, so a green world load never proves consent is
   ;; wired. This asserts it directly: every init.clj module! that pulls a
-  ;; skein.spools.*/skein.macros.* namespace onto the classpath — a :ns module
+  ;; skein.spools.* namespace onto the classpath — a :ns module
   ;; (its own coordinate) or a :file module's ns :require (each required
   ;; coordinate) — must declare that coordinate in :spools. Coordinates resolve
   ;; through the synced root manifests, never a name heuristic: batteries and
@@ -1925,7 +1923,7 @@
         (doseq [{:keys [key file spools] use-ns :ns} modules]
           (let [required-nss (if file
                                (->> (ns-require-libs (read-first-form (io/file ".skein" file)))
-                                    (filter spool-or-macros-ns?))
+                                    (filter spool-ns?))
                                [use-ns])]
             (doseq [required-ns required-nss]
               (let [coord (resolve-spool-coordinate coordinate-roots required-ns)]
@@ -1959,12 +1957,9 @@
    :skein/spools-treadle 'ct.spools.executors.subagent/spool})
 
 (def ^:private forms-only-ns-modules
-  "The init.clj `:ns` modules that legally declare no `spool` var: the macro
-  namespaces, whose contribution is empty, the defp demo, whose contribution is
-  the patterns its source collects, and pinned `codethread/devflow`, whose whole
-  contribution is the stage `defworkflow` entries its load collects."
-  #{:macros/patterns :macros/ops :macros/queries :macros/rules :macros/demo
-    :skein/spools-workflow :skein/spools-workflow-cli :skein/spools-cron
+  "The init.clj `:ns` modules that legally declare no `spool` var because their
+  whole contribution is collected from top-level authoring forms."
+  #{:skein/spools-workflow :skein/spools-workflow-cli :skein/spools-cron
     :skein/spools-devflow})
 
 (def ^:private authoring-generation
