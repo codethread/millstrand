@@ -10,12 +10,7 @@
 
 ## 1. Overview
 
-`skein.spools.batteries` is the shipped *core strand command surface*, expressed as registered
-weaver ops. It registers the everyday strand operations — `add`, `update`, `show`, `supersede`,
-`burn`, `note`, `list`, `ready`, `notes`, `subgraph`, the create-only `weave` op, and the read-only
-registry-introspection ops `query`, `pattern`, and `vocab` — as `register-op!` ops whose `:arg-spec` is parsed
-by the blessed argv parser `skein.api.cli.alpha` (see [cli.md](../devflow/specs/cli.md) and
-[repl-api.md](../devflow/specs/repl-api.md)).
+`skein.spools.batteries` is the shipped *core strand command surface*. It declares the everyday strand operations — `add`, `update`, `show`, `supersede`, `burn`, `note`, `list`, `ready`, `notes`, `subgraph`, the create-only `weave` op, and the read-only registry-introspection ops `query`, `pattern`, and `vocab` — through `skein.api.skein.alpha/defop`. Each declaration carries an `:arg-spec` parsed by the blessed argv parser `skein.api.cli.alpha` (see [cli.md](../devflow/specs/cli.md) and [repl-api.md](../devflow/specs/repl-api.md)).
 
 Each op delegates to exactly the `skein.api.*.alpha` call the old JSON socket dispatch used — strand
 lifecycle in `skein.api.weaver.alpha`, queries and traversal in `skein.api.graph.alpha`, weave in

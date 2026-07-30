@@ -5,10 +5,10 @@
 
 Shipped core strand command surface as parser-backed weaver ops.
 
-  Batteries registers the everyday strand operations — add/update/show/supersede/
+  Batteries declares the everyday strand operations — add/update/show/supersede/
   burn/list/ready/subgraph, spool coordinate helpers, the create-only `weave`
-  op, and the read-only `query`/`pattern` registry-introspection ops — as
-  `register-op!` ops whose
+  op, and the read-only `query`/`pattern` registry-introspection ops — through
+  `skein.api.skein.alpha/defop`. Their
   `:arg-spec` is parsed by `skein.api.cli.alpha`. Each op delegates to the same
   `skein.api.*.alpha` calls the JSON socket dispatch uses and returns
   the same JSON shapes, so the ops are reachable through `strand <name>` at the
@@ -57,7 +57,7 @@ Create a strand with merged attributes, optional state, and outgoing edges.
 
 
 Seed the process-lifetime Batteries failure glossary.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1569-L1571">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1581-L1583">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/burn-op">`burn-op`</a>
 ``` clojure
@@ -155,12 +155,14 @@ List lean-projected ready strands, optionally from a named query result set.
 
 ## <a name="skein.spools.batteries/seed-batteries-glossary!">`seed-batteries-glossary!`</a>
 ``` clojure
-(seed-batteries-glossary! {:keys [runtime]})
+(seed-batteries-glossary! ctx)
 ```
 Function.
 
 Seed Batteries' process-lifetime failure glossary.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1561-L1567">Source</a></sub></p>
+
+  Input conforms to `::seed-context`; the result conforms to `::seed-result`.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1568-L1579">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/set-read-limit!">`set-read-limit!`</a>
 ``` clojure

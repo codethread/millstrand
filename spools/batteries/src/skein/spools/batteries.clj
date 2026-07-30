@@ -1,10 +1,10 @@
 (ns skein.spools.batteries
   "Shipped core strand command surface as parser-backed weaver ops.
 
-  Batteries registers the everyday strand operations — add/update/show/supersede/
+  Batteries declares the everyday strand operations — add/update/show/supersede/
   burn/list/ready/subgraph, spool coordinate helpers, the create-only `weave`
-  op, and the read-only `query`/`pattern` registry-introspection ops — as
-  `register-op!` ops whose
+  op, and the read-only `query`/`pattern` registry-introspection ops — through
+  `skein.api.skein.alpha/defop`. Their
   `:arg-spec` is parsed by `skein.api.cli.alpha`. Each op delegates to the same
   `skein.api.*.alpha` calls the JSON socket dispatch uses and returns
   the same JSON shapes, so the ops are reachable through `strand <name>` at the
@@ -1558,13 +1558,25 @@
   [ctx]
   (spool-handler ctx))
 
+(s/def ::runtime some?)
+(s/def ::seed-context (s/keys :req-un [::runtime]))
+(s/def ::seeded #{:batteries-glossary})
+(s/def ::seed-result
+  (s/and (s/keys :req-un [::seeded])
+         #(= #{:seeded} (set (keys %)))))
+
 (defn seed-batteries-glossary!
-  "Seed Batteries' process-lifetime failure glossary."
-  [{:keys [runtime]}]
-  (doseq [outcome batteries-glossary]
-    (glossary/register-glossary-outcome!
-     runtime (assoc outcome :owner 'skein.spools.batteries)))
-  {:seeded :batteries-glossary})
+  "Seed Batteries' process-lifetime failure glossary.
+
+  Input conforms to `::seed-context`; the result conforms to `::seed-result`."
+  [ctx]
+  (require-valid! ::seed-context ctx "Batteries glossary seed context is invalid")
+  (let [runtime (:runtime ctx)
+        result {:seeded :batteries-glossary}]
+    (doseq [outcome batteries-glossary]
+      (glossary/register-glossary-outcome!
+       runtime (assoc outcome :owner 'skein.spools.batteries)))
+    (require-valid! ::seed-result result "Batteries glossary seed result is invalid")))
 
 (lifecycle/defseed batteries-glossary-seed
   "Seed the process-lifetime Batteries failure glossary."
