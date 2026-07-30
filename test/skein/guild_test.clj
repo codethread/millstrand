@@ -31,6 +31,39 @@
   (assert-state-shape #'guild/new-state
                       #{:guild-ops :deprecated-ops :fallback-guild-name}))
 
+(deftest source-and-image-activation-preserve-healthy-guild-state
+  (with-runtime
+    (fn [rt _]
+      (let [source (test-support/activate-spool!
+                    rt :skein/spools-guild 'skein.spools.guild)]
+        (is (= :applied (get-in source [:modules :skein/spools-guild :status])))
+        (is (= :applied
+               (get-in source
+                       [:modules :skein/spools-guild :lifecycle/outcomes
+                        :guild-state :status]))))
+      (guild/set-fallback-guild-name! rt "preserved-guild")
+      (guild/register-op! rt 'gate.close.v1 {:doc "Close" :returns close-return
+                                             :hook-class :mutating
+                                             :deadline-class :standard}
+                          'skein.guild-test/close-handler)
+      (let [image (test-support/activate-spool!
+                   rt :skein/spools-guild 'skein.spools.guild :load :image)]
+        (is (= :unchanged
+               (get-in image [:modules :skein/spools-guild :status])))
+        (is (= :image
+               (get-in image [:modules :skein/spools-guild :source/status])))
+        (is (= :applied
+               (get-in image
+                       [:modules :skein/spools-guild :lifecycle/status])))
+        (is (= [:guild-state]
+               (get-in image
+                       [:modules :skein/spools-guild :lifecycle/plan
+                        :preserve])))
+        (is (= "preserved-guild"
+               (:guild (guild/guild-op {:op/runtime rt}))))
+        (is (= ["gate.close.v1"]
+               (mapv :name (:active (guild/guild-op {:op/runtime rt})))))))))
+
 (deftest declarations-are-owned-and-delete-by-omission
   (with-runtime
     (fn [rt _]
@@ -152,7 +185,7 @@
     (fn [rt _]
       (test-support/activate-spool! rt :skein/spools-guild 'skein.spools.guild)
       (guild/set-fallback-guild-name! rt "fallback-guild")
-      (is (= "fallback-guild" (:guild (guild/ops {:op/runtime rt}))))
+      (is (= "fallback-guild" (:guild (guild/guild-op {:op/runtime rt}))))
       (guild/register-op! rt 'gate.close.v1
                           {:doc "Close v1" :input-spec ::close-input :returns close-return
                            :hook-class :mutating :deadline-class :standard}
@@ -231,9 +264,15 @@
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"not registered"
                               (guild/deprecate! rt 'missing.v1 {:replacement "missing.v2"})))))))
 
-(deftest contribute-entry-passes-publication-validation
-  (testing "guild's module contribution validates through the canonical publication seam"
-    (let [entry (get-in (guild/contribute {}) [:ops :entries "guild"])]
-      (is (map? (weaver/validate-op-entry! entry)))
-      (is (not (contains? entry :hook-class)))
-      (is (not (contains? entry :deadline-class))))))
+(deftest authored-module-declarations-use-the-public-forms
+  (testing "Guild contributes its static op and owns reset as one resource"
+    (is (fn? guild/guild-op))
+    (is (= {:kind :resource
+            :open 'skein.spools.guild/reset-guild!
+            :close 'skein.spools.guild/reset-guild!
+            :after #{}
+            :scope :module}
+           guild/guild-state)))
+  (is (nil? (ns-resolve 'skein.spools.guild 'spool)))
+  (is (nil? (ns-resolve 'skein.spools.guild 'contribute)))
+  (is (nil? (ns-resolve 'skein.spools.guild 'reconcile))))
