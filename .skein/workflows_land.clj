@@ -143,14 +143,21 @@
   Order comes from `queue/sequence`, not from the `queue/queued-at` timestamp
   it is stamped beside: two enqueues under a coarse or manual Clock can share an
   instant, and a tie broken by strand id would silently reorder the train. The
-  timestamp stays for readers; the sequence is the contract."
+  timestamp stays for readers; the sequence is the contract.
+
+  An entry without a sequence cannot be placed, so it fails here rather than
+  sorting to an arbitrary position and quietly breaking the order this promises."
   []
-  (vec (sort-by #(attr-value % :queue/sequence)
-                (weaver/list (current/runtime)
+  (let [entries (weaver/list (current/runtime)
                              [:and
                               [:= :state "active"]
                               [:= [:attr "kind"] merge-queue-kind]]
-                             {}))))
+                             {})]
+    (when-let [unsequenced (seq (remove #(number? (attr-value % :queue/sequence)) entries))]
+      (throw (ex-info "merge queue entry carries no sequence; train order is unknowable"
+                      {:entries (mapv :id unsequenced)
+                       :recovery "strand land break-lock --reason \"<reason>\""})))
+    (vec (sort-by #(attr-value % :queue/sequence) entries))))
 
 (defn- next-queue-sequence
   "Return the next train position, one past the highest ever issued.

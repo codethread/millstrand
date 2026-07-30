@@ -1604,6 +1604,14 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"land run not found"
                             (op! "land" ["await" "land-nonexistent" "--timeout-secs" "0"])))
+      ;; the same gate holds for an approval that skipped awaiting, since it
+      ;; joins the train through the same door
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"joins the merge train at sign-off, not before"
+                            (op! "land" ["choose" "land-too-early" "approved" "--input"
+                                         (json/write-str {:subject "feat: too early"
+                                                          :body "Squashed commits: abc123"})])))
+      (is (empty? (active-merge-queue)))
       (signed-off-land! "land-in-time" 571)
       (is (true? (:granted (op! "land" ["await" "land-in-time" "--timeout-secs" "0"]))))
       (is (= ["land-in-time"] (active-merge-queue)))
