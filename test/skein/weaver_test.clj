@@ -206,9 +206,6 @@
 (def handler-release (atom (promise)))
 (def cleanup-events (atom []))
 (def module-contributions (atom {}))
-(def module-reconcile-mode (atom :ok))
-(def module-reconciliations (atom []))
-(def module-reconcile-statuses (atom []))
 
 (def ^:private raw-mutating-standard
   {:hook-class :mutating :deadline-class :standard})
@@ -229,16 +226,6 @@
       ::throw (throw (ex-info "contribution boom" {:module/key key}))
       ::malformed [:not-a-contribution]
       contribution)))
-
-(defn module-reconcile
-  "Record module resource reconciliation or fail under the test-controlled mode."
-  [{key :module/key :as ctx}]
-  (swap! module-reconciliations conj key)
-  (swap! module-reconcile-statuses conj
-         [key (get-in ctx [:module/contribution :status])])
-  (when (= :fail @module-reconcile-mode)
-    (throw (ex-info "reconcile boom" {:module/key key})))
-  {:module (name key)})
 
 (defn capture-event [event]
   (swap! delivered-events conj event))
@@ -430,9 +417,6 @@
     (reset! snapshot-event-runs [])
     (reset! snapshot-hook-runs [])
     (reset! module-contributions {})
-    (reset! module-reconcile-mode :ok)
-    (reset! module-reconciliations [])
-    (reset! module-reconcile-statuses [])
     (f)))
 
 (defn test-pattern [{:keys [input]}]
@@ -4031,30 +4015,26 @@
                 "))\n" body "\n"))
      file)))
 
-(def ^:private reconcile-only-spool
-  "A `def spool` form naming this namespace's reconciler, for module sources
-  whose contribution stays the authoring forms they collect."
-  "(def spool {:reconcile 'skein.weaver-test/module-reconcile})")
-
-(def ^:private contribute-spool
-  "A `def spool` form naming this namespace's contribute fn, for module sources
-  whose contribution is driven by the `module-contributions` atom."
-  "(def spool {:contribute 'skein.weaver-test/module-contribute})")
-
-(def ^:private contribute-reconcile-spool
-  "`contribute-spool` extended with this namespace's reconciler."
-  (str "(def spool {:contribute 'skein.weaver-test/module-contribute\n"
-       "            :reconcile 'skein.weaver-test/module-reconcile})"))
+(defn- contribution-forms
+  "Return source forms that collect the test contribution for `module-key`."
+  [module-key]
+  (format
+   (str "(let [contribution (get @skein.weaver-test/module-contributions %s)]\n"
+        "  (case contribution\n"
+        "    :skein.weaver-test/throw (throw (ex-info \"contribution boom\" {}))\n"
+        "    :skein.weaver-test/malformed (runtime/collect-module-entry! :queries nil nil)\n"
+        "    (doseq [[kind entries] contribution [entry-key value] entries]\n"
+        "      (runtime/collect-module-entry! kind entry-key value))))")
+   (pr-str module-key)))
 
 (defn- module-source!
-  "Write a workspace `:file` module source carrying `spool-form`.
+  "Write a workspace `:file` module source carrying `body`.
 
-  Without a `spool-form` the source declares no entry point, so the module's
-  contribution is whatever authoring forms it collects — here, none."
+  Without a body the module collects no authoring forms."
   ([workspace relative-path ns-sym]
    (module-source! workspace relative-path ns-sym "nil"))
-  ([workspace relative-path ns-sym spool-form]
-   (write-runtime-module! workspace relative-path ns-sym spool-form)))
+  ([workspace relative-path ns-sym body]
+   (write-runtime-module! workspace relative-path ns-sym body)))
 
 (defn- write-local-spool-module!
   ([workspace root-lib ns-sym body]
@@ -4085,15 +4065,15 @@
       (write-runtime-module!
        workspace "modules/base-shared.clj" (symbol (str "test.module.base-shared-" suffix))
        (str "(runtime/collect-module-entry! :queries \"base-shared\" [:= [:attr :owner] \"shared\"])\n"
-            reconcile-only-spool))
+            "nil"))
       (write-runtime-module!
        workspace "modules/base-local.clj" (symbol (str "test.module.base-local-" suffix))
        (str "(runtime/collect-module-entry! :queries \"base-local\" [:= [:attr :owner] \"local\"])\n"
-            reconcile-only-spool))
+            "nil"))
       (write-runtime-module!
        workspace "modules/dependent.clj" (symbol (str "test.module.dependent-" suffix))
        (str "(runtime/collect-module-entry! :queries \"dependent\" [:= [:attr :owner] \"dependent\"])\n"
-            reconcile-only-spool))
+            "nil"))
       (spit (io/file workspace "init.clj")
             (str "(skein.core.weaver.runtime/declare-module! "
                  "skein.core.weaver.runtime/*runtime* :base "
@@ -4112,11 +4092,6 @@
           (is (= "modules/base-local.clj"
                  (get-in (weaver-runtime/module-status rt)
                          [:modules :base :file])))
-          (is (= [:base :dependent] @module-reconciliations)
-              "dependency order, not startup declaration order, owns reconcile")
-          (is (= [[:base :applied] [:dependent :applied]]
-                 @module-reconcile-statuses)
-              "an applied-path reconcile receives contribution status :applied")
           (is (= #{"base-local" "dependent"}
                  (set (keys (graph/queries rt)))))
           (is (= "init.clj"
@@ -4125,13 +4100,10 @@
           (is (= "init.local.clj"
                  (get-in (weaver-runtime/module-status rt)
                          [:declaration/shadows :base :effective :source :name])))
-          (let [calls (count @module-reconciliations)
-                unchanged (weaver-runtime/refresh-modules! rt)]
+          (let [unchanged (weaver-runtime/refresh-modules! rt)]
             (is (= :unchanged (:status unchanged)))
             (is (every? #(= :unchanged (:status %))
-                        (vals (:modules unchanged))))
-            (is (= calls (count @module-reconciliations))
-                "content-identical contributions skip reconcile"))
+                        (vals (:modules unchanged)))))
           (write-runtime-module!
            workspace "modules/new.clj" (symbol (str "test.module.new-" suffix))
            "(runtime/collect-module-entry! :queries \"new\" [:= [:attr :owner] \"new\"])")
@@ -4144,9 +4116,6 @@
             (is (= :applied (:status result)))
             (is (= :removed (get-in result [:modules :base :status])))
             (is (= :removed (get-in result [:modules :dependent :status])))
-            (is (= [[:dependent :removed] [:base :removed]]
-                   (filterv #(= :removed (second %)) @module-reconcile-statuses))
-                "a removal-path reconcile receives contribution status :removed, dependents first")
             (is (= #{"new"} (set (keys (graph/queries rt))))
                 "full-graph omission deletes only the omitted owners"))
           (finally
@@ -4174,11 +4143,8 @@
           (is (= "modules/image.clj" (:file data)))
           (is (= [:ns] (:allowed data))
               ":load :image refusal with :file names the accepted target kind"))
-        ;; Under the def-spool convention (PROP-Dsp-001.G4) a missing entry point
-        ;; is no longer a declaration-time refusal — it resolves from the `spool`
-        ;; var at evaluation, so `{:ns … :load :image}` declares without throwing.
         (is (nil? (refusal-data {:ns 'skein.weaver-test :load :image}))
-            "a contribute-less image declaration is accepted at declaration time")))))
+            "an image declaration is accepted before retained forms are checked")))))
 
 (deftest image-module-activates-from-the-live-image-without-source-load
   (with-runtime
@@ -4193,26 +4159,23 @@
                              ":spools ['" root-lib "]})\n")]
         (write-local-spool-module!
          workspace root-lib module-ns
-         (str "(def spool {:contribute 'skein.weaver-test/module-contribute"
-              " :reconcile 'skein.weaver-test/module-reconcile})"))
-        (spool-sync/sync-approved-spools rt)
-        (weaver-runtime/with-runtime-and-spool-classloader rt #(require module-ns))
-        (swap! module-contributions assoc :image-live
-               {:queries {"image-live" [:= [:attr :owner] "image"]}})
+         "(skein.api.runtime.alpha/collect-entry! :queries \"image-live\" [:= [:attr :owner] \"image\"])")
+        (is (= :applied
+               (:status (runtime/module! rt :image-live
+                                         {:ns module-ns :spools [root-lib]}))))
         (spit (io/file workspace "init.clj") declaration)
         (let [ledger-before (spool-sync/namespace-load-ledger rt)
               result (runtime/refresh! rt)
               outcome (get-in result [:modules :image-live])]
-          (is (= :applied (:status result)))
-          (is (= :applied (:status outcome)))
+          (is (= :unchanged (:status result)))
+          (is (= :unchanged (:status outcome)))
           (is (= :image (:source/status outcome)))
           (is (not (contains? outcome :source/stamp)))
           (is (= ledger-before (spool-sync/namespace-load-ledger rt))
               "image activation performs no source load")
           (is (nil? (get-in @(:module-state rt) [:contribution-sources :image-live]))
               "no source stamp is recorded for an image module")
-          (is (= [:= [:attr :owner] "image"] (get (graph/queries rt) "image-live")))
-          (is (= [[:image-live :applied]] @module-reconcile-statuses)))
+          (is (= [:= [:attr :owner] "image"] (get (graph/queries rt) "image-live"))))
         (let [status (weaver-runtime/module-status rt)]
           (is (= :image (get-in status [:modules :image-live :load]))
               "the declaration stays introspectable data")
@@ -4222,14 +4185,11 @@
           (is (= :image (get-in plan [:modules :image-live :source/status]))
               "plan states the module as image-owned"))
         (let [ledger (spool-sync/namespace-load-ledger rt)
-              reconciles (count @module-reconciliations)
               result (runtime/refresh! rt {:only [:image-live]})]
           (is (= :unchanged (:status result)))
           (is (= :image (get-in result [:modules :image-live :source/status])))
           (is (= ledger (spool-sync/namespace-load-ledger rt))
-              "targeted refresh over an image module stays loadless")
-          (is (= reconciles (count @module-reconciliations))
-              "an unchanged image contribution skips reconcile"))))))
+              "targeted refresh over an image module stays loadless"))))))
 
 (deftest image-module-replays-retained-authoring-declarations
   (with-runtime
@@ -4385,8 +4345,7 @@
             root-lib 'test/module-root]
         (write-local-spool-module!
          workspace root-lib ns-sym
-         (str "(defn contribute [_ctx] {:queries {\"stamp-q\" [:= [:attr :v] 1]}})\n"
-              "(def spool {:contribute 'contribute})"))
+         "(skein.api.runtime.alpha/collect-entry! :queries \"stamp-q\" [:= [:attr :v] 1])")
         (is (= :applied (:status (runtime/module! rt :stamp-mod
                                                   {:ns ns-sym :spools [root-lib]}))))
         (is (some? (get-in @(:module-state rt) [:contribution-sources :stamp-mod]))
@@ -4399,15 +4358,10 @@
               "redeclaring as :load :image drops the recorded source stamp")
           (is (= [:= [:attr :v] 1] (get (graph/queries rt) "stamp-q"))))))))
 
-(defn- names-both-image-remedies?
-  "True when an image contribution failure states both remedies (SPEC-004.C46).
-
-  Either requirement can be the missing one, so both branches promise one
-  message naming the namespace load and the public `spool` var alike."
+(defn- names-image-remedy?
+  "True when an image contribution failure states the source-load remedy."
   [message]
-  (boolean (and message
-                (re-find #"load or require" message)
-                (re-find #"public spool var" message))))
+  (boolean (and message (re-find #"load or require" message))))
 
 (deftest image-module-unloaded-namespace-fails-as-module-outcome
   (with-runtime
@@ -4424,213 +4378,35 @@
         (is (= ns-sym (get-in outcome [:error :data :ns]))
             "the failure names the unloaded namespace")
         (is (= :image (get-in outcome [:error :data :load])))
-        (is (names-both-image-remedies? (get-in outcome [:error :message]))
-            "the unloaded branch states both the load and the spool-var remedy")))))
+        (is (names-image-remedy? (get-in outcome [:error :message]))
+            "the unloaded branch states the source-load remedy")))))
 
-(deftest source-module-resolves-both-entry-points-from-the-public-spool-var
+(deftest source-and-image-modules-reject-public-spool-vars
   (with-runtime
     (fn [rt _db-file]
       (let [workspace (get-in rt [:metadata :config-dir])
             suffix (str/replace (str (random-uuid)) "-" "")
             root-lib 'test/module-root
-            module-ns (symbol (str "test.module.spool-both-" suffix))]
+            module-ns (symbol (str "test.module.removed-spool-" suffix))]
         (write-local-spool-module!
          workspace root-lib module-ns
-         (str "(defn contribute [_ctx]"
-              " {:queries {\"spool-both\" [:= [:attr :src] \"spool\"]}})\n"
-              "(defn reconcile [_ctx] {:reconciled true})\n"
-              "(def spool {:contribute 'contribute :reconcile 'reconcile})"))
-        (let [result (runtime/module! rt :spool-both {:ns module-ns :spools [root-lib]})]
-          (is (= :applied (:status result)))
-          (is (= [:= [:attr :src] "spool"] (get (graph/queries rt) "spool-both")))
-          (is (= {:contribute (symbol (str module-ns) "contribute")
-                  :reconcile (symbol (str module-ns) "reconcile")}
-                 (get-in result [:resolved/entry-points :spool-both]))
-              "unqualified spool-var symbols are qualified against the declaring namespace")
-          (is (not (contains? (get-in result [:modules :spool-both]) :module/resolved))
-              "the raw resolution carrier is not duplicated into public outcomes")
-          (is (= :applied (get-in result [:modules :spool-both :reconcile/status]))))))))
-
-(deftest image-module-resolves-spool-var-with-no-source-load-or-injected-callable
-  (with-runtime
-    (fn [rt _db-file]
-      (let [workspace (get-in rt [:metadata :config-dir])
-            suffix (str/replace (str (random-uuid)) "-" "")
-            root-lib 'test/module-root
-            spool-ns (symbol (str "test.module.image-spool-" suffix))
-            bare-ns (symbol (str "test.module.image-bare-" suffix))
-            foreign-ns (symbol (str "test.module.image-foreign-" suffix))
-            foreign-owner-ns (symbol (str "test.module.image-foreign-owner-" suffix))]
-        (write-local-spool-module!
-         workspace root-lib spool-ns
-         (str "(defn contribute [_ctx]"
-              " {:queries {\"image-spool-q\" [:= [:attr :owner] \"image-spool\"]}})\n"
-              "(def spool {:contribute 'contribute})"))
-        (write-local-spool-module!
-         workspace root-lib bare-ns
-         "(defn contribute [_ctx] {:queries {\"image-bare-q\" [:= [:attr :owner] \"bare\"]}})")
-        (write-local-spool-module!
-         workspace root-lib foreign-ns
-         (str "(defn contribute [_ctx]"
-              " {:queries {\"image-foreign-q\" [:= [:attr :owner] \"foreign\"]}})"))
-        (write-local-spool-module!
-         workspace root-lib foreign-owner-ns
-         (str "(def spool {:contribute '" foreign-ns "/contribute})"))
+         "(def spool {:contribute 'removed})")
+        (let [source-result (runtime/module!
+                             rt :removed-source
+                             {:ns module-ns :spools [root-lib]})
+              source-outcome (get-in source-result [:modules :removed-source])]
+          (is (= :failed (:status source-outcome)))
+          (is (= :removed-def-spool
+                 (get-in source-outcome [:error :data :reason]))))
         (spool-sync/sync-approved-spools rt)
-        (weaver-runtime/with-runtime-and-spool-classloader
-          rt #(do (require spool-ns) (require bare-ns) (require foreign-owner-ns)))
-        (testing "the entry point resolves from the preloaded image with no source load"
-          (let [ledger-before (spool-sync/namespace-load-ledger rt)
-                result (runtime/module! rt :image-spool
-                                        {:ns spool-ns :load :image :spools [root-lib]})
-                outcome (get-in result [:modules :image-spool])]
-            (is (= :applied (:status result)))
-            (is (= :image (:source/status outcome)))
-            (is (not (contains? outcome :source/stamp)))
-            (is (= ledger-before (spool-sync/namespace-load-ledger rt))
-                "image activation via the spool var performs no source load")
-            (is (= [:= [:attr :owner] "image-spool"] (get (graph/queries rt) "image-spool-q")))
-            (is (= {:contribute (symbol (str spool-ns) "contribute")}
-                   (get-in result [:resolved/entry-points :image-spool])))))
-        (testing "a cross-namespace entry point may require its own namespace"
-          (is (nil? (find-ns foreign-ns)))
-          (let [result (runtime/module!
-                        rt :image-foreign
-                        {:ns foreign-owner-ns :load :image :spools [root-lib]})]
-            (is (= :applied (:status result)))
-            (is (some? (find-ns foreign-ns)))
-            (is (= [:= [:attr :owner] "foreign"]
-                   (get (graph/queries rt) "image-foreign-q")))))
-        (testing "an image namespace with no spool var fails at evaluation"
-          (let [result (runtime/module! rt :image-bare
-                                        {:ns bare-ns :load :image :spools [root-lib]})
-                outcome (get-in result [:modules :image-bare])]
-            (is (= :partial (:status result)))
-            (is (= :failed (:status outcome)))
-            (is (= :image-bare (get-in outcome [:error :data :module/key])))
-            (is (= :image (get-in outcome [:error :data :load])))
-            (is (names-both-image-remedies? (get-in outcome [:error :message]))
-                "the loaded-but-contribution-less branch states the same two remedies")
-            (is (not (contains? (graph/queries rt) "image-bare-q")))))))))
-
-(deftest spool-declaration-loud-failures-and-legal-reconcile-forms-composition
-  (with-runtime
-    (fn [rt _db-file]
-      (let [workspace (get-in rt [:metadata :config-dir])
-            suffix (str/replace (str (random-uuid)) "-" "")
-            root-lib 'test/module-root
-            ns-of (fn [label] (symbol (str "test.module." label "-" suffix)))
-            nonmap-ns (ns-of "spool-nonmap")
-            unknown-ns (ns-of "spool-unknown")
-            empty-ns (ns-of "spool-empty")
-            nonsym-ns (ns-of "spool-nonsym")
-            nonfn-ns (ns-of "spool-nonfn")
-            missing-callable-ns (ns-of "spool-missing-callable")
-            referred-target-ns (ns-of "spool-referred-target")
-            referred-only-ns (ns-of "spool-referred-only")
-            qualified-referred-ns (ns-of "spool-qualified-referred")
-            conflict-ns (ns-of "spool-conflict")
-            compose-ns (ns-of "spool-compose")]
-        (write-local-spool-module!
-         workspace root-lib nonmap-ns
-         "(defn contribute [_ctx] {}) (def spool [:not :a :map])")
-        (write-local-spool-module!
-         workspace root-lib unknown-ns
-         "(defn contribute [_ctx] {}) (def spool {:contribute 'contribute :bogus 1})")
-        (write-local-spool-module!
-         workspace root-lib empty-ns
-         "(defn contribute [_ctx] {}) (def spool {})")
-        (write-local-spool-module!
-         workspace root-lib nonsym-ns
-         "(def spool {:contribute :not-a-symbol})")
-        (write-local-spool-module!
-         workspace root-lib nonfn-ns
-         "(def data 42) (def spool {:contribute 'data})")
-        (write-local-spool-module!
-         workspace root-lib missing-callable-ns
-         "(def spool {:contribute 'no.such.spool.namespace/contribute})")
-        (write-local-spool-module!
-         workspace root-lib referred-target-ns
-         (str "(defn foreign-contribute [_ctx]"
-              " {:queries {\"foreign-referred-q\" [:= [:attr :v] 1]}})"))
-        (write-local-spool-module!
-         workspace root-lib referred-only-ns [referred-target-ns]
-         (str "(refer '" referred-target-ns " :only '[foreign-contribute])\n"
-              "(def spool {:contribute 'foreign-contribute})"))
-        (write-local-spool-module!
-         workspace root-lib qualified-referred-ns
-         (str "(def spool {:contribute '" referred-only-ns "/foreign-contribute})"))
-        (write-local-spool-module!
-         workspace root-lib conflict-ns
-         (str "(runtime/collect-module-entry! :queries \"conflict-q\" [:= [:attr :v] 1])\n"
-              "(defn contribute [_ctx] {:queries {\"other\" [:= [:attr :v] 2]}})\n"
-              "(def spool {:contribute 'contribute})"))
-        (write-local-spool-module!
-         workspace root-lib compose-ns
-         (str "(runtime/collect-module-entry! :queries \"compose-q\" [:= [:attr :v] 1])\n"
-              "(defn reconcile [_ctx] {:reconciled true})\n"
-              "(def spool {:reconcile 'reconcile})"))
-        (letfn [(outcome [key ns-sym]
-                  (get-in (runtime/module! rt key {:ns ns-sym :spools [root-lib]})
-                          [:modules key]))]
-          (testing "a spool var that is not a map fails loudly with explain data"
-            (let [o (outcome :spool-nonmap nonmap-ns)]
-              (is (= :failed (:status o)))
-              (is (= :spool-nonmap (get-in o [:error :data :module/key])))
-              (is (some? (get-in o [:error :data :explain])))))
-          (testing "unknown spool keys fail loudly"
-            (is (= :failed (:status (outcome :spool-unknown unknown-ns)))))
-          (testing "a spool var with no entry point fails loudly"
-            (is (= :failed (:status (outcome :spool-empty empty-ns)))))
-          (testing "a non-symbol entry-point value fails loudly (ADR-002.O1)"
-            (is (= :failed (:status (outcome :spool-nonsym nonsym-ns)))))
-          (testing "a symbol whose Var root value is not a fn fails loudly (the ifn?-Var trap)"
-            (let [o (outcome :spool-nonfn nonfn-ns)]
-              (is (= :failed (:status o)))
-              (is (= :contribute (get-in o [:error :data :module/role])))
-              (is (= (symbol (str nonfn-ns) "data")
-                     (get-in o [:error :data :module/callable])))))
-          (testing "a callable in a missing namespace keeps the canonical error shape"
-            (let [o (outcome :spool-missing-callable missing-callable-ns)]
-              (is (= :failed (:status o)))
-              (is (= :spool-missing-callable
-                     (get-in o [:error :data :module/key])))
-              (is (= :contribute (get-in o [:error :data :module/role])))
-              (is (= 'no.such.spool.namespace/contribute
-                     (get-in o [:error :data :module/callable])))))
-          (testing "an unqualified spool symbol cannot resolve through a referred foreign Var"
-            (let [o (outcome :spool-referred-only referred-only-ns)]
-              (is (= :failed (:status o)))
-              (is (= :spool-referred-only
-                     (get-in o [:error :data :module/key])))
-              (is (= :contribute (get-in o [:error :data :module/role])))
-              (is (= (symbol (str referred-only-ns) "foreign-contribute")
-                     (get-in o [:error :data :module/callable])))
-              (is (not (contains? (graph/queries rt) "foreign-referred-q")))))
-          (testing "a qualified spool symbol cannot target another namespace's referred-only name"
-            (let [callable (symbol (str referred-only-ns) "foreign-contribute")
-                  o (outcome :spool-qualified-referred qualified-referred-ns)]
-              (is (= :failed (:status o)))
-              (is (= :spool-qualified-referred
-                     (get-in o [:error :data :module/key])))
-              (is (= :contribute (get-in o [:error :data :module/role])))
-              (is (= callable (get-in o [:error :data :module/callable])))
-              (is (not (contains? (graph/queries rt) "foreign-referred-q")))))
-          (testing "a :contribute entry point plus collected authoring forms is a loud conflict"
-            (let [o (outcome :spool-conflict conflict-ns)]
-              (is (= :failed (:status o)))
-              (is (= [:queries] (get-in o [:error :data :collected/kinds])))
-              (is (not (contains? (graph/queries rt) "other")))))
-          (testing "a :reconcile-only spool var composes with authoring forms"
-            (let [result (runtime/module! rt :spool-compose
-                                          {:ns compose-ns :spools [root-lib]})
-                  o (get-in result [:modules :spool-compose])]
-              (is (= :applied (:status o)))
-              (is (= [:= [:attr :v] 1] (get (graph/queries rt) "compose-q")))
-              (is (= :applied (:reconcile/status o))
-                  "the reconcile-only entry point still runs")
-              (is (= {:reconcile (symbol (str compose-ns) "reconcile")}
-                     (get-in result [:resolved/entry-points :spool-compose]))))))))))
+        (weaver-runtime/with-runtime-and-spool-classloader rt #(require module-ns))
+        (let [image-result (runtime/module!
+                            rt :removed-image
+                            {:ns module-ns :load :image :spools [root-lib]})
+              image-outcome (get-in image-result [:modules :removed-image])]
+          (is (= :failed (:status image-outcome)))
+          (is (= :removed-def-spool
+                 (get-in image-outcome [:error :data :reason]))))))))
 
 (deftest file-module-rejects-multiple-namespace-owners
   (with-runtime
@@ -4642,17 +4418,17 @@
             second-ns (ns-of "file-second")
             aliased-ns (ns-of "file-aliased-keyword")
             source-for
-            (fn [filename spool-first?]
+            (fn [filename form-first?]
               (let [source (str "modules/" filename ".clj")
                     file (io/file workspace source)
-                    spool-form
-                    "(defn contribute [_ctx] {}) (def spool {:contribute 'contribute})\n"]
+                    module-form
+                    "(skein.api.runtime.alpha/collect-entry! :queries \"owned\" [:= [:attr :v] 1])\n"]
                 (io/make-parents file)
                 (spit file
                       (str "(ns " first-ns ")\n"
-                           (when spool-first? spool-form)
+                           (when form-first? module-form)
                            "(ns " second-ns ")\n"
-                           (when-not spool-first? spool-form)))
+                           (when-not form-first? module-form)))
                 source))]
         (doseq [[key source] [[:multi-ns-spool-first
                                (source-for "multi-ns-spool-first" true)]
@@ -4683,15 +4459,12 @@
           (spit file
                 (str "(ns " aliased-ns ")\n"
                      "(ns " aliased-ns ")\n"
-                     "(defn contribute [_ctx] {})\n"
-                     "(def spool {:contribute 'contribute})\n"))
+                     "(skein.api.runtime.alpha/collect-entry! "
+                     ":queries \"repeated-owner\" [:= [:attr :v] 1])\n"))
           (let [result (runtime/module! rt :repeated-owner-file {:file source})]
             (is (= :applied (:status result)))
-            (is (= (symbol (str aliased-ns) "contribute")
-                   (get-in result
-                           [:resolved/entry-points
-                            :repeated-owner-file
-                            :contribute])))))))))
+            (is (= [:= [:attr :v] 1]
+                   (get (graph/queries rt) "repeated-owner")))))))))
 
 (deftest targeted-refresh-retains-prior-contribution-and-isolates-collisions
   (with-runtime
@@ -4702,10 +4475,10 @@
             source-b "modules/owner-b.clj"]
         (module-source! workspace source-a
                         (symbol (str "test.module.owner-a-" suffix))
-                        contribute-reconcile-spool)
+                        (contribution-forms :owner-a))
         (module-source! workspace source-b
                         (symbol (str "test.module.owner-b-" suffix))
-                        contribute-spool)
+                        (contribution-forms :owner-b))
         (graph/register-query! rt 'unrelated [:= [:attr :owner] "unrelated"])
         (reset! module-contributions
                 {:owner-a {:queries {"owned" [:= [:attr :version] 1]}}})
@@ -4721,20 +4494,12 @@
                  (get-in failed [:modules :owner-a :contribution/status])))
           (is (= [:= [:attr :version] 1] (get (graph/queries rt) "owned")))
           (is (contains? (graph/queries rt) "unrelated")))
-        (reset! module-reconcile-mode :fail)
         (swap! module-contributions assoc
                :owner-a {:queries {"owned" [:= [:attr :version] 2]}})
-        (let [degraded (weaver-runtime/refresh-modules! rt {:only #{:owner-a}})]
-          (is (= :partial (:status degraded)))
-          (is (= :degraded (get-in degraded [:modules :owner-a :status])))
+        (let [updated (weaver-runtime/refresh-modules! rt {:only #{:owner-a}})]
+          (is (= :applied (:status updated)))
           (is (= [:= [:attr :version] 2] (get (graph/queries rt) "owned"))
-              "reconcile failure does not roll back published declarations"))
-        (let [calls (count @module-reconciliations)
-              unchanged (weaver-runtime/refresh-modules! rt {:only [:owner-a]})]
-          (is (= :unchanged (:status unchanged)))
-          (is (= calls (count @module-reconciliations))
-              "unchanged publication leaves a degraded resource untouched"))
-        (reset! module-reconcile-mode :ok)
+              "a valid targeted refresh replaces the owner's declarations"))
         (swap! module-contributions assoc
                :owner-b {:queries {"owned" [:= [:attr :version] :collision]}})
         (let [collision
@@ -4755,13 +4520,11 @@
             suffix (str/replace (str (random-uuid)) "-" "")]
         (module-source! workspace source
                         (symbol (str "test.module.planned-" suffix))
-                        contribute-reconcile-spool)
-        (reset! module-reconciliations [])
+                        (contribution-forms :planned))
         (reset! module-contributions
                 {:planned {:queries {"planned" [:= [:attr :v] 1]}}})
         (weaver-runtime/declare-module! rt :planned {:file source})
-        (let [applied-refresh (:last-refresh (weaver-runtime/module-status rt))
-              reconciles (count @module-reconciliations)]
+        (let [applied-refresh (:last-refresh (weaver-runtime/module-status rt))]
           (swap! module-contributions assoc
                  :planned {:queries {"planned" [:= [:attr :v] 2]}})
           (let [planned (weaver-runtime/refresh-modules! rt {:only [:planned]
@@ -4773,8 +4536,6 @@
             (is (= [:queries] (:publication/kinds planned)))
             (is (= [:= [:attr :v] 1] (get (graph/queries rt) "planned"))
                 "plan publishes nothing")
-            (is (= reconciles (count @module-reconciliations))
-                "plan reconciles nothing")
             (is (= applied-refresh (:last-refresh (weaver-runtime/module-status rt)))
                 "plan records no coordinator state")))))))
 
@@ -4793,7 +4554,7 @@
                       :binding-moment :test/use})))]
         (module-source! workspace source
                         (symbol (str "test.module.domain-kind-" suffix))
-                        contribute-spool)
+                        (contribution-forms :domain))
         (reset! module-contributions
                 {:domain {:test/items {:one {:version 1}}}})
         (is (= :applied
@@ -4821,7 +4582,7 @@
                       :binding-moment :test/use})))]
         (module-source! workspace source
                         (symbol (str "test.module.multi-kind-" suffix))
-                        contribute-spool)
+                        (contribution-forms :multi-kind))
         (reset! module-contributions
                 {:multi-kind {:test/kind-a {:a {:version 1}}
                               :test/kind-b {:b {:version 2}}}})
@@ -5039,7 +4800,7 @@
             source "modules/plan-effects.clj"]
         (module-source! workspace source
                         (symbol (str "test.module.plan-effects-" suffix))
-                        contribute-spool)
+                        (contribution-forms :planned))
         (reset! module-contributions
                 {:planned {:queries {"planned" [:= [:attr :v] 1]}}})
         (runtime/module! rt :planned {:file source})
@@ -5101,7 +4862,7 @@
             suffix (str/replace (str (random-uuid)) "-" "")]
         (module-source! workspace source
                         (symbol (str "test.module.valid-" suffix))
-                        contribute-spool)
+                        (contribution-forms :valid))
         (reset! module-contributions
                 {:valid {:queries {"valid" [:= [:attr :valid] true]}}})
         (weaver-runtime/declare-module! rt :valid {:file source})
@@ -5222,7 +4983,7 @@
             suffix (str/replace (str (random-uuid)) "-" "")]
         (module-source! workspace source
                         (symbol (str "test.module.live-event-" suffix))
-                        contribute-spool)
+                        (contribution-forms :live))
         (reset! module-contributions
                 {:live {:queries {"live" [:= [:attr :live] true]}}})
         (events/register-handler! rt :refresh-failure #{:refresh/fail}
@@ -5252,324 +5013,6 @@
         (is (= #{"in-flight" "queued"}
                (set (map :event/id @delivered-events))))))))
 
-(deftest g2a-last-good-resolved-entry-points-survive-failure-reload-and-removal
-  (let [world (temp-world)
-        workspace (:config-dir world)
-        suffix (str/replace (str (random-uuid)) "-" "")
-        root-lib 'test/module-root
-        base-ns (symbol (str "test.module.lastgood-base-" suffix))
-        dep-ns (symbol (str "test.module.lastgood-dep-" suffix))
-        base-contribute (symbol (str base-ns) "contribute")
-        dep-contribute (symbol (str dep-ns) "contribute")]
-    (try
-      (let [base-src (write-local-spool-module!
-                      workspace root-lib base-ns
-                      (str "(defn contribute [_ctx]"
-                           " {:queries {\"lg-base\" [:= [:attr :owner] \"base\"]}})\n"
-                           "(def spool {:contribute 'contribute"
-                           " :reconcile 'skein.weaver-test/module-reconcile})"))]
-        (write-local-spool-module!
-         workspace root-lib dep-ns
-         (str "(defn contribute [_ctx]"
-              " {:queries {\"lg-dep\" [:= [:attr :owner] \"dep\"]}})\n"
-              "(def spool {:contribute 'contribute"
-              " :reconcile 'skein.weaver-test/module-reconcile})"))
-        (spit (io/file workspace "init.clj")
-              (str "(skein.core.weaver.runtime/declare-module! "
-                   "skein.core.weaver.runtime/*runtime* :lg-base "
-                   "{:ns '" base-ns " :spools ['" root-lib "]})\n"
-                   "(skein.core.weaver.runtime/declare-module! "
-                   "skein.core.weaver.runtime/*runtime* :lg-dep "
-                   "{:ns '" dep-ns " :spools ['" root-lib "] :after [:lg-base]})\n"))
-        (let [rt (weaver-runtime/start! nil {:world world :publish? false})]
-          (try
-            (reset! module-reconcile-statuses [])
-            (testing "both entry points resolve from each module's public spool var"
-              (is (= :applied (get-in (weaver-runtime/module-status rt)
-                                      [:last-refresh :status])))
-              (let [resolved (:resolved/entry-points (weaver-runtime/module-status rt))]
-                (is (= {:contribute base-contribute
-                        :reconcile 'skein.weaver-test/module-reconcile}
-                       (:lg-base resolved)))
-                (is (= {:contribute dep-contribute
-                        :reconcile 'skein.weaver-test/module-reconcile}
-                       (:lg-dep resolved)))))
-            (testing "a later evaluation fails, retaining the last-good resolved set"
-              (spit base-src
-                    (str "(ns " base-ns
-                         "\n  (:require [skein.core.weaver.runtime :as runtime]))\n"
-                         "(defn contribute [_ctx]"
-                         " {:queries {\"lg-base\" [:= [:attr :owner] \"base\"]}})\n"
-                         "(def spool [:not :a :map])\n"))
-              (let [result (weaver-runtime/refresh-modules! rt)]
-                (is (= :partial (:status result)))
-                (is (= :failed (get-in result [:modules :lg-base :status])))
-                (is (= {:contribute base-contribute
-                        :reconcile 'skein.weaver-test/module-reconcile}
-                       (get-in result [:resolved/entry-points :lg-base]))
-                    "the failed module keeps its last-good resolved entry points")))
-            (testing "reload-code! runs without clearing the retained resolved set"
-              (runtime/reload-code! rt root-lib)
-              (is (= {:contribute base-contribute
-                      :reconcile 'skein.weaver-test/module-reconcile}
-                     (get-in (weaver-runtime/module-status rt)
-                             [:resolved/entry-points :lg-base]))
-                  "reload-code! leaves the coordinator's resolved state intact"))
-            (testing "removal by omission reconciles through the retained set, dependents first"
-              (reset! module-reconcile-statuses [])
-              (spit (io/file workspace "init.clj") "")
-              (let [result (weaver-runtime/refresh-modules! rt)]
-                (is (= :applied (:status result)))
-                (is (= :removed (get-in result [:modules :lg-base :status])))
-                (is (= :removed (get-in result [:modules :lg-dep :status])))
-                (is (= [[:lg-dep :removed] [:lg-base :removed]]
-                       @module-reconcile-statuses)
-                    "the prior reconciler runs once per module with :removed, dependents first")
-                (is (empty? (:resolved/entry-points result))
-                    "removed modules drop out of the exposed resolved set")
-                (is (empty? (:resolved/entry-points (weaver-runtime/module-status rt)))
-                    "and out of the stored coordinator state")))
-            (finally
-              (weaver-runtime/stop! rt)))))
-      (finally
-        (delete-tree! (io/file workspace ".."))))))
-
-(deftest g2a-invalid-reconcile-on-unchanged-contribution-retains-last-good
-  (doseq [{:keys [label key invalid-definition invalid-name]}
-          [{:label "missing reconciler"
-            :key :missing-reconciler
-            :invalid-definition ""
-            :invalid-name "missing-reconcile"}
-           {:label "non-function reconciler"
-            :key :nonfn-reconciler
-            :invalid-definition "(def reconcile-data :not-a-function)\n"
-            :invalid-name "reconcile-data"}]]
-    (testing label
-      (let [world (temp-world)
-            workspace (:config-dir world)
-            suffix (str/replace (str (random-uuid)) "-" "")
-            root-lib 'test/module-root
-            module-ns (symbol (str "test.module.invalid-reconcile-" suffix))
-            contribute (symbol (str module-ns) "contribute")
-            invalid-reconcile (symbol (str module-ns) invalid-name)
-            retained {:contribute contribute
-                      :reconcile 'skein.weaver-test/module-reconcile}]
-        (try
-          (write-local-spool-module!
-           workspace root-lib module-ns
-           (str "(defn contribute [_ctx]"
-                " {:queries {\"stable\" [:= [:attr :owner] \"stable\"]}})\n"
-                "(def spool {:contribute 'contribute "
-                ":reconcile 'skein.weaver-test/module-reconcile})"))
-          (spit (io/file workspace "init.clj")
-                (str "(skein.core.weaver.runtime/declare-module! "
-                     "skein.core.weaver.runtime/*runtime* " key
-                     " {:ns '" module-ns " :spools ['" root-lib "]})\n"))
-          (let [rt (weaver-runtime/start! nil {:world world :publish? false})]
-            (try
-              (is (= retained
-                     (get-in (weaver-runtime/module-status rt)
-                             [:resolved/entry-points key])))
-              (write-local-spool-module!
-               workspace root-lib module-ns
-               (str "(defn contribute [_ctx]"
-                    " {:queries {\"stable\" [:= [:attr :owner] \"stable\"]}})\n"
-                    invalid-definition
-                    "(def spool {:contribute 'contribute :reconcile '"
-                    invalid-name "})"))
-              (let [result (weaver-runtime/refresh-modules! rt)]
-                (is (= :partial (:status result)))
-                (is (= :failed (get-in result [:modules key :status])))
-                (is (= :reconcile
-                       (get-in result [:modules key :error :data :module/role])))
-                (is (= invalid-reconcile
-                       (get-in result [:modules key :error :data :module/callable])))
-                (is (= retained (get-in result [:resolved/entry-points key]))
-                    "an invalid reconciler cannot replace the last-good set"))
-              (reset! module-reconcile-statuses [])
-              (spit (io/file workspace "init.clj") "")
-              (let [result (weaver-runtime/refresh-modules! rt)]
-                (is (= :applied (:status result)))
-                (is (= :removed (get-in result [:modules key :status])))
-                (is (= [[key :removed]] @module-reconcile-statuses)
-                    "later removal still runs the retained reconciler")
-                (is (empty? (:resolved/entry-points result))))
-              (finally
-                (weaver-runtime/stop! rt))))
-          (finally
-            (delete-tree! (io/file workspace ".."))))))))
-
-(deftest g2a-first-refresh-after-live-upgrade-retains-explicit-removal-reconciler
-  (let [world (temp-world)
-        workspace (:config-dir world)
-        suffix (str/replace (str (random-uuid)) "-" "")
-        root-lib 'test/module-root
-        module-ns (symbol (str "test.module.live-upgrade-" suffix))
-        legacy-declaration {:contribute (symbol (str module-ns) "contribute")
-                            :reconcile 'skein.weaver-test/module-reconcile}
-        legacy-resolved {:live-upgrade legacy-declaration}]
-    (try
-      (write-local-spool-module!
-       workspace root-lib module-ns
-       (str "(defn contribute [_ctx]"
-            " {:queries {\"live-upgrade\" [:= [:attr :owner] \"legacy\"]}})\n"))
-      (spit (io/file workspace "init.clj")
-            (str "(skein.core.weaver.runtime/declare-module! "
-                 "skein.core.weaver.runtime/*runtime* :live-upgrade "
-                 "{:ns '" module-ns " :spools ['" root-lib "]})\n"))
-      (let [rt (weaver-runtime/start! nil {:world world :publish? false})]
-        (try
-          (reset! module-reconcile-statuses [])
-          ;; A coordinator picked up with refresh! rather than a restart: its
-          ;; graph entry was collected before the cutover, so it carries the
-          ;; entry-point keys no authoring route accepts any more, and its state
-          ;; predates :resolved-entry-points (DELTA-Dsp-004.D3).
-          (swap! (:module-state rt)
-                 (fn [state]
-                   (-> state
-                       (dissoc :resolved-entry-points)
-                       (update-in [:graph :live-upgrade] merge legacy-declaration))))
-          (is (= legacy-resolved
-                 (:resolved/entry-points (runtime/status rt)))
-              "status bootstraps the projection before the first refresh")
-          (spit (io/file workspace "init.clj")
-                (str "(skein.core.weaver.runtime/declare-module! "
-                     "skein.core.weaver.runtime/*runtime* :cycle-a "
-                     "{:ns '" module-ns " :after [:cycle-b]})\n"
-                     "(skein.core.weaver.runtime/declare-module! "
-                     "skein.core.weaver.runtime/*runtime* :cycle-b "
-                     "{:ns '" module-ns " :after [:cycle-a]})\n"))
-          (let [refused (weaver-runtime/refresh-modules! rt)]
-            (is (= :refused (:status refused)))
-            (is (= legacy-resolved
-                   (:resolved/entry-points (runtime/status rt)))
-                "a refused first refresh leaves live-pickup status valid"))
-          (let [declared (weaver-runtime/declare-module!
-                          rt :post-cutover {:ns module-ns :spools [root-lib]})]
-            (is (not= :refused (:status declared))
-                "a fresh declaration joins the retained graph without re-normalizing it")
-            (is (contains? (:modules (weaver-runtime/module-status rt)) :post-cutover))
-            (is (= legacy-declaration
-                   (select-keys (get-in (weaver-runtime/module-status rt)
-                                        [:modules :live-upgrade])
-                                [:contribute :reconcile]))
-                "and leaves the pre-cutover entry readable"))
-          (spit (io/file workspace "init.clj") "")
-          (let [result (weaver-runtime/refresh-modules! rt)]
-            (is (= :applied (:status result)))
-            (is (= :removed (get-in result [:modules :live-upgrade :status])))
-            (is (= [[:live-upgrade :removed]] @module-reconcile-statuses)
-                "the retained reconciler runs exactly once, on removal")
-            (is (empty? (:resolved/entry-points result))))
-          (finally
-            (weaver-runtime/stop! rt))))
-      (finally
-        (delete-tree! (io/file workspace ".."))))))
-
-(deftest d3-targeted-refresh-refuses-evaluating-a-retained-pre-cutover-module
-  (let [world (temp-world)
-        workspace (:config-dir world)
-        suffix (str/replace (str (random-uuid)) "-" "")
-        root-lib 'test/module-root
-        legacy-ns (symbol (str "test.module.retained-legacy-" suffix))
-        upstream-ns (symbol (str "test.module.retained-upstream-" suffix))
-        independent-ns (symbol (str "test.module.retained-independent-" suffix))
-        legacy-declaration {:contribute (symbol (str legacy-ns) "contribute")
-                            :reconcile 'skein.weaver-test/module-reconcile}
-        legacy-body (str "(defn contribute [_ctx]"
-                         " {:queries {\"retained-legacy\" [:= [:attr :owner] \"legacy\"]}})\n")
-        published #{"retained-legacy" "retained-upstream" "retained-independent"}]
-    (try
-      (write-local-spool-module!
-       workspace root-lib legacy-ns
-       (str legacy-body
-            "(def spool {:contribute 'contribute"
-            " :reconcile 'skein.weaver-test/module-reconcile})"))
-      (write-local-spool-module!
-       workspace root-lib upstream-ns
-       (str "(defn contribute [_ctx]"
-            " {:queries {\"retained-upstream\" [:= [:attr :owner] \"upstream\"]}})\n"
-            "(def spool {:contribute 'contribute})"))
-      (write-local-spool-module!
-       workspace root-lib independent-ns
-       (str "(defn contribute [_ctx]"
-            " {:queries {\"retained-independent\" [:= [:attr :owner] \"independent\"]}})\n"
-            "(def spool {:contribute 'contribute})"))
-      (spit (io/file workspace "init.clj")
-            (str "(skein.core.weaver.runtime/declare-module! "
-                 "skein.core.weaver.runtime/*runtime* :retained-upstream "
-                 "{:ns '" upstream-ns " :spools ['" root-lib "]})\n"
-                 "(skein.core.weaver.runtime/declare-module! "
-                 "skein.core.weaver.runtime/*runtime* :retained-legacy "
-                 "{:ns '" legacy-ns " :spools ['" root-lib "]"
-                 " :after [:retained-upstream]})\n"
-                 "(skein.core.weaver.runtime/declare-module! "
-                 "skein.core.weaver.runtime/*runtime* :retained-independent "
-                 "{:ns '" independent-ns " :spools ['" root-lib "]})\n"))
-      (let [rt (weaver-runtime/start! nil {:world world :publish? false})
-            refusal (fn [opts]
-                      (try
-                        (weaver-runtime/refresh-modules! rt opts)
-                        nil
-                        (catch clojure.lang.ExceptionInfo e (ex-data e))))]
-        (try
-          (is (= published (set (keys (graph/queries rt))))
-              "all three modules publish before the pickup")
-          ;; Put the world in the state of a coordinator that picked the cutover
-          ;; up with refresh! rather than a restart: the module's entry points
-          ;; are named by its retained graph entry, its source names them
-          ;; nowhere, and its state predates :resolved-entry-points
-          ;; (DELTA-Dsp-004.D3). Dropping the loaded `spool` var alongside the
-          ;; rewritten source is what makes the namespace pre-cutover; a reload
-          ;; alone would leave the var interned.
-          (write-local-spool-module! workspace root-lib legacy-ns legacy-body)
-          (ns-unmap (find-ns legacy-ns) 'spool)
-          (swap! (:module-state rt)
-                 (fn [state]
-                   (-> state
-                       (dissoc :resolved-entry-points)
-                       (update-in [:graph :retained-legacy] merge legacy-declaration))))
-          (reset! module-reconcile-statuses [])
-          (testing "targeting the retained module refuses before anything mutates"
-            (let [data (refusal {:only [:retained-legacy]})]
-              (is (= :retained-legacy-declaration (:reason data)))
-              (is (= [:retained-legacy] (:module/keys data)))
-              (is (= {:retained-legacy legacy-declaration}
-                     (:retained/entry-points data)))))
-          (testing "so does targeting a module it is an affected dependent of"
-            (let [data (refusal {:only [:retained-upstream]})]
-              (is (= [:retained-legacy] (:module/keys data))
-                  "the refusal names the module that must not be evaluated")
-              (is (= [:retained-upstream] (:selected data))
-                  "alongside what was actually targeted")))
-          (testing "a refused targeted refresh leaves the live world untouched"
-            (is (= published (set (keys (graph/queries rt))))
-                "the retained module keeps its published contribution")
-            (is (= {:retained-legacy legacy-declaration}
-                   (:resolved/entry-points (runtime/status rt)))
-                "and its retained resolved entry points")
-            (is (empty? @module-reconcile-statuses)
-                "no reconciler runs on the refused path"))
-          (testing "an unaffected targeted refresh still applies"
-            (let [result (weaver-runtime/refresh-modules!
-                          rt {:only [:retained-independent]})]
-              (is (= :unchanged (:status result)))
-              (is (= legacy-declaration
-                     (get-in result [:resolved/entry-points :retained-legacy]))
-                  "the refusal is narrow: unrelated work keeps the retained set")))
-          (testing "removal by omission still runs the retained reconciler once"
-            (spit (io/file workspace "init.clj") "")
-            (let [result (weaver-runtime/refresh-modules! rt)]
-              (is (= :applied (:status result)))
-              (is (= :removed (get-in result [:modules :retained-legacy :status])))
-              (is (= [[:retained-legacy :removed]] @module-reconcile-statuses))
-              (is (empty? (:resolved/entry-points result)))
-              (is (empty? (graph/queries rt)))))
-          (finally
-            (weaver-runtime/stop! rt))))
-      (finally
-        (delete-tree! (io/file workspace ".."))))))
-
 (deftest fresh-declarations-refuse-entry-point-keys
   (testing "the direct internal declare-module! route refuses either key"
     (with-runtime
@@ -5579,7 +5022,7 @@
               source "modules/fresh-legacy.clj"]
           (module-source! workspace source
                           (symbol (str "test.module.fresh-legacy-" suffix))
-                          contribute-spool)
+                          (contribution-forms :fresh-legacy))
           (doseq [field [:contribute :reconcile]]
             (let [failure (try
                             (weaver-runtime/declare-module!
@@ -5591,8 +5034,8 @@
               (is (= [field] (:removed (ex-data failure)))
                   "the refusal names the offending key")
               (is (= :fresh-legacy (:module/key (ex-data failure))))
-              (is (re-find #"public spool var" (ex-message failure))
-                  "and points at the convention that replaced it")))
+              (is (re-find #"authoring forms" (ex-message failure))
+                  "and points at the grammar that replaced it")))
           (is (not (contains? (:modules (weaver-runtime/module-status rt))
                               :fresh-legacy))
               "a refused declaration is not recorded")))))
@@ -5604,7 +5047,7 @@
       (try
         (module-source! workspace "modules/startup-legacy.clj"
                         (symbol (str "test.module.startup-legacy-" suffix))
-                        contribute-spool)
+                        (contribution-forms :startup-legacy))
         (spit (io/file workspace "init.clj")
               (str "(skein.core.weaver.runtime/declare-module! "
                    "skein.core.weaver.runtime/*runtime* :startup-legacy "
