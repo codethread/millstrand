@@ -1954,8 +1954,7 @@
    :skein/spools-shell 'skein.spools.executors.shell/spool
    :skein/spools-code 'skein.spools.executors.code/spool
    :skein/spools-unsafe-text-search 'skein.spools.unsafe-text-search/spool
-   :skein/spools-chime 'skein.spools.chime/spool
-   :skein/spools-cron 'skein.spools.cron/spool})
+   :skein/spools-chime 'skein.spools.chime/spool})
 
 (def ^:private sibling-spool-vars
   "The pinned sibling modules `.skein/init.clj` activates, keyed as init.clj keys
@@ -1975,7 +1974,7 @@
   the patterns its source collects, and pinned `codethread/devflow`, whose whole
   contribution is the stage `defworkflow` entries its load collects."
   #{:macros/patterns :macros/ops :macros/queries :macros/rules :macros/demo
-    :skein/spools-devflow})
+    :skein/spools-cron :skein/spools-devflow})
 
 (def ^:private authoring-generation
   "Migration-window classification for every selected module.
@@ -1989,7 +1988,7 @@
    :skein/spools-code :legacy
    :skein/spools-unsafe-text-search :legacy
    :skein/spools-chime :legacy
-   :skein/spools-cron :legacy
+   :skein/spools-cron :forms
    :skein/spools-devflow :forms
    :skein/spools-kanban :legacy
    :skein/spools-shuttle :legacy

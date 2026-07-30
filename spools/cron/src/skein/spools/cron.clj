@@ -20,11 +20,14 @@
 
   State is runtime-owned via `skein.api.runtime.alpha/spool-state`, so two
   runtimes in one JVM keep independent executors, job tables, and failure logs.
-  The in-memory job table carries no cadence: it is repopulated by trusted
-  config re-running `register!` after each startup/reload, while the durable
-  wake in SQLite is the sole authority for when a job next fires."
+  The in-memory job table carries no cadence: collected `defjob` declarations
+  converge through Cron's lifecycle effect after publication, while the durable
+  wake in SQLite is the sole authority for when a job next fires. Trusted
+  callers may still use `register!` directly."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [skein.api.format.alpha :as format-alpha]
+            [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.registry.alpha :as registry]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.scheduler.alpha :as scheduler]
@@ -46,13 +49,6 @@
   `new-state` and this version drift apart."
   4)
 
-(def ^:private kinds-version
-  "Shape version for cron's runtime-owned job-kind registry handle. Held in its
-  own spool-state slot (not nested in `::state`) so the module publication kernel
-  discovers `:skein.spools.cron/jobs` when a dependent module contributes cron
-  jobs (module_publication.clj domain-backends scans spool-state one level deep)."
-  1)
-
 (def job-kind
   "Owner-partitioned kind id for Cron job declarations."
   :skein.spools.cron/jobs)
@@ -68,12 +64,22 @@
   (s/and map?
          #(every? #{:override?} (keys %))
          #(or (not (contains? % :override?)) (boolean? (:override? %)))))
-
-(defn- new-job-kinds []
-  (doto (registry/registry)
-    (registry/declare-kind! {:id job-kind
-                             :entry-spec ::job
-                             :binding-moment :cron/fire})))
+(s/def ::runtime #(and (map? %) (contains? % :spool-state)))
+(s/def ::jobs (s/map-of keyword? ::job))
+(s/def ::lifecycle-context
+  (s/and map?
+         #(s/valid? ::runtime (:runtime %))))
+(s/def ::apply-context
+  (s/and ::lifecycle-context
+         #(s/valid? ::jobs (:desired %))
+         #(s/valid? ::jobs (:actual %))))
+(s/def ::reconciled #{:cron})
+(s/def ::job-ids (s/coll-of keyword? :kind vector?))
+(s/def ::reconcile-result
+  (s/and map?
+         #(= #{:reconciled :jobs} (set (keys %)))
+         #(s/valid? ::reconciled (:reconciled %))
+         #(s/valid? ::job-ids (:jobs %))))
 
 (defn- ^ThreadFactory daemon-thread-factory [prefix]
   (let [counter (atom 0)]
@@ -106,7 +112,7 @@
 (defn- ^ExecutorService executor [runtime] (:executor (state runtime)))
 (defn- jobs-atom [runtime] (:jobs (state runtime)))
 (defn- job-kinds [runtime]
-  (runtime/spool-state runtime ::job-kinds {:version kinds-version} new-job-kinds))
+  (runtime/spool-state runtime ::job-kinds registry/registry))
 (defn- failure-log [runtime] (:failure-log (state runtime)))
 (defn- ^Random rng [runtime] (:rng (state runtime)))
 
@@ -148,6 +154,11 @@
   [id]
   (str "cron/" (name id)))
 
+(defn- wake-pending?
+  [runtime id]
+  (let [key (wake-key id)]
+    (some #(= key (:key %)) (scheduler/pending runtime))))
+
 (defn- resolve-symbol [role sym]
   (when-not (and (symbol? sym) (namespace sym))
     (fail! (str "Cron job " role " must be a fully qualified symbol") {role sym}))
@@ -167,7 +178,7 @@
                                   :payload {:job (name id)}})))
 
 (defn- config-tuple [job]
-  [(:interval-ms job) (:jitter-ms job) (:handler job)])
+  [(:interval-ms job) (or (:jitter-ms job) 0) (:handler job)])
 
 (defn unregister!
   "Cancel a cron job's pending wake and remove it from `runtime`.
@@ -185,7 +196,7 @@
   (let [id (job-id id)
         key (wake-key id)
         old @(jobs-atom runtime)
-        pending? (some #(= key (:key %)) (scheduler/pending runtime))]
+        pending? (wake-pending? runtime id)]
     (when pending?
       (scheduler/cancel! runtime key))
     (swap! (jobs-atom runtime) dissoc id)
@@ -343,9 +354,8 @@
         interval (:interval-ms job)
         jitter (or (:jitter-ms job) 0)]
     (resolve-symbol :handler (:handler job))
-    (let [key (wake-key id)
-          old-entry (get @(jobs-atom runtime) id)
-          pending? (some #(= key (:key %)) (scheduler/pending runtime))
+    (let [old-entry (get @(jobs-atom runtime) id)
+          pending? (wake-pending? runtime id)
           entry {:id id :interval-ms interval :jitter-ms jitter :handler (:handler job)}
           replace? (or (not pending?)
                        (and old-entry (not= (config-tuple old-entry) (config-tuple entry))))]
@@ -369,7 +379,7 @@
 
   `id` is the stable cron job key and `job` is the same literal map accepted by
   `register!`. The optional `options` map conforms to `::job-options`. The macro
-  performs no scheduling itself; cron's reconciler applies the complete
+  performs no scheduling itself; Cron's lifecycle effect applies the complete
   effective declaration after publication."
   ([id job]
    `(defjob ~id {} ~job))
@@ -377,62 +387,77 @@
    `(runtime/collect-entry! job-kind ~id (job-declaration ~id ~options ~job)
                             (select-keys ~options #{:override?}))))
 
-(defn contribute
-  "Materialize cron's job-kind registry handle for dependent module contributions.
+(runtime/collect-kind! ::job-kinds
+                       {:id job-kind
+                        :entry-spec ::job
+                        :binding-moment :cron/fire})
 
-  The handle lives in its own spool-state slot so the publication kernel
-  discovers `:skein.spools.cron/jobs` before a dependent module (e.g. the NVD
-  scan job) stages its cron contribution."
-  [{:keys [runtime]}]
-  (state runtime)
-  (job-kinds runtime)
-  {})
+(defn desired-jobs
+  "Return the effective Cron job declarations for a `::lifecycle-context`."
+  [{:keys [runtime] :as context}]
+  (require-valid! ::lifecycle-context context "Invalid Cron lifecycle context")
+  (into {}
+        (map (fn [[id job]]
+               (let [normalized-id (job-id id)]
+                 [normalized-id (assoc job :id normalized-id)])))
+        (registry/effective (job-kinds runtime) job-kind)))
 
-(defn reconcile
-  "Reconcile effective cron declarations with their durable dispatcher wakes.
+(defn actual-jobs
+  "Return Cron's currently managed jobs for a `::lifecycle-context`."
+  [{:keys [runtime] :as context}]
+  (require-valid! ::lifecycle-context context "Invalid Cron lifecycle context")
+  @(jobs-atom runtime))
 
-  Removed declarations cancel before removal; changed declarations preserve an
-  unchanged wake and reschedule a changed cadence or handler. Applied and
-  removed contributions deliberately share the body: the effective registry
-  already reflects the transition, so one reconciliation pass registers what
-  appeared and cancels what vanished either way (SPEC-004.C46b). Any other
-  status is a direct-call error and fails loudly."
-  [{:keys [runtime] :as ctx}]
-  (let [status (get-in ctx [:module/contribution :status])]
-    (when-not (contains? #{:applied :removed} status)
-      (fail! "Unsupported module contribution status"
-             {:status status
-              :allowed #{:applied :removed}
-              :module/key (:module/key ctx)
-              :reconciler 'skein.spools.cron/reconcile}))
-    (let [visible (jobs-atom runtime)
-          effective (registry/effective (job-kinds runtime) job-kind)
-          before @visible
-          removed (remove (set (keys effective)) (keys before))]
-      (try
-        (doseq [id removed] (unregister! runtime id))
-        (doseq [[id job] effective]
-          (when (not= (select-keys job [:interval-ms :jitter-ms :handler])
-                      (select-keys (get before id) [:interval-ms :jitter-ms :handler]))
-            (register! runtime (assoc job :id id))))
-        {:reconciled :cron :jobs (vec (sort (keys effective)))}
-        (catch Throwable t
-          (throw (ex-info "Cron reconciliation left a recoverable degraded outcome"
-                          {:remedy "Repair the cron declaration or durable wake, then refresh the owning module"
-                           :jobs (vec (sort (keys effective)))}
-                          t)))))))
+(defn- apply-job-change!
+  [runtime operation id declaration change!]
+  (try
+    (change!)
+    (catch Throwable t
+      (throw (ex-info "Cron job reconciliation failed"
+                      {:job id
+                       :operation operation
+                       :declaration declaration
+                       :wake-key (wake-key id)
+                       :remedy
+                       (format-alpha/reflow
+                        "|Repair the named Cron declaration or durable wake,
+                         |then refresh the owning module.")}
+                      t)))))
 
-(def spool
-  "Entry-point declaration for the cron spool (PROP-Dsp-001 `def spool`
-  convention).
+(defn apply-jobs!
+  "Converge Cron's managed jobs from a validated `::apply-context`."
+  [{:keys [runtime desired actual] :as context}]
+  (require-valid! ::apply-context context "Invalid Cron apply context")
+  (let [removed (remove (set (keys desired)) (keys actual))]
+    (doseq [id removed]
+      (apply-job-change! runtime :remove id (get actual id)
+                         #(unregister! runtime id)))
+    (doseq [[id job] desired]
+      (when (or (not= (config-tuple job) (some-> (get actual id) config-tuple))
+                (not (wake-pending? runtime id)))
+        (apply-job-change! runtime :apply id job
+                           #(register! runtime (assoc job :id id)))))
+    (require-valid! ::reconcile-result
+                    {:reconciled :cron :jobs (vec (sort (keys desired)))}
+                    "Invalid Cron reconciliation result")))
 
-  The refresh coordinator resolves `:contribute`/`:reconcile` from this public
-  var at every module evaluation, so a consumer declares only a source target
-  and world policy (`{:ns 'skein.spools.cron :spools [...]}`) and never mirrors
-  the pair. Unqualified symbols resolve against this namespace; fn values are
-  rejected (ADR-002.O1)."
-  {:contribute 'contribute
-   :reconcile 'reconcile})
+(defn remove-jobs!
+  "Cancel every managed job for a validated `::lifecycle-context`."
+  [{:keys [runtime] :as context}]
+  (require-valid! ::lifecycle-context context "Invalid Cron lifecycle context")
+  (doseq [id (keys @(jobs-atom runtime))]
+    (unregister! runtime id))
+  (require-valid! ::reconcile-result
+                  {:reconciled :cron :jobs []}
+                  "Invalid Cron removal result"))
+
+(lifecycle/defreconcile scheduled-jobs
+  "Keep durable Cron wakes converged on the effective published job registry."
+  {:read-desired 'skein.spools.cron/desired-jobs
+   :read-actual 'skein.spools.cron/actual-jobs
+   :apply 'skein.spools.cron/apply-jobs!
+   :on-removed 'skein.spools.cron/remove-jobs!
+   :trigger-kinds #{job-kind}})
 
 (defn jobs
   "Return the cron jobs registered on `runtime` as status maps, sorted by id.

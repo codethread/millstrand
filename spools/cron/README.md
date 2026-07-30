@@ -51,12 +51,11 @@ Activate it from trusted startup config after syncing approved roots:
    :required? true})
 ```
 
-The module reconciler registers no jobs. Trusted config contributes jobs from
-dependent modules, so the repo decides what runs on a cadence.
+The module collects an open jobs-kind declaration and a desired-state lifecycle effect. Trusted config contributes jobs from dependent modules, so the repo decides what runs on a cadence. Publication of any owner's Cron jobs triggers the effect, including when Cron's own source declaration is unchanged.
 
 ## Registering jobs
 
-A job is registered by fully-qualified `:handler` symbol:
+`register!` remains the direct trusted-Clojure seam for a job with a fully-qualified `:handler` symbol:
 
 ```clojure
 (require '[skein.spools.cron :as cron])
@@ -82,6 +81,17 @@ cadence-defining tuple `[interval-ms jitter-ms handler]` is unchanged. This is t
 normal reload path: config re-runs, the in-memory job table is repopulated, and
 the existing durable countdown remains in place. A changed interval, jitter, or
 `:handler` symbol replaces the wake and starts the next countdown from now.
+
+Module authors normally use `defjob`. The form collects replayable declaration data and schedules nothing during source evaluation:
+
+```clojure
+(cron/defjob :nightly-report
+  {:interval-ms (* 24 60 60 1000)
+   :jitter-ms (* 60 60 1000)
+   :handler 'my.jobs/emit-report})
+```
+
+After owner-complete publication, Cron's lifecycle effect compares the effective job registry with the managed job table. It preserves unchanged wakes, reschedules changed jobs, and cancels omitted jobs. Removing the Cron module cancels all jobs through the retained lifecycle declaration.
 
 Cron no longer has a first-fire seed hook. The first fire, and every later fire,
 is represented by the durable scheduler wake. If code needs a different
