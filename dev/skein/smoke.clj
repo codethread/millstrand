@@ -645,18 +645,27 @@
               "defop's op joins the live help catalogue")
       ;; The fixture resource records its phases as strands, so both the query
       ;; and the module's open phase are provable from one lean list.
-      (assert= ["smoke-authoring open"]
-               (titles (parse-json (run-strand-config! workspace "list" "--query" "smoke-authored")))
-               "defquery publishes a named query and defresource ran its open phase")
-      (source-file/spit-forms! init-path (authoring-init-forms false))
-      (refresh-live-weaver! workspace)
-      (assert-contains (run-strand-config-fails! workspace "smoke-echo" "hello")
-                       "Operation not found"
-                       "omitting the module removes its collected op by omission")
-      (run-strand-config-fails! workspace "list" "--query" "smoke-authored")
-      (assert (some #{"smoke-authoring close"}
-                    (titles (parse-json (run-strand-config! workspace "list"))))
-              "removal by omission runs the module resource's close phase")
+      (let [opened (parse-json (run-strand-config! workspace "list" "--query" "smoke-authored"))]
+        (assert= ["smoke-authoring open"] (titles opened)
+                 "defquery publishes a named query and defresource ran its open phase")
+        (source-file/spit-forms! init-path (authoring-init-forms false))
+        (refresh-live-weaver! workspace)
+        (assert-contains (run-strand-config-fails! workspace "smoke-echo" "hello")
+                         "Operation not found"
+                         "omitting the module removes its collected op by omission")
+        (assert-contains (run-strand-config-fails! workspace "list" "--query" "smoke-authored")
+                         "Query not found: smoke-authored"
+                         "omitting the module removes its collected query by omission")
+        ;; The close marker carries the handle open returned, so the resource is
+        ;; proved to have been closed with its own live state rather than a
+        ;; freshly reopened one.
+        (let [closed (first (filter #(= "smoke-authoring close" (:title %))
+                                    (parse-json (run-strand-config! workspace "list"))))]
+          (assert (some? closed)
+                  "removal by omission runs the module resource's close phase")
+          (assert= (:id (first opened))
+                   (get-in closed [:attributes :opened])
+                   "the close phase receives the handle its own open phase returned")))
       (finally
         (stop-weaver-config! workspace)
         (delete-tree! (smoke-workspace (str db-file ".authoring")))))))
