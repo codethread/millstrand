@@ -68,7 +68,7 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
 - **PROP-Sbn-001.S3 (path validation and arguments):** Core defines named public specs for the `:bins` partition and entry shapes, and the kind's registration path consults them before publication. Registration then requires `:executable` to be relative and remain beneath the owning root after canonicalization, and `:build`, when present, to be a vector of non-empty strings. For a bin without `:build`, registration also requires `:executable` to name an existing regular file carrying an executable bit; these filesystem checks stay in the candidate validator because a spec cannot express them. Invalid declarations fail the candidate refresh through SPEC-004.C46d's `:candidate-validator`, while every owner keeps its previous live partition.
 
-  A bin with `:build` may name an executable that is absent from a fresh materialized root by construction, so its existence and executable-bit checks move to plan time: `bins plan` fails `bin/not-built`, naming the build command as the remedy (S8).
+  A bin with `:build` may name an executable that is absent from a fresh materialized root by construction, so registration performs no filesystem check on it. Instead `bins plan` evaluates one runnable predicate — the resolved path names an existing regular file carrying an executable bit — and reports the result in the plan. The plan itself always resolves and always carries the recipe, because `mill bin build` needs it exactly when the predicate fails. `mill bin run` refuses `bin/not-built` when the predicate fails for a bin declaring `:build`, naming the build command as the remedy (S8). For a buildless bin the same predicate was enforced at registration; if the file has since changed on disk, exec simply fails loudly as `bin/exec-failed`.
 
   Planning resolves `:executable` to its canonical absolute path. `mill` appends every user argument after the bin name without parsing, resolving, or inspecting it. Beyond the OS resolving a bare recipe command at spawn time, there is no `PATH` lookup and no shebang parsing in Skein. If the kernel cannot start the file or its declared interpreter, exec fails loudly with the host error.
 
@@ -80,7 +80,7 @@ The correctness stance for this whole surface: failures are acceptable provided 
   mill bin run <bin> [args...]     # resolve a plan and execve into it
   ```
 
-  `list` emits JSON machine output per SPEC-002.C4 and TEN-001. `build` spawns the recipe as a child process with the owning root as cwd and the caller's environment plus the S7 overlay, leaves its stdio on the caller's terminal, waits, and reports the exit in a JSON envelope. It runs whenever asked — no stamp, no lock, no staleness check; re-running is both the upgrade path and the recovery path. `run` emits nothing after a successful exec because mill is gone and the bin owns the stream. It emits a JSON failure envelope only when it never reaches exec.
+  `list` emits JSON machine output per SPEC-002.C4 and TEN-001. `build` spawns the recipe as a child process with the owning root as cwd and the caller's environment plus the S7 overlay, leaves its stdio on the caller's terminal, waits, and reports the exit in a JSON envelope. It runs whenever asked — no stamp, no lock, no staleness check; re-running is both the upgrade path and the recovery path. A recipe process that cannot be started at all fails `bin/build-start-failed` with the host cause (S8). `run` emits nothing after a successful exec because mill is gone and the bin owns the stream. It emits a JSON failure envelope only when it never reaches exec.
 
   `run` stops parsing flags after `<bin>`, so `mill bin run kanban-dash --help` passes `--help` to the dashboard. `mill` flags, including `--workspace`, must precede the bin name. `mill bin --help` and `mill bin run --help` describe the Skein surface because neither invocation names a bin. Listing an empty registry returns an empty collection.
 
@@ -101,11 +101,14 @@ The correctness stance for this whole surface: failures are acceptable provided 
   ```json
   {"operation": "bins plan",
    "bin": "kanban-dash",
+   "runnable": false,
    "exec": {"path": "/Users/ct/.cache/skein/spools/603fa7b8…/bin/kanban-dash",
             "env": {"SKEIN_WORKSPACE": "/Users/ct/dev/projects/skein-src/.skein"}},
    "build": {"argv": ["bun", "install", "--frozen-lockfile"],
              "cwd":  "/Users/ct/.cache/skein/spools/603fa7b8…"}}
   ```
+
+  `runnable` is the S3 predicate's result at resolution time; the plan resolves whether or not it holds, so `mill bin build` always has the recipe. It is `mill bin run` that acts on a false value.
 
   Mill already owns the caller's cwd and complete environment, so the plan does not echo them. For `run`, mill leaves cwd unchanged and constructs argv as the resolved path followed by the user-supplied arguments. `build` appears only when the declaration carries a recipe; `mill bin build` runs its `argv` with its `cwd` as working directory. In both cases the plan's `env` is only an overlay. `SKEIN_WORKSPACE` identifies the selected workspace and is sufficient for a bin to address its weaver through the ordinary client path.
 
@@ -117,9 +120,10 @@ The correctness stance for this whole surface: failures are acceptable provided 
   | ------- | ----------- |
   | `bin/unknown` | No active declaration carries the requested name. |
   | `bin/declaration-invalid` | A declaration has the wrong shape, escapes its owning root, or — for a buildless bin — names a file that is absent, non-regular, or non-executable. Existing owner-registry collision and override errors apply unchanged during publication. |
-  | `bin/not-built` | A bin declaring `:build` names an executable that does not exist at plan time; the error names `mill bin build <bin>` as the remedy. |
+  | `bin/not-built` | `mill bin run` on a bin declaring `:build` whose plan reports the S3 runnable predicate false; the error names `mill bin build <bin>` as the remedy. |
   | `bin/no-build-recipe` | `mill bin build` named a bin that declares no `:build`. |
-  | `bin/build-failed` | The recipe exited non-zero; the error preserves the exit code. The recipe's own output is the diagnosis, and re-running the build after acting on it is the recovery. |
+  | `bin/build-start-failed` | The recipe process could not be started — a bare command absent from the caller's `PATH`, or an unstartable path; the error preserves the recipe argv and host cause. |
+  | `bin/build-failed` | The recipe started and exited non-zero; the error preserves the exit code. The recipe's own output is the diagnosis, and re-running the build after acting on it is the recovery. |
   | `mill/no-selected-weaver` | No live weaver answers the list or plan request; this reuses mill's existing outcome. |
   | `bin/exec-failed` | Mill resolves a valid plan but the host refuses exec; the error preserves the path and host cause. |
 
@@ -129,7 +133,7 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
 - **PROP-Sbn-001.S10 (demonstration):** The kanban dashboard moves from `scripts/agent-dash/` into `kanban.spool` as an executable `bin/kanban-dash` declaring `:build ["bun" "install" "--frozen-lockfile"]`. This downstream move demonstrates the surface but is not an acceptance gate for this repository.
 
-- **PROP-Sbn-001.S11 (validation):** Clojure tests prove registration consults the named partition and entry specs, and that the handlers validate list and plan results against their named specs. They also cover two independent non-batteries declarations, an empty registry, plan resolution, collision overrides, root containment, and candidate-validator refusal for absent, non-regular, and non-executable files while previous live partitions remain intact — plus acceptance of a `:build` bin whose executable is absent, and `bin/not-built` with its remedy at plan time. Go tests cover typed rejection of malformed plans, list relay, flag cutover after `<bin>`, plan argument appending, cwd preservation, caller-environment inheritance plus `SKEIN_WORKSPACE` overlay, descriptor cleanup, and loud exec failure with the path and host cause; for `build`, running the recipe with the owning root as cwd and the caller's environment, the JSON exit envelope, `bin/build-failed` preserving a non-zero exit, and `bin/no-build-recipe`. A manual terminal check covers raw mode, resize, alt-screen, and Ctrl-C.
+- **PROP-Sbn-001.S11 (validation):** Clojure tests prove registration consults the named partition and entry specs, and that the handlers validate list and plan results against their named specs. They also cover two independent non-batteries declarations, an empty registry, plan resolution, collision overrides, root containment, and candidate-validator refusal for absent, non-regular, and non-executable files while previous live partitions remain intact — plus acceptance of a `:build` bin whose executable is absent, and plans reporting the runnable predicate false for absent, non-regular, and non-executable files while still carrying the recipe. Go tests cover typed rejection of malformed plans, list relay, flag cutover after `<bin>`, plan argument appending, cwd preservation, caller-environment inheritance plus `SKEIN_WORKSPACE` overlay, descriptor cleanup, and loud exec failure with the path and host cause; for `build`, running the recipe with the owning root as cwd and the caller's environment, the JSON exit envelope, `bin/build-start-failed` preserving the recipe argv and host cause, `bin/build-failed` preserving a non-zero exit, and `bin/no-build-recipe`; and end to end, that a fresh root's unrunnable build-bin yields `bin/not-built` from `run`, a successful `mill bin build` from that same plan, and a subsequent runnable plan. A manual terminal check covers raw mode, resize, alt-screen, and Ctrl-C.
 
 ### PROP-Sbn-001.EX1 A consumer runs a shipped dashboard
 
@@ -146,7 +150,7 @@ $ mill bin list
 ]}
 
 $ mill bin run kanban-dash
-{"operation":"bins plan","error":"bin/not-built",
+{"operation":"bin run","error":"bin/not-built",
  "bin":"kanban-dash","remedy":"mill bin build kanban-dash"}
 
 $ mill bin build kanban-dash
@@ -156,7 +160,7 @@ $ mill bin run kanban-dash
 # full-screen board in this terminal; mill is gone
 ```
 
-Nothing recorded that the build happened; the executable's existence is the only build state Skein reads. Bumping the pin materializes a fresh root whose executable is absent again, so `run` refuses with the same remedy. Re-running `mill bin build` after any doubt is always safe for the recipes in scope — ordinary idempotent installers — and where one is not, that is the author's contract with their users, not Skein's.
+Nothing recorded that the build happened; the S3 runnable predicate is the only build state Skein reads. Bumping the pin materializes a fresh root whose executable is absent again, so `run` refuses with the same remedy. Re-running `mill bin build` after any doubt is always safe for the recipes in scope — ordinary idempotent installers — and where one is not, that is the author's contract with their users, not Skein's.
 
 ### PROP-Sbn-001.EX2 An existing wrapper becomes reachable unchanged
 
@@ -183,7 +187,7 @@ Mill preserves the directory from which the operator invoked it and passes the t
 - **PROP-Sbn-001.Q1:** A spool author declares whichever executables they want consumers to see. Only entries contributed through `:bins` appear in `mill bin list`; no visibility marker is needed.
 - **PROP-Sbn-001.Q2:** `SKEIN_WORKSPACE` is sufficient caller context. It identifies the selected world and therefore the weaver a bin should address through the ordinary client path. The overlay carries no run id, weaver id, or peer name.
 - **PROP-Sbn-001.Q3:** Bins are available only from activated modules because declarations live in contributions. If a module is inactive or fails to contribute, its bins are absent along with its ops. This follows the current activation model and needs no workaround.
-- **PROP-Sbn-001.Q4:** Why no completion stamp or build lock: the executable's existence, read at plan time, is the only build state Skein consults. A half-finished build either leaves the executable absent (`run` keeps refusing with the remedy) or present but broken (the bin fails loudly in the user's terminal). Both are visible, and both are fixed by re-running the build command. Concurrent builds in one root race benignly for idempotent installers; the loser re-runs. A stamp-and-lock design was written in full (`46b19a1e`) and cut deliberately — it pulled in stamp identity, external state keyed by root and recipe, a cross-process protocol needing a spec owner, and cache GC, all to answer questions "re-run the build" already answers.
+- **PROP-Sbn-001.Q4:** Why no completion stamp or build lock: the S3 runnable predicate, evaluated at plan time, is the only build state Skein consults. A half-finished build either leaves the predicate failing (`run` keeps refusing with the remedy) or produces a runnable but broken program (the bin fails loudly in the user's terminal). Both are visible, and both are fixed by re-running the build command. Concurrent builds in one root race benignly for idempotent installers; the loser re-runs. A stamp-and-lock design was written in full (`46b19a1e`) and cut deliberately — it pulled in stamp identity, external state keyed by root and recipe, a cross-process protocol needing a spec owner, and cache GC, all to answer questions "re-run the build" already answers.
 
 ## PROP-Sbn-001.P6 Deferred work
 
