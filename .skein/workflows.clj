@@ -1,18 +1,21 @@
 (ns workflows
-  "This repo's hand-authored coordination workflows and their command surface:
-  the coordinator `land` workflow (family \"land\") with its `land` op, the
-  third-party `spool-bump` workflow, the module-shaping `story` workflow, the
-  light `explore` and `fix` workflows for the two low-ceremony modes, and the
-  `delegate-pipeline` weave pattern for sequential delegated subagent gates,
-  and the small `macros-demo` pattern retained as an authoring-form example.
+  "This repo's hand-authored coordination workflow definitions: the coordinator
+  `land` workflow (family \"land\"), whose policy op is the sibling
+  workflows-land module, the third-party `spool-bump` workflow, the
+  module-shaping `story` workflow, the light `explore` and `fix` workflows for
+  the two low-ceremony modes, the `delegate-pipeline` weave pattern for
+  sequential delegated subagent gates, and the small `macros-demo` pattern
+  retained as an authoring-form example.
 
   Every workflow here is a static `defworkflow` Var: a definition a worker can
   read through `strand workflow show <name>` before starting a run, with its
   param contract owned by a spec rather than by a constructor's argument list
   (PROP-Wcd-001.S12). The generic driving surface is the shipped `workflow` op
-  activated in init.clj; the `land` op survives because it adds domain behavior
-  the engine has no business knowing — the singleton merge lock and the kanban
-  lane moves.
+  activated in init.clj.
+
+  The land definitions stay here while workflows-land.clj owns the policy that
+  drives them: live runs carry `workflows/...` symbols on their persisted gates,
+  so these Vars keep their names.
 
   The devflow lifecycle itself is the external `ct.spools.devflow` spool and
   workers drive it through the same generic `workflow` op."
@@ -21,172 +24,8 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.skein.alpha :as skein]
-            [skein.api.current.alpha :as current]
             [skein.api.format.alpha :as format-alpha]
-            [skein.api.weaver.alpha :as weaver]
-            [skein.api.spool.alpha :refer [attr-get entity-projection]]
             [skein.spools.workflow :as workflow]))
-
-(def ^:private merge-lock-kind
-  "Singleton strand kind for the repo-wide land merge sentinel."
-  "merge-lock")
-
-(def ^:private merge-lock-monitor
-  "JVM-local half of merge-lock acquisition serialisation.
-
-  The file lock handles other weaver processes; this monitor prevents overlapping
-  file-lock attempts inside one JVM from raising OverlappingFileLockException."
-  (Object.))
-
-(defn- with-merge-lock-acquisition
-  "Call f while holding the selected workspace's cross-process acquisition lock."
-  [rt f]
-  (let [config-dir (get-in rt [:metadata :config-dir])]
-    (when-not (and (string? config-dir) (not (str/blank? config-dir)))
-      (throw (ex-info "runtime has no selected config directory for merge-lock acquisition"
-                      {:config-dir config-dir})))
-    (with-open [file (java.io.RandomAccessFile.
-                      (io/file config-dir ".land-merge-lock.acquire")
-                      "rw")
-                channel (.getChannel file)
-                lock (.lock channel)]
-      (f))))
-
-(defn- attr-value
-  "Return strand attribute k using the shared fail-loud attribute reader."
-  [strand k]
-  (when strand
-    (attr-get strand k)))
-
-(defn- require-land-input!
-  "Return value when it satisfies spec, otherwise fail with spec evidence."
-  [spec key value]
-  (when-not (s/valid? spec value)
-    (throw (ex-info (str (name key) " must be a non-blank string")
-                    {:key key
-                     :value value
-                     :spec spec
-                     :explain (s/explain-data spec value)})))
-  value)
-
-(defn- active-merge-locks
-  "Return active merge-lock strands."
-  []
-  (weaver/list (current/runtime) [:and [:= :state "active"] [:= [:attr "kind"] merge-lock-kind]] {}))
-
-(defn- land-root
-  "Return the active land root for feature, failing loudly when absent."
-  [feature]
-  (or (workflow/current-root feature)
-      (throw (ex-info "land run not found" {:feature feature}))))
-
-(defn- require-sane-merge-locks!
-  "Return active locks, refusing a corrupt multiple-lock state."
-  []
-  (let [locks (active-merge-locks)]
-    (when (> (count locks) 1)
-      (throw (ex-info "multiple active merge locks found; inspect and repair manually"
-                      {:locks (mapv :id locks)})))
-    locks))
-
-(defn- require-owned-merge-lock!
-  "Return feature's sole active lock, failing when absent or owned elsewhere."
-  [feature]
-  (if-let [lock (first (require-sane-merge-locks!))]
-    (if (= feature (attr-value lock :land/run-id))
-      lock
-      (throw (ex-info "another land run holds the merge lock"
-                      {:lock (:id lock)
-                       :land/run-id (attr-value lock :land/run-id)
-                       :expected-run-id feature})))
-    (throw (ex-info "land cleanup requires its active merge lock"
-                    {:land/run-id feature}))))
-
-(defn- acquire-merge-lock-serially!
-  "Acquire the singleton merge lock inside the caller's serialization scope."
-  [feature]
-  (let [rt (current/runtime)
-        root (land-root feature)
-        owner (:id root)
-        locks (require-sane-merge-locks!)
-        owned (some #(when (and (= owner (attr-value % :owner))
-                                (= feature (attr-value % :land/run-id)))
-                       %)
-                    locks)]
-    (if owned
-      {:lock owned :created? false}
-      (do
-        (when-let [held (first locks)]
-          (throw (ex-info "another land run holds the merge lock"
-                          {:lock (:id held)
-                           :owner (attr-value held :owner)
-                           :land/run-id (attr-value held :land/run-id)})))
-        {:lock (weaver/add! rt {:title (str "Merge lock: " feature)
-                                :attributes {:kind merge-lock-kind
-                                             :owner owner
-                                             :land/run-id feature}})
-         :created? true}))))
-
-(defn- release-merge-lock!
-  "Release the merge lock held by feature, if one exists."
-  [feature reason]
-  (doseq [lock (require-sane-merge-locks!)
-          :when (= feature (attr-value lock :land/run-id))]
-    (weaver/update! (current/runtime)
-                    (:id lock)
-                    {:state "closed"
-                     :attributes {:land/released-reason reason}})))
-
-(defn- break-merge-lock!
-  "Explicitly break a stale merge lock with a human-supplied reason."
-  [reason]
-  (require-land-input! ::reason :reason reason)
-  (let [rt (current/runtime)]
-    (with-merge-lock-acquisition
-      rt
-      (fn []
-        (if-let [lock (first (require-sane-merge-locks!))]
-          {:broken (entity-projection (weaver/update! rt
-                                                      (:id lock)
-                                                      {:state "closed"
-                                                       :attributes {:land/broken-reason reason}}))}
-          (throw (ex-info "no active merge lock to break" {:reason reason})))))))
-
-(defn- move-card-to-review!
-  "Move an optional claimed card to in_review; return true only when changed."
-  [card]
-  (when (and (string? card) (not (str/blank? card)))
-    (let [strand (weaver/show (current/runtime) card)]
-      (when-not (= "true" (attr-value strand :kanban/card))
-        (throw (ex-info "land card is not a kanban card" {:card card})))
-      (case (attr-value strand :kanban/lane)
-        "claimed" (do ((requiring-resolve 'ct.spools.kanban/review!) (current/runtime) card)
-                      true)
-        "in_review" false
-        (throw (ex-info "land card must be claimed before review"
-                        {:card card :lane (attr-value strand :kanban/lane)}))))))
-
-(defn- suppressing-rollback!
-  "Run f during error recovery, suppressing rollback failures on original."
-  [^Throwable original f]
-  (try
-    (f)
-    (catch Throwable rollback-error
-      (.addSuppressed original rollback-error))))
-
-(defn- move-card-to-rework!
-  "Move an optional in_review card to claimed; return true only when changed."
-  [card]
-  (when (and (string? card) (not (str/blank? card)))
-    (let [strand (weaver/show (current/runtime) card)]
-      (when-not (= "true" (attr-value strand :kanban/card))
-        (throw (ex-info "land card is not a kanban card" {:card card})))
-      (case (attr-value strand :kanban/lane)
-        "in_review" (do ((requiring-resolve 'ct.spools.kanban/rework!) (current/runtime) card)
-                        true)
-        "claimed" false
-        (throw (ex-info "land card must be in_review before abort rework"
-                        {:card card :lane (attr-value strand :kanban/lane)}))))))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."
@@ -531,7 +370,6 @@
 (s/def ::land-merge-input
   (s/and (s/keys :req-un [::subject ::body])
          #(every? #{:subject :body} (keys %))))
-(s/def ::land-policy-choice #{"approved" "abort"})
 
 (def ^:private land-abort-reason-input
   "Declared choice input for the land sign-off abort choice: a required
@@ -544,43 +382,6 @@
   "Declare the squash subject and body required by the approved choice."
   {:spec ::land-merge-input
    :doc "Semantic squash subject and Squashed commits body for gh pr merge."})
-
-(defn- require-pr-number!
-  "Return pr-number when it satisfies the land PR-number boundary spec."
-  [feature pr-number]
-  (when-not (s/valid? ::pr-number pr-number)
-    (throw (ex-info "push-draft-pr completion requires a positive --pr-number"
-                    {:argument :pr-number
-                     :feature feature
-                     :value pr-number
-                     :spec ::pr-number
-                     :explain (s/explain-data ::pr-number pr-number)})))
-  pr-number)
-
-(defn- keywordize-input!
-  "Return a shallow keyword-keyed JSON object for workflow input specs."
-  [verb input]
-  (when-not (map? input)
-    (throw (ex-info (str "land " verb " --input must be a JSON object")
-                    {:verb verb :input input})))
-  (into {}
-        (map (fn [[k v]]
-               [(if (string? k) (keyword k) k) v]))
-        input))
-
-(defn- require-choice-input-keys!
-  "Return input when it contains no keys outside choice's closed contract."
-  [choice input]
-  (let [allowed (case choice
-                  "approved" #{:subject :body}
-                  "abort" #{:reason})
-        unknown (vec (remove allowed (keys input)))]
-    (when (seq unknown)
-      (throw (ex-info "land choose input contains unsupported keys"
-                      {:choice choice
-                       :unknown unknown
-                       :allowed (vec (sort allowed))})))
-    input))
 
 (def ^:private land-merge-script
   "Idempotently ready and squash-merge the feature PR."
@@ -878,141 +679,6 @@
                                    :next :land-abort
                                    :input land-abort-reason-input}]
                         :attributes {"workflow/decision-point" "land-signed-off"})))
-
-(def ^:private land-arg-spec
-  "Declared policy boundaries for the coordinator-only `land` op."
-  {:op "land"
-   :doc (format-alpha/reflow
-         "|Enforce the cross-domain policy boundaries of the coordinator landing
-          |workflow. Use `strand workflow` for discovery, start, ready, ordinary
-          |completion, revise, and run inspection.")
-   :subcommands
-   {"complete" {:doc (format-alpha/reflow
-                      "|Complete a land policy boundary: record the opened PR and
-                       |move its card, or close terminal bookkeeping and release
-                       |the merge lock.")
-                :hook-class :mutating :deadline-class :standard
-                :flags {:pr-number {:type :int
-                                    :doc "Positive PR number, required only at push-draft-pr."}}
-                :positionals [{:name :run-id :required? true :doc "Land run id."}]}
-    "choose" {:doc "Choose approved or abort sign-off with lock and card rollback."
-              :hook-class :mutating :deadline-class :standard
-              :annotations
-              {:notes ["The choice positional is a closed enum: approved or abort."]}
-              :flags {:input {:type :string
-                              :parse :json
-                              :required? true
-                              :doc "JSON object satisfying the selected choice input spec."}}
-              :positionals [{:name :run-id :required? true :doc "Land run id."}
-                            {:name :choice
-                             :required? true
-                             :spec ::land-policy-choice
-                             :doc "Closed policy enum: approved or abort."}]}
-    "break-lock" {:doc "Explicitly break a stale merge lock with a reason."
-                  :hook-class :mutating :deadline-class :standard
-                  :flags {:reason {:type :string
-                                   :required? true
-                                   :doc "Non-blank forensic recovery reason."}}}}})
-
-(def ^:private land-returns
-  {:subcommands
-   (into {}
-         (map (fn [subcommand]
-                [subcommand {:type :map
-                             :required {:operation :string}
-                             :extra :json}]))
-         (keys (:subcommands land-arg-spec)))})
-
-(skein/defop land
-  "Enforce coordinator landing policy across workflows, kanban, and merge locks.
-
-  Use the generic `workflow` op for every operation that does not cross those
-  ownership boundaries."
-  {:returns land-returns :arg-spec land-arg-spec}
-  [ctx]
-  (let [{:keys [subcommand run-id pr-number input reason choice]} (:op/args ctx)
-        verb (first subcommand)]
-    (case verb
-      "complete"
-      (let [feature (require-land-input! ::run-id :run-id run-id)
-            ready (workflow/ready feature)]
-        (cond
-          (some #(= "land.pr.open" (:action-ref %)) ready)
-          (let [root (workflow/current-root feature)
-                context (attr-value root :workflow/context)
-                card (or (:card context) (get context "card"))
-                changed? (move-card-to-review! card)]
-            (try
-              (workflow/complete!
-               feature
-               {:context {:pr-number (require-pr-number! feature pr-number)}})
-              (catch Throwable t
-                (when changed?
-                  (suppressing-rollback! t #(move-card-to-rework! card)))
-                (throw t))))
-
-          (some #(contains? #{"land.cleanup" "land.abort.record"} (:action-ref %)) ready)
-          (do
-            (when (some? pr-number)
-              (throw (ex-info "--pr-number is only accepted at push-draft-pr"
-                              {:run-id feature :pr-number pr-number})))
-            (with-merge-lock-acquisition
-              (current/runtime)
-              (fn []
-                (when (some #(= "land.cleanup" (:action-ref %)) ready)
-                  (require-owned-merge-lock! feature))
-                (let [result (workflow/complete! feature)]
-                  (release-merge-lock! feature "land terminal cleanup")
-                  result))))
-
-          :else
-          (throw (ex-info "land complete requires a PR-open or terminal policy frontier"
-                          {:run-id feature :ready ready}))))
-
-      "choose"
-      (let [feature (require-land-input! ::run-id :run-id run-id)]
-        (when-not (s/valid? ::land-policy-choice choice)
-          (throw (ex-info "land choose accepts only approved or abort"
-                          {:run-id feature
-                           :choice choice
-                           :allowed (vec (sort (s/describe ::land-policy-choice)))
-                           :spec ::land-policy-choice
-                           :explain (s/explain-data ::land-policy-choice choice)})))
-        (let [input (->> input
-                         (keywordize-input! "choose")
-                         (require-choice-input-keys! choice))]
-          (case choice
-            "approved"
-            (locking merge-lock-monitor
-              (with-merge-lock-acquisition
-                (current/runtime)
-                (fn []
-                  (let [{:keys [created?]} (acquire-merge-lock-serially! feature)]
-                    (try
-                      (workflow/choose! feature :approved input)
-                      (catch Throwable t
-                        (when created?
-                          (suppressing-rollback!
-                           t
-                           #(release-merge-lock! feature "land choose failed")))
-                        (throw t)))))))
-
-            "abort"
-            (let [context (attr-value (workflow/current-root feature) :workflow/context)
-                  card (or (:card context) (get context "card"))
-                  changed? (move-card-to-rework! card)]
-              (try
-                (workflow/choose! feature :abort input)
-                (catch Throwable t
-                  (when changed?
-                    (suppressing-rollback! t #(move-card-to-review! card)))
-                  (throw t))))
-
-            (throw (ex-info "land choose accepts only approved or abort"
-                            {:run-id feature :choice choice
-                             :allowed ["approved" "abort"]})))))
-
-      "break-lock" (break-merge-lock! reason))))
 
 ;; ---------------------------------------------------------------------------
 ;; spool-bump: third-party spool bump, landing, adoption, and cutover

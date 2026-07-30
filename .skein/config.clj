@@ -47,6 +47,13 @@
    [:= :state "active"]
    [:= [:attr "kind"] "merge-lock"]])
 
+(skein/defquery merge-queue-query
+  "Query for the runs queued to merge, including the one holding the lock."
+  {:usage "strand list --query merge-queue"}
+  [:and
+   [:= :state "active"]
+   [:= [:attr "kind"] "merge-queue-entry"]])
+
 (skein/defquery work-query
   "Query for active actionable work, excluding workflow plumbing, agent run records, and inert kanban refinement cards."
   {:usage "strand ready --query work"}

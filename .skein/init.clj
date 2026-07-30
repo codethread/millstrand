@@ -14,7 +14,8 @@
 ;;
 ;; File-per-concern map (each is one module):
 ;;   config.clj        — named queries + shared policy validation helpers
-;;   workflows.clj     — hand-authored workflows + the land policy op
+;;   workflows.clj     — hand-authored workflow definitions
+;;   workflows_land.clj— the land policy op: merge lock, merge queue, lane moves
 ;;   harnesses.clj     — harness seats + routing policy
 ;;   reviewers.clj     — reviewer rosters
 ;;   attention.clj     — chime attention rules
@@ -180,15 +181,24 @@
 (runtime/module! runtime :config
                  {:file "config.clj"
                   :required? true})
-;; workflows.clj authors land/story definitions, the narrow land policy op, and
-;; the delegate-pipeline and macros-demo patterns. It reuses config.clj's public
-;; validation helper, so it orders after :config as well as the workflow and
-;; delegation spools.
+;; workflows.clj authors the land/story definitions and the delegate-pipeline and
+;; macros-demo patterns. The land policy op is its sibling below. It reuses
+;; config.clj's public validation helper, so it orders after :config as well as
+;; the workflow and delegation spools.
 (runtime/module! runtime :workflows
                  {:file "workflows.clj"
                   :spools ['skein.spools/workflow 'ct.spools/delegation]
                   :after [:skein/spools-workflow :skein/spools-delegation
                           :config]
+                  :required? true})
+;; workflows_land.clj authors the narrow land policy op: the merge lock, the
+;; merge queue in front of it, and the kanban lane moves. It is a sibling rather
+;; than part of workflows.clj because the policy outgrew the definitions it
+;; drives; it references no Var there, so the order below is for readers.
+(runtime/module! runtime :workflows-land
+                 {:file "workflows_land.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows]
                   :required? true})
 
 ;; The code executor's lifecycle resource scans ready gates when opened. It must load after

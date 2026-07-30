@@ -69,7 +69,10 @@
   publish its complete module contribution — the load path init.clj's `:file`
   modules run, standing in for a full refresh in these focused projections."
   [rt module-key file]
-  (let [ns-sym (symbol (str/replace (str/replace file #"^\.skein/" "") #"\.clj$" ""))
+  (let [ns-sym (symbol (-> file
+                           (str/replace #"^\.skein/" "")
+                           (str/replace #"\.clj$" "")
+                           (str/replace "_" "-")))
         contribution (:contribution
                       (module-graph/with-contribution-collection
                         {:module/key module-key
@@ -113,7 +116,9 @@
      (test-support/activate-spool! runtime :skein/spools-workflow
                                    'skein.spools.workflow)
      (publish-authoring! runtime :workflows ".skein/workflows.clj")
-     (let [provenances #{'config 'workflows}
+     ;; the land op lives beside the definitions it drives, in its own module
+     (publish-authoring! runtime :workflows-land ".skein/workflows_land.clj")
+     (let [provenances #{'config 'workflows 'workflows-land}
            checked (atom #{})
            check! (fn [operation context value]
                     (t/check-op-return! runtime (symbol operation) context value)
