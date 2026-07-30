@@ -1,6 +1,6 @@
 # Alpha Surface
 
-**Document ID:** `SPEC-005` **Status:** Implemented **Last Updated:** 2026-07-29 **Related:** [Strand Model](./strand-model.md), [CLI Surface](./cli.md), [REPL API](./repl-api.md), [Weaver Runtime](./daemon-runtime.md), [Spools index](../../spools/README.md), [Writing shared spools](../../docs/spools/writing-shared-spools.md)
+**Document ID:** `SPEC-005` **Status:** Implemented **Last Updated:** 2026-07-30 **Related:** [Strand Model](./strand-model.md), [CLI Surface](./cli.md), [REPL API](./repl-api.md), [Weaver Runtime](./daemon-runtime.md), [Spools index](../../spools/README.md), [Writing shared spools](../../docs/spools/writing-shared-spools.md)
 
 ## SPEC-005.P1 Purpose
 

@@ -3,7 +3,7 @@
 **Document ID:** `PROP-Auf-001`
 **Status:** Approved
 **Approved:** 2026-07-29
-**Last Updated:** 2026-07-29
+**Last Updated:** 2026-07-30
 **Related RFCs:** [`RFC-Saf-001`](../../rfcs/2026-07-28-spool-authoring-forms.md) (spool authoring forms), [`RFC-Laf-001`](../../rfcs/2026-07-28-lifecycle-authoring-forms.md) (lifecycle authoring forms) — the source decision records this proposal merges and advances; kept unchanged as the intent history
 **Related decisions:** [ADR-002](../../adrs/0002-no-inline-module-lifecycle-macro.md) (rejected inline callback sugar), [ADR-003](../../adrs/0003-spool-activation-lifecycle.md) (one activation path and the reconcile contract), [ADR-004](../../adrs/0004-def-spool-convention.md) (`def spool` entry-point convention), [RFC-020: readability macros](../../rfcs/2026-07-08-skein-readability-macros.md)
 **Related root specs:** [`repl-api.md`](../../specs/repl-api.md) (C17c/C17d/C19), [`daemon-runtime.md`](../../specs/daemon-runtime.md) (C45/C46/C46b/C46c/C74a), [`alpha-surface.md`](../../specs/alpha-surface.md)
@@ -711,7 +711,7 @@ A finished spool reads as ordinary definitions plus explicit Skein authoring for
 
 (skein/defpattern release
   "Create a release strand."
-  {:input release-input}
+  {:spec ::release-input}
   ...)
 
 (lifecycle/defresource monitor

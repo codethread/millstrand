@@ -661,6 +661,10 @@ Core forms are the public grammar for hand-authored core entries. Their declarat
 Five kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, and `:events`. Beyond those the set is open over whatever the running runtime declares. A domain spool declares its own kind with `skein.api.registry.alpha/declare-kind!`, and other modules then contribute entries to it. The shipped workflow executors do exactly this, mixing a domain kind and a core kind in one contribution:
 
 ```clojure
+(ns shell-executor
+  (:require [skein.api.skein.alpha :as skein]
+            [skein.spools.workflow :as workflow]))
+
 (workflow/defexecutor shell
   "Return detail when a shell-backed gate needs coordinator attention."
   {:request-spec ::request}
