@@ -23,7 +23,9 @@
             [skein.core.weaver.module-publication :as publication]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.core.weaver.spool-sync :as spool-sync]
-            [skein.spools.test-support :as test-support]))
+            [skein.spools.test-support :as test-support]
+            [skein.test.alpha :as test-alpha])
+  (:import [java.time Instant]))
 
 (defn- delete-directory!
   "Delete a directory tree rooted at `path` if it exists."
@@ -273,12 +275,15 @@
                {}))
 
 (defn- active-merge-queue
-  "Return the queued land run ids in the train's FIFO order."
+  "Return the queued land run ids in the train's FIFO order.
+
+  Ordered by `queue/sequence` the way the op orders them, so a test never
+  agrees with the implementation by accident of matching timestamps."
   []
   (->> (weaver/list (current/runtime)
                     [:and [:= :state "active"] [:= [:attr "kind"] "merge-queue-entry"]]
                     {})
-       (sort-by (juxt #(get-in % [:attributes :queue/queued-at]) :id))
+       (sort-by #(get-in % [:attributes :queue/sequence]))
        (mapv #(get-in % [:attributes :land/run-id]))))
 
 (def ^:private config-op-names
@@ -1576,6 +1581,57 @@
       (let [again (op! "land" ["await" "land-second" "--timeout-secs" "0"])]
         (is (= 1 (:position again)))
         (is (= ["land-first" "land-second"] (active-merge-queue)))))))
+
+(deftest land-await-admits-only-land-runs-that-reached-signoff
+  (with-config-runtime
+    (fn [rt]
+      ;; a land run that has not reached sign-off would take the head and then
+      ;; fail every approval it attempted, wedging everyone behind it
+      (start-land! "land-too-early" "land-too-early" "/tmp/land-too-early")
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"joins the merge train at sign-off, not before"
+                            (op! "land" ["await" "land-too-early" "--timeout-secs" "0"])))
+      (is (empty? (active-merge-queue)))
+      ;; nor does the train admit a run from another workflow family
+      (op! "workflow" ["start" "explore-intruder"
+                       "--workflow" "explore"
+                       "--params" (json/write-str {:topic "merge trains"})])
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"merge train admits land runs only"
+                            (op! "land" ["await" "explore-intruder" "--timeout-secs" "0"])))
+      (is (empty? (active-merge-queue)))
+      ;; and an unknown run is not silently enqueued either
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"land run not found"
+                            (op! "land" ["await" "land-nonexistent" "--timeout-secs" "0"])))
+      (signed-off-land! "land-in-time" 571)
+      (is (true? (:granted (op! "land" ["await" "land-in-time" "--timeout-secs" "0"]))))
+      (is (= ["land-in-time"] (active-merge-queue)))
+      rt)))
+
+(deftest land-train-order-survives-a-clock-that-cannot-separate-arrivals
+  (with-config-runtime
+    (fn [rt]
+      (signed-off-land! "land-tie-one" 581)
+      (signed-off-land! "land-tie-two" 582)
+      (signed-off-land! "land-tie-three" 583)
+      ;; a frozen clock stamps every arrival with the same instant; order must
+      ;; still be arrival order rather than whatever the strand ids sort to
+      (test-alpha/set-clock! rt (test-alpha/manual-clock Instant/EPOCH))
+      (doseq [run-id ["land-tie-one" "land-tie-two" "land-tie-three"]]
+        (op! "land" ["await" run-id "--timeout-secs" "0"]))
+      (is (= 1 (count (distinct (map #(get-in % [:attributes :queue/queued-at])
+                                     (weaver/list rt
+                                                  [:and [:= :state "active"]
+                                                   [:= [:attr "kind"] "merge-queue-entry"]]
+                                                  {})))))
+          "the frozen clock must actually produce tied timestamps")
+      (is (= ["land-tie-one" "land-tie-two" "land-tie-three"] (active-merge-queue)))
+      (let [waiting (op! "land" ["await" "land-tie-three" "--timeout-secs" "0"])]
+        (is (= 2 (:position waiting)))
+        (is (= [["land-tie-one" 0] ["land-tie-two" 1]]
+               (mapv (juxt :land/run-id :position) (:ahead waiting)))
+            "positions come from the sequence, not the tied timestamps")))))
 
 (deftest land-approval-requires-heading-the-merge-train
   (with-config-runtime

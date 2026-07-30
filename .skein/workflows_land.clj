@@ -34,7 +34,7 @@
   "Strand kind for one land run's reservation in the merge queue.
 
   Awaiting the lock is a declaration of intent to merge, so `land await` enqueues
-  rather than polling a free/busy flag. Entries are ordered by `queue/queued-at`
+  rather than polling a free/busy flag. Entries are ordered by `queue/sequence`
   and only the head may acquire the lock, which turns the old race — where every
   losing coordinator rebased and re-ran the ten required checks, then raced again
   — into a train each run rebases exactly once at the front of.
@@ -63,18 +63,24 @@
   (Object.))
 
 (defn- with-merge-lock-acquisition
-  "Call f while holding the selected workspace's cross-process acquisition lock."
+  "Call f while holding both halves of the acquisition lock.
+
+  The monitor is taken here rather than by each caller: a caller that reached
+  the file lock without it would raise OverlappingFileLockException against its
+  own siblings instead of serializing with them, and every path that touches the
+  lock or the queue has to hold both."
   [rt f]
   (let [config-dir (get-in rt [:metadata :config-dir])]
     (when-not (and (string? config-dir) (not (str/blank? config-dir)))
       (throw (ex-info "runtime has no selected config directory for merge-lock acquisition"
                       {:config-dir config-dir})))
-    (with-open [file (java.io.RandomAccessFile.
-                      (io/file config-dir ".land-merge-lock.acquire")
-                      "rw")
-                channel (.getChannel file)
-                lock (.lock channel)]
-      (f))))
+    (locking merge-lock-monitor
+      (with-open [file (java.io.RandomAccessFile.
+                        (io/file config-dir ".land-merge-lock.acquire")
+                        "rw")
+                  channel (.getChannel file)
+                  lock (.lock channel)]
+        (f)))))
 
 (defn- attr-value
   "Return strand attribute k using the shared fail-loud attribute reader."
@@ -126,19 +132,34 @@
     (throw (ex-info "land cleanup requires its active merge lock"
                     {:land/run-id feature}))))
 
+(defn- all-queue-entries
+  "Return every merge-queue entry ever created, in any state."
+  []
+  (weaver/list (current/runtime) [:= [:attr "kind"] merge-queue-kind] {}))
+
 (defn- queue-entries
   "Return the active merge-queue entries in FIFO order.
 
-  Ordering is the authored `queue/queued-at` stamp rather than the row's
-  `updated_at`, so it comes from the runtime Clock and a manual Clock makes
-  train order deterministic in tests. `:id` breaks same-instant ties."
+  Order comes from `queue/sequence`, not from the `queue/queued-at` timestamp
+  it is stamped beside: two enqueues under a coarse or manual Clock can share an
+  instant, and a tie broken by strand id would silently reorder the train. The
+  timestamp stays for readers; the sequence is the contract."
   []
-  (vec (sort-by (juxt #(attr-value % :queue/queued-at) :id)
+  (vec (sort-by #(attr-value % :queue/sequence)
                 (weaver/list (current/runtime)
                              [:and
                               [:= :state "active"]
                               [:= [:attr "kind"] merge-queue-kind]]
                              {}))))
+
+(defn- next-queue-sequence
+  "Return the next train position, one past the highest ever issued.
+
+  Counted over entries in every state so a closed train never lets a new run
+  reuse a number an active entry still holds. Callers must hold the acquisition
+  lock, which is what makes the read-then-write safe."
+  []
+  (inc (reduce max -1 (keep #(attr-value % :queue/sequence) (all-queue-entries)))))
 
 (defn- queue-entry-for
   "Return feature's entry among entries, or nil when it is not queued."
@@ -150,6 +171,29 @@
   [entries feature]
   (first (keep-indexed #(when (= feature (attr-value %2 :land/run-id)) %1) entries)))
 
+(defn- require-ready-to-merge!
+  "Return feature's land root once the run is actually at sign-off.
+
+  The train is a queue of runs ready to merge, so admission is checked rather
+  than assumed: a run admitted before sign-off would take the head, fail every
+  approval it attempted, and wedge everyone behind it until an operator broke
+  the lock."
+  [feature]
+  (let [root (land-root feature)
+        family (attr-value root :workflow/family)
+        step (first (workflow/ready feature))]
+    (when-not (= "land" family)
+      (throw (ex-info "the merge train admits land runs only"
+                      {:land/run-id feature
+                       :workflow/family family})))
+    (when-not (and (= "signoff" (:checkpoint step))
+                   (some #{"approved"} (:choices step)))
+      (throw (ex-info "a run joins the merge train at sign-off, not before"
+                      {:land/run-id feature
+                       :frontier (or (:checkpoint step) (:action-ref step))
+                       :choices (:choices step)})))
+    root))
+
 (defn- enqueue-for-merge!
   "Return feature's queue entry, appending one to the train when absent.
 
@@ -157,11 +201,13 @@
   coordinator's original place rather than sending it to the back."
   [feature]
   (or (queue-entry-for (queue-entries) feature)
-      (let [rt (current/runtime)]
+      (let [rt (current/runtime)
+            root (require-ready-to-merge! feature)]
         (weaver/add! rt {:title (str "Merge queue: " feature)
                          :attributes {:kind merge-queue-kind
-                                      :owner (:id (land-root feature))
+                                      :owner (:id root)
                                       :land/run-id feature
+                                      :queue/sequence (next-queue-sequence)
                                       :queue/queued-at (str (runtime/now rt))}}))))
 
 (defn- close-queue-entry!
@@ -372,8 +418,7 @@
   needs to decide whether to keep waiting or evict a dead head."
   [feature timeout-secs]
   (let [rt (current/runtime)
-        entry (locking merge-lock-monitor
-                (with-merge-lock-acquisition rt #(enqueue-for-merge! feature)))
+        entry (with-merge-lock-acquisition rt #(enqueue-for-merge! feature))
         queued-at (attr-value entry :queue/queued-at)
         head? (fn [entries] (= (:id entry) (:id (first entries))))]
     (poll-until!
@@ -593,11 +638,10 @@
                          (require-choice-input-keys! choice))]
           (case choice
             "approved"
-            (locking merge-lock-monitor
-              (with-merge-lock-acquisition
-                (current/runtime)
-                (fn []
-                  (let [{:keys [created? entry-created?]}
+            (with-merge-lock-acquisition
+              (current/runtime)
+              (fn []
+                (let [{:keys [created? entry-created?]}
                         (acquire-merge-lock-serially! feature (merge-record feature input))]
                     (try
                       (workflow/choose! feature :approved input)
@@ -611,7 +655,7 @@
                            t
                            #(close-queue-entry! feature "aborted"
                                                 {:queue/broken-reason "land choose failed"})))
-                        (throw t)))))))
+                        (throw t))))))
 
             "abort"
             (let [context (attr-value (workflow/current-root feature) :workflow/context)
@@ -619,7 +663,11 @@
                   changed? (move-card-to-rework! card)]
               (try
                 (let [chosen (workflow/choose! feature :abort input)]
-                  (close-queue-entry! feature "aborted" {})
+                  ;; leaving the train is a queue mutation like any other and
+                  ;; races enqueues and evictions without the acquisition lock
+                  (with-merge-lock-acquisition
+                    (current/runtime)
+                    #(close-queue-entry! feature "aborted" {}))
                   chosen)
                 (catch Throwable t
                   (when changed?
