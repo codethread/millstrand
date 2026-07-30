@@ -10,11 +10,13 @@
   (:require [clojure.data.json :as json]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.registry.alpha :as registry]
+            [skein.api.runtime.alpha :as runtime]
+            [skein.api.skein.alpha :as skein]
             [skein.api.spec.alpha :as spec-alpha]
             [skein.api.weaver.alpha :as weaver]
-            [skein.api.runtime.alpha :as runtime]
-            [skein.api.spool.alpha :as spool :refer [fail!]]))
+            [skein.api.spool.alpha :as spool :refer [fail! require-valid!]]))
 
 (def ^:private state-version
   "Bump whenever new-state's key set changes."
@@ -77,6 +79,13 @@
 (s/def ::deadline-class #{:standard :unbounded})
 (s/def ::doc string?)
 (s/def ::input-spec (s/or :keyword keyword? :symbol symbol?))
+(s/def ::runtime #(and (map? %) (contains? % :spool-state)))
+(s/def ::lifecycle-context (s/keys :req-un [::runtime]))
+(s/def ::reset #{:guild})
+(s/def ::reset-result
+  (s/and map?
+         #(= #{:reset} (set (keys %)))
+         #(s/valid? ::reset (:reset %))))
 ;; :returns shape authority is skein.api.return-shape.alpha at op registration;
 ;; this spec owns only presence-with-value.
 (s/def ::returns some?)
@@ -286,80 +295,56 @@
     (publish-declarations! runtime)
     (assoc deprecated :name (:name entry))))
 
-(defn ops
-  "Return JSON-safe metadata describing the registered guild API."
-  [{:op/keys [runtime-metadata] :as ctx}]
-  {:guild (or (:name runtime-metadata)
-              @(fallback-guild-name (:op/runtime ctx)))
-   :active (mapv (fn [[name {:keys [doc input-spec]}]]
-                   (cond-> {:name name}
-                     doc (assoc :doc doc)
-                     input-spec (merge (input-spec-summary input-spec))))
-                 (sort-by key @(guild-ops (:op/runtime ctx))))
-   :deprecated (mapv (fn [[name {:keys [replacement since doc]}]]
-                       (cond-> {:name name :replacement replacement}
-                         doc (assoc :doc doc)
-                         since (assoc :since since)))
-                     (sort-by key @(deprecated-ops (:op/runtime ctx))))})
-
-(defn contribute
-  "Return Guild's owner-complete built-in operation contribution."
-  [_ctx]
-  {:ops
-   {:entries
-    {"guild" {:name "guild"
-              :fn 'skein.spools.guild/ops
-              :stream? false
-              :provenance 'skein.spools.guild
-              :doc (:doc guild-arg-spec)
-              :arg-spec guild-arg-spec
-              :returns guild-returns}}}})
-
-(defn reconcile
-  "Reconcile Guild's runtime-owned declarations per the module contract.
-
-  Applied and removed contributions deliberately share one body: resetting
-  the runtime-owned declaration atoms (including the fallback guild name) and
-  republishing clears every prior declaration, which is both
-  fresh-application hygiene and complete teardown (SPEC-004.C46b). Any other
-  status is a direct-call error and fails loudly."
-  [{:keys [runtime] :as ctx}]
-  (let [status (get-in ctx [:module/contribution :status])]
-    (case status
-      (:applied :removed)
-      (do (reset! (guild-ops runtime) {})
-          (reset! (deprecated-ops runtime) {})
-          (reset! (fallback-guild-name runtime) nil)
-          (publish-declarations! runtime)
-          {:reconciled :guild})
-      (fail! "Unsupported module contribution status"
-             {:status status
-              :allowed #{:applied :removed}
-              :module/key (:module/key ctx)
-              :reconciler 'skein.spools.guild/reconcile}))))
-
 (defn set-fallback-guild-name!
   "Record `guild-name` as the fallback guild name in `runtime`'s state.
 
   The guild name is normally read from runtime metadata; the fallback covers
-  contexts without it. Module reconcile resets the fallback to nil, so
-  trusted config and tests call this after activation. Passing nil clears
-  the fallback; a non-nil value must be a non-blank string and anything else
-  fails loudly with the offending value."
+  contexts without it. The `guild-state` resource resets the fallback when its
+  module opens or closes; preserving a healthy resource preserves the current
+  fallback. Passing nil clears the fallback; a non-nil value must be a
+  non-blank string and anything else fails loudly with the offending value."
   [runtime guild-name]
   (when (and (some? guild-name) (not (and (string? guild-name) (not (str/blank? guild-name)))))
     (fail! "Guild name must be a non-blank string" {:guild/name guild-name}))
   (reset! (fallback-guild-name runtime) guild-name)
   guild-name)
 
-(def spool
-  "Entry-point declaration for the guild spool (PROP-Dsp-001 `def spool`
-  convention).
+(defn reset-guild!
+  "Reset Guild's runtime-owned declarations during module open and close.
 
-  The refresh coordinator resolves `:contribute`/`:reconcile` from this public
-  var at every module evaluation, so a consumer declares only a source target
-  and world policy (`{:ns 'skein.spools.guild :spools [...]}`) and never mirrors
-  the pair. Unqualified symbols resolve against this namespace; fn values are
-  rejected (ADR-002.O1)."
-  {:contribute 'contribute
-   :reconcile 'reconcile})
+  `context` must conform to `::lifecycle-context`; the result conforms to
+  `::reset-result`. Guild is the irregular lifecycle boundary: both transitions
+  clear its active and deprecated operations, fallback name, and published
+  declaration owner. The coordinator retains this callable for omission cleanup."
+  [context]
+  (let [{:keys [runtime]}
+        (require-valid! ::lifecycle-context context "Invalid Guild lifecycle context")]
+    (reset! (guild-ops runtime) {})
+    (reset! (deprecated-ops runtime) {})
+    (reset! (fallback-guild-name runtime) nil)
+    (publish-declarations! runtime)
+    (require-valid! ::reset-result {:reset :guild} "Invalid Guild reset result")))
+
+(skein/defop guild
+  "Return JSON-safe metadata describing the registered Guild API."
+  {:arg-spec guild-arg-spec
+   :returns guild-returns
+   :stream? false}
+  [{:op/keys [runtime runtime-metadata]}]
+  {:guild (or (:name runtime-metadata)
+              @(fallback-guild-name runtime))
+   :active (mapv (fn [[name {:keys [doc input-spec]}]]
+                   (cond-> {:name name}
+                     doc (assoc :doc doc)
+                     input-spec (merge (input-spec-summary input-spec))))
+                 (sort-by key @(guild-ops runtime)))
+   :deprecated (mapv (fn [[name {:keys [replacement since doc]}]]
+                       (cond-> {:name name :replacement replacement}
+                         doc (assoc :doc doc)
+                         since (assoc :since since)))
+                     (sort-by key @(deprecated-ops runtime)))})
+
+(lifecycle/defresource guild-state
+  "Own Guild's reset and publication boundary for the module lifetime."
+  {:open 'skein.spools.guild/reset-guild!
+   :close 'skein.spools.guild/reset-guild!})
