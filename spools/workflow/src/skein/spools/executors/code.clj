@@ -10,6 +10,8 @@
   (:require [clojure.spec.alpha :as s]
             [skein.api.current.alpha :as current]
             [skein.api.events.alpha :as events]
+            [skein.api.lifecycle.alpha :as lifecycle]
+            [skein.api.skein.alpha :as skein]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :refer [attr-get fail! require-valid!]]
             [skein.api.vocab.alpha :as vocab]
@@ -62,16 +64,6 @@
 (s/def ::request
   (s/keys :req [:code/fn :code/params] :opt [:code/timeout-secs]))
 (s/def ::result json-safe?)
-(s/def ::contribute-context map?)
-(s/def ::contribution
-  #(= #{workflow/executor-kind :queries} (set (keys %))))
-(s/def ::reconcile-context
-  (s/and map?
-         #(map? (:runtime %))
-         #(contains? #{:applied :removed}
-                     (get-in % [:module/contribution :status]))))
-(s/def ::reconcile-result
-  #(contains? #{:applied :removed} (:reconciled %)))
 (s/def ::id string?)
 (s/def ::gate-view (s/keys :req-un [::id]))
 (s/def ::gate string?)
@@ -86,8 +78,9 @@
   [_event]
   (scan!))
 
-(defn gate-stalled?
+(workflow/defexecutor code
   "Return durable stall detail for a ready `:code` gate view, or nil."
+  {:request-spec ::request}
   [gate-view]
   (require-valid! ::gate-view gate-view "Invalid code gate view")
   (let [gate (weaver/show (rt) (:id gate-view))
@@ -95,44 +88,49 @@
                  {:gate (:id gate) :error (attr gate :gate/error)})]
     (require-valid! ::stall-detail result "Invalid code gate stall detail")))
 
-(defn contribute
-  "Contribute the `:code` workflow executor and its stalled-gates query."
+(skein/defquery stalled-code-gates-query
+  "Return active code gates carrying a durable error stamp."
+  {}
+  [:and [:= :state "active"]
+   [:= [:attr "workflow/gate"] "code"]
+   [:exists [:attr "gate/error"]]])
+
+(s/def ::runtime some?)
+(s/def ::resource map?)
+(s/def ::open-context (s/keys :req-un [::runtime]))
+(s/def ::close-context (s/keys :req-un [::runtime ::resource]))
+(s/def ::engine-handle
+  #(= #{:scan-monitor :resources :close-fn} (set (keys %))))
+(s/def ::closed #{:code/engine})
+(s/def ::close-result (s/keys :req-un [::closed]))
+
+(defn open-code-engine!
+  "Open the code executor handler and worker resources."
   [ctx]
-  (require-valid! ::contribute-context ctx "Invalid code executor contribution context")
-  (let [result {workflow/executor-kind
-                {"code" {:stalled? 'skein.spools.executors.code/gate-stalled?
-                         :request-spec ::request}}
-                :queries
-                {"stalled-code-gates"
-                 [:and [:= :state "active"]
-                  [:= [:attr "workflow/gate"] "code"]
-                  [:exists [:attr "gate/error"]]]}}]
-    (require-valid! ::contribution result "Invalid code executor contribution")))
+  (require-valid! ::open-context ctx "Invalid code engine open context")
+  (let [runtime (:runtime ctx)
+        result (current/with-runtime runtime
+                 (binding [*runtime* runtime]
+                   (declare-code-vocab! runtime)
+                   (register-code-handler! runtime)
+                   (ensure-resources!)
+                   (scan!)
+                   (state)))]
+    (require-valid! ::engine-handle result "Invalid code engine handle")))
 
-(defn reconcile
-  "Reconcile the code executor's vocabulary, handler, and runtime-owned pools."
-  [{:keys [runtime] :as ctx}]
-  (require-valid! ::reconcile-context ctx "Invalid code executor reconcile context")
-  (binding [*runtime* runtime]
-    (let [status (get-in ctx [:module/contribution :status])
-          result (case status
-                   :applied (do
-                              (declare-code-vocab! runtime)
-                              (register-code-handler! runtime)
-                              (ensure-resources!)
-                              (scan!)
-                              {:reconciled :applied})
-                   :removed (do
-                              (events/unregister-handler! runtime :code/engine)
-                              ((:close-fn (state)))
-                              {:reconciled :removed}))]
-      (require-valid! ::reconcile-result result
-                      "Invalid code executor reconcile result"))))
+(defn close-code-engine!
+  "Close code executor resources and unregister its event handler."
+  [ctx]
+  (require-valid! ::close-context ctx "Invalid code engine close context")
+  (events/unregister-handler! (:runtime ctx) :code/engine)
+  ((:close-fn (:resource ctx)))
+  (require-valid! ::close-result {:closed :code/engine}
+                  "Invalid code engine close result"))
 
-(def spool
-  "Entry-point declaration for the code executor module."
-  {:contribute 'contribute
-   :reconcile 'reconcile})
+(lifecycle/defresource code-engine
+  "Own the code executor handler and worker resources."
+  {:open 'skein.spools.executors.code/open-code-engine!
+   :close 'skein.spools.executors.code/close-code-engine!})
 
 (defn- daemon-thread-factory ^ThreadFactory [prefix]
   (let [counter (atom 0)]

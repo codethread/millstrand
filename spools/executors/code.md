@@ -8,6 +8,8 @@
 
 A code gate runs arbitrary Clojure inside the weaver process with ambient runtime authority. There is no process isolation. The function owns every subprocess it starts.
 
+Collected authoring forms publish the executor and stalled-gate query. A module-scoped lifecycle resource owns the vocabulary, event handler, worker pool, and timeout scheduler. Removing the module unregisters the handler and closes both pools.
+
 ## Loading
 
 Declare the workflow module first, then order the code executor after every module that defines a function it may resolve:

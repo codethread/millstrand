@@ -26,47 +26,25 @@ Fulfil workflow `:shell` gates by running their command off the event thread.
 
 
 Runtime captured for asynchronous shell-executor worker threads.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L49-L51">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L51-L53">Source</a></sub></p>
 
-## <a name="skein.spools.executors.shell/contribute">`contribute`</a>
+## <a name="skein.spools.executors.shell/close-shell-handler!">`close-shell-handler!`</a>
 ``` clojure
-(contribute _ctx)
+(close-shell-handler! ctx)
 ```
 Function.
 
-Module contribution: the `:shell` workflow executor and the
-  `stalled-shell-gates` query, published owner-complete.
+Unregister shell scanning when the module is removed.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L431-L438">Source</a></sub></p>
 
-  Both disappear by omission when this module is refreshed away
-  (DELTA-OlrDrt-001.CC2). The executor entry declares the stall predicate
-  symbol — resolved to a function value per gate evaluation (CC10) — and the
-  `::request` gate-request spec, which `workflow executor-catalog` projects as
-  the discoverable `shell/*` contract. The event handler and worker pool are
-  not declarative data — `reconcile` owns them.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L396-L409">Source</a></sub></p>
-
-## <a name="skein.spools.executors.shell/gate-stalled-symbol">`gate-stalled-symbol`</a>
-
-
-
-
-The `:shell` executor's stall predicate symbol, declared into the workflow
-  executor kind and resolved to a function value at each gate evaluation
-  (DELTA-OlrDrt-001.CC10).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L359-L363">Source</a></sub></p>
-
-## <a name="skein.spools.executors.shell/gate-stalled?">`gate-stalled?`</a>
+## <a name="skein.spools.executors.shell/close-shell-pool!">`close-shell-pool!`</a>
 ``` clojure
-(gate-stalled? gate-view)
+(close-shell-pool! ctx)
 ```
 Function.
 
-Return durable stall detail for a ready `:shell` gate view, or nil.
-
-  The failure detail lives on the gate itself (`gate/error`), so — unlike
-  the subagent executor — there is no `delegates`-edge join back to a separate
-  run row.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L343-L354">Source</a></sub></p>
+Close the runtime-lifetime shell worker pool.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L407-L414">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/non-blank-string?">`non-blank-string?`</a>
 ``` clojure
@@ -75,7 +53,7 @@ Return durable stall detail for a ready `:shell` gate view, or nil.
 Function.
 
 Non-blank string.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L109-L112">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L111-L114">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/on-event">`on-event`</a>
 ``` clojure
@@ -84,24 +62,25 @@ Non-blank string.
 Function.
 
 Weaver event handler: graph changes may make a `:shell` gate ready.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L338-L341">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L340-L343">Source</a></sub></p>
 
-## <a name="skein.spools.executors.shell/reconcile">`reconcile`</a>
+## <a name="skein.spools.executors.shell/open-shell-handler!">`open-shell-handler!`</a>
 ``` clojure
-(reconcile {:keys [runtime], :as ctx})
+(open-shell-handler! ctx)
 ```
 Function.
 
-Reconcile the shell executor's non-declarative resources.
+Declare shell vocabulary, register scanning, and run the initial scan.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L416-L429">Source</a></sub></p>
 
-  On an applied contribution: seed the `shell` vocabulary, register the
-  graph-change event handler, materialize the runtime-owned worker pool, and run
-  one initial scan — content-identical refreshes skip reconcile, so no duplicate
-  scan occurs. On removal: drop the event handler so no further scan is
-  triggered; the executor and query are already gone by kernel omission. The
-  worker pool retains identity and is closed at runtime stop
-  (DELTA-OlrDrt-001.CC7/CC8).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L411-L436">Source</a></sub></p>
+## <a name="skein.spools.executors.shell/open-shell-pool!">`open-shell-pool!`</a>
+``` clojure
+(open-shell-pool! ctx)
+```
+Function.
+
+Open the runtime-lifetime shell worker pool.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L397-L405">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/scan!">`scan!`</a>
 ``` clojure
@@ -113,28 +92,37 @@ Dispatch every ready `:shell` gate not already claimed or errored.
 
   Enumerates ready gates purely through the workflow surface and serializes on a
   runtime-owned monitor so concurrent scans cannot double-launch a gate.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L319-L336">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L321-L338">Source</a></sub></p>
 
-## <a name="skein.spools.executors.shell/spool">`spool`</a>
-
-
+## <a name="skein.spools.executors.shell/shell-handler">`shell-handler`</a>
 
 
-Entry-point declaration for the shell executor (PROP-Dsp-001 `def spool`
-  convention).
 
-  The refresh coordinator resolves `:contribute`/`:reconcile` from this public
-  var at every module evaluation, so a consumer declares only a source target
-  and world policy and never mirrors the pair. Callers still order it after the
-  workflow module with an `:after` edge on the workflow module's key (the
-  executor kind must exist before this contribution publishes). Unqualified
-  symbols resolve against this namespace; fn values are rejected (ADR-002.O1).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L438-L449">Source</a></sub></p>
+
+Own the shell event handler for the lifetime of the module.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L446-L450">Source</a></sub></p>
+
+## <a name="skein.spools.executors.shell/shell-pool">`shell-pool`</a>
+
+
+
+
+Own the shell worker pool for the lifetime of the runtime.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L440-L444">Source</a></sub></p>
+
+## <a name="skein.spools.executors.shell/shell-stalled?">`shell-stalled?`</a>
+``` clojure
+(shell-stalled? gate-view)
+```
+Function.
+
+Return durable stall detail for a ready `:shell` gate view, or nil.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L348-L356">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/stalled-shell-gates-query">`stalled-shell-gates-query`</a>
 
 
 
 
-Named query behind `stalled-shell-gates`, contributed to the core query kind.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L369-L373">Source</a></sub></p>
+Return active shell gates carrying a durable error stamp.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L358-L363">Source</a></sub></p>

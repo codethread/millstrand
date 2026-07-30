@@ -59,8 +59,8 @@
                   :spools ['skein.spools/workflow]
                   :after [:skein/spools-workflow]})
 ;; The shell executor ships in the workflow spool root and fulfils :shell gates
-;; by running the gate command directly. It contributes the :shell executor
-;; symbol and its query, and its reconcile owns the worker pool + initial scan;
+;; by running the gate command directly. Collected forms publish the :shell executor
+;; symbol and its query. Lifecycle resources own the worker pool and initial scan;
 ;; ordered after workflow, which owns the executor registry it contributes into.
 (runtime/module! runtime :skein/spools-shell
                  {:ns 'skein.spools.executors.shell
@@ -186,7 +186,7 @@
                           :config]
                   :required? true})
 
-;; The code executor scans ready gates during reconcile. It must load after
+;; The code executor's lifecycle resource scans ready gates when opened. It must load after
 ;; workflows.clj so every persisted code/fn symbol owned there can resolve on
 ;; the initial scan.
 (runtime/module! runtime :skein/spools-code

@@ -469,7 +469,7 @@
         (testing "a declared executor projects its gate-request contract"
           (let [item (by-waiter "shell")
                 request (:request item)]
-            (is (= "skein.spools.executors.shell/gate-stalled?"
+            (is (= "skein.spools.executors.shell/shell-stalled?"
                    (:stall-predicate item)))
             (is (= "skein.spools.executors.shell/request" (:spec request)))
             (is (= ["shell/argv"]

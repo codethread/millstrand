@@ -15,23 +15,31 @@ Fulfil workflow `:code` gates by invoking trusted Clojure functions.
 
 
 
-## <a name="skein.spools.executors.code/contribute">`contribute`</a>
+## <a name="skein.spools.executors.code/close-code-engine!">`close-code-engine!`</a>
 ``` clojure
-(contribute ctx)
+(close-code-engine! ctx)
 ```
 Function.
 
-Contribute the `:code` workflow executor and its stalled-gates query.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L98-L110">Source</a></sub></p>
+Close code executor resources and unregister its event handler.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L121-L128">Source</a></sub></p>
 
-## <a name="skein.spools.executors.code/gate-stalled?">`gate-stalled?`</a>
+## <a name="skein.spools.executors.code/code-engine">`code-engine`</a>
+
+
+
+
+Own the code executor handler and worker resources.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L130-L133">Source</a></sub></p>
+
+## <a name="skein.spools.executors.code/code-stalled?">`code-stalled?`</a>
 ``` clojure
-(gate-stalled? gate-view)
+(code-stalled? gate-view)
 ```
 Function.
 
 Return durable stall detail for a ready `:code` gate view, or nil.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L89-L96">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L81-L89">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.code/on-event">`on-event`</a>
 ``` clojure
@@ -40,21 +48,21 @@ Return durable stall detail for a ready `:code` gate view, or nil.
 Function.
 
 Scan for newly ready code gates after a graph mutation.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L84-L87">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L76-L79">Source</a></sub></p>
 
-## <a name="skein.spools.executors.code/reconcile">`reconcile`</a>
+## <a name="skein.spools.executors.code/open-code-engine!">`open-code-engine!`</a>
 ``` clojure
-(reconcile {:keys [runtime], :as ctx})
+(open-code-engine! ctx)
 ```
 Function.
 
-Reconcile the code executor's vocabulary, handler, and runtime-owned pools.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L112-L130">Source</a></sub></p>
+Open the code executor handler and worker resources.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L107-L119">Source</a></sub></p>
 
-## <a name="skein.spools.executors.code/spool">`spool`</a>
-
-
+## <a name="skein.spools.executors.code/stalled-code-gates-query">`stalled-code-gates-query`</a>
 
 
-Entry-point declaration for the code executor module.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L132-L135">Source</a></sub></p>
+
+
+Return active code gates carrying a durable error stamp.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L91-L96">Source</a></sub></p>

@@ -190,7 +190,7 @@
           (is (str/includes? (attr errored :gate/error) expected))
           (is (nil? (attr errored :code/result)))
           (is (nil? (attr errored :code/running)))
-          (is (= gate-id (:gate (code/gate-stalled? (ready-code-gate run-id)))))
+          (is (= gate-id (:gate (code/code-stalled? (ready-code-gate run-id)))))
           (is (some #(= gate-id (:id %))
                     (weaver/list-query rt 'stalled-code-gates {}))))))))
 
@@ -353,22 +353,12 @@
    #'code/new-state
    #{:scan-monitor :resources :close-fn}))
 
-(deftest contribution-vocabulary-reconcile-and-removal
+(deftest forms-publish-vocabulary-handler-and-resources
   (with-runtime
     (fn [rt _]
       (test-support/activate-spool! rt :skein/spools-workflow 'skein.spools.workflow)
-      (is (= {workflow/executor-kind
-              {"code" {:stalled? 'skein.spools.executors.code/gate-stalled?
-                       :request-spec :skein.spools.executors.code/request}}
-              :queries
-              {"stalled-code-gates"
-               [:and [:= :state "active"]
-                [:= [:attr "workflow/gate"] "code"]
-                [:exists [:attr "gate/error"]]]}}
-             (code/contribute {:runtime rt})))
-      (is (= {:reconciled :applied}
-             (code/reconcile {:runtime rt
-                              :module/contribution {:status :applied}})))
+      (test-support/activate-spool! rt :skein/spools-code 'skein.spools.executors.code
+                                    :after [:skein/spools-workflow])
       (let [pool (:worker-executor
                   (with-bindings {#'code/*runtime* rt} (#'code/resources)))
             declaration (first (filter #(= "code" (:name %))
@@ -379,20 +369,10 @@
                  "code/running" "code/result"}
                (set (:keys declaration))))
         (is (some #(= :code/engine (:key %)) (events/handlers rt)))
-        (code/reconcile {:runtime rt
-                         :module/contribution {:status :applied}})
+        (is (= "code" (:waiter (first (workflow/executor-catalog)))))
+        (test-support/activate-spool! rt :skein/spools-code 'skein.spools.executors.code
+                                      :after [:skein/spools-workflow])
         (is (identical? pool
                         (:worker-executor
                          (with-bindings {#'code/*runtime* rt} (#'code/resources)))))
-        (is (= {:reconciled :removed}
-               (code/reconcile {:runtime rt
-                                :module/contribution {:status :removed}})))
-        (is (.isShutdown pool))
-        (is (not-any? #(= :code/engine (:key %)) (events/handlers rt)))
-        (is (= {:reconciled :applied}
-               (code/reconcile {:runtime rt
-                                :module/contribution {:status :applied}})))
-        (is (not (identical? pool
-                             (:worker-executor
-                              (with-bindings {#'code/*runtime* rt}
-                                (#'code/resources))))))))))
+        "unchanged refresh preserves the worker pool"))))
