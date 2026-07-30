@@ -61,9 +61,7 @@ strand search "widget" --limit 200            # raise the row cap
 | `strand search <substring> [--archived] [--attr-key <k>] [--limit <n>]` | Substring search; JSON rows `{id, title, attr-key, snippet}`. |
 | `(search rt opts)` | Explicit-runtime core; `opts` is `{:substring :archived? :attr-key :limit}`. |
 
-The namespace declares the operation with `skein.api.skein.alpha/defop`.
-Activate it with
-`(runtime/module! rt :key {:ns 'skein.spools.unsafe-text-search :spools ['skein.spools/unsafe-text-search]})`.
+The namespace declares the operation with `skein.api.skein.alpha/defop`. Activate it with `(runtime/module! rt :key {:ns 'skein.spools.unsafe-text-search :spools ['skein.spools/unsafe-text-search]})`.
 
 Flags:
 
@@ -86,6 +84,8 @@ attribute key:
   JSON (so a string value reads back quoted, e.g. `"billing"`).
 - A strand that matches on its title and on two attribute values returns three
   rows, one per hit.
+
+The runtime validates `search` options against `:skein.spools.unsafe-text-search/search-opts` and each returned row against `:skein.spools.unsafe-text-search/result-row`.
 
 ## 4. Failure modes (TEN-003)
 

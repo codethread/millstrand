@@ -69,17 +69,18 @@ Return strand rows whose title or an attribute value contains `substring`.
   `:archived?` (include archived/cold attribute rows the query language cannot
   see; default false — hot rows only), `:attr-key` (scope the attribute-value
   search to one attribute key, which also skips the title branch), and `:limit`
-  (default `default-search-limit`).
+  (default `default-search-limit`). The runtime validates this map against
+  `::search-opts`.
 
   Each row is `{:id :title :attr-key :snippet}`: `:attr-key` is nil for a title
   hit or the matching attribute key otherwise, and `:snippet` is the matched
   text (the title, or the attribute value as stored JSON). Rows are ordered by
-  strand id then attribute key.
+  strand id then attribute key. Every row conforms to `::result-row`.
 
   Read-only. Fails loudly (TEN-003) on malformed opts or overflow: `search`
   fetches one row past `:limit` and, if the result exceeds it, throws naming
   `--limit` and query-narrowing rather than silently truncating.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L128-L170">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L128-L171">Source</a></sub></p>
 
 ## <a name="skein.spools.unsafe-text-search/search-op">`search-op`</a>
 ``` clojure
@@ -89,4 +90,4 @@ Function.
 
 UNSAFE substring search over strand titles and attribute values, including
   archived rows.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L204-L216">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj#L205-L217">Source</a></sub></p>
