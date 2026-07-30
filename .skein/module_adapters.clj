@@ -5,6 +5,7 @@
   world's config-election of the batteries reference help transform, kept here
   beside the batteries module ordering so the election has an owner."
   (:require [skein.api.current.alpha :as current]
+            [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.runtime.help-transform.alpha :as help-transform]))
 
 (defn reconcile-help-transform
@@ -22,12 +23,16 @@
      runtime
      {:transform @(requiring-resolve 'skein.spools.batteries/default-help-transform)
       :owner 'skein.spools.batteries}))
-  {:reconciled :help-transform})
+  {:registered :help-transform})
 
-(def spool
-  "Entry-point declaration for the module-adapters file module.
+(defn close-help-transform!
+  "Release this world's batteries help-transform election."
+  [{:keys [runtime]}]
+  (help-transform/unregister-default-help-transform!
+   runtime 'skein.spools.batteries)
+  {:unregistered :help-transform})
 
-  Its `:reconcile` entry point lives here instead of in the init.clj
-  declaration. Unqualified symbols resolve against this namespace
-  (PROP-Dsp-001.G1/Q4)."
-  {:reconcile 'reconcile-help-transform})
+(lifecycle/defresource batteries-help-transform
+  "Own this world's batteries help-transform election for the module lifetime."
+  {:open 'module-adapters/reconcile-help-transform
+   :close 'module-adapters/close-help-transform!})

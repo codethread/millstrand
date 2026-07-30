@@ -60,6 +60,8 @@
   stays registered via its spool."
   (:require [skein.api.current.alpha :as current]
             [skein.api.format.alpha :as format-alpha]
+            [skein.api.lifecycle.alpha :as lifecycle]
+            [skein.api.runtime.alpha :as runtime]
             [ct.spools.delegation :as agents]
             [ct.spools.agent-run :as shuttle]))
 
@@ -326,46 +328,46 @@
            |out. Route reviews of primarily Claude-authored code here, not
            |frontier design or broad implementation work.")}})
 
-(defn contribute
-  "Contribute this repo's harness seats as the workspace-owned partitions of the
-  agent-run tool and alias kinds.
+(doseq [[key harness] harness-defs]
+  (runtime/collect-entry! shuttle/harness-kind key harness))
 
-  Owning the partitions is what makes deletion-by-omission work: removing a seat
-  or tool from `harness-defs`/`alias-defs` and refreshing drops it from the live
-  registry, because publication replaces this module's complete partition rather
-  than upserting into the shared REPL owner. The default review/task contracts
-  are singleton slots, set in `reconcile` after publication. Definitions are
-  validated against agent-run's `::registered-harness-def`/`::registered-alias-def` specs at
-  publication."
-  [_]
-  {shuttle/harness-kind harness-defs
-   shuttle/alias-kind alias-defs})
+(doseq [[key alias] alias-defs]
+  (runtime/collect-entry! shuttle/alias-kind key alias))
 
-(defn reconcile
-  "Bind this repo's default agent review and task contracts.
-
-  These are singleton contract-text slots on the agent-run engine, not
-  owner-partitioned declarations, so they live in reconcile and re-establish on
-  every refresh."
+(defn open-review-contract!
+  "Bind this repo's default agent review contract."
   [{:keys [runtime]}]
   (current/with-runtime
     runtime
-    ;; agent review consumes the one authoritative policy text by default; the
-    ;; text itself ships from ct.spools.delegation, set-default-review-contract!
-    ;; still lives on the agent-run engine
-    (shuttle/set-default-review-contract! agents/review-contract)
-    ;; this repo runs the agent-plan task workflow (progress=, the
-    ;; awaiting_verification flow keyed on status=implemented), so it opts its
-    ;; serving runs into delegation's exported fragment; the engine's own worker
-    ;; contract rides every run regardless
-    (shuttle/set-default-task-contract! agents/worker-contract))
-  {:reconciled :harnesses})
+    (shuttle/set-default-review-contract! agents/review-contract)))
 
-(def spool
-  "Entry-point declaration for the harnesses file module.
+(defn close-review-contract!
+  "Clear this repo's default agent review contract."
+  [{:keys [runtime]}]
+  (current/with-runtime
+    runtime
+    (shuttle/set-default-review-contract! nil)))
 
-  The uniform convention covers every module-loadable namespace even when the
-  file is not itself a spool. Unqualified symbols resolve against this
-  namespace (PROP-Dsp-001.G1/Q4)."
-  {:contribute 'contribute
-   :reconcile 'reconcile})
+(defn open-task-contract!
+  "Bind this repo's default agent task contract."
+  [{:keys [runtime]}]
+  (current/with-runtime
+    runtime
+    (shuttle/set-default-task-contract! agents/worker-contract)))
+
+(defn close-task-contract!
+  "Clear this repo's default agent task contract."
+  [{:keys [runtime]}]
+  (current/with-runtime
+    runtime
+    (shuttle/set-default-task-contract! nil)))
+
+(lifecycle/defresource review-contract
+  "Own the workspace review-contract binding for the module lifetime."
+  {:open 'harnesses/open-review-contract!
+   :close 'harnesses/close-review-contract!})
+
+(lifecycle/defresource task-contract
+  "Own the workspace task-contract binding for the module lifetime."
+  {:open 'harnesses/open-task-contract!
+   :close 'harnesses/close-task-contract!})

@@ -2,6 +2,7 @@
   "Bind this repo's kanban card projection to devflow."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.spool.alpha :as spool]
             [ct.spools.devflow :as devflow]
             [ct.spools.kanban :as kanban]))
@@ -37,21 +38,18 @@
   :args (s/cat :runtime any? :run-id ::run-id)
   :ret ::projection)
 
-;; The devflow<->kanban tracker binding is a singleton slot, not a partitioned
-;; kind: kanban exposes one tracker per runtime through `set-tracker!`, so there
-;; is no owner partition to contribute and nothing for deletion-by-omission to
-;; drop. Reconcile is its home — it re-establishes the binding on every refresh.
-(defn reconcile
-  "Bind devflow as this runtime's required kanban tracker."
+;; Kanban v16 accepts the tracker as process-lifetime configuration: it exposes
+;; no unbind operation, so omission cannot claim module-lifetime cleanup. The
+;; idempotent seed makes that lifetime explicit and re-establishes the binding
+;; on a new weaver generation.
+(defn bind-devflow-tracker!
+  "Bind devflow as this runtime's required process-lifetime Kanban tracker."
   [{:keys [runtime]}]
   (kanban/set-tracker! runtime
                        {:name "devflow"
                         :project 'kanban-tracker/devflow-projection})
-  {:reconciled :kanban-tracker})
+  {:bound :kanban-tracker})
 
-(def spool
-  "Entry-point declaration for the kanban-tracker file module.
-
-  The tracker binding lives entirely in `reconcile`. Unqualified symbols
-  resolve against this namespace (PROP-Dsp-001.G1/Q4)."
-  {:reconcile 'reconcile})
+(lifecycle/defseed devflow-tracker
+  "Bind the canonical world's process-lifetime Devflow tracker."
+  {:apply 'kanban-tracker/bind-devflow-tracker!})

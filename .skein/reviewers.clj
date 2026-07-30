@@ -52,7 +52,8 @@
   sign-off invariants: the synthesizer is never a seat that reviewed, and at
   least one reviewing seat comes from outside the authoring model family."
   (:require [ct.spools.delegation :as agents]
-            [skein.api.format.alpha :as fmt]))
+            [skein.api.format.alpha :as fmt]
+            [skein.api.runtime.alpha :as runtime]))
 
 (def change-review
   "Roster fanned out over each reviewed change in this repository."
@@ -292,23 +293,6 @@
 
    :synthesis {:harness :sol-med}})
 
-(defn contribute
-  "Contribute this repository's reviewer rosters as the workspace-owned
-  partition of delegation's roster kind.
-
-  Owning the partition is what makes deletion-by-omission work: removing a roster
-  from this file and refreshing drops it from the live registry, because
-  publication replaces this module's complete `roster-kind` partition rather than
-  upserting into a shared REPL owner. Roster data is validated against
-  `:ct.spools.delegation/roster` at publication."
-  [_]
-  {agents/roster-kind {:change-review change-review
-                       :complex-patch-review complex-patch-review
-                       :docs-review docs-review}})
-
-(def spool
-  "Entry-point declaration for the reviewers file module.
-
-  This roster owns no live resource, so it declares no `:reconcile`.
-  Unqualified symbols resolve against this namespace (PROP-Dsp-001.G1/Q4)."
-  {:contribute 'contribute})
+(runtime/collect-entry! agents/roster-kind :change-review change-review)
+(runtime/collect-entry! agents/roster-kind :complex-patch-review complex-patch-review)
+(runtime/collect-entry! agents/roster-kind :docs-review docs-review)

@@ -8,7 +8,7 @@ The agent family (`agent-run`, `executors.subagent`, `delegation`, `bench`) live
 The spools in this directory ship with Skein as working references. Use them directly, copy them
 as starting points, or study them to author your own.
 
-Every spool loads through one convention: an approved coordinate in `.skein/spools.edn` and a stable `runtime/module!` declaration guarded by its `:spools` roots. Full refresh resolves those roots, loads the module source, publishes its owner-complete contribution, and reconciles resources. These forms run in trusted config (`.skein/init.clj`) or an explicit-runtime REPL; [customising your workspace](../docs/spools/customisation.md) is the operational walkthrough.
+Every spool loads through one convention: an approved coordinate in `.skein/spools.edn` and a stable `runtime/module!` declaration guarded by its `:spools` roots. Full refresh resolves those roots, collects the module's authoring forms, publishes its owner-complete contribution, and runs its lifecycle declarations. These forms run in trusted config (`.skein/init.clj`) or an explicit-runtime REPL; [customising your workspace](../docs/spools/customisation.md) is the operational walkthrough.
 
 Blessed alpha helpers such as `skein.api.peers.alpha` are also explicit-require userland APIs for trusted config and REPL workflows. Use that namespace's `peers` and `call!` helpers when a spool or repo config needs to discover and invoke same-machine sibling weavers.
 
@@ -199,9 +199,6 @@ The override inherits the shared family's `:roots`, `:requires`, and `:skein/min
   "Tool bindings"](./workflow.md#3-definition-layer)), so a consumer rebinds
   steps to their own tooling from trusted config without touching these
   namespaces.
-- A spool publishes its declarations through a `contribute` function that
-  returns owner-complete kind→entry data, and owns any resource or registration
-  effects in an optional `reconcile` function. See each contract doc for exact
-  behavior.
+- A spool publishes owner-complete kind entries through contribution forms and owns runtime effects through lifecycle forms. See [Writing shared spools](../docs/spools/writing-shared-spools.md) for the authoring grammar and each contract doc for exact behavior.
 - To author and load your own spool from a workspace-local root, follow
   [Authoring your own spool code](../docs/spools/customisation.md#promoting-config-to-a-local-spool).

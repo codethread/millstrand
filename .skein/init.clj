@@ -38,7 +38,8 @@
 (runtime/module! runtime :skein/spools-batteries
                  {:ns 'skein.spools.batteries
                   :spools ['skein.spools/batteries]})
-;; This repo elects the batteries reference help transform after batteries loads.
+;; This repo elects the batteries reference help transform after batteries loads;
+;; its lifecycle resource releases the singleton when the module is omitted.
 (runtime/module! runtime :module-adapters
                  {:file "module_adapters.clj"
                   :after [:skein/spools-batteries]})
@@ -108,15 +109,15 @@
 ;; --- repo policy over the peer spools ---------------------------------------
 ;; harnesses.clj contributes its seats over the :pi harness that agent-run
 ;; publishes, as the workspace-owned partitions of agent-run's tool/alias kinds,
-;; so it orders after both peers. Its reconcile sets the two singleton default
-;; review/task contract slots, consuming the delegation contract text.
+;; so it orders after both peers. Two lifecycle resources own the singleton
+;; review/task contract slots and clear them on removal.
 (runtime/module! runtime :harnesses
                  {:file "harnesses.clj"
                   :spools ['ct.spools/delegation 'ct.spools/agent-run]
                   :after [:skein/spools-shuttle :skein/spools-delegation]
                   :required? true})
 ;; The declarative reviewer roster stays a small git-reviewable data document,
-;; contributed as the workspace-owned partition of delegation's roster kind.
+;; collected as the workspace-owned partition of delegation's roster kind.
 ;; Roster harness aliases resolve at review time, not registration time, so order
 ;; relative to harnesses.clj is not load-bearing.
 (runtime/module! runtime :reviewers
@@ -144,7 +145,8 @@
 
 ;; --- kanban board + devflow tracker binding ---------------------------------
 ;; kanban is an external git-distributed spool. The board loads independently;
-;; the repo tracker binding below joins it to devflow after both spools are active.
+;; the process-lifetime tracker seed below joins it to devflow after both spools
+;; are active. Kanban v16 deliberately exposes no tracker unbind operation.
 (runtime/module! runtime :skein/spools-kanban
                  {:ns 'ct.spools.kanban
                   :spools ['codethread/kanban]
