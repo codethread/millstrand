@@ -195,7 +195,7 @@ $ mill bin run kanban-dash
  "bin":"kanban-dash","remedy":"mill bin build kanban-dash"}
 
 $ mill bin build kanban-dash
-{"operation":"bins build","bin":"kanban-dash","exit":0,"elapsed-ms":4130}
+{"operation":"bin build","bin":"kanban-dash","exit":0,"elapsed-ms":4130}
 
 $ mill bin run kanban-dash
 # full-screen board in this terminal; mill is gone
