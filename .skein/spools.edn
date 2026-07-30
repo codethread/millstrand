@@ -16,8 +16,8 @@
  skein.spools/workflow {:skein/source-root "spools/workflow"},
  ct.spools/agent-run
  {:git/url "https://github.com/codethread/agent-harness.spool.git",
-  :git/sha "30f0f21ea6b78b4d38f506fe543f76e7208e23e8",
-  :git/tag "v17",
+  :git/sha "7ffaac7541329f9f4c5643ad1560e2d68ced8b2c",
+  :git/tag "v20",
   :roots
   {ct.spools/agent-run "agent-run",
    ct.spools/delegation "delegation",
