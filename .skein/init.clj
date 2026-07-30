@@ -176,9 +176,9 @@
                   :required? true})
 
 ;; --- cron timer engine + the NVD scan job -----------------------------------
-;; Cron is a generic weaver timer engine; its contribute/reconcile create the
-;; scheduled executor. nvd_scan.clj requires it (for the job's seed/jitter fns),
-;; so it is ordered after cron.
+;; Cron is a generic weaver timer engine. Its collected open-kind and lifecycle
+;; declarations own job publication and scheduling; nvd_scan.clj contributes a
+;; job through `defjob`, so it is ordered after cron.
 (runtime/module! runtime :skein/spools-cron
                  {:ns 'skein.spools.cron
                   :spools ['skein.spools/cron]

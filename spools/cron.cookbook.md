@@ -37,8 +37,9 @@ run every so often for the lifetime of the weaver. You also want spread so many
 weavers or many jobs do not fire on the same tick.
 
 **Composition.** Call `register!` with `:interval-ms`, optional `:jitter-ms`, and
-a `:handler` symbol resolving to `(fn [runtime] ..)`. Register from trusted startup
-config after cron's module activation has created the execution executor.
+a `:handler` symbol resolving to `(fn [runtime] ..)`. This is the direct
+trusted-Clojure seam. Module sources should use the `defjob` recipe below so
+owner-complete publication and omission drive the job lifecycle.
 
 ```clojure
 (ns my.jobs
@@ -86,10 +87,10 @@ Honest source: the job shape in [`cron/README.md`](./cron/README.md) and
 network read. Your main config file also loads under test, and you do not want
 that test to touch the real world.
 
-**Composition.** Give the job a dedicated startup-file module. Cron's own
-module only creates the execution executor and registers no jobs. The job file
-holds the `:handler` plus the `defjob` declaration. `init.clj` wires it as its
-own module.
+**Composition.** Give the job a dedicated startup-file module. Cron's module
+declares the open jobs kind and the scheduling lifecycle effect but contributes
+no jobs. The job file holds the `:handler` plus the `defjob` declaration.
+`init.clj` wires it as its own module.
 
 ```clojure
 ;; report_job.clj (ns report-job) — the job's handler and registration live together.
@@ -118,8 +119,9 @@ own module.
   config tests.
 - **Behavior and cadence stay together.** One file holds what the job does and
   when it runs.
-- **Reloads keep cadence.** Re-running the same registration after reload
-  restores in-memory job config while preserving the durable pending wake.
+- **Reloads keep cadence.** Republishing the same declaration leaves the
+  managed job untouched. Changing its cadence or handler replaces its wake;
+  omitting it cancels the wake.
 
 Honest source: this repo's [`.skein/nvd_scan.clj`](../.skein/nvd_scan.clj), wired
 as `:nvd-scan` in [`.skein/init.clj`](../.skein/init.clj).

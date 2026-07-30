@@ -38,7 +38,11 @@
     {:prefix "skein-cron"}
     (fn [rt _config-dir]
       (test-alpha/set-clock! rt (test-alpha/manual-clock (Instant/ofEpochSecond 0)))
-      (test-support/activate-spool! rt :skein/spools-cron 'skein.spools.cron)
+      (let [handle (registry/registry)]
+        (registry/declare-kind! handle {:id cron/job-kind
+                                        :entry-spec :skein.spools.cron/job
+                                        :binding-moment :cron/fire})
+        (swap! (:spool-state rt) assoc :skein.spools.cron/job-kinds handle))
       (f rt))))
 
 (defn- cron-wake
@@ -130,19 +134,27 @@
                                                 {:layer :workspace :entries entries :overrides #{}}))]
         (replace! {:owned {:id :owned :interval-ms 1000
                            :handler 'skein.cron-test/fire-ok}})
-        (cron/reconcile {:runtime rt :module/contribution {:status :applied}})
+        (cron/apply-jobs! {:runtime rt
+                           :desired (cron/desired-jobs {:runtime rt})
+                           :actual (cron/actual-jobs {:runtime rt})})
         (let [first-wake (:wake_at (cron-wake rt "cron/owned"))]
           (test-alpha/set-clock! rt (test-alpha/manual-clock (Instant/ofEpochMilli 5000)))
-          (cron/reconcile {:runtime rt :module/contribution {:status :applied}})
+          (cron/apply-jobs! {:runtime rt
+                             :desired (cron/desired-jobs {:runtime rt})
+                             :actual (cron/actual-jobs {:runtime rt})})
           (is (= first-wake (:wake_at (cron-wake rt "cron/owned")))
               "an unchanged owner declaration preserves its pending wake")
           (replace! {:owned {:id :owned :interval-ms 2000
                              :handler 'skein.cron-test/fire-other}})
-          (cron/reconcile {:runtime rt :module/contribution {:status :applied}})
+          (cron/apply-jobs! {:runtime rt
+                             :desired (cron/desired-jobs {:runtime rt})
+                             :actual (cron/actual-jobs {:runtime rt})})
           (is (= 7000 (:wake_at (cron-wake rt "cron/owned")))
               "a changed owner declaration reschedules exactly once")
           (registry/remove-owner! handle kind owner)
-          (cron/reconcile {:runtime rt :module/contribution {:status :applied}})
+          (cron/apply-jobs! {:runtime rt
+                             :desired (cron/desired-jobs {:runtime rt})
+                             :actual (cron/actual-jobs {:runtime rt})})
           (is (nil? (cron-wake rt "cron/owned"))
               "owner removal cancels the durable cron wake")
           (is (empty? (cron/jobs rt))))))))
@@ -251,6 +263,14 @@
    #{:executor :jobs :failure-log :rng :in-flight-count :close-fn}))
 
 (deftest job-authoring-validates-closed-options-and-job-shape
+  (is (= {:kind :reconcile
+          :after #{}
+          :trigger-kinds #{cron/job-kind}
+          :read-desired 'skein.spools.cron/desired-jobs
+          :read-actual 'skein.spools.cron/actual-jobs
+          :apply 'skein.spools.cron/apply-jobs!
+          :on-removed 'skein.spools.cron/remove-jobs!}
+         (deref (ns-resolve 'skein.spools.cron 'scheduled-jobs))))
   (is (= {:id :sample :interval-ms 1000 :handler 'skein.cron-test/fire-ok}
          (cron/job-declaration
           :sample {} {:interval-ms 1000 :handler 'skein.cron-test/fire-ok})))
