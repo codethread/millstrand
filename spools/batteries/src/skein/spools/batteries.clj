@@ -613,7 +613,6 @@
      "|Status performs no remote Git calls. It reports the running runtime's
       |declared and adopted state without attempting sync or reload.")]})
 
-
 ;; The blessed parser's :parse :json uses clojure.data.json/read-str, which
 ;; silently returns the first value and ignores trailing input, so it cannot
 ;; enforce old C13a's "exactly one JSON value" contract. weave reads --input as
@@ -701,20 +700,6 @@
   (mapv query-list-entry (graph/queries rt)))
 
 ;; --- op handlers ------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ;; --- arg-specs --------------------------------------------------------------
 
