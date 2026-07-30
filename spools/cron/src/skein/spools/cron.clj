@@ -154,6 +154,11 @@
   [id]
   (str "cron/" (name id)))
 
+(defn- wake-pending?
+  [runtime id]
+  (let [key (wake-key id)]
+    (some #(= key (:key %)) (scheduler/pending runtime))))
+
 (defn- resolve-symbol [role sym]
   (when-not (and (symbol? sym) (namespace sym))
     (fail! (str "Cron job " role " must be a fully qualified symbol") {role sym}))
@@ -191,7 +196,7 @@
   (let [id (job-id id)
         key (wake-key id)
         old @(jobs-atom runtime)
-        pending? (some #(= key (:key %)) (scheduler/pending runtime))]
+        pending? (wake-pending? runtime id)]
     (when pending?
       (scheduler/cancel! runtime key))
     (swap! (jobs-atom runtime) dissoc id)
@@ -349,9 +354,8 @@
         interval (:interval-ms job)
         jitter (or (:jitter-ms job) 0)]
     (resolve-symbol :handler (:handler job))
-    (let [key (wake-key id)
-          old-entry (get @(jobs-atom runtime) id)
-          pending? (some #(= key (:key %)) (scheduler/pending runtime))
+    (let [old-entry (get @(jobs-atom runtime) id)
+          pending? (wake-pending? runtime id)
           entry {:id id :interval-ms interval :jitter-ms jitter :handler (:handler job)}
           replace? (or (not pending?)
                        (and old-entry (not= (config-tuple old-entry) (config-tuple entry))))]
@@ -429,7 +433,8 @@
       (apply-job-change! runtime :remove id (get actual id)
                          #(unregister! runtime id)))
     (doseq [[id job] desired]
-      (when (not= (config-tuple job) (some-> (get actual id) config-tuple))
+      (when (or (not= (config-tuple job) (some-> (get actual id) config-tuple))
+                (not (wake-pending? runtime id)))
         (apply-job-change! runtime :apply id job
                            #(register! runtime (assoc job :id id)))))
     (require-valid! ::reconcile-result

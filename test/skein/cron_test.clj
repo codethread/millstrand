@@ -145,6 +145,12 @@
                              :actual (cron/actual-jobs {:runtime rt})})
           (is (= first-wake (:wake_at (cron-wake rt "cron/owned")))
               "an unchanged owner declaration preserves its pending wake")
+          (scheduler/cancel! rt "cron/owned")
+          (cron/apply-jobs! {:runtime rt
+                             :desired (cron/desired-jobs {:runtime rt})
+                             :actual (cron/actual-jobs {:runtime rt})})
+          (is (= 6000 (:wake_at (cron-wake rt "cron/owned")))
+              "a missing durable wake is re-armed even when config is unchanged")
           (replace! {:owned {:id :owned :interval-ms 2000
                              :handler 'skein.cron-test/fire-other}})
           (cron/apply-jobs! {:runtime rt
