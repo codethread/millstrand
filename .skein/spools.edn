@@ -9,16 +9,16 @@
  {:skein/source-root "spools/unsafe-text-search"},
  codethread/devflow
  {:git/url "https://github.com/codethread/devflow.spool.git",
-  :git/sha "c056282702c14feba84ea6b1538cdcc0f3043734",
-  :git/tag "v13",
+  :git/sha "179efcc8531379e8ae6626348bfdbe028d7a1f90",
+  :git/tag "v14",
   :roots {codethread/devflow "."}},
  skein.spools/batteries {:skein/source-root "spools/batteries"},
  skein.spools/cron {:skein/source-root "spools/cron"},
  skein.spools/workflow {:skein/source-root "spools/workflow"},
  ct.spools/agent-run
  {:git/url "https://github.com/codethread/agent-harness.spool.git",
-  :git/sha "2f54926ec8c25bd82eb33bfe42f01d5052d48837",
-  :git/tag "v16",
+  :git/sha "30f0f21ea6b78b4d38f506fe543f76e7208e23e8",
+  :git/tag "v17",
   :roots
   {ct.spools/agent-run "agent-run",
    ct.spools/delegation "delegation",

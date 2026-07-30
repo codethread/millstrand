@@ -129,19 +129,11 @@
             (publish-module-contribution!
              rt :skein/spools-shuttle
              (requiring-resolve 'ct.spools.agent-run/contribute))
-            ((requiring-resolve 'skein.spools.workflow/contribute)
-             {:runtime rt :module/key :skein/spools-workflow})
-            ((requiring-resolve 'skein.spools.workflow/reconcile)
-             {:runtime rt :module/key :skein/spools-workflow
-              :module/contribution {:status :applied}})
-            (load-module-namespace! rt :skein/spools-workflow-cli
-                                    'skein.spools.workflow.cli)
-            (publish-module-contribution!
-             rt :skein/spools-workflow-cli
-             (requiring-resolve 'skein.spools.workflow.cli/contribute))
-            ((requiring-resolve 'skein.spools.workflow.cli/reconcile)
-             {:runtime rt :module/key :skein/spools-workflow-cli
-              :module/contribution {:status :applied}})
+            (test-support/activate-spool! rt :skein/spools-workflow
+                                          'skein.spools.workflow)
+            (test-support/activate-spool! rt :skein/spools-workflow-cli
+                                          'skein.spools.workflow.cli
+                                          :after [:skein/spools-workflow])
             (load-module-namespace! rt :skein/spools-devflow 'ct.spools.devflow)
             (load-module-source! rt :config ".skein/config.clj")
             (load-file ".skein/harnesses.clj")
@@ -1949,8 +1941,6 @@
   keys them, each mapped to the namespace's public `def spool` declaration var.
   Guild ships in-tree but is not activated in this workspace."
   {:skein/spools-batteries 'skein.spools.batteries/spool
-   :skein/spools-workflow 'skein.spools.workflow/spool
-   :skein/spools-workflow-cli 'skein.spools.workflow.cli/spool
    :skein/spools-shell 'skein.spools.executors.shell/spool
    :skein/spools-code 'skein.spools.executors.code/spool
    :skein/spools-unsafe-text-search 'skein.spools.unsafe-text-search/spool
@@ -1974,7 +1964,8 @@
   the patterns its source collects, and pinned `codethread/devflow`, whose whole
   contribution is the stage `defworkflow` entries its load collects."
   #{:macros/patterns :macros/ops :macros/queries :macros/rules :macros/demo
-    :skein/spools-cron :skein/spools-devflow})
+    :skein/spools-workflow :skein/spools-workflow-cli :skein/spools-cron
+    :skein/spools-devflow})
 
 (def ^:private authoring-generation
   "Migration-window classification for every selected module.
@@ -1982,8 +1973,8 @@
   Later authoring-form migration cards change only their owned rows from
   `:legacy` to `:forms`. The final-removal card deletes this table."
   {:skein/spools-batteries :legacy
-   :skein/spools-workflow :legacy
-   :skein/spools-workflow-cli :legacy
+   :skein/spools-workflow :forms
+   :skein/spools-workflow-cli :forms
    :skein/spools-shell :legacy
    :skein/spools-code :legacy
    :skein/spools-unsafe-text-search :legacy

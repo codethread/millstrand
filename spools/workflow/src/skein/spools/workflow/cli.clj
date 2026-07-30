@@ -25,7 +25,9 @@
          :spools ['skein.spools/workflow]
          :after [:skein/spools-workflow]})"
   (:require [clojure.string :as str]
+            [skein.api.contribution.alpha :as contribution]
             [skein.api.format.alpha :as fmt]
+            [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.runtime.glossary.alpha :as glossary]
             [skein.spools.workflow :as workflow]))
 
@@ -110,50 +112,6 @@
                         (attributes->map (:attributes args)))
                       (or (:attr args) {}))))
     request))
-
-(defn workflow-op
-  "Handle `strand workflow <verb>`, routing to the engine's worker surface.
-
-  The registered op handler; resolved by symbol at invocation time, so it is public
-  like the other spools' op handlers. Each verb assembles a request map and hands
-  it to the engine function that owns the semantics — the CLI resolves no step,
-  infers no role, and stamps no outcome of its own. The declared arg-spec rejects
-  an unknown verb before invocation, so the fall-through exists only to keep a
-  direct Clojure caller loud."
-  [{:op/keys [args argv]}]
-  (let [{:keys [subcommand choice] target :workflow} args]
-    (case (first subcommand)
-      "list" {:operation "workflow list"
-              :definitions (workflow/catalog (list-request args))}
-      "show" (assoc (workflow/definition-view (keyword target))
-                    :operation "workflow show")
-      "executors" {:operation "workflow executors"
-                   :executors (workflow/executor-catalog)}
-      "start" (workflow/run-start!
-               (-> {:run-id (:run-id args) :workflow (keyword target)}
-                   (with-json-object args :params :params)))
-      "ready" (workflow/run-ready {:run-id (:run-id args)})
-      "choices" (workflow/run-choices (-> {:run-id (:run-id args)}
-                                          (carry args :step :step)))
-      "complete" (workflow/run-complete!
-                  (-> (with-attributes (run-request args) args argv)
-                      (with-json-object args :context :context)))
-      "choose" (workflow/run-choose!
-                (-> (assoc (run-request args) :choice choice)
-                    (with-json-object args :input :input)))
-      "next" (workflow/run-next!
-              (-> (run-request args)
-                  (carry args :choice :choice)
-                  (with-json-object args :input :input)))
-      "defer" (workflow/run-defer!
-               (-> (assoc (run-request args) :workflow (keyword target))
-                   (with-json-object args :params :params)))
-      "await" (workflow/run-await
-               (carry {:run-id (:run-id args)} args :timeout-secs :timeout-secs))
-      (throw (ex-info "Unsupported workflow subcommand"
-                      {:subcommand subcommand
-                       :allowed ["list" "show" "executors" "start" "ready" "choices"
-                                 "complete" "choose" "next" "defer" "await"]})))))
 
 (def ^:private workflow-doc
   (fmt/reflow
@@ -570,47 +528,55 @@
    {:name "workflow/step-not-defer"
     :definition "The step named for workflow defer holds another role."}])
 
-(defn contribute
-  "Return the workflow CLI module's complete operation contribution.
+(contribution/defop workflow
+  "Discover and drive the workflows this weaver has registered: list the catalogue, show one definition, then start a run and move it through its ready frontier."
+  (merge {:arg-spec workflow-arg-spec
+          :returns workflow-returns
+          :stream? false}
+         workflow-meta)
+  [{:op/keys [args argv]}]
+  (let [{:keys [subcommand choice] target :workflow} args]
+    (case (first subcommand)
+      "list" {:operation "workflow list"
+              :definitions (workflow/catalog (list-request args))}
+      "show" (assoc (workflow/definition-view (keyword target))
+                    :operation "workflow show")
+      "executors" {:operation "workflow executors"
+                   :executors (workflow/executor-catalog)}
+      "start" (workflow/run-start!
+               (-> {:run-id (:run-id args) :workflow (keyword target)}
+                   (with-json-object args :params :params)))
+      "ready" (workflow/run-ready {:run-id (:run-id args)})
+      "choices" (workflow/run-choices (-> {:run-id (:run-id args)}
+                                          (carry args :step :step)))
+      "complete" (workflow/run-complete!
+                  (-> (with-attributes (run-request args) args argv)
+                      (with-json-object args :context :context)))
+      "choose" (workflow/run-choose!
+                (-> (assoc (run-request args) :choice choice)
+                    (with-json-object args :input :input)))
+      "next" (workflow/run-next!
+              (-> (run-request args)
+                  (carry args :choice :choice)
+                  (with-json-object args :input :input)))
+      "defer" (workflow/run-defer!
+               (-> (assoc (run-request args) :workflow (keyword target))
+                   (with-json-object args :params :params)))
+      "await" (workflow/run-await
+               (carry {:run-id (:run-id args)} args :timeout-secs :timeout-secs))
+      (throw (ex-info "Unsupported workflow subcommand"
+                      {:subcommand subcommand
+                       :allowed ["list" "show" "executors" "start" "ready" "choices"
+                                 "complete" "choose" "next" "defer" "await"]})))))
 
-  One entry, assembled into the canonical `::op-entry` shape (string key,
-  `:name`, the handler `:fn`, provenance, and arg-spec node metadata) exactly as
-  `register-op!` would — mirrored here because a blessed spool may not reach the
-  weaver's internal op-entry plumbing (SPEC-003.C19a). Publishing the op as this
-  module's complete partition is also what makes opting back out real: dropping
-  the module and refreshing removes the verb from the effective registry."
-  [_ctx]
-  {:ops {:entries {"workflow" (merge {:name "workflow"
-                                      :fn 'skein.spools.workflow.cli/workflow-op
-                                      :stream? false
-                                      :provenance 'skein.spools.workflow.cli
-                                      :doc workflow-doc
-                                      :arg-spec workflow-arg-spec
-                                      :returns workflow-returns}
-                                     workflow-meta)}}})
+(defn seed-workflow-glossary!
+  "Seed the Workflow CLI's process-lifetime failure glossary."
+  [{:keys [runtime]}]
+  (doseq [outcome workflow-glossary]
+    (glossary/register-glossary-outcome!
+     runtime (assoc outcome :owner 'skein.spools.workflow.cli)))
+  {:seeded :workflow-cli-glossary})
 
-(defn reconcile
-  "Seed the workflow worker CLI's failure glossary when the module is applied.
-
-  Removal is deliberately effect-free: the glossary API ships register and
-  replace but no unregister, so outcomes are process-lifetime seeds."
-  [{:keys [runtime] :as ctx}]
-  (case (get-in ctx [:module/contribution :status])
-    :applied (do (doseq [outcome workflow-glossary]
-                   (glossary/register-glossary-outcome!
-                    runtime (assoc outcome :owner 'skein.spools.workflow.cli)))
-                 {:reconciled :workflow-cli-glossary})
-    :removed {:reconciled :removed}
-    (throw (ex-info "Unsupported module contribution status"
-                    {:status (get-in ctx [:module/contribution :status])
-                     :module/key (:module/key ctx)}))))
-
-(def spool
-  "Entry-point declaration for the workflow CLI module (PROP-Dsp-001 `def spool`
-  convention).
-
-  The refresh coordinator resolves `:contribute` from this public var at every
-  module evaluation. The op registry and vocabulary belong to the engine module;
-  `reconcile` seeds this module's process-lifetime glossary outcomes."
-  {:contribute 'contribute
-   :reconcile 'reconcile})
+(lifecycle/defseed workflow-glossary-seed
+  "Seed the process-lifetime Workflow CLI failure glossary."
+  {:apply 'skein.spools.workflow.cli/seed-workflow-glossary!})

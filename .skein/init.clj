@@ -44,13 +44,16 @@
                   :after [:skein/spools-batteries]})
 
 ;; --- workflow engine + shell executor -------------------------------------
+;; The engine's collected open-kind and lifecycle declarations own Workflow
+;; definition/executor publication and its process-lifetime vocabulary seed.
 (runtime/module! runtime :skein/spools-workflow
                  {:ns 'skein.spools.workflow
                   :spools ['skein.spools/workflow]})
 ;; The generic worker CLI is a separate, opt-in module of the same spool: the
 ;; engine ships no verbs, and this declaration is what puts the root `workflow`
 ;; op (list/show/start/ready/complete/choose/defer/await) on the surface for
-;; every registered definition. Dropping it and refreshing removes the verb.
+;; every registered definition. Its collected lifecycle declaration seeds the
+;; failure glossary. Dropping it and refreshing removes the verb.
 (runtime/module! runtime :skein/spools-workflow-cli
                  {:ns 'skein.spools.workflow.cli
                   :spools ['skein.spools/workflow]

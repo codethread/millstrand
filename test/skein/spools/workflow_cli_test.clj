@@ -172,7 +172,8 @@
       (activate-engine! rt)
       (is (not (contains? (op-names rt) "workflow"))
           "the engine module contributes no operation entries")
-      (is (empty? (:ops (workflow/contribute {:runtime rt})))))))
+      (is (nil? (ns-resolve 'skein.spools.workflow 'spool))
+          "the forms-only engine exposes no legacy entry point"))))
 
 (deftest activating-the-workflow-cli-publishes-the-workflow-op
   (with-runtime
@@ -203,16 +204,15 @@
 
 (deftest the-cli-module-owns-the-whole-workflow-op-partition
   ;; Opting back out is the same publication mechanism as opting in: the module
-  ;; contributes the complete op partition, so a workspace that stops declaring
+  ;; collects the complete op partition, so a workspace that stops declaring
   ;; the module publishes no `workflow` entry at the next refresh.
-  (let [entries (get-in (cli/contribute {}) [:ops :entries])]
-    (is (= #{"workflow"} (set (keys entries))))
-    (testing "the assembled entry answers to the op registry's own validator"
-      ;; The entry shape is a spool mirroring what `register-op!` assembles, so
-      ;; the publication-side validator — closed entry keys, provenance,
-      ;; arg-spec structure and leaf classes, returns alignment — is the spec
-      ;; that owns it, here and at every refresh.
-      (is (= "workflow" (:name (weaver/validate-op-entry! (get entries "workflow"))))))))
+  (with-runtime
+    (fn [rt _]
+      (activate-cli! rt)
+      (let [entry (weaver/resolve-op rt 'workflow)]
+        (is (= "workflow" (:name (weaver/validate-op-entry! entry))))
+        (is (nil? (ns-resolve 'skein.spools.workflow.cli 'spool))
+            "the forms-only CLI exposes no legacy entry point")))))
 
 ;; --- list: deterministic filtering ------------------------------------------
 

@@ -27,6 +27,7 @@
             [skein.api.current.alpha :as current]
             [skein.api.format.alpha :as fmt]
             [skein.api.graph.alpha :as graph]
+            [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.spool.alpha :refer [fail! require-valid! attr-key->str
                                            poll-until!]]
@@ -1359,13 +1360,13 @@
   [name]
   (defs/resolve-registered (current/runtime) name))
 
-(defn- declare-workflow-vocab!
+(defn seed-workflow-vocab!
   "Seed the `workflow/*` attribute namespace into `rt`'s vocabulary registry,
   owned by this spool, so the attributes `compile` and the builders write are
   discoverable data."
-  [rt]
+  [{:keys [runtime]}]
   (vocab/declare!
-   rt
+   runtime
    {:kind :attr-namespace
     :name "workflow"
     :owner :skein/spools-workflow
@@ -1387,51 +1388,26 @@
           |Workflow molecule/wisp attributes written by the workflow spool's
           |compile and builders. A step closed before the outcome cutover may
           |also carry workflow/outcome-notes, which the engine no longer writes;
-          |it reads back as an ordinary historical attribute.")}))
+          |it reads back as an ordinary historical attribute.")})
+  {:seeded :workflow})
 
-(defn contribute
-  "Module contribution for the workflow spool.
+(runtime/collect-kind!
+ :skein.spools.workflow.internal.registry/registry
+ {:id definition-kind
+  :entry-spec :skein.spools.workflow.internal.registry/definition-symbol
+  :binding-moment :route-transition
+  :candidate-validator
+  'skein.spools.workflow.internal.definitions/validate-candidates!})
 
-  The workflow spool supplies no definitions or executors of its own — those
-  are contributed by the workflows that pour them and by the executors that
-  register — so it contributes no declarative entries. It materializes the
-  registry handle so a dependent module contributing to the workflow kinds finds
-  them already declared (DELTA-OlrDrt-001.CC4)."
-  [{:keys [runtime]}]
-  (registry/registry-handle runtime)
-  {})
+(runtime/collect-kind!
+ :skein.spools.workflow.internal.registry/registry
+ {:id executor-kind
+  :entry-spec :skein.spools.workflow.internal.registry/executor-entry
+  :binding-moment :gate-evaluation})
 
-(defn reconcile
-  "Reconcile the workflow spool's resources per the module contract.
-
-  An applied contribution seeds the `workflow/*` vocabulary. The removal
-  branch is deliberately effect-free: vocabulary ownership has no retraction
-  API — declarations are process-lifetime seeds (SPEC-004.C46b,
-  DELTA-Itr-001) — and re-declaring on removal is the defect the contract
-  names. Any other status is a direct-call error and fails loudly."
-  [{:keys [runtime] :as ctx}]
-  (let [status (get-in ctx [:module/contribution :status])]
-    (case status
-      :applied (do (declare-workflow-vocab! runtime)
-                   {:reconciled :workflow})
-      :removed {:reconciled :removed}
-      (fail! "Unsupported module contribution status"
-             {:status status
-              :allowed #{:applied :removed}
-              :module/key (:module/key ctx)
-              :reconciler 'skein.spools.workflow/reconcile}))))
-
-(def spool
-  "Entry-point declaration for the workflow spool (PROP-Dsp-001 `def spool`
-  convention).
-
-  The refresh coordinator resolves `:contribute`/`:reconcile` from this public
-  var at every module evaluation, so a consumer declares only a source target
-  and world policy (`{:ns 'skein.spools.workflow :spools [...]}`) and never
-  mirrors the pair. Unqualified symbols resolve against this namespace; fn
-  values are rejected (ADR-002.O1)."
-  {:contribute 'contribute
-   :reconcile 'reconcile})
+(lifecycle/defseed workflow-vocabulary
+  "Seed the process-lifetime Workflow attribute vocabulary."
+  {:apply 'skein.spools.workflow/seed-workflow-vocab!})
 
 ;; --- input contract specs -------------------------------------------------
 

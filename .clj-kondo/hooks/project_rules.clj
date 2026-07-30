@@ -68,7 +68,10 @@
   expansion."
   [{:keys [node]}]
   (let [[_ name-node docstring-node opts-node query-node] (:children node)
-        used (api/list-node (list (api/token-node 'do) opts-node query-node))
+        used (api/list-node (list (api/token-node 'do)
+                                  (api/list-node
+                                   (list (api/token-node 'identity) opts-node))
+                                  query-node))
         def-node (api/list-node (list (api/token-node 'def) name-node docstring-node used))]
     {:node (with-meta def-node (meta node))}))
 
@@ -83,7 +86,10 @@
   (let [[_ name-node docstring-node opts-node argv-node & body] (:children node)
         handler-node (api/token-node (symbol (str (api/sexpr name-node) "-op")))
         defn-node (api/list-node (list* (api/token-node 'defn) handler-node docstring-node argv-node body))
-        used (api/list-node (list (api/token-node 'do) opts-node defn-node))]
+        used (api/list-node (list (api/token-node 'do)
+                                  (api/list-node
+                                   (list (api/token-node 'identity) opts-node))
+                                  defn-node))]
     {:node (with-meta used (meta node))}))
 
 (defn defrule
