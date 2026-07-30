@@ -94,17 +94,6 @@
        :source/namespace ns-sym}
       #(spool-sync/load-synced-namespace! rt ns-sym module-key)))))
 
-(defn- publish-module-contribution!
-  "Replace one fixture module owner from its data-first contribution function."
-  [rt module-key contribute]
-  (publish-contribution!
-   rt module-key
-   (update-vals (contribute {:runtime rt :module/key module-key})
-                (fn [partition]
-                  (if (contains? partition :entries)
-                    partition
-                    {:entries partition :overrides #{}})))))
-
 (defn- with-config-runtime
   "Run f with an isolated runtime and the repo-local .skein config loaded.
 
@@ -136,10 +125,9 @@
                                           :after [:skein/spools-workflow])
             (load-module-namespace! rt :skein/spools-devflow 'ct.spools.devflow)
             (load-module-source! rt :config ".skein/config.clj")
-            (load-file ".skein/harnesses.clj")
-            (publish-module-contribution!
-             rt :harnesses (requiring-resolve 'harnesses/contribute))
-            ((requiring-resolve 'harnesses/reconcile) {:runtime rt})
+            (load-module-source! rt :harnesses ".skein/harnesses.clj")
+            ((requiring-resolve 'harnesses/open-review-contract!) {:runtime rt})
+            ((requiring-resolve 'harnesses/open-task-contract!) {:runtime rt})
             (load-module-source! rt :workflows ".skein/workflows.clj")
             (f rt)))
         (finally
@@ -857,8 +845,7 @@
   ;; exercises the same contribution path init.clj's reviewers module runs
   (with-config-runtime
     (fn [rt]
-      (load-file ".skein/reviewers.clj")
-      (publish-module-contribution! rt :reviewers (requiring-resolve 'reviewers/contribute))
+      (load-module-source! rt :reviewers ".skein/reviewers.clj")
       (let [rosters ((requiring-resolve 'ct.spools.delegation/rosters))
             roster (first (filter #(= :change-review (:name %)) rosters))
             complex-roster (first (filter #(= :complex-patch-review (:name %)) rosters))
@@ -1977,17 +1964,17 @@
    :skein/spools-delegation :forms
    :skein/spools-bench :forms
    :skein/spools-treadle :forms
-   :kanban/tracker :legacy
-   :harnesses :legacy
-   :reviewers :legacy
-   :module-adapters :legacy
+   :kanban/tracker :forms
+   :harnesses :forms
+   :reviewers :forms
+   :module-adapters :forms
    :attention :forms
    :config :forms
    :workflows :forms
    :nvd-scan :forms})
 
 (deftest selected-modules-have-one-authoring-generation
-  (is (= #{:legacy :forms} (set (vals authoring-generation))))
+  (is (= #{:forms} (set (vals authoring-generation))))
   (is (every? #(contains? #{:legacy :forms} %) (vals authoring-generation)))
   (is (= #{:skein/spools-batteries :skein/spools-workflow
            :skein/spools-workflow-cli :skein/spools-shell :skein/spools-code
