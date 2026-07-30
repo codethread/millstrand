@@ -192,27 +192,29 @@
   notification)
 
 (defn- process-thread! [notifier notification result]
-  (let [argv (conj (:argv notifier) (:title notification))]
+  (let [argv (conj (:argv notifier) (:title notification))
+        runtime (rt)]
     (doto (Thread.
            (fn []
-             (try
-               (let [process (.start (ProcessBuilder. ^java.util.List argv))]
-                 (with-open [writer (OutputStreamWriter. (.getOutputStream process) "UTF-8")]
-                   (.write writer (str (or (:body notification) ""))))
-                 (let [exit (.waitFor process)]
-                   (swap! result assoc :exit-code exit)
-                   (when-not (zero? exit)
-                     (record-failure! {:kind :process
-                                       :argv argv
-                                       :exit-code exit
-                                       :title (:title notification)}))))
-               (catch Throwable t
-                 (swap! result assoc :error (ex-message t))
-                 (record-failure! {:kind :process
-                                   :argv argv
-                                   :title (:title notification)
-                                   :message (ex-message t)
-                                   :data (ex-data t)}))))
+             (binding [*runtime* runtime]
+               (try
+                 (let [process (.start (ProcessBuilder. ^java.util.List argv))]
+                   (with-open [writer (OutputStreamWriter. (.getOutputStream process) "UTF-8")]
+                     (.write writer (str (or (:body notification) ""))))
+                   (let [exit (.waitFor process)]
+                     (swap! result assoc :exit-code exit)
+                     (when-not (zero? exit)
+                       (record-failure! {:kind :process
+                                         :argv argv
+                                         :exit-code exit
+                                         :title (:title notification)}))))
+                 (catch Throwable t
+                   (swap! result assoc :error (ex-message t))
+                   (record-failure! {:kind :process
+                                     :argv argv
+                                     :title (:title notification)
+                                     :message (ex-message t)
+                                     :data (ex-data t)})))))
            (str "chime-notify-" (System/nanoTime)))
       (.setDaemon true)
       (.start))))

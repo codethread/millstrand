@@ -161,6 +161,19 @@
           (eventually #(file-contains? out-file "---"))
           (is (file-contains? out-file "BODY=Body text")))))))
 
+(deftest notifier-thread-retains-its-runtime-for-process-failures
+  (with-chime
+    (fn [_rt _config-dir]
+      (chime/set-notifier! {:argv ["/missing/chime-notifier"]})
+      (is (= :started
+             (:status (chime/notify! {:title "Broken notifier"}))))
+      (await-notifier-threads!)
+      (is (= {:kind :process
+              :argv ["/missing/chime-notifier" "Broken notifier"]
+              :title "Broken notifier"}
+             (select-keys (last (chime/recent-failures))
+                          [:kind :argv :title]))))))
+
 (deftest rule-registration-validation
   (with-chime
     (fn [_ _]
