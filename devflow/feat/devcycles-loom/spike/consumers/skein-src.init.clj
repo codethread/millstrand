@@ -8,11 +8,9 @@
 ;; Staying: harnesses.clj, reviewers.clj, nvd_scan.clj, module_adapters.clj,
 ;; scripts/, dash.
 ;;
-;; spools.edn gains:
-;;   codethread/devcycles {:git/url "…/devcycles.spool.git" :git/tag "v1"
-;;                         :git/sha "…" :roots {ct.spools/devcycles "."}}
-;;   (dev override: spools.local.edn
-;;     {codethread/devcycles {:local/root "../devcycles.spool" :claims "v1"}})
+;; spools.edn gains one line — devcycles ships in-repo (PROP-Dcl-001.G1),
+;; no git pin, no dev override:
+;;   ct.spools/devcycles {:skein/source-root "spools/devcycles"}
 (require '[clojure.java.io :as io]
          '[skein.api.current.alpha :as current]
          '[skein.api.runtime.alpha :as runtime]

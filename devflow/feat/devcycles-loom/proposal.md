@@ -1,4 +1,4 @@
-# devcycles.spool Proposal
+# devcycles Proposal
 
 **Document ID:** `PROP-Dcl-001`
 **Status:** Draft
@@ -31,17 +31,22 @@ these workflows with its own merge, CI, review, or validation behavior.
 
 ## PROP-Dcl-001.P2 Goals
 
-- **PROP-Dcl-001.G1:** A new external sibling spool repository, `devcycles.spool`, owns the
-  shared dev-cycle composition and is released under the shared-spool discipline
-  (`v<int>` markers, compat alarm, accretion-only under a name).
-- **PROP-Dcl-001.G2:** skein-src's `.skein` consumes devcycles.spool; what remains locally is
+- **PROP-Dcl-001.G1:** The shared dev-cycle composition ships **inside skein-src** as a new
+  spool source root, `spools/devcycles` (owner decision superseding the earlier
+  external-repo draft). The pedagogy is the point: a learner asking "how does skein do it"
+  finds the answer in the flagship repo with no repo hop, and devcycles composing over the
+  *external* kanban/devflow/agent-run spools is itself the demonstration of cross-repo
+  spool composition. Releases ride skein releases; accretion-only under a registered name
+  still applies.
+- **PROP-Dcl-001.G2:** skein-src's `.skein` consumes the devcycles spool; what remains locally is
   thin repo policy (harness seats, reviewer rosters, repo cron jobs, per-developer bindings).
 - **PROP-Dcl-001.G3:** Sibling spool repos activate the same dev cycle in their own
   `.skein` worlds. Per-concern modules keep activation legible, but the family root's
   dependency floors (devflow, kanban, agent-run) are required by every consumer — the
   spool shares the owner's whole practice, and consumers customize repo specifics within
-  the devflow/kanban remit, never the dependency set. devcycles.spool's own workspace runs
-  on it via the `:local/root ".."` self-coordinate that devflow.spool already uses.
+  the devflow/kanban remit, never the dependency set. skein-src's own `.skein` world
+  consumes it through the same `:skein/source-root` coordinate every consumer writes —
+  dogfooding by construction, no self-pin needed.
 - **PROP-Dcl-001.G4:** Shared definitions are consumer-shapable through the engine's
   existing seams. Repo-varying values ride params with defaults, tool commands ride
   bindings supplied as data, and whole styles of work ride `defer` points bound by each
@@ -77,13 +82,17 @@ these workflows with its own merge, CI, review, or validation behavior.
 
 ## PROP-Dcl-001.P4 Proposed scope
 
-- **PROP-Dcl-001.S1:** New repo `devcycles.spool`, one family entry (working name
-  `codethread/devcycles`), namespaces under `ct.spools.devcycles.*` (not `skein.spools.*`),
-  with per-concern modules for activation clarity: workflows, tracker binding, attention
-  rules, named queries. All modules share the one root and its dependency floors; a
-  consumer that activates any of them accepts devflow, kanban, and agent-run pins
-  (owner decision resolving review finding ulp1o/9s12g: no root split, the shared whole
-  practice is the point).
+- **PROP-Dcl-001.S1:** New in-repo spool source root `spools/devcycles`, coordinate
+  `ct.spools/devcycles {:skein/source-root "spools/devcycles"}`, namespaces staying
+  `ct.spools.devcycles.*` — deliberately userland-tier, *not* `skein.spools.*`, so the
+  example reads as "this is how you'd write yours" (transplantable, and free to churn
+  faster than engine contracts). This makes devcycles the first shipped source root whose
+  sources require external spool namespaces; that new tier gets a written rule in
+  `quality.spool-tiers`/writing-shared-spools as part of this feature. Per-concern modules
+  for activation clarity: workflows, tracker binding, attention rules, named queries. All
+  modules share the one root and its dependency floors; a consumer that activates any of
+  them accepts devflow, kanban, and agent-run pins (owner decision resolving review
+  finding ulp1o/9s12g: no root split, the shared whole practice is the point).
 
 - **PROP-Dcl-001.S2:** Lift wholesale, with one repair: the devflow↔kanban tracker binding,
   the chime attention rules (with the parked-run threshold as declared data), and the named
@@ -231,24 +240,21 @@ these workflows with its own merge, CI, review, or validation behavior.
   Acceptance includes a cold-generation test: a gate poured before cutover must resolve
   the old symbol on a later weaver generation loading devcycles + shim (review 9s12g).
 
-- **PROP-Dcl-001.S6:** Release/pinning posture: `:requires` floors on `codethread/devflow`,
-  `codethread/kanban`, and `ct.spools/agent-run`; no floor on `skein.spools/workflow`
-  (unmarked source-root — the README activation snippet documents the prerequisite) and no
-  `:skein/min` while Skein itself is unmarked (ADR-004 Phase B precedent). skein-src
-  develops against the sibling checkout via `spools.local.edn` + `:claims`; the committed
-  pin stays the tested truth. Because no prerequisite is fetched transitively, the devcycles spool
-  README carries a numbered consumer bootstrap: (1) add the five family entries to
-  `.skein/spools.edn` (config file, shown complete), (2) declare the wanted modules in
-  `.skein/init.clj` with the given `:after` edges (config file, snippet per module),
-  (3) `mill weaver start` or `runtime/refresh!` (shell / REPL, labeled), (4) verify with
-  `strand help` listing the new ops. The consumer-side shapes:
+- **PROP-Dcl-001.S6:** Release/pinning posture: devcycles itself is never pinned — it
+  rides the engine checkout the consumer's weaver already runs, referenced by one
+  `:skein/source-root` line. Its `:requires` floors on `codethread/devflow`,
+  `codethread/kanban`, and `ct.spools/agent-run` stay declarative (never fetched
+  transitively); no floor on `skein.spools/workflow` (unmarked source-root) and no
+  `:skein/min` while Skein itself is unmarked (ADR-004 Phase B precedent). The consumer
+  bootstrap shrinks accordingly: (1) pin the three external families in
+  `.skein/spools.edn` if not already present, (2) add the devcycles source-root line,
+  (3) declare the wanted modules in `.skein/init.clj` with the given `:after` edges,
+  (4) `mill weaver start` or `runtime/refresh!`, (5) verify with `strand help` listing
+  the new ops. The consumer-side shapes:
 
   ```clojure
-  ;; .skein/spools.edn (consumer pin; dev override via spools.local.edn)
-  {codethread/devcycles {:git/url "…/devcycles.spool.git" :git/tag "v1" :git/sha "…"
-                         :roots   {ct.spools/devcycles "."}}}
-  ;; spools.local.edn while developing against the sibling checkout:
-  {codethread/devcycles {:local/root "../devcycles.spool" :claims "v1"}}
+  ;; .skein/spools.edn — one line; no git pin, no sha, no local-root dev override
+  {ct.spools/devcycles {:skein/source-root "spools/devcycles"}}
 
   ;; .skein/init.clj (one module! per concern; tracker shown, same shape for
   ;; workflows/attention/queries)
@@ -259,6 +265,20 @@ these workflows with its own merge, CI, review, or validation behavior.
                     :required? true})
   ```
 
+  **Why in-repo creates no dependency cycle.** World config is runtime composition, not a
+  build dependency, so the artifact graph stays acyclic: external spools depend on engine
+  APIs; devcycles (shipped with the engine) *loads* against external spool namespaces
+  resolved from the consuming world's own pins; worlds compose both. devflow.spool and
+  kanban.spool adopting devcycles for their own `.skein` satisfy their own family's floor
+  with the `:local/root "."` self-coordinate they already use — that is dogfooding, not
+  circularity. The one genuine loop is co-evolution *testing*: skein-src's suite now
+  needs the pinned external spools present to load devcycles — the reverse direction of
+  `make spool-suite-gate` — and both directions use the same pinned-versions-vs-checkout
+  discipline that gate already established. The trade accepted with in-repo: consumers
+  cannot hold devcycles at an old version while upgrading the engine; the two move
+  together (TEN-000 alpha posture, and the external floors still let kanban/devflow move
+  independently).
+
 - **PROP-Dcl-001.S7:** Named follow-up deliverables, filed as cards at this feature's
   close (adoption itself is out of scope per NG5):
   - devflow.spool world: adopt the tracker-binding module; accepted when its board joins
@@ -267,8 +287,8 @@ these workflows with its own merge, CI, review, or validation behavior.
     refinement card.
   - agent-harness.spool world: evaluate adopting `fix`/`land`/attention beside
     `feature-iteration`; recorded as a refinement card.
-  - dresser.loom: extend the `skein-workspace` templates with the devcycles family entry
-    and module snippets; a dresser release with its own acceptance.
+  - dresser.loom: extend the `skein-workspace` templates with the devcycles source-root
+    line and module snippets; a dresser release with its own acceptance.
 
   Already filed under the devcycles epic (kanban `b2etv`), surfaced by the spike and
   review rounds — engine work this feature depends on directionally but does not ship
@@ -288,19 +308,22 @@ these workflows with its own merge, CI, review, or validation behavior.
     stays a documented contract, not an enforced one (TEN-001/TEN-002 owner ruling).
     If adopted, pre-v1 devcycles definitions ship qualified from day one.
 
-- **PROP-Dcl-001.S8:** The devcycles spool repo carries the shared-spool furniture required by
-  writing-shared-spools from day one: the doc triad, README activation snippets per module,
-  advisory `spool.edn`, `bin/compat-alarm`, test tiers including a consumer-workspace
-  fixture synced in an embedded `:publish? false` runtime, and its own `.skein` world
-  consuming the devcycles spool itself.
+- **PROP-Dcl-001.S8:** In-repo, most shared-spool furniture dissolves into skein-src's
+  existing conventions: the doc triad becomes `spools/devcycles.md` + `.api.md` +
+  cookbook per the shipped-spool pattern; release markers and compat discipline ride
+  skein's own; the advisory `spool.edn` stays (it is where the external floors are
+  declared). What survives as new work: the consumer-workspace fixture test — an
+  embedded `:publish? false` runtime activating devcycles against the pinned externals —
+  and the self-hosting proof, which is simply skein-src's own `.skein` consuming
+  `spools/devcycles`.
 
 ## PROP-Dcl-001.P5 Open questions
 
-- **PROP-Dcl-001.Q1:** DECIDED (owner): repo `devcycles.spool` with family
-  `codethread/devcycles`, following the existing sibling `.spool` convention. The `.loom`
-  suffix (dresser.loom precedent) is not adopted here; if the distinction (behavior woven
-  into a world vs apparatus that composes one) is ever worth codifying, that's a
-  writing-shared-spools accretion, not this feature's problem.
+- **PROP-Dcl-001.Q1:** DECIDED (owner, twice revised): first `devcycles.spool` over
+  `.loom` (sibling convention; dresser.loom precedent unadopted), then superseded by the
+  in-repo decision (G1) — there is no separate repo at all. The name is the source root
+  `spools/devcycles` with coordinate `ct.spools/devcycles`; the userland-tier namespace
+  choice is recorded in S1.
 - **PROP-Dcl-001.Q2:** Beyond the two defer points fixed in S3 (`land` cleanup, `fix`
   validation), should `land`'s CI-watch style also be a defer rather than a binding? A
   binding changes the command; a defer changes the whole verification workflow.

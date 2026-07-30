@@ -1,9 +1,10 @@
-# Spike: shape of devcycles.spool and its consumers
+# Spike: shape of the devcycles spool and its consumers
 
 Illustrative only — nothing here is loaded by any world, and gates/instructions are
 deliberately terse. The point is the seams from PROP-Dcl-001.S3:
 
-- `devcycles.spool/` — the shared spool repo's shape: `fix` and `land` as exported unbound
+- `devcycles/` — the `spools/devcycles` source-root shape (in-repo per PROP-Dcl-001.G1;
+  its `spool.edn` declares the external floors): `fix` and `land` as exported unbound
   templates plus default-bound registrations, params for repo-varying values, gate commands
   as bindings data, defer points with devcycles-shipped `:call` targets, the tracker module with
   a real `:removed` branch, and attention rules as an owner contribution.
