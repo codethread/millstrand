@@ -25,8 +25,11 @@
          :spools ['skein.spools/workflow]
          :after [:skein/spools-workflow]})"
   (:require [clojure.string :as str]
+            [skein.api.contribution.alpha :as contribution]
             [skein.api.format.alpha :as fmt]
+            [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.runtime.glossary.alpha :as glossary]
+            [skein.api.runtime.alpha :as runtime]
             [skein.spools.workflow :as workflow]))
 
 (defn- list-request
@@ -570,47 +573,24 @@
    {:name "workflow/step-not-defer"
     :definition "The step named for workflow defer holds another role."}])
 
-(defn contribute
-  "Return the workflow CLI module's complete operation contribution.
+(runtime/collect-entry!
+ :ops "workflow"
+ (contribution/op-declaration
+  'workflow workflow-doc
+  (merge {:arg-spec workflow-arg-spec
+          :returns workflow-returns
+          :stream? false}
+         workflow-meta)
+  'skein.spools.workflow.cli/workflow-op))
 
-  One entry, assembled into the canonical `::op-entry` shape (string key,
-  `:name`, the handler `:fn`, provenance, and arg-spec node metadata) exactly as
-  `register-op!` would — mirrored here because a blessed spool may not reach the
-  weaver's internal op-entry plumbing (SPEC-003.C19a). Publishing the op as this
-  module's complete partition is also what makes opting back out real: dropping
-  the module and refreshing removes the verb from the effective registry."
-  [_ctx]
-  {:ops {:entries {"workflow" (merge {:name "workflow"
-                                      :fn 'skein.spools.workflow.cli/workflow-op
-                                      :stream? false
-                                      :provenance 'skein.spools.workflow.cli
-                                      :doc workflow-doc
-                                      :arg-spec workflow-arg-spec
-                                      :returns workflow-returns}
-                                     workflow-meta)}}})
+(defn seed-workflow-glossary!
+  "Seed the Workflow CLI's process-lifetime failure glossary."
+  [{:keys [runtime]}]
+  (doseq [outcome workflow-glossary]
+    (glossary/register-glossary-outcome!
+     runtime (assoc outcome :owner 'skein.spools.workflow.cli)))
+  {:seeded :workflow-cli-glossary})
 
-(defn reconcile
-  "Seed the workflow worker CLI's failure glossary when the module is applied.
-
-  Removal is deliberately effect-free: the glossary API ships register and
-  replace but no unregister, so outcomes are process-lifetime seeds."
-  [{:keys [runtime] :as ctx}]
-  (case (get-in ctx [:module/contribution :status])
-    :applied (do (doseq [outcome workflow-glossary]
-                   (glossary/register-glossary-outcome!
-                    runtime (assoc outcome :owner 'skein.spools.workflow.cli)))
-                 {:reconciled :workflow-cli-glossary})
-    :removed {:reconciled :removed}
-    (throw (ex-info "Unsupported module contribution status"
-                    {:status (get-in ctx [:module/contribution :status])
-                     :module/key (:module/key ctx)}))))
-
-(def spool
-  "Entry-point declaration for the workflow CLI module (PROP-Dsp-001 `def spool`
-  convention).
-
-  The refresh coordinator resolves `:contribute` from this public var at every
-  module evaluation. The op registry and vocabulary belong to the engine module;
-  `reconcile` seeds this module's process-lifetime glossary outcomes."
-  {:contribute 'contribute
-   :reconcile 'reconcile})
+(lifecycle/defseed workflow-glossary-seed
+  "Seed the process-lifetime Workflow CLI failure glossary."
+  {:apply 'skein.spools.workflow.cli/seed-workflow-glossary!})

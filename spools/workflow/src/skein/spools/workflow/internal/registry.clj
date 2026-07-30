@@ -64,22 +64,12 @@
   (s/or :symbol ::executor-symbol
         :decl ::executor-decl))
 
-(def ^:private registry-state-version
-  "Shape version for the workflow registry handle. Bump when the declared kinds
-  change: spool-state survives refresh, so a version mismatch reinitializes
-  rather than reuse a stale handle."
-  3)
-
 (defn- new-registry-handle []
   (doto (registry/registry)
     (registry/declare-kind!
      {:id definition-kind
       :entry-spec ::definition-symbol
       :binding-moment :route-transition
-      ;; Whether an entry is publishable depends on the rest of the candidate:
-      ;; a checkpoint route or call target names another registered workflow,
-      ;; and an owner can delete that target by omitting it. Only the complete
-      ;; staged candidate can answer that, so the check runs there.
       :candidate-validator
       'skein.spools.workflow.internal.definitions/validate-candidates!})
     (registry/declare-kind! {:id executor-kind
@@ -90,12 +80,11 @@
   "Return `rt`'s workflow registry handle, materializing it on first use.
 
   The handle is a direct `spool-state` value so the refresh kernel discovers its
-  definition and executor kinds. Realizing it also declares the kinds, so a
-  module contribution naming them finds them already declared."
+  definition and executor kinds. The workflow module's collected kind
+  declarations populate it before dependent contributions stage; direct/REPL
+  callers get the same declarations when they materialize a bare handle."
   [rt]
-  (runtime/spool-state rt ::registry
-                       {:version registry-state-version}
-                       new-registry-handle))
+  (runtime/spool-state rt ::registry new-registry-handle))
 
 (def ^:private executor-fns-version
   "Shape version for the raw executor-function resource map. Bump when

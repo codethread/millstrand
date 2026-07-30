@@ -159,20 +159,22 @@
          nil)))))
 
 (defn activate-spool!
-  "Activate a spool module on a bare test runtime from the JVM image.
+  "Activate a spool module on a bare test runtime.
 
-  `ns-sym` is the spool's namespace symbol. `activate-spool!` requires it and
-  declares an image module `{:ns ns-sym :load :image}` under `key`, so the
-  coordinator resolves the entry points from the namespace's `def spool` var
-  and the fixture needs no incidental `:require` just to reach a datum
-  (PROP-Dsp-001.G8). An optional `:after` edge is added before `runtime/module!`
-  refreshes the module immediately outside startup collection.
+  `ns-sym` is the spool's namespace symbol. Legacy modules carrying a public
+  `spool` var activate from the JVM image; forms-only modules omit `:load` so
+  their declaration record is collected from source. Pass `:load :image` to
+  select image replay explicitly. An optional `:after` edge
+  is added before `runtime/module!` refreshes the module immediately outside
+  startup collection.
   Throws with the full refresh result unless the module's outcome is applied or
   unchanged, so a fixture failure names the refusal instead of cascading into
   unrelated assertions. Returns the refresh result."
-  [rt key ns-sym & {:keys [after]}]
+  [rt key ns-sym & {:keys [after load]}]
   (require ns-sym)
-  (let [result (runtime/module! rt key (cond-> {:ns ns-sym :load :image}
+  (let [load (or load (when (ns-resolve ns-sym 'spool) :image))
+        result (runtime/module! rt key (cond-> {:ns ns-sym}
+                                         load (assoc :load load)
                                          after (assoc :after after)))
         status (get-in result [:modules key :status])]
     (when-not (contains? #{:applied :unchanged} status)

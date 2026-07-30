@@ -2,6 +2,9 @@
  ;; let-shaped vectors; kondo cannot expand these custom macros, so lint their
  ;; binding forms as let to resolve the bound symbols.
  :lint-as {clojure.test.check.clojure-test/defspec clojure.test/deftest
+           skein.api.lifecycle.alpha/defreconcile clojure.core/def
+           skein.api.lifecycle.alpha/defresource clojure.core/def
+           skein.api.lifecycle.alpha/defseed clojure.core/def
            skein.test.alpha/with-weaver-world clojure.core/let
            skein.userland-test/with-runtimes clojure.core/let
            ;; defworkflow defines a Var from (name doc opts definition); def's
