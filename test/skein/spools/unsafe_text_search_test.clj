@@ -11,12 +11,35 @@
             [skein.spools.unsafe-text-search :as unsafe-text-search]
             [skein.test.alpha :as t]))
 
-(deftest production-return-coverage-is-derived-from-unsafe-text-search-provenance
+(deftest authoring-form-publishes-the-complete-search-operation
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :skein/spools-unsafe-text-search 'skein.spools.unsafe-text-search)
+      (let [source-result
+            (test-support/activate-spool!
+             rt :skein/spools-unsafe-text-search 'skein.spools.unsafe-text-search)
+            source-entry (first (filter #(= "search" (:name %)) (weaver/ops rt)))
+            image-result
+            (test-support/activate-spool!
+             rt :skein/spools-unsafe-text-search 'skein.spools.unsafe-text-search
+             :load :image)
+            image-entry (first (filter #(= "search" (:name %)) (weaver/ops rt)))]
+        (is (= :loaded (get-in source-result
+                               [:modules :skein/spools-unsafe-text-search :source/status])))
+        (is (= :image (get-in image-result
+                              [:modules :skein/spools-unsafe-text-search :source/status])))
+        (is (= source-entry image-entry)
+            "image replay publishes the source-collected normalized entry")
+        (is (= 'skein.spools.unsafe-text-search/search-op (:fn source-entry)))
+        (is (= 'skein.spools.unsafe-text-search (:provenance source-entry)))
+        (is (= "search" (get-in source-entry [:arg-spec :op])))
+        (is (= :read (get-in source-entry [:arg-spec :hook-class])))
+        (is (= :standard (get-in source-entry [:arg-spec :deadline-class])))
+        (is (= :collection (get-in source-entry [:returns :type])))
+        (is (nil? (ns-resolve 'skein.spools.unsafe-text-search 'spool))
+            "the forms-only module exposes no legacy entry point"))
       (repl/strand! "Search return coverage" {"topic" "returns"})
-      (let [entries (filterv #(= 'skein.spools.unsafe-text-search (:provenance %)) (weaver/ops rt))
+      (let [entries (filterv #(= 'skein.spools.unsafe-text-search (:provenance %))
+                             (weaver/ops rt))
             missing (mapv :name (filter #(not (contains? % :returns)) entries))
             required (set (map (juxt :name (constantly {})) entries))
             value (weaver/op! rt 'search ["returns"])
