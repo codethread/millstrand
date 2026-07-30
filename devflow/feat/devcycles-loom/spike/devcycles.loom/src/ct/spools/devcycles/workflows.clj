@@ -31,8 +31,9 @@
 ;; defworkflow :override? accretion). Residue that stands: bindings must stay
 ;; JSON-safe data because resolved params ride workflow/context, so computed
 ;; values exist only where THIS template's render fns compute them from that
-;; data. The bindings-registry kind idea is demoted to nice-to-have; advice
-;; (see ../../advice-sketch.clj) would retire gate-attr plumbing entirely.
+;; data. The bindings-registry kind idea is demoted to nice-to-have. (A
+;; workflow-advice primitive was sketched and DROPPED: it publishes step ids
+;; and topology as consumer contract, too wide a surface for what it buys.)
 ;; One declared surface, three derivations — defaults, the ::bindings spec,
 ;; and the render thunks all come from `bindable`, so the contract cannot
 ;; drift and the authoring pain collapses to one map:
@@ -107,7 +108,7 @@
                   :attributes {"workflow/instruction" "Terse: fix + failing-first test, commit."})
    (workflow/defer :validate "Choose how this fix is validated"
      :depends-on [:implement])
-   ;; GAP (the one that still stands, advice or not): the defer target receives
+   ;; GAP (the one that still stands): the defer target receives
    ;; only its own defaults plus explicit params (PROP-Dfr-001.NG6) — the worker
    ;; must re-pass worktree/branch by hand when filling. Two candidate
    ;; primitives on paper: a declared param-forwarding list on the defer point
