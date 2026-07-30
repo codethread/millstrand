@@ -193,18 +193,38 @@
   [v]
   (and (string? v) (not (str/blank? v))))
 
+(s/def ::non-blank-string non-blank-string?)
+(s/def ::title ::non-blank-string)
+(s/def ::owner ::non-blank-string)
+
+;; ---------------------------------------------------------------------------
+;; macros-demo weave pattern
+;; ---------------------------------------------------------------------------
+
+(s/def ::macros-demo-input
+  (s/keys :req-un [::title] :opt-un [::owner]))
+
+(contribution/defpattern macros-demo
+  "Create a tiny two-step dependency chain as a workspace authoring example."
+  {:spec ::macros-demo-input}
+  [{:keys [input]}]
+  (let [owner (or (:owner input) "ct")]
+    [{:ref 'start
+      :title (:title input)
+      :attributes {:kind "macros-demo" :phase "start" :owner owner}}
+     {:ref 'finish
+      :title (str "Finish: " (:title input))
+      :attributes {:kind "macros-demo" :phase "finish" :owner owner}
+      :edges [{:type "depends-on" :to 'start}]}]))
+
 ;; ---------------------------------------------------------------------------
 ;; delegate-pipeline weave pattern
 ;; ---------------------------------------------------------------------------
 
-(s/def ::non-blank-string non-blank-string?)
-(s/def ::title ::non-blank-string)
-(s/def ::owner ::non-blank-string)
 (s/def ::body ::non-blank-string)
 (s/def ::harness ::non-blank-string)
 (s/def ::cwd ::non-blank-string)
 (s/def ::max-attempts pos-int?)
-
 (s/def ::id ::non-blank-string)
 (s/def ::run_id ::non-blank-string)
 (s/def ::accept boolean?)
@@ -223,22 +243,6 @@
 (s/def ::run-id ::non-blank-string)
 (s/def ::delegate-pipeline-params
   (s/keys :req-un [::run-id ::tasks] :opt-un [::harness ::cwd]))
-
-(s/def ::macros-demo-input
-  (s/keys :req-un [::title] :opt-un [::owner]))
-
-(contribution/defpattern macros-demo
-  "Create a tiny two-step dependency chain as a workspace authoring example."
-  {:spec ::macros-demo-input}
-  [{:keys [input]}]
-  (let [owner (or (:owner input) "ct")]
-    [{:ref 'start
-      :title (:title input)
-      :attributes {:kind "macros-demo" :phase "start" :owner owner}}
-     {:ref 'finish
-      :title (str "Finish: " (:title input))
-      :attributes {:kind "macros-demo" :phase "finish" :owner owner}
-      :edges [{:type "depends-on" :to 'start}]}]))
 
 (defn- task-value
   "Return task field `k`, accepting keyword or string keyed task maps."
