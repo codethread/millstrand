@@ -1946,8 +1946,7 @@
   "The in-tree spool modules `.skein/init.clj` activates, keyed as init.clj
   keys them, each mapped to the namespace's public `def spool` declaration var.
   Guild ships in-tree but is not activated in this workspace."
-  {:skein/spools-batteries 'skein.spools.batteries/spool
-   :skein/spools-shell 'skein.spools.executors.shell/spool
+  {:skein/spools-shell 'skein.spools.executors.shell/spool
    :skein/spools-code 'skein.spools.executors.code/spool
    :skein/spools-chime 'skein.spools.chime/spool})
 
@@ -1959,7 +1958,7 @@
 (def ^:private forms-only-ns-modules
   "The init.clj `:ns` modules that legally declare no `spool` var because their
   whole contribution is collected from top-level authoring forms."
-  #{:skein/spools-workflow :skein/spools-workflow-cli
+  #{:skein/spools-batteries :skein/spools-workflow :skein/spools-workflow-cli
     :skein/spools-unsafe-text-search :skein/spools-cron :skein/spools-devflow
     :skein/spools-shuttle :skein/spools-delegation :skein/spools-bench
     :skein/spools-treadle})
@@ -1969,7 +1968,7 @@
 
   Later authoring-form migration cards change only their owned rows from
   `:legacy` to `:forms`. The final-removal card deletes this table."
-  {:skein/spools-batteries :legacy
+  {:skein/spools-batteries :forms
    :skein/spools-workflow :forms
    :skein/spools-workflow-cli :forms
    :skein/spools-shell :legacy

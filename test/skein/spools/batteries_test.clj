@@ -127,8 +127,8 @@
           (let [leaf (get-in (op-entry rt op-name) [:arg-spec :subcommands verb])]
             (is (= :read (:hook-class leaf)))
             (is (= :standard (:deadline-class leaf))))))
-      (testing "contribution preserves leaf classes without entry defaults"
-        (let [entry (get-in (batteries/contribute {}) [:ops :entries "add"])]
+      (testing "collected contribution preserves leaf classes without entry defaults"
+        (let [entry (op-entry rt 'add)]
           (is (= :mutating (get-in entry [:arg-spec :hook-class])))
           (is (= :standard (get-in entry [:arg-spec :deadline-class])))
           (is (nil? (:hook-class entry)))
@@ -1096,7 +1096,7 @@
 (deftest batteries-adopts-discovery-tier-pattern
   (with-batteries
     (fn [rt]
-      (testing "module reconcile seeds the batteries-owned glossary outcomes"
+      (testing "module lifecycle seeds the batteries-owned glossary outcomes"
         (is (set/subset?
              #{"batteries/state-invalid" "batteries/attr-key-duplicate"
                "batteries/edge-malformed" "batteries/query-unknown"

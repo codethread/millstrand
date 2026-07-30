@@ -1,10 +1,10 @@
 (ns skein.spools.batteries
   "Shipped core strand command surface as parser-backed weaver ops.
 
-  Batteries registers the everyday strand operations — add/update/show/supersede/
+  Batteries declares the everyday strand operations — add/update/show/supersede/
   burn/list/ready/subgraph, spool coordinate helpers, the create-only `weave`
-  op, and the read-only `query`/`pattern` registry-introspection ops — as
-  `register-op!` ops whose
+  op, and the read-only `query`/`pattern` registry-introspection ops — through
+  `skein.api.skein.alpha/defop`. Their
   `:arg-spec` is parsed by `skein.api.cli.alpha`. Each op delegates to the same
   `skein.api.*.alpha` calls the JSON socket dispatch uses and returns
   the same JSON shapes, so the ops are reachable through `strand <name>` at the
@@ -20,8 +20,8 @@
   Ops adopt the discovery-tier pattern (DELTA-Dtf-003.CC2): their arg-specs drive
   help, and where it adds value they carry closed `:annotations` sub-maps
   (`use-when`/`notes`/`failure-modes`) and op-level `:about`/`:prime` prose.
-  `failure-modes` reference the batteries-owned glossary outcomes reconciled by
-  the batteries module (the load-order contract, DELTA-Dtf-002.CC7).
+  `failure-modes` reference the batteries-owned glossary outcomes seeded by the
+  batteries module (the load-order contract, DELTA-Dtf-002.CC7).
 
   Batteries also EXPORTS `default-help-transform` — the reference default help
   transform (DELTA-Dtf-002.CC1): one recursive renderer over the uniform fractal
@@ -42,10 +42,12 @@
             [clojure.walk :as walk]
             [skein.api.format.alpha :as format-alpha]
             [skein.api.graph.alpha :as graph]
+            [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.notes.alpha :as notes]
             [skein.api.patterns.alpha :as patterns]
             [skein.api.runtime.alpha :as runtime-api]
             [skein.api.runtime.glossary.alpha :as glossary]
+            [skein.api.skein.alpha :as skein]
             [skein.api.vocab.alpha :as vocab]
             [skein.api.weaver.alpha :as weaver])
   (:import [java.io PushbackReader StringReader]
@@ -611,29 +613,6 @@
      "|Status performs no remote Git calls. It reports the running runtime's
       |declared and adopted state without attempting sync or reload.")]})
 
-(defn spool-op
-  "Dispatch validated `strand spool about|add|bump|status` inputs and results.
-
-  Input uses `::spool-op-context`; results use `::spool-about-result`,
-  `::spool-add-result`, `::spool-bump-result`, or `::spool-status-result`.
-  Producer manifests use `::advisory-manifest`. Each closed result/manifest map
-  also uses the named `exact-keys?` predicate because `clojure.spec.alpha/keys`
-  accepts extra keys. The `status` read leaf keeps the retired `spool-status`
-  op's offline, no-network, closed-result contract verbatim
-  (DELTA-Lhc-001.CC8)."
-  [ctx]
-  (require-valid! ::spool-op-context ctx "spool received an invalid operation context")
-  (case (first (:subcommand (:op/args ctx)))
-    "about" (require-valid! ::spool-about-result (spool-about)
-                            "spool about returned an invalid result")
-    "add" (require-valid! ::spool-add-result (assoc (add-spool-op ctx) :operation "spool add")
-                          "spool add returned an invalid result")
-    "bump" (require-valid! ::spool-bump-result (assoc (bump-spool-op ctx) :operation "spool bump")
-                           "spool bump returned an invalid result")
-    "status" (require-valid! ::spool-status-result
-                             (assoc (spool-status (:op/runtime ctx)) :operation "spool status")
-                             "spool status returned an invalid result")))
-
 ;; The blessed parser's :parse :json uses clojure.data.json/read-str, which
 ;; silently returns the first value and ignores trailing input, so it cannot
 ;; enforce old C13a's "exactly one JSON value" contract. weave reads --input as
@@ -721,165 +700,6 @@
   (mapv query-list-entry (graph/queries rt)))
 
 ;; --- op handlers ------------------------------------------------------------
-
-(defn add-op
-  "Create a strand with merged attributes, optional state, and outgoing edges."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        args (:op/args ctx)
-        {:keys [title state attr attributes edge]} args]
-    (check-attr-duplicates! (:op/argv ctx))
-    (let [merged (merge (when (contains? args :attributes) (attributes->map attributes))
-                        (or attr {}))
-          edges (parse-edges edge)]
-      (weaver/add! rt
-                   (cond-> {:title title :attributes merged}
-                     (some? state) (assoc :state (validate-generic-state state))
-                     (seq edges) (assoc :edges edges))
-                   (request-context :add)))))
-
-(defn update-op
-  "Patch one strand's title, state, attributes, and outgoing edges.
-
-  Attributes are a JSON Merge Patch: `--attr` string values merge on top of the
-  typed `--attributes` object (add precedence), and a JSON null in `--attributes`
-  removes that key. Passing no attribute flag leaves the attribute map untouched."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        args (:op/args ctx)
-        {:keys [id title state attr attributes edge]} args]
-    (check-attr-duplicates! (:op/argv ctx))
-    (let [edges (parse-edges edge)
-          attribute-patch? (or (contains? args :attr) (contains? args :attributes))
-          patch (cond-> {}
-                  (seq edges) (assoc :edges edges)
-                  (some? title) (assoc :title title)
-                  (some? state) (assoc :state (validate-generic-state state))
-                  attribute-patch? (assoc :attributes
-                                          (merge (when (contains? args :attributes)
-                                                   (attributes->map attributes))
-                                                 (or attr {}))))]
-      (weaver/update! rt id patch (request-context :update)))))
-
-(defn show-op
-  "Return one normalized strand by id."
-  [ctx]
-  (weaver/show (:op/runtime ctx) (:id (:op/args ctx))))
-
-(defn supersede-op
-  "Replace one strand with another and return the supersession result."
-  [ctx]
-  (let [{:keys [old-id replacement-id]} (:op/args ctx)]
-    (weaver/supersede! (:op/runtime ctx) old-id replacement-id (request-context :supersede))))
-
-(defn burn-op
-  "Physically delete one strand by id and return the burn summary."
-  [ctx]
-  (graph/burn-by-ids! (:op/runtime ctx) [(:id (:op/args ctx))] (request-context :burn)))
-
-(defn list-op
-  "List lean-projected strands, optionally filtered by lifecycle state and/or a named query."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [state query param limit]} (:op/args ctx)
-        params (or param {})
-        limit (effective-read-limit rt limit)]
-    (when state (validate-readable-state state))
-    (if query
-      (do (when (str/blank? query)
-            (throw (ex-info "--query requires a non-empty name" {})))
-          (run-named-query rt weaver/list-lean query params state limit))
-      (do (when (seq params)
-            (throw (ex-info "--param requires --query" {})))
-          (weaver/list-lean rt lean-attribute-byte-floor (if state [:= :state state] [:exists :id]) {} limit)))))
-
-(defn ready-op
-  "List lean-projected ready strands, optionally from the result set of a named query."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [query param limit]} (:op/args ctx)
-        params (or param {})
-        limit (effective-read-limit rt limit)]
-    (if query
-      (do (when (str/blank? query)
-            (throw (ex-info "--query requires a non-empty name" {})))
-          (run-named-ready-lean rt query params limit))
-      (do (when (seq params)
-            (throw (ex-info "--param requires --query" {})))
-          (weaver/ready-lean rt lean-attribute-byte-floor [:exists :id] {} limit)))))
-
-(defn subgraph-op
-  "Return a relation-scoped subgraph rooted at one strand."
-  [ctx]
-  (let [{:keys [root-id relation]} (:op/args ctx)
-        {:keys [root-ids strands edges]}
-        (graph/subgraph (:op/runtime ctx) [root-id]
-                        (cond-> {} relation (assoc :type relation)))]
-    {"root_ids" root-ids
-     "strands" strands
-     "edges" edges}))
-
-(defn weave-op
-  "Apply a registered create-only weave pattern to one JSON input value."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [pattern input]} (:op/args ctx)]
-    (patterns/weave! rt
-                     pattern
-                     (walk/keywordize-keys (read-single-json input))
-                     (request-context :weave))))
-
-(defn query-op
-  "Introspect registered named queries: list all metadata or explain one."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [subcommand] nm :name} (:op/args ctx)]
-    (case (first subcommand)
-      "list" (json-safe-value (query-list-entries rt))
-      "explain" (do (when (str/blank? nm)
-                      (throw (ex-info "query explain requires a query name" {})))
-                    (json-safe-value (graph/query-explain rt nm))))))
-
-(defn pattern-op
-  "Introspect registered weave patterns: list all metadata or explain one."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [subcommand] nm :name} (:op/args ctx)]
-    (case (first subcommand)
-      "list" (patterns/patterns rt)
-      "explain" (do (when (str/blank? nm)
-                      (throw (ex-info "pattern explain requires a pattern name" {})))
-                    (patterns/explain rt nm)))))
-
-(defn note-op
-  "Append a note to a target strand's memory via the note primitive.
-
-  Its `note/text`/`note/at` content is storage-enforced write-once (SPEC-001.P4);
-  the note strand stays open to decorating attrs. Returns the primitive's
-  `{:id :target}` shape, where `target` is a projection of the `notes` edge rather
-  than a stored attribute."
-  [ctx]
-  (let [{:keys [id text by round attr]} (:op/args ctx)]
-    (check-attr-duplicates! (:op/argv ctx))
-    ;; note! folds every non-:by/:round opt into decorating attrs, so the
-    ;; string-keyed --attr map lands as ordinary strand attrs on the note.
-    (notes/note! (:op/runtime ctx) id text (merge (or attr {}) {:by by :round round}))))
-
-(defn notes-op
-  "Return a target strand's notes from every primitive writer in note/at order,
-  optionally filtered to one review round."
-  [ctx]
-  (let [{:keys [id round]} (:op/args ctx)]
-    (notes/notes (:op/runtime ctx) id {:round round})))
-
-(defn vocab-op
-  "List the runtime's vocabulary declarations as an ordered array of C1 maps,
-  string-keyed at the wire boundary, optionally narrowed to one --kind."
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [kind]} (:op/args ctx)]
-    (json-safe-value
-     (vocab/declarations rt (when kind {:kind (validate-vocab-kind kind)})))))
 
 ;; --- arg-specs --------------------------------------------------------------
 
@@ -1458,112 +1278,212 @@
     (render-catalog envelope)
     (render-detail envelope)))
 
-;; --- registration -----------------------------------------------------------
+;; --- declarations -----------------------------------------------------------
 
-(def ^:private op-registrations
-  "Each shipped op: [op-name arg-spec handler-symbol op-meta?].
+(defn- op-options
+  [op-name arg-spec & [metadata]]
+  (merge {:arg-spec arg-spec
+          :returns (get op-returns op-name)}
+         metadata))
 
-  The optional trailing `op-meta` map carries extra registration metadata merged
-  over the derived defaults — today the `:about`/`:prime` prose (DELTA-Dtf-002.CC4)
-  a few ops declare. Every row carries its classes single-source on arg-spec
-  leaves (DELTA-Lhc-002.CC1)."
-  [['add add-arg-spec 'skein.spools.batteries/add-op add-meta]
-   ['update update-arg-spec 'skein.spools.batteries/update-op]
-   ['show show-arg-spec 'skein.spools.batteries/show-op]
-   ['supersede supersede-arg-spec 'skein.spools.batteries/supersede-op]
-   ['burn burn-arg-spec 'skein.spools.batteries/burn-op]
-   ['list list-arg-spec 'skein.spools.batteries/list-op]
-   ['ready ready-arg-spec 'skein.spools.batteries/ready-op]
-   ['subgraph subgraph-arg-spec 'skein.spools.batteries/subgraph-op]
-   ['weave weave-arg-spec 'skein.spools.batteries/weave-op weave-meta]
-   ['query query-arg-spec 'skein.spools.batteries/query-op]
-   ['pattern pattern-arg-spec 'skein.spools.batteries/pattern-op]
-   ['note note-arg-spec 'skein.spools.batteries/note-op]
-   ['notes notes-arg-spec 'skein.spools.batteries/notes-op]
-   ['vocab vocab-arg-spec 'skein.spools.batteries/vocab-op]
-   ['spool spool-arg-spec 'skein.spools.batteries/spool-op]])
+(skein/defop add
+  "Create a strand with merged attributes, optional state, and outgoing edges."
+  (op-options 'add add-arg-spec add-meta)
+  [ctx]
+  (let [rt (:op/runtime ctx)
+        args (:op/args ctx)
+        {:keys [title state attr attributes edge]} args]
+    (check-attr-duplicates! (:op/argv ctx))
+    (let [merged (merge (when (contains? args :attributes) (attributes->map attributes))
+                        (or attr {}))
+          edges (parse-edges edge)]
+      (weaver/add! rt
+                   (cond-> {:title title :attributes merged}
+                     (some? state) (assoc :state (validate-generic-state state))
+                     (seq edges) (assoc :edges edges))
+                   (request-context :add)))))
 
-(defn- op-contribution-entry
-  "Assemble one op registry entry in `register-op!`'s canonical shape.
+(skein/defop update
+  "Patch one strand's title, state, attributes, and outgoing edges."
+  (op-options 'update update-arg-spec)
+  [ctx]
+  (let [rt (:op/runtime ctx)
+        args (:op/args ctx)
+        {:keys [id title state attr attributes edge]} args]
+    (check-attr-duplicates! (:op/argv ctx))
+    (let [edges (parse-edges edge)
+          attribute-patch? (or (contains? args :attr) (contains? args :attributes))
+          patch (cond-> {}
+                  (seq edges) (assoc :edges edges)
+                  (some? title) (assoc :title title)
+                  (some? state) (assoc :state (validate-generic-state state))
+                  attribute-patch? (assoc :attributes
+                                          (merge (when (contains? args :attributes)
+                                                   (attributes->map attributes))
+                                                 (or attr {}))))]
+      (weaver/update! rt id patch (request-context :update)))))
 
-  A blessed spool may not reach the weaver's internal op-entry plumbing
-  (SPEC-003.C19a), so this mirrors the assembly the eager `register-op!` path
-  performs (the same shape that `skein/defop` collects): a string `:name`, the
-  handler `:fn`, provenance, and authored arg-spec node metadata, keyed by the
-  canonical string op name so the effective registry stays string-keyed."
-  [op-name arg-spec handler op-meta]
-  (let [opts (merge {:doc (:doc arg-spec)
-                     :arg-spec arg-spec
-                     :returns (get op-returns op-name)}
-                    op-meta)]
-    (cond-> {:name (name op-name)
-             :fn handler
-             :provenance (symbol (namespace handler))}
-      (:stream? opts) (assoc :stream? true)
-      (:doc opts) (assoc :doc (:doc opts))
-      (some? (:arg-spec opts)) (assoc :arg-spec (:arg-spec opts))
-      (contains? opts :returns) (assoc :returns (:returns opts))
-      (:about opts) (assoc :about (:about opts))
-      (:prime opts) (assoc :prime (:prime opts))
-      (some? (:annotations opts)) (assoc :annotations (:annotations opts)))))
+(skein/defop show
+  "Return one normalized strand by id."
+  (op-options 'show show-arg-spec)
+  [ctx]
+  (weaver/show (:op/runtime ctx) (:id (:op/args ctx))))
 
-(defn contribute
-  "Return batteries' complete stable-owner CLI operation contribution.
+(skein/defop supersede
+  "Replace one strand with another and return the supersession result."
+  (op-options 'supersede supersede-arg-spec)
+  [ctx]
+  (let [{:keys [old-id replacement-id]} (:op/args ctx)]
+    (weaver/supersede! (:op/runtime ctx) old-id replacement-id (request-context :supersede))))
 
-  Workspace startup loads the namespace through the seeded approved
-  `skein.spools/batteries` source root and a module guarded by that root.
-  Deleting the seeded entry is the supported opt-out. This function supplies
-  the declarative operation partition. Each entry is assembled into the
-  canonical `::op-entry` shape (string key, `:name`, `:fn`, provenance, and
-  arg-spec node metadata) exactly as `register-op!` would, so the module
-  publication path is equivalent to direct registration. Batteries ships no
-  `help` op of its own — the built-in help op stays effective and batteries
-  elects only the reference help transform (DELTA-Dtf-002.D1) — so the
-  partition declares no overrides over the lower defaults layer."
-  [_ctx]
-  {:ops {:entries (into {}
-                        (map (fn [[op-name arg-spec handler op-meta]]
-                               [(name op-name)
-                                (op-contribution-entry op-name arg-spec handler op-meta)]))
-                        op-registrations)}})
+(skein/defop burn
+  "Physically delete one strand by id and return the burn summary."
+  (op-options 'burn burn-arg-spec)
+  [ctx]
+  (graph/burn-by-ids! (:op/runtime ctx) [(:id (:op/args ctx))] (request-context :burn)))
 
-(defn reconcile
-  "Reconcile batteries' owned glossary outcomes per the module contract.
+(skein/defop list
+  "List lean-projected strands, optionally filtered by lifecycle state or a named query."
+  (op-options 'list list-arg-spec)
+  [ctx]
+  (let [rt (:op/runtime ctx)
+        {:keys [state query param limit]} (:op/args ctx)
+        params (or param {})
+        limit (effective-read-limit rt limit)]
+    (when state (validate-readable-state state))
+    (if query
+      (do (when (str/blank? query)
+            (throw (ex-info "--query requires a non-empty name" {})))
+          (run-named-query rt weaver/list-lean query params state limit))
+      (do (when (seq params)
+            (throw (ex-info "--param requires --query" {})))
+          (weaver/list-lean rt lean-attribute-byte-floor (if state [:= :state state] [:exists :id]) {} limit)))))
 
-  The declarative operation partition publishes through `contribute`; the
-  glossary outcomes its ops' `failure-modes` reference are batteries-owned
-  runtime resources (not declaration data), so an applied contribution seeds
-  them here rather than during direct registration (DELTA-OlrRepl-001.CC6).
-  Module publication does not run the direct-registration glossary-ref check,
-  so publishing before this reconcile is safe; help resolves the
-  referenced-term closure against the seeded outcomes. The removal branch is
-  deliberately effect-free: the glossary API ships register/replace and no
-  unregister — outcomes are process-lifetime seeds (SPEC-004.C46b,
-  DELTA-Itr-001) — so there is nothing to retract, and re-registering on
-  removal is the defect the contract names. Any other status is a direct-call
-  error and fails loudly."
-  [{:keys [runtime] :as ctx}]
-  (let [status (get-in ctx [:module/contribution :status])]
-    (case status
-      :applied (do (doseq [outcome batteries-glossary]
-                     (glossary/register-glossary-outcome!
-                      runtime (assoc outcome :owner 'skein.spools.batteries)))
-                   {:reconciled :batteries-glossary})
-      :removed {:reconciled :removed}
-      (throw (ex-info "Unsupported module contribution status"
-                      {:status status
-                       :allowed #{:applied :removed}
-                       :module/key (:module/key ctx)
-                       :reconciler 'skein.spools.batteries/reconcile})))))
+(skein/defop ready
+  "List lean-projected ready strands, optionally from a named query result set."
+  (op-options 'ready ready-arg-spec)
+  [ctx]
+  (let [rt (:op/runtime ctx)
+        {:keys [query param limit]} (:op/args ctx)
+        params (or param {})
+        limit (effective-read-limit rt limit)]
+    (if query
+      (do (when (str/blank? query)
+            (throw (ex-info "--query requires a non-empty name" {})))
+          (run-named-ready-lean rt query params limit))
+      (do (when (seq params)
+            (throw (ex-info "--param requires --query" {})))
+          (weaver/ready-lean rt lean-attribute-byte-floor [:exists :id] {} limit)))))
 
-(def spool
-  "Entry-point declaration for the batteries spool (PROP-Dsp-001 `def spool`
-  convention).
+(skein/defop subgraph
+  "Return a relation-scoped subgraph rooted at one strand."
+  (op-options 'subgraph subgraph-arg-spec)
+  [ctx]
+  (let [{:keys [root-id relation]} (:op/args ctx)
+        {:keys [root-ids strands edges]}
+        (graph/subgraph (:op/runtime ctx) [root-id]
+                        (cond-> {} relation (assoc :type relation)))]
+    {"root_ids" root-ids
+     "strands" strands
+     "edges" edges}))
 
-  The refresh coordinator resolves `:contribute`/`:reconcile` from this public
-  var at every module evaluation, so a consumer declares only a source target
-  and world policy (`{:ns 'skein.spools.batteries :spools [...]}`) and never
-  mirrors the pair. Unqualified symbols resolve against this namespace; fn
-  values are rejected (ADR-002.O1)."
-  {:contribute 'contribute
-   :reconcile 'reconcile})
+(skein/defop weave
+  "Apply a registered create-only weave pattern to one JSON input value."
+  (op-options 'weave weave-arg-spec weave-meta)
+  [ctx]
+  (let [rt (:op/runtime ctx)
+        {:keys [pattern input]} (:op/args ctx)]
+    (patterns/weave! rt
+                     pattern
+                     (walk/keywordize-keys (read-single-json input))
+                     (request-context :weave))))
+
+(skein/defop query
+  "Introspect registered named queries: list all metadata or explain one."
+  (op-options 'query query-arg-spec)
+  [ctx]
+  (let [rt (:op/runtime ctx)
+        {:keys [subcommand] nm :name} (:op/args ctx)]
+    (case (first subcommand)
+      "list" (json-safe-value (query-list-entries rt))
+      "explain" (do (when (str/blank? nm)
+                      (throw (ex-info "query explain requires a query name" {})))
+                    (json-safe-value (graph/query-explain rt nm))))))
+
+(skein/defop pattern
+  "Introspect registered weave patterns: list all metadata or explain one."
+  (op-options 'pattern pattern-arg-spec)
+  [ctx]
+  (let [rt (:op/runtime ctx)
+        {:keys [subcommand] nm :name} (:op/args ctx)]
+    (case (first subcommand)
+      "list" (patterns/patterns rt)
+      "explain" (do (when (str/blank? nm)
+                      (throw (ex-info "pattern explain requires a pattern name" {})))
+                    (patterns/explain rt nm)))))
+
+(skein/defop note
+  "Append a note to a target strand's memory via the note primitive."
+  (op-options 'note note-arg-spec)
+  [ctx]
+  (let [{:keys [id text by round attr]} (:op/args ctx)]
+    (check-attr-duplicates! (:op/argv ctx))
+    ;; note! folds every non-:by/:round opt into decorating attrs, so the
+    ;; string-keyed --attr map lands as ordinary strand attrs on the note.
+    (notes/note! (:op/runtime ctx) id text (merge (or attr {}) {:by by :round round}))))
+
+(skein/defop notes
+  "Return a target strand's notes in note/at order."
+  (op-options 'notes notes-arg-spec)
+  [ctx]
+  (let [{:keys [id round]} (:op/args ctx)]
+    (notes/notes (:op/runtime ctx) id {:round round})))
+
+(skein/defop vocab
+  "List the runtime's vocabulary declarations, optionally narrowed to one kind."
+  (op-options 'vocab vocab-arg-spec)
+  [ctx]
+  (let [rt (:op/runtime ctx)
+        {:keys [kind]} (:op/args ctx)]
+    (json-safe-value
+     (vocab/declarations rt (when kind {:kind (validate-vocab-kind kind)})))))
+
+(skein/defop spool
+  "Dispatch validated `strand spool about|add|bump|status` inputs and results."
+  (op-options 'spool spool-arg-spec)
+  [ctx]
+  (require-valid! ::spool-op-context ctx "spool received an invalid operation context")
+  (case (first (:subcommand (:op/args ctx)))
+    "about" (require-valid! ::spool-about-result (spool-about)
+                            "spool about returned an invalid result")
+    "add" (require-valid! ::spool-add-result (assoc (add-spool-op ctx) :operation "spool add")
+                          "spool add returned an invalid result")
+    "bump" (require-valid! ::spool-bump-result (assoc (bump-spool-op ctx) :operation "spool bump")
+                           "spool bump returned an invalid result")
+    "status" (require-valid! ::spool-status-result
+                             (assoc (spool-status (:op/runtime ctx)) :operation "spool status")
+                             "spool status returned an invalid result")))
+
+(s/def ::runtime some?)
+(s/def ::seed-context (s/keys :req-un [::runtime]))
+(s/def ::seeded #{:batteries-glossary})
+(s/def ::seed-result
+  (s/and (s/keys :req-un [::seeded])
+         #(= #{:seeded} (set (keys %)))))
+
+(defn seed-batteries-glossary!
+  "Seed Batteries' process-lifetime failure glossary.
+
+  Input conforms to `::seed-context`; the result conforms to `::seed-result`."
+  [ctx]
+  (require-valid! ::seed-context ctx "Batteries glossary seed context is invalid")
+  (let [runtime (:runtime ctx)
+        result {:seeded :batteries-glossary}]
+    (doseq [outcome batteries-glossary]
+      (glossary/register-glossary-outcome!
+       runtime (assoc outcome :owner 'skein.spools.batteries)))
+    (require-valid! ::seed-result result "Batteries glossary seed result is invalid")))
+
+(lifecycle/defseed batteries-glossary-seed
+  "Seed the process-lifetime Batteries failure glossary."
+  {:apply 'skein.spools.batteries/seed-batteries-glossary!})

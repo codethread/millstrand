@@ -4,8 +4,8 @@
 ;; re-reads this file to recollect the whole graph. Startup-file collection only
 ;; STAGES declarations — no source load, publication, or reconcile runs here — so
 ;; this file holds no imperative effects; each concern's registrations live in its
-;; module's contribution (the authoring forms its source collects, its namespace's
-;; public `def spool` entry point, or both) or that var's reconcile entry point.
+;; module's contribution (the authoring forms its source collects or its namespace's
+;; public `def spool` entry point) and its collected or legacy lifecycle declarations.
 ;; No declaration here names an entry point: where a module has one, the
 ;; coordinator resolves it from the public `spool` var by convention
 ;; (PROP-Dsp-001), so a declaration carries only a source target and world policy.
@@ -32,9 +32,9 @@
 (def runtime (current/runtime))
 
 ;; Batteries is approved as a shipped source-root spool by default. The module
-;; guard keeps source loading behind that visible approval; `contribute`
-;; publishes its CLI op partition and `reconcile` seeds the batteries-owned
-;; glossary outcomes those ops reference.
+;; guard keeps source loading behind that visible approval; its `skein/defop`
+;; forms publish the CLI partition and its lifecycle seed owns the failure
+;; glossary those operations reference.
 (runtime/module! runtime :skein/spools-batteries
                  {:ns 'skein.spools.batteries
                   :spools ['skein.spools/batteries]})
