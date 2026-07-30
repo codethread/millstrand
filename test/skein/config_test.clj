@@ -354,6 +354,7 @@
                    "agent" "bench"]]
     (is (some #(= op-name (:name %)) (weaver/ops rt)) op-name))
   (is (some #(= "delegate-pipeline" (:name %)) (patterns/patterns rt)))
+  (is (some #(= "macros-demo" (:name %)) (patterns/patterns rt)))
   ;; agent-plan is spool-owned now; a real startup wires the agents spool in
   ;; via init.clj, so it must still be registered end to end
   (is (some #(= "agent-plan" (:name %)) (patterns/patterns rt)))
@@ -773,6 +774,17 @@
                                          :attributes {:agent-run/phase "failed" :agent-run/error "boom"}})]
           (is (= "Agent run failed: Run" (:title note)))
           (is (str/includes? (:body note) "boom")))))))
+
+(deftest macros-demo-weave-preserves-workspace-example
+  (with-config-runtime
+    (fn [rt]
+      (patterns/weave! rt :macros-demo {:title "Try forms" :owner "dev"})
+      (let [strands (weaver/list rt)
+            by-phase (into {} (map (juxt #(get-in % [:attributes :phase]) identity)
+                                   strands))]
+        (is (= #{"start" "finish"} (set (keys by-phase))))
+        (is (= "dev" (get-in (by-phase "start") [:attributes :owner])))
+        (is (= "Finish: Try forms" (:title (by-phase "finish"))))))))
 
 (deftest delegate-pipeline-weave-creates-chain-loop-gates
   (with-config-runtime

@@ -3,7 +3,8 @@
   the coordinator `land` workflow (family \"land\") with its `land` op, the
   third-party `spool-bump` workflow, the module-shaping `story` workflow, the
   light `explore` and `fix` workflows for the two low-ceremony modes, and the
-  `delegate-pipeline` weave pattern for sequential delegated subagent gates.
+  `delegate-pipeline` weave pattern for sequential delegated subagent gates,
+  and the small `macros-demo` pattern retained as an authoring-form example.
 
   Every workflow here is a static `defworkflow` Var: a definition a worker can
   read through `strand workflow show <name>` before starting a run, with its
@@ -198,6 +199,7 @@
 
 (s/def ::non-blank-string non-blank-string?)
 (s/def ::title ::non-blank-string)
+(s/def ::owner ::non-blank-string)
 (s/def ::body ::non-blank-string)
 (s/def ::harness ::non-blank-string)
 (s/def ::cwd ::non-blank-string)
@@ -221,6 +223,22 @@
 (s/def ::run-id ::non-blank-string)
 (s/def ::delegate-pipeline-params
   (s/keys :req-un [::run-id ::tasks] :opt-un [::harness ::cwd]))
+
+(s/def ::macros-demo-input
+  (s/keys :req-un [::title] :opt-un [::owner]))
+
+(contribution/defpattern macros-demo
+  "Create a tiny two-step dependency chain as a workspace authoring example."
+  {:spec ::macros-demo-input}
+  [{:keys [input]}]
+  (let [owner (or (:owner input) "ct")]
+    [{:ref 'start
+      :title (:title input)
+      :attributes {:kind "macros-demo" :phase "start" :owner owner}}
+     {:ref 'finish
+      :title (str "Finish: " (:title input))
+      :attributes {:kind "macros-demo" :phase "finish" :owner owner}
+      :edges [{:type "depends-on" :to 'start}]}]))
 
 (defn- task-value
   "Return task field `k`, accepting keyword or string keyed task maps."
