@@ -1,8 +1,13 @@
-// The dashboard shell: the tab contract, the reusable list+detail state kit,
-// the tab bar, the active-tab-only polling loop, the single keyboard dispatch,
-// and the fullscreen/raw-mode entry point. Tab modules plug into the registry
-// runApp receives; the shell owns no concrete row type and never runs a second
-// useInput — every view-local key is routed to the active tab.
+// The dashboard shell: the view contract, the reusable list+detail state kit,
+// the tab strip, the polling loop, the single keyboard dispatch, and the
+// fullscreen/raw-mode entry point. The shell hosts one view module (the board)
+// and owns no concrete row type; it never runs a second useInput — every
+// view-local key is routed to that module.
+//
+// The tab strip is the view's own, not the shell's: the module reports the
+// labels and which one is current (Strip), and the shell only draws them. On the
+// board those tabs are the saved filter views, so ⇥ is a view-local key like any
+// other.
 
 import { appendFileSync } from "node:fs";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -13,8 +18,7 @@ import { Header, TableRow, useTerminalSize, type Cell } from "./ui";
 // ── reusable list+detail view state ──────────────────────────────────────────
 // One scrollable list with an optional attribute detail. Selection is anchored
 // to a stable per-row key (id, or a tree path) so it survives refreshes that
-// reorder or drop rows. Both simple tabs and the agents subviews share this,
-// so there is one copy of the movement/scroll logic, not one per view.
+// reorder or drop rows.
 
 export type ListState = {
   selected: number;
@@ -67,12 +71,12 @@ export function reduceScrollKeys(scroll: number, input: string, key: Key, maxScr
   return null;
 }
 
-// ── the tab contract ─────────────────────────────────────────────────────────
-// A tab owns its view state V (persisted by the shell across tab switches),
+// ── the view contract ────────────────────────────────────────────────────────
+// The hosted module owns its view state V (the shell persists it across polls),
 // fetches into it, reduces its own keys, and renders list/detail/failure. The
-// shell only owns the header/tab-bar chrome, the all/active axis, tab switching,
-// quit, and the polling cadence. defineTab erases V at the single unsafe
-// boundary so App can hold every tab uniformly.
+// shell owns the header/tab-strip chrome, the all/active axis, quit, ⌃g/y, and
+// the polling cadence. defineDash erases V at the single unsafe boundary so the
+// shell can hold the module without knowing its state shape.
 
 export type RenderCtx = { cols: number; termRows: number; interactive: boolean; all: boolean };
 
@@ -85,70 +89,75 @@ export type KeyCtx<V> = {
   refresh: () => void;
 };
 
-export type Tab<V> = {
+// The tab strip as the shell draws it: the labels left to right, and the index of
+// the one in force. What a tab *means* is the module's business.
+export type Strip = { labels: string[]; active: number };
+
+export type Dash<V> = {
   id: string;
-  label: string;
+  // What the header counts ("active cards"): the module's own noun for its rows.
+  noun: string;
   init: () => V;
   // Fetch under the current all/active axis, then return a pure updater the shell
   // applies against the *latest* V — never the pre-fetch snapshot — so a slow poll
   // landing after the user has scrolled or switched views folds in the new rows
   // without clobbering that interim navigation. Errors are caught into the updater
-  // so a poll failure renders instead of throwing. `v` selects which data to fetch
-  // (e.g. the agents mode); the updater re-checks the latest V and drops itself if
-  // that choice changed mid-flight.
+  // so a poll failure renders instead of throwing. `v` selects which data to fetch;
+  // the updater re-checks the latest V and drops itself if that choice changed
+  // mid-flight.
   refresh: (v: V, all: boolean) => Promise<(latest: V) => V>;
-  // A change re-runs the poll immediately (e.g. the agents runs⇄plans toggle,
-  // which swaps datasets). Constant for single-dataset tabs.
+  // A change re-runs the poll immediately (expanding a card needs its tasks).
   fetchKey: (v: V) => string;
-  // View-local keys: movement, enter, esc, scroll, and any tab-private keys.
+  // View-local keys: movement, enter, esc, scroll, tab-strip navigation, and any
+  // module-private keys.
   onKey: (v: V, ctx: KeyCtx<V>) => V;
-  // A detail is open: the shell blocks ⇥ and leaves the all/active axis inert.
+  // A detail is open: the shell leaves the all/active axis inert.
   inDetail: (v: V) => boolean;
-  // The tab is reading raw text (a filter name being typed) and every key belongs
-  // to it — including the shell's own q/⇥/a/⌃g/y, which would otherwise quit or
-  // switch tabs mid-word. Absent means "never captures".
+  // The module is reading raw text (a filter name being typed) and every key
+  // belongs to it — including the shell's own q/a/⌃g/y, which would otherwise quit
+  // mid-word. Absent means "never captures".
   capturesInput?: (v: V) => boolean;
-  // The strand under the cursor in the tab's current view, or null when nothing is
-  // focused (empty list, or a view with no single strand like the graph pane). The
-  // shell opens it in $EDITOR on ⌃g.
+  // The strand under the cursor in the module's current view, or null when nothing
+  // is focused. The shell opens it in $EDITOR on ⌃g.
   editTarget: (v: V) => DetailRow | null;
   // The strand id under the cursor, or null when nothing is focused. Broader than
   // editTarget — a bare tree/task row has an id even where no full DetailRow is in
-  // hand (kanban tasks, an unopened plans row) — so the shell can copy it on y.
+  // hand — so the shell can copy it on y.
   copyId: (v: V) => string | null;
-  // The all/active axis applies in the tab's current view.
+  // The all/active axis applies in the module's current view.
   allApplies: (v: V) => boolean;
+  strip: (v: V) => Strip;
   render: (v: V, ctx: RenderCtx) => React.ReactElement;
 };
 
-export function defineTab<V>(tab: Tab<V>): Tab<unknown> {
-  return tab as unknown as Tab<unknown>;
+export function defineDash<V>(dash: Dash<V>): Dash<unknown> {
+  return dash as unknown as Dash<unknown>;
 }
 
 // ── the shell ────────────────────────────────────────────────────────────────
 
-function TabBar({ tabs, active, cols }: { tabs: readonly Tab<unknown>[]; active: number; cols: number }) {
+function TabBar({ strip, cols }: { strip: Strip; cols: number }) {
   const cells: Cell[] = [];
-  tabs.forEach((t, i) => {
+  strip.labels.forEach((label, i) => {
     if (i > 0) cells.push({ text: " | ", dimColor: true });
-    cells.push({ text: ` ${t.label} `, bold: i === active, inverse: i === active });
+    cells.push({ text: ` ${label} `, bold: i === strip.active, inverse: i === strip.active });
   });
   return <TableRow cells={cells} width={cols} />;
 }
 
-// The per-tab envelope the shell owns: the all/active axis, the last refresh
-// time, and the tab's opaque view state.
+// The envelope the shell owns: the all/active axis, the last refresh time, and
+// the module's opaque view state.
 type Env = { all: boolean; refreshedAt: Date; v: unknown };
 
 function App({
-  tabs,
+  dash,
   fullscreen,
-  preloadedFirst,
+  preloaded,
   frame,
 }: {
-  tabs: readonly Tab<unknown>[];
+  dash: Dash<unknown>;
   fullscreen: boolean;
-  preloadedFirst: unknown | undefined;
+  preloaded: unknown | undefined;
   frame: { clear?: () => void };
 }) {
   const { exit } = useApp();
@@ -156,7 +165,6 @@ function App({
   const { cols, rows: termRows } = useTerminalSize();
   // Bumped after an $EDITOR round-trip to force Ink to repaint the clobbered frame.
   const [, setRedraw] = useState(0);
-  const [active, setActive] = useState(0);
   // A transient one-line status (a y-copy result), shown in the header and cleared
   // after a moment. The timer is held in a ref so a fresh flash resets it rather
   // than leaving an older timer to blank the newer message.
@@ -168,54 +176,48 @@ function App({
     flashTimer.current = setTimeout(() => setFlash(null), 2000);
   }, []);
   useEffect(() => () => void (flashTimer.current && clearTimeout(flashTimer.current)), []);
-  const [envs, setEnvs] = useState<Env[]>(() =>
-    tabs.map((t, i) => ({
-      all: opts.all,
-      refreshedAt: new Date(),
-      v: i === 0 && preloadedFirst !== undefined ? preloadedFirst : t.init(),
-    })),
-  );
+  const [env, setEnv] = useState<Env>(() => ({
+    all: opts.all,
+    refreshedAt: new Date(),
+    v: preloaded !== undefined ? preloaded : dash.init(),
+  }));
   // Mirror for callbacks/timers that must read the latest env without
-  // re-subscribing. refreshing guards against overlapping fetches per tab.
-  const envsRef = useRef(envs);
-  envsRef.current = envs;
-  const refreshing = useRef<boolean[]>(tabs.map(() => false));
-  // A refresh asked for while one is already in flight (a v/all toggle during a
+  // re-subscribing. refreshing guards against overlapping fetches.
+  const envRef = useRef(env);
+  envRef.current = env;
+  const refreshing = useRef(false);
+  // A refresh asked for while one is already in flight (an all toggle during a
   // slow poll) is coalesced here and re-run against the then-current v/all when
   // the in-flight fetch settles, so the new view can't be left stale.
-  const pendingRefresh = useRef<boolean[]>(tabs.map(() => false));
+  const pendingRefresh = useRef(false);
 
-  const patchEnv = useCallback((i: number, patch: Partial<Env>) => {
-    setEnvs((es) => es.map((e, j) => (j === i ? { ...e, ...patch } : e)));
-  }, []);
-
-  const setV = useCallback((i: number, next: unknown | ((v: unknown) => unknown)) => {
-    setEnvs((es) => es.map((e, j) => (j === i ? { ...e, v: typeof next === "function" ? (next as (v: unknown) => unknown)(e.v) : next } : e)));
+  const setV = useCallback((next: unknown | ((v: unknown) => unknown)) => {
+    setEnv((e) => ({ ...e, v: typeof next === "function" ? (next as (v: unknown) => unknown)(e.v) : next }));
   }, []);
 
   const refresh = useCallback(
-    async (i: number, allOverride?: boolean) => {
+    async (allOverride?: boolean) => {
       // No overlapping fetches: a request landing mid-flight is queued, not run,
       // then replayed below with the latest v/all once this fetch settles.
-      if (refreshing.current[i]) {
-        pendingRefresh.current[i] = true;
+      if (refreshing.current) {
+        pendingRefresh.current = true;
         return;
       }
-      refreshing.current[i] = true;
-      const all = allOverride ?? envsRef.current[i].all;
+      refreshing.current = true;
+      const all = allOverride ?? envRef.current.all;
       try {
-        const apply = await tabs[i].refresh(envsRef.current[i].v, all);
-        setEnvs((es) => es.map((e, j) => (j === i ? { ...e, refreshedAt: new Date(), v: apply(e.v) } : e)));
+        const apply = await dash.refresh(envRef.current.v, all);
+        setEnv((e) => ({ ...e, refreshedAt: new Date(), v: apply(e.v) }));
       } finally {
-        refreshing.current[i] = false;
-        if (pendingRefresh.current[i]) {
-          pendingRefresh.current[i] = false;
-          void refresh(i);
+        refreshing.current = false;
+        if (pendingRefresh.current) {
+          pendingRefresh.current = false;
+          void refresh();
         }
         if (opts.once) exit();
       }
     },
-    [exit, tabs],
+    [dash, exit],
   );
 
   // Suspend the dashboard, hand the editor the controlling tty, then restore.
@@ -256,55 +258,49 @@ function App({
     [showFlash],
   );
 
-  // Re-poll on tab entry and whenever the active tab's fetch key changes (an
-  // agents view toggle swaps datasets); the interval then refreshes only the
-  // active tab. Toggling all/active refetches directly from its key handler, so
-  // it is intentionally not a dependency here.
-  const fetchKey = tabs[active].fetchKey(envs[active].v);
+  // Re-poll on start and whenever the fetch key changes (an expanded card needs
+  // its tasks fetched). Toggling all/active refetches directly from its key
+  // handler, so it is intentionally not a dependency here.
+  const fetchKey = dash.fetchKey(env.v);
   useEffect(() => {
     if (opts.once) {
       exit();
       return;
     }
-    void refresh(active);
-    const timer = setInterval(() => void refresh(active), opts.interval * 1000);
+    void refresh();
+    const timer = setInterval(() => void refresh(), opts.interval * 1000);
     return () => clearInterval(timer);
-  }, [active, fetchKey, refresh, exit]);
+  }, [fetchKey, refresh, exit]);
 
   useInput(
     (input, key) => {
-      const t = tabs[active];
-      const v = envsRef.current[active].v;
+      const v = envRef.current.v;
       if (process.env.SHUTTLE_DASH_DEBUG) {
         appendFileSync(
           process.env.SHUTTLE_DASH_DEBUG,
-          `${JSON.stringify({ input, ret: key.return, esc: key.escape, tab: t.id, inDetail: t.inDetail(v) })}\n`,
+          `${JSON.stringify({ input, ret: key.return, esc: key.escape, view: dash.id, inDetail: dash.inDetail(v) })}\n`,
         );
       }
-      // A capturing tab owns the whole keyboard: every global binding is skipped so
-      // no keystroke meant for a text field can quit or switch tabs mid-word.
-      if (t.capturesInput?.(v) !== true) {
+      // A capturing view owns the whole keyboard: every global binding is skipped
+      // so no keystroke meant for a text field can quit mid-word.
+      if (dash.capturesInput?.(v) !== true) {
         if (input === "q") {
           exit();
           return;
         }
-        if (key.tab && !t.inDetail(v)) {
-          setActive((a) => (key.shift ? (a - 1 + tabs.length) % tabs.length : (a + 1) % tabs.length));
-          return;
-        }
-        if (input === "a" && !t.inDetail(v) && t.allApplies(v)) {
-          const newAll = !envsRef.current[active].all;
-          patchEnv(active, { all: newAll });
-          void refresh(active, newAll);
+        if (input === "a" && !dash.inDetail(v) && dash.allApplies(v)) {
+          const newAll = !envRef.current.all;
+          setEnv((e) => ({ ...e, all: newAll }));
+          void refresh(newAll);
           return;
         }
         if (key.ctrl && input === "g") {
-          const target = t.editTarget(v);
+          const target = dash.editTarget(v);
           if (target) openInEditor(target);
           return;
         }
         if (input === "y") {
-          const id = t.copyId(v);
+          const id = dash.copyId(v);
           if (id) void copyCursorId(id);
           return;
         }
@@ -314,20 +310,19 @@ function App({
         key,
         cols,
         termRows,
-        setV: (next) => setV(active, next),
-        refresh: () => void refresh(active),
+        setV,
+        refresh: () => void refresh(),
       };
       // Reduce against the latest V so keys arriving faster than React commits
       // don't drop through a stale snapshot. onKey's only side effects (refresh,
       // async detail fetch) suspend on an await before any setState, so running
       // them inside the updater is safe.
-      setV(active, (prev: unknown) => t.onKey(prev, ctx));
+      setV((prev: unknown) => dash.onKey(prev, ctx));
     },
     { isActive: isRawModeSupported === true && !opts.once },
   );
 
   const interactive = isRawModeSupported === true && !opts.once;
-  const env = envs[active];
   const rctx: RenderCtx = { cols, termRows, interactive, all: env.all };
   // Pin the frame to the full terminal in the alt screen: a constant-height root
   // makes every frame terminal-tall so a shorter frame overwrites a taller one
@@ -335,26 +330,26 @@ function App({
   // keeps a miscounted view from scrolling the alt screen.
   return (
     <Box flexDirection="column" height={fullscreen ? termRows : undefined} overflow={fullscreen ? "hidden" : undefined}>
-      <Header all={env.all} noun={tabs[active].label.toLowerCase()} refreshedAt={env.refreshedAt} cols={cols} flash={flash} />
-      <TabBar tabs={tabs} active={active} cols={cols} />
+      <Header all={env.all} noun={dash.noun} refreshedAt={env.refreshedAt} cols={cols} flash={flash} />
+      <TabBar strip={dash.strip(env.v)} cols={cols} />
       <Box marginTop={1} flexDirection="column">
-        {tabs[active].render(env.v, rctx)}
+        {dash.render(env.v, rctx)}
       </Box>
     </Box>
   );
 }
 
-export async function runApp(tabs: readonly Tab<unknown>[]) {
+export async function runApp(dash: Dash<unknown>) {
   const fullscreen = process.stdout.isTTY === true && process.stdin.isTTY === true && !opts.once;
 
   // Non-interactive frames pre-fetch so the printed frame is real data. The
   // interactive path must NOT await spawns before render: under Bun, subprocess
   // activity before Ink attaches to stdin leaves the pty in canonical mode and
   // setRawMode never takes effect — keys then arrive line-buffered and dead.
-  let preloadedFirst: unknown | undefined;
+  let preloaded: unknown | undefined;
   if (!fullscreen) {
-    const apply = await tabs[0].refresh(tabs[0].init(), opts.all);
-    preloadedFirst = apply(tabs[0].init());
+    const apply = await dash.refresh(dash.init(), opts.all);
+    preloaded = apply(dash.init());
   }
 
   // Enter the alt screen and clear+home before Ink renders, so the frame starts
@@ -364,7 +359,7 @@ export async function runApp(tabs: readonly Tab<unknown>[]) {
   // Handed to App so an $EDITOR round-trip can drop Ink's cached frame and force a
   // full repaint of the alt screen the editor clobbered.
   const frame: { clear?: () => void } = {};
-  const app = render(<App tabs={tabs} fullscreen={fullscreen} preloadedFirst={preloadedFirst} frame={frame} />);
+  const app = render(<App dash={dash} fullscreen={fullscreen} preloaded={preloaded} frame={frame} />);
   frame.clear = app.clear;
   await app.waitUntilExit();
   if (fullscreen) process.stdout.write("\x1b[?1049l");

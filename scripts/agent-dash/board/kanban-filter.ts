@@ -1,6 +1,6 @@
-// Saved label-filter views for the KANBAN board, and their on-disk store. Pure
+// Saved label-filter views for the board, and their on-disk store. Pure
 // transforms plus two filesystem entry points, kept out of the Ink tab so Bun
-// tests exercise matching, slot editing, and persistence without a dashboard.
+// tests exercise matching, tab navigation, and persistence without a dashboard.
 //
 // Filtering is client-side by design: `kanban board` ships each card's `labels`
 // array (spool-side `--label` is AND-only, with no OR and no negation), so the
@@ -17,16 +17,15 @@ export type FilterMode = "and" | "or";
 export type Term = "include" | "exclude";
 export type FilterView = { name: string; mode: FilterMode; terms: Record<string, Term> };
 
-// `active` indexes `views`; `enabled` is the ⇧f on/off toggle, held separately so
-// switching a view off and back on remembers which one it was.
-export type FilterState = { views: FilterView[]; active: number | null; enabled: boolean };
+// `active` indexes `views`, and null is the unfiltered ALL tab — the whole board.
+export type FilterState = { views: FilterView[]; active: number | null };
 
 export const emptyView = (): FilterView => ({ name: "", mode: "and", terms: {} });
-export const emptyFilterState = (): FilterState => ({ views: [], active: null, enabled: true });
+export const emptyFilterState = (): FilterState => ({ views: [], active: null });
 
-// A view nobody named and nobody gave a term to is the "new slot" placeholder:
-// it is dropped at commit rather than saved. A *named* view with no terms is
-// kept — it is a deliberate "show everything" bookmark.
+// A view nobody named and nobody gave a term to says nothing, so committing one
+// saves nothing. A *named* view with no terms is kept — it is a deliberate "show
+// everything" bookmark.
 export const isBlank = (v: FilterView): boolean =>
   v.name.trim() === "" && Object.keys(v.terms).length === 0;
 
@@ -76,33 +75,45 @@ export function applyFilter<T extends { id: string; type: string; epic: string |
   return cards.filter((c) => keptIds.has(c.id) || (c.type === "epic" && parents.has(c.id)));
 }
 
-// ── slots ────────────────────────────────────────────────────────────────────
+// ── the tab strip ────────────────────────────────────────────────────────────
+// Saved views *are* the dashboard's tabs: ALL (the unfiltered board) sits first,
+// each saved view follows in order, and a trailing NEW slot is where ⇥ lands to
+// author one. A strip position is that flat index, so navigation is plain ring
+// arithmetic and the shell can render the strip without knowing what a filter is.
 
-// The overlay edits a working copy of the saved views with one blank slot
-// appended, so `l` off the end of the list lands on a fresh view. Committing
-// drops every blank slot and re-points `active` at whichever view the cursor was
-// on — or clears the filter outright when that slot was the blank one.
-export function commitViews(views: readonly FilterView[], slot: number): { views: FilterView[]; active: number | null } {
-  const kept: FilterView[] = [];
-  let active: number | null = null;
-  views.forEach((view, i) => {
-    if (isBlank(view)) return;
-    if (i === slot) active = kept.length;
-    kept.push(view);
-  });
-  return { views: kept, active };
+export const ALL_TAB = "ALL";
+export const NEW_TAB = "+";
+
+export const stripLabels = (views: readonly FilterView[]): string[] =>
+  [ALL_TAB, ...views.map((v) => v.name.trim() || "(unnamed)"), NEW_TAB];
+
+export const posOf = (active: number | null): number => (active === null ? 0 : active + 1);
+
+// Where a strip position points: the ALL tab, a saved view's index, or the NEW
+// slot that has no view behind it yet.
+export const viewAt = (pos: number, count: number): number | null | "new" =>
+  pos === 0 ? null : pos > count ? "new" : pos - 1;
+
+export const stepPos = (pos: number, count: number, back: boolean): number => {
+  const size = count + 2;
+  return (pos + (back ? -1 : 1) + size) % size;
+};
+
+// ── saving ───────────────────────────────────────────────────────────────────
+
+// Land the edited view: `slot` null appends it (the NEW tab), otherwise it
+// replaces that tab in place. Either way the result becomes the active tab, so
+// the board the user just described is the board they land on.
+export function saveView(views: readonly FilterView[], slot: number | null, view: FilterView): { views: FilterView[]; active: number } {
+  if (slot === null) return { views: [...views, view], active: views.length };
+  return { views: views.map((v, i) => (i === slot ? view : v)), active: slot };
 }
 
-// Drop the view at `slot` from the overlay's working copy. The trailing blank is
-// the "start a new view" affordance rather than a saved view, so deleting it is
-// refused — and if the slot removed was a filled trailing one, a fresh blank
-// takes its place so a new view is always one step off the end. Like every other
-// overlay edit this only lands when ⏎ commits, so ⎋ still puts the view back.
-export function removeSlot(views: readonly FilterView[], slot: number): { views: FilterView[]; slot: number } {
-  if (slot === views.length - 1 && isBlank(views[slot]!)) return { views: [...views], slot };
-  const next = views.filter((_, i) => i !== slot);
-  if (next.length === 0 || !isBlank(next[next.length - 1]!)) next.push(emptyView());
-  return { views: next, slot: Math.min(slot, next.length - 1) };
+// Drop a saved view, which drops its tab. The board falls back to ALL rather
+// than to a neighbouring filter: silently landing on a *different* filtered
+// board after a delete would read as the delete having hidden cards.
+export function deleteView(views: readonly FilterView[], slot: number): { views: FilterView[]; active: null } {
+  return { views: views.filter((_, i) => i !== slot), active: null };
 }
 
 // The one-line summary the filter strip shows: `#tests & !docs`, or the mode-less
@@ -151,19 +162,20 @@ function parseView(raw: unknown, where: string): FilterView {
   return { name: raw.name, mode: raw.mode, terms };
 }
 
+// `enabled` is a store written before the views became tabs, where ⇧f parked the
+// active filter without forgetting it. The ALL tab is that off switch now, so the
+// key is accepted and dropped: reading it back as anything would resurrect a
+// setting the UI can no longer show or change.
 function parseState(raw: unknown, where: string): FilterState {
   if (!isObject(raw)) throw new Error(`${where} must be an object`);
   const extra = Object.keys(raw).filter((k) => !["views", "active", "enabled"].includes(k));
   if (extra.length > 0) throw new Error(`${where} has unexpected keys: ${extra.join(", ")}`);
   if (!Array.isArray(raw.views)) throw new Error(`${where}.views must be an array`);
   const views = raw.views.map((view, i) => parseView(view, `${where}.views[${i}]`));
-  if (typeof raw.enabled !== "boolean") {
-    throw new Error(`${where}.enabled must be a boolean, got ${JSON.stringify(raw.enabled)}`);
-  }
   if (raw.active !== null && !(typeof raw.active === "number" && Number.isInteger(raw.active) && raw.active >= 0 && raw.active < views.length)) {
     throw new Error(`${where}.active must be null or an index into views (0..${views.length - 1}), got ${JSON.stringify(raw.active)}`);
   }
-  return { views, active: raw.active as number | null, enabled: raw.enabled };
+  return { views, active: raw.active as number | null };
 }
 
 // A store we cannot read or cannot trust yields no views plus a message the tab
@@ -211,7 +223,7 @@ export function saveFilterState(file: string, root: string, state: FilterState):
     }
   }
   try {
-    all[root] = { views: state.views, active: state.active, enabled: state.enabled };
+    all[root] = { views: state.views, active: state.active };
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(all, null, 2) + "\n");
     return null;
