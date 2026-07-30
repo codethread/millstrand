@@ -11,7 +11,6 @@
             [clojure.tools.reader.reader-types :as reader-types]
             [skein.api.registry.alpha :as registry]
             [skein.core.format :as format]
-            [skein.core.weaver.dispatch :as dispatch]
             [skein.core.weaver.lifecycle-effects :as lifecycle-effects]
             [skein.core.weaver.module-graph :as module-graph]
             [skein.core.weaver.module-publication :as publication]
@@ -46,7 +45,6 @@
    :startup/files []
    :contributions (sorted-map)
    :contribution-sources (sorted-map)
-   :resolved-entry-points (sorted-map)
    :lifecycle (sorted-map)
    :resources (sorted-map)
    :outcomes (sorted-map)
@@ -223,7 +221,7 @@
 
 (defn- normalize-contribution [value]
   (when-not (map? value)
-    (fail! "Module contribution function must return a map"
+    (fail! "Collected module contribution must be a map"
            {:contribution value}))
   (into (sorted-map)
         (map (fn [[kind-id entries]]
@@ -474,8 +472,8 @@
   (let [namespaces (vec (distinct (declared-file-namespaces file)))]
     (when (< 1 (count namespaces))
       (fail! (format/reflow
-              "|Module :file source declares more than one namespace; convention
-               |lookup requires one unambiguous owner")
+              "|Module :file source declares more than one namespace; declaration
+               |collection requires one unambiguous owner")
              {:reason :multiple-module-namespaces
               :module/key key
               :file file
@@ -524,8 +522,7 @@
                           :collection/reload? true
                           :classpath-binding classpath-binding}))
           ;; No reachable on-disk source: the namespace is already live in the
-          ;; image, so its Vars, its `spool` var included, come from the
-          ;; inherited/classpath image. Report an unchanged source rather than
+          ;; inherited classpath image. Report an unchanged source rather than
           ;; reloading.
           {:ns ns-sym :classpath-binding classpath-binding})
 
@@ -534,63 +531,30 @@
     (let [file (spool-sync/module-file runtime (:file declaration))]
       (with-loader #(load-module-file! runtime file {:file file})))))
 
-(defn- resolve-entry-point-fns! [with-loader key resolved]
-  (with-loader
-    #(into {}
-           (keep (fn [role]
-                   (when-let [callable (get resolved role)]
-                     [role (entry-points/resolve-fn! key role callable)])))
-           [:contribute :reconcile])))
-
 (def ^:private image-contribution-remedy
   "The actionable remedy for image-mode declaration replay failures."
   (format/reflow
    "|To load or require the module namespace into the JVM image, refresh it once
-    |in source mode so authoring forms retain their declaration record; during
-    |the migration window a public spool var carrying :contribute is also
-    |accepted."))
+    |in source mode so authoring forms retain their declaration record."))
 
 (defn- evaluate-image-module
   "Evaluate a `:load :image` module: trust the already-loaded JVM image for its
   `:ns` target with no source load and no contribution-collection scope. Entry
   contribution replays from the namespace's retained authoring declaration
   record. The outcome carries `:source/status :image` and no source stamp."
-  [runtime with-loader key declaration]
+  [key declaration]
   (let [ns-sym (:ns declaration)]
     (when-not (find-ns ns-sym)
       (fail! image-contribution-remedy
              {:module/key key :ns ns-sym :load :image
               :reason :namespace-not-loaded}))
     (try
-      (let [resolved (entry-points/resolve-entry-points key ns-sym)
-            resolved-fns (resolve-entry-point-fns! with-loader key resolved)
-            replay
-            (try
-              (replay-declarations key ns-sym)
-              (catch clojure.lang.ExceptionInfo throwable
-                (if (and (= :missing-declaration-record
-                            (:reason (ex-data throwable)))
-                         (:contribute resolved-fns))
-                  {:contribution
-                   (with-loader
-                     #((:contribute resolved-fns)
-                       {:runtime runtime
-                        :module/key key
-                        :module/declaration declaration}))
-                   :kind-declarations []}
-                  (throw throwable))))]
-        (when (and (:reconcile resolved) (seq (:lifecycle replay)))
-          (fail! "Module cannot mix legacy :reconcile with lifecycle forms"
-                 {:module/key key :module/namespace ns-sym
-                  :reason :mixed-lifecycle-grammar}))
+      (let [_ (entry-points/reject-public-spool! key ns-sym)
+            replay (replay-declarations key ns-sym)]
         {:status :ready
          :module/key key
          :source/status :image
-         :module/resolved resolved
-         :module/reconcile-fn (:reconcile resolved-fns)
-         :declaration/source (if (:contribute resolved-fns)
-                               :image-replay-or-legacy
-                               :image-replay)
+         :declaration/source :image-replay
          :kind-declarations (:kind-declarations replay [])
          :lifecycle (:lifecycle replay {})
          :contribution (normalize-contribution (:contribution replay))})
@@ -601,7 +565,7 @@
   [runtime with-loader key declaration previous-contribution previous-source dry-run?]
   (try
     (if (= :image (:load declaration))
-      (evaluate-image-module runtime with-loader key declaration)
+      (evaluate-image-module key declaration)
       (let [context (collection-context runtime key declaration)
             {:keys [return kind-declarations lifecycle] collected :contribution}
             (module-graph/with-contribution-collection
@@ -611,9 +575,7 @@
                             :unchanged
                             :loaded)
             module-ns (entry-points/module-namespace declaration context)
-            resolved (entry-points/resolve-entry-points key module-ns)
-            resolved-fns (resolve-entry-point-fns! with-loader key resolved)
-            contribute-fn (:contribute resolved-fns)
+            _ (entry-points/reject-public-spool! key module-ns)
             kind-declarations
             (if (= :unchanged source-status)
               (try
@@ -635,36 +597,14 @@
                     (throw throwable))))
               lifecycle)
             contribution (cond
-                           contribute-fn
-                           (do
-                             (when (seq collected)
-                               (fail! (format/reflow
-                                       "|Module's spool var supplies a :contribute entry
-                                        |point yet its source collected authoring forms; the
-                                        |function would silently discard them, so choose one
-                                        |source")
-                                      {:module/key key
-                                       :module/namespace module-ns
-                                       :contribute (:contribute resolved)
-                                       :collected/kinds (vec (keys collected))}))
-                             (with-loader
-                               #(contribute-fn
-                                 {:runtime runtime
-                                  :module/key key
-                                  :module/declaration declaration})))
                            (and (= :unchanged source-status)
                                 (some? previous-contribution))
                            previous-contribution
 
                            :else collected)
             normalized (normalize-contribution contribution)
-            _ (when (and (:reconcile resolved) (seq lifecycle))
-                (fail! "Module cannot mix legacy :reconcile with lifecycle forms"
-                       {:module/key key :module/namespace module-ns
-                        :reason :mixed-lifecycle-grammar}))
             _ (lifecycle-effects/validate! lifecycle)
-            _ (when (and (not contribute-fn)
-                         (not= :unchanged source-status)
+            _ (when (and (not= :unchanged source-status)
                          (not dry-run?))
                 (retain-declarations!
                  key module-ns normalized kind-declarations lifecycle))]
@@ -674,9 +614,7 @@
          :source/result return
          :source/stamp (when-let [ns-sym (:ns declaration)]
                          (source-stamp (latest-source-binding runtime ns-sym)))
-         :module/resolved resolved
-         :module/reconcile-fn (:reconcile resolved-fns)
-         :declaration/source (if contribute-fn :legacy-callback :source-collection)
+         :declaration/source :source-collection
          :kind-declarations kind-declarations
          :lifecycle lifecycle
          :contribution normalized}))
@@ -740,43 +678,6 @@
            {:module/key module-key
             :kind/declarations (:kind-declarations raw-outcome)
             :error (:error outcome)})))
-
-(defn- retained-legacy-modules
-  "Return the affected pre-cutover declarations, keyed by module.
-
-  A declaration carrying `:contribute`/`:reconcile` can only be graph state a
-  live coordinator held before it picked the cutover up, because no authoring
-  seam accepts the keys (DELTA-Dsp-004.D3). `legacy-resolved-entry-points` stays
-  the single reader of them."
-  [graph order]
-  (select-keys (entry-points/legacy-resolved-entry-points {:graph graph}) order))
-
-(defn- refuse-retained-legacy-evaluation!
-  "Refuse a targeted refresh that would evaluate a retained pre-cutover module.
-
-  Convention-only resolution reads such a declaration as a post-cutover one with
-  no entry points, which would retract its published contribution and replace
-  its retained resolved set with an empty one, dropping the reconciler its
-  removal still has to run. The refusal precedes synchronization, evaluation,
-  and publication, so the graph, contributions, retained resolved entry points,
-  resources, and live registrations all stay as they were. A full refresh is the
-  migration path: it removes an omitted pre-cutover module through that retained
-  reconciler (DELTA-Dsp-004.D3/D3a, SPEC-004.C46b)."
-  [mode graph order selected]
-  (when (= :targeted mode)
-    (when-let [retained (not-empty (retained-legacy-modules graph order))]
-      (fail! (format/reflow
-              "|Targeted refresh would evaluate a module declared before the
-               |def-spool cutover, whose entry points live in retained
-               |coordinator state rather than a public spool var; evaluating it
-               |would retract its live contribution and lose its reconciler. Run
-               |a full refresh, which migrates or removes it through that
-               |retained state")
-             {:reason :retained-legacy-declaration
-              :mode mode
-              :module/keys (vec (keys retained))
-              :retained/entry-points retained
-              :selected (vec (sort-by pr-str selected))}))))
 
 (defn- previous-module [state key]
   {:module/declaration (get-in state [:graph key])
@@ -854,7 +755,7 @@
     (update staged :outcomes #(select-keys % order))))
 
 (defn- provisional-result
-  [mode roots conflicts remedies shadows outcomes removed resolved-entry-points]
+  [mode roots conflicts remedies shadows outcomes removed]
   {:status :unchanged
    :mode mode
    :modules (into (sorted-map)
@@ -868,60 +769,7 @@
    :residuals []
    :conflicts conflicts
    :remedies remedies
-   :resolved/entry-points resolved-entry-points
    :declaration/shadows shadows})
-
-(defn- reconcile-one
-  [runtime with-loader state graph resolved-entry-points reconcile-fns result key
-   outcome]
-  (let [declaration (get graph key)
-        previous (previous-module state key)
-        ;; The reconciler comes from the module's retained resolved entry-point
-        ;; set, so removal-by-omission still tears down (its source is never
-        ;; re-loaded on the removal path) — PROP-Dsp-001.G2a/F11.
-        reconcile (get-in resolved-entry-points [key :reconcile])
-        evaluated-reconcile-fn (get reconcile-fns key)]
-    (if (or (nil? reconcile)
-            (not (#{:applied :removed} (:status outcome))))
-      {:outcome outcome}
-      (try
-        (let [reconcile-fn
-              (or evaluated-reconcile-fn
-                  (with-loader
-                    #(entry-points/resolve-fn! key :reconcile reconcile)))
-              return (with-loader
-                       #(reconcile-fn
-                         {:runtime runtime
-                          :module/key key
-                          :module/declaration declaration
-                          :module/previous previous
-                          :module/contribution outcome
-                          :refresh/result result}))]
-          (when-not (dispatch/data-first-value? return)
-            (fail! "Module reconcile return must be data-first"
-                   {:module/key key :return return}))
-          {:outcome (assoc outcome :reconcile/status :applied
-                           :reconcile/result return)
-           :resource {:status :applied :result return}})
-        (catch Throwable throwable
-          {:outcome (assoc outcome :status :degraded
-                           :reconcile/status :failed
-                           :reconcile/error (exception-data throwable))
-           :resource {:status :degraded
-                      :error (exception-data throwable)}})))))
-
-(defn- reconcile-modules
-  [runtime with-loader state graph resolved-entry-points reconcile-fns result order]
-  (reduce
-   (fn [{:keys [outcomes resources]} key]
-     (let [{:keys [outcome resource]}
-           (reconcile-one runtime with-loader state graph resolved-entry-points reconcile-fns
-                          result key (get outcomes key))]
-       {:outcomes (assoc outcomes key outcome)
-        :resources (cond-> resources resource (assoc key resource))}))
-   {:outcomes (:modules result)
-    :resources (:resources state)}
-   order))
 
 (defn- lifecycle-symbols
   [declarations]
@@ -1077,8 +925,8 @@
            :publication/kinds (vec (sort-by pr-str changed-kinds)))))
 
 (defn- record-result!
-  [runtime collection contributions contribution-sources resolved-entry-points
-   resources lifecycle-state outcomes roots result]
+  [runtime collection contributions contribution-sources resources lifecycle-state
+   outcomes roots result]
   (swap! (:module-state runtime)
          (fn [state]
            (-> state
@@ -1089,7 +937,6 @@
                                            (:files collection))
                       :contributions (into (sorted-map) contributions)
                       :contribution-sources (into (sorted-map) contribution-sources)
-                      :resolved-entry-points (into (sorted-map) resolved-entry-points)
                       :resources (into (sorted-map) resources)
                       :lifecycle (into (sorted-map) lifecycle-state)
                       :outcomes (into (sorted-map) outcomes)
@@ -1105,7 +952,6 @@
    :residuals []
    :conflicts [error]
    :remedies []
-   :resolved/entry-points (sorted-map)
    :declaration/shadows (sorted-map)})
 
 (defn- record-refused-result! [runtime opts result]
@@ -1124,9 +970,7 @@
             declaration (module-graph/normalize-declaration key declaration)
             graph (assoc (:graph state) key declaration)
             ;; Only the declaration being authored is normalized. The graph it
-            ;; joins was normalized when it was collected, and on a coordinator
-            ;; picked up without a restart it may still hold pre-cutover
-            ;; entries a fresh normalization would now refuse (DELTA-Dsp-004.D3).
+            ;; joins was normalized when it was collected.
             order (module-graph/dependency-order graph)]
         {:mode :targeted
          :collection (assoc (select-keys state [:layers :shadows :startup/files])
@@ -1165,9 +1009,7 @@
   roots, then runs collection, source-load, and staging without synchronizing,
   publishing, reconciling, or recording coordinator state (CC14).
 
-  A targeted refresh that would evaluate a retained pre-cutover declaration —
-  directly or as an affected dependent — throws before anything mutates, leaving
-  the live world untouched (DELTA-Dsp-004.D3)."
+  Validation failures leave the live world untouched."
   [runtime {:keys [load-startup-files! with-loader]} opts]
   ;; The runtime slot is one dedicated Object monitor. Splint cannot see the
   ;; stable object behind the map lookup; refreshes serialize so two collectors
@@ -1197,7 +1039,6 @@
                         #{})
               selected (or selected (set (keys graph)))
               order (module-graph/affected-modules graph selected)
-              _ (refuse-retained-legacy-evaluation! mode graph order selected)
               ;; An empty graph needs no acquisition pass. Any desired or current
               ;; module graph owns synchronization through this coordinator.
               sync-result (if (:dry-run? opts)
@@ -1221,26 +1062,6 @@
                                                (:dry-run? opts))
                         lifecycle-resolvers
                         (resolve-lifecycle-callables! with-loader raw)
-                        reconcile-fns
-                        (into {}
-                              (keep (fn [[key outcome]]
-                                      (when-let [reconcile-fn
-                                                 (:module/reconcile-fn outcome)]
-                                        [key reconcile-fn])))
-                              raw)
-                    ;; Retain each module's last-good resolved entry-point set:
-                    ;; a failed evaluation keeps the prior set, and removed
-                    ;; modules keep theirs through the removal reconcile before
-                    ;; dropping out of the exposed/stored set (PROP-Dsp-001.G2a).
-                        resolved-entry-points
-                        (merge (entry-points/legacy-resolved-entry-points state)
-                               (:resolved-entry-points state)
-                               (into {}
-                                     (keep (fn [[key outcome]]
-                                             (when (contains? outcome :module/resolved)
-                                               [key (:module/resolved outcome)]))
-                                           raw)))
-                        exposed-resolved (apply dissoc resolved-entry-points removed)
                         staged-runtime (staging-runtime runtime)
                         _ (realize-kind-declarations! staged-runtime raw)
                         backends (publication/backends staged-runtime)
@@ -1258,8 +1079,7 @@
                                                         (:remedies sync-result)
                                                         (:shadows collection)
                                                         (:outcomes staged)
-                                                        removed
-                                                        exposed-resolved)]
+                                                        removed)]
                 ;; A dry-run stops here: it has collected, classified, staged and
                 ;; validated candidates but publishes nothing, reconciles nothing,
                 ;; and records no coordinator state (DELTA-OlrRepl-001.CC14).
@@ -1275,13 +1095,10 @@
                                                reverse
                                                (filter removed))
                             reconcile-order (vec (concat removal-order order))
-                            reconciled (reconcile-modules
-                                        runtime with-loader state graph resolved-entry-points
-                                        reconcile-fns provisional reconcile-order)
                             lifecycle-reconciled
                             (reconcile-lifecycle
                              runtime state graph raw
-                             (assoc provisional :modules (:outcomes reconciled))
+                             provisional
                              changed-kinds reconcile-order lifecycle-resolvers)
                             _ (try
                                 (publication/validate-op-glossary-refs!
@@ -1307,7 +1124,7 @@
                                                                   (:hard-conflicts loaded-status)))
                                           :publication/kinds (vec (sort-by pr-str changed-kinds)))]
                         (record-result! runtime collection contributions contribution-sources
-                                        exposed-resolved (:resources reconciled)
+                                        (:resources state)
                                         (:lifecycle-state lifecycle-reconciled) state-outcomes
                                         (:roots sync-result) result))))
                   (catch Throwable throwable
@@ -1331,17 +1148,11 @@
   "Return the coordinator's offline module state joined with loaded-code state."
   [runtime]
   (let [state @(:module-state runtime)
-        loaded (safe-loaded-status runtime)
-        resolved-entry-points
-        (or (:resolved-entry-points state)
-            (entry-points/legacy-resolved-entry-points state))]
+        loaded (safe-loaded-status runtime)]
     {:modules (:graph state)
      :declaration/layers (:layers state)
      :declaration/shadows (:shadows state)
      :contributions (:contributions state)
-     ;; The last-good resolved entry points sit alongside the authored `:modules`
-     ;; graph, never inside it (PROP-Dsp-001.G2a).
-     :resolved/entry-points resolved-entry-points
      :module/outcomes (:outcomes state)
      :resource/outcomes (:resources state)
      :lifecycle/outcomes

@@ -1,22 +1,9 @@
 (ns quality.spool-var
-  "The spool-var slice of quality.conventions-check: PROP-Dsp-001.G6a.
+  "The spool-var slice of quality.conventions-check.
 
-  Under the def-spool convention a public var named `spool` in a
-  module-loadable namespace *is* the module declaration, always (G5's
-  reservation contract). This check is the guard against incidental
-  shadowing inside this repo (Q2): it rejects a public `spool` var whose
-  authored value does not match the `::spool` shape — a map whose keys are
-  a non-empty subset of `:contribute`/`:reconcile`, each an entry-point
-  symbol (`:ns` was dropped in the rename, G2).
-
-  It is a structural repository guard, not a second runtime contract and
-  not protection for external consumers: it reads the authored literal and
-  never resolves a symbol or derefs a var. The `::spool` spec in
-  `skein.api.spool.alpha` and the runtime's G5 validation stay
-  authoritative everywhere (G6a). Entry-point values are authored as
-  quoted symbols (`'my.ns/fn`), so the read form wraps them as
-  `(quote sym)`; the shape check unwraps that to recover the symbol the
-  runtime will see.
+  A public `spool` var in a module-loadable namespace is a removed grammar
+  and is always a finding. This structural repository guard reads authored
+  source without resolving symbols or dereferencing vars.
 
   Scope is the module-loadable roots — shipped spools under
   `spools/*/src` and the workspace's `.skein` config (local spools and
@@ -26,62 +13,12 @@
   so the findings logic loads on the test classpath; file reading is the
   shared `quality.source-forms` surface conventions-check already scans."
   (:require [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [quality.source-forms :as source-forms]
-            [skein.api.spool.alpha :as spool-api]))
-
-(def ^:private entry-point-keys #{:contribute :reconcile})
+            [quality.source-forms :as source-forms]))
 (def ^:private public-var-forms #{'def 'defonce 'defn 'defmacro})
 
 (def ^:private spools-root "spools")
 (def ^:private config-root ".skein")
-
-(defn- authored-symbol
-  "Return the symbol an authored entry-point value names. Values are
-  quoted symbols, so `'my.ns/fn` reads as `(quote my.ns/fn)`; anything
-  else (fn literal, string, bare unquoted or computed form) returns nil."
-  [form]
-  (when (and (seq? form) (= 'quote (first form)) (= 2 (count form))
-             (symbol? (second form)))
-    (second form)))
-
-(defn spool-value-problem
-  "Return a short reason string when `value` — the literal read from a
-    `(def spool …)` site — does not match the `::spool` shape, or nil when
-    it conforms. Structural only: quoted source symbols are normalized to the
-    values evaluation produces, then the authoritative runtime `::spool` spec
-    decides validity; symbols are never resolved and vars are never deref'd
-    (G6a)."
-  [value]
-  (when-not (map? value)
-    (throw (ex-info "spool-value-problem expects a non-map guard upstream" {})))
-  (let [normalized (into {} (map (fn [[field form]]
-                                   [field (authored-symbol form)]))
-                         value)]
-    (when-not (s/valid? ::spool-api/spool normalized)
-      (let [unknown (remove entry-point-keys (keys value))
-            present (filter #(contains? value %) entry-point-keys)]
-        (cond
-          (seq unknown)
-          (str "has unsupported key" (when (next unknown) "s") " "
-               (str/join ", " (sort-by str unknown)))
-
-          (empty? present)
-          "declares neither :contribute nor :reconcile"
-
-          :else
-          (when-let [bad (first (remove #(authored-symbol (get value %)) present))]
-            (str "entry point " bad
-                 " must be a quoted symbol (e.g. `'my.ns/fn`)")))))))
-
-(defn- value-problem
-  "Reason string for any authored `value`, mapping a non-map to its own
-  message before delegating the map cases to `spool-value-problem`."
-  [value]
-  (if (map? value)
-    (spool-value-problem value)
-    "authored value is not a map"))
 
 (defn- declaration-site
   "Return a site when `form` declares the public var name `spool`.
@@ -153,9 +90,9 @@
 (defn findings
   "Turn `sites` ({:filename :line :form-kind :private? :value :has-value?
   :read-error :read-error/class :read-error/data})
-  into finding strings. Public sites whose authored value fails the shape
-  check, or that carry no value at all, are findings; private sites are
-  ignored, and a file the scanner could not read is itself a finding."
+  into finding strings. Every public site is a finding because the module
+  entry-point convention has been removed. Private sites are ignored, and a
+  file the scanner could not read is itself a finding."
   [sites]
   (for [{:keys [filename line form-kind private? value has-value? read-error]
          :as site} sites
@@ -170,20 +107,10 @@
 
                 private? nil
 
-                (not= 'def form-kind)
-                (str filename ":" line ": public `spool` var must be authored with `def`,"
-                     " not `" form-kind "`; a module declaration must satisfy ::spool"
-                     " (PROP-Dsp-001.G6a)")
-
-                (not has-value?)
-                (str filename ":" line ": public `spool` var has no value;"
-                     " a module declaration must satisfy ::spool (PROP-Dsp-001.G6a)")
-
                 :else
-                (when-let [problem (value-problem value)]
-                  (str filename ":" line ": public `spool` var " problem
-                       "; a module declaration must satisfy ::spool"
-                       " (PROP-Dsp-001.G6a)")))]
+                (str filename ":" line
+                     ": public `spool` var uses the removed module entry-point convention;"
+                     " use contribution and lifecycle authoring forms"))]
         :when finding]
     finding))
 

@@ -60,9 +60,7 @@ How code gets into a weaver.
 | **Coordinate** | The value under a family key, naming where its source comes from: `:local/root`, `:git/url` plus `:git/sha`, or `:skein/source-root`. | Dependency, source, path, URL, version |
 | **Root** | A public library within a family, mapped to a checkout path by `:roots`. Every root has exactly one owner. | Spool, namespace, directory, family |
 | **Module** | A `runtime/module!` declaration naming one source target and its world policy, guarded by the `:spools` roots it needs. The activation unit. | Spool, namespace, plugin, component |
-| **`def spool`** | The public var named `spool` in a module's namespace. That var *is* the module's entry-point declaration (ADR-004, SPEC-003.C17d). | Config, manifest, plugin descriptor, metadata |
-| **Contribute** | The entry point returning a module's owner-complete contribution: the ops, queries, patterns, and handlers it publishes. | Register, init, setup, main |
-| **Reconcile** | The entry point that ensures or tears down a module's registrations and resources, branching on `:applied` or `:removed`. | Cleanup, teardown, shutdown |
+| **Authoring form** | A top-level form that defines an ordinary Var and collects a registry or lifecycle declaration while the selected module source is evaluated. | Callback, installer, manifest |
 | **Approval** | A coordinate's presence in `spools.edn`. For a Git family the pinned sha is the consumer's consent. | Install, enable, activate, allowlist |
 | **Acquisition** | Resolving and fetching approved roots. | Install, download, resolve, fetch |
 | **Sync** | Materializing acquired roots into the runtime and reporting per-root outcomes. | Load, install, refresh, reload |
@@ -181,7 +179,7 @@ Registered by `.skein/workflows.clj` and `.skein/config.clj`.
 - A **note** is a closed strand attached by the `notes` battery. Its text is write-once and cannot be rewritten, archived, or deleted on any mutation path.
 - **Burn** deletes and **close** does not. Every burn writes a **tombstone** in the same transaction; a tombstone supports hand-recovery, never undo.
 - One **family** is one repository and one release unit. A family has one or more **roots**, and each root has exactly one owner.
-- A **spool** is the code; a **module** is its activation. A module resolves its entry points from the public **`def spool`** var in its namespace, never from its declaration.
+- A **spool** is the code; a **module** is its activation. Module source publishes through authoring forms; the activation declaration names only source and world policy.
 - **Approval** is consent, **acquisition** fetches, **sync** materializes. A sha-pinned family cannot change under an unchanged pin.
 - One real weaver process publishes exactly one **ambient runtime**.
 - A **weaver generation** mints its spool classloader at boot and never swaps it, so **non-additive changes** wait for the next generation.
@@ -218,7 +216,7 @@ Registered by `.skein/workflows.clj` and `.skein/config.clj`.
 - "State" is the core lifecycle column and nothing else. Kanban lanes and derived task statuses are attributes and projections that spools compute; do not call them state.
 - "Generation" means a **weaver generation** and a **schema generation**. Both appear in the same specs.
 - "Battery" means an operational relation and the **batteries** spool. Unrelated; qualify when both are in scope.
-- "Spool" means a repository, a **family** entry, a **root** library, and the **`def spool`** var. Retire bare "spool" wherever two of those are live in a sentence.
+- "Spool" means a repository, a **family** entry, and a **root** library. Retire bare "spool" wherever two of those are live in a sentence.
 - "Module" and "spool" were used interchangeably. A **spool** is code; a **module** is one activation declaration over it.
 - "Review" means the land **sign-off** step here, and a devflow step, a delegation preset, or a kanban lane elsewhere. Name the surface.
 - "Prime" means the discovery tier and the two `mill` orientation commands.

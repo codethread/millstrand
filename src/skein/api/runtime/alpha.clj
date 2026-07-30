@@ -31,7 +31,6 @@
             [skein.core.specs :as specs]
             [skein.core.weaver.access :as access]
             [skein.core.weaver.module-graph :as module-graph]
-            [skein.core.weaver.module-refresh.entry-points :as entry-points]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.core.weaver.spool-sync :as spool-sync]))
 
@@ -201,12 +200,10 @@
 (s/def ::root-lib symbol?)
 
 ;; `::module-opts` is the named public input grammar `module!` consults: a
-;; source target plus world policy, with entry points owned by the module
-;; namespace's `spool` var rather than by opts. The coordinator's
-;; `normalize-declaration` stays the normalizer and the single authority for
-;; actionable refusal prose — the withdrawn entry-point keys included — so
-;; `validate-module-opts!` routes a spec-invalid input through it and then
-;; refuses whatever this narrower grammar still rejects.
+;; source target plus world policy. The coordinator's `normalize-declaration`
+;; owns the actionable refusal for withdrawn callback keys, so
+;; `validate-module-opts!` routes a spec-invalid input through it before
+;; refusing whatever this narrower grammar still rejects.
 (s/def ::module-opts
   (s/and map?
          #(every? #{:ns :file :load :spools :after :required?} (keys %))
@@ -249,9 +246,6 @@
 
 (s/def ::refresh-status #{:applied :partial :unchanged :refused})
 (s/def ::refresh-mode #{:full :targeted})
-(s/def ::resolved-entry-points
-  (s/map-of ::module-key ::entry-points/resolved-entry-points))
-
 (defn- valid-lifecycle-projection?
   [{:keys [status phase] :as projection}]
   (and (map? projection)
@@ -292,7 +286,6 @@
          #(map? (:modules %))
          #(valid-lifecycle-outcomes? (:modules %))
          #(map? (:roots %))
-         #(s/valid? ::resolved-entry-points (:resolved/entry-points %))
          #(vector? (:residuals %))
          #(vector? (:conflicts %))
          #(vector? (:remedies %))))
@@ -308,7 +301,6 @@
          #(map? (:modules %))
          #(map? (:contributions %))
          #(valid-lifecycle-status? (:lifecycle/outcomes %))
-         #(s/valid? ::resolved-entry-points (:resolved/entry-points %))
          #(map? (:loaded %))
          #(contains? % :pending-generation)
          #(s/valid? (s/nilable ::pending-generation) (:pending-generation %))
@@ -341,38 +333,17 @@
   optional module-key `:after` dependencies, and an optional boolean
   `:required?`.
 
-  Entry points are declared by convention alone (PROP-Dsp-001) and `opts` names
-  none: the module's namespace declares a public
-  `(def spool {:contribute … :reconcile …})` var, and a public `spool` var in a
-  module-loadable namespace unconditionally is that module's entry-point
-  declaration. Every effective symbol is resolved and root-value-validated
-  during source evaluation and the bounded missing-record image fallback.
-  Normal image replay resolves no contribution symbol. When no `:contribute`
-  resolves, the module's
-  contribution is the declaration data collected from the authoring forms
-  evaluated in its source, so a plain file of authoring forms is a complete
-  module (DELTA-OlrRepl-001.CC3). A `spool` var supplying `:contribute` while
-  the same source load collected authoring forms is a loud conflict; a
-  `:reconcile`-only `spool` var composes with authoring forms. Opts naming
-  `:contribute` or `:reconcile` — qualified or not — are refused with the
-  removed keys named, the module key, and a `(def spool …)` remedy, the same
-  refusal a directly authored declaration raises; the keys carry no alias and
-  no fallback (DELTA-Dsp-003.CC1).
+  Registry entries and live effects are authored with top-level contribution
+  and lifecycle forms. `opts` names neither callbacks nor entry points:
+  `:contribute` and `:reconcile` are rejected with replacement-form guidance,
+  and a public `spool` var in a loaded module namespace is rejected too. The
+  removed grammar has no alias or fallback.
 
-  `:load :image` (SPEC-004.C45/C46, ADR-003.P4) trusts the already-loaded JVM
-  image for the `:ns` target: refresh performs no source load for that module,
-  and it accepts no `:file` target. It replays the namespace's retained
-  authoring declaration record as data. A missing or stale record fails the
-  module evaluation. During the bounded migration window, only a missing
-  record may fall back to the legacy namespace `spool` var's `:contribute`
-  callback. The outcome reports `:source/status :image` and carries no source
-  stamp.
-
-  A `:reconcile` fn receives the contribution status under
-  `[:module/contribution :status]` and branches: `:applied` ensures its live
-  resources and registrations exist, `:removed` tears them down, and any other
-  status — reachable only by direct call — fails loudly naming the status, the
-  allowed set, the module, and the reconciler (SPEC-004.C46b).
+  `:load :image` (SPEC-004.C45/C46) trusts the already-loaded JVM image for the
+  `:ns` target: refresh performs no source load for that module, and it accepts
+  no `:file` target. It replays the namespace's retained authoring declaration
+  record as data. Missing, stale, or foreign records fail module evaluation.
+  The outcome reports `:source/status :image` and carries no source stamp.
 
   During startup-file collection this only stages the declaration and performs
   no source load, publication, or reconcile. Outside collection it replaces the
@@ -518,8 +489,7 @@
   staged contributions skip publication and reconcile. The atomic multi-phase
   reconcile is the coordinator that startup also drives; this surface owns the
   arities, request classification, and result validation. The joined result
-  conforms to `::refresh-result`, whose `:resolved/entry-points` projection
-  conforms to `::resolved-entry-points` (DELTA-OlrRepl-001.CC7)."
+  conforms to `::refresh-result`."
   ([runtime] (refresh! runtime {}))
   ([runtime opts]
    (validate-refresh-opts! opts)
@@ -561,8 +531,7 @@
   conflicts), the nullable `:pending-generation` record for a refused
   non-additive sync, and the last refresh result. It performs no network access,
   file write, source load, registration, or reconcile. The result conforms to
-  `::status-result`, including `::resolved-entry-points`
-  (DELTA-OlrRepl-001.CC8, DELTA-OlrDrt-001.CC15)."
+  `::status-result` (DELTA-OlrRepl-001.CC8, DELTA-OlrDrt-001.CC15)."
   [runtime]
   (validate-status-result! (weaver-runtime/module-status runtime)))
 

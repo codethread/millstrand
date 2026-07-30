@@ -436,16 +436,16 @@ definitions. Application stays on the read commands: `list --query <name>` and `
 
 Named query registries are not durable by themselves. If you want a query after every weaver restart, register it from startup-loaded code.
 
-For a simple persistent query, expose a complete contribution from a small workspace namespace and name its entry point in the public `spool` var:
+For a simple persistent query, declare it with the query authoring form in a small workspace namespace:
 
 ```clojure
-(ns my.workspace)
+(ns my.workspace
+  (:require [skein.api.skein.alpha :as skein]))
 
-(defn contribute [_ctx]
-  {:queries {"mine" [:= [:attr :owner] "ct"]}})
-
-(def spool
-  {:contribute 'contribute})
+(skein/defquery mine
+  "Return strands owned by ct."
+  {}
+  [:= [:attr :owner] "ct"])
 ```
 
 Declare that owner from `init.clj`:

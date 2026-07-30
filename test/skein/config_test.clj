@@ -7,14 +7,12 @@
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
-            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [skein.core.db-test :as db-test]
             [skein.api.current.alpha :as current]
             [skein.api.format.alpha :as fmt]
             [skein.api.runtime.alpha :as runtime]
-            [skein.api.spool.alpha :as spool-api]
             [skein.api.graph.alpha :as graph]
             [skein.api.patterns.alpha :as patterns]
             [skein.api.weaver.alpha :as weaver]
@@ -2181,67 +2179,14 @@
                     (str key " requires " required-ns " (coordinate " coord
                          ") but its :spools guard " spools " does not declare it"))))))))))
 
-(def ^:private in-tree-spool-vars
-  "The in-tree spool modules `.skein/init.clj` activates, keyed as init.clj
-  keys them, each mapped to the namespace's public `def spool` declaration var.
-  Guild and Chime ship in-tree but use authoring forms instead."
-  {})
-
 (def ^:private forms-only-ns-modules
-  "The init.clj `:ns` modules that legally declare no `spool` var because their
-  whole contribution is collected from top-level authoring forms."
+  "The init.clj `:ns` modules whose declarations are collected from forms."
   #{:skein/spools-batteries :skein/spools-workflow :skein/spools-workflow-cli
     :skein/spools-shell :skein/spools-code
     :skein/spools-unsafe-text-search :skein/spools-chime :skein/spools-cron
     :skein/spools-devflow
     :skein/spools-kanban :skein/spools-shuttle :skein/spools-delegation
     :skein/spools-bench :skein/spools-treadle})
-
-(def ^:private authoring-generation
-  "Migration-window classification for every selected module.
-
-  Later authoring-form migration cards change only their owned rows from
-  `:legacy` to `:forms`. The final-removal card deletes this table."
-  {:skein/spools-batteries :forms
-   :skein/spools-workflow :forms
-   :skein/spools-workflow-cli :forms
-   :skein/spools-shell :forms
-   :skein/spools-code :forms
-   :skein/spools-unsafe-text-search :forms
-   :skein/spools-chime :forms
-   :skein/spools-cron :forms
-   :skein/spools-devflow :forms
-   :skein/spools-kanban :forms
-   :skein/spools-shuttle :forms
-   :skein/spools-delegation :forms
-   :skein/spools-bench :forms
-   :skein/spools-treadle :forms
-   :kanban/tracker :forms
-   :harnesses :forms
-   :reviewers :forms
-   :module-adapters :forms
-   :attention :forms
-   :config :forms
-   :workflows :forms
-   :nvd-scan :forms})
-
-(deftest selected-modules-have-one-authoring-generation
-  (is (= #{:forms} (set (vals authoring-generation))))
-  (is (every? #(contains? #{:legacy :forms} %) (vals authoring-generation)))
-  (is (= #{:skein/spools-batteries :skein/spools-workflow
-           :skein/spools-workflow-cli :skein/spools-shell :skein/spools-code
-           :skein/spools-unsafe-text-search :skein/spools-chime :skein/spools-cron
-           :skein/spools-devflow :skein/spools-kanban :skein/spools-shuttle
-           :skein/spools-delegation :skein/spools-bench :skein/spools-treadle
-           :kanban/tracker :harnesses :reviewers :module-adapters :attention
-           :config :workflows :nvd-scan}
-         (set (keys authoring-generation)))))
-
-(defn- public-spool-var
-  "Resolve a namespace's `spool` var, or nil when it is missing or private."
-  [spool-sym]
-  (when-let [spool-var (requiring-resolve spool-sym)]
-    (when-not (:private (meta spool-var)) spool-var)))
 
 (deftest pinned-kanban-release-activates-from-source-and-image
   (with-config-runtime
@@ -2272,47 +2217,18 @@
         (is (nil? (ns-resolve 'ct.spools.kanban 'spool))
             "the forms-only Kanban module exposes no legacy entry point")))))
 
-(deftest init-modules-resolve-entry-points-by-convention
-  ;; PROP-Dsp-001.G7/P7.1: the literal-mirror triples are retired outright —
-  ;; init.clj names only a source target and world policy, and the coordinator
-  ;; resolves every module's entry points from its namespace's public `def spool`
-  ;; var. This guards that conversion from both sides. First, NO init.clj module
-  ;; — in-tree spool, pinned sibling, or workspace file — declares an explicit
-  ;; `:contribute`/`:reconcile`; that is the invariant the retired sibling parity
-  ;; test used to police from the other direction. Second, every legacy `:ns`
-  ;; module expected to contribute through an entry point resolves a public
-  ;; `spool` var that is a valid `::spool-api/spool` carrying at least a
-  ;; `:contribute` entry point. Cardinality is asserted first, so a deleted,
-  ;; duplicated, or re-keyed declaration fails before any per-module check, and
-  ;; an added `:ns` module must be classified as contributing or as forms-only
-  ;; before it can pass. Workspace `:file` modules are deliberately outside the
-  ;; var requirement: a file's whole contribution may be the authoring forms its
-  ;; load collects.
+(deftest init-modules-use-the-form-only-grammar
   (with-startup-config-runtime
     (fn [_rt]
       (let [declarations (->> (read-all-forms ".skein/init.clj")
                               (filter module-form?)
                               (map parse-module-form))
-            expected-vars in-tree-spool-vars
             ns-keys (->> declarations (filter :ns) (map :key))]
         (is (seq declarations) "parsed at least one init.clj module! form")
         (is (every? #(= 1 (count %)) (vals (group-by :key declarations)))
             "a module key is declared more than once in init.clj")
-        (is (= (into (set (keys expected-vars)) forms-only-ns-modules)
-               (set ns-keys))
+        (is (= forms-only-ns-modules (set ns-keys))
             "init.clj's :ns module keys drifted from the expected set")
         (doseq [{:keys [key contribute reconcile]} declarations]
           (is (and (nil? contribute) (nil? reconcile))
-              (str key " still declares an explicit entry-point key in init.clj")))
-        (doseq [[key spool-sym] expected-vars]
-          (if-let [spool-var (public-spool-var spool-sym)]
-            (do
-              (is (s/valid? ::spool-api/spool @spool-var)
-                  (str key " backing " spool-sym " is not a valid ::spool: "
-                       (s/explain-str ::spool-api/spool @spool-var)))
-              (is (contains? @spool-var :contribute)
-                  (str key " backing " spool-sym
-                       " declares no :contribute entry point")))
-            (is false
-                (str key " resolves no public " spool-sym
-                     " var, so it contributes nothing by convention"))))))))
+              (str key " still declares a withdrawn callback key")))))))

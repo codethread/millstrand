@@ -1,5 +1,7 @@
 # Do not add a `use-module` macro for inline lifecycle fns
 
+> **Superseded for authoring on 2026-07-30 by PROP-Auf-001.** Contribution and lifecycle callbacks were removed after the selected source universe migrated to authoring forms. This ADR remains the historical record for why opaque inline callback bodies were rejected.
+
 **Document ID:** `ADR-002`
 **Status:** Rejected
 **Date:** 2026-07-23

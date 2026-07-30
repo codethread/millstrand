@@ -7,7 +7,6 @@
             [clojure.test :refer [deftest is testing]]
             [skein.api.graph.alpha :as graph]
             [skein.api.runtime.alpha :as runtime]
-            [skein.api.spool.alpha :as spool]
             [skein.core.specs :as specs]
             [skein.core.weaver.config :as weaver-config]
             [skein.core.weaver.module-graph :as module-graph]
@@ -220,29 +219,21 @@
    :residuals []
    :conflicts []
    :remedies []
-   :resolved/entry-points
-   {:demo {:contribute 'demo.module/contribute
-           :reconcile 'demo.module/reconcile}}
    :declaration/shadows {}
    :publication/kinds [:queries]})
 
 (deftest live-module-result-specs-own-public-shapes
-  (testing "refresh-result requires status, mode, vectors, and resolved entry points"
+  (testing "refresh-result requires status, mode, and vectors"
     (is (s/valid? ::runtime/refresh-result applied-refresh-result))
     (is (s/valid? ::runtime/refresh-result
                   {:status :refused :mode :targeted :modules {} :roots {}
-                   :residuals [] :conflicts [{:reason :boom}] :remedies []
-                   :resolved/entry-points {}}))
+                   :residuals [] :conflicts [{:reason :boom}] :remedies []}))
     (is (not (s/valid? ::runtime/refresh-result
                        (assoc applied-refresh-result :status :bogus))))
     (is (not (s/valid? ::runtime/refresh-result
                        (dissoc applied-refresh-result :mode))))
     (is (not (s/valid? ::runtime/refresh-result
-                       (assoc applied-refresh-result :residuals nil))))
-    (is (not (s/valid? ::runtime/refresh-result
-                       (assoc applied-refresh-result
-                              :resolved/entry-points
-                              {:demo {:reconcile :not-a-symbol}})))))
+                       (assoc applied-refresh-result :residuals nil)))))
   (testing "plan-result is a refresh-result flagged dry-run with a caveat"
     (let [planned (assoc applied-refresh-result :dry-run? true :caveat "loads recorded")]
       (is (s/valid? ::runtime/plan-result planned))
@@ -251,17 +242,14 @@
   (testing "status-result requires joined maps and a last-refresh slot"
     (let [status {:modules {} :declaration/layers {} :declaration/shadows {}
                   :contributions {} :module/outcomes {} :resource/outcomes {}
-                  :root/outcomes {} :resolved/entry-points {}
+                  :root/outcomes {}
                   :loaded {} :pending-generation nil :last-refresh nil}]
       (is (s/valid? ::runtime/status-result status))
       (is (not (s/valid? ::runtime/status-result (dissoc status :last-refresh))))
       (is (not (s/valid? ::runtime/status-result (dissoc status :pending-generation))))
       (is (not (s/valid? ::runtime/status-result
                          (assoc status :pending-generation :bogus))))
-      (is (not (s/valid? ::runtime/status-result (assoc status :loaded :nope))))
-      (is (not (s/valid? ::runtime/status-result
-                         (assoc status :resolved/entry-points
-                                {:demo {:contribute 'unqualified}}))))))
+      (is (not (s/valid? ::runtime/status-result (assoc status :loaded :nope))))))
   (testing "reload-code-result names the reloaded root plus residual outcomes"
     (let [result {:root-lib 'demo/root
                   :root "/tmp/root"
@@ -475,11 +463,8 @@
               (is (str/includes? (ex-message error) "no longer name entry points")
                   "the message classes the failure as a removed key")
               (is (str/includes? (:remedy (ex-data error))
-                                 "namespace's public spool var")
-                  "the remedy directs the author at the namespace's spool var")
-              (is (str/includes? (:remedy (ex-data error))
-                                 "(def spool {:contribute 'contribute :reconcile 'reconcile})")
-                  "and shows a def spool form storing symbols, not resolved fn values"))
+                                 "skein/def*")
+                  "the remedy directs the author at the replacement forms"))
             (is (not (str/includes? (ex-message unqualified) "qualified"))
                 "an unqualified value is never told to qualify the removed key")
             (is (empty? (select-keys (:modules (runtime/status rt))
@@ -487,35 +472,11 @@
                                       :legacy-reconcile :legacy-both]))
                 "a refused declaration is not recorded")))))))
 
-(deftest spool-spec-owns-the-def-spool-convention-shape
-  (testing "a map with at least one entry-point symbol and no other keys is valid"
-    (is (s/valid? ::spool/spool {:contribute 'contribute}))
-    (is (s/valid? ::spool/spool {:reconcile 'other.ns/reconcile}))
-    (is (s/valid? ::spool/spool {:contribute 'contribute :reconcile 'reconcile})))
-  (testing "malformed spool values are rejected (G2/G6)"
-    (is (not (s/valid? ::spool/spool {})) "at least one entry point is required")
-    (is (not (s/valid? ::spool/spool [:not :a :map])))
-    (is (not (s/valid? ::spool/spool {:contribute 'contribute :ns 'some.ns}))
-        "the :ns key is dropped in the rename")
-    (is (not (s/valid? ::spool/spool {:contribute :not-a-symbol})))
-    (is (not (s/valid? ::spool/spool {:contribute identity}))
-        "fn values are rejected on sight (ADR-002.O1)")))
-
-(defn image-contribute
-  "Return the image-module test contribution."
-  [_ctx]
-  {:queries {"image-q" [:= [:attr :k] :image]}})
-
 (defn- image-spool-namespace!
-  "Intern a public `spool` var naming `image-contribute` in a fresh namespace.
-
-  Image modules resolve their entry points from the declared namespace's public
-  `spool` var in the live JVM image, so the fixture interns one instead of
-  loading module source."
+  "Intern the withdrawn public `spool` var in a fresh image namespace."
   []
   (let [ns-sym 'skein.api.runtime.alpha-test.image-target]
-    (intern (create-ns ns-sym) 'spool
-            {:contribute 'skein.api.runtime.alpha-test/image-contribute})
+    (intern (create-ns ns-sym) 'spool {:contribute 'contribute})
     ns-sym))
 
 (deftest image-module-declaration-activates-and-validates
@@ -523,14 +484,14 @@
     nil
     {}
     (fn [rt _world]
-      (testing "an image declaration activates from its namespace's spool var"
+      (testing "an image declaration rejects a public spool var"
         (let [result (runtime/module! rt :image
                                       {:ns (image-spool-namespace!)
-                                       :load :image})]
-          (is (= :applied (:status result)))
+                                       :load :image})
+              outcome (get-in result [:modules :image])]
+          (is (= :partial (:status result)))
           (is (s/valid? ::runtime/module-result result))
-          (is (= :image (get-in result [:modules :image :source/status])))
-          (is (= [:= [:attr :k] :image] (get (graph/queries rt) "image-q")))))
+          (is (= :removed-def-spool (get-in outcome [:error :data :reason])))))
       (testing "an image namespace with no spool var fails at evaluation"
         (let [result (runtime/module! rt :image-bare
                                       {:ns 'skein.api.runtime.alpha-test :load :image})

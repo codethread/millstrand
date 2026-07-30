@@ -17,9 +17,8 @@
     namespaces (SPEC-005.C5) — spools are userland code building on
     `skein.api.*.alpha`, and the designed exception is nominal; the
     unsafe-namespace convention's rules live in `quality.spool-tiers`;
-  - a public `spool` var in a module-loadable namespace carries a
-    well-formed `::spool` declaration (PROP-Dsp-001.G6a) — the structural
-    guard against incidental shadowing lives in `quality.spool-var`;
+  - a public `spool` var in a module-loadable namespace is a removed grammar;
+    the structural guard lives in `quality.spool-var`;
   - no source hand-escapes JSON that `json/write-str` would reproduce
     from Clojure data; the narrowing rules live in
     `quality.json-literals`."

@@ -69,12 +69,11 @@
   one to recover the other."
   (format/reflow
    "|Module options no longer name entry points. Delete the key from the
-    |declaration and declare the module's entry points in its namespace's
-    |public spool var, as
-    |(def spool {:contribute 'contribute :reconcile 'reconcile})."))
+    |declaration. Publish registry entries with the skein/def* authoring forms
+    |and live effects with the lifecycle authoring forms."))
 
 (defn- require-no-entry-points!
-  "Refuse a declaration that names an entry point, pointing at `def spool`.
+  "Refuse a declaration that names a withdrawn callback entry point.
 
   Every freshly authored declaration reaches here — startup collection, the
   direct `declare-module!` route, targeted `:declare`, and the public
@@ -87,10 +86,7 @@
 
   This refusal is permanent, not a migration hint on a timer: it earns its keep
   for as long as the keys stay out of the grammar, because it is the only thing
-  that tells an author holding a pre-cutover example where entry points went.
-  Retained pre-cutover state is the part that expires: its reader
-  `legacy-resolved-entry-points` carries that removal trigger
-  (DELTA-Dsp-003.D3, DELTA-Dsp-004.D3a)."
+  that tells an author holding a pre-cutover example where entry points went."
   [key opts]
   (let [removed (filterv #(contains? opts %) entry-point-keys)]
     (when (seq removed)
@@ -107,14 +103,10 @@
   one `:ns` or workspace-relative `:file`, and carry normalized `:spools`,
   `:after`, and `:required?` values. `:load :image` (the only accepted `:load`
   value) trusts the already-loaded JVM image: it requires an `:ns` target and
-  refresh never source-loads that module, so its entry points resolve from the
-  namespace's `spool` var at evaluation.
+  refresh replays that namespace's retained authoring declaration record.
 
-  Entry-point keys are refused here, so no newly authored declaration reaches
-  the coordinator carrying one. Declarations a live coordinator collected
-  before the cutover are never re-normalized: they stay readable in retained
-  state, where `legacy-resolved-entry-points` alone reads their entry points
-  (DELTA-Dsp-004.CC1/D3)."
+  Callback keys are refused here, so no declaration reaches the coordinator
+  carrying one."
   [key opts]
   (when-not (keyword? key)
     (fail! "Module key must be a keyword" {:module/key key}))
