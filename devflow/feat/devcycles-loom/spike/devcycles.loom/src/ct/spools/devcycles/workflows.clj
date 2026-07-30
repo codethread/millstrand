@@ -109,8 +109,11 @@
      :depends-on [:implement])
    ;; GAP (the one that still stands, advice or not): the defer target receives
    ;; only its own defaults plus explicit params (PROP-Dfr-001.NG6) — the worker
-   ;; must re-pass worktree/branch by hand when filling. A declared
-   ;; param-forwarding list on the defer point is the missing primitive.
+   ;; must re-pass worktree/branch by hand when filling. Two candidate
+   ;; primitives on paper: a declared param-forwarding list on the defer point
+   ;; (additive, per-definition data), or the namespaced run context
+   ;; (../../namespaced-context-sketch.clj) that dissolves forwarding by letting
+   ;; qualified context flow whole while each target's spec names what it reads.
    (workflow/step :handoff "Hand the branch to land" :self
                   :depends-on [:validate]
                   :attributes {"workflow/instruction" "Terse: start land with the same branch/worktree."})))
