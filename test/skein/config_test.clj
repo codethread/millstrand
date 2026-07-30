@@ -194,13 +194,13 @@
         (str "(ns f16-probe\n"
              "  \"F16 regression probe: contributes an alias and a workflow definition.\"\n"
              "  (:require [ct.spools.agent-run :as shuttle]\n"
+             "            [skein.api.runtime.alpha :as runtime]\n"
              "            [skein.spools.workflow :as workflow]))\n"
-             "(defn contribute [_]\n"
-             "  {shuttle/alias-kind "
-             (if present? "{:f16-probe-seat {:alias-of :codex}}" "{}") "\n"
-             "   workflow/definition-kind "
-             (if present? "{:f16-probe-flow 'workflows/story}" "{}") "})\n"
-             "(def spool {:contribute 'contribute})\n")))
+             (when present?
+               (str "(runtime/collect-entry! shuttle/alias-kind "
+                    ":f16-probe-seat {:alias-of :codex})\n"
+                    "(runtime/collect-entry! workflow/definition-kind "
+                    ":f16-probe-flow 'workflows/story)\n")))))
 
 (deftest f16-workspace-partition-refresh-deletes-omitted-seats-and-constructors
   ;; F16 regression: the .skein policy files publish their harness seats, reviewer

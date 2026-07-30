@@ -4805,13 +4805,17 @@
                 {:planned {:queries {"planned" [:= [:attr :v] 1]}}})
         (runtime/module! rt :planned {:file source})
         (let [last-refresh (:last-refresh (runtime/status rt))
-              sync-calls (atom 0)]
+              sync-calls (atom 0)
+              sync-approved-spools spool-sync/sync-approved-spools]
           (swap! module-contributions assoc
                  :planned {:queries {"planned" [:= [:attr :v] 2]}})
           (with-redefs [spool-sync/sync-approved-spools
-                        (fn [& _]
-                          (swap! sync-calls inc)
-                          (throw (ex-info "plan synchronized" {})))]
+                        (fn [candidate-rt & args]
+                          (if (identical? rt candidate-rt)
+                            (do
+                              (swap! sync-calls inc)
+                              (throw (ex-info "plan synchronized" {})))
+                            (apply sync-approved-spools candidate-rt args)))]
             (is (= :applied
                    (:status (runtime/plan rt {:only [:planned]}))))
             (is (zero? @sync-calls)))
