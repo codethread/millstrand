@@ -29,7 +29,6 @@
             [skein.api.format.alpha :as fmt]
             [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.runtime.glossary.alpha :as glossary]
-            [skein.api.runtime.alpha :as runtime]
             [skein.spools.workflow :as workflow]))
 
 (defn- list-request
@@ -113,50 +112,6 @@
                         (attributes->map (:attributes args)))
                       (or (:attr args) {}))))
     request))
-
-(defn workflow-op
-  "Handle `strand workflow <verb>`, routing to the engine's worker surface.
-
-  The registered op handler; resolved by symbol at invocation time, so it is public
-  like the other spools' op handlers. Each verb assembles a request map and hands
-  it to the engine function that owns the semantics — the CLI resolves no step,
-  infers no role, and stamps no outcome of its own. The declared arg-spec rejects
-  an unknown verb before invocation, so the fall-through exists only to keep a
-  direct Clojure caller loud."
-  [{:op/keys [args argv]}]
-  (let [{:keys [subcommand choice] target :workflow} args]
-    (case (first subcommand)
-      "list" {:operation "workflow list"
-              :definitions (workflow/catalog (list-request args))}
-      "show" (assoc (workflow/definition-view (keyword target))
-                    :operation "workflow show")
-      "executors" {:operation "workflow executors"
-                   :executors (workflow/executor-catalog)}
-      "start" (workflow/run-start!
-               (-> {:run-id (:run-id args) :workflow (keyword target)}
-                   (with-json-object args :params :params)))
-      "ready" (workflow/run-ready {:run-id (:run-id args)})
-      "choices" (workflow/run-choices (-> {:run-id (:run-id args)}
-                                          (carry args :step :step)))
-      "complete" (workflow/run-complete!
-                  (-> (with-attributes (run-request args) args argv)
-                      (with-json-object args :context :context)))
-      "choose" (workflow/run-choose!
-                (-> (assoc (run-request args) :choice choice)
-                    (with-json-object args :input :input)))
-      "next" (workflow/run-next!
-              (-> (run-request args)
-                  (carry args :choice :choice)
-                  (with-json-object args :input :input)))
-      "defer" (workflow/run-defer!
-               (-> (assoc (run-request args) :workflow (keyword target))
-                   (with-json-object args :params :params)))
-      "await" (workflow/run-await
-               (carry {:run-id (:run-id args)} args :timeout-secs :timeout-secs))
-      (throw (ex-info "Unsupported workflow subcommand"
-                      {:subcommand subcommand
-                       :allowed ["list" "show" "executors" "start" "ready" "choices"
-                                 "complete" "choose" "next" "defer" "await"]})))))
 
 (def ^:private workflow-doc
   (fmt/reflow
@@ -573,15 +528,46 @@
    {:name "workflow/step-not-defer"
     :definition "The step named for workflow defer holds another role."}])
 
-(runtime/collect-entry!
- :ops "workflow"
- (contribution/op-declaration
-  'workflow workflow-doc
+(contribution/defop workflow
+  "Discover and drive the workflows this weaver has registered: list the catalogue, show one definition, then start a run and move it through its ready frontier."
   (merge {:arg-spec workflow-arg-spec
           :returns workflow-returns
           :stream? false}
          workflow-meta)
-  'skein.spools.workflow.cli/workflow-op))
+  [{:op/keys [args argv]}]
+  (let [{:keys [subcommand choice] target :workflow} args]
+    (case (first subcommand)
+      "list" {:operation "workflow list"
+              :definitions (workflow/catalog (list-request args))}
+      "show" (assoc (workflow/definition-view (keyword target))
+                    :operation "workflow show")
+      "executors" {:operation "workflow executors"
+                   :executors (workflow/executor-catalog)}
+      "start" (workflow/run-start!
+               (-> {:run-id (:run-id args) :workflow (keyword target)}
+                   (with-json-object args :params :params)))
+      "ready" (workflow/run-ready {:run-id (:run-id args)})
+      "choices" (workflow/run-choices (-> {:run-id (:run-id args)}
+                                          (carry args :step :step)))
+      "complete" (workflow/run-complete!
+                  (-> (with-attributes (run-request args) args argv)
+                      (with-json-object args :context :context)))
+      "choose" (workflow/run-choose!
+                (-> (assoc (run-request args) :choice choice)
+                    (with-json-object args :input :input)))
+      "next" (workflow/run-next!
+              (-> (run-request args)
+                  (carry args :choice :choice)
+                  (with-json-object args :input :input)))
+      "defer" (workflow/run-defer!
+               (-> (assoc (run-request args) :workflow (keyword target))
+                   (with-json-object args :params :params)))
+      "await" (workflow/run-await
+               (carry {:run-id (:run-id args)} args :timeout-secs :timeout-secs))
+      (throw (ex-info "Unsupported workflow subcommand"
+                      {:subcommand subcommand
+                       :allowed ["list" "show" "executors" "start" "ready" "choices"
+                                 "complete" "choose" "next" "defer" "await"]})))))
 
 (defn seed-workflow-glossary!
   "Seed the Workflow CLI's process-lifetime failure glossary."

@@ -22,6 +22,8 @@
                         fn hooks.project-rules/no-fn-keys-destructure
                         clojure.core/defn hooks.project-rules/no-fn-keys-destructure
                         defn hooks.project-rules/no-fn-keys-destructure
+                        skein.api.contribution.alpha/defop hooks.project-rules/defop
+                        skein.api.contribution.alpha/defquery hooks.project-rules/defquery
                         skein.macros.queries/defquery hooks.project-rules/defquery
                         skein.macros.ops/defop hooks.project-rules/defop
                         skein.macros.rules/defrule hooks.project-rules/defrule}}
