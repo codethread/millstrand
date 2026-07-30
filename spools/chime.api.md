@@ -18,16 +18,23 @@ Human-attention notification bridge for Skein graph events.
 
 
 Runtime captured for asynchronous notifier worker threads.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L123-L125">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L118-L120">Source</a></sub></p>
 
-## <a name="skein.spools.chime/contribute">`contribute`</a>
+## <a name="skein.spools.chime/close-engine!">`close-engine!`</a>
 ``` clojure
-(contribute {:keys [runtime]})
+(close-engine! {:keys [runtime resource], :as context})
 ```
 Function.
 
-Materialize Chime's rule kind for dependent module contributions.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L419-L425">Source</a></sub></p>
+Close Chime's atomic engine boundary for a validated lifecycle context.
+
+  `context` conforms to `::lifecycle-context`; its `:resource` conforms to
+  `::engine-handle`, and the return value conforms to `::lifecycle-result`.
+
+  A failed close restores the active cluster before surfacing the failure. The
+  retained resource handle can therefore be retried without exposing a
+  half-closed handler, barrier, or rule view.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L515-L550">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/defrule">`defrule`</a>
 ``` clojure
@@ -39,7 +46,15 @@ Define a notification rule and collect its Chime declaration.
 
   Options conform to `::rule-options`; `:override? true` records explicit
   override intent.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L63-L80">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L64-L81">Source</a></sub></p>
+
+## <a name="skein.spools.chime/engine">`engine`</a>
+
+
+
+
+Own Chime's handler, mutation barrier, and visible rule view atomically.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L552-L555">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/mutation-registration-barrier!">`mutation-registration-barrier!`</a>
 ``` clojure
@@ -50,7 +65,7 @@ Function.
 Serialize a pending graph mutation after any in-progress rule registration.
 
   Installed as a synchronous pre-commit hook. Its return value is ignored.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L411-L417">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L408-L414">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/notifier">`notifier`</a>
 ``` clojure
@@ -59,7 +74,7 @@ Serialize a pending graph mutation after any in-progress rule registration.
 Function.
 
 Return the current notifier binding, or nil when none is bound.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L183-L186">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L178-L181">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/notify!">`notify!`</a>
 ``` clojure
@@ -71,7 +86,7 @@ Send one notification through the current binding.
 
   Returns an inspectable map immediately. Missing notifier is recorded as a loud
   failure instead of silently dropping the notification.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L225-L241">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L222-L238">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/on-event">`on-event`</a>
 ``` clojure
@@ -80,7 +95,23 @@ Send one notification through the current binding.
 Function.
 
 Weaver event handler: scan graph changes for attention notifications.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L406-L409">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L403-L406">Source</a></sub></p>
+
+## <a name="skein.spools.chime/open-engine!">`open-engine!`</a>
+``` clojure
+(open-engine! {:keys [runtime], :as context})
+```
+Function.
+
+Open Chime's atomic engine boundary for a validated lifecycle context.
+
+  `context` conforms to `::lifecycle-context`; the returned handle conforms to
+  `::engine-handle`.
+
+  The handler, mutation barrier, and visible rule view change under their
+  shared monitor. A failed open compensates back to the inactive boundary so a
+  lifecycle retry never inherits a half-open engine.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L489-L513">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/recent-failures">`recent-failures`</a>
 ``` clojure
@@ -101,29 +132,7 @@ Return the last 100 notifier, process, and rule failures for this weaver lifetim
   - `:message` — present only when something threw, not `:exception/message`:
     a missing notifier and a non-zero notifier exit are failures without an
     exception to take a message from.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L140-L155">Source</a></sub></p>
-
-## <a name="skein.spools.chime/reconcile">`reconcile`</a>
-``` clojure
-(reconcile {:keys [runtime], :as ctx})
-```
-Function.
-
-Reconcile chime's engine and visible rule view for a module transition.
-
-  Publication has already validated every owner partition. On an applied
-  contribution: register the mutation-barrier pre-commit hook and the
-  `:chime/engine` event handler, then baseline changed effective rules and
-  publish the complete view — repeats stay idempotent because duplicate hook
-  and handler keys replace prior entries (SPEC-004.C65/C76). On removal:
-  unregister both, then publish an empty visible view; direct `register!`
-  rules survive under the repl owner, so deactivation is view-level and a
-  later reapplication re-baselines and republishes them. Every branch holds
-  the visible-view monitor that scans, registration, and the mutation barrier
-  share, so no mutation or event lane observes a half-applied transition. Any
-  other contribution status fails loudly: the module kernel only reconciles
-  applied and removed outcomes, so anything else is a caller error.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L446-L486">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L135-L150">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/register!">`register!`</a>
 ``` clojure
@@ -138,7 +147,7 @@ Register or replace a notification rule.
   initial seen baseline, so durable conditions do not notify after registration
   even when they have never notified before. Mutations serialized after
   registration notify normally.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L259-L286">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L256-L283">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/reset-seen!">`reset-seen!`</a>
 ``` clojure
@@ -147,7 +156,7 @@ Register or replace a notification rule.
 Function.
 
 Clear per-weaver notification deduplication and batch-scan state.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L157-L162">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L152-L157">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/rule-declaration">`rule-declaration`</a>
 ``` clojure
@@ -159,7 +168,7 @@ Return a validated Chime rule declaration.
 
   `options` conforms to `::rule-options`; override intent remains collection
   metadata.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L48-L61">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L49-L62">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/rule-kind">`rule-kind`</a>
 
@@ -167,7 +176,7 @@ Return a validated Chime rule declaration.
 
 
 Owner-partitioned kind id for Chime notification rules.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L31-L33">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L32-L34">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/rules">`rules`</a>
 ``` clojure
@@ -176,7 +185,7 @@ Owner-partitioned kind id for Chime notification rules.
 Function.
 
 Return registered notification rules ordered by key.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L288-L291">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L285-L288">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/scan!">`scan!`</a>
 ``` clojure
@@ -190,7 +199,7 @@ Evaluate registered rules against currently affected strands.
   Rules receive `{:event .. :strand .. :ready-ids #{..}}`; `:ready-ids` is
   computed once per scan. Batch events and their per-strand fanout share a
   `:batch/id`, and only the first event of a batch triggers a scan.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L385-L404">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L382-L401">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/set-notifier!">`set-notifier!`</a>
 ``` clojure
@@ -203,22 +212,7 @@ Bind the local notifier command for this weaver lifetime.
   The binding is `{:argv [..]}`. Chime appends the notification title as the
   final argument and writes the body to stdin. Rebinding replaces the prior
   value; pass a valid binding after every weaver startup or config reload.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L173-L181">Source</a></sub></p>
-
-## <a name="skein.spools.chime/spool">`spool`</a>
-
-
-
-
-Entry-point declaration for the chime spool (PROP-Dsp-001 `def spool`
-  convention).
-
-  The refresh coordinator resolves `:contribute`/`:reconcile` from this public
-  var at every module evaluation, so a consumer declares only a source target
-  and world policy (`{:ns 'skein.spools.chime :spools [...]}`) and never mirrors
-  the pair. Unqualified symbols resolve against this namespace; fn values are
-  rejected (ADR-002.O1).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L488-L498">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L168-L176">Source</a></sub></p>
 
 ## <a name="skein.spools.chime/unregister!">`unregister!`</a>
 ``` clojure
@@ -227,4 +221,4 @@ Entry-point declaration for the chime spool (PROP-Dsp-001 `def spool`
 Function.
 
 Unregister a notification rule by key.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L293-L314">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/chime/src/skein/spools/chime.clj#L290-L311">Source</a></sub></p>

@@ -161,6 +161,19 @@
           (eventually #(file-contains? out-file "---"))
           (is (file-contains? out-file "BODY=Body text")))))))
 
+(deftest notifier-thread-retains-its-runtime-for-process-failures
+  (with-chime
+    (fn [_rt _config-dir]
+      (chime/set-notifier! {:argv ["/missing/chime-notifier"]})
+      (is (= :started
+             (:status (chime/notify! {:title "Broken notifier"}))))
+      (await-notifier-threads!)
+      (is (= {:kind :process
+              :argv ["/missing/chime-notifier" "Broken notifier"]
+              :title "Broken notifier"}
+             (select-keys (last (chime/recent-failures))
+                          [:kind :argv :title]))))))
+
 (deftest rule-registration-validation
   (with-chime
     (fn [_ _]
@@ -415,40 +428,86 @@
 (defn- barrier-hook-entries [rt]
   (filterv #(= :chime/registration-barrier (:key %)) (hooks/hooks rt)))
 
-(deftest module-reconcile-registers-engine-and-cleans-up-on-removal
-  ;; Production activates chime via runtime/module!, so module reconcile owns
-  ;; the engine: the mutation-barrier hook and the :chime/engine event handler
-  ;; register on an applied contribution and unregister on removal.
-  (test-support/with-runtime
-    {:prefix "skein-chime-config"}
+(deftest engine-resource-registers-atomically-and-cleans-up-on-removal
+  (with-chime
     (fn [rt _config-dir]
-      (is (= {:reconciled :applied}
-             (chime/reconcile {:runtime rt :module/contribution {:status :applied}})))
       (is (= 1 (count (engine-handler-entries rt))))
       (is (= 1 (count (barrier-hook-entries rt))))
       (chime/register! :phase-failed 'skein.chime-test/phase-failed-rule)
       (testing "repeated application replaces entries and keeps the rule view"
-        (is (= {:reconciled :applied}
-               (chime/reconcile {:runtime rt :module/contribution {:status :applied}})))
+        (is (= :chime/engine
+               (chime/open-engine! {:runtime rt :effect/id :engine})))
         (is (= 1 (count (engine-handler-entries rt))))
         (is (= 1 (count (barrier-hook-entries rt))))
         (is (= [:phase-failed] (mapv :key (chime/rules)))))
       (testing "removal unregisters the engine and empties the visible view"
         (is (= {:reconciled :removed}
-               (chime/reconcile {:runtime rt :module/contribution {:status :removed}})))
+               (chime/close-engine! {:runtime rt
+                                     :effect/id :engine
+                                     :resource :chime/engine})))
         (is (= [] (engine-handler-entries rt)))
         (is (= [] (barrier-hook-entries rt)))
         (is (= [] (chime/rules))))
       (testing "reapplication restores the surviving direct rule"
-        ;; direct register! rules live under the repl owner and survive module
-        ;; removal; deactivation is view-level only
-        (is (= {:reconciled :applied}
-               (chime/reconcile {:runtime rt :module/contribution {:status :applied}})))
-        (is (= [:phase-failed] (mapv :key (chime/rules)))))
-      (testing "any other contribution status fails loudly"
-        (is (thrown-with-msg?
-             clojure.lang.ExceptionInfo #"Unsupported module contribution status"
-             (chime/reconcile {:runtime rt})))))))
+        (is (= :chime/engine
+               (chime/open-engine! {:runtime rt :effect/id :engine})))
+        (is (= [:phase-failed] (mapv :key (chime/rules))))))))
+
+(deftest engine-resource-compensates-failed-open-and-close
+  (with-chime
+    (fn [rt _config-dir]
+      (chime/close-engine! {:runtime rt
+                            :effect/id :engine
+                            :resource :chime/engine})
+      (testing "a failed open returns to the fully inactive boundary"
+        (with-redefs [events/register-handler!
+                      (fn [& _]
+                        (throw (ex-info "handler registration failed" {})))]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                #"Chime engine open failed and was reverted"
+                                (chime/open-engine! {:runtime rt
+                                                     :effect/id :engine}))))
+        (is (= [] (engine-handler-entries rt)))
+        (is (= [] (barrier-hook-entries rt)))
+        (is (= [] (chime/rules))))
+      (testing "compensation preserves the primary failure and reports rollback failures"
+        (let [failure
+              (with-redefs [events/register-handler!
+                            (fn [& _]
+                              (throw (ex-info "handler registration failed"
+                                              {:stage :open})))
+                            hooks/unregister-hook!
+                            (fn [& _]
+                              (throw (ex-info "barrier rollback failed"
+                                              {:stage :compensation})))]
+                (try
+                  (chime/open-engine! {:runtime rt :effect/id :engine})
+                  nil
+                  (catch clojure.lang.ExceptionInfo t
+                    t)))]
+          (is (= "handler registration failed" (ex-message (ex-cause failure))))
+          (is (= [{:action :barrier
+                   :error {:class "clojure.lang.ExceptionInfo"
+                           :message "barrier rollback failed"
+                           :data {:stage :compensation}}}]
+                 (:compensation/errors (ex-data failure))))
+          (is (= [] (engine-handler-entries rt)))
+          (is (= [] (chime/rules))))
+        ;; The intentionally failed compensation left only the barrier behind.
+        (hooks/unregister-hook! rt :chime/registration-barrier))
+      (chime/open-engine! {:runtime rt :effect/id :engine})
+      (testing "a failed close restores the fully active boundary"
+        (with-redefs [hooks/unregister-hook!
+                      (fn [& _]
+                        (throw (ex-info "barrier removal failed" {})))]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                #"Chime engine close failed and was restored"
+                                (chime/close-engine!
+                                 {:runtime rt
+                                  :effect/id :engine
+                                  :resource :chime/engine}))))
+        (is (= 1 (count (engine-handler-entries rt))))
+        (is (= 1 (count (barrier-hook-entries rt))))))))
 
 (deftest module-activated-engine-fires-event-driven-notifications
   ;; Activation via runtime/module! — the production path — yields a live
@@ -476,6 +535,12 @@
      :scanned-batch-ids}))
 
 (deftest rule-authoring-validates-closed-options
+  (is (= {:kind :resource
+          :after #{}
+          :scope :module
+          :open 'skein.spools.chime/open-engine!
+          :close 'skein.spools.chime/close-engine!}
+         (deref (ns-resolve 'skein.spools.chime 'engine))))
   (is (= {:key :sample :fn 'skein.chime-test/phase-failed-rule}
          (chime/rule-declaration
           :sample {} 'skein.chime-test/phase-failed-rule)))
