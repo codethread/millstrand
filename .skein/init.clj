@@ -87,6 +87,8 @@
                   :required? true})
 
 ;; --- peer coordination spools -----------------------------------------------
+;; These sibling modules collect owner-complete contributions from source.
+;; Named lifecycle resources own their runtime setup and removal.
 (runtime/module! runtime :skein/spools-shuttle
                  {:ns 'ct.spools.agent-run
                   :spools ['ct.spools/agent-run]
@@ -104,7 +106,7 @@
 
 ;; --- repo policy over the peer spools ---------------------------------------
 ;; harnesses.clj contributes its seats over the :pi harness that agent-run
-;; reconciles, as the workspace-owned partitions of agent-run's tool/alias kinds,
+;; publishes, as the workspace-owned partitions of agent-run's tool/alias kinds,
 ;; so it orders after both peers. Its reconcile sets the two singleton default
 ;; review/task contract slots, consuming the delegation contract text.
 (runtime/module! runtime :harnesses
@@ -193,7 +195,7 @@
                   :after [:skein/spools-workflow :workflows]
                   :required? true})
 
-;; The subagent gate executor reconciles last: its reconcile runs an initial gate
+;; The subagent gate executor activates last: its lifecycle resource runs an initial gate
 ;; scan, so every harness alias harnesses.clj registers must already exist or a
 ;; durable ready gate would be stamped gate/error on every cold start.
 (runtime/module! runtime :skein/spools-treadle

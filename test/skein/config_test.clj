@@ -124,11 +124,11 @@
         (with-runtime-loader
           rt
           (fn []
-            (spool-sync/load-synced-namespace!
-             rt 'ct.spools.agent-run :skein/spools-shuttle)
-            (publish-module-contribution!
-             rt :skein/spools-shuttle
-             (requiring-resolve 'ct.spools.agent-run/contribute))
+            (test-support/activate-spool! rt :skein/spools-shuttle
+                                          'ct.spools.agent-run)
+            (test-support/activate-spool! rt :skein/spools-delegation
+                                          'ct.spools.delegation
+                                          :after [:skein/spools-shuttle])
             (test-support/activate-spool! rt :skein/spools-workflow
                                           'skein.spools.workflow)
             (test-support/activate-spool! rt :skein/spools-workflow-cli
@@ -857,10 +857,6 @@
   ;; exercises the same contribution path init.clj's reviewers module runs
   (with-config-runtime
     (fn [rt]
-      ;; materialize delegation's registry handle so its roster kind is a declared
-      ;; publication backend before reviewers.clj contributes its roster partition
-      ((requiring-resolve 'ct.spools.delegation/contribute)
-       {:runtime rt :module/key :skein/spools-delegation})
       (load-file ".skein/reviewers.clj")
       (publish-module-contribution! rt :reviewers (requiring-resolve 'reviewers/contribute))
       (let [rosters ((requiring-resolve 'ct.spools.delegation/rosters))
@@ -1957,21 +1953,16 @@
 
 (def ^:private sibling-spool-vars
   "The pinned sibling modules `.skein/init.clj` activates, keyed as init.clj keys
-  them, each mapped to the released namespace's public `def spool` var. These are
-  the pinned namespaces that contribute through an entry point: `codethread/kanban`
-  and the three `ct.spools/agent-run` roots, whose subagent executor carries its
-  own `spool` var."
-  {:skein/spools-kanban 'ct.spools.kanban/spool
-   :skein/spools-shuttle 'ct.spools.agent-run/spool
-   :skein/spools-delegation 'ct.spools.delegation/spool
-   :skein/spools-bench 'ct.spools.bench/spool
-   :skein/spools-treadle 'ct.spools.executors.subagent/spool})
+  them, each mapped to the released namespace's public `def spool` var."
+  {:skein/spools-kanban 'ct.spools.kanban/spool})
 
 (def ^:private forms-only-ns-modules
   "The init.clj `:ns` modules that legally declare no `spool` var because their
   whole contribution is collected from top-level authoring forms."
   #{:skein/spools-workflow :skein/spools-workflow-cli
-    :skein/spools-unsafe-text-search :skein/spools-cron :skein/spools-devflow})
+    :skein/spools-unsafe-text-search :skein/spools-cron :skein/spools-devflow
+    :skein/spools-shuttle :skein/spools-delegation :skein/spools-bench
+    :skein/spools-treadle})
 
 (def ^:private authoring-generation
   "Migration-window classification for every selected module.
@@ -1988,10 +1979,10 @@
    :skein/spools-cron :forms
    :skein/spools-devflow :forms
    :skein/spools-kanban :legacy
-   :skein/spools-shuttle :legacy
-   :skein/spools-delegation :legacy
-   :skein/spools-bench :legacy
-   :skein/spools-treadle :legacy
+   :skein/spools-shuttle :forms
+   :skein/spools-delegation :forms
+   :skein/spools-bench :forms
+   :skein/spools-treadle :forms
    :kanban/tracker :legacy
    :harnesses :legacy
    :reviewers :legacy
