@@ -356,14 +356,16 @@ export async function runApp(dash: Dash<unknown>) {
   // at row 0 rather than the shell's old cursor row and no scrollback shows
   // through. Leaving the alt screen on exit restores the shell buffer verbatim.
   if (fullscreen) process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
-  // Leaving is best-effort and runs on every exit path: a dead terminal throws
-  // EIO on the write, and there is nothing left to restore.
+  // Leaving runs on every exit path. Writing to a terminal that has already been
+  // destroyed fails with EIO or EPIPE and there is nothing left to restore, so
+  // only that failure is tolerated — any other write error is a real one.
   const leaveAltScreen = () => {
     if (!fullscreen) return;
     try {
       process.stdout.write("\x1b[?1049l");
-    } catch {
-      // the terminal is already gone.
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "EIO" && code !== "EPIPE") throw err;
     }
   };
   // Handed to App so an $EDITOR round-trip can drop Ink's cached frame and force a
@@ -380,19 +382,29 @@ export async function runApp(dash: Dash<unknown>) {
     // teardown and exit on whichever the terminal's death delivers: the hangup, or
     // stdin ending. Interactive only — a piped stdin ends normally, and exiting on
     // that would cut the single printed frame short.
+    //
+    // The status is non-zero because losing the terminal is not a clean quit, and
+    // 128+SIGHUP is what a shell reports for a hangup, so a supervisor can tell the
+    // two apart. Teardown that fails for any reason other than the already-dead
+    // terminal says so on the way out; exiting is unconditional, since a throw here
+    // would leave behind exactly the spinning process this handler exists to end.
     if (fullscreen) {
-      const abandon = () => {
+      const abandon = (status: number) => () => {
         try {
           app.unmount();
-        } catch {
-          // already unmounted; the exit below is what matters.
+          leaveAltScreen();
+        } catch (err) {
+          try {
+            process.stderr.write(`dash: teardown after terminal loss failed: ${err}\n`);
+          } catch {
+            // stderr died with the terminal; the exit status is the only signal left.
+          }
         }
-        leaveAltScreen();
-        process.exit(0);
+        process.exit(status);
       };
-      process.once("SIGHUP", abandon);
-      process.stdin.once("end", abandon);
-      process.stdin.once("close", abandon);
+      process.once("SIGHUP", abandon(129));
+      process.stdin.once("end", abandon(1));
+      process.stdin.once("close", abandon(1));
     }
 
     await app.waitUntilExit();
