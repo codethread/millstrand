@@ -1,5 +1,7 @@
 # One spool activation path: the module lifecycle, and the retirement of `install!`
 
+> **Superseded in part on 2026-07-30 by PROP-Auf-001.** The callback entry-point and reconciler parts are historical. Modules now collect contribution and lifecycle authoring forms, and image activation replays their retained declaration record.
+
 **Document ID:** `ADR-003`
 **Status:** Accepted
 **Date:** 2026-07-23

@@ -4,13 +4,8 @@
 ;; re-reads this file to recollect the whole graph. Startup-file collection only
 ;; STAGES declarations — no source load, publication, or reconcile runs here — so
 ;; this file holds no imperative effects; each concern's registrations live in its
-;; module's contribution (the authoring forms its source collects or its namespace's
-;; public `def spool` entry point) and its collected or legacy lifecycle declarations.
-;; No declaration here names an entry point: where a module has one, the
-;; coordinator resolves it from the public `spool` var by convention
-;; (PROP-Dsp-001), so a declaration carries only a source target and world policy.
-;; A module whose whole contribution is collected authoring forms declares no
-;; `spool` var and needs none.
+;; module's contribution and lifecycle declarations are collected from its
+;; authoring forms. Declarations carry only a source target and world policy.
 ;;
 ;; File-per-concern map (each is one module):
 ;;   config.clj        — named queries + shared policy validation helpers
@@ -80,9 +75,7 @@
 ;; devflow is an external git-distributed spool: activation is gated on the
 ;; approved codethread/devflow coordinate (spools.edn pin or a developer's
 ;; spools.local.edn checkout), never on an incidental classpath copy. Its whole
-;; contribution is the stage `defworkflow` entries its load collects, so it
-;; declares no `spool` var — a module may not both collect authoring forms and
-;; supply `:contribute` (SPEC-004.C46).
+;; contribution is the stage `defworkflow` entries its load collects.
 (runtime/module! runtime :skein/spools-devflow
                  {:ns 'ct.spools.devflow
                   :spools ['codethread/devflow]

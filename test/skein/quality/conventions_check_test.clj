@@ -18,12 +18,9 @@
   the `UNSAFE:` docstring lead agrees with the name in both
   directions.
 
-  The spool-var rules pin PROP-Dsp-001.G6a: a public `spool` var in a
-  module-loadable namespace must carry a well-formed `::spool` value (a
-  map keyed by a non-empty subset of `:contribute`/`:reconcile`, each a
-  quoted entry-point symbol). Malformed and incidental public values are
-  findings; private `spool` vars are ignored, and the guard is
-  structural — it reads the authored literal, never resolving symbols.
+  The spool-var rules reject the withdrawn public `spool` convention in
+  module-loadable namespaces. Private `spool` vars are ignored, and the guard
+  is structural: it reads source without resolving symbols.
 
   The json-literals rules pin the three narrowings that keep every
   finding mechanically convertible: only text `json/write-str` would
@@ -290,70 +287,23 @@
   [content]
   (spool-var/findings (def-spool-sites content)))
 
-(deftest well-formed-public-spool-var-is-accepted
-  (testing "both entry points, qualified quoted symbols"
-    (is (empty? (findings-for
-                 "(def spool {:contribute 'skein.spools.tidy/contribute
-                              :reconcile 'skein.spools.tidy/reconcile})"))))
-  (testing "a single entry point is enough"
-    (is (empty? (findings-for "(def spool {:reconcile 'skein.spools.tidy/reconcile})")))
-    (is (empty? (findings-for "(def spool {:contribute 'skein.spools.tidy/contribute})"))))
-  (testing "unqualified entry-point symbols are permitted (G2)"
-    (is (empty? (findings-for "(def spool {:contribute 'contribute})"))))
-  (testing "a docstring form reports the value, not the docstring"
-    (is (empty? (findings-for
-                 "(def spool \"Base declaration.\" {:reconcile 'skein.spools.tidy/reconcile})")))))
+(deftest public-spool-var-is-rejected
+  (doseq [content ["(def spool {:contribute 'contribute})"
+                   "(defn spool [ctx] ctx)"
+                   "(defonce spool {})"
+                   "(do (def spool {:reconcile 'reconcile}))"]]
+    (let [findings (findings-for content)]
+      (is (= 1 (count findings)))
+      (is (re-find #"removed module entry-point convention" (first findings))))))
 
 (deftest private-spool-var-is-ignored-even-when-malformed
   (is (empty? (findings-for "(def ^:private spool {:contribute 42})")))
   (is (empty? (findings-for "(def ^:private spool \"not a declaration\")"))))
 
-(deftest incidental-non-map-public-spool-var-is-a-finding
-  (let [findings (findings-for "(def spool \"a shadowing string\")")]
-    (is (= 1 (count findings)))
-    (is (re-find #"authored value is not a map" (first findings)))
-    (is (re-find #"PROP-Dsp-001.G6a" (first findings)))))
-
-(deftest public-spool-var-with-no-value-is-a-finding
-  (let [findings (findings-for "(def spool)")]
-    (is (= 1 (count findings)))
-    (is (re-find #"has no value" (first findings)))))
-
-(deftest malformed-public-spool-values-are-findings
-  (testing "a map with neither entry point"
-    (let [findings (findings-for "(def spool {})")]
-      (is (= 1 (count findings)))
-      (is (re-find #"declares neither :contribute nor :reconcile" (first findings)))))
-  (testing "a leftover :ns key from an incomplete rename"
-    (let [findings (findings-for
-                    "(def spool {:ns 'skein.spools.tidy
-                                 :contribute 'skein.spools.tidy/contribute})")]
-      (is (= 1 (count findings)))
-      (is (re-find #"has unsupported key :ns" (first findings)))))
-  (testing "a non-symbol entry-point value"
-    (let [findings (findings-for "(def spool {:contribute \"contribute\"})")]
-      (is (= 1 (count findings)))
-      (is (re-find #"entry point :contribute must be a quoted symbol" (first findings)))))
-  (testing "a fn literal is rejected on sight (ADR-002.O1)"
-    (let [findings (findings-for "(def spool {:contribute (fn [ctx] ctx)})")]
-      (is (= 1 (count findings)))
-      (is (re-find #"must be a quoted symbol" (first findings)))))
-  (testing "a bare unquoted symbol is not the authored data shape"
-    (let [findings (findings-for "(def spool {:contribute contribute})")]
-      (is (= 1 (count findings)))
-      (is (re-find #"must be a quoted symbol" (first findings))))))
-
 (deftest only-a-var-named-spool-is-a-declaration-site
   (testing "adjacent names are not the reserved var"
     (is (empty? (def-spool-sites "(def spooler {:contribute 42})")))
     (is (empty? (def-spool-sites "(def spool-state {:contribute 42})"))))
-  (testing "other public var forms named spool are malformed declaration sites"
-    (doseq [content ["(defn spool [ctx] ctx)"
-                     "(defmacro spool [form] form)"
-                     "(defonce spool {:contribute 'a/b})"]]
-      (let [findings (findings-for content)]
-        (is (= 1 (count findings)))
-        (is (re-find #"must be authored with `def`" (first findings))))))
   (testing "private defn shorthand is unaffected"
     (is (empty? (def-spool-sites "(defn- spool [ctx] ctx)"))))
   (testing "the extraction records privacy and the authored value"
@@ -363,32 +313,12 @@
       (is (map? (:value site))))))
 
 (deftest executable-wrapper-spool-vars-are-declaration-sites
-  (testing "evaluated nested positions do not hide a malformed declaration"
-    (doseq [content ["(do (def spool {:contribute 42}))"
-                     "(when true (do (def spool {:contribute 42})))"
-                     "(if true :ok (def spool {:contribute 42}))"
-                     "(cond false :ok :else (def spool {:contribute 42}))"
-                     "(identity (do (def spool {:contribute 42})))"
-                     "(def held (do (def spool {:contribute 42})))"
-                     "[{:declaration (def spool {:contribute 42})}]"]]
-      (let [findings (findings-for content)]
-        (is (= 1 (count findings)))
-        (is (re-find #"entry point :contribute must be a quoted symbol"
-                     (first findings))))))
   (testing "quoted data and deferred function bodies stay inert"
     (doseq [content ["'(do (def spool {:contribute 42}))"
                      "(def held '(def spool {:contribute 42}))"
                      "(fn [] (do (def spool {:contribute 42})))"
                      "(defn factory [] (do (def spool {:contribute 42})))"]]
       (is (empty? (def-spool-sites content))))))
-
-(deftest spool-value-problem-conforms-and-rejects
-  (testing "a conformant map yields no problem"
-    (is (nil? (spool-var/spool-value-problem
-               {:contribute (list 'quote 'skein.spools.tidy/contribute)}))))
-  (testing "an unknown key is the problem before the missing entry point"
-    (is (re-find #"has unsupported key :bogus"
-                 (spool-var/spool-value-problem {:bogus 1})))))
 
 (deftest unreadable-file-site-is-surfaced-as-a-finding
   (let [findings (spool-var/findings

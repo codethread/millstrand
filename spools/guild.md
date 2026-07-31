@@ -95,7 +95,7 @@ contract is [SPEC-003.C60a/C60b](../devflow/specs/repl-api.md). Run
 (guild/set-fallback-guild-name! runtime "frontend")
 ```
 
-Guild activates through the module lifecycle. The declaration names only the source target; the coordinator resolves the entry points from Guild's public `spool` var, whose `contribute` publishes the `guild` op and whose `reconcile` clears previous guild declarations in that runtime. The guild name is read from runtime metadata when available; `set-fallback-guild-name!` records a fallback for contexts without it. Reconcile resets the fallback, so call it after activation.
+Guild activates through the module lifecycle. The declaration names only the source target; Guild's authoring forms publish the `guild` op and its lifecycle resource resets previous guild declarations in that runtime. The guild name is read from runtime metadata when available; `set-fallback-guild-name!` records a fallback for contexts without it. Call it after activation.
 
 ### `guild list`
 

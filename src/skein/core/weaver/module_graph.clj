@@ -10,7 +10,8 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.registry.alpha :as registry]
-            [skein.core.format :as format]))
+            [skein.core.format :as format]
+            [skein.core.weaver.lifecycle-effects :as lifecycle-effects]))
 
 (def ^:private declaration-keys
   #{:ns :file :load :spools :after :required?})
@@ -69,12 +70,11 @@
   one to recover the other."
   (format/reflow
    "|Module options no longer name entry points. Delete the key from the
-    |declaration and declare the module's entry points in its namespace's
-    |public spool var, as
-    |(def spool {:contribute 'contribute :reconcile 'reconcile})."))
+    |declaration. Publish registry entries with the skein/def* authoring forms
+    |and live effects with the lifecycle authoring forms."))
 
 (defn- require-no-entry-points!
-  "Refuse a declaration that names an entry point, pointing at `def spool`.
+  "Refuse a declaration that names a withdrawn callback entry point.
 
   Every freshly authored declaration reaches here — startup collection, the
   direct `declare-module!` route, targeted `:declare`, and the public
@@ -87,10 +87,7 @@
 
   This refusal is permanent, not a migration hint on a timer: it earns its keep
   for as long as the keys stay out of the grammar, because it is the only thing
-  that tells an author holding a pre-cutover example where entry points went.
-  Retained pre-cutover state is the part that expires: its reader
-  `legacy-resolved-entry-points` carries that removal trigger
-  (DELTA-Dsp-003.D3, DELTA-Dsp-004.D3a)."
+  that tells an author holding a pre-cutover example where entry points went."
   [key opts]
   (let [removed (filterv #(contains? opts %) entry-point-keys)]
     (when (seq removed)
@@ -107,14 +104,10 @@
   one `:ns` or workspace-relative `:file`, and carry normalized `:spools`,
   `:after`, and `:required?` values. `:load :image` (the only accepted `:load`
   value) trusts the already-loaded JVM image: it requires an `:ns` target and
-  refresh never source-loads that module, so its entry points resolve from the
-  namespace's `spool` var at evaluation.
+  refresh replays that namespace's retained authoring declaration record.
 
-  Entry-point keys are refused here, so no newly authored declaration reaches
-  the coordinator carrying one. Declarations a live coordinator collected
-  before the cutover are never re-normalized: they stay readable in retained
-  state, where `legacy-resolved-entry-points` alone reads their entry points
-  (DELTA-Dsp-004.CC1/D3)."
+  Callback keys are refused here, so no declaration reaches the coordinator
+  carrying one."
   [key opts]
   (when-not (keyword? key)
     (fail! "Module key must be a keyword" {:module/key key}))
@@ -350,6 +343,16 @@
   resource boundary depend on source evaluation order. Outside collection the
   form is passive, matching contribution authoring forms during code reload."
   [effect-id declaration]
+  ;; Dependency existence belongs to the complete collected set below. Stubbing
+  ;; this declaration's dependencies lets the established lifecycle validator
+  ;; judge its intrinsic shape at the collection boundary without rejecting a
+  ;; declaration whose dependency is authored later in the same source file.
+  (lifecycle-effects/validate!
+   (into {effect-id declaration}
+         (map (fn [dependency]
+                [dependency {:kind :seed
+                             :apply 'skein.core.weaver.lifecycle-effects/validate!}])
+              (disj (or (:after declaration) #{}) effect-id))))
   (when *lifecycle-collector*
     (require-collection-source!)
     (swap! *lifecycle-collector*
@@ -386,6 +389,14 @@
                :declaration ::registry/kind-declaration-input)
   :ret ::registry/kind-declaration-input)
 
+(s/def ::collection-result
+  (s/and map?
+         #(= #{:return :contribution :lifecycle :kind-declarations}
+             (set (keys %)))
+         #(map? (:contribution %))
+         #(map? (:lifecycle %))
+         #(vector? (:kind-declarations %))))
+
 (defn with-contribution-collection
   "Call `f` while collecting entries from exactly one module source target.
 
@@ -400,11 +411,20 @@
                          *contribution-context* context]
                  (f))
         contribution (update-vals @collector
-                                  #(update % :overrides (fnil set #{})))]
-    {:return return
-     :contribution contribution
-     :lifecycle @lifecycle-collector
-     :kind-declarations (->> @kind-collector vals
-                             (sort-by (juxt :spool-state/key
-                                            (comp :id :declaration)))
-                             vec)}))
+                                  #(update % :overrides (fnil set #{})))
+        result {:return return
+                :contribution contribution
+                :lifecycle @lifecycle-collector
+                :kind-declarations (->> @kind-collector vals
+                                        (sort-by (juxt :spool-state/key
+                                                       (comp :id :declaration)))
+                                        vec)}]
+    (when-not (s/valid? ::collection-result result)
+      (fail! "Contribution collection result has an invalid shape"
+             {:result result
+              :explain (s/explain-data ::collection-result result)}))
+    result))
+
+(s/fdef with-contribution-collection
+  :args (s/cat :context map? :f fn?)
+  :ret ::collection-result)

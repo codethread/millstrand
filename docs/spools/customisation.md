@@ -69,7 +69,7 @@ failing files fail loudly with file context. The generated `init.clj` is intenti
    :spools ['skein.spools/batteries]})
 ```
 
-The declaration names only a source target and world policy; batteries declares its `:contribute`/`:reconcile` entry points in a `(def spool …)` var in its own namespace, which the coordinator resolves by convention ([ADR-004](../../devflow/adrs/0004-def-spool-convention.md)). The source-root coordinate is relative to the mill-selected Skein checkout, so bootstrap persists no absolute checkout path. Delete the seeded entry to opt out of batteries; the guarded module then publishes no batteries ops.
+The declaration names only a source target and world policy; Batteries publishes through authoring forms in its source. The source-root coordinate is relative to the mill-selected Skein checkout, so bootstrap persists no absolute checkout path. Delete the seeded entry to opt out of batteries; the guarded module then publishes no batteries ops.
 
 `skein.api.runtime.alpha` is a privileged built-in runtime loader/config helper namespace shipped with Skein —
 not an ordinary user spool, which is why loader/config helpers do not live under `skein.spools.*`.
@@ -215,19 +215,19 @@ in the root (if `:paths` is omitted, Skein's namespace loading defaults to `["sr
 {:paths ["src"]}
 ```
 
-Then implement the spool. The query from earlier now moves into a `contribute` function that returns the
-module's complete declaration, so every refresh and startup publishes it from one place:
+Then implement the spool with an authoring form. Every source evaluation collects the module's complete owner partition:
 
 ```clojure
-(ns my.workflow)
+(ns my.workflow
+  (:require [skein.api.skein.alpha :as skein]))
 
-(defn contribute [_ctx]
-  {:queries {"mine" [:= [:attr :owner] "ct"]}})
-
-(def spool {:contribute 'contribute})
+(skein/defquery mine
+  "Return strands owned by ct."
+  {}
+  [:= [:attr :owner] "ct"])
 ```
 
-The `spool` var is where the module's entry points live; the coordinator resolves it by convention, so `init.clj` names only a source target and world policy:
+`init.clj` names only a source target and world policy:
 
 ```clojure
 (runtime/module! runtime :my/workflow
@@ -235,12 +235,7 @@ The `spool` var is where the module's entry points live; the coordinator resolve
    :spools ['my/workflow]})
 ```
 
-Each piece has one job. `spools.edn` approves source. `runtime/module!` declares
-the desired module, and the refresh coordinator acquires its roots, collects its
-contribution, replaces that owner's entries, and reconciles resources. A
-direct `require` from `mill weaver repl` evaluates in the weaver JVM and is useful for trusted
-experimentation, but for repeatable module activation and status, go through `runtime/module!` or
-`runtime/refresh!` from startup config or the live REPL.
+Each piece has one job. `spools.edn` approves source. `runtime/module!` declares the desired module, and the refresh coordinator acquires its roots, collects its declarations, replaces that owner's entries, and reconciles lifecycle effects. A direct `require` from `mill weaver repl` evaluates in the weaver JVM and is useful for trusted experimentation, but for repeatable module activation and status, go through `runtime/module!` or `runtime/refresh!` from startup config or the live REPL.
 
 Extension code runs with weaver authority, so only load trusted code. And there is no per-module isolation or
 unload guarantee: restart the weaver when you need a clean runtime.
