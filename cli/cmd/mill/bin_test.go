@@ -265,6 +265,21 @@ func TestMillBinFailureUsesStructuredJSONCommandEnvelope(t *testing.T) {
 	}
 }
 
+func TestMillBinFailureEnvelopeProtectsCanonicalFields(t *testing.T) {
+	envelope := newBinError("bin run", "dashboard", "bin/not-built", "not built", map[string]any{
+		"operation": "spoofed operation",
+		"error":     "spoofed error",
+		"bin":       "spoofed bin",
+		"remedy":    "mill bin build dashboard",
+	}).binFailureEnvelope()
+	if envelope["operation"] != "bin run" || envelope["error"] != "bin/not-built" || envelope["bin"] != "dashboard" {
+		t.Fatalf("canonical fields were shadowed: %#v", envelope)
+	}
+	if envelope["remedy"] != "mill bin build dashboard" {
+		t.Fatalf("remote details were lost: %#v", envelope)
+	}
+}
+
 func TestMillBinListRelayFailureUsesTypedResponseError(t *testing.T) {
 	originalInvoke, originalErrorOut := binInvoke, millErrorOut
 	t.Cleanup(func() { binInvoke, millErrorOut = originalInvoke, originalErrorOut })
@@ -423,10 +438,11 @@ func TestRunBinExecWaitsForMillAndWeaverRelayBeforeExecSeam(t *testing.T) {
 	t.Cleanup(func() { binInvoke, execBin = originalInvoke, originalExec })
 	binInvoke = client.InvokeThroughMill
 	execBin = func(path string, argv []string, _ []string) error {
+		const relayCompletionGuard = 2 * time.Second
 		select {
 		case <-serverDone:
-		case <-time.After(2 * time.Second):
-			t.Fatal("exec seam reached while mill/weaver relay was still live")
+		case <-time.After(relayCompletionGuard):
+			t.Fatalf("exec seam reached while mill/weaver relay was still live after %s", relayCompletionGuard)
 		}
 		if path != "/tmp/dashboard" || !reflect.DeepEqual(argv, []string{"/tmp/dashboard"}) {
 			t.Fatalf("exec seam received unexpected command: %q %#v", path, argv)

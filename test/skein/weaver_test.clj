@@ -21,6 +21,7 @@
             [skein.api.runtime.help-transform.alpha :as help-transform]
             [skein.api.weaver.alpha :as weaver]
             [skein.core.weaver.access :as access]
+            [skein.core.weaver.bins :as bins]
             [skein.core.weaver.config :as weaver-config]
             [skein.core.weaver.core-registry :as core-registry]
             [skein.core.weaver.help :as weaver-help]
@@ -105,6 +106,16 @@
         (is (= :bin/anchor-unresolved (-> planned ex-data :reason)))
         (is (s/valid? :skein.core.weaver.bins/list-result listed))
         (is (instance? clojure.lang.ExceptionInfo planned))))))
+
+(deftest bins-plan-rejects-invalid-selectors
+  (with-runtime
+    (fn [rt _]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"bins plan bin selector is invalid"
+                            (bins/plan rt 42)))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"bins plan bin selector is invalid"
+                            (bins/plan rt nil))))))
 
 (defn test-op [{:op/keys [name argv]}]
   {:operation name :argv argv})

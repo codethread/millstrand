@@ -129,6 +129,10 @@
                             (contribution/bin-declaration
                              'sample "Sample." opts
                              'skein.api.skein-test))))))
+(is (thrown-with-msg? clojure.lang.ExceptionInfo #"defbin doc is invalid"
+                      (contribution/bin-declaration
+                       'sample 42 {:executable "x"}
+                       'skein.api.skein-test)))
 
 (deftest domain-forms-define-callables-and-collect-override-intent
   (let [contribution

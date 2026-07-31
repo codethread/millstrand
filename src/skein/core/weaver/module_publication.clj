@@ -57,7 +57,7 @@
 (defn backends
   "Return the runtime's unique kind-id to publication-backend map.
 
-  The five core stores are always present. Each runtime-owned registry handle
+  The six core stores are always present. Each runtime-owned registry handle
   found directly in `:spool-state` contributes its declared open kinds. A kind
   declared by two stores fails loudly before contribution evaluation."
   [runtime]

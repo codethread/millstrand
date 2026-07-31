@@ -94,7 +94,8 @@
 (s/def ::bin-entry
   (s/and map?
          #(every? #{:name :doc :executable :provenance :build} (keys %))
-         #(every? (partial contains? %) [:name :doc :executable :provenance])))
+         #(every? (partial contains? %) [:name :doc :executable :provenance])
+         #(s/valid? string? (:doc %))))
 
 (defn op-declaration
   "Return a validated `:ops` entry.
@@ -173,6 +174,7 @@
                          " is invalid; expected :family or :root")
                     {:anchor (first (:executable opts))
                      :allowed (vec (sort bin-anchors))})))
+  (require-valid! string? doc "defbin doc is invalid")
   (require-valid! ::bin-options opts "defbin options are invalid")
   (require-valid!
    ::bin-entry

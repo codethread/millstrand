@@ -70,15 +70,16 @@ func (e *binError) binFailureEnvelope() map[string]any {
 	if errorValue == "" {
 		errorValue = e.Message
 	}
-	envelope := map[string]any{
-		"operation": e.Operation,
-		"error":     errorValue,
-	}
-	if e.Bin != "" {
-		envelope["bin"] = e.Bin
-	}
+	envelope := make(map[string]any, len(e.Details)+3)
 	for key, value := range e.Details {
 		envelope[key] = value
+	}
+	// Details come from a remote response. Canonical command fields win even
+	// when a malformed response tries to shadow them.
+	envelope["operation"] = e.Operation
+	envelope["error"] = errorValue
+	if e.Bin != "" {
+		envelope["bin"] = e.Bin
 	}
 	return envelope
 }

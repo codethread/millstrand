@@ -17,6 +17,9 @@
   (and (string? value) (not (str/blank? value))))
 
 (s/def ::name non-blank-string?)
+(s/def ::bin-selector
+  (s/or :string non-blank-string?
+        :keyword #(and (keyword? %) (non-blank-string? (name %)))))
 (s/def ::doc string?)
 (s/def ::spool non-blank-string?)
 (s/def ::executable non-blank-string?)
@@ -171,7 +174,8 @@
 (defn plan
   "Return the resolved execution plan for registered `bin`."
   [runtime bin]
-  (let [bin (if (keyword? bin) (name bin) (str bin))
+  (require-valid! ::bin-selector bin "bins plan bin selector is invalid")
+  (let [bin (if (keyword? bin) (name bin) bin)
         entry (effective-entry runtime bin)
         {:keys [exec base]} (resolve-executable runtime bin entry)
         result (cond-> {:operation "bins plan"
