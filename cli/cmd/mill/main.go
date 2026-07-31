@@ -126,6 +126,7 @@ func main() {
 		return runPrime("strand")
 	}})
 	root.AddCommand(strandCmd)
+	root.AddCommand(newBinCommand())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
