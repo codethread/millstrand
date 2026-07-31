@@ -2094,15 +2094,12 @@
   (and (seq? form) (= 'runtime/module! (first form))))
 
 (defn- parse-module-form
-  "Project a `(runtime/module! runtime <key> <opts>)` form into its guard- and
-  convention-relevant data."
+  "Project a `(runtime/module! runtime <key> <opts>)` form into its guard data."
   [form]
   (let [opts (nth form 3)]
     {:key (nth form 2)
      :ns (some-> (:ns opts) unquote-form)
      :file (:file opts)
-     :contribute (some-> (:contribute opts) unquote-form)
-     :reconcile (some-> (:reconcile opts) unquote-form)
      :spools (into #{} (map unquote-form) (:spools opts))}))
 
 (defn- ns-require-libs
