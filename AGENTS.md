@@ -27,7 +27,7 @@ make build                              # repo-local ./bin/strand, ./bin/mill �
 mill start                              # supervisor, in a durable terminal
 mill init [--workspace <dir>]           # create/complete a workspace
 mill weaver start|status|stop|repl [--workspace <dir>]
-make dash                               # code-owner TUI over the live coordination world
+make dash                               # interactive kanban TUI from the pinned spool
 
 make test-warm NS="ns..."               # warm REPL to iterate a slice — never a Done-when gate
 clojure -M:test <ns...>                 # cold focused run — the per-slice Done-when gate
@@ -35,7 +35,7 @@ flock -w 3600 /tmp/skein-test.lock clojure -M:test  # full locked suite — queu
 (cd cli && go test ./...)               # primary validation, CI-blocking
 clojure -M:smoke                        # primary validation, CI-blocking
 make spool-suite-gate                   # pinned external spool suites vs this checkout — CI-blocking (GITLIBS=<dir> overrides the gitlibs cache)
-make dash-check fmt-check lint reflect-check docs-check   # blocking CI quality gates, held at zero findings
+make fmt-check lint reflect-check docs-check              # blocking CI quality gates, held at zero findings
 make api-docs                           # regenerate *.api.md after touching any spool or skein.api.*.alpha docstring
 ```
 

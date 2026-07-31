@@ -13,7 +13,6 @@ jobs:
     outputs:
       clojure: ${{ steps.filter.outputs.clojure }}
       go: ${{ steps.filter.outputs.go }}
-      dashboard: ${{ steps.filter.outputs.dashboard }}
       shared: ${{ steps.filter.outputs.shared }}
     steps:
       - uses: actions/checkout@v4
@@ -37,22 +36,10 @@ jobs:
               - 'cli/**'
               - 'go.work'
               - '.golangci.yml'
-            dashboard:
-              - 'scripts/agent-dash/**'
             shared:
               - '.github/workflows/**'
               - 'Makefile'
               - 'scripts/quality/**'
-
-  dashboard-check:
-    name: Agent dashboard
-    needs: changes
-    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.dashboard == 'true' || needs.changes.outputs.shared == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: make dash-check
 
   clojure-test:
     name: Clojure test suite
