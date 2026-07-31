@@ -7,6 +7,7 @@ package dispatch
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -97,7 +98,10 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	world := client.MillWorldRequest{CWD: effectiveCwd, ConfigDir: p.workspace}
 	code, err := sendInvoke(world, envelope, stdout, stderr)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, "error:", err)
+		var responseErr *client.ResponseError
+		if !errors.As(err, &responseErr) {
+			_, _ = fmt.Fprintln(stderr, "error:", err)
+		}
 		if code == 0 {
 			code = 1
 		}

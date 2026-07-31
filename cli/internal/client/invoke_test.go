@@ -3,6 +3,7 @@ package client
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"net"
 	"strings"
 	"testing"
@@ -93,15 +94,20 @@ func TestRelaySingleNonVerbatimStringStaysJSON(t *testing.T) {
 
 func TestRelaySingleErrorGoesToStderrNonZero(t *testing.T) {
 	frame := `{"protocol_version":1,"request_id":"r1","ok":false,"result":null,"error":{"type":"domain","code":"op/not-found","message":"Operation not found","details":{"available":["add","list"]}}}` + "\n"
-	out, er, code := relay(t, frame)
+	var out, er bytes.Buffer
+	code, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er)
 	if code == 0 {
 		t.Fatalf("expected non-zero exit for error frame")
 	}
-	if out != "" {
-		t.Fatalf("error frame must not print to stdout, got %q", out)
+	var responseErr *ResponseError
+	if !errors.As(err, &responseErr) || responseErr.Code != "op/not-found" || responseErr.Details["available"] == nil {
+		t.Fatalf("relay must preserve typed response error, got %v", err)
 	}
-	if !strings.Contains(er, "op/not-found") || !strings.Contains(er, "available: add, list") {
-		t.Fatalf("stderr missing error detail: %q", er)
+	if out.Len() != 0 {
+		t.Fatalf("error frame must not print to stdout, got %q", out.String())
+	}
+	if !strings.Contains(er.String(), "op/not-found") || !strings.Contains(er.String(), "available: add, list") {
+		t.Fatalf("stderr missing error detail: %q", er.String())
 	}
 }
 

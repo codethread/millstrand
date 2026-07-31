@@ -66,10 +66,16 @@ func newBinError(operation, bin, code, message string, details map[string]any) *
 // that use the Go surface directly, while the process surface emits only this
 // JSON object instead of Cobra's generic "error:" line.
 func (e *binError) binFailureEnvelope() map[string]any {
+	errorValue := e.Code
+	if errorValue == "" {
+		errorValue = e.Message
+	}
 	envelope := map[string]any{
 		"operation": e.Operation,
-		"code":      e.Code,
-		"bin":       e.Bin,
+		"error":     errorValue,
+	}
+	if e.Bin != "" {
+		envelope["bin"] = e.Bin
 	}
 	for key, value := range e.Details {
 		envelope[key] = value
@@ -245,18 +251,26 @@ func newBinCommand() *cobra.Command {
 	bin := &cobra.Command{Use: "bin", Short: "List and run spool-shipped executables"}
 	bin.PersistentFlags().String("workspace", "", "explicit workspace selection (defaults to repo-local .skein)")
 
-	list := &cobra.Command{Use: "list", Short: "List declared bins", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	list := &cobra.Command{Use: "list", Short: "List declared bins", Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) != 0 {
+			return binOperationError("bin list", "", fmt.Errorf("list accepts no arguments; got %q", args[0]))
+		}
+		return nil
+	}, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, err := cmd.Flags().GetString("workspace")
 		if err != nil {
+			return binOperationError("bin list", "", err)
+		}
+		if err := runBinList(workspace); err != nil {
 			return err
 		}
-		return runBinList(workspace)
+		return nil
 	}}
 
 	build := &cobra.Command{Use: "build <bin>", Short: "Run a bin's declared build recipe", DisableFlagParsing: true, RunE: func(cmd *cobra.Command, args []string) error {
 		parsed, err := parseBinInvocation(cmd, args, false)
 		if err != nil {
-			return err
+			return binOperationError("bin build", "", err)
 		}
 		if parsed.help {
 			return cmd.Help()
@@ -267,7 +281,7 @@ func newBinCommand() *cobra.Command {
 	run := &cobra.Command{Use: "run <bin> [args...]", Short: "Exec a declared bin", DisableFlagParsing: true, RunE: func(cmd *cobra.Command, args []string) error {
 		parsed, err := parseBinInvocation(cmd, args, true)
 		if err != nil {
-			return err
+			return binOperationError("bin run", "", err)
 		}
 		if parsed.help {
 			return cmd.Help()
@@ -362,11 +376,7 @@ func invokeBin(world client.MillWorldRequest, argv []string) ([]byte, error) {
 		return nil, err
 	}
 	if code != 0 {
-		message := strings.TrimSpace(stderr.String())
-		if message == "" {
-			message = fmt.Sprintf("bins operation exited with status %d", code)
-		}
-		return nil, errors.New(message)
+		return nil, fmt.Errorf("bins operation exited with status %d", code)
 	}
 	if stdout.Len() == 0 {
 		return nil, errors.New("malformed bins response: empty result")
@@ -377,14 +387,17 @@ func invokeBin(world client.MillWorldRequest, argv []string) ([]byte, error) {
 func runBinList(workspace string) error {
 	world, err := binWorld(workspace)
 	if err != nil {
-		return err
+		return binOperationError("bin list", "", err)
 	}
 	result, err := invokeBin(world, []string{"list"})
 	if err != nil {
-		return err
+		return binOperationError("bin list", "", err)
 	}
 	_, err = binStdout.Write(result)
-	return err
+	if err != nil {
+		return binOperationError("bin list", "", err)
+	}
+	return nil
 }
 
 func fetchBinPlan(workspace, name string) (BinPlan, error) {
@@ -403,30 +416,20 @@ func fetchBinPlan(workspace, name string) (BinPlan, error) {
 	return plan, nil
 }
 
-func binPlanFailureCode(err error) string {
-	message := err.Error()
-	for _, prefix := range []string{"bin/", "mill/"} {
-		if start := strings.Index(message, prefix); start >= 0 {
-			end := start + len(prefix)
-			for end < len(message) {
-				ch := message[end]
-				if (ch < 'a' || ch > 'z') && ch != '-' && ch != '/' {
-					break
-				}
-				end++
-			}
-			if end > start+len(prefix) {
-				return message[start:end]
-			}
-		}
+func binOperationError(operation, name string, err error) *binError {
+	var responseErr *client.ResponseError
+	if errors.As(err, &responseErr) {
+		return newBinError(operation, name, responseErr.Code, responseErr.Message, responseErr.Details)
 	}
-	return "bin/plan-failed"
+	// Keep malformed plans and client/transport failures as failures in their
+	// own right. Their text is a cause, never an outcome code to be guessed.
+	return newBinError(operation, name, "", err.Error(), map[string]any{"cause": err.Error()})
 }
 
 func runBinBuild(workspace, name string) error {
 	plan, err := fetchBinPlan(workspace, name)
 	if err != nil {
-		return newBinError("bin build", name, binPlanFailureCode(err), "could not resolve bin plan", map[string]any{"cause": err.Error()})
+		return binOperationError("bin build", name, err)
 	}
 	if plan.Build == nil {
 		return newBinError("bin build", name, "bin/no-build-recipe", fmt.Sprintf("bin %q declares no build recipe", name), nil)
@@ -457,7 +460,7 @@ func runBinBuild(workspace, name string) error {
 func runBinExec(workspace, name string, args []string) error {
 	plan, err := fetchBinPlan(workspace, name)
 	if err != nil {
-		return newBinError("bin run", name, binPlanFailureCode(err), "could not resolve bin plan", map[string]any{"cause": err.Error()})
+		return binOperationError("bin run", name, err)
 	}
 	if plan.Runnable != nil && !*plan.Runnable {
 		if plan.Build != nil {

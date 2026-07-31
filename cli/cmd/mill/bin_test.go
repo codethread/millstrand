@@ -252,13 +252,127 @@ func TestMillBinFailureUsesStructuredJSONCommandEnvelope(t *testing.T) {
 	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
 		t.Fatalf("failure is not JSON: %v (%q)", err, stderr.String())
 	}
-	for key, want := range map[string]any{"operation": "bin run", "code": "bin/not-built", "bin": "dashboard", "remedy": "mill bin build dashboard"} {
+	for key, want := range map[string]any{"operation": "bin run", "error": "bin/not-built", "bin": "dashboard", "remedy": "mill bin build dashboard"} {
 		if envelope[key] != want {
 			t.Fatalf("envelope[%q] = %#v, want %#v", key, envelope[key], want)
 		}
 	}
+	if _, present := envelope["code"]; present {
+		t.Fatalf("failure envelope must use error, not code: %#v", envelope)
+	}
 	if strings.Contains(stderr.String(), "error:") {
 		t.Fatalf("structured failure fell through plain error output: %q", stderr.String())
+	}
+}
+
+func TestMillBinListRelayFailureUsesTypedResponseError(t *testing.T) {
+	originalInvoke, originalErrorOut := binInvoke, millErrorOut
+	t.Cleanup(func() { binInvoke, millErrorOut = originalInvoke, originalErrorOut })
+	binInvoke = func(_ client.MillWorldRequest, _ map[string]any, _ io.Writer, _ io.Writer) (int, error) {
+		return 1, &client.ResponseError{
+			Type:    "domain",
+			Code:    "mill/no-selected-weaver",
+			Message: "no running weaver for selected workspace",
+			Details: map[string]any{"config_dir": "/selected/.skein"},
+		}
+	}
+	var stderr bytes.Buffer
+	millErrorOut = &stderr
+	cmd := newMillCommand()
+	cmd.SetArgs([]string{"bin", "list", "--workspace", "/selected/.skein"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected list relay failure")
+	} else {
+		writeMillCommandError(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("list failure is not JSON: %v (%q)", err, stderr.String())
+	}
+	if envelope["operation"] != "bin list" || envelope["error"] != "mill/no-selected-weaver" {
+		t.Fatalf("unexpected list failure envelope: %#v", envelope)
+	}
+	if envelope["config_dir"] != "/selected/.skein" {
+		t.Fatalf("typed weaver details were not relayed: %#v", envelope)
+	}
+	if _, present := envelope["bin"]; present {
+		t.Fatalf("list failure must not invent a bin name: %#v", envelope)
+	}
+}
+
+func TestMillBinPlanFailuresPreserveTypedCodeAndDetails(t *testing.T) {
+	tests := []struct {
+		name    string
+		code    string
+		message string
+		details map[string]any
+	}{
+		{name: "unknown", code: "bin/unknown", message: "unknown bin", details: map[string]any{"available": []any{"known"}}},
+		{name: "anchor unresolved", code: "bin/anchor-unresolved", message: "bin anchor cannot be resolved", details: map[string]any{"path": "/workspace/bin.clj", "anchor": ":family", "remedy": "use an absolute path"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originalInvoke, originalErrorOut := binInvoke, millErrorOut
+			t.Cleanup(func() { binInvoke, millErrorOut = originalInvoke, originalErrorOut })
+			binInvoke = func(_ client.MillWorldRequest, _ map[string]any, _ io.Writer, _ io.Writer) (int, error) {
+				return 1, &client.ResponseError{Type: "domain", Code: tt.code, Message: tt.message, Details: tt.details}
+			}
+			var stderr bytes.Buffer
+			millErrorOut = &stderr
+			cmd := newMillCommand()
+			cmd.SetArgs([]string{"bin", "run", "--workspace", "/selected/.skein", "dashboard"})
+			if err := cmd.Execute(); err == nil {
+				t.Fatal("expected plan failure")
+			} else {
+				writeMillCommandError(err)
+			}
+			var envelope map[string]any
+			if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+				t.Fatalf("plan failure is not JSON: %v (%q)", err, stderr.String())
+			}
+			if envelope["operation"] != "bin run" || envelope["error"] != tt.code || envelope["bin"] != "dashboard" {
+				t.Fatalf("typed plan failure was not preserved: %#v", envelope)
+			}
+			for key, want := range tt.details {
+				if !reflect.DeepEqual(envelope[key], want) {
+					t.Fatalf("typed detail %q = %#v, want %#v", key, envelope[key], want)
+				}
+			}
+			if _, present := envelope["code"]; present {
+				t.Fatalf("failure envelope must use error, not code: %#v", envelope)
+			}
+		})
+	}
+}
+
+func TestMillBinMalformedPlanFailureDoesNotInventOutcomeCode(t *testing.T) {
+	originalInvoke, originalErrorOut := binInvoke, millErrorOut
+	t.Cleanup(func() { binInvoke, millErrorOut = originalInvoke, originalErrorOut })
+	binInvoke = func(_ client.MillWorldRequest, _ map[string]any, stdout, _ io.Writer) (int, error) {
+		_, _ = io.WriteString(stdout, `{"operation":"bins plan","bin":"dashboard","runnable":true,"exec":{"path":"relative","env":{}}}`+"\n")
+		return 0, nil
+	}
+	var stderr bytes.Buffer
+	millErrorOut = &stderr
+	cmd := newMillCommand()
+	cmd.SetArgs([]string{"bin", "run", "--workspace", "/selected/.skein", "dashboard"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected malformed plan failure")
+	} else {
+		writeMillCommandError(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("malformed plan failure is not JSON: %v (%q)", err, stderr.String())
+	}
+	if envelope["operation"] != "bin run" || envelope["bin"] != "dashboard" {
+		t.Fatalf("unexpected malformed plan envelope: %#v", envelope)
+	}
+	if envelope["error"] == "bin/plan-failed" || envelope["error"] == "" {
+		t.Fatalf("malformed plan must not silently become bin/plan-failed: %#v", envelope)
+	}
+	if envelope["cause"] == nil {
+		t.Fatalf("malformed plan cause missing: %#v", envelope)
 	}
 }
 
