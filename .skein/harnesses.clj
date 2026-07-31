@@ -170,6 +170,16 @@
           "|Read-only-sandbox variant of :luna-low (same scorecard). For
            |contracts whose findings ride the run result — no strand CLI
            |mid-run (see :codex-ro socket limit).")}
+   :luna-high
+   {:alias-of :codex
+    :extra-args ["-m" "gpt-5.6-luna" "-c" "model_reasoning_effort=high"]
+    :cost-rates luna-rates
+    :doc (format-alpha/reflow
+          "|UNSCORED (unbenched; every axis X). gpt-5.6-luna high via codex.
+           |Untested step-up from :luna-low for tasks that want the luna
+           |tier's price floor with more reasoning budget than low effort
+           |affords. Route trial work here and score from the next bench
+           |before routing anything load-bearing.")}
    :terra-med
    {:alias-of :codex
     :extra-args ["-m" "gpt-5.6-terra" "-c" "model_reasoning_effort=medium"]
