@@ -1,8 +1,9 @@
 (ns skein.core.weaver.core-registry
-  "Owner-partition backing for the five core weaver registries.
+  "Owner-partition backing for the six core weaver registries.
 
-  CLI ops, named queries, weave patterns, lifecycle hooks, and event handlers
-  each become one kind declared on an `owner-registry` kernel. Every declaration
+  CLI ops, named queries, weave patterns, lifecycle hooks, event handlers, and
+  executable declarations each become one kind declared on an `owner-registry`
+  kernel. Every declaration
   is owned by a stable keyword owner in a fixed layer (`:defaults < :spools <
   :workspace < :direct`); replacing an owner partition is complete, so an
   omitted key disappears, and cross-owner collisions or missing override intent
@@ -27,6 +28,7 @@
 (s/def ::pattern-entry map?)
 (s/def ::hook-entry map?)
 (s/def ::event-entry map?)
+(s/def ::bin-entry map?)
 
 (def ^:private kind-declarations
   "Declaration datum per core kind: registered entry spec and binding moment
@@ -36,7 +38,8 @@
    :queries {:entry-spec ::query-entry :binding-moment :query/use}
    :patterns {:entry-spec ::pattern-entry :binding-moment :pattern/invocation}
    :hooks {:entry-spec ::hook-entry :binding-moment :hook/dispatch-start}
-   :events {:entry-spec ::event-entry :binding-moment :event/dispatch-start}})
+   :events {:entry-spec ::event-entry :binding-moment :event/dispatch-start}
+   :bins {:entry-spec ::bin-entry :binding-moment :bin/invocation}})
 
 (def system-owner
   "Owner keyword for Skein-shipped defaults such as the built-in help op."

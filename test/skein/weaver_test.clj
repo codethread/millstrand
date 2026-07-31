@@ -74,6 +74,12 @@
          (db-test/delete-sqlite-family! db-file)
          (delete-tree! (io/file (:config-dir world))))))))
 
+(deftest built-in-bins-op-lists-an-empty-registry
+  (with-runtime
+    (fn [rt _]
+      (is (= {:operation "bins list" :bins []}
+             (weaver/op! rt 'bins ["list"]))))))
+
 (defn test-op [{:op/keys [name argv]}]
   {:operation name :argv argv})
 
@@ -2518,7 +2524,7 @@
       (testing "no argv returns the versioned catalog of shallow per-op envelopes"
         (let [{:keys [schema-version ops]} (weaver/op! rt 'help [])]
           (is (= 2 schema-version))
-          (is (= ["about" "custom" "help" "prime" "raw" "streamed" "subbed" "unclassed"]
+          (is (= ["about" "bins" "custom" "help" "prime" "raw" "streamed" "subbed" "unclassed"]
                  (mapv #(get-in % [:operation :name]) ops)))
           ;; Every catalog node is a summary node: op-wide facts stay in
           ;; :operation and :source, never merged onto the node. The op-wide

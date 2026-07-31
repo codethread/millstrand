@@ -1,14 +1,14 @@
 (ns skein.core.weaver.core-registry-test
-  "Owner-partition semantics shared by the five core weaver registries.
+  "Owner-partition semantics shared by the six core weaver registries.
 
-  Each core kind (ops, queries, patterns, hooks, events) is backed by the same
+  Each core kind (ops, queries, patterns, hooks, events, bins) is backed by the same
   owner-registry kernel, so the deletion-completeness, same-layer collision,
   cross-layer override/restoration, and owner-isolation guarantees are proven
   once per kind against the backing store (TASK-Olr-002.DW2)."
   (:require [clojure.test :refer [deftest is testing]]
             [skein.core.weaver.core-registry :as cr]))
 
-(def ^:private kinds [:ops :queries :patterns :hooks :events])
+(def ^:private kinds [:ops :queries :patterns :hooks :events :bins])
 
 (defn- value
   "A representative entry value valid for `kind`'s declared entry spec. Named

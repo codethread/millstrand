@@ -42,6 +42,36 @@
          #(or (not (contains? % :metadata)) (map? (:metadata %)))
          #(or (not (contains? % :override?)) (boolean? (:override? %)))))
 
+(def ^:private bin-option-keys
+  #{:executable :build :override?})
+
+(def ^:private bin-anchors #{:family :root})
+
+(defn- non-blank-string? [value]
+  (and (string? value) (not (str/blank? value))))
+
+(defn- relative-path? [value]
+  (and (non-blank-string? value)
+       (not (.isAbsolute (java.io.File. ^String value)))))
+
+(defn- valid-bin-executable? [value]
+  (or (non-blank-string? value)
+      (and (vector? value)
+           (= 2 (count value))
+           (contains? bin-anchors (first value))
+           (relative-path? (second value)))))
+
+(s/def ::bin-options
+  (s/and map?
+         #(every? bin-option-keys (keys %))
+         #(contains? % :executable)
+         #(valid-bin-executable? (:executable %))
+         #(or (not (contains? % :build))
+              (and (vector? (:build %))
+                   (seq (:build %))
+                   (every? non-blank-string? (:build %))))
+         #(or (not (contains? % :override?)) (boolean? (:override? %)))))
+
 (s/def ::op-entry
   (s/and map?
          #(every? #{:name :fn :provenance :doc :arg-spec :returns :stream?
@@ -60,6 +90,11 @@
   (s/and map? #(= #{:key :types :fn :order :metadata} (set (keys %)))))
 (s/def ::event-entry
   (s/and map? #(= #{:key :types :fn :metadata} (set (keys %)))))
+
+(s/def ::bin-entry
+  (s/and map?
+         #(every? #{:name :doc :executable :provenance :build} (keys %))
+         #(every? (partial contains? %) [:name :doc :executable :provenance])))
 
 (defn op-declaration
   "Return a validated `:ops` entry.
@@ -122,3 +157,26 @@
                    :fn fn-sym
                    :metadata (get opts :metadata {})}
                   "defhandler declaration is invalid"))
+
+(defn bin-declaration
+  "Return a validated `:bins` entry for executable `bin-name`.
+
+  The executable spelling and optional argv recipe are retained as authored;
+  path resolution and filesystem readiness belong to the plan read path."
+  [bin-name doc opts provenance]
+  (when (and (map? opts)
+             (vector? (:executable opts))
+             (seq (:executable opts))
+             (not (contains? bin-anchors (first (:executable opts)))))
+    (throw (ex-info "defbin options are invalid: executable anchor must be :family or :root"
+                    {:anchor (first (:executable opts))
+                     :allowed (vec (sort bin-anchors))})))
+  (require-valid! ::bin-options opts "defbin options are invalid")
+  (require-valid!
+   ::bin-entry
+   (cond-> {:name (name bin-name)
+            :doc doc
+            :executable (:executable opts)
+            :provenance provenance}
+     (contains? opts :build) (assoc :build (:build opts)))
+   "defbin declaration is invalid"))

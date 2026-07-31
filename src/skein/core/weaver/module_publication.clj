@@ -26,6 +26,7 @@
    :queries (core-backend :queries (:query-store runtime))
    :patterns (core-backend :patterns (:pattern-store runtime))
    :hooks (core-backend :hooks (:hook-store runtime))
+   :bins (core-backend :bins (:bin-store runtime))
    :events {:kind :events
             :type :core
             :store (get-in runtime [:event-system :handler-store])
