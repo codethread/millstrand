@@ -294,7 +294,8 @@
 (def ^:private named-query-names
   "The config-owned named queries whose registered definitions the surface
   baseline preserves, authored as `defquery` blocks in .skein/config.clj."
-  ["run-active" "workflow-runs" "devflow-runs" "merge-lock" "merge-queue" "work"])
+  ["run-active" "kanban-feature-work" "workflow-runs" "devflow-runs" "merge-lock"
+   "merge-queue" "work"])
 
 (defn- portable-source
   "Rewrite an op-help envelope's absolute `:source` file to a repo-relative path.
@@ -355,8 +356,8 @@
 (defn- assert-config-registrations
   "Assert the repo-local query/op/pattern registrations are present."
   [rt]
-  (doseq [query-name ["kanban-cards" "kanban-pending" "run-active" "workflow-runs"
-                      "devflow-runs" "merge-lock" "merge-queue" "work"]]
+  (doseq [query-name ["kanban-cards" "kanban-pending" "run-active" "kanban-feature-work"
+                      "workflow-runs" "devflow-runs" "merge-lock" "merge-queue" "work"]]
     (is (contains? (graph/queries rt) query-name)))
   (is (contains? (graph/queries rt) "bench-runs"))
   (doseq [op-name ["kanban" "land" "workflow"
@@ -681,6 +682,36 @@
   [subgraph]
   (sh/sh "jq" "-f" "scripts/reports/feature-costs.jq"
          :in (json/write-str subgraph)))
+
+(deftest kanban-feature-work-query-selects-direct-active-tasks-before-ready-filtering
+  (with-config-runtime
+    (fn [rt]
+      (let [feature (weaver/add! rt {:title "Feature" :state "active"})
+            other-feature (weaver/add! rt {:title "Other feature" :state "active"})
+            ready-task (weaver/add! rt {:title "Ready task" :state "active"
+                                        :attributes {:kanban/task "true"}})
+            blocked-task (weaver/add! rt {:title "Blocked task" :state "active"
+                                          :attributes {:kanban/task "true"}})
+            closed-task (weaver/add! rt {:title "Closed task" :state "closed"
+                                         :attributes {:kanban/task "true"}})
+            other-task (weaver/add! rt {:title "Other task" :state "active"
+                                        :attributes {:kanban/task "true"}})
+            non-task (weaver/add! rt {:title "Non-task child" :state "active"})
+            blocker (weaver/add! rt {:title "Blocker" :state "active"})
+            query (var-get (requiring-resolve 'config/kanban-feature-work-query))]
+        (weaver/update! rt (:id feature)
+                        {:edges [{:type "parent-of" :to (:id ready-task)}
+                                 {:type "parent-of" :to (:id blocked-task)}
+                                 {:type "parent-of" :to (:id closed-task)}
+                                 {:type "parent-of" :to (:id non-task)}]})
+        (weaver/update! rt (:id other-feature)
+                        {:edges [{:type "parent-of" :to (:id other-task)}]})
+        (weaver/update! rt (:id blocked-task)
+                        {:edges [{:type "depends-on" :to (:id blocker)}]})
+        (is (= #{"Ready task" "Blocked task"}
+               (set (map :title (weaver/list rt query {:feature (:id feature)})))))
+        (is (= #{"Ready task"}
+               (set (map :title (weaver/ready rt query {:feature (:id feature)})))))))))
 
 (deftest feature-cost-report-reduces-generic-subgraph-json
   (let [root {:id "root" :title "Feature card" :state "active" :attributes {}}

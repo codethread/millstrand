@@ -111,4 +111,4 @@ Rule, notifier, and process failures are recorded by `(chime/recent-failures)` a
   activation, and local-override pattern.
 - [`../../docs/spools/customisation.md#promoting-config-to-a-local-spool`](../../docs/spools/customisation.md#promoting-config-to-a-local-spool) — authoring and loading local spools.
 
-[agent-run-contract]: https://github.com/codethread/agent-harness.spool/blob/9834f630488052d1600b1ded7c041dcdde78ebf3/agent-run/README.md
+[agent-run-contract]: https://github.com/codethread/agent-harness.spool/blob/2e689490d875bc66887b158f34382b97ade4df6b/agent-run/README.md
