@@ -356,11 +356,47 @@ export async function runApp(dash: Dash<unknown>) {
   // at row 0 rather than the shell's old cursor row and no scrollback shows
   // through. Leaving the alt screen on exit restores the shell buffer verbatim.
   if (fullscreen) process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
+  // Leaving is best-effort and runs on every exit path: a dead terminal throws
+  // EIO on the write, and there is nothing left to restore.
+  const leaveAltScreen = () => {
+    if (!fullscreen) return;
+    try {
+      process.stdout.write("\x1b[?1049l");
+    } catch {
+      // the terminal is already gone.
+    }
+  };
   // Handed to App so an $EDITOR round-trip can drop Ink's cached frame and force a
   // full repaint of the alt screen the editor clobbered.
   const frame: { clear?: () => void } = {};
-  const app = render(<App dash={dash} fullscreen={fullscreen} preloaded={preloaded} frame={frame} />);
-  frame.clear = app.clear;
-  await app.waitUntilExit();
-  if (fullscreen) process.stdout.write("\x1b[?1049l");
+  try {
+    const app = render(<App dash={dash} fullscreen={fullscreen} preloaded={preloaded} frame={frame} />);
+    frame.clear = app.clear;
+
+    // Losing the terminal under a live dash — tmux kill-session, a closed window,
+    // a dropped ssh — revokes stdin and stdout. Ink's signal handling unmounts but
+    // does not terminate the process under Bun, and Bun's event loop then spins on
+    // the revoked descriptor at 100% CPU forever, orphaned to init. So own the
+    // teardown and exit on whichever the terminal's death delivers: the hangup, or
+    // stdin ending. Interactive only — a piped stdin ends normally, and exiting on
+    // that would cut the single printed frame short.
+    if (fullscreen) {
+      const abandon = () => {
+        try {
+          app.unmount();
+        } catch {
+          // already unmounted; the exit below is what matters.
+        }
+        leaveAltScreen();
+        process.exit(0);
+      };
+      process.once("SIGHUP", abandon);
+      process.stdin.once("end", abandon);
+      process.stdin.once("close", abandon);
+    }
+
+    await app.waitUntilExit();
+  } finally {
+    leaveAltScreen();
+  }
 }
