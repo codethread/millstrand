@@ -104,11 +104,22 @@ require_ralph_label() {
   current_json="$("$strand" show "$epic" 2>/dev/null)" \
     || { echo "ralph-codex: cannot read epic $epic while checking the ralph label" >&2; exit 1; }
   if ! jq -e --arg epic "$epic" '
-    .id == $epic
-    and .attributes["kanban/type"] == "epic"
-    and .attributes["kanban.label/ralph"] == "true"
+    (.id == $epic)
+    and (.title | type == "string" and length > 0)
+    and (.state | type == "string" and length > 0)
+    and (.attributes | type == "object")
   ' <<<"$current_json" >/dev/null; then
-    echo "ralph-codex: epic $epic must be an epic with label ralph; refusing to prompt the model" >&2
+    echo "ralph-codex: strand show returned an invalid epic payload for $epic; refusing to prompt the model" >&2
+    exit 1
+  fi
+  epic_type="$(jq -r 'if (.attributes | has("kanban/type")) then (.attributes["kanban/type"] | tostring) else "<missing>" end' <<<"$current_json")"
+  if [ "$epic_type" != "epic" ]; then
+    echo "ralph-codex: epic $epic has kanban/type=$epic_type, expected epic; refusing to prompt the model" >&2
+    exit 1
+  fi
+  ralph_label="$(jq -r 'if (.attributes | has("kanban.label/ralph")) then (.attributes["kanban.label/ralph"] | tostring) else "<missing>" end' <<<"$current_json")"
+  if [ "$ralph_label" != "true" ]; then
+    echo "ralph-codex: epic $epic has kanban.label/ralph=$ralph_label, expected true; refusing to prompt the model" >&2
     exit 1
   fi
 }

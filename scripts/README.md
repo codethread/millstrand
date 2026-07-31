@@ -11,7 +11,7 @@ scripts/ralph <epic-id> "Work every feature and close the epic"
 scripts/ralph-codex <epic-id> "Work every feature and close the epic"
 ```
 
-Both loops require the target to be a kanban epic carrying the `ralph` label. They check the label before each model run and stop without prompting if it is missing. Add it with `strand kanban label add <epic-id> ralph`.
+Before prompting a model, both loops require an active target that is a kanban epic carrying the `ralph` label. They check the label before each model run and stop without prompting if it is missing. Add it with `strand kanban label add <epic-id> ralph`.
 
 Append `--` and any extra harness arguments after the prompt to pass them to `claude` or `codex exec`.
 
