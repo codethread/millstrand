@@ -6,6 +6,13 @@
    [:and
     [:= :state "active"]
     [:= [:attr "workflow/run-id"] [:param :run-id]]]},
+  "kanban-feature-work"
+  {:params [:feature],
+   :where
+   [:and
+    [:= :state "active"]
+    [:= [:attr "kanban/task"] "true"]
+    [:edge/in "parent-of" [:= :id [:param :feature]]]]},
   "workflow-runs"
   [:and [:= :state "active"] [:= [:attr "workflow/role"] "root"]],
   "devflow-runs"

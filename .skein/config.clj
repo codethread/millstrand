@@ -25,6 +25,15 @@
            [:= :state "active"]
            [:= [:attr "workflow/run-id"] [:param :run-id]]]})
 
+(skein/defquery kanban-feature-work-query
+  "Parameterized query for active direct task children of one feature card."
+  {:usage "strand ready --query kanban-feature-work --param feature=<feature-id>"}
+  {:params [:feature]
+   :where [:and
+           [:= :state "active"]
+           [:= [:attr "kanban/task"] "true"]
+           [:edge/in "parent-of" [:= :id [:param :feature]]]]})
+
 (skein/defquery workflow-runs-query
   "Query for active workflow roots (any family)."
   {:usage "strand list --query workflow-runs --limit 500"}
