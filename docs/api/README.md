@@ -15,6 +15,7 @@ Two conventions hold across the tier:
 | --- | --- |
 | [`current`](./current.api.md) | You are at a trusted in-process entry point and need to capture the active runtime (or probe for one without fabricating it). |
 | [`runtime`](./runtime.api.md) | Module/config workflows: declare, plan, refresh, inspect status, reload code, read `spool-state`, and read the runtime clock. |
+| [`lifecycle`](./lifecycle.api.md) | Your module has live effects as well as registry entries: `defresource` for a paired open/close, `defseed` for one idempotent apply, `defreconcile` for repeated desired-state work. |
 | [`clock`](./clock.api.md) | Code needs one capability for current time and sleeping, including deterministic polling with a manual test Clock. |
 
 ### Strand data
@@ -40,6 +41,7 @@ Two conventions hold across the tier:
 | --- | --- |
 | [`patterns`](./patterns.api.md) | Agents should submit intent and your config decides the graph shape: spec-checked, create-only weave patterns invokable from the CLI. |
 | [`skein`](./skein.api.md) | Authoring core registry entries with `defop`, `defquery`, `defpattern`, `defhook`, and `defhandler`. |
+| [`registry`](./registry.api.md) | Your domain owns a family of replaceable declarations and needs a registry kind of its own for other modules to contribute to. |
 | [`cli`](./cli.api.md) | Declaring an op's argv shape as data — the parser and help renderer behind every registered op; never hand-write usage strings. |
 | [`return-shape`](./return-shape.api.md) | Declaring and checking the JSON-compatible values returned by registered ops. |
 | [`spec`](./spec.api.md) | Documenting a registered clojure.spec over the wire: the printed form graph, nested contract tree, copyable JSON template, and structured problems — never a schema, never invoking a predicate. |

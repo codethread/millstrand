@@ -144,8 +144,10 @@ The weaver is the application core. It is a long-lived local Clojure process tha
 
 - the SQLite database connection;
 - strand creation, update, query, readiness, and burn operations;
+- the in-memory registered-op registry;
 - the in-memory named-query registry;
 - the in-memory weave-pattern registry;
+- the in-memory lifecycle hook registry, run synchronously inside a mutation;
 - the in-memory event handler registry and async dispatch worker;
 - the approved-root acquisition state;
 - runtime module activation state.
@@ -461,6 +463,8 @@ Declare that owner from `init.clj`:
 For a workspace that already declares a local spool, add the query to that
 module's contribution so owner-complete refresh installs everything together.
 
+`defquery` is one of five [authoring forms](#authoring-forms) for core registry entries. It defines the Var `mine` and collects the query under the registry key `"mine"`; a name ending in `-query` has that suffix stripped, so `defquery mine-query` also registers `"mine"`.
+
 Defining a Clojure var that contains query data is not the same as registering a named query. A
 local var can be passed to graph helpers from your own code, but `strand list --query mine` only
 works after `mine` has been registered in the weaver's named-query registry.
@@ -609,14 +613,29 @@ The same `:edges` vector accepts `{:op :remove :from :to :type}` to delete one e
 
 ## Startup config and customisation
 
-The weaver loads trusted startup files from the selected workspace in order — `init.clj`, then
-`init.local.clj` — and everything registered there (named queries, weave patterns, event
-handlers, activated spools) is weaver-lifetime runtime state. The full customisation story is its
-own page: [customising your workspace](./spools/customisation.md) covers the files `mill init`
-bootstraps, direct `init.clj` registrations, smoke-testing config in a disposable world,
-module refresh and `reload-code!` semantics, REPL hygiene in a shared weaver, promoting config to a local
-spool, and the `skein.userland.alpha` ergonomics layer. The rules change only when a spool leaves
-your machine: [writing shared spools](./spools/writing-shared-spools.md).
+The weaver loads trusted startup files from the selected workspace in order — `init.clj`, then `init.local.clj` — and everything registered there is weaver-lifetime runtime state: registered ops, named queries, weave patterns, lifecycle hooks, event handlers, and activated spools. The full customisation story is its own page: [customising your workspace](./spools/customisation.md) covers the files `mill init` bootstraps, direct `init.clj` registrations, promoting that config into a local spool whose module publishes through [authoring forms](#authoring-forms), smoke-testing config in a disposable world, module refresh and `reload-code!` semantics, REPL hygiene in a shared weaver, and the `skein.userland.alpha` ergonomics layer. The rules change only when a spool leaves your machine: [writing shared spools](./spools/writing-shared-spools.md).
+
+## Authoring forms
+
+Registry entries are authored, not imperatively registered. `skein.api.skein.alpha` ships one macro per core kind. Each one defines an ordinary Clojure Var and collects one validated declaration while a runtime module source is evaluated.
+
+| Form | Kind it collects | Required options |
+| --- | --- | --- |
+| `defop` | `:ops`, a `strand <op>` command | `:arg-spec` |
+| `defquery` | `:queries`, a named query | none |
+| `defpattern` | `:patterns`, a weave pattern | `:spec` |
+| `defhook` | `:hooks`, a synchronous pre-commit hook | `:types` |
+| `defhandler` | `:events`, an async post-commit handler | `:types` |
+
+Each form takes a name, a docstring, an options map, and then the body its kind needs: an argument vector and body for the handler kinds, a query definition value for `defquery`. Every form also accepts `{:override? true}` to record explicit intent to shadow a lower layer. `defop`'s `:arg-spec` is the declared argv shape [`skein.api.cli.alpha`](./api/cli.api.md) parses and renders help from, so a registered op never writes its own usage strings.
+
+Collection only happens under a module contribution. Evaluating a form at the REPL, or reloading source with `runtime/reload-code!`, defines the Var and publishes nothing. The same rule explains removal: a refresh replaces an owner's whole partition for a kind, so dropping a form from the source drops its entry at the next refresh. There is no unregister call to remember.
+
+Domain spools own forms for their own kinds the same way — `skein.spools.workflow/defworkflow` and `defexecutor`, `skein.spools.cron/defjob`, `skein.spools.chime/defrule`. Module lifecycle effects are declared with `skein.api.lifecycle.alpha`: `defresource`, `defseed`, and `defreconcile`.
+
+The direct registration functions still exist and still work: `graph/register-query!`, `patterns/register-pattern!`, `events/register-handler!`, `hooks/register-hook!`, and `weaver/register-op!`. Each writes one entry under the direct-registration owner for the weaver lifetime, which makes them a good REPL tool for trying something out. Anything a module owns belongs in a form.
+
+Per-function detail is in the generated [`skein.api.skein.alpha` reference](./api/skein.api.md); [writing shared spools](./spools/writing-shared-spools.md) covers the declaration grammars, the module contract, and how to declare a kind of your own. The contracts behind this section: which namespace owns which form, and what `:override?` means, in [SPEC-003.C17e](../devflow/specs/repl-api.md); collection, owner-complete publication, and removal by omission in [SPEC-004.C46h](../devflow/specs/daemon-runtime.md).
 
 ## Weave patterns
 
@@ -624,18 +643,20 @@ Weave patterns are trusted owner-defined transformations that turn a JSON-like i
 atomic batch of new strands and edges. They are useful when agents should submit intent and your
 workspace should decide the graph shape.
 
-Pattern registration lives in trusted Clojure config or spools, not in the public CLI. A pattern has
-a simple name, a fully qualified weaver-loadable function symbol, and a `clojure.spec` input
-contract.
+Pattern registration lives in trusted Clojure config or spools, not in the public CLI. A pattern has a simple name, a handler function loadable in the weaver, and a `clojure.spec` input contract. `skein/defpattern` declares all three in one form, in a module source namespace:
 
 ```clojure
 (ns my.workflow
-  (:require [clojure.spec.alpha :as s]))
+  (:require [clojure.spec.alpha :as s]
+            [skein.api.skein.alpha :as skein]))
 
 (s/def ::title string?)
 (s/def ::task-input (s/keys :req-un [::title]))
 
-(defn task-pattern [{:keys [input]}]
+(skein/defpattern task
+  "Create an implementation strand and a review strand that depends on it."
+  {:spec ::task-input}
+  [{:keys [input]}]
   [{:ref 'impl
     :title (:title input)
     :attributes {:owner "agent"}}
@@ -645,13 +666,13 @@ contract.
     :edges [{:type "depends-on" :to 'impl}]}])
 ```
 
-Register the pattern from startup config or the live REPL:
+The form name is the registered pattern name, so this publishes `task` when `my.workflow` is activated as a module. To try a pattern out without a module, register it directly from the live REPL instead:
 
 ```clojure
 (require '[skein.api.current.alpha :as current]
          '[skein.api.patterns.alpha :as patterns])
 
-(patterns/register-pattern! (current/runtime) 'task 'my.workflow/task-pattern ::task-input)
+(patterns/register-pattern! (current/runtime) 'task 'my.workflow/task ::task-input)
 ```
 
 CLI callers can discover registered patterns, inspect the input contract, and invoke the pattern with exactly one JSON value on stdin:
@@ -678,7 +699,7 @@ transactional batch engine as REPL-only `skein.api.batch.alpha/apply!`. Raw batc
 loading-dock door: it can create, update, burn, and upsert or remove edges, so it remains a Clojure
 config/REPL workflow instead of a public CLI command.
 
-Like queries, patterns are weaver-lifetime runtime state. Register them from startup config if they should always exist after restart or reload.
+Like queries, patterns are weaver-lifetime runtime state. Author them in a module source with `defpattern` if they should always exist after restart or refresh.
 
 ## Graph helpers
 
@@ -710,7 +731,7 @@ Graph helpers include operations such as query id selection, strand hydration by
      :strands (graph/strands-by-ids rt ids)}))
 ```
 
-Register the `owned` query from startup config or the live REPL:
+Declare the `owned` query beside it with `skein/defquery`, or register it directly from the live REPL:
 
 ```clojure
 (graph/register-query! (current/runtime) 'owned [:= [:attr :owner] "ct"])
@@ -723,25 +744,28 @@ printf "(do (require 'my.workflow) (my.workflow/owned-strands {}))\n" \
   | mill weaver repl --stdin --workspace "$workspace"
 ```
 
-Named read surfaces beyond queries are registered CLI operations. Their flat arg-spec leaves carry `:hook-class :read` and `:deadline-class`; registration opts carry classes only for raw-envelope ops. They add docs, arg parsing, and `strand <op>` invocation on top of plain trusted functions like the one above.
+Named read surfaces beyond queries are registered CLI operations, authored with `skein/defop`. Their flat arg-spec leaves carry `:hook-class :read` and `:deadline-class`; registration opts carry classes only for raw-envelope ops. They add docs, arg parsing, and `strand <op>` invocation on top of plain trusted functions like the one above.
 
 ## Events
 
 Skein ships `skein.api.events.alpha` for trusted config and live REPL workflows that need to react to strand mutations. There are no public JSON socket or `strand` CLI commands for event registration.
 
-Register handlers from startup-loaded code or weaver-loadable spools:
+Author handlers with `skein/defhandler` in startup-loaded code or a weaver-loadable spool. The form name becomes the handler's registry key, and `:types` selects the events it sees:
 
 ```clojure
-(ns my.workflow)
+(ns my.workflow
+  (:require [skein.api.skein.alpha :as skein]))
 
-(defn cleanup-temporary! [event]
+(skein/defhandler cleanup-temporary
+  "Drop workspace-owned temporary rows after a strand changes."
+  {:types #{:strand/updated}
+   :metadata {:purpose :cleanup}}
+  [event]
   ;; Handler receives one event map and can call trusted Skein helpers/APIs.
-  (when (= :strand/updated (:event/type event))
-    ;; your workspace-specific cleanup here
-    nil))
+  nil)
 ```
 
-Register the handler from startup config or the live REPL:
+To try a handler out without a module, register it directly from the live REPL:
 
 ```clojure
 (require '[skein.api.current.alpha :as current]
@@ -750,13 +774,11 @@ Register the handler from startup config or the live REPL:
 (events/register-handler! (current/runtime)
                           :my/cleanup-temporary
                           #{:strand/updated}
-                          'my.workflow/cleanup-temporary!
+                          'my.workflow/cleanup-temporary
                           {:purpose :cleanup})
 ```
 
-Handlers are selected by explicit event-type filters such as `:strand/added`, `:strand/updated`, and
-`:strand/burned`. Registration uses a stable key and a fully qualified function symbol resolvable in
-the weaver JVM; duplicate keys replace prior handlers for reload workflows.
+Handlers are selected by explicit event-type filters such as `:strand/added`, `:strand/updated`, and `:strand/burned`. Every handler has a stable key and a fully qualified function symbol resolvable in the weaver JVM; registering a duplicate key replaces the prior handler, which is what makes reload workflows work.
 
 Event dispatch is asynchronous after successful mutations. Handler exceptions do not roll back the mutation; inspect bounded failure state from trusted Clojure:
 
@@ -767,7 +789,38 @@ Event dispatch is asynchronous after successful mutations. Handler exceptions do
 (events/recent-failures (current/runtime))
 ```
 
-Event handler state is weaver-lifetime runtime state. Register handlers from `init.clj` or a loaded spool module if they should exist after startup or refresh.
+Event handler state is weaver-lifetime runtime state. Author handlers in a module source loaded from `init.clj` if they should exist after startup or refresh.
+
+### Hooks run before the commit
+
+Events run after a mutation commits and cannot change it. For code that runs *inside* the mutation, register a lifecycle hook instead. `skein.api.hooks.alpha` owns that registry, and `skein/defhook` authors an entry: a `:types` set of hook types plus an optional integer `:order` fixing its place in the chain.
+
+There are two flavours, chosen by the hook type. A **validation** hook has its return value ignored and vetoes the mutation by throwing, which rolls the whole transaction back. Those types are `:strand/add-before-commit`, `:strand/update-before-commit`, `:strand/burn-before-commit`, `:strand/supersede-before-commit`, `:batch/apply-before-commit`, and `:payload/received` for a decoded JSON socket request.
+
+```clojure
+(require '[skein.api.skein.alpha :as skein]
+         '[skein.api.spool.alpha :as spool])
+
+(skein/defhook require-owner
+  "Refuse a strand added without an owner attribute."
+  {:types #{:strand/add-before-commit} :order 10}
+  [ctx]
+  (when-not (spool/attr-get (:strand/after ctx) :owner)
+    (throw (ex-info "owner attribute is required" {:code "owner/missing"})))
+  nil)
+```
+
+The one **transform** type is `:attributes/normalize`, which folds every registered hook over the attribute map on its way into storage. A transform hook reads `:hook/value` from its context and must return `{:hook/value replacement}`; anything else fails loudly, as does a replacement that is not JSON-encodable.
+
+Read the chain in execution order, and the owner and shadowing picture behind it, from the same namespace:
+
+```clojure
+(require '[skein.api.current.alpha :as current]
+         '[skein.api.hooks.alpha :as hooks])
+
+(hooks/hooks (current/runtime))
+(hooks/hook-provenance (current/runtime))
+```
 
 ## Scheduler (no-poller wakeups)
 
