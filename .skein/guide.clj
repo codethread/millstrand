@@ -54,7 +54,9 @@
 (def ^:private skein-model
   "What skein is, distilled from the user reference so the guide starts
   oriented instead of spending its first sweeps rediscovering the model."
-  ["A weaver daemon owns one workspace: its SQLite strand store, named queries, weave patterns, and registered ops."
+  [(format-alpha/reflow
+    "|A weaver daemon owns one workspace: its SQLite strand store, named
+     |queries, weave patterns, and registered ops.")
    (format-alpha/reflow
     "|A strand is {id, title, state active|closed|replaced, JSON attributes};
      |edges (depends-on, parent-of, ...) join strands; everything else —
@@ -68,7 +70,9 @@
     "|Without --workspace, strand targets the canonical repo's .skein
      |workspace; `strand --workspace <dir> ...` selects another world
      |explicitly.")
-   "Ops declare their surface as data: help output is generated from it, so help never lies about invocation."])
+   (format-alpha/reflow
+    "|Ops declare their surface as data: help output is generated from it, so
+     |help never lies about invocation.")])
 
 (def ^:private discovery-ladder
   "The live-surface commands the guide works from, cheapest tier first."
@@ -145,11 +149,21 @@
        |generated help.")
      ""
      "[answer]"
-     "Lead with the ordered commands the caller runs next, written plain: strand <op> ...."
-     "Use plain `strand ...` commands in your answer. Never echo the agent-run env prefix, selected workspace, or run id."
-     "Never tell the caller to restart a canonical weaver: that requires explicit user sign-off. Report a pending generation instead."
-     "Verify every flag against `strand help`; cite file:line for behavior; say what you could not verify."
-     "Close with the discovery commands and jq filters that re-derive your answer."])))
+     (format-alpha/reflow
+      "|Lead with the ordered commands the caller runs next, written plain:
+       |strand <op> ....")
+     (format-alpha/reflow
+      "|Use plain `strand ...` commands in your answer. Never echo the
+       |agent-run env prefix, selected workspace, or run id.")
+     (format-alpha/reflow
+      "|Never tell the caller to restart a canonical weaver: that requires
+       |explicit user sign-off. Report a pending generation instead.")
+     (format-alpha/reflow
+      "|Verify every flag against `strand help`; cite file:line for behavior;
+       |say what you could not verify.")
+     (format-alpha/reflow
+      "|Close with the discovery commands and jq filters that re-derive your
+       |answer.")])))
 
 (defn- guide-prompt
   "Return the full guide prompt for question."
