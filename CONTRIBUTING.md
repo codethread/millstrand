@@ -35,7 +35,7 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
   (chime/set-notifier! {:argv ["cc-notify"]})   ; anything with the `cmd <title>` + body-on-stdin shape
   ```
 
-- Watch progress with `make dash` (TUI over agent runs, the board, and devflow), `strand kanban board`, `strand branches [branch]`, and `strand workflow ready <run-id>`. For an ASCII board: `printf "(do (require 'ct.spools.kanban) (ct.spools.kanban/print-board!))\n" | mill weaver repl --stdin`.
+- Watch progress with `make dash` (interactive kanban board), `strand kanban board`, `strand branches [branch]`, and `strand workflow ready <run-id>`. For an ASCII board: `printf "(do (require 'ct.spools.kanban) (ct.spools.kanban/print-board!))\n" | mill weaver repl --stdin`.
 - `strand agent harnesses` lists the model seats and their roles; the routing policy comments sit beside the alias definitions in `.skein/harnesses.clj`.
 
 ## Discovery: help, about, prime

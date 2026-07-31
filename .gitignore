@@ -11,7 +11,5 @@ cli/bin/
 /bin/
 site/
 
-scripts/agent-dash/node_modules/
-
 .lsp/
 .clj-kondo/

@@ -1,4 +1,4 @@
-.PHONY: build install dash dash-check api-docs docs-site docs-serve docs-check fmt fmt-check fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
+.PHONY: build install dash api-docs docs-site docs-serve docs-check fmt fmt-check fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
 
 GO_CLI := ./cli/cmd/strand
 MILL_CLI := ./cli/cmd/mill
@@ -39,15 +39,10 @@ install:
 	go install -ldflags "-X skein-strand-cli/internal/config.InstalledSource=$$src -X skein-strand-cli/internal/config.BuildID=$(BUILD_ID)" $(GO_CLI) && \
 	go install -ldflags "-X skein-strand-cli/internal/config.InstalledSource=$$src -X skein-strand-cli/internal/config.BuildID=$(BUILD_ID)" $(MILL_CLI)
 
-# code-owner TUI over live agent runs; polls the strand CLI
+# Interactive kanban TUI supplied by the pinned kanban.spool release.
 dash:
-	bun install --cwd scripts/agent-dash --silent
-	bun scripts/agent-dash/index.tsx
-
-dash-check:
-	bun install --cwd scripts/agent-dash --frozen-lockfile --silent
-	bun run --cwd scripts/agent-dash test
-	bun run --cwd scripts/agent-dash typecheck
+	mill bin build kanban-dash
+	mill bin run kanban-dash
 
 api-docs:
 	@if command -v bb >/dev/null 2>&1; then \
