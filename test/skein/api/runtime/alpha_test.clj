@@ -301,13 +301,13 @@
       (is (not (s/valid? ::runtime/module-opts (assoc image-opts :unknown 1))))
       (is (not (s/valid? ::runtime/module-opts {:ns 'demo.ns :file "modules/demo.clj"})))
       (is (not (s/valid? ::runtime/module-opts {:ns 'demo.ns :required? :yes})))))
-  (testing "entry points are convention-only: opts name neither entry point"
+  (testing "module opts reject withdrawn callback keys"
     (is (not (s/valid? ::runtime/module-opts
                        {:ns 'demo.ns :contribute 'demo.ns/contribute}))
-        "a module's :contribute lives in its namespace's spool var")
+        ":contribute is no longer module grammar")
     (is (not (s/valid? ::runtime/module-opts
                        {:ns 'demo.ns :reconcile 'demo.ns/reconcile}))
-        "a module's :reconcile lives in its namespace's spool var")
+        ":reconcile is no longer module grammar")
     (is (not (s/valid? ::runtime/module-opts
                        {:file "modules/demo.clj"
                         :contribute 'demo.ns/contribute
