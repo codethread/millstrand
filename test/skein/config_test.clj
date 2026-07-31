@@ -106,7 +106,8 @@
 
   Loads the split config modules the way init.clj orders them: config.clj
   first (workflows.clj references its public CLI-tail helpers at load time),
-  then harnesses.clj, workflows.clj, and the land policy op beside it in
+  then harnesses.clj, the guide op that spawns onto its seats, workflows.clj,
+  and the land policy op beside it in
   workflows_land.clj. attention.clj and nvd_scan.clj are
   deliberately not loaded here — chime rules are asserted through the full
   startup fixture, and the NVD job must never register from a direct load."
@@ -136,6 +137,7 @@
             (load-module-source! rt :harnesses ".skein/harnesses.clj")
             ((requiring-resolve 'harnesses/open-review-contract!) {:runtime rt})
             ((requiring-resolve 'harnesses/open-task-contract!) {:runtime rt})
+            (load-module-source! rt :guide ".skein/guide.clj")
             (load-module-source! rt :workflows ".skein/workflows.clj")
             (load-module-source! rt :workflows-land ".skein/workflows_land.clj")
             (f rt)))
@@ -149,7 +151,7 @@
   [target]
   (.mkdirs (io/file target))
   (doseq [name ["init.clj" "config.clj" "workflows.clj" "workflows_land.clj" "harnesses.clj"
-                "attention.clj" "nvd_scan.clj" "reviewers.clj"
+                "guide.clj" "attention.clj" "nvd_scan.clj" "reviewers.clj"
                 "kanban_tracker.clj" "module_adapters.clj" "spools.edn"]]
     (io/copy (io/file ".skein" name) (io/file target name)))
   (let [scripts-target (io/file target "scripts")]
@@ -361,7 +363,7 @@
     (is (contains? (graph/queries rt) query-name)))
   (is (contains? (graph/queries rt) "bench-runs"))
   (doseq [op-name ["kanban" "land" "workflow"
-                   "agent" "bench"]]
+                   "agent" "bench" "guide"]]
     (is (some #(= op-name (:name %)) (weaver/ops rt)) op-name))
   (is (some #(= "delegate-pipeline" (:name %)) (patterns/patterns rt)))
   (is (some #(= "macros-demo" (:name %)) (patterns/patterns rt)))
