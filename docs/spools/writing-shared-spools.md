@@ -756,7 +756,9 @@ A reconcile declaration names four fully qualified callables, all required:
 
 The coordinator calls the two readers, hands both results to `:apply`, and retains nothing but the summary. Unlike a resource, a reconcile has no handle: the live state lives wherever the domain already keeps it, and `:read-actual` is how the coordinator sees it.
 
-`:trigger-kinds` is why the form exists. An unchanged, healthy effect is normally *preserved* across a refresh — the coordinator leaves it alone rather than re-running it. A reconcile naming one or more registry kinds in `:trigger-kinds` is re-run instead of preserved whenever a refresh changed any of those kinds, even though its own declaration is identical. That is how a cron reconcile converges wakes for a job some *other* module just published. Leave `:trigger-kinds` off and the effect only runs when its own declaration is new or changed.
+Two options are optional. `:trigger-kinds` is why the form exists. An unchanged, healthy effect is normally *preserved* across a refresh — the coordinator leaves it alone rather than re-running it. A reconcile naming one or more registry kinds in `:trigger-kinds` is re-run instead of preserved whenever a refresh changed any of those kinds, even though its own declaration is identical. That is how a cron reconcile converges wakes for a job some *other* module just published. Leave `:trigger-kinds` off and the effect only runs when its own declaration is new or changed.
+
+`:after` is the same ordering set a resource takes: a set of effect ids in this module that must run before this one. It orders application and, reversed, teardown — an effect named in someone's `:after` comes down after its dependent does. Reach for it when a reconcile has to see a resource already open, or a seed already applied.
 
 ```clojure
 (lifecycle/defreconcile scheduled-jobs
@@ -769,6 +771,8 @@ The coordinator calls the two readers, hands both results to `:apply`, and retai
 ```
 
 Cron's `apply-jobs!` reads the shape this implies: unregister every id in `actual` that `desired` no longer has, then register or re-register the rest, and return `{:reconciled :cron :jobs [...]}`. Convergence is the callable's job, not the coordinator's — nothing diffs the two maps for you.
+
+The closed option grammar is `skein.api.lifecycle.alpha/::reconcile-options` (`::seed-options` and `::resource-options` for the other two forms). Each form validates its options as the form is evaluated, before anything is collected, so an unknown key or an unqualified callable symbol fails that module's evaluation rather than surfacing later when the effect would have run. Callable *resolution* is a separate, later check the coordinator makes before publishing the candidate image. Contract: [SPEC-003.C17f](../../devflow/specs/repl-api.md).
 
 #### What happens when an effect fails
 
