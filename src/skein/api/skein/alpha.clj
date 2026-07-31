@@ -83,3 +83,18 @@
                                 ~(keyword form-name) ~opts '~fn-sym)
                                (select-keys ~opts #{:override?}))
        (var ~form-name))))
+
+(defmacro defbin
+  "Define an executable declaration and collect its validated `:bins` entry.
+
+  `:executable` names a command, a declaring-file-relative path, or a closed
+  `[:family path]`/`[:root path]` anchor. An optional `:build` is an argv vector;
+  `:override? true` records explicit override intent."
+  [form-name doc opts]
+  `(do
+     (def ~form-name ~doc
+       (contribution/bin-declaration '~form-name ~doc ~opts '~(ns-name *ns*)))
+     (runtime/collect-entry! :bins ~(str form-name)
+                             ~form-name
+                             (select-keys ~opts #{:override?}))
+     (var ~form-name)))

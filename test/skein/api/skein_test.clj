@@ -43,7 +43,18 @@
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"defhandler options are invalid"
                           (contribution/handler-declaration
                            :sample {:types #{:strand/added} :unknown true}
-                           'skein.api.skein-test/sample)))))
+                           'skein.api.skein-test/sample)))
+    (let [error (try
+                  (contribution/bin-declaration
+                   'sample "Sample." {:executable [:spool "bin/x"]}
+                   'skein.api.skein-test)
+                  nil
+                  (catch clojure.lang.ExceptionInfo throwable
+                    throwable))]
+      (is (instance? clojure.lang.ExceptionInfo error))
+      (is (re-find #":spool.*:family.*:root" (ex-message error)))
+      (is (= {:anchor :spool :allowed [:family :root]}
+             (select-keys (ex-data error) [:anchor :allowed]))))))
 
 (deftest generated-declarations-collect-values-and-override-intent
   (let [query [:= :state "active"]
@@ -65,7 +76,7 @@
            (get-in contribution [:patterns :entries "sample" :fn])))))
 
 (deftest public-namespace-exposes-only-core-authoring-forms
-  (is (= '#{defhandler defhook defop defpattern defquery}
+  (is (= '#{defbin defhandler defhook defop defpattern defquery}
          (set (keys (ns-publics 'skein.api.skein.alpha))))))
 
 (deftest source-forms-define-vars-and-collect-every-core-kind
@@ -85,14 +96,43 @@
               (skein/defhook sample-hook "Sample."
                 {:types #{:strand/added}} [_] nil)
               (skein/defhandler sample-handler "Sample."
-                {:types #{:strand/added}} [_] nil))))]
-    (is (= #{:ops :queries :patterns :hooks :events} (set (keys contribution))))
+                {:types #{:strand/added}} [_] nil)
+              (skein/defbin sample-bin "Sample executable."
+                {:executable "sample-bin" :build ["make" "sample-bin"]}))))]
+    (is (= #{:ops :queries :patterns :hooks :events :bins} (set (keys contribution))))
     (is (= #{"sample"} (get-in contribution [:ops :overrides])))
     (is (= 'skein.api.skein-test/sample-op
            (get-in contribution [:ops :entries "sample" :fn])))
+    (is (= {:name "sample-bin"
+            :doc "Sample executable."
+            :executable "sample-bin"
+            :build ["make" "sample-bin"]
+            :provenance 'skein.api.skein-test
+            :source/file (:source/file collection-context)}
+           (get-in contribution [:bins :entries "sample-bin"])))
     (is (every? var?
                 (map #(ns-resolve test-ns %)
-                     '[sample-op sample-query sample-pattern sample-hook sample-handler])))))
+                     '[sample-op sample-query sample-pattern sample-hook sample-handler
+                       sample-bin])))))
+
+(deftest defbin-rejects-the-closed-option-grammar
+  (doseq [[label opts expected]
+          [["missing executable" {} #"defbin options are invalid"]
+           ["unknown option" {:executable "x" :cwd "."} #"defbin options are invalid"]
+           ["absolute anchored path" {:executable [:root "/bin/x"]}
+            #"defbin options are invalid"]
+           ["empty build" {:executable "x" :build []} #"defbin options are invalid"]
+           ["blank build argument" {:executable "x" :build [" "]}
+            #"defbin options are invalid"]]]
+    (testing label
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo expected
+                            (contribution/bin-declaration
+                             'sample "Sample." opts
+                             'skein.api.skein-test))))))
+(is (thrown-with-msg? clojure.lang.ExceptionInfo #"defbin doc is invalid"
+                      (contribution/bin-declaration
+                       'sample 42 {:executable "x"}
+                       'skein.api.skein-test)))
 
 (deftest domain-forms-define-callables-and-collect-override-intent
   (let [contribution

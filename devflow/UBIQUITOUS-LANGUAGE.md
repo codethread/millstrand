@@ -83,6 +83,7 @@ What a module may contribute once it is active.
 | **Lifecycle hook** | A registered synchronous gate that may reject an operation but not transform it. | Event handler, middleware, interceptor, filter |
 | **Attribute namespace** | A declared family of attribute keys with a stated owner and doc, listed by `strand vocab`. Consumers reuse its keys verbatim. | Schema, model, table, prefix |
 | **Spool state** | Runtime-owned per-key state reached only through `skein.api.runtime.alpha/spool-state`. The sanctioned alternative to module-level atoms. | Global, atom, cache, singleton, session |
+| **Bin** | An executable declared by a spool with `skein.api.skein.alpha/defbin`. Only declared bins appear in `bins list`; `mill bin build` runs its optional recipe and `mill bin run` resolves and executes it in the caller's terminal. | Executable file, script, tool |
 | **Lean read** | The CLI and agent listing projection: oversized attribute values become an omission descriptor, and results are capped before assembly. Over the cap the op fails loudly. | Pagination, truncation, summary, preview |
 
 ## Discovery

@@ -170,8 +170,10 @@ func relayStream(r *bufio.Reader, stdout, stderr io.Writer) (int, error) {
 	}
 }
 
-// surfaceError renders a response error envelope to stderr and returns a
-// non-zero exit code, preserving the ResponseError formatting used elsewhere.
+// surfaceError renders a response error envelope to stderr and returns the
+// typed error as well as a non-zero exit code. Callers that need machine
+// handling (such as mill bin) can preserve its code and details without
+// reverse-parsing the human rendering.
 func surfaceError(raw json.RawMessage, stderr io.Writer) (int, error) {
 	if len(raw) == 0 {
 		return 1, errors.New("weaver error")
@@ -179,10 +181,10 @@ func surfaceError(raw json.RawMessage, stderr io.Writer) (int, error) {
 	var re ResponseError
 	if err := json.Unmarshal(raw, &re); err != nil {
 		_, _ = fmt.Fprintln(stderr, "error:", string(raw))
-		return 1, nil
+		return 1, fmt.Errorf("malformed weaver error: %w", err)
 	}
 	_, _ = fmt.Fprintln(stderr, "error:", re.Error())
-	return 1, nil
+	return 1, &re
 }
 
 func readFrameLine(r *bufio.Reader) ([]byte, error) {

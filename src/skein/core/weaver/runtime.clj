@@ -313,7 +313,11 @@
   keeps startup on the same owner-explicit registration path without a static
   require."
   [runtime]
-  (with-runtime-binding runtime #((requiring-resolve 'skein.core.weaver.help/register-built-in-ops!) runtime)))
+  (with-runtime-binding
+    runtime
+    (fn []
+      ((requiring-resolve 'skein.core.weaver.help/register-built-in-ops!) runtime)
+      ((requiring-resolve 'skein.core.weaver.bins/register-built-in-ops!) runtime))))
 
 (defn- with-spool-classloader [runtime f]
   (let [thread (Thread/currentThread)
@@ -581,6 +585,7 @@
           query-store (core-registry/backed-registry :queries)
           pattern-store (core-registry/backed-registry :patterns)
           hook-store (core-registry/backed-registry :hooks)
+          bin-store (core-registry/backed-registry :bins)
           runtime-base {:storage storage
                         :datasource ds
                         :clock (atom (clock/system-clock))
@@ -589,6 +594,7 @@
                         :pattern-store pattern-store
                         :op-store op-store
                         :hook-store hook-store
+                        :bin-store bin-store
                         :glossary-registry (atom {})
                         :help-transform-slot (atom nil)
                         :generation-id (str (java.util.UUID/randomUUID))

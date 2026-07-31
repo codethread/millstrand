@@ -80,6 +80,16 @@
   [runtime]
   (:hook-store runtime))
 
+(defn bin-registry
+  "Return one immutable effective executable-declaration snapshot."
+  [runtime]
+  (core-registry/effective (:bin-store runtime)))
+
+(defn bin-store
+  "Return the executable-declaration owner-partition store."
+  [runtime]
+  (:bin-store runtime))
+
 (defn approved-spool-sync-state
   "Return the runtime's approved-spool sync-state atom."
   [runtime]
