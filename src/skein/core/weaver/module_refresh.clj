@@ -68,6 +68,22 @@
   [effect-id declaration]
   (module-graph/collect-lifecycle! effect-id declaration))
 
+(defn- reject-public-spool!
+  "Fail when a module namespace exposes the withdrawn public `spool` var."
+  [module-key module-ns]
+  (when (and module-ns
+             (find-ns module-ns)
+             (contains? (ns-publics module-ns) 'spool))
+    (fail! (format/reflow
+            "|Module namespace exposes the removed public spool entry point.
+             |Delete `def spool`; publish registry entries with skein/defop,
+             |skein/defquery, skein/defpattern, skein/defhook, or
+             |skein/defhandler, and declare live effects with the lifecycle
+             |authoring forms.")
+           {:reason :removed-def-spool
+            :module/key module-key
+            :module/namespace module-ns})))
+
 (defn- staging-runtime
   "Return `runtime` with isolated copies of every domain registry handle."
   [runtime]
@@ -418,7 +434,8 @@
                  (try
                    (spool-sync/synced-namespace-file runtime ns-sym)
                    (catch clojure.lang.ExceptionInfo throwable
-                     (when (seq (:searched-roots (ex-data throwable)))
+                     (when-not (= :synced-namespace-not-found
+                                  (:reason (ex-data throwable)))
                        (throw throwable))))]
         synced)
       (classpath-source-file (classpath-binding runtime ns-sym))))
@@ -499,8 +516,12 @@
   (if-let [ns-sym (:ns declaration)]
     (let [source-binding (latest-source-binding runtime ns-sym)
           classpath-binding (classpath-binding runtime ns-sym)
-          synced-file (try (spool-sync/synced-namespace-file runtime ns-sym)
-                           (catch Exception _ nil))]
+          synced-file (try
+                        (spool-sync/synced-namespace-file runtime ns-sym)
+                        (catch clojure.lang.ExceptionInfo throwable
+                          (when-not (= :synced-namespace-not-found
+                                       (:reason (ex-data throwable)))
+                            (throw throwable))))]
       (cond
         (and source-binding
              (not= previous-source (source-stamp source-binding)))
@@ -549,7 +570,7 @@
              {:module/key key :ns ns-sym :load :image
               :reason :namespace-not-loaded}))
     (try
-      (let [_ (entry-points/reject-public-spool! key ns-sym)
+      (let [_ (reject-public-spool! key ns-sym)
             replay (replay-declarations key ns-sym)]
         {:status :ready
          :module/key key
@@ -577,7 +598,7 @@
                             :unchanged
                             :loaded)
             module-ns (entry-points/module-namespace declaration context)
-            _ (entry-points/reject-public-spool! key module-ns)
+            _ (reject-public-spool! key module-ns)
             kind-declarations
             (if (= :unchanged source-status)
               (try

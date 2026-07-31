@@ -10,7 +10,8 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.registry.alpha :as registry]
-            [skein.core.format :as format]))
+            [skein.core.format :as format]
+            [skein.core.weaver.lifecycle-effects :as lifecycle-effects]))
 
 (def ^:private declaration-keys
   #{:ns :file :load :spools :after :required?})
@@ -342,6 +343,7 @@
   resource boundary depend on source evaluation order. Outside collection the
   form is passive, matching contribution authoring forms during code reload."
   [effect-id declaration]
+  (lifecycle-effects/validate-declaration! effect-id declaration)
   (when *lifecycle-collector*
     (require-collection-source!)
     (swap! *lifecycle-collector*

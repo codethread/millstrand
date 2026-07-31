@@ -1654,6 +1654,7 @@
     (or file
         (throw (ex-info "Could not locate namespace source in synced spool roots"
                         {:ns ns-sym
+                         :reason :synced-namespace-not-found
                          :relative-path relative-path
                          :searched-roots searched-roots})))))
 
