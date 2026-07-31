@@ -214,8 +214,11 @@
   (.destroyForcibly process))
 
 (defn- timeout-output [reader]
-  (let [output (deref reader timeout-reader-drain-ms ::timed-out)]
-    (if (= ::timed-out output)
+  (let [output (try
+                 (deref reader timeout-reader-drain-ms ::timed-out)
+                 (catch java.io.IOException _
+                   ::reader-failed))]
+    (if (#{::timed-out ::reader-failed} output)
       {:output timeout-output-marker :output-truncated? true}
       {:output output})))
 
