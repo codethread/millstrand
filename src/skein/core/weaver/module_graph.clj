@@ -343,7 +343,16 @@
   resource boundary depend on source evaluation order. Outside collection the
   form is passive, matching contribution authoring forms during code reload."
   [effect-id declaration]
-  (lifecycle-effects/validate-declaration! effect-id declaration)
+  ;; Dependency existence belongs to the complete collected set below. Stubbing
+  ;; this declaration's dependencies lets the established lifecycle validator
+  ;; judge its intrinsic shape at the collection boundary without rejecting a
+  ;; declaration whose dependency is authored later in the same source file.
+  (lifecycle-effects/validate!
+   (into {effect-id declaration}
+         (map (fn [dependency]
+                [dependency {:kind :seed
+                             :apply 'skein.core.weaver.lifecycle-effects/validate!}])
+              (disj (or (:after declaration) #{}) effect-id))))
   (when *lifecycle-collector*
     (require-collection-source!)
     (swap! *lifecycle-collector*

@@ -22,8 +22,7 @@
                  :resource [:open :close]
                  :reconcile [:read-desired :read-actual :apply :on-removed])))
 
-(defn validate-declaration!
-  "Validate one lifecycle declaration without resolving its dependencies."
+(defn- validate-declaration!
   [effect-id declaration]
   (when-not (keyword? effect-id)
     (fail! "Lifecycle effect id must be a keyword"

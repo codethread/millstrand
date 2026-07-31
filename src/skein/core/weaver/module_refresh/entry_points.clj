@@ -1,10 +1,6 @@
 (ns skein.core.weaver.module-refresh.entry-points
   "Reject the withdrawn public `spool` entry-point convention."
-  (:require [clojure.spec.alpha :as s]
-            [skein.core.format :as format]))
-
-(defn- fail! [message data]
-  (throw (ex-info message data)))
+  (:require [clojure.spec.alpha :as s]))
 
 (defn module-namespace
   "Return the namespace symbol loaded for a module, or nil.
