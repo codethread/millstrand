@@ -103,13 +103,14 @@ require_ralph_label() {
   local current_json
   current_json="$("$strand" show "$epic" 2>/dev/null)" \
     || { echo "ralph-codex: cannot read epic $epic while checking the ralph label" >&2; exit 1; }
-  if ! jq -e --arg epic "$epic" '
-    (.id == $epic)
-    and (.title | type == "string" and length > 0)
-    and (.state | type == "string" and length > 0)
-    and (.attributes | type == "object")
+  if ! jq -e -s --arg epic "$epic" '
+    (length == 1)
+    and (.[0].id == $epic)
+    and (.[0].title | type == "string" and length > 0)
+    and (.[0].state | type == "string" and length > 0)
+    and (.[0].attributes | type == "object")
   ' <<<"$current_json" >/dev/null; then
-    echo "ralph-codex: strand show returned an invalid epic payload for $epic; refusing to prompt the model" >&2
+    echo "ralph-codex: strand show returned an invalid or multiple epic payloads for $epic; refusing to prompt the model" >&2
     exit 1
   fi
   epic_type="$(jq -r 'if (.attributes | has("kanban/type")) then (.attributes["kanban/type"] | tostring) else "<missing>" end' <<<"$current_json")"
