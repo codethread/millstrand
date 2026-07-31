@@ -168,7 +168,9 @@
              (vector? (:executable opts))
              (seq (:executable opts))
              (not (contains? bin-anchors (first (:executable opts)))))
-    (throw (ex-info "defbin options are invalid: executable anchor must be :family or :root"
+    (throw (ex-info (str "defbin options are invalid: executable anchor "
+                         (pr-str (first (:executable opts)))
+                         " is invalid; expected :family or :root")
                     {:anchor (first (:executable opts))
                      :allowed (vec (sort bin-anchors))})))
   (require-valid! ::bin-options opts "defbin options are invalid")

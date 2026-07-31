@@ -182,13 +182,18 @@
                                                :cwd (.getPath (canonical-file base))}))]
     (require-valid! ::plan-result result "bins plan result is invalid")))
 
-(defn- list-item [runtime [bin entry]]
-  (let [{:keys [exec family]} (resolve-executable runtime bin entry)
+(defn- list-item [[_ entry]]
+  (let [executable (:executable entry)
         result (cond-> {:name (:name entry)
-                        :spool (or (some-> family str)
-                                   (str (:provenance entry)))
+                        :spool (str (:provenance entry))
                         :doc (:doc entry)
-                        :executable (or (:path exec) (:command exec))}
+                        ;; Listing is declaration inspection. Anchors are
+                        ;; deliberately rendered without resolving them; the
+                        ;; plan path owns anchor resolution and its
+                        ;; bin/anchor-unresolved failure.
+                        :executable (if (vector? executable)
+                                      (pr-str executable)
+                                      executable)}
                   (:build entry) (assoc :build (:build entry)))]
     (require-valid! ::list-item result "bins list item is invalid")))
 
@@ -197,7 +202,7 @@
   [runtime]
   (let [entries (sort-by key (core-registry/effective (:bin-store runtime)))
         result {:operation "bins list"
-                :bins (mapv #(list-item runtime %) entries)}]
+                :bins (mapv list-item entries)}]
     (require-valid! ::list-result result "bins list result is invalid")))
 
 (def ^:private bins-arg-spec

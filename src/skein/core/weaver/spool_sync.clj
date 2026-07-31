@@ -25,7 +25,7 @@
            [java.nio.file FileSystemException FileVisitResult Files LinkOption SimpleFileVisitor StandardCopyOption]
            [java.nio.file.attribute FileAttribute]))
 
-(def ^:private local-spool-keys #{:local/root})
+(def ^:private local-family-spool-keys #{:local/root :roots})
 (def ^:private overlay-spool-keys #{:local/root :claims})
 (def ^:private git-spool-keys #{:git/url :git/sha :git/tag :roots :requires :skein/min})
 (def ^:private source-root-spool-keys #{:skein/source-root})
@@ -83,7 +83,7 @@
                  :opt [:git/tag :skein/min]
                  :opt-un [::roots ::requires])))
 (s/def ::local-family-entry
-  (s/and #(exact-keys? local-spool-keys %)
+  (s/and #(exact-keys? local-family-spool-keys %)
          (s/keys :req [:local/root])))
 (s/def ::source-root-family-entry
   (s/and #(exact-keys? source-root-spool-keys %)
@@ -202,9 +202,10 @@
 
 (defn- normalize-shared-family [source family entry]
   (validate-entry-map! source family entry
-                       (reduce into #{} [local-spool-keys git-spool-keys source-root-spool-keys]))
+                       (reduce into #{} [local-family-spool-keys git-spool-keys
+                                         source-root-spool-keys]))
   (let [local? (contains? entry :local/root)
-        git? (boolean (some #(contains? entry %) git-spool-keys))
+        git? (contains? entry :git/url)
         source-root? (contains? entry :skein/source-root)]
     (when-not (= 1 (count (filter true? [local? git? source-root?])))
       (throw (ex-info "Spool entry requires exactly one coordinate kind"
@@ -242,7 +243,7 @@
          ::normalized-family
          {:family family
           :coordinate {:kind :local :local/root (:local/root entry)}
-          :roots-map {family "."}
+          :roots-map (normalize-roots-map source family entry)
           :requires {}
           :skein-min nil
           :claims nil
