@@ -74,18 +74,23 @@ nav:
       - skein.api.format.alpha: docs/api/format.api.md
       - skein.api.graph.alpha: docs/api/graph.api.md
       - skein.api.hooks.alpha: docs/api/hooks.api.md
+      - skein.api.lifecycle.alpha: docs/api/lifecycle.api.md
       - skein.api.notes.alpha: docs/api/notes.api.md
       - skein.api.patterns.alpha: docs/api/patterns.api.md
       - skein.api.peers.alpha: docs/api/peers.api.md
+      - skein.api.registry.alpha: docs/api/registry.api.md
       - skein.api.relations.alpha: docs/api/relations.api.md
       - skein.api.return-shape.alpha: docs/api/return-shape.api.md
       - skein.api.runtime.alpha: docs/api/runtime.api.md
       - skein.api.runtime.glossary.alpha: docs/api/runtime-glossary.api.md
       - skein.api.runtime.help-transform.alpha: docs/api/runtime-help-transform.api.md
       - skein.api.scheduler.alpha: docs/api/scheduler.api.md
+      - skein.api.skein.alpha: docs/api/skein.api.md
+      - skein.api.spec.alpha: docs/api/spec.api.md
       - skein.api.spool.alpha: docs/api/spool.api.md
       - skein.api.vocab.alpha: docs/api/vocab.api.md
       - skein.api.weaver.alpha: docs/api/weaver.api.md
+      - skein.test.alpha: docs/api/test.api.md
   - Bundled Spools:
       - Index: spools/README.md
       - Batteries:
