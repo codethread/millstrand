@@ -616,7 +616,7 @@ Under `:required? true`, missing or failed root prerequisites refuse refresh. Na
 
 ### Author contributions with kind-specific forms
 
-Module sources publish registry entries through kind-specific authoring forms. The five core kinds use `skein.api.skein.alpha/defop`, `defquery`, `defpattern`, `defhook`, and `defhandler`. Workflow, Cron, and Chime own `defworkflow`/`defexecutor`, `defjob`, and `defrule`. Each form validates its kind's closed declaration grammar before collection.
+Module sources publish registry entries through kind-specific authoring forms. The six core kinds use `skein.api.skein.alpha/defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`. Workflow, Cron, and Chime own `defworkflow`/`defexecutor`, `defjob`, and `defrule`. Each form validates its kind's closed declaration grammar before collection.
 
 Ordinary `def` and `defn` forms collect nothing. A contribution form defines its ordinary Var or function and calls `collect-entry!` for the module currently being evaluated. `skein.spools.cron/defjob` is a compact example:
 
@@ -640,7 +640,7 @@ The source remains a flat sequence of top-level forms. Evaluating a form yoursel
 
 Core forms are the public grammar for hand-authored core entries. Their declaration constructors and normalized maps are internal plumbing, not an authoring escape hatch. A domain that genuinely needs generated entries exposes its own validated factory or batch form.
 
-Five kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, and `:events`. Beyond those the set is open over whatever the running runtime declares. A domain spool declares its own kind with `skein.api.registry.alpha/declare-kind!`, and other modules then contribute entries to it. The shipped workflow executors do exactly this, mixing a domain kind and a core kind in one contribution:
+Six kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, `:events`, and `:bins`. Beyond those the set is open over whatever the running runtime declares. A domain spool declares its own kind with `skein.api.registry.alpha/declare-kind!`, and other modules then contribute entries to it. The shipped workflow executors do exactly this, mixing a domain kind and a core kind in one contribution:
 
 ```clojure
 (ns shell-executor
@@ -672,8 +672,35 @@ Entry values have no single schema. Each public authoring form documents and val
 | `:patterns` | [`register-pattern!`](../api/patterns.api.md#skein.api.patterns.alpha/register-pattern!) |
 | `:hooks` | [`register-hook!`](../api/hooks.api.md#skein.api.hooks.alpha/register-hook!) |
 | `:events` | [`register-handler!`](../api/events.api.md#skein.api.events.alpha/register-handler!) |
+| `:bins` | `skein.api.skein.alpha/defbin` |
 
 A custom kind's entry values are whatever its owner's `:entry-spec` accepts, so read that spool's own contract; [`declare-kind!`](../api/registry.api.md#skein.api.registry.alpha/declare-kind!) is where a kind states its id, spec, and policy.
+
+`defbin` declares an executable that consumers can discover and run without cloning the spool. The declaration names an executable and may carry a build argv; it does not run code while the module is evaluated. Use an anchored executable when the file belongs to a family checkout or one of its roots:
+
+```clojure
+(ns acme.dashboard
+  (:require [skein.api.skein.alpha :as skein]))
+
+(skein/defbin dashboard
+  "Open the dashboard in the caller's terminal."
+  {:executable [:family "bin/dashboard"]
+   :build ["bun" "install" "--cwd" "dashboard"]})
+```
+
+Use `:family` for a file beside the family's public roots and `:root` for a file inside one root. The path is resolved when `bins plan` runs. An anchor gives the base for resolution; it is not a sandbox and does not require the file to stay beneath that base. A string executable is the right choice for a workspace-owned wrapper or a program already on the consumer's `PATH`. A build recipe is an argv vector, never a shell string, and runs at the executable's base. Do not put shell interpolation or toolchain installation policy in the declaration.
+
+Bins run in the caller's process, not inside the weaver. Mill adds `SKEIN_WORKSPACE` to the child environment, with the selected workspace path. A wrapper that needs to call a registered op should use that value explicitly and pass its own arguments unchanged:
+
+```sh
+#!/bin/sh
+set -eu
+
+workspace=${SKEIN_WORKSPACE:?mill bin run did not provide SKEIN_WORKSPACE}
+exec strand --workspace "$workspace" dashboard render "$@"
+```
+
+Keep the wrapper's cwd assumptions explicit. `mill bin run` preserves the directory from which the operator invoked it; `SKEIN_WORKSPACE` identifies the selected world and is the stable path for `strand` calls. The wrapper should not dial `weaver.sock`, infer a workspace from its cwd, or require the consumer to add the spool checkout to `PATH`. Use `mill bin list` to inspect the declaration, `mill bin build <name>` to run its recipe, and `mill bin run <name> [args...]` to execute it. The `strand` CLI remains a dispatcher and does not execute bins.
 
 A kind provider declares its open kind through a kind declaration form before dependent entries stage. `skein.spools.cron` is the shipped example. A module contributing to another spool's kind names that spool's module in `:after`.
 
