@@ -28,14 +28,20 @@ var binInvoke = client.InvokeThroughMill
 // build envelopes. Child processes still receive the real os.Stdout below.
 var binStdout io.Writer = os.Stdout
 
+// millErrorOut is the command surface's error stream. It is a seam so the
+// structured bin failure contract can be tested without starting a process.
+var millErrorOut io.Writer = os.Stderr
+
 // execBin is a seam for tests. A successful syscall.Exec never returns; a
 // returned error is the only path on which mill can report bin/exec-failed.
 var execBin = syscall.Exec
 
 type binError struct {
-	Code    string
-	Message string
-	Details map[string]any
+	Operation string
+	Bin       string
+	Code      string
+	Message   string
+	Details   map[string]any
 }
 
 func (e *binError) Error() string {
@@ -49,6 +55,35 @@ func (e *binError) Error() string {
 		return e.Code
 	}
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
+}
+
+func newBinError(operation, bin, code, message string, details map[string]any) *binError {
+	return &binError{Operation: operation, Bin: bin, Code: code, Message: message, Details: details}
+}
+
+// binFailureEnvelope is the machine-readable failure shape for mill bin
+// commands. The human message remains available through Error for callers
+// that use the Go surface directly, while the process surface emits only this
+// JSON object instead of Cobra's generic "error:" line.
+func (e *binError) binFailureEnvelope() map[string]any {
+	envelope := map[string]any{
+		"operation": e.Operation,
+		"code":      e.Code,
+		"bin":       e.Bin,
+	}
+	for key, value := range e.Details {
+		envelope[key] = value
+	}
+	return envelope
+}
+
+func writeMillCommandError(err error) {
+	var binErr *binError
+	if errors.As(err, &binErr) {
+		_ = json.NewEncoder(millErrorOut).Encode(binErr.binFailureEnvelope())
+		return
+	}
+	_, _ = fmt.Fprintln(millErrorOut, "error:", err)
 }
 
 // BinPlan is the typed wire contract returned by bins plan. The custom
@@ -368,13 +403,33 @@ func fetchBinPlan(workspace, name string) (BinPlan, error) {
 	return plan, nil
 }
 
+func binPlanFailureCode(err error) string {
+	message := err.Error()
+	for _, prefix := range []string{"bin/", "mill/"} {
+		if start := strings.Index(message, prefix); start >= 0 {
+			end := start + len(prefix)
+			for end < len(message) {
+				ch := message[end]
+				if (ch < 'a' || ch > 'z') && ch != '-' && ch != '/' {
+					break
+				}
+				end++
+			}
+			if end > start+len(prefix) {
+				return message[start:end]
+			}
+		}
+	}
+	return "bin/plan-failed"
+}
+
 func runBinBuild(workspace, name string) error {
 	plan, err := fetchBinPlan(workspace, name)
 	if err != nil {
-		return err
+		return newBinError("bin build", name, binPlanFailureCode(err), "could not resolve bin plan", map[string]any{"cause": err.Error()})
 	}
 	if plan.Build == nil {
-		return &binError{Code: "bin/no-build-recipe", Message: fmt.Sprintf("bin %q declares no build recipe", name)}
+		return newBinError("bin build", name, "bin/no-build-recipe", fmt.Sprintf("bin %q declares no build recipe", name), nil)
 	}
 	started := time.Now()
 	cmd := exec.Command(plan.Build.Argv[0], plan.Build.Argv[1:]...)
@@ -384,7 +439,7 @@ func runBinBuild(workspace, name string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
-		return &binError{Code: "bin/build-start-failed", Message: fmt.Sprintf("could not start build %q: %v", strings.Join(plan.Build.Argv, " "), err), Details: map[string]any{"argv": plan.Build.Argv, "cause": err.Error()}}
+		return newBinError("bin build", name, "bin/build-start-failed", fmt.Sprintf("could not start build %q: %v", strings.Join(plan.Build.Argv, " "), err), map[string]any{"argv": plan.Build.Argv, "cause": err.Error()})
 	}
 	err = cmd.Wait()
 	if err != nil {
@@ -393,7 +448,7 @@ func runBinBuild(workspace, name string) error {
 		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		}
-		return &binError{Code: "bin/build-failed", Message: fmt.Sprintf("build exited with status %d", exitCode), Details: map[string]any{"argv": plan.Build.Argv, "exit": exitCode}}
+		return newBinError("bin build", name, "bin/build-failed", fmt.Sprintf("build exited with status %d", exitCode), map[string]any{"argv": plan.Build.Argv, "exit": exitCode})
 	}
 	result := map[string]any{"operation": "bin build", "bin": name, "exit": 0, "elapsed-ms": time.Since(started).Milliseconds()}
 	return json.NewEncoder(binStdout).Encode(result)
@@ -402,23 +457,36 @@ func runBinBuild(workspace, name string) error {
 func runBinExec(workspace, name string, args []string) error {
 	plan, err := fetchBinPlan(workspace, name)
 	if err != nil {
-		return err
+		return newBinError("bin run", name, binPlanFailureCode(err), "could not resolve bin plan", map[string]any{"cause": err.Error()})
 	}
 	if plan.Runnable != nil && !*plan.Runnable {
 		if plan.Build != nil {
-			return &binError{Code: "bin/not-built", Message: fmt.Sprintf("bin %q is not runnable; build it with: mill bin build %s", name, name), Details: map[string]any{"bin": name, "remedy": "mill bin build " + name}}
+			return newBinError("bin run", name, "bin/not-built", fmt.Sprintf("bin %q is not runnable; build it with: mill bin build %s", name, name), map[string]any{"remedy": "mill bin build " + name})
 		}
-		return &binError{Code: "bin/not-runnable", Message: fmt.Sprintf("bin %q is not runnable at %s", name, plan.Exec.Path), Details: map[string]any{"bin": name, "path": plan.Exec.Path}}
+		return newBinError("bin run", name, "bin/not-runnable", fmt.Sprintf("bin %q is not runnable at %s", name, plan.Exec.Path), map[string]any{"path": plan.Exec.Path})
 	}
 	executable := plan.Exec.Path
+	command := ""
 	if executable == "" {
-		executable = plan.Exec.Command
+		command = plan.Exec.Command
+		resolved, lookupErr := exec.LookPath(command)
+		if lookupErr != nil && !errors.Is(lookupErr, exec.ErrDot) {
+			// Keep the declaration's bare command in the failure details. The
+			// resolved path is an implementation detail, while the command is
+			// what the operator must repair in PATH.
+			return newBinError("bin run", name, "bin/exec-failed", fmt.Sprintf("could not find %s in PATH: %v", command, lookupErr), map[string]any{"path": command, "cause": lookupErr.Error()})
+		}
+		executable = resolved
 	}
 	argv := make([]string, 1, len(args)+1)
 	argv[0] = executable
 	argv = append(argv, args...)
 	if err := execBin(executable, argv, overlayEnvironment(os.Environ(), plan.Exec.Env)); err != nil {
-		return &binError{Code: "bin/exec-failed", Message: fmt.Sprintf("could not exec %s: %v", executable, err), Details: map[string]any{"path": executable, "cause": err.Error()}}
+		failurePath := executable
+		if command != "" {
+			failurePath = command
+		}
+		return newBinError("bin run", name, "bin/exec-failed", fmt.Sprintf("could not exec %s: %v", failurePath, err), map[string]any{"path": failurePath, "cause": err.Error()})
 	}
 	return nil
 }

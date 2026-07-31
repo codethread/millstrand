@@ -52,7 +52,15 @@ var launchWeaver = func(source string, args []string, out, errOut io.Writer) (*e
 }
 
 func main() {
-	root := &cobra.Command{Use: "mill", Short: "Skein local router"}
+	root := newMillCommand()
+	if err := root.Execute(); err != nil {
+		writeMillCommandError(err)
+		os.Exit(1)
+	}
+}
+
+func newMillCommand() *cobra.Command {
+	root := &cobra.Command{Use: "mill", Short: "Skein local router", SilenceErrors: true, SilenceUsage: true}
 	root.AddCommand(&cobra.Command{Use: "start", Short: "Start mill in the foreground", RunE: func(cmd *cobra.Command, args []string) error {
 		return start()
 	}})
@@ -127,11 +135,7 @@ func main() {
 	}})
 	root.AddCommand(strandCmd)
 	root.AddCommand(newBinCommand())
-
-	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
-	}
+	return root
 }
 
 func start() error {

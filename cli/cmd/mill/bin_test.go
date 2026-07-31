@@ -6,14 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"skein-strand-cli/internal/client"
+	"skein-strand-cli/internal/config"
 )
 
 func TestBinPlanRejectsMalformedExecShapes(t *testing.T) {
@@ -175,6 +178,150 @@ func TestRunBinExecAppendsOpaqueArgumentsAndUsesOverlay(t *testing.T) {
 	current, err := os.Getwd()
 	if err != nil || current != caller {
 		t.Fatalf("run changed caller cwd from %q to %q (err=%v)", caller, current, err)
+	}
+}
+
+func TestRunBinExecResolvesBareCommandThroughCallerPATH(t *testing.T) {
+	originalInvoke, originalExec := binInvoke, execBin
+	t.Cleanup(func() { binInvoke, execBin = originalInvoke, originalExec })
+	pathDir := t.TempDir()
+	command := "path-bin"
+	commandPath := filepath.Join(pathDir, command)
+	if err := os.WriteFile(commandPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", pathDir)
+	binInvoke = fakePlanInvoker(fmt.Sprintf(`{"operation":"bins plan","bin":"%s","runnable":null,"exec":{"command":"%s","env":{}}}`, command, command))
+	var gotPath string
+	var gotArgv []string
+	execBin = func(path string, argv []string, _ []string) error {
+		gotPath = path
+		gotArgv = append([]string(nil), argv...)
+		return nil
+	}
+
+	if err := runBinExec("/selected", command, []string{"--flag"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != commandPath {
+		t.Fatalf("exec path = %q, want PATH-resolved %q", gotPath, commandPath)
+	}
+	if !reflect.DeepEqual(gotArgv, []string{commandPath, "--flag"}) {
+		t.Fatalf("exec argv = %#v, want resolved path plus opaque args", gotArgv)
+	}
+}
+
+func TestRunBinExecFailurePreservesBareCommandAndCause(t *testing.T) {
+	originalInvoke, originalExec := binInvoke, execBin
+	t.Cleanup(func() { binInvoke, execBin = originalInvoke, originalExec })
+	command := "missing-from-path"
+	t.Setenv("PATH", t.TempDir())
+	binInvoke = fakePlanInvoker(fmt.Sprintf(`{"operation":"bins plan","bin":"%s","runnable":null,"exec":{"command":"%s","env":{}}}`, command, command))
+	execBin = func(string, []string, []string) error {
+		t.Fatal("exec seam called after PATH lookup failed")
+		return nil
+	}
+
+	err := runBinExec("/selected", command, nil)
+	var binErr *binError
+	if !errors.As(err, &binErr) || binErr.Code != "bin/exec-failed" {
+		t.Fatalf("error = %v, want bin/exec-failed", err)
+	}
+	if got := binErr.Details["path"]; got != command {
+		t.Fatalf("failure path = %#v, want bare command %q", got, command)
+	}
+	if cause, ok := binErr.Details["cause"].(string); !ok || cause == "" {
+		t.Fatalf("failure cause = %#v, want host lookup cause", binErr.Details["cause"])
+	}
+}
+
+func TestMillBinFailureUsesStructuredJSONCommandEnvelope(t *testing.T) {
+	originalInvoke, originalErrorOut := binInvoke, millErrorOut
+	t.Cleanup(func() { binInvoke, millErrorOut = originalInvoke, originalErrorOut })
+	binInvoke = fakePlanInvoker(`{"operation":"bins plan","bin":"dashboard","runnable":false,"exec":{"path":"/tmp/dashboard","env":{}},"build":{"argv":["bun","install"],"cwd":"/tmp"}}`)
+	var stderr bytes.Buffer
+	millErrorOut = &stderr
+	cmd := newMillCommand()
+	cmd.SetArgs([]string{"bin", "run", "dashboard"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected bin/not-built failure")
+	}
+	writeMillCommandError(err)
+	var envelope map[string]any
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("failure is not JSON: %v (%q)", err, stderr.String())
+	}
+	for key, want := range map[string]any{"operation": "bin run", "code": "bin/not-built", "bin": "dashboard", "remedy": "mill bin build dashboard"} {
+		if envelope[key] != want {
+			t.Fatalf("envelope[%q] = %#v, want %#v", key, envelope[key], want)
+		}
+	}
+	if strings.Contains(stderr.String(), "error:") {
+		t.Fatalf("structured failure fell through plain error output: %q", stderr.String())
+	}
+}
+
+func TestRunBinExecWaitsForMillAndWeaverRelayBeforeExecSeam(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	serveFakeWeaverStream(t, world, func(req map[string]any) [][]byte {
+		return [][]byte{mustFrame(t, map[string]any{"protocol_version": 1, "request_id": req["request_id"], "ok": true, "result": map[string]any{"operation": "bins plan", "bin": "dashboard", "runnable": true, "exec": map[string]any{"path": "/tmp/dashboard", "env": map[string]string{}}}})}
+	})
+	writeWeaverMetadata(t, world, os.Getpid(), "weaver-bin-seam")
+
+	root, err := config.StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	millSocket := filepath.Join(root, config.MillSocketFileName)
+	listener, err := net.Listen("unix", millSocket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close(); _ = os.Remove(millSocket) })
+	meta := client.MillMetadata{ProtocolVersion: client.MillProtocolVersion, PID: os.Getpid(), MillID: "mill-bin-seam", StateRoot: root, SocketPath: millSocket, StartedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	metadataPath, err := config.MillMetadataPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := json.Marshal(meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(metadataPath, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	serverDone := make(chan struct{})
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr == nil {
+			s := server{meta: meta, children: map[string]*weaverChild{}}
+			s.handle(conn)
+		}
+		close(serverDone)
+	}()
+
+	originalInvoke, originalExec := binInvoke, execBin
+	t.Cleanup(func() { binInvoke, execBin = originalInvoke, originalExec })
+	binInvoke = client.InvokeThroughMill
+	execBin = func(path string, argv []string, _ []string) error {
+		select {
+		case <-serverDone:
+		case <-time.After(2 * time.Second):
+			t.Fatal("exec seam reached while mill/weaver relay was still live")
+		}
+		if path != "/tmp/dashboard" || !reflect.DeepEqual(argv, []string{"/tmp/dashboard"}) {
+			t.Fatalf("exec seam received unexpected command: %q %#v", path, argv)
+		}
+		return nil
+	}
+
+	if err := runBinExec(cfg, "dashboard", nil); err != nil {
+		t.Fatal(err)
 	}
 }
 
