@@ -170,6 +170,23 @@
           "|Read-only-sandbox variant of :luna-low (same scorecard). For
            |contracts whose findings ride the run result — no strand CLI
            |mid-run (see :codex-ro socket limit).")}
+   :luna-high
+   {:alias-of :codex
+    :extra-args ["-m" "gpt-5.6-luna" "-c" "model_reasoning_effort=high"]
+    :cost-rates luna-rates
+    :doc (format-alpha/reflow
+          "|{:complexity X :code-taste X :resilience 1 :ui-design X
+           | :coordination - :cost 8}
+           |gpt-5.6-luna high via codex. The repo's guide seat: the `guide` op
+           |(.skein/guide.clj) runs here, where a question is answered by
+           |reading the live CLI surface and repo docs rather than by writing
+           |code. High effort buys the extra sweeps a surface map needs over
+           |:luna-low, at the same rate card; the retrieval strengths and the
+           |environment fragility both carry over from :luna-low's benches
+           |(cards vk5re, vw8pf), so route recon and answer-shaped work here
+           |and authored code elsewhere. Code and coordination axes are
+           |untested at high effort — treat any code run as a trial, note the
+           |outcome on the card, and score from the next bench.")}
    :terra-med
    {:alias-of :codex
     :extra-args ["-m" "gpt-5.6-terra" "-c" "model_reasoning_effort=medium"]
