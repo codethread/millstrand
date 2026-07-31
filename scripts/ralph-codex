@@ -6,8 +6,9 @@
 # Usage: scripts/ralph-codex <epic-id> "<prompt>" [-- <extra codex exec args>]
 #
 # Environment:
-#   RALPH_MODEL             model for each run (default: sol-low, shorthand
-#                           for gpt-5.6-sol at low reasoning effort)
+#   RALPH_MODEL             model for each run (default: luna-high; aliases
+#                           luna-low and sol-low select their matching gpt-5.6
+#                           tiers at low reasoning effort)
 #   RALPH_EFFORT            reasoning effort override
 #   RALPH_MAX_ITERATIONS    safety cap; 0 means unlimited (default: 30)
 #   RALPH_SKIP_PERMISSIONS  set to 0 to keep Codex sandboxing and approvals
@@ -41,12 +42,20 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 strand="$script_dir/../bin/strand"
 [ -x "$strand" ] || { echo "ralph-codex: repo-local bin/strand not found (run make build)" >&2; exit 1; }
 
-model="${RALPH_MODEL-sol-low}"
+model="${RALPH_MODEL-luna-high}"
 [ -n "$model" ] || { echo "ralph-codex: RALPH_MODEL must not be empty" >&2; exit 2; }
 case "$model" in
   sol-low)
     codex_model="gpt-5.6-sol"
     default_effort="low"
+    ;;
+  luna-low)
+    codex_model="gpt-5.6-luna"
+    default_effort="low"
+    ;;
+  luna-high)
+    codex_model="gpt-5.6-luna"
+    default_effort="high"
     ;;
   *)
     codex_model="$model"
@@ -90,6 +99,32 @@ epic_state() {
   "$strand" show "$epic" | jq -r '.state'
 }
 
+require_ralph_label() {
+  local current_json
+  current_json="$("$strand" show "$epic" 2>/dev/null)" \
+    || { echo "ralph-codex: cannot read epic $epic while checking the ralph label" >&2; exit 1; }
+  if ! jq -e -s --arg epic "$epic" '
+    (length == 1)
+    and (.[0].id == $epic)
+    and (.[0].title | type == "string" and length > 0)
+    and (.[0].state | type == "string" and length > 0)
+    and (.[0].attributes | type == "object")
+  ' <<<"$current_json" >/dev/null; then
+    echo "ralph-codex: strand show returned an invalid or multiple epic payloads for $epic; refusing to prompt the model" >&2
+    exit 1
+  fi
+  epic_type="$(jq -r 'if (.attributes | has("kanban/type")) then (.attributes["kanban/type"] | tostring) else "<missing>" end' <<<"$current_json")"
+  if [ "$epic_type" != "epic" ]; then
+    echo "ralph-codex: epic $epic has kanban/type=$epic_type, expected epic; refusing to prompt the model" >&2
+    exit 1
+  fi
+  ralph_label="$(jq -r 'if (.attributes | has("kanban.label/ralph")) then (.attributes["kanban.label/ralph"] | tostring) else "<missing>" end' <<<"$current_json")"
+  if [ "$ralph_label" != "true" ]; then
+    echo "ralph-codex: epic $epic has kanban.label/ralph=$ralph_label, expected true; refusing to prompt the model" >&2
+    exit 1
+  fi
+}
+
 epic_json="$("$strand" show "$epic" 2>/dev/null)" \
   || { echo "ralph-codex: epic $epic not found (strand show failed)" >&2; exit 1; }
 if ! jq -e --arg epic "$epic" '
@@ -113,6 +148,7 @@ case "$initial_state" in
     exit 1
     ;;
 esac
+require_ralph_label
 
 harness_prompt() {
   cat <<EOF
@@ -193,6 +229,8 @@ while true; do
   echo "[ralph-codex] iteration $iteration — epic $epic ($epic_title) | transcript: $raw_log"
   echo
 
+  # Recheck immediately before each model prompt so label removal stops the loop.
+  require_ralph_label
   pipe_status=(0 0 0)
   codex exec "${codex_flags[@]}" --output-last-message "$final_message" \
     "${extra_args[@]}" "$(harness_prompt "$iteration")" \
