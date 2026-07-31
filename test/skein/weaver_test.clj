@@ -4186,18 +4186,18 @@
          workspace root-lib forms-ns
          (bin-form "image-bin" "image-command"))
         (is (= :applied (:status (runtime/module! rt :image
-                                                   {:ns forms-ns :spools [root-lib]}))))
+                                                  {:ns forms-ns :spools [root-lib]}))))
         (let [source-view (core-registry/effective (:bin-store rt))]
           (is (= :unchanged (:status (runtime/module! rt :image
-                                                        {:ns forms-ns :load :image}))))
+                                                      {:ns forms-ns :load :image}))))
           (is (= source-view (core-registry/effective (:bin-store rt)))
               "image activation replays the same bin partition"))
 
         (write-local-spool-module! workspace root-lib empty-ns "")
         (is (= :applied (:status (runtime/module! rt :empty
-                                                   {:ns empty-ns :spools [root-lib]}))))
+                                                  {:ns empty-ns :spools [root-lib]}))))
         (is (= :unchanged (:status (runtime/module! rt :empty
-                                                        {:ns empty-ns :load :image}))))
+                                                    {:ns empty-ns :load :image}))))
 
         (create-ns no-record-ns)
         (let [image (runtime/module! rt :no-record
@@ -4242,7 +4242,7 @@
                   (bin-form "runnable-bin" "./runnable" :build ["build-runnable"]))]
         (write-multi-root-spool-module! workspace family roots selected-lib ns-sym body)
         (is (= :applied (:status (runtime/module! rt :matrix
-                                                   {:ns ns-sym :spools [selected-lib]}))))
+                                                  {:ns ns-sym :spools [selected-lib]}))))
         (let [plans (into {}
                           (map (fn [name]
                                  [name (weaver/op! rt 'bins ["plan" name])]))
@@ -4275,7 +4275,6 @@
                  (->> (weaver/op! rt 'bins ["list"]) :bins
                       (some #(when (= "family-bin" (:name %)) %))
                       :executable))))))))
-
 
 (deftest startup-collects-layered-module-graph-and-full-refresh-removes-owners
   (let [world (temp-world)

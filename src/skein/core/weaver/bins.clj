@@ -64,8 +64,8 @@
   (.getCanonicalFile (io/file path)))
 
 (defn- file-under? [file root]
-  (let [file-path (.getPath (canonical-file file))
-        root-path (.getPath (canonical-file root))
+  (let [file-path (.getPath ^java.io.File (canonical-file file))
+        root-path (.getPath ^java.io.File (canonical-file root))
         prefix (str root-path java.io.File/separator)]
     (or (= file-path root-path) (str/starts-with? file-path prefix))))
 
@@ -133,7 +133,7 @@
                    :family (coordinate-root runtime (:coordinate match))
                    :root (:root match)
                    (anchor-unresolved! bin source-file anchor))]
-        {:exec {:path (.getPath (canonical-file (io/file base path)))}
+        {:exec {:path (.getPath ^java.io.File (canonical-file (io/file base path)))}
          :base base
          :family (:family match)
          :root-match match})
@@ -147,7 +147,7 @@
                             absolute? (canonical-file path)
                             :else (canonical-relative source-file path))]
         {:exec (if resolved-path
-                 {:path (.getPath resolved-path)}
+                 {:path (.getPath ^java.io.File resolved-path)}
                  {:command path})
          :base (source-directory source-file)
          :family (some-> (longest-root-match runtime source-file) :family)
@@ -179,7 +179,7 @@
                         :runnable (runnable? exec)
                         :exec (assoc exec :env {"SKEIN_WORKSPACE" (access/config-dir runtime)})}
                  (:build entry) (assoc :build {:argv (:build entry)
-                                               :cwd (.getPath (canonical-file base))}))]
+                                               :cwd (.getPath ^java.io.File (canonical-file base))}))]
     (require-valid! ::plan-result result "bins plan result is invalid")))
 
 (defn- list-item [[_ entry]]
@@ -194,7 +194,7 @@
                         :executable (if (vector? executable)
                                       (pr-str executable)
                                       executable)}
-                  (:build entry) (assoc :build (:build entry)))]
+                 (:build entry) (assoc :build (:build entry)))]
     (require-valid! ::list-item result "bins list item is invalid")))
 
 (defn list-bins
@@ -210,27 +210,27 @@
    :doc "List shipped executables or resolve one execution plan."
    :subcommands
    {"list" {:doc "List effective executable declarations."
-             :hook-class :read
-             :deadline-class :standard}
+            :hook-class :read
+            :deadline-class :standard}
     "plan" {:doc "Resolve one executable declaration into an execution plan."
-             :hook-class :read
-             :deadline-class :standard
-             :positionals [{:name :bin
-                            :type :string
-                            :required? true
-                            :doc "Registered bin name."}]}}})
+            :hook-class :read
+            :deadline-class :standard
+            :positionals [{:name :bin
+                           :type :string
+                           :required? true
+                           :doc "Registered bin name."}]}}})
 
 (def ^:private bins-returns
   {:subcommands
    {"list" {:type :map
-             :required {:operation :string
-                        :bins {:type :collection :items :json}}}
+            :required {:operation :string
+                       :bins {:type :collection :items :json}}}
     "plan" {:type :map
-             :required {:operation :string
-                        :bin :string
-                        :runnable [:nullable :boolean]
-                        :exec :json}
-             :optional {:build :json}}}})
+            :required {:operation :string
+                       :bin :string
+                       :runnable [:nullable :boolean]
+                       :exec :json}
+            :optional {:build :json}}}})
 
 (defn bins-op
   "Handle the read-only `bins list` and `bins plan` protocol."

@@ -13,6 +13,19 @@ Authoring forms for Skein's owner-complete core kinds.
 
 
 
+## <a name="skein.api.skein.alpha/defbin">`defbin`</a>
+``` clojure
+(defbin form-name doc opts)
+```
+Macro.
+
+Define an executable declaration and collect its validated `:bins` entry.
+
+  `:executable` names a command, a declaring-file-relative path, or a closed
+  `[:family path]`/`[:root path]` anchor. An optional `:build` is an argv vector;
+  `:override? true` records explicit override intent.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/skein/alpha.clj#L87-L100">Source</a></sub></p>
+
 ## <a name="skein.api.skein.alpha/defhandler">`defhandler`</a>
 ``` clojure
 (defhandler form-name doc opts argv & body)
