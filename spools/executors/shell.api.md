@@ -35,7 +35,7 @@ Runtime captured for asynchronous shell-executor worker threads.
 Function.
 
 Unregister shell scanning when the module is removed.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L434-L441">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L431-L438">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/close-shell-pool!">`close-shell-pool!`</a>
 ``` clojure
@@ -44,7 +44,7 @@ Unregister shell scanning when the module is removed.
 Function.
 
 Close the runtime-lifetime shell worker pool.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L410-L417">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L407-L414">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/non-blank-string?">`non-blank-string?`</a>
 ``` clojure
@@ -62,7 +62,7 @@ Non-blank string.
 Function.
 
 Weaver event handler: graph changes may make a `:shell` gate ready.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L343-L346">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L340-L343">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/open-shell-handler!">`open-shell-handler!`</a>
 ``` clojure
@@ -71,7 +71,7 @@ Weaver event handler: graph changes may make a `:shell` gate ready.
 Function.
 
 Declare shell vocabulary, register scanning, and run the initial scan.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L419-L432">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L416-L429">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/open-shell-pool!">`open-shell-pool!`</a>
 ``` clojure
@@ -80,7 +80,7 @@ Declare shell vocabulary, register scanning, and run the initial scan.
 Function.
 
 Open the runtime-lifetime shell worker pool.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L400-L408">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L397-L405">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/scan!">`scan!`</a>
 ``` clojure
@@ -92,7 +92,7 @@ Dispatch every ready `:shell` gate not already claimed or errored.
 
   Enumerates ready gates purely through the workflow surface and serializes on a
   runtime-owned monitor so concurrent scans cannot double-launch a gate.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L324-L341">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L321-L338">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/shell-handler">`shell-handler`</a>
 
@@ -100,7 +100,7 @@ Dispatch every ready `:shell` gate not already claimed or errored.
 
 
 Own the shell event handler for the lifetime of the module.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L449-L453">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L446-L450">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/shell-pool">`shell-pool`</a>
 
@@ -108,7 +108,7 @@ Own the shell event handler for the lifetime of the module.
 
 
 Own the shell worker pool for the lifetime of the runtime.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L443-L447">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L440-L444">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/shell-stalled?">`shell-stalled?`</a>
 ``` clojure
@@ -117,7 +117,7 @@ Own the shell worker pool for the lifetime of the runtime.
 Function.
 
 Return durable stall detail for a ready `:shell` gate view, or nil.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L351-L359">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L348-L356">Source</a></sub></p>
 
 ## <a name="skein.spools.executors.shell/stalled-shell-gates-query">`stalled-shell-gates-query`</a>
 
@@ -125,4 +125,4 @@ Return durable stall detail for a ready `:shell` gate view, or nil.
 
 
 Return active shell gates carrying a durable error stamp.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L361-L366">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L358-L363">Source</a></sub></p>

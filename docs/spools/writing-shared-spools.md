@@ -334,11 +334,23 @@ Skein's discovery convention has three tiers — generated `help`, authored `abo
 3. **Ship `:about` when your op has semantics beyond its argument shapes.** Author a non-blank `:about` prose string in the op metadata (not an `about` subcommand); the builtin `strand about <op>` meta-verb projects it in a minimal `{about, source}` envelope. Keep it cross-verb narrative (purpose, conventions, attribute contracts) — never restate a node-derivable fact, that is `help`'s job.
 4. **Ship `:prime` when your spool carries working discipline.** If an agent must load conventions before acting (board lanes, handover contracts, workflow rules), author a non-blank `:prime` prose string in the op metadata; `strand prime <op>` projects it. Generate it from the same definitions the spool installs so the discipline can never drift from the installed surface.
 
-### Glossary outcomes belong to your reconciler
+### Seed glossary outcomes with a lifecycle declaration
 
-Shared failure outcomes are defined **once** in the runtime glossary and referenced by name from each verb's `failure-modes`. They are runtime resources rather than declaration data, so they do not go in a module contribution. Seed them with `register-glossary-outcome!` (qualified, stable names; a collision fails loudly — a deliberate change uses `replace-glossary-outcome!` or, better, a new name) from the `:applied` branch of the reconciler on the same module that owns the referring ops, as batteries does. The glossary API ships no unregister, so outcomes are process-lifetime seeds and that reconciler's `:removed` branch is deliberately effect-free.
+Shared failure outcomes are defined **once** in the runtime glossary and referenced by name from each verb's `failure-modes`. They are runtime resources rather than declaration data, so they do not go in a module contribution. Define an idempotent action on the same module that owns the referring ops, register each qualified, stable outcome with `register-glossary-outcome!`, and declare that action with `lifecycle/defseed`. A collision fails loudly; a deliberate change uses `replace-glossary-outcome!` or, better, a new name. The glossary API ships no unregister, so the seed is process-lifetime.
 
-Ordering is safe: module publication does not run the direct-registration glossary-ref check, so the ops may publish before the reconciler seeds their outcomes. `help` resolves the referenced-term closure when it is read, and reports a reference it cannot resolve loudly as `discovery/glossary-ref-unresolved` instead of dropping it. A spool that ships its outcomes this way carries them portably wherever its module is declared.
+```clojure
+(defn seed-glossary! [{:keys [runtime]}]
+  (doseq [outcome glossary-outcomes]
+    (glossary/register-glossary-outcome!
+     runtime (assoc outcome :owner 'acme.priority)))
+  {:seeded :acme-priority-glossary})
+
+(lifecycle/defseed priority-glossary
+  "Seed Acme Priority's process-lifetime failure glossary."
+  {:apply 'acme.priority/seed-glossary!})
+```
+
+Ordering is safe: module publication does not run the direct-registration glossary-ref check, so the ops may publish before the lifecycle seed runs. `help` resolves the referenced-term closure when it is read, and reports a reference it cannot resolve loudly as `discovery/glossary-ref-unresolved` instead of dropping it. A spool that ships its outcomes this way carries them portably wherever its module is declared.
 
 ### The `:about`/`:prime` metadata shape is a compatibility boundary
 

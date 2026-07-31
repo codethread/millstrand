@@ -23,6 +23,7 @@
   `skein.api.runtime.internal.shapes`; every registered key stays
   alpha-qualified."
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [skein.api.clock.alpha :as clock-api]
             [skein.api.registry.alpha :as registry]
             [skein.api.runtime.internal.shapes :as shapes]
@@ -199,6 +200,14 @@
 (s/def ::module-key keyword?)
 (s/def ::root-lib symbol?)
 
+(defn- non-blank-symbol? [value]
+  (and (symbol? value) (not (str/blank? (str value)))))
+
+(defn- workspace-relative-file? [value]
+  (and (string? value)
+       (not (str/blank? value))
+       (not (.isAbsolute (java.io.File. ^String value)))))
+
 ;; `::module-opts` is the named public input grammar `module!` consults: a
 ;; source target plus world policy. The coordinator's `normalize-declaration`
 ;; owns the actionable refusal for withdrawn callback keys, so
@@ -208,8 +217,8 @@
   (s/and map?
          #(every? #{:ns :file :load :spools :after :required?} (keys %))
          #(not= (contains? % :ns) (contains? % :file))
-         #(or (not (contains? % :ns)) (symbol? (:ns %)))
-         #(or (not (contains? % :file)) (string? (:file %)))
+         #(or (not (contains? % :ns)) (non-blank-symbol? (:ns %)))
+         #(or (not (contains? % :file)) (workspace-relative-file? (:file %)))
          #(or (not (contains? % :load)) (= :image (:load %)))
          #(or (not (contains? % :load)) (not (contains? % :file)))
          #(or (not (contains? % :spools))
@@ -227,9 +236,10 @@
          #(every? #{:ns :file :load :spools :after :required?}
                   (keys %))
          #(not= (contains? % :ns) (contains? % :file))
-         #(or (not (contains? % :ns)) (symbol? (:ns %)))
-         #(or (not (contains? % :file)) (string? (:file %)))
+         #(or (not (contains? % :ns)) (non-blank-symbol? (:ns %)))
+         #(or (not (contains? % :file)) (workspace-relative-file? (:file %)))
          #(or (not (contains? % :load)) (= :image (:load %)))
+         #(or (not (contains? % :load)) (not (contains? % :file)))
          #(and (vector? (:spools %)) (every? symbol? (:spools %)))
          #(and (vector? (:after %)) (every? keyword? (:after %)))
          #(boolean? (:required? %))))

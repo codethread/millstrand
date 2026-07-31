@@ -235,12 +235,7 @@ Then implement the spool with an authoring form. Every source evaluation collect
    :spools ['my/workflow]})
 ```
 
-Each piece has one job. `spools.edn` approves source. `runtime/module!` declares
-the desired module, and the refresh coordinator acquires its roots, collects its
-declarations, replaces that owner's entries, and reconciles lifecycle effects. A
-direct `require` from `mill weaver repl` evaluates in the weaver JVM and is useful for trusted
-experimentation, but for repeatable module activation and status, go through `runtime/module!` or
-`runtime/refresh!` from startup config or the live REPL.
+Each piece has one job. `spools.edn` approves source. `runtime/module!` declares the desired module, and the refresh coordinator acquires its roots, collects its declarations, replaces that owner's entries, and reconciles lifecycle effects. A direct `require` from `mill weaver repl` evaluates in the weaver JVM and is useful for trusted experimentation, but for repeatable module activation and status, go through `runtime/module!` or `runtime/refresh!` from startup config or the live REPL.
 
 Extension code runs with weaver authority, so only load trusted code. And there is no per-module isolation or
 unload guarantee: restart the weaver when you need a clean runtime.

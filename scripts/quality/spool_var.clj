@@ -14,7 +14,8 @@
   shared `quality.source-forms` surface conventions-check already scans."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [quality.source-forms :as source-forms]))
+            [quality.source-forms :as source-forms]
+            [skein.api.format.alpha :as format-alpha]))
 (def ^:private public-var-forms #{'def 'defonce 'defn 'defmacro})
 
 (def ^:private spools-root "spools")
@@ -108,9 +109,11 @@
                 private? nil
 
                 :else
-                (str filename ":" line
-                     ": public `spool` var uses the removed module entry-point convention;"
-                     " use contribution and lifecycle authoring forms"))]
+                (str filename ":" line ": "
+                     (format-alpha/reflow
+                      "|Public `spool` var uses the removed module entry-point
+                       |convention; use contribution and lifecycle authoring
+                       |forms")))]
         :when finding]
     finding))
 

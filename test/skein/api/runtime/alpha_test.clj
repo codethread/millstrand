@@ -300,6 +300,11 @@
       (is (not (s/valid? ::runtime/module-opts (assoc image-opts :load :classpath))))
       (is (not (s/valid? ::runtime/module-opts (assoc image-opts :unknown 1))))
       (is (not (s/valid? ::runtime/module-opts {:ns 'demo.ns :file "modules/demo.clj"})))
+      (is (not (s/valid? ::runtime/module-opts {:ns (symbol "")})))
+      (is (not (s/valid? ::runtime/module-opts {:file ""})))
+      (is (not (s/valid? ::runtime/module-opts {:file "/absolute/demo.clj"})))
+      (is (not (s/valid? ::runtime/module-opts
+                         {:file "modules/demo.clj" :load :image})))
       (is (not (s/valid? ::runtime/module-opts {:ns 'demo.ns :required? :yes})))))
   (testing "module opts reject withdrawn callback keys"
     (is (not (s/valid? ::runtime/module-opts

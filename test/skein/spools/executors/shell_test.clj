@@ -60,6 +60,18 @@
   (doto (File/createTempFile "shell-test" suffix)
     (.deleteOnExit)))
 
+(deftest output-reader-failure-is-not-reported-as-a-timeout
+  (let [reader (reify clojure.lang.IBlockingDeref
+                 (deref [_ _ _]
+                   (throw (java.io.IOException. "reader failed"))))
+        failure (try
+                  (#'shell/timeout-output reader)
+                  nil
+                  (catch java.io.IOException throwable
+                    throwable))]
+    (is (instance? java.io.IOException failure))
+    (is (= "reader failed" (ex-message failure)))))
+
 (deftest pass-closes-gate-records-outcome-and-unblocks-next-step
   (with-shell
     (fn [rt]
