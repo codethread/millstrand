@@ -4408,6 +4408,32 @@
           (is (= :removed-def-spool
                  (get-in image-outcome [:error :data :reason]))))))))
 
+(deftest source-reload-removes-a-stale-legacy-spool-var
+  (with-runtime
+    (fn [rt _db-file]
+      (let [workspace (get-in rt [:metadata :config-dir])
+            suffix (str/replace (str (random-uuid)) "-" "")
+            root-lib 'test/module-root
+            module-ns (symbol (str "test.module.migrated-spool-" suffix))
+            source (write-local-spool-module!
+                    workspace root-lib module-ns
+                    "(def spool {:contribute 'removed})")]
+        (is (= :failed
+               (get-in (runtime/module! rt :migrated-source
+                                        {:ns module-ns :spools [root-lib]})
+                       [:modules :migrated-source :status])))
+        (spit source
+              (str "(ns " module-ns ")\n"
+                   "(skein.api.runtime.alpha/collect-entry!\n"
+                   " :queries \"migrated\" [:= [:attr :grammar] \"forms\"])\n"))
+        (let [result (runtime/module! rt :migrated-source
+                                      {:ns module-ns :spools [root-lib]})]
+          (is (= :applied (get-in result [:modules :migrated-source :status])))
+          (is (not (contains? (ns-publics module-ns) 'spool))
+              "reload removes the legacy Var without userland ns-unmap")
+          (is (= [:= [:attr :grammar] "forms"]
+                 (graph/resolve-query rt :migrated))))))))
+
 (deftest file-module-rejects-multiple-namespace-owners
   (with-runtime
     (fn [rt _db-file]

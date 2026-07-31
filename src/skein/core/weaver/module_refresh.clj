@@ -84,6 +84,31 @@
             :module/key module-key
             :module/namespace module-ns})))
 
+(defn- reload-without-stale-spool!
+  "Run `load!` after removing a legacy public `spool` Var.
+
+  Clojure reload leaves Vars that disappeared from source interned. Removing the
+  old Var before evaluation distinguishes a migrated module from source that
+  still authors the withdrawn convention. Restore the old Var if loading fails,
+  so a refused refresh does not mutate the live namespace."
+  [module-ns load!]
+  (let [namespace (some-> module-ns find-ns)
+        stale-var (some-> namespace ns-publics (get 'spool))
+        stale-meta (some-> stale-var meta)
+        stale-bound? (and stale-var (bound? stale-var))
+        stale-value (when stale-bound? @stale-var)]
+    (when stale-var
+      (ns-unmap namespace 'spool))
+    (try
+      (load!)
+      (catch Throwable throwable
+        (when stale-var
+          (let [restored (if stale-bound?
+                           (intern namespace 'spool stale-value)
+                           (intern namespace 'spool))]
+            (alter-meta! restored merge stale-meta)))
+        (throw throwable)))))
+
 (defn- staging-runtime
   "Return `runtime` with isolated copies of every domain registry handle."
   [runtime]
@@ -507,12 +532,16 @@
        :source/file file
        :source/namespace (declared-file-namespace key file)})))
 
-(defn- load-module-file! [runtime file result]
+(defn- load-module-file! [runtime module-ns file result]
   (spool-sync/with-namespace-load-observation
-    runtime #(do (load-file file) result)))
+    runtime #(reload-without-stale-spool!
+              module-ns
+              (fn []
+                (load-file file)
+                result))))
 
 (defn- load-source!
-  [runtime with-loader key declaration previous-source]
+  [runtime with-loader key declaration context previous-source]
   (if-let [ns-sym (:ns declaration)]
     (let [source-binding (latest-source-binding runtime ns-sym)
           classpath-binding (classpath-binding runtime ns-sym)
@@ -526,18 +555,21 @@
         (and source-binding
              (not= previous-source (source-stamp source-binding)))
         (with-loader #(load-module-file!
-                       runtime (:file source-binding)
+                       runtime ns-sym (:file source-binding)
                        {:ns ns-sym
                         :file (:file source-binding)
                         :collection/reload? true}))
 
         synced-file
-        (with-loader #(spool-sync/load-synced-namespace! runtime ns-sym key))
+        (with-loader #(reload-without-stale-spool!
+                       ns-sym
+                       (fn []
+                         (spool-sync/load-synced-namespace! runtime ns-sym key))))
 
         (and (find-ns ns-sym) (nil? source-binding) classpath-binding)
         (if-let [file (classpath-source-file classpath-binding)]
           (with-loader #(load-module-file!
-                         runtime file
+                         runtime ns-sym file
                          {:ns ns-sym
                           :file file
                           :collection/reload? true
@@ -548,9 +580,13 @@
           {:ns ns-sym :classpath-binding classpath-binding})
 
         :else
-        (with-loader #(spool-sync/load-synced-namespace! runtime ns-sym key))))
+        (with-loader #(reload-without-stale-spool!
+                       ns-sym
+                       (fn []
+                         (spool-sync/load-synced-namespace! runtime ns-sym key))))))
     (let [file (spool-sync/module-file runtime (:file declaration))]
-      (with-loader #(load-module-file! runtime file {:file file})))))
+      (with-loader #(load-module-file!
+                     runtime (:source/namespace context) file {:file file})))))
 
 (def ^:private image-contribution-remedy
   "The actionable remedy for image-mode declaration replay failures."
@@ -593,7 +629,8 @@
             {:keys [return kind-declarations lifecycle] collected :contribution}
             (module-graph/with-contribution-collection
               context
-              #(load-source! runtime with-loader key declaration previous-source))
+              #(load-source!
+                runtime with-loader key declaration context previous-source))
             source-status (if (and (:ns declaration) (nil? (:file return)))
                             :unchanged
                             :loaded)

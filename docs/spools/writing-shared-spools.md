@@ -254,7 +254,7 @@ contract in [`batteries.md`](../../spools/batteries.md).
 This section covers vocab and attribute namespaces, not Clojure source namespaces; see
 [Namespace tiers](#namespace-tiers-why-this-split-exists) for source naming.
 
-A shared spool declares each namespace it owns from its `reconcile` function with `vocab/declare!`, passing its stable module key as the `:owner`. Qualify those namespaces with a project prefix, such as
+A shared spool declares each namespace it owns from a process-lifetime lifecycle seed with `vocab/declare!`, passing its stable module key as the `:owner`. Qualify those namespaces with a project prefix, such as
 `acme/priority`, so they do not collide with Skein core or with another author's spool. The prefix is an authoring convention, not a parser rule. The registry
 backs it with the duplicate-owner check: if two owners claim the same namespace, the declaration fails loudly instead of choosing one.
 
