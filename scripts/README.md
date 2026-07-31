@@ -11,9 +11,11 @@ scripts/ralph <epic-id> "Work every feature and close the epic"
 scripts/ralph-codex <epic-id> "Work every feature and close the epic"
 ```
 
+Before prompting a model, both loops require an active target that is a kanban epic carrying the `ralph` label. They check the label before each model run and stop without prompting if it is missing. Add it with `strand kanban label add <epic-id> ralph`.
+
 Append `--` and any extra harness arguments after the prompt to pass them to `claude` or `codex exec`.
 
-`ralph-codex` defaults `RALPH_MODEL` to `sol-low`, which selects `gpt-5.6-sol` with low reasoning effort. Set `RALPH_EFFORT` to override the effort or set `RALPH_MODEL` to another Codex model ID. It uses Codex's approval and sandbox bypass by default because a headless run cannot answer permission prompts; set `RALPH_SKIP_PERMISSIONS=0` to keep the configured Codex restrictions. `RALPH_LOG_DIR` overrides the transcript directory; by default each run writes to `$TMPDIR/ralph/<epic>-<timestamp>`.
+`ralph-codex` defaults `RALPH_MODEL` to `luna-high`, which selects `gpt-5.6-luna` with high reasoning effort. `luna-low` selects it with low reasoning effort; `sol-low` selects `gpt-5.6-sol` with low reasoning effort. Set `RALPH_EFFORT` to override the effort or set `RALPH_MODEL` to another Codex model ID. It uses Codex's approval and sandbox bypass by default because a headless run cannot answer permission prompts; set `RALPH_SKIP_PERMISSIONS=0` to keep the configured Codex restrictions. `RALPH_LOG_DIR` overrides the transcript directory; by default each run writes to `$TMPDIR/ralph/<epic>-<timestamp>`.
 
 The harness addendum appended to the user's prompt carries loop mechanics only: orient from live state, close the epic with `strand kanban finish <epic> --outcome done` when every feature is complete, leave the world resumable, and the `RALPH-STOP` brake. Work discipline — claiming, decomposition, landing — lives on the epic card and its feature cards. Use `strand ready --query kanban-epic-pending --param epic=<id>` for pending feature cards. For a chosen feature, use `strand ready --query kanban-feature-work --param feature=<id>` for ready work.
 
