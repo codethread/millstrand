@@ -422,8 +422,9 @@
              "|You head the merge train. `landed-since` lists only merges recorded
               |after you joined; it is not an up-to-date check. Before approval, run
               |`git fetch origin && git rev-list --count HEAD..origin/main`. If the
-              |count is nonzero, rebase onto origin/main and re-establish green CI at
-              |the new HEAD; then `land choose <run-id> approved`.")})
+              |count is nonzero, rebase onto origin/main — never merge main into the
+              |branch — and re-establish green CI at the new HEAD; then
+              |`land choose <run-id> approved`.")})
 
 (defn- waiting-result
   "Return the payload for a run still behind others in the train."
@@ -599,6 +600,10 @@
                         |HEAD..origin/main` regardless of `landed-since`. A nonzero
                         |count means rebase and re-run CI; the train removes the
                         |repetition, not the rebase.")
+                      (format-alpha/reflow
+                       "|Branches come current by rebase, never by merging main in:
+                        |landing squashes, so a merge commit preserves nothing and
+                        |only adds noise to the commit-by-commit review surface.")
                       (format-alpha/reflow
                        "|An ungranted return lists the runs ahead with their
                         |stage and last update. Confirm a stalled head cannot
