@@ -7,6 +7,7 @@
   changed contributions prevalidate across all registered kinds before
   publication; resource reconcilers run afterward with explicit degradation."
   (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [clojure.tools.reader :as reader]
             [clojure.tools.reader.reader-types :as reader-types]
             [skein.api.registry.alpha :as registry]
@@ -36,20 +37,36 @@
 
 (declare fail!)
 
+(s/def ::initial-state
+  (s/and map?
+         #(= #{:graph :layers :shadows :startup/files :contributions
+               :contribution-sources :lifecycle :resources :outcomes
+               :root-outcomes :last-refresh}
+             (set (keys %)))
+         #(every? map? ((juxt :graph :layers :shadows :contributions
+                              :contribution-sources :lifecycle :resources
+                              :outcomes :root-outcomes) %))
+         #(vector? (:startup/files %))
+         #(nil? (:last-refresh %))))
+
 (defn initial-state
   "Return the empty runtime-owned module coordinator state."
   []
-  {:graph (sorted-map)
-   :layers (sorted-map)
-   :shadows (sorted-map)
-   :startup/files []
-   :contributions (sorted-map)
-   :contribution-sources (sorted-map)
-   :lifecycle (sorted-map)
-   :resources (sorted-map)
-   :outcomes (sorted-map)
-   :root-outcomes (sorted-map)
-   :last-refresh nil})
+  (let [state {:graph (sorted-map)
+               :layers (sorted-map)
+               :shadows (sorted-map)
+               :startup/files []
+               :contributions (sorted-map)
+               :contribution-sources (sorted-map)
+               :lifecycle (sorted-map)
+               :resources (sorted-map)
+               :outcomes (sorted-map)
+               :root-outcomes (sorted-map)
+               :last-refresh nil}]
+    (when-not (s/valid? ::initial-state state)
+      (fail! "Initial module coordinator state has an invalid shape"
+             {:state state :explain (s/explain-data ::initial-state state)}))
+    state))
 
 (defn with-startup-file
   "Call `f` with startup-file declaration provenance dynamically bound."
@@ -852,11 +869,13 @@
                        (map (fn [callable]
                               (let [resolved-var (requiring-resolve callable)
                                     resolved (some-> resolved-var deref)]
-                                (when-not (ifn? resolved)
+                                (when-not (fn? resolved)
                                   (fail! "Lifecycle callable does not resolve to a function"
                                          {:module/key module-key
                                           :effect/callable callable
-                                          :effect/phase :resolve}))
+                                          :effect/phase :resolve
+                                          :resolved/value resolved
+                                          :resolved/type (some-> resolved class .getName)}))
                                 [callable resolved])))
                        (lifecycle-symbols (:lifecycle outcome))))])))
         raw))

@@ -45,6 +45,10 @@
   (doseq [f (reverse (file-seq file))]
     (.delete f)))
 
+(def bad-lifecycle-callable
+  "Malformed lifecycle value used to prove resolution requires a function."
+  :not-a-function)
+
 (defn temp-world []
   (let [root (java.io.File/createTempFile "tdx" "")]
     (.delete root)
@@ -4433,6 +4437,23 @@
               "reload removes the legacy Var without userland ns-unmap")
           (is (= [:= [:attr :grammar] "forms"]
                  (graph/resolve-query rt :migrated))))))))
+
+(deftest lifecycle-callables-must-resolve-to-functions
+  (let [callable 'skein.weaver-test/bad-lifecycle-callable
+        error (try
+                (#'module-refresh/resolve-lifecycle-callables!
+                 (fn [f] (f))
+                 {:bad-lifecycle
+                  {:status :ready
+                   :lifecycle {:bad-callable
+                               {:kind :seed :apply callable}}}})
+                nil
+                (catch clojure.lang.ExceptionInfo throwable
+                  throwable))]
+    (is (instance? clojure.lang.ExceptionInfo error))
+    (is (= callable (:effect/callable (ex-data error))))
+    (is (= :not-a-function (:resolved/value (ex-data error))))
+    (is (= "clojure.lang.Keyword" (:resolved/type (ex-data error))))))
 
 (deftest file-module-rejects-multiple-namespace-owners
   (with-runtime

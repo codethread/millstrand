@@ -389,6 +389,14 @@
                :declaration ::registry/kind-declaration-input)
   :ret ::registry/kind-declaration-input)
 
+(s/def ::collection-result
+  (s/and map?
+         #(= #{:return :contribution :lifecycle :kind-declarations}
+             (set (keys %)))
+         #(map? (:contribution %))
+         #(map? (:lifecycle %))
+         #(vector? (:kind-declarations %))))
+
 (defn with-contribution-collection
   "Call `f` while collecting entries from exactly one module source target.
 
@@ -403,11 +411,20 @@
                          *contribution-context* context]
                  (f))
         contribution (update-vals @collector
-                                  #(update % :overrides (fnil set #{})))]
-    {:return return
-     :contribution contribution
-     :lifecycle @lifecycle-collector
-     :kind-declarations (->> @kind-collector vals
-                             (sort-by (juxt :spool-state/key
-                                            (comp :id :declaration)))
-                             vec)}))
+                                  #(update % :overrides (fnil set #{})))
+        result {:return return
+                :contribution contribution
+                :lifecycle @lifecycle-collector
+                :kind-declarations (->> @kind-collector vals
+                                        (sort-by (juxt :spool-state/key
+                                                       (comp :id :declaration)))
+                                        vec)}]
+    (when-not (s/valid? ::collection-result result)
+      (fail! "Contribution collection result has an invalid shape"
+             {:result result
+              :explain (s/explain-data ::collection-result result)}))
+    result))
+
+(s/fdef with-contribution-collection
+  :args (s/cat :context map? :f fn?)
+  :ret ::collection-result)
