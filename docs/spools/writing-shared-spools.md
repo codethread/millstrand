@@ -739,9 +739,51 @@ Use `defseed` for an idempotent process-lifetime action with no cleanup. Use `de
    :close 'acme.priority.local/close-priority!})
 ```
 
+Every lifecycle callable receives one context map carrying `:runtime`, the `:module/key` that declared the effect, `:effect/id`, `:effect/kind`, `:effect/declaration`, `:effect/phase`, and `:refresh/result`. A resource's `:close` also gets `:resource`, the exact handle its `:open` returned. Reconcile adds two keys of its own, below.
+
+#### Converging state with defreconcile
+
+`defseed` and `defresource` describe a boundary the coordinator opens and closes. `defreconcile` describes something different: a domain whose live state must keep matching what other modules have published, however often that changes. Cron is the shipped example — jobs arrive as `defjob` entries from any module, and the durable wakes behind them have to follow.
+
+A reconcile declaration names four fully qualified callables, all required:
+
+| Key | Called with | Returns |
+| --- | --- | --- |
+| `:read-desired` | the lifecycle context | what the published registry says should exist |
+| `:read-actual` | the lifecycle context | what this domain is currently managing |
+| `:apply` | the context plus `:desired` and `:actual` | a data-first summary of what it converged |
+| `:on-removed` | the lifecycle context | a data-first summary, after the declaring module goes away |
+
+The coordinator calls the two readers, hands both results to `:apply`, and retains nothing but the summary. Unlike a resource, a reconcile has no handle: the live state lives wherever the domain already keeps it, and `:read-actual` is how the coordinator sees it.
+
+`:trigger-kinds` is why the form exists. An unchanged, healthy effect is normally *preserved* across a refresh — the coordinator leaves it alone rather than re-running it. A reconcile naming one or more registry kinds in `:trigger-kinds` is re-run instead of preserved whenever a refresh changed any of those kinds, even though its own declaration is identical. That is how a cron reconcile converges wakes for a job some *other* module just published. Leave `:trigger-kinds` off and the effect only runs when its own declaration is new or changed.
+
+```clojure
+(lifecycle/defreconcile scheduled-jobs
+  "Keep durable Cron wakes converged on the effective published job registry."
+  {:read-desired 'skein.spools.cron/desired-jobs
+   :read-actual 'skein.spools.cron/actual-jobs
+   :apply 'skein.spools.cron/apply-jobs!
+   :on-removed 'skein.spools.cron/remove-jobs!
+   :trigger-kinds #{job-kind}})
+```
+
+Cron's `apply-jobs!` reads the shape this implies: unregister every id in `actual` that `desired` no longer has, then register or re-register the rest, and return `{:reconciled :cron :jobs [...]}`. Convergence is the callable's job, not the coordinator's — nothing diffs the two maps for you.
+
+#### What happens when an effect fails
+
 A module removed by omission is never source-loaded again. The coordinator retains its last good lifecycle declaration, resolved callables, and resource handle so module-scoped effects can close. Changed resources close before reopening. Healthy unchanged effects are preserved; degraded effects retry their whole declared boundary. A failed close retains its handle and callable for a later retry, while independent cleanup continues.
 
-Lifecycle callables return data-first results. Put a live executor, scheduler, socket, or other handle in the resource result the coordinator retains, never in a contribution entry or status projection.
+Each effect gets a status in the refresh result's per-module `:lifecycle/outcomes`, and the same vocabulary appears in `runtime/status`:
+
+- `:applied` — it ran and succeeded. `:removed` — it was torn down cleanly.
+- `:degraded` — it threw, with `:phase` naming where (`:open`, `:apply`, `:close`, `:remove`, `:runtime-stop`) and `:error` carrying the exception data. A degraded apply halts the rest of that module's order, so effects behind it report `:not-attempted`.
+- `:blocked` — a removal that could not be attempted because an effect naming it in `:after` failed to come down first.
+- `:retained` — a `:scope :runtime` resource surviving its module's removal. Those close only when the weaver stops.
+
+`runtime/plan` is the effect-free dry run. Its `:lifecycle/plan` sorts every effect into the buckets the next refresh would use — `:apply`, `:preserve`, `:retry`, `:replace`, `:reconcile`, and `:remove` — which is the direct way to check whether a `:trigger-kinds` set is doing what you meant.
+
+Lifecycle callables return data-first results. Put a live executor, scheduler, socket, or other handle in the resource result the coordinator retains, never in a contribution entry or status projection. A resource's `:open` return is that retained handle and is exempt; every other result — seed apply, reconcile apply, and every removal — is checked, and the check walks the whole value, so one live object nested inside an otherwise plain map is enough to refuse it.
 
 ### Workspace file modules
 
