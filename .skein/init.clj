@@ -12,6 +12,7 @@
 ;;   workflows.clj     — hand-authored workflow definitions
 ;;   workflows_land.clj— the land policy op: merge lock, merge queue, lane moves
 ;;   harnesses.clj     — harness seats + routing policy
+;;   guide.clj         — the guide op: surface questions answered by a run
 ;;   reviewers.clj     — reviewer rosters
 ;;   attention.clj     — chime attention rules
 ;;   nvd_scan.clj      — NVD scan cron job
@@ -109,6 +110,14 @@
                  {:file "harnesses.clj"
                   :spools ['ct.spools/delegation 'ct.spools/agent-run]
                   :after [:skein/spools-shuttle :skein/spools-delegation]
+                  :required? true})
+;; guide.clj publishes the `guide` op, which spawns its answer as an agent run on
+;; a seat harnesses.clj registers, so it orders after both. Nothing else consumes
+;; it: dropping this declaration and refreshing removes the op and nothing more.
+(runtime/module! runtime :guide
+                 {:file "guide.clj"
+                  :spools ['ct.spools/agent-run]
+                  :after [:skein/spools-shuttle :harnesses]
                   :required? true})
 ;; The declarative reviewer roster stays a small git-reviewable data document,
 ;; collected as the workspace-owned partition of delegation's roster kind.
