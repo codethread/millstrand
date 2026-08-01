@@ -2,7 +2,9 @@ package harness
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -115,8 +117,12 @@ func (Claude) Decode(line []byte) []Event {
 }
 
 // FinalMessage implements Harness. Claude carries its final message inline in
-// the closing result event.
+// the closing result event, so a run that exited cleanly without one did not
+// really finish — and the brake would be unreadable either way.
 func (Claude) FinalMessage(_ RunSpec, streamFinal string) (string, error) {
+	if strings.TrimSpace(streamFinal) == "" {
+		return "", errors.New("claude exited cleanly but its stream carried no final result message")
+	}
 	return streamFinal, nil
 }
 

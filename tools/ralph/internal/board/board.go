@@ -64,11 +64,20 @@ type Strand struct {
 // Attr returns a scalar attribute as a string. Structured values (an omitted
 // body, a nested map) read as empty: callers want them for display only.
 func (s Strand) Attr(key string) string {
+	value, _ := s.attr(key)
+	return value
+}
+
+// attr also reports whether the key is present but holds something other than a
+// scalar. The gate needs that distinction: an attribute it cannot read is a
+// different problem from one nobody set.
+func (s Strand) attr(key string) (value string, malformed bool) {
 	raw, ok := s.Attributes[key]
 	if !ok {
-		return ""
+		return "", false
 	}
-	return scalar(raw)
+	got, isScalar := scalar(raw)
+	return got, !isScalar
 }
 
 // Labels returns the card's kanban.label/* keys, sorted.
@@ -76,7 +85,7 @@ func (s Strand) Labels() []string {
 	var out []string
 	for key, raw := range s.Attributes {
 		name, ok := strings.CutPrefix(key, "kanban.label/")
-		if ok && scalar(raw) == "true" {
+		if value, _ := scalar(raw); ok && value == "true" {
 			out = append(out, name)
 		}
 	}
@@ -84,20 +93,22 @@ func (s Strand) Labels() []string {
 	return out
 }
 
-func scalar(raw json.RawMessage) string {
+// scalar renders a JSON scalar for display, reporting false for anything that
+// is not one: a nested map, a list, or an unreadable value.
+func scalar(raw json.RawMessage) (string, bool) {
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return ""
+		return "", false
 	}
 	switch t := v.(type) {
 	case string:
-		return t
+		return t, true
 	case bool:
-		return strconv.FormatBool(t)
+		return strconv.FormatBool(t), true
 	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64)
+		return strconv.FormatFloat(t, 'f', -1, 64), true
 	default:
-		return ""
+		return "", false
 	}
 }
 
@@ -219,11 +230,11 @@ func (c Client) Gate(ctx context.Context, id string) (Strand, error) {
 	if err != nil {
 		return Strand{}, fmt.Errorf("%w: cannot read epic %s: %v", ErrGate, id, err)
 	}
-	if got := s.Attr(AttrType); got != "epic" {
-		return Strand{}, fmt.Errorf("%w: %s has %s=%s, expected epic", ErrGate, id, AttrType, missing(got))
+	if got, malformed := s.attr(AttrType); got != "epic" {
+		return Strand{}, fmt.Errorf("%w: %s has %s=%s, expected epic", ErrGate, id, AttrType, unreadable(got, malformed))
 	}
-	if got := s.Attr(AttrRalph); got != "true" {
-		return Strand{}, fmt.Errorf("%w: %s has %s=%s, expected true", ErrGate, id, AttrRalph, missing(got))
+	if got, malformed := s.attr(AttrRalph); got != "true" {
+		return Strand{}, fmt.Errorf("%w: %s has %s=%s, expected true", ErrGate, id, AttrRalph, unreadable(got, malformed))
 	}
 	switch s.State {
 	case StateActive, StateClosed, StateReplaced:
@@ -233,11 +244,17 @@ func (c Client) Gate(ctx context.Context, id string) (Strand, error) {
 	return s, nil
 }
 
-func missing(v string) string {
-	if v == "" {
+// unreadable names why an attribute failed the gate, so a value the CLI could
+// not render is not reported as one nobody set.
+func unreadable(v string, malformed bool) string {
+	switch {
+	case malformed:
+		return "<malformed>"
+	case v == "":
 		return "<missing>"
+	default:
+		return v
 	}
-	return v
 }
 
 // Snapshot polls the epic and the feature cards beneath it. Cards under active
@@ -268,6 +285,9 @@ func (c Client) Snapshot(ctx context.Context, epicID string) (Snapshot, error) {
 		for _, raw := range grouped[lane] {
 			if raw.Epic != epicID {
 				continue
+			}
+			if raw.ID == "" {
+				return Snapshot{}, fmt.Errorf("kanban board returned a %s card under epic %s with no id", lane, epicID)
 			}
 			card := Card{
 				ID: raw.ID, Title: raw.Title, Type: raw.Type, Lane: lane,
@@ -300,6 +320,9 @@ func (c Client) CardDetail(ctx context.Context, id string) (Card, error) {
 	var payload cardPayload
 	if err := json.Unmarshal(out, &payload); err != nil {
 		return Card{}, fmt.Errorf("kanban card %s returned undecodable JSON: %w", id, err)
+	}
+	if payload.Card.ID != id {
+		return Card{}, fmt.Errorf("kanban card %s returned card %q", id, payload.Card.ID)
 	}
 	return Card{
 		ID:       payload.Card.ID,

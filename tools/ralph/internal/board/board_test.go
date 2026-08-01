@@ -188,3 +188,37 @@ func TestAttrIgnoresStructuredValues(t *testing.T) {
 		t.Errorf("missing attributes must read empty, got %q", got)
 	}
 }
+
+func TestGateNamesAMalformedAttribute(t *testing.T) {
+	// A value the CLI could not render must not be reported as one nobody set;
+	// the two problems have different fixes.
+	c := fakeStrand(t, map[string]string{
+		"show e1": `{"id":"e1","title":"Epic one","state":"active","attributes":{
+			"kanban/type":{"nested":"map"},"kanban.label/ralph":"true"}}`,
+	})
+	_, err := c.Gate(context.Background(), "e1")
+	if err == nil || !strings.Contains(err.Error(), "<malformed>") {
+		t.Fatalf("err = %v, want it to report a malformed kanban/type", err)
+	}
+}
+
+func TestCardDetailRefusesAnotherCard(t *testing.T) {
+	c := fakeStrand(t, map[string]string{
+		"kanban card f1": `{"card":{"id":"f2","title":"Some other card","state":"active","attributes":{}},"tasks":[],"ready":[]}`,
+	})
+	_, err := c.CardDetail(context.Background(), "f1")
+	if err == nil || !strings.Contains(err.Error(), `returned card "f2"`) {
+		t.Fatalf("err = %v, want a refusal naming the card that came back", err)
+	}
+}
+
+func TestSnapshotRefusesACardWithNoID(t *testing.T) {
+	c := fakeStrand(t, map[string]string{
+		"show e1":      activeEpic,
+		"kanban board": `{"claimed":[],"in_review":[],"pending":[{"title":"Nameless","epic":"e1"}],"refinement":[]}`,
+	})
+	_, err := c.Snapshot(context.Background(), "e1")
+	if err == nil || !strings.Contains(err.Error(), "no id") {
+		t.Fatalf("err = %v, want a refusal for the card with no id", err)
+	}
+}

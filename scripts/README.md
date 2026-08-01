@@ -30,7 +30,9 @@ Append `--` and any extra harness arguments after the prompt to pass them to `cl
 
 `--harness` picks `claude` (the default) or `codex`. `--model` and `--effort` take the harness's own vocabulary; empty means the harness default, which is `fable` at high effort for Claude and `luna-high` for Codex. Codex also accepts the aliases `luna-high`, `luna-low` and `sol-low`, which select `gpt-5.6-luna` or `gpt-5.6-sol` at the matching reasoning effort; any other name is passed through as a Codex model id.
 
-Both harnesses bypass their permission prompts by default because a headless run cannot answer one; `--skip-permissions=false` keeps them. `--max-iterations` caps the run (0 means unlimited, default 30), `--log-dir` sets the transcript directory (default `$TMPDIR/ralph/<epic>-<timestamp>`), `--workspace` selects a non-default strand world, `--poll` sets the board refresh interval, and `--prompt-file` reads the prompt from a file instead of an argument.
+Both harnesses bypass their permission prompts by default because a headless run cannot answer one; `--skip-permissions=false` keeps them. `--max-iterations` caps the run (0 means unlimited, default 30), `--failure-limit` says how many consecutive failed runs end it (default 3), `--log-dir` sets the transcript directory (default `$TMPDIR/ralph/<epic>-<timestamp>`), `--workspace` selects a non-default strand world, and `--prompt-file` reads the prompt from a file instead of an argument.
+
+Two flags take Go durations: `--poll` is the board refresh interval (default `10s`) and `--pause` is the breather between iterations (default `3s`), which keeps a crash-looping harness from hot-looping. `--strand` overrides which strand binary ralph reads the board through; by default it takes the one sitting beside itself in `./bin`, falling back to `PATH`.
 
 `RALPH_HARNESS`, `RALPH_MODEL`, `RALPH_EFFORT`, `RALPH_MAX_ITERATIONS`, `RALPH_SKIP_PERMISSIONS`, `RALPH_LOG_DIR` and `SKEIN_WORKSPACE` supply defaults for the matching flags. An unparseable value is an error rather than a silent fallback.
 

@@ -120,3 +120,14 @@ func TestClaudeArgs(t *testing.T) {
 		t.Error("permission bypass must be opt-in")
 	}
 }
+
+func TestClaudeRefusesAnEmptyFinalMessage(t *testing.T) {
+	// A clean exit with no closing result means the stream was truncated; the
+	// brake would be unreadable, so the iteration cannot be called a success.
+	if _, err := (Claude{}).FinalMessage(RunSpec{}, "  \n"); err == nil {
+		t.Fatal("an empty final message must be an error")
+	}
+	if _, err := (Claude{}).FinalMessage(RunSpec{}, "all done"); err != nil {
+		t.Fatalf("FinalMessage: %v", err)
+	}
+}
