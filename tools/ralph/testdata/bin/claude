@@ -1,0 +1,37 @@
+#!/bin/sh
+# Stub agent for driving the dashboard by hand without spending anything.
+# Speaks Claude Code's stream-json and ignores every flag it is given.
+# Put this directory first on PATH and run ralph as usual.
+set -eu
+
+emit() { printf '%s\n' "$1"; sleep "${RALPH_STUB_DELAY:-0.4}"; }
+
+emit '{"type":"system","subtype":"init","session_id":"stub"}'
+emit '{"type":"assistant","message":{"content":[{"type":"text","text":"Orienting from live state before touching anything."}]}}'
+emit '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"strand kanban card <epic>","description":"read the epic"}}]}}'
+emit '{"type":"assistant","message":{"content":[{"type":"text","text":"Claiming a feature card and decomposing it into tasks."}]}}'
+emit '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"devflow/specs/cli.md"}}]}}'
+emit '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"NOTES.md","old_string":"before","new_string":"after"}}]}}'
+
+i=0
+while [ "$i" -lt "${RALPH_STUB_TOOLS:-30}" ]; do
+  emit "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Bash\",\"input\":{\"command\":\"go test ./... -run TestCase$i\"}}]}}"
+  i=$((i + 1))
+done
+
+case "${RALPH_STUB_ENDING:-ok}" in
+  brake)
+    emit '{"type":"result","subtype":"success","num_turns":9,"total_cost_usd":0.31,"duration_ms":48000,"result":"I cannot get past this.\nRALPH-STOP: the stub was told to pull the brake"}'
+    ;;
+  fail)
+    emit '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"stub failure"}'
+    exit 1
+    ;;
+  hang)
+    emit '{"type":"assistant","message":{"content":[{"type":"text","text":"Hanging until something kills me."}]}}'
+    while true; do sleep 1; done
+    ;;
+  *)
+    emit '{"type":"result","subtype":"success","num_turns":12,"total_cost_usd":0.42,"duration_ms":73000,"result":"Feature done and pushed."}'
+    ;;
+esac
