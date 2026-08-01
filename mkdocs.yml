@@ -61,6 +61,7 @@ nav:
       - CLI Surface: devflow/specs/cli.md
       - Weaver Runtime: devflow/specs/daemon-runtime.md
       - REPL API: devflow/specs/repl-api.md
+      - Repository Workflows: devflow/specs/repo-workflows.md
       - Strand Model: devflow/specs/strand-model.md
   # Generated per-fn reference for the blessed skein.api.*.alpha tier; the
   # behavior contracts remain the specs above (SPEC-005.C2).

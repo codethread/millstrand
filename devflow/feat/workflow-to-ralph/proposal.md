@@ -4,7 +4,7 @@
 **Status:** Approved
 **Approved:** 2026-08-01
 **Related RFCs:** None
-**Related root specs:** None
+**Related root specs:** [SPEC-006 Repository workflows](../../specs/repo-workflows.md)
 
 Once approved this document is frozen: it records the intent agreed at sign-off, not what was later built. Implementation change lives in the spec deltas, the plan, and code.
 
