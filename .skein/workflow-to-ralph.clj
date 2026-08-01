@@ -131,9 +131,16 @@
     ((requiring-resolve 'ct.spools.kanban/label-add!) runtime epic ["ralph"])
     (let [observed (attr-value (weaver/show runtime epic) :kanban.label/ralph)]
       (when-not (= "true" observed)
-        ((requiring-resolve 'ct.spools.kanban/label-rm!) runtime epic ["ralph"])
-        (throw (ex-info "Ralph label persistence check failed"
-                        {:epic epic :expected "true" :observed observed})))
+        (let [cleanup-error
+              (try
+                ((requiring-resolve 'ct.spools.kanban/label-rm!) runtime epic ["ralph"])
+                nil
+                (catch Throwable t t))]
+          (throw (ex-info "Ralph label persistence check failed"
+                          (cond-> {:epic epic :expected "true" :observed observed}
+                            cleanup-error
+                            (assoc :cleanup-error (.getMessage cleanup-error)))
+                          cleanup-error))))
       (str "labeled epic " epic " for Ralph after " (count features)
            " feature reviews"))))
 
@@ -148,8 +155,7 @@
    :defaults {}}
   (workflow/workflow
    (fn [{:keys [epic]}] (str "Review Ralph breakdown for epic " epic))
-   {:attributes {"workflow/family" "workflow-to-ralph"
-                 "workflow-to-ralph/epic" (fn [{:keys [epic]}] epic)}}
+   {:attributes {"workflow/family" "workflow-to-ralph"}}
    (workflow/checkpoint
     :review-feature
     (fn [{:keys [item]}] (str "Review task breakdown for feature " item))
@@ -207,8 +213,7 @@
             |ralph label absent until every feature review passes.")}}
   (workflow/workflow
    (fn [{:keys [epic]}] (str "Prepare epic " epic " for Ralph"))
-   {:attributes {"workflow/family" "workflow-to-ralph"
-                 "workflow-to-ralph/epic" (fn [{:keys [epic]}] epic)}}
+   {:attributes {"workflow/family" "workflow-to-ralph"}}
    (workflow/gate
     :validate-epic
     (fn [{:keys [epic]}] (str "Validate Ralph epic " epic))
