@@ -483,8 +483,8 @@
                                 [:card :id])
               feature-b (get-in (kanban-add! rt "Feature B" {"--epic" epic})
                                 [:card :id])
-              _task-a (task-add! rt feature-a "Task A" {})
-              _task-b (task-add! rt feature-b "Task B" {})
+              _task-a (task-add! rt feature-a "Task A" {"--body" "Do A."})
+              _task-b (task-add! rt feature-b "Task B" {"--body" "Do B."})
               other-epic (get-in (kanban-add! rt "Other epic"
                                               {"--type" "epic"})
                                  [:card :id])
@@ -500,7 +500,7 @@
                                 {:features [feature-a feature-b]})]))]
           (is (thrown-with-msg?
                clojure.lang.ExceptionInfo
-               #"not a direct child"
+               #"do not match the epic breakdown"
                ((requiring-resolve 'workflow-to-ralph/label-epic!)
                 {:epic epic :features [other-feature]})))
           (is (nil? (get-in (weaver/show rt epic)

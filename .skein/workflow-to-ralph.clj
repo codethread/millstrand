@@ -1,5 +1,9 @@
 (ns workflow-to-ralph
-  "Prepare a kanban epic for the repository's Ralph execution loops."
+  "Prepare a kanban epic for the repository's Ralph execution loops.
+
+  `::prepare-params`, `::review-params`, and `::breakdown-input` own the exact
+  boundary shapes. `workflow-to-ralph/*` action refs and code callbacks belong
+  exclusively to the two workflows declared here."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.current.alpha :as current]
@@ -52,8 +56,8 @@
 (defn validate-epic!
   "Validate the epic boundary for a workflow-to-ralph run.
 
-  Fails loudly unless `params` names an active kanban epic without the `ralph`
-  label. Returns a short executor result string on success."
+  The implementation callback requires `::prepare-params` and fails loudly
+  unless it names an active kanban epic without the `ralph` label."
   [{:keys [epic] :as params}]
   (require-valid! ::prepare-params params
                   "Ralph epic validation parameters are invalid")
@@ -81,23 +85,43 @@
   (let [children (into #{}
                        (map :to_strand_id)
                        (graph/outgoing-edges runtime [epic] "parent-of"))]
+    (when-not (= children (set features))
+      (throw (ex-info "Reviewed Ralph features do not match the epic breakdown"
+                      {:epic epic
+                       :reviewed-features (vec (sort features))
+                       :direct-children (vec (sort children))})))
     (doseq [feature features]
       (when-not (contains? children feature)
         (throw (ex-info "Ralph feature is not a direct child of the epic"
                         {:epic epic :feature feature
                          :direct-children (vec (sort children))})))
       (let [tasks (:tasks ((requiring-resolve 'ct.spools.kanban/task-list)
-                           runtime feature))]
+                           runtime feature))
+            task-ids (into #{} (map :id) tasks)
+            dependency-ids (into #{}
+                                 (map :to_strand_id)
+                                 (graph/outgoing-edges runtime (vec task-ids)
+                                                       "depends-on"))]
         (when (empty? tasks)
           (throw (ex-info "Ralph feature has no task breakdown"
-                          {:epic epic :feature feature})))))))
+                          {:epic epic :feature feature})))
+        (doseq [task tasks]
+          (when-not (and (= "active" (:state task))
+                         (non-blank-string? (:title task))
+                         (non-blank-string? (:body task)))
+            (throw (ex-info "Ralph feature has an incomplete task"
+                            {:epic epic :feature feature :task task}))))
+        (when-not (every? task-ids dependency-ids)
+          (throw (ex-info "Ralph task dependency leaves its feature breakdown"
+                          {:epic epic :feature feature
+                           :external-dependencies
+                           (vec (sort (remove task-ids dependency-ids)))})))))))
 
 (defn label-epic!
   "Validate reviewed feature breakdowns and apply the Ralph readiness label.
 
-  `params` carries the epic id and the exact reviewed feature ids. Revalidates
-  the epic and every direct feature before the single label mutation, then
-  verifies the persisted postcondition."
+  The implementation callback requires `::review-params`. It revalidates the
+  epic and every direct feature before the atomic kanban label operation."
   [{:keys [epic features] :as params}]
   (require-valid! ::review-params params
                   "Ralph labeling parameters are invalid")
@@ -105,20 +129,15 @@
   (let [runtime (current/runtime)]
     (require-feature-breakdowns! runtime epic features)
     ((requiring-resolve 'ct.spools.kanban/label-add!) runtime epic ["ralph"])
-    (let [labeled (weaver/show runtime epic)]
-      (when-not (= "true" (attr-value labeled :kanban.label/ralph))
-        (throw (ex-info "Ralph label mutation did not satisfy its postcondition"
-                        {:epic epic
-                         :label (attr-value labeled :kanban.label/ralph)})))
-      (str "labeled epic " epic " for Ralph after " (count features)
-           " feature reviews"))))
+    (str "labeled epic " epic " for Ralph after " (count features)
+         " feature reviews")))
 
 (workflow/defworkflow workflow-to-ralph-review
   "Review every feature breakdown before marking its epic ready for Ralph.
 
-  This continuation pours one agent checkpoint for each feature id. The final
-  labeling step fans in over every approval, so it cannot become ready while a
-  feature review remains open."
+  This `:continue`-only definition requires `::review-params` and cannot be
+  started independently. It pours one agent checkpoint for each feature id;
+  the final labeling step fans in over every approval."
   {:entrypoints #{:continue}
    :param-spec ::review-params
    :defaults {}}
@@ -170,9 +189,9 @@
 (workflow/defworkflow workflow-to-ralph
   "Decompose an existing kanban epic and prepare it for a Ralph loop.
 
-  The first stage creates feature cards and task strands without applying the
-  `ralph` label. Its checkpoint records the complete feature-id set and routes
-  to the per-feature review continuation."
+  This `:start` definition requires `::prepare-params`. Its checkpoint requires
+  `::breakdown-input`, records the complete feature-id set, and routes to the
+  per-feature review continuation without applying the `ralph` label."
   {:entrypoints #{:start}
    :param-spec ::prepare-params
    :defaults {}
