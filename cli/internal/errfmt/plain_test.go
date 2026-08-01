@@ -41,14 +41,14 @@ func TestRenderPlainIsGolden(t *testing.T) {
 		},
 		{
 			name: "local invocation error",
-			in:   LocalError(TypeLocal, errors.New("unknown flag: --nope"), nil),
+			in:   LocalError(TypeLocal, CodeInvalidInvocation, errors.New("unknown flag: --nope"), nil),
 			want: "error: unknown flag: --nope\n",
 		},
 		{
 			// Locally raised but transport by taxonomy: no envelope stands behind
 			// it, so the `weaver ... error` prefix would be a lie.
 			name: "unreachable mill",
-			in:   LocalError(TypeTransport, errors.New("mill socket unreachable; start one with: mill start"), []string{"kanban", "board"}),
+			in:   LocalError(TypeTransport, CodeMillUnreachable, errors.New("mill socket unreachable; start one with: mill start"), []string{"kanban", "board"}),
 			want: "error: mill socket unreachable; start one with: mill start\n",
 		},
 		{

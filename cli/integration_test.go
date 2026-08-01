@@ -354,6 +354,31 @@ func TestMillRoutedStrandOpsAddListHelpAndStream(t *testing.T) {
 		t.Fatalf("expected unknown-op failure, err=%v out=%q", err, out)
 	}
 
+	// The same failure in JSON mode, over the whole strand -> mill -> weaver
+	// chain: the envelope the weaver built reaches a CLI-over-CLI consumer as
+	// structure, affordance and all (SPEC-002.C4e).
+	t.Setenv("SKEIN_ERROR_FORMAT", "json")
+	out, err = h.strandCmd("", repo, "", "no-such-op")
+	if err == nil {
+		t.Fatalf("expected unknown-op failure, out=%q", out)
+	}
+	var envelope struct {
+		Type    string         `json:"type"`
+		Code    string         `json:"code"`
+		Message string         `json:"message"`
+		Details map[string]any `json:"details"`
+	}
+	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(out)), &envelope); decodeErr != nil {
+		t.Fatalf("decoding %q: %v", out, decodeErr)
+	}
+	if envelope.Type != "domain" || !strings.Contains(envelope.Message, "Operation not found") {
+		t.Fatalf("weaver-origin envelope = %#v", envelope)
+	}
+	if len(envelope.Details["available"].([]any)) == 0 {
+		t.Fatalf("the available affordance must arrive structured: %#v", envelope.Details)
+	}
+	t.Setenv("SKEIN_ERROR_FORMAT", "")
+
 	if out, err := h.millCmd("", repo, "", "weaver", "stop"); err != nil {
 		t.Fatalf("weaver stop failed: %v\n%s", err, out)
 	}

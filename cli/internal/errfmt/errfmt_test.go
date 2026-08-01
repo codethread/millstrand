@@ -59,19 +59,31 @@ func TestResolveHonoursTheEnvironmentOverrideBothWays(t *testing.T) {
 }
 
 func TestResolveRejectsAnUnacceptedFormatLoudly(t *testing.T) {
-	// json is card e4trm's to add; until it lands it is as invalid as a typo.
-	for _, value := range []string{"json", "PLAIN", " pretty", "colour"} {
+	for _, value := range []string{"JSON", "PLAIN", " pretty", "colour"} {
 		t.Setenv(FormatEnv, value)
 		mode, err := Resolve(&bytes.Buffer{})
 		if err == nil {
 			t.Fatalf("%q: expected a loud rejection", value)
 		}
-		if !strings.Contains(err.Error(), FormatEnv) || !strings.Contains(err.Error(), "plain, pretty") {
+		if !strings.Contains(err.Error(), FormatEnv) || !strings.Contains(err.Error(), "json, plain, pretty") {
 			t.Fatalf("%q: error must name the variable and the accepted set, got %q", value, err)
 		}
 		if mode != Plain {
 			t.Fatalf("%q: a rejected override still resolves the detected mode, got %q", value, mode)
 		}
+	}
+}
+
+func TestResolveAcceptsJSONOnlyByName(t *testing.T) {
+	t.Setenv(FormatEnv, "json")
+	if mode, err := Resolve(charDevice(t)); err != nil || mode != JSON {
+		t.Fatalf("json override on a terminal = (%q, %v)", mode, err)
+	}
+	// Nothing detects JSON: a machine consumer asks for it, and a terminal that
+	// did not is still a terminal.
+	t.Setenv(FormatEnv, "")
+	if mode := ModeFor(charDevice(t)); mode == JSON {
+		t.Fatal("JSON must never be the detected mode")
 	}
 }
 
@@ -90,10 +102,12 @@ func TestQuotedDetailsFindsWhatTheMessageAlreadySays(t *testing.T) {
 
 func TestFromErrorIsLocal(t *testing.T) {
 	e := FromError(os.ErrNotExist, []string{"kanban"})
-	if e.Type != TypeLocal || e.Message != os.ErrNotExist.Error() {
+	if e.Type != TypeLocal || e.Message != os.ErrNotExist.Error() || !e.Local {
 		t.Fatalf("FromError = %#v", e)
 	}
-	if e.Code != "" || e.Details != nil {
-		t.Fatalf("a local error carries no envelope, got %#v", e)
+	// No envelope stood behind it, so there are no details; the code is this
+	// bin's own, synthesized for a JSON-mode consumer.
+	if e.Code != CodeInvalidInvocation || e.Details != nil {
+		t.Fatalf("a local error carries a local code and no details, got %#v", e)
 	}
 }

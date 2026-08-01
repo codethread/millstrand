@@ -41,7 +41,10 @@ func invokeThroughMill(world MillWorldRequest, envelope map[string]any, stdout, 
 	defer cancel()
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", meta.SocketPath)
 	if err != nil {
-		return 1, fmt.Errorf("mill socket unreachable; start one with: mill start: %w", err)
+		return 1, &TransportError{
+			Err:  fmt.Errorf("mill socket unreachable; start one with: mill start: %w", err),
+			Code: errfmt.CodeMillUnreachable,
+		}
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -182,19 +185,40 @@ func relayStream(r *bufio.Reader, stdout, stderr io.Writer, command []string) (i
 // handling (such as mill bin) can preserve its code and details without
 // reverse-parsing the human rendering.
 func surfaceError(raw json.RawMessage, stderr io.Writer, command []string) (int, error) {
+	// Every way a failure frame can fail to carry an envelope is the same fault:
+	// skew between this bin, the mill, and the weaver. It is not rendered here —
+	// returning it unrendered leaves the single rendering to the caller, which
+	// renders every failure the relay did not, and the raw value rides in the
+	// message so nothing is lost. The wire taxonomy is exactly the three types
+	// validResponseError accepts (SPEC-004.C24), so a frame claiming any other
+	// never reaches a consumer as if the weaver had declared it.
 	if len(raw) == 0 {
-		return 1, errors.New("weaver error")
+		return 1, malformedWeaverError(raw, errors.New("failure frame carries no error value"))
 	}
-	mode := errfmt.ModeFor(stderr)
 	var re ResponseError
 	if err := json.Unmarshal(raw, &re); err != nil {
-		// Nothing decoded, so there is nothing typed to render: the raw frame is
-		// the most faithful thing stderr can carry.
-		errfmt.Render(stderr, errfmt.Error{Type: errfmt.TypeLocal, Message: string(raw), Command: command}, mode)
-		return 1, fmt.Errorf("malformed weaver error: %w", err)
+		return 1, malformedWeaverError(raw, err)
 	}
-	errfmt.Render(stderr, re.forRendering(command), mode)
+	if !validResponseError(&re) {
+		return 1, malformedWeaverError(raw, errors.New("error envelope does not match protocol"))
+	}
+	errfmt.Render(stderr, re.forRendering(command), errfmt.ModeFor(stderr))
 	return 1, &re
+}
+
+// malformedWeaverError types a failure frame this bin could not read as an
+// envelope, keeping the raw value beside the reason it was rejected.
+func malformedWeaverError(raw json.RawMessage, reason error) error {
+	if len(raw) == 0 {
+		return &TransportError{
+			Err:  fmt.Errorf("malformed weaver error: %w", reason),
+			Code: errfmt.CodeWeaverResponseMalformed,
+		}
+	}
+	return &TransportError{
+		Err:  fmt.Errorf("malformed weaver error %s: %w", raw, reason),
+		Code: errfmt.CodeWeaverResponseMalformed,
+	}
 }
 
 // commandFromEnvelope reads back the op name and argv the dispatcher assembled,
