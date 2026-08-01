@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 	"skein-strand-cli/internal/client"
 	"skein-strand-cli/internal/config"
+	"skein-strand-cli/internal/errfmt"
 )
 
 type server struct {
@@ -53,14 +54,38 @@ var launchWeaver = func(source string, args []string, out, errOut io.Writer) (*e
 
 func main() {
 	root := newMillCommand()
-	if err := root.Execute(); err != nil {
-		writeMillCommandError(err)
+	// ExecuteC hands back the command that actually ran, which is how the
+	// renderer learns what the user typed.
+	cmd, err := root.ExecuteC()
+	if err != nil {
+		writeMillCommandError(err, millCommandPath(cmd))
 		os.Exit(1)
 	}
 }
 
+// millCommandPath is the command the user typed, binary name dropped.
+func millCommandPath(cmd *cobra.Command) []string {
+	if cmd == nil {
+		return nil
+	}
+	path := strings.Fields(cmd.CommandPath())
+	if len(path) == 0 {
+		return nil
+	}
+	return path[1:]
+}
+
 func newMillCommand() *cobra.Command {
-	root := &cobra.Command{Use: "mill", Short: "Skein local router", SilenceErrors: true, SilenceUsage: true}
+	root := &cobra.Command{
+		Use:           "mill",
+		Short:         "Skein local router",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		// Cobra reaches here only once --help, completion, and the other paths
+		// that need no weaver have been served, which is exactly where the error
+		// format may fail loudly.
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return errfmt.ValidateFormat() },
+	}
 	root.AddCommand(&cobra.Command{Use: "start", Short: "Start mill in the foreground", RunE: func(cmd *cobra.Command, args []string) error {
 		return start()
 	}})

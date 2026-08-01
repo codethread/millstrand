@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"syscall"
+
+	"skein-strand-cli/internal/errfmt"
 )
 
 const protocolVersion = 1
@@ -43,39 +45,19 @@ type ResponseError struct {
 	Details map[string]any `json:"details"`
 }
 
+// Error is the plain single-line rendering, which errfmt owns: the Go error
+// string and what stderr prints outside a terminal are the same bytes.
 func (e *ResponseError) Error() string {
 	if e == nil {
 		return "weaver error"
 	}
-	message := e.Message
-	if query, ok := e.Details["canonical-query"].(string); ok && query != "" {
-		message = fmt.Sprintf("%s: %s", message, query)
-	}
-	if available, ok := e.Details["available"].([]any); ok && len(available) > 0 {
-		names := []string{}
-		for _, v := range available {
-			if s, ok := v.(string); ok {
-				names = append(names, s)
-			}
-		}
-		if len(names) > 0 {
-			message = fmt.Sprintf("%s (available: %s)", message, strings.Join(names, ", "))
-		}
-	}
-	if e.Code == "database/not-initialized" {
-		return message
-	}
-	// ex-data details are the machine-readable half of a fail-loudly error;
-	// agents scripting the CLI need them, so append them as compact JSON
-	if len(e.Details) > 0 {
-		if encoded, err := encodeJSONNoEscape(e.Details); err == nil {
-			message = fmt.Sprintf("%s details=%s", message, encoded)
-		}
-	}
-	if e.Code != "" {
-		return fmt.Sprintf("weaver %s error (%s): %s", e.Type, e.Code, message)
-	}
-	return fmt.Sprintf("weaver %s error: %s", e.Type, message)
+	return e.forRendering(nil).PlainMessage()
+}
+
+// forRendering maps the decoded envelope into the renderer's input without
+// flattening it first, so pretty mode still has the typed fields to work with.
+func (e *ResponseError) forRendering(command []string) errfmt.Error {
+	return errfmt.Error{Type: e.Type, Code: e.Code, Message: e.Message, Details: e.Details, Command: command}
 }
 
 func encodeJSONNoEscape(v any) ([]byte, error) {

@@ -12,7 +12,7 @@ import (
 func relay(t *testing.T, frames string) (string, string, int) {
 	t.Helper()
 	var out, er bytes.Buffer
-	code, err := RelayResponse(bufio.NewReader(strings.NewReader(frames)), &out, &er)
+	code, err := RelayResponse(bufio.NewReader(strings.NewReader(frames)), &out, &er, nil)
 	if err != nil {
 		// Relay errors are surfaced through stderr/exit code for the caller;
 		// tests that expect a clean relay assert err==nil explicitly.
@@ -95,7 +95,7 @@ func TestRelaySingleNonVerbatimStringStaysJSON(t *testing.T) {
 func TestRelaySingleErrorGoesToStderrNonZero(t *testing.T) {
 	frame := `{"protocol_version":1,"request_id":"r1","ok":false,"result":null,"error":{"type":"domain","code":"op/not-found","message":"Operation not found","details":{"available":["add","list"]}}}` + "\n"
 	var out, er bytes.Buffer
-	code, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er)
+	code, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, nil)
 	if code == 0 {
 		t.Fatalf("expected non-zero exit for error frame")
 	}
@@ -171,7 +171,7 @@ func TestRelayStreamOverSocketFlushesIncrementally(t *testing.T) {
 	}()
 
 	var out, er bytes.Buffer
-	code, err := RelayResponse(bufio.NewReader(cliConn), &out, &er)
+	code, err := RelayResponse(bufio.NewReader(cliConn), &out, &er, nil)
 	if err != nil {
 		t.Fatalf("relay error: %v", err)
 	}
