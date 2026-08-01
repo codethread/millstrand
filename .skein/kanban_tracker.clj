@@ -1,10 +1,15 @@
 (ns kanban-tracker
-  "Bind this repo's kanban card projection to devflow."
+  "Bind this repo's kanban card projection to devflow.
+
+  The projection reads the generic workflow engine surface rather than a
+  devflow facade: devflow v15 removed its runtime facade, and the generic
+  `current-root`/`ready` answer the same questions for any devflow version."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [skein.api.current.alpha :as current]
             [skein.api.lifecycle.alpha :as lifecycle]
             [skein.api.spool.alpha :as spool]
-            [ct.spools.devflow :as devflow]
+            [skein.spools.workflow :as workflow]
             [ct.spools.kanban :as kanban]))
 
 (s/def ::run-id (s/and string? (complement str/blank?)))
@@ -13,7 +18,7 @@
 (defn- active-stage
   "Return the active root's non-blank stage, or nil when no root is active."
   [runtime run-id]
-  (when-let [root (devflow/current-root runtime run-id)]
+  (when-let [root (current/with-runtime runtime (workflow/current-root run-id))]
     (let [stage (spool/attr-get root :devflow/stage)]
       (when-not (and (string? stage) (not (str/blank? stage)))
         (spool/fail! "Active devflow root must carry a non-blank devflow/stage"
@@ -31,7 +36,9 @@
     (spool/require-valid!
      ::projection
      {:status stage
-      :ready (if stage (devflow/ready runtime run-id) [])}
+      :ready (if stage
+               (vec (current/with-runtime runtime (workflow/ready run-id)))
+               [])}
      "Devflow tracker projection must match its owning spec")))
 
 (s/fdef devflow-projection

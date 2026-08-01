@@ -17,6 +17,7 @@
 ;;   attention.clj     — chime attention rules
 ;;   nvd_scan.clj      — NVD scan cron job
 ;;   kanban_tracker.clj— devflow<->kanban tracker binding
+;;   devflow_targets.clj — kanban binding for devflow's decomposition defers
 ;;   module_adapters.clj — repo election of the batteries help transform
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and every
@@ -170,7 +171,18 @@
                   :required? true})
 (runtime/module! runtime :kanban/tracker
                  {:file "kanban_tracker.clj"
-                  :spools ['codethread/kanban 'codethread/devflow]
+                  :spools ['codethread/kanban 'codethread/devflow
+                           'skein.spools/workflow]
+                  :after [:skein/spools-kanban :skein/spools-devflow]
+                  :required? true})
+;; devflow v17 publishes its decompose stage unbound; devflow_targets.clj binds
+;; the card-authoring defer to this repo's kanban board and re-points the routed
+;; :decompose name at that binding, so it must follow both spools and the
+;; tracker that shares their surface.
+(runtime/module! runtime :devflow/decomposition-targets
+                 {:file "devflow_targets.clj"
+                  :spools ['codethread/kanban 'codethread/devflow
+                           'skein.spools/workflow]
                   :after [:skein/spools-kanban :skein/spools-devflow]
                   :required? true})
 

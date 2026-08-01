@@ -15,11 +15,6 @@
     [:edge/in "parent-of" [:= :id [:param :feature]]]]},
   "workflow-runs"
   [:and [:= :state "active"] [:= [:attr "workflow/role"] "root"]],
-  "devflow-runs"
-  [:and
-   [:= :state "active"]
-   [:= [:attr "workflow/role"] "root"]
-   [:= [:attr "workflow/family"] "devflow"]],
   "merge-lock"
   [:and [:= :state "active"] [:= [:attr "kind"] "merge-lock"]],
   "merge-queue"

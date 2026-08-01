@@ -41,13 +41,8 @@
    [:= :state "active"]
    [:= [:attr "workflow/role"] "root"]])
 
-(skein/defquery devflow-runs-query
-  "Query for active devflow lifecycle roots."
-  {:usage "strand list --query devflow-runs"}
-  [:and
-   [:= :state "active"]
-   [:= [:attr "workflow/role"] "root"]
-   [:= [:attr "workflow/family"] "devflow"]])
+;; devflow-runs is published by the devflow spool itself since v15; the
+;; workspace no longer duplicates it (same-layer registry keys are single-owner).
 
 (skein/defquery merge-lock-query
   "Query for the active singleton landing lock."

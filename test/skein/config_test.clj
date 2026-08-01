@@ -152,7 +152,8 @@
   (.mkdirs (io/file target))
   (doseq [name ["init.clj" "config.clj" "workflows.clj" "workflows_land.clj" "harnesses.clj"
                 "guide.clj" "attention.clj" "nvd_scan.clj" "reviewers.clj"
-                "kanban_tracker.clj" "module_adapters.clj" "spools.edn"]]
+                "kanban_tracker.clj" "devflow_targets.clj" "module_adapters.clj"
+                "spools.edn"]]
     (io/copy (io/file ".skein" name) (io/file target name)))
   (let [scripts-target (io/file target "scripts")]
     (.mkdirs scripts-target)
@@ -296,7 +297,7 @@
 (def ^:private named-query-names
   "The config-owned named queries whose registered definitions the surface
   baseline preserves, authored as `defquery` blocks in .skein/config.clj."
-  ["run-active" "kanban-feature-work" "workflow-runs" "devflow-runs" "merge-lock"
+  ["run-active" "kanban-feature-work" "workflow-runs" "merge-lock"
    "merge-queue" "work"])
 
 (defn- portable-source
@@ -436,7 +437,7 @@
                (mapv #(get-in % [:attributes :workflow/run-id])
                      (weaver/list (current/runtime)
                                   (var-get (requiring-resolve
-                                            'config/devflow-runs-query))
+                                            'ct.spools.devflow/devflow-runs-query))
                                   {}))))))))
 
 (deftest spool-bump-workflow-publishes-authority-exclusive-cutover-paths
@@ -2041,8 +2042,8 @@
     (fn [rt]
       (load-file ".skein/kanban_tracker.clj")
       (let [project (requiring-resolve 'kanban-tracker/devflow-projection)
-            current-root (requiring-resolve 'ct.spools.devflow/current-root)
-            ready (requiring-resolve 'ct.spools.devflow/ready)]
+            current-root (requiring-resolve 'skein.spools.workflow/current-root)
+            ready (requiring-resolve 'skein.spools.workflow/ready)]
         (testing "an active root projects its stage and ready steps"
           (with-redefs-fn {current-root (constantly {:attributes {:devflow/stage "tasks"}})
                            ready (constantly [{:id "next" :title "Do next" :role "step"}])}
