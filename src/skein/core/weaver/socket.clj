@@ -69,12 +69,15 @@
   "Render a present ex-data `:code` as the wire's code string (SPEC-004.C24),
   or nil when the value cannot be one.
 
-  Codes go through the same rendering as every other detail value so a
-  namespaced keyword keeps its namespace; handed the raw keyword, data.json's
-  Named rule would serialize it via `name` and drop the namespace."
+  Only a name is a code, so the accepted types are checked before rendering:
+  `json-safe-value` prints whatever it does not recognize, which would turn a
+  UUID or a bare object into an invented code. What it does give the named
+  types is the rendering every other detail value gets, keeping a namespaced
+  keyword whole where data.json's Named rule would serialize it via `name` and
+  drop the namespace."
   [code]
-  (let [rendered (json-safe-value code)]
-    (when (string? rendered) rendered)))
+  (when (or (string? code) (keyword? code) (symbol? code))
+    (json-safe-value code)))
 
 (defn- inferred-code
   "Pick the code for an error that carries none: a failed canonical-query

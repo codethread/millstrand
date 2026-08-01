@@ -231,6 +231,12 @@
   [_ctx]
   (throw (ex-info "op blew up" {:code nil})))
 
+(defn opaque-code-op
+  "Throw a `:code` that prints as a plausible string but is not a name."
+  [_ctx]
+  (throw (ex-info "op blew up"
+                  {:code (java.util.UUID/fromString "0d1b8e2c-9d3a-4a5e-8f7b-2c6d1e4a9b30")})))
+
 (defn subcommand-result-op
   "Return operation-label variants selected by the parsed subcommand path."
   [{:op/keys [name args]}]
@@ -3682,6 +3688,8 @@
                            'skein.weaver-test/non-string-code-op)
       (weaver/register-op! rt 'nil-code raw-mutating-standard
                            'skein.weaver-test/nil-code-op)
+      (weaver/register-op! rt 'opaque-code raw-mutating-standard
+                           'skein.weaver-test/opaque-code-op)
       (testing "a code the wire cannot carry is named, never coerced"
         (let [response (invoke-request rt "non-string-code" [])
               details (get-in response ["error" "details"])]
@@ -3692,7 +3700,12 @@
       (testing "an explicit nil code is present, not absent"
         (let [response (invoke-request rt "nil-code" [])]
           (is (= "domain/invalid-error-code" (get-in response ["error" "code"])))
-          (is (= "nil" (get-in response ["error" "details" "error/invalid-code"]))))))))
+          (is (= "nil" (get-in response ["error" "details" "error/invalid-code"])))))
+      (testing "a value that merely prints as a string is not a name"
+        (let [response (invoke-request rt "opaque-code" [])]
+          (is (= "domain/invalid-error-code" (get-in response ["error" "code"])))
+          (is (= "#uuid \"0d1b8e2c-9d3a-4a5e-8f7b-2c6d1e4a9b30\""
+                 (get-in response ["error" "details" "error/invalid-code"]))))))))
 
 (deftest weaver-query-registry-fails-clearly
   (with-runtime
