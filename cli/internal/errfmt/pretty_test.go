@@ -209,6 +209,29 @@ func TestPrettyColoursOnlyWhenNoColorIsUnset(t *testing.T) {
 	}
 }
 
+// A standalone remedy is the same line the layout's `try` section renders, so a
+// caller with no envelope behind it points at help in the same idiom.
+func TestRenderRemedyMatchesTheLayoutsTryLine(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	var pretty bytes.Buffer
+	RenderRemedy(&pretty, "mill --help", Pretty)
+	if pretty.String() != "\n    try: mill --help\n" {
+		t.Fatalf("pretty remedy = %q", pretty.String())
+	}
+
+	var plain bytes.Buffer
+	RenderRemedy(&plain, "mill --help", Plain)
+	if plain.String() != "try: mill --help\n" {
+		t.Fatalf("plain remedy = %q", plain.String())
+	}
+
+	var empty bytes.Buffer
+	RenderRemedy(&empty, "", Pretty)
+	if empty.Len() != 0 {
+		t.Fatalf("no remedy means no line: %q", empty.String())
+	}
+}
+
 func stripANSI(s string) string {
 	for _, code := range []string{ansiReset, ansiRed, ansiBold, ansiDim, ansiCyan} {
 		s = strings.ReplaceAll(s, code, "")

@@ -97,6 +97,22 @@ func Render(w io.Writer, e Error, mode Mode) {
 	_, _ = fmt.Fprintln(w, "error:", e.PlainMessage())
 }
 
+// RenderRemedy writes a standalone `try: <command>` pointer on its own line,
+// for a caller that has a remedy but no envelope to hang it on — mill's pointer
+// at `--help` after an unknown command. Pretty gives it the indented cyan line
+// the layout's `try` section gets, separated from the headline it follows;
+// plain keeps it bare, one line under SPEC-002.C4's untouched `error:` line.
+func RenderRemedy(w io.Writer, remedy string, mode Mode) {
+	if remedy == "" {
+		return
+	}
+	if mode == Pretty {
+		_, _ = fmt.Fprintln(w, "\n"+remedyLine(remedy, newPalette()))
+		return
+	}
+	_, _ = fmt.Fprintln(w, "try:", remedy)
+}
+
 // Resolve picks the rendering for w. SKEIN_ERROR_FORMAT wins when set;
 // otherwise pretty for a character device and plain for everything else —
 // resolved against the writer in use, never process stderr, so a buffer-backed

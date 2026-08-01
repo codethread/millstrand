@@ -58,7 +58,7 @@ func main() {
 	// renderer learns what the user typed.
 	cmd, err := root.ExecuteC()
 	if err != nil {
-		writeMillCommandError(err, millCommandPath(cmd))
+		writeMillCommandFailure(err, cmd)
 		os.Exit(1)
 	}
 }
@@ -77,8 +77,11 @@ func millCommandPath(cmd *cobra.Command) []string {
 
 func newMillCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "mill",
-		Short:         "Skein local router",
+		Use:   "mill",
+		Short: "Skein local router",
+		// Silencing hands the whole failure output to writeMillCommandFailure,
+		// which renders once and decides for itself which of Cobra's help
+		// pointer and usage block the failure has earned.
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		// Cobra reaches here only once --help, completion, and the other paths
@@ -160,6 +163,7 @@ func newMillCommand() *cobra.Command {
 	}})
 	root.AddCommand(strandCmd)
 	root.AddCommand(newBinCommand())
+	stampUsageErrors(root)
 	return root
 }
 
