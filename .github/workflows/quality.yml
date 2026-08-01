@@ -34,6 +34,7 @@ jobs:
               - '.splint.edn'
             go:
               - 'cli/**'
+              - 'tools/**'
               - 'go.work'
               - '.golangci.yml'
             shared:
@@ -64,8 +65,8 @@ jobs:
         env:
           SKEIN_TEST_AWAIT_SCALE: '3'
 
-  cli-go-test:
-    name: CLI Go tests
+  go-test:
+    name: Go tests
     needs: changes
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.clojure == 'true' || needs.changes.outputs.go == 'true' || needs.changes.outputs.shared == 'true' }}
     runs-on: ubuntu-latest
@@ -83,8 +84,9 @@ jobs:
       - uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: latest
-      - run: go test ./...
-        working-directory: cli
+      # The strand CLI's tests boot a real weaver, which is why this job needs
+      # Java and Clojure; ralph's are pure Go and ride along.
+      - run: make test-go
 
   smoke-test:
     name: Smoke test

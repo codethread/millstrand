@@ -1,7 +1,12 @@
-.PHONY: build install dash api-docs docs-site docs-serve docs-check fmt fmt-check fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
+.PHONY: build ralph install dash api-docs test-go docs-site docs-serve docs-check fmt fmt-check fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
 
 GO_CLI := ./cli/cmd/strand
 MILL_CLI := ./cli/cmd/mill
+# ralph is repo-local development tooling in its own module: it ships with no
+# Skein release, so it stays out of the published skein-strand-cli module.
+RALPH_CLI := ./tools/ralph
+# Every Go module in the workspace; the quality targets iterate this list.
+GO_MODULES := cli tools/ralph
 # BuildID falls back to the compiled-in "dev" when git is unavailable; it is
 # informational (skew attribution), so unlike InstalledSource it may degrade.
 BUILD_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
@@ -14,10 +19,16 @@ QUICKDOC_SCRIPT := scripts/generate_api_docs.clj
 
 # repo-local build for agents/worktrees validating CLI changes without touching
 # the user's global install; run the resulting ./bin/strand and ./bin/mill directly
-build:
+build: ralph
 	mkdir -p ./bin
 	go build -ldflags "$(SOURCE_LDFLAGS)" -o ./bin/strand $(GO_CLI)
 	go build -ldflags "$(SOURCE_LDFLAGS)" -o ./bin/mill $(MILL_CLI)
+
+# ralph finds the strand binary sitting beside it, so it belongs in ./bin with
+# the rest of the repo-local toolchain.
+ralph:
+	mkdir -p ./bin
+	go build -o ./bin/ralph $(RALPH_CLI)
 
 # stamp the user's global binaries with the CANONICAL repo checkout (the shared
 # .git common dir's parent), not the invoking worktree, so an install run from a
@@ -77,7 +88,9 @@ docs-serve:
 
 fmt:
 	clojure -M:format/fix
-	cd cli && go run mvdan.cc/gofumpt@$(GOFUMPT_VERSION) -w .
+	@for mod in $(GO_MODULES); do \
+		(cd "$$mod" && go run mvdan.cc/gofumpt@$(GOFUMPT_VERSION) -w .) || exit 1; \
+	done
 
 fmt-check: fmt-check-clj fmt-check-go
 
@@ -85,7 +98,16 @@ fmt-check-clj:
 	clojure -M:format
 
 fmt-check-go:
-	cd cli && out="$$(go run mvdan.cc/gofumpt@$(GOFUMPT_VERSION) -l .)" && test -z "$$out"
+	@for mod in $(GO_MODULES); do \
+		out="$$(cd "$$mod" && go run mvdan.cc/gofumpt@$(GOFUMPT_VERSION) -l .)"; \
+		if [ -n "$$out" ]; then echo "gofumpt: $$mod: $$out" >&2; exit 1; fi; \
+	done
+
+test-go:
+	@for mod in $(GO_MODULES); do \
+		echo "==> go test $$mod"; \
+		(cd "$$mod" && go test ./...) || exit 1; \
+	done
 
 lint: lint-clj lint-splint lint-conventions lint-go
 
@@ -109,14 +131,17 @@ lint-conventions:
 	clojure -M:lint/conventions
 
 lint-go:
-	cd cli && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --config ../.golangci.yml ./...
+	@for mod in $(GO_MODULES); do \
+		echo "==> golangci-lint $$mod"; \
+		(cd "$$mod" && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --config $(CURDIR)/.golangci.yml ./...) || exit 1; \
+	done
 
 reflect-check:
 	clojure -M:reflect-check
 
 deps-report:
 	-clojure -M:deps/antq
-	-cd cli && go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+	@$(MAKE) security-report-go
 	# local-only deep NVD scan; needs CLJ_WATSON_NVD_API_KEY exported
 	-clojure -M:security/clj-watson-nvd
 
@@ -126,7 +151,10 @@ security-report-clj:
 	-clojure -M:security/clj-watson
 
 security-report-go:
-	-cd cli && go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+	@for mod in $(GO_MODULES); do \
+		echo "==> govulncheck $$mod"; \
+		(cd "$$mod" && go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...) || true; \
+	done
 
 # Per-worktree warm test loop: probe-or-boot the worktree's warm REPL and run the
 # NS-named namespaces through it. Iteration only — never a Done-when gate; the
