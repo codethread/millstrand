@@ -67,8 +67,9 @@ func remedyLine(remedy string, paint palette) string {
 }
 
 // headline names what the user typed and what went wrong. The code trails it as
-// opaque text, dropped when it is the fallback that says nothing; the type noun
-// never appears, because "weaver domain error" tells a user nothing either.
+// opaque text, dropped when it is the fallback that says nothing or when the bin
+// synthesized it for a locally raised error; the type noun never appears,
+// because "weaver domain error" tells a user nothing either.
 func headline(e Error, paint palette) string {
 	message := e.Message
 	if message == "" {
@@ -79,7 +80,7 @@ func headline(e Error, paint palette) string {
 		line += command + ": "
 	}
 	line += paint.bold(message)
-	if e.Code != "" && e.Code != fallbackCode {
+	if e.Code != "" && e.Code != fallbackCode && !e.Local {
 		line += " " + paint.dim("("+e.Code+")")
 	}
 	return line

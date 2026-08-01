@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"skein-strand-cli/internal/config"
+	"skein-strand-cli/internal/errfmt"
 )
 
 const MillProtocolVersion = 2
@@ -86,7 +87,10 @@ func millCallPayload(operation string, world MillWorldRequest, payload map[strin
 	defer cancel()
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", meta.SocketPath)
 	if err != nil {
-		return nil, fmt.Errorf("mill socket unreachable; start one with: mill start: %w", err)
+		return nil, &TransportError{
+			Err:  fmt.Errorf("mill socket unreachable; start one with: mill start: %w", err),
+			Code: errfmt.CodeMillUnreachable,
+		}
 	}
 	defer func() { _ = conn.Close() }()
 	deadline := 5 * time.Second
@@ -129,13 +133,20 @@ func millCallPayload(operation string, world MillWorldRequest, payload map[strin
 	return resp.Result, nil
 }
 
+// ReadMillMetadata resolves the running mill from its published metadata. Every
+// way it fails — no metadata, stale metadata, a dead pid, a mismatched socket —
+// means there is no mill to talk to, so it types as transport and carries the
+// code that says the remedy is to start one.
 func ReadMillMetadata() (MillMetadata, error) {
 	metadata, err := readMillMetadata()
 	if err != nil {
 		if errors.Is(err, ErrMillProtocolMismatch) {
-			return MillMetadata{}, err
+			return MillMetadata{}, &TransportError{Err: err, Code: errfmt.CodeMillUnreachable}
 		}
-		return MillMetadata{}, fmt.Errorf("%w; start one with: mill start", err)
+		return MillMetadata{}, &TransportError{
+			Err:  fmt.Errorf("%w; start one with: mill start", err),
+			Code: errfmt.CodeMillUnreachable,
+		}
 	}
 	return metadata, nil
 }

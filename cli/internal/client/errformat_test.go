@@ -3,6 +3,7 @@ package client
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -45,6 +46,32 @@ func TestRelayErrorRendersPrettyWithTheTypedFields(t *testing.T) {
 	}
 }
 
+// The weaver-origin case JSON mode exists for: the envelope the weaver built
+// reaches a CLI-over-CLI consumer as structure rather than as prose.
+func TestRelayErrorRendersJSONWhenAsked(t *testing.T) {
+	t.Setenv("SKEIN_ERROR_FORMAT", "json")
+	frame := `{"protocol_version":1,"request_id":"r1","ok":false,"result":null,"error":{"type":"domain","code":"domain/error","message":"Unknown subcommand \"list\"","details":{"available":["add","board"],"op":"kanban","token":"list"}}}` + "\n"
+	var out, er bytes.Buffer
+	if _, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, []string{"kanban", "list"}); err == nil {
+		t.Fatal("expected the typed response error")
+	}
+	var decoded struct {
+		Type    string         `json:"type"`
+		Code    string         `json:"code"`
+		Message string         `json:"message"`
+		Details map[string]any `json:"details"`
+	}
+	if err := json.Unmarshal(er.Bytes(), &decoded); err != nil {
+		t.Fatalf("decoding %q: %v", er.String(), err)
+	}
+	if decoded.Type != "domain" || decoded.Code != "domain/error" {
+		t.Fatalf("taxonomy lost in relay: %#v", decoded)
+	}
+	if decoded.Message != `Unknown subcommand "list"` || decoded.Details["op"] != "kanban" {
+		t.Fatalf("envelope lost in relay: %#v", decoded)
+	}
+}
+
 // SPEC-002.C4c splits the taxonomy from the origin: an unreachable mill is
 // transport even though the bin raised it locally, and locally raised means the
 // plain line stays bare.
@@ -68,6 +95,34 @@ func TestForRenderingClassifiesTheThreeOrigins(t *testing.T) {
 	}
 }
 
+// An error frame that will not decode has nothing typed to render, so the relay
+// leaves it to the caller that renders everything the relay did not. Rendering
+// it here as well put two lines on stderr — two envelopes in JSON mode, where
+// exactly one is the whole contract.
+func TestRelayLeavesAnUndecodableFrameToItsCaller(t *testing.T) {
+	frame := `{"protocol_version":1,"request_id":"r1","ok":false,"result":null,"error":"boom"}` + "\n"
+	var out, er bytes.Buffer
+	code, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, nil)
+	if code == 0 || err == nil {
+		t.Fatalf("expected a non-zero exit and an error, got (%d, %v)", code, err)
+	}
+	if er.Len() != 0 {
+		t.Fatalf("the relay renders nothing it could not decode, got %q", er.String())
+	}
+	var transportErr *TransportError
+	if !errors.As(err, &transportErr) {
+		t.Fatalf("a frame that will not decode is skew, so transport: %#v", err)
+	}
+	if transportErr.Code != errfmt.CodeWeaverResponseMalformed {
+		t.Fatalf("code = %q", transportErr.Code)
+	}
+	// The undecodable error value is the most faithful thing left to say, so it
+	// rides in the message rather than being dropped with the rendering.
+	if !strings.Contains(err.Error(), `"boom"`) {
+		t.Fatalf("the raw error value must survive in the message: %v", err)
+	}
+}
+
 // Every failure InvokeThroughMill raises itself is a transport failure; only a
 // decoded envelope passes through untouched.
 func TestInvokeThroughMillMarksItsOwnFailuresTransport(t *testing.T) {
@@ -77,6 +132,14 @@ func TestInvokeThroughMillMarksItsOwnFailuresTransport(t *testing.T) {
 	var transportErr *TransportError
 	if !errors.As(err, &transportErr) {
 		t.Fatalf("no running mill must surface as transport, got %#v", err)
+	}
+	// The remedy is to start a mill, and the code says so rather than leaving a
+	// JSON-mode consumer to guess which transport failure it hit.
+	if transportErr.Code != errfmt.CodeMillUnreachable {
+		t.Fatalf("code = %q", transportErr.Code)
+	}
+	if rendered := ForRendering(err, nil); rendered.Type != errfmt.TypeTransport || rendered.Code != errfmt.CodeMillUnreachable {
+		t.Fatalf("the code must reach the renderer: %#v", rendered)
 	}
 }
 

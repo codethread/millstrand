@@ -64,6 +64,11 @@ func writeMillCommandFailure(err error, cmd *cobra.Command) {
 	if errors.As(err, &binErr) {
 		return
 	}
+	// So is JSON mode: the envelope line is the whole of stderr, and a caller
+	// decoding it reads no usage prose (SPEC-002.C15a).
+	if errfmt.ModeFor(millErrorOut) == errfmt.JSON {
+		return
+	}
 	var usageErr *usageError
 	if errors.As(err, &usageErr) {
 		// Cobra's own block, unindented in either mode: it is a usage rendering

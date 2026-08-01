@@ -2,10 +2,11 @@
 // a leaf package: client, dispatch, and cmd/mill map their typed values into
 // Error and call Render, and nothing here imports them back.
 //
-// Two renderings ship. Plain is the machine-facing single line pinned by
+// Three renderings ship. Plain is the machine-facing single line pinned by
 // SPEC-002.C4 and is the default whenever the error writer is not a terminal.
-// Pretty is the expanded terminal layout. SKEIN_ERROR_FORMAT overrides the
-// detection either way.
+// Pretty is the expanded terminal layout. JSON is the error envelope as one
+// decodable line, for a caller composing over the CLI. SKEIN_ERROR_FORMAT
+// overrides the detection, and is the only way to reach JSON.
 package errfmt
 
 import (
@@ -25,10 +26,12 @@ const (
 	Plain Mode = "plain"
 	// Pretty is the expanded layout, only ever selected for a terminal.
 	Pretty Mode = "pretty"
+	// JSON is the four-field envelope as one line, never detected: a caller
+	// composing over the CLI asks for it by name.
+	JSON Mode = "json"
 )
 
-// FormatEnv overrides terminal detection. Card e4trm extends the accepted set
-// with json when it lands.
+// FormatEnv overrides terminal detection, and is the only route to JSON.
 const FormatEnv = "SKEIN_ERROR_FORMAT"
 
 // TypeLocal marks an error the bin raised about its own invocation. It is the
@@ -41,6 +44,33 @@ const TypeLocal = "cli"
 // bad invocation is TypeLocal (SPEC-002.C4c).
 const TypeTransport = "transport"
 
+// Codes for the errors a bin raises itself. They exist so a JSON-mode consumer
+// can log one local failure apart from another; like every code outside the
+// three SPEC-005.C7 pins, they are informative and free to change, and nothing
+// branches on them.
+const (
+	// CodeInvalidInvocation is the catch-all bad command line: an unknown flag,
+	// a flag missing its value, an unparseable --timeout.
+	CodeInvalidInvocation = "cli/invalid-invocation"
+	// CodeInvalidErrorFormat is a SKEIN_ERROR_FORMAT this bin does not accept.
+	CodeInvalidErrorFormat = "cli/invalid-error-format"
+	// CodePayloadUnreadable is a --payload or --stdin slot that would not load.
+	CodePayloadUnreadable = "cli/payload-unreadable"
+	// CodeContextUnresolved is a cwd or git context that would not derive.
+	CodeContextUnresolved = "cli/context-unresolved"
+	// CodeOutputUnwritable is a failure to write the bin's own stdout.
+	CodeOutputUnwritable = "cli/output-unwritable"
+	// CodeMillUnreachable is no mill to talk to: no metadata, stale metadata, a
+	// dead pid, a refused dial. Retryable once a mill is running.
+	CodeMillUnreachable = "cli/mill-unreachable"
+	// CodeMillTransportFailed is a mill that was reached and then failed: a
+	// dropped connection, a write that never landed.
+	CodeMillTransportFailed = "cli/mill-transport-failed"
+	// CodeWeaverResponseMalformed is a response frame that would not decode —
+	// skew between this bin, the mill, and the weaver.
+	CodeWeaverResponseMalformed = "cli/weaver-response-malformed"
+)
+
 // databaseNotInitialized is the one code this package switches on: its bare
 // message is the `mill init` remediation users see, and codes are otherwise
 // explicitly non-contractual (SPEC-005.C7).
@@ -50,7 +80,7 @@ const databaseNotInitialized = "database/not-initialized"
 // code lands here — so the pretty headline drops it.
 const fallbackCode = "domain/error"
 
-var acceptedFormats = []Mode{Plain, Pretty}
+var acceptedFormats = []Mode{JSON, Plain, Pretty}
 
 // Error is the renderer's own input shape. Call sites fill what they have; no
 // field is required.
@@ -72,29 +102,35 @@ type Error struct {
 }
 
 // FromError lifts a bare error value — a Cobra failure, a usage complaint, any
-// locally raised error with no envelope behind it — into a local Error.
+// locally raised error with no envelope behind it — into a local Error under
+// the catch-all invocation code. A caller that knows which local failure it is
+// holding calls LocalError with the code that says so.
 func FromError(err error, command []string) Error {
-	return LocalError(TypeLocal, err, command)
+	return LocalError(TypeLocal, CodeInvalidInvocation, err, command)
 }
 
-// LocalError lifts a locally raised error under an explicit taxonomy type. No
-// envelope stands behind it, so plain rendering stays the bare line whatever
-// the type says.
-func LocalError(errType string, err error, command []string) Error {
+// LocalError lifts a locally raised error under an explicit taxonomy type and
+// code. No envelope stands behind it, so plain rendering stays the bare line
+// and pretty prints no code, whatever the type says: the code is there for a
+// JSON-mode consumer, not for a reader.
+func LocalError(errType, code string, err error, command []string) Error {
 	message := ""
 	if err != nil {
 		message = err.Error()
 	}
-	return Error{Type: errType, Message: message, Command: command, Local: true}
+	return Error{Type: errType, Code: code, Message: message, Command: command, Local: true}
 }
 
 // Render writes e to w in the given mode, terminated by a newline.
 func Render(w io.Writer, e Error, mode Mode) {
-	if mode == Pretty {
+	switch mode {
+	case Pretty:
 		renderPretty(w, e)
-		return
+	case JSON:
+		renderJSON(w, e)
+	default:
+		_, _ = fmt.Fprintln(w, "error:", e.PlainMessage())
 	}
-	_, _ = fmt.Fprintln(w, "error:", e.PlainMessage())
 }
 
 // RenderRemedy writes a standalone `try: <command>` pointer on its own line,
@@ -102,8 +138,10 @@ func Render(w io.Writer, e Error, mode Mode) {
 // at `--help` after an unknown command. Pretty gives it the indented cyan line
 // the layout's `try` section gets, separated from the headline it follows;
 // plain keeps it bare, one line under SPEC-002.C4's untouched `error:` line.
+// A consumer in JSON mode reads one envelope line per failure and no prose, so
+// the pointer is not written at all there.
 func RenderRemedy(w io.Writer, remedy string, mode Mode) {
-	if remedy == "" {
+	if remedy == "" || mode == JSON {
 		return
 	}
 	if mode == Pretty {

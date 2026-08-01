@@ -41,7 +41,10 @@ func invokeThroughMill(world MillWorldRequest, envelope map[string]any, stdout, 
 	defer cancel()
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", meta.SocketPath)
 	if err != nil {
-		return 1, fmt.Errorf("mill socket unreachable; start one with: mill start: %w", err)
+		return 1, &TransportError{
+			Err:  fmt.Errorf("mill socket unreachable; start one with: mill start: %w", err),
+			Code: errfmt.CodeMillUnreachable,
+		}
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -185,15 +188,19 @@ func surfaceError(raw json.RawMessage, stderr io.Writer, command []string) (int,
 	if len(raw) == 0 {
 		return 1, errors.New("weaver error")
 	}
-	mode := errfmt.ModeFor(stderr)
 	var re ResponseError
 	if err := json.Unmarshal(raw, &re); err != nil {
-		// Nothing decoded, so there is nothing typed to render: the raw frame is
-		// the most faithful thing stderr can carry.
-		errfmt.Render(stderr, errfmt.Error{Type: errfmt.TypeLocal, Message: string(raw), Command: command}, mode)
-		return 1, fmt.Errorf("malformed weaver error: %w", err)
+		// Nothing decoded, so there is nothing typed to render here. Returning it
+		// unrendered leaves the single rendering to the caller, which renders
+		// every failure the relay did not — the raw frame rides in the message so
+		// nothing is lost. A frame that will not decode is skew between this bin,
+		// the mill, and the weaver, so it types transport (SPEC-002.C4c).
+		return 1, &TransportError{
+			Err:  fmt.Errorf("malformed weaver error %s: %w", raw, err),
+			Code: errfmt.CodeWeaverResponseMalformed,
+		}
 	}
-	errfmt.Render(stderr, re.forRendering(command), mode)
+	errfmt.Render(stderr, re.forRendering(command), errfmt.ModeFor(stderr))
 	return 1, &re
 }
 

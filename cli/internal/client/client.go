@@ -67,6 +67,9 @@ func (e *ResponseError) forRendering(command []string) errfmt.Error {
 // is transport all the same (SPEC-002.C4c).
 type TransportError struct {
 	Err error
+	// Code names which transport failure this is, for a JSON-mode consumer.
+	// Empty means the generic one asTransport stamps.
+	Code string
 }
 
 func (e *TransportError) Error() string { return e.Err.Error() }
@@ -75,7 +78,8 @@ func (e *TransportError) Unwrap() error { return e.Err }
 
 // asTransport marks everything a mill call failed with that is not a decoded
 // envelope. Applied once at each call boundary, it saves every caller from
-// re-deciding which failures were the transport's.
+// re-deciding which failures were the transport's, and leaves a failure that
+// already named itself alone.
 func asTransport(err error) error {
 	if err == nil {
 		return nil
@@ -84,7 +88,11 @@ func asTransport(err error) error {
 	if errors.As(err, &responseErr) {
 		return err
 	}
-	return &TransportError{Err: err}
+	var transportErr *TransportError
+	if errors.As(err, &transportErr) {
+		return err
+	}
+	return &TransportError{Err: err, Code: errfmt.CodeMillTransportFailed}
 }
 
 // ForRendering maps whatever a mill call returned into the renderer's input: a
@@ -97,7 +105,7 @@ func ForRendering(err error, command []string) errfmt.Error {
 	}
 	var transportErr *TransportError
 	if errors.As(err, &transportErr) {
-		return errfmt.LocalError(errfmt.TypeTransport, err, command)
+		return errfmt.LocalError(errfmt.TypeTransport, transportErr.Code, err, command)
 	}
 	return errfmt.FromError(err, command)
 }

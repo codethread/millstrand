@@ -79,6 +79,16 @@ func newMillCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "mill",
 		Short: "Skein local router",
+		Long: `mill is the Skein local router: it supervises weavers and forwards
+strand invocations to the one selected for a workspace.
+
+Environment:
+  SKEIN_ERROR_FORMAT   error rendering: plain|pretty|json (default: pretty at a
+                       terminal, plain everywhere else). json writes the error
+                       envelope {type, code, message, details} as one line on
+                       stderr, and nothing else, for a caller composing over
+                       this CLI
+  NO_COLOR             drop ANSI colour from the pretty rendering`,
 		// Silencing hands the whole failure output to writeMillCommandFailure,
 		// which renders once and decides for itself which of Cobra's help
 		// pointer and usage block the failure has earned.

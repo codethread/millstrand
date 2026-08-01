@@ -54,7 +54,7 @@ type parsed struct {
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	p, err := parse(args)
 	if err != nil {
-		return fail(stderr, err)
+		return fail(stderr, errfmt.CodeInvalidInvocation, err)
 	}
 	if p.version {
 		return printJSON(stdout, stderr, map[string]any{"bin_version": Version, "protocol_version": client.ProtocolVersion})
@@ -63,11 +63,12 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// at the first non-flag token). With an op named, --help must trail the op
 	// (DELTA-Dtf-001.CC6): redirect rather than print static usage.
 	if p.help && p.haveOp {
-		return fail(stderr, fmt.Errorf("--help must follow the op: run `strand help %s` or `strand %s --help`", p.opName, p.opName))
+		return fail(stderr, errfmt.CodeInvalidInvocation,
+			fmt.Errorf("--help must follow the op: run `strand help %s` or `strand %s --help`", p.opName, p.opName))
 	}
 	if p.help || !p.haveOp {
 		if _, err := fmt.Fprint(stdout, helpText); err != nil {
-			return fail(stderr, err)
+			return fail(stderr, errfmt.CodeOutputUnwritable, err)
 		}
 		return 0
 	}
@@ -75,20 +76,20 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// so a typo'd SKEIN_ERROR_FORMAT never breaks the paths SPEC-002.C34 promises
 	// work with no weaver.
 	if err := errfmt.ValidateFormat(); err != nil {
-		return fail(stderr, err)
+		return fail(stderr, errfmt.CodeInvalidErrorFormat, err)
 	}
 
 	payloads, err := buildPayloads(p, stdin)
 	if err != nil {
-		return fail(stderr, err)
+		return fail(stderr, errfmt.CodePayloadUnreadable, err)
 	}
 	effectiveCwd, worktreeRoot, gitCommonDir, err := resolveContext(p)
 	if err != nil {
-		return fail(stderr, err)
+		return fail(stderr, errfmt.CodeContextUnresolved, err)
 	}
 	envelope, err := assembleEnvelope(p, payloads, effectiveCwd, worktreeRoot, gitCommonDir)
 	if err != nil {
-		return fail(stderr, err)
+		return fail(stderr, errfmt.CodeInvalidInvocation, err)
 	}
 
 	if p.dryRun {
@@ -299,18 +300,19 @@ func assembleEnvelope(p parsed, payloads map[string]string, effectiveCwd, worktr
 func printJSON(stdout, stderr io.Writer, v any) int {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return fail(stderr, err)
+		return fail(stderr, errfmt.CodeOutputUnwritable, err)
 	}
 	if _, err := fmt.Fprintln(stdout, string(b)); err != nil {
-		return fail(stderr, err)
+		return fail(stderr, errfmt.CodeOutputUnwritable, err)
 	}
 	return 0
 }
 
 // fail renders a bad invocation — unknown flags, unreadable payloads,
-// underivable context — and returns the exit code.
-func fail(stderr io.Writer, err error) int {
-	return render(stderr, errfmt.FromError(err, nil))
+// underivable context — under the code that names which one it was, and returns
+// the exit code.
+func fail(stderr io.Writer, code string, err error) int {
+	return render(stderr, errfmt.LocalError(errfmt.TypeLocal, code, err, nil))
 }
 
 func render(stderr io.Writer, e errfmt.Error) int {
@@ -342,6 +344,13 @@ Bin-only:
   --dry-run                print the assembled invoke envelope; contacts nothing
   --version                print bin and protocol version
   --help                   print this help (bare "strand" prints it too)
+
+Environment:
+  SKEIN_ERROR_FORMAT       error rendering: plain|pretty|json (default: pretty at
+                           a terminal, plain everywhere else). json writes the
+                           error envelope {type, code, message, details} as one
+                           line on stderr, for a caller composing over this CLI
+  NO_COLOR                 drop ANSI colour from the pretty rendering
 
 Invoke envelope (SPEC-002-D004.C6): the request frame carries protocol version,
 request id, and weaver id; the envelope {name, argv, payloads, cwd,
