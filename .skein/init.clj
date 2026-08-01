@@ -193,6 +193,13 @@
                   :after [:skein/spools-workflow :skein/spools-delegation
                           :config]
                   :required? true})
+;; workflow-to-ralph.clj owns the two-stage epic preparation routine. It is a
+;; separate module so its decomposition and review contract stays focused.
+(runtime/module! runtime :workflow-to-ralph
+                 {:file "workflow-to-ralph.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows]
+                  :required? true})
 ;; workflows_land.clj authors the narrow land policy op: the merge lock, the
 ;; merge queue in front of it, and the kanban lane moves. It is a sibling rather
 ;; than part of workflows.clj because the policy outgrew the definitions it
@@ -219,5 +226,5 @@
                  {:ns 'ct.spools.executors.subagent
                   :spools ['ct.spools/agent-run]
                   :after [:skein/spools-shuttle :skein/spools-workflow
-                          :harnesses :workflows]
+                          :harnesses :workflows :workflow-to-ralph]
                   :required? true})

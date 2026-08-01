@@ -139,6 +139,8 @@
             ((requiring-resolve 'harnesses/open-task-contract!) {:runtime rt})
             (load-module-source! rt :guide ".skein/guide.clj")
             (load-module-source! rt :workflows ".skein/workflows.clj")
+            (load-module-source! rt :workflow-to-ralph
+                                 ".skein/workflow-to-ralph.clj")
             (load-module-source! rt :workflows-land ".skein/workflows_land.clj")
             (f rt)))
         (finally
@@ -150,7 +152,8 @@
   "Copy the repo-local config files into a temporary config dir."
   [target]
   (.mkdirs (io/file target))
-  (doseq [name ["init.clj" "config.clj" "workflows.clj" "workflows_land.clj" "harnesses.clj"
+  (doseq [name ["init.clj" "config.clj" "workflows.clj" "workflow-to-ralph.clj"
+                "workflows_land.clj" "harnesses.clj"
                 "guide.clj" "attention.clj" "nvd_scan.clj" "reviewers.clj"
                 "kanban_tracker.clj" "module_adapters.clj" "spools.edn"]]
     (io/copy (io/file ".skein" name) (io/file target name)))
@@ -438,6 +441,45 @@
                                   (var-get (requiring-resolve
                                             'config/devflow-runs-query))
                                   {}))))))))
+
+(deftest workflow-to-ralph-blocks-labeling-on-every-feature-review
+  (with-startup-config-runtime
+    (fn [_rt]
+      (let [description (op! "workflow" ["show" "workflow-to-ralph"])
+            started (op! "workflow" ["start" "prepare-epic"
+                                     "--workflow" "workflow-to-ralph"
+                                     "--params" (json/write-str {:epic "epic-1"})])]
+        (is (= "workflow-to-ralph/workflow-to-ralph"
+               (:definition description)))
+        (is (= "workflow-to-ralph.epic.decompose"
+               (:action-ref (first (:ready started)))))
+        (is (= "breakdown-ready"
+               (:checkpoint
+                (first (:ready (op! "workflow"
+                                    ["next" "prepare-epic"]))))))
+        (let [review-frontier
+              (:ready
+               (op! "workflow"
+                    ["next" "prepare-epic"
+                     "--choice" "ready-for-review"
+                     "--input" (json/write-str {:features ["feature-a"
+                                                           "feature-b"]})]))]
+          (is (= ["Review task breakdown for feature feature-a"
+                  "Review task breakdown for feature feature-b"]
+                 (mapv :title review-frontier)))
+          (is (every? #(= "review-feature" (:checkpoint %)) review-frontier))
+          (let [[first-review second-review] review-frontier]
+            (op! "workflow" ["next" "prepare-epic"
+                             "--step" (:id first-review)
+                             "--choice" "approved"])
+            (let [after-final-review
+                  (op! "workflow" ["next" "prepare-epic"
+                                   "--step" (:id second-review)
+                                   "--choice" "approved"])]
+              (is (= "workflow-to-ralph.epic.label"
+                     (:action-ref (first (:ready after-final-review)))))
+              (is (true? (:done (op! "workflow"
+                                     ["next" "prepare-epic"])))))))))))
 
 (deftest spool-bump-workflow-publishes-authority-exclusive-cutover-paths
   (with-startup-config-runtime
