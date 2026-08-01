@@ -129,8 +129,13 @@
   (let [runtime (current/runtime)]
     (require-feature-breakdowns! runtime epic features)
     ((requiring-resolve 'ct.spools.kanban/label-add!) runtime epic ["ralph"])
-    (str "labeled epic " epic " for Ralph after " (count features)
-         " feature reviews")))
+    (let [observed (attr-value (weaver/show runtime epic) :kanban.label/ralph)]
+      (when-not (= "true" observed)
+        ((requiring-resolve 'ct.spools.kanban/label-rm!) runtime epic ["ralph"])
+        (throw (ex-info "Ralph label persistence check failed"
+                        {:epic epic :expected "true" :observed observed})))
+      (str "labeled epic " epic " for Ralph after " (count features)
+           " feature reviews"))))
 
 (workflow/defworkflow workflow-to-ralph-review
   "Review every feature breakdown before marking its epic ready for Ralph.
