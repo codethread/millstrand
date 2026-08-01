@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/signal"
 	"time"
+
+	"skein-strand-cli/internal/errfmt"
 )
 
 // InvokeThroughMill sends an invoke envelope through the local mill routing path
@@ -23,6 +25,11 @@ import (
 // It returns the process exit code: 0 on a successful single/stream response, a
 // non-zero code on an error frame or terminator, and 130 on interrupt.
 func InvokeThroughMill(world MillWorldRequest, envelope map[string]any, stdout, stderr io.Writer) (int, error) {
+	code, err := invokeThroughMill(world, envelope, stdout, stderr)
+	return code, asTransport(err)
+}
+
+func invokeThroughMill(world MillWorldRequest, envelope map[string]any, stdout, stderr io.Writer) (int, error) {
 	meta, err := ReadMillMetadata()
 	if err != nil {
 		return 1, err
@@ -56,7 +63,7 @@ func InvokeThroughMill(world MillWorldRequest, envelope map[string]any, stdout, 
 	if err := json.NewEncoder(conn).Encode(req); err != nil {
 		return 1, fmt.Errorf("mill socket write failed: %w", err)
 	}
-	code, err := RelayResponse(bufio.NewReader(conn), stdout, stderr)
+	code, err := RelayResponse(bufio.NewReader(conn), stdout, stderr, commandFromEnvelope(envelope))
 	select {
 	case <-interrupted:
 		return 130, nil
@@ -70,7 +77,7 @@ func InvokeThroughMill(world MillWorldRequest, envelope map[string]any, stdout, 
 // header switches to line-by-line relay until a `done` terminator; otherwise it
 // is a single `ok` response. Emitted stream lines are written verbatim (flushed
 // per line); errors surface on stderr with a non-zero exit.
-func RelayResponse(r *bufio.Reader, stdout, stderr io.Writer) (int, error) {
+func RelayResponse(r *bufio.Reader, stdout, stderr io.Writer, command []string) (int, error) {
 	line, err := readFrameLine(r)
 	if err != nil {
 		return 1, err
@@ -80,12 +87,12 @@ func RelayResponse(r *bufio.Reader, stdout, stderr io.Writer) (int, error) {
 		return 1, err
 	}
 	if isStreamHeader(frame) {
-		return relayStream(r, stdout, stderr)
+		return relayStream(r, stdout, stderr, command)
 	}
-	return relaySingle(frame, line, stdout, stderr)
+	return relaySingle(frame, line, stdout, stderr, command)
 }
 
-func relaySingle(frame map[string]json.RawMessage, line []byte, stdout, stderr io.Writer) (int, error) {
+func relaySingle(frame map[string]json.RawMessage, line []byte, stdout, stderr io.Writer, command []string) (int, error) {
 	ok, err := frameBool(frame, "ok")
 	if err != nil {
 		return 1, fmt.Errorf("malformed weaver response: %w", err)
@@ -113,7 +120,7 @@ func relaySingle(frame map[string]json.RawMessage, line []byte, stdout, stderr i
 		}
 		return 0, nil
 	}
-	return surfaceError(frame["error"], stderr)
+	return surfaceError(frame["error"], stderr, command)
 }
 
 // relayVerbatim writes a verbatim-flagged result to stdout with no JSON
@@ -137,7 +144,7 @@ func relayVerbatim(raw json.RawMessage, stdout io.Writer) (int, error) {
 	return 0, nil
 }
 
-func relayStream(r *bufio.Reader, stdout, stderr io.Writer) (int, error) {
+func relayStream(r *bufio.Reader, stdout, stderr io.Writer, command []string) (int, error) {
 	for {
 		line, err := readFrameLine(r)
 		if err != nil {
@@ -155,7 +162,7 @@ func relayStream(r *bufio.Reader, stdout, stderr io.Writer) (int, error) {
 			if success {
 				return 0, nil
 			}
-			return surfaceError(frame["error"], stderr)
+			return surfaceError(frame["error"], stderr, command)
 		}
 		// Emitted value: relay the frame verbatim, flushing per line. The line
 		// carries its own trailing newline; a final unterminated line gets one.
@@ -174,17 +181,40 @@ func relayStream(r *bufio.Reader, stdout, stderr io.Writer) (int, error) {
 // typed error as well as a non-zero exit code. Callers that need machine
 // handling (such as mill bin) can preserve its code and details without
 // reverse-parsing the human rendering.
-func surfaceError(raw json.RawMessage, stderr io.Writer) (int, error) {
+func surfaceError(raw json.RawMessage, stderr io.Writer, command []string) (int, error) {
 	if len(raw) == 0 {
 		return 1, errors.New("weaver error")
 	}
+	mode := errfmt.ModeFor(stderr)
 	var re ResponseError
 	if err := json.Unmarshal(raw, &re); err != nil {
-		_, _ = fmt.Fprintln(stderr, "error:", string(raw))
+		// Nothing decoded, so there is nothing typed to render: the raw frame is
+		// the most faithful thing stderr can carry.
+		errfmt.Render(stderr, errfmt.Error{Type: errfmt.TypeLocal, Message: string(raw), Command: command}, mode)
 		return 1, fmt.Errorf("malformed weaver error: %w", err)
 	}
-	_, _ = fmt.Fprintln(stderr, "error:", re.Error())
+	errfmt.Render(stderr, re.forRendering(command), mode)
 	return 1, &re
+}
+
+// commandFromEnvelope reads back the op name and argv the dispatcher assembled,
+// which is the command the user typed.
+func commandFromEnvelope(envelope map[string]any) []string {
+	command := []string{}
+	if name, ok := envelope["name"].(string); ok && name != "" {
+		command = append(command, name)
+	}
+	switch argv := envelope["argv"].(type) {
+	case []string:
+		command = append(command, argv...)
+	case []any:
+		for _, token := range argv {
+			if text, ok := token.(string); ok {
+				command = append(command, text)
+			}
+		}
+	}
+	return command
 }
 
 func readFrameLine(r *bufio.Reader) ([]byte, error) {

@@ -16,6 +16,7 @@ import (
 
 	"skein-strand-cli/internal/client"
 	"skein-strand-cli/internal/config"
+	"skein-strand-cli/internal/errfmt"
 )
 
 // Version is the strand bin version reported by --version and carried in the
@@ -70,6 +71,12 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
+	// Selection is validated once the local-only flags above are out of the way,
+	// so a typo'd SKEIN_ERROR_FORMAT never breaks the paths SPEC-002.C34 promises
+	// work with no weaver.
+	if err := errfmt.ValidateFormat(); err != nil {
+		return fail(stderr, err)
+	}
 
 	payloads, err := buildPayloads(p, stdin)
 	if err != nil {
@@ -98,9 +105,12 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	world := client.MillWorldRequest{CWD: effectiveCwd, ConfigDir: p.workspace}
 	code, err := sendInvoke(world, envelope, stdout, stderr)
 	if err != nil {
+		// A *client.ResponseError has already been rendered by the relay; anything
+		// else (transport, malformed frames) has not. Exactly one rendering
+		// reaches stderr either way.
 		var responseErr *client.ResponseError
 		if !errors.As(err, &responseErr) {
-			_, _ = fmt.Fprintln(stderr, "error:", err)
+			render(stderr, client.ForRendering(err, append([]string{p.opName}, p.argv...)))
 		}
 		if code == 0 {
 			code = 1
@@ -297,8 +307,14 @@ func printJSON(stdout, stderr io.Writer, v any) int {
 	return 0
 }
 
+// fail renders a bad invocation — unknown flags, unreadable payloads,
+// underivable context — and returns the exit code.
 func fail(stderr io.Writer, err error) int {
-	_, _ = fmt.Fprintln(stderr, "error:", err)
+	return render(stderr, errfmt.FromError(err, nil))
+}
+
+func render(stderr io.Writer, e errfmt.Error) int {
+	errfmt.Render(stderr, e, errfmt.ModeFor(stderr))
 	return 1
 }
 

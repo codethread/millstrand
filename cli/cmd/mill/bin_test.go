@@ -247,7 +247,7 @@ func TestMillBinFailureUsesStructuredJSONCommandEnvelope(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected bin/not-built failure")
 	}
-	writeMillCommandError(err)
+	writeMillCommandError(err, nil)
 	var envelope map[string]any
 	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
 		t.Fatalf("failure is not JSON: %v (%q)", err, stderr.String())
@@ -298,7 +298,7 @@ func TestMillBinListRelayFailureUsesTypedResponseError(t *testing.T) {
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected list relay failure")
 	} else {
-		writeMillCommandError(err)
+		writeMillCommandError(err, nil)
 	}
 	var envelope map[string]any
 	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
@@ -339,7 +339,7 @@ func TestMillBinPlanFailuresPreserveTypedCodeAndDetails(t *testing.T) {
 			if err := cmd.Execute(); err == nil {
 				t.Fatal("expected plan failure")
 			} else {
-				writeMillCommandError(err)
+				writeMillCommandError(err, nil)
 			}
 			var envelope map[string]any
 			if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
@@ -374,7 +374,7 @@ func TestMillBinMalformedPlanFailureDoesNotInventOutcomeCode(t *testing.T) {
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected malformed plan failure")
 	} else {
-		writeMillCommandError(err)
+		writeMillCommandError(err, nil)
 	}
 	var envelope map[string]any
 	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {

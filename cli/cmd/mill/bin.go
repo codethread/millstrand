@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"skein-strand-cli/internal/client"
 	"skein-strand-cli/internal/config"
+	"skein-strand-cli/internal/errfmt"
 )
 
 // binInvoke is deliberately the existing selected-world invoke path. The
@@ -84,13 +85,16 @@ func (e *binError) binFailureEnvelope() map[string]any {
 	return envelope
 }
 
-func writeMillCommandError(err error) {
+// writeMillCommandError is mill's only error writer. The structured bin
+// envelope stays ahead of the shared renderer: `mill bin` failures are a
+// machine contract (SPEC-002.C54/C55) and never fall through to an error line.
+func writeMillCommandError(err error, command []string) {
 	var binErr *binError
 	if errors.As(err, &binErr) {
 		_ = json.NewEncoder(millErrorOut).Encode(binErr.binFailureEnvelope())
 		return
 	}
-	_, _ = fmt.Fprintln(millErrorOut, "error:", err)
+	errfmt.Render(millErrorOut, client.ForRendering(err, command), errfmt.ModeFor(millErrorOut))
 }
 
 // BinPlan is the typed wire contract returned by bins plan. The custom
