@@ -5,6 +5,7 @@
             [skein.api.current.alpha :as current]
             [skein.api.format.alpha :as format-alpha]
             [skein.api.graph.alpha :as graph]
+            [skein.api.spool.alpha :refer [require-valid!]]
             [skein.api.weaver.alpha :as weaver]
             [skein.spools.workflow :as workflow]))
 
@@ -44,7 +45,9 @@
 
   Fails loudly unless `params` names an active kanban epic without the `ralph`
   label. Returns a short executor result string on success."
-  [{:keys [epic]}]
+  [{:keys [epic] :as params}]
+  (require-valid! ::prepare-params params
+                  "Ralph epic validation parameters are invalid")
   (let [strand (weaver/show (current/runtime) epic)]
     (when-not strand
       (throw (ex-info "Ralph preparation epic does not exist" {:epic epic})))
@@ -87,6 +90,8 @@
   the epic and every direct feature before the single label mutation, then
   verifies the persisted postcondition."
   [{:keys [epic features] :as params}]
+  (require-valid! ::review-params params
+                  "Ralph labeling parameters are invalid")
   (validate-epic! params)
   (let [runtime (current/runtime)]
     (require-feature-breakdowns! runtime epic features)

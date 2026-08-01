@@ -457,6 +457,10 @@
                (:definition description)))
         (is (= "workflow-to-ralph.epic.validate"
                (:action-ref (first (:ready started)))))
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"validation parameters are invalid"
+             ((requiring-resolve 'workflow-to-ralph/validate-epic!) {})))
         (let [definition (var-get
                           (requiring-resolve
                            'workflow-to-ralph/workflow-to-ralph))
