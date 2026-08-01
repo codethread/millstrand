@@ -461,6 +461,11 @@
              clojure.lang.ExceptionInfo
              #"validation parameters are invalid"
              ((requiring-resolve 'workflow-to-ralph/validate-epic!) {})))
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"validation parameters are invalid"
+             ((requiring-resolve 'workflow-to-ralph/validate-epic!)
+              {:epic epic :unexpected true})))
         (let [definition (var-get
                           (requiring-resolve
                            'workflow-to-ralph/workflow-to-ralph))

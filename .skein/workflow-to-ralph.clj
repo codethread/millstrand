@@ -19,13 +19,22 @@
   [values]
   (= (count values) (count (distinct values))))
 
+(defn- exact-keys?
+  "Return a predicate requiring a map to contain exactly allowed keys."
+  [allowed]
+  #(= allowed (set (keys %))))
+
 (s/def ::epic non-blank-string?)
 (s/def ::features
   (s/and (s/coll-of non-blank-string? :kind vector? :min-count 1)
          distinct-values?))
-(s/def ::prepare-params (s/keys :req-un [::epic]))
-(s/def ::review-params (s/keys :req-un [::epic ::features]))
-(s/def ::breakdown-input (s/keys :req-un [::features]))
+(s/def ::prepare-params
+  (s/and (s/keys :req-un [::epic]) (exact-keys? #{:epic})))
+(s/def ::review-params
+  (s/and (s/keys :req-un [::epic ::features])
+         (exact-keys? #{:epic :features})))
+(s/def ::breakdown-input
+  (s/and (s/keys :req-un [::features]) (exact-keys? #{:features})))
 
 (def ^:private breakdown-input
   "Declare the feature ids created by the epic decomposition step."
@@ -92,7 +101,7 @@
   [{:keys [epic features] :as params}]
   (require-valid! ::review-params params
                   "Ralph labeling parameters are invalid")
-  (validate-epic! params)
+  (validate-epic! {:epic epic})
   (let [runtime (current/runtime)]
     (require-feature-breakdowns! runtime epic features)
     ((requiring-resolve 'ct.spools.kanban/label-add!) runtime epic ["ralph"])
