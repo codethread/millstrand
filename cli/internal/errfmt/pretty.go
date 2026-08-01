@@ -34,7 +34,7 @@ const (
 )
 
 func renderPretty(w io.Writer, e Error) {
-	paint := palette{colour: os.Getenv("NO_COLOR") == ""}
+	paint := newPalette()
 	names := stringList(e.Details[availableKey])
 	remedy, hasRemedy := e.Details[tryKey].(string)
 	hasRemedy = hasRemedy && remedy != ""
@@ -51,9 +51,13 @@ func renderPretty(w io.Writer, e Error) {
 		sections = append(sections, section(paint.dim("details:"), rows))
 	}
 	if hasRemedy {
-		sections = append(sections, labelIndent+paint.cyan("try: "+remedy))
+		sections = append(sections, remedyLine(remedy, paint))
 	}
 	_, _ = fmt.Fprintln(w, strings.Join(sections, "\n\n"))
+}
+
+func remedyLine(remedy string, paint palette) string {
+	return labelIndent + paint.cyan("try: "+remedy)
 }
 
 // headline names what the user typed and what went wrong. The code trails it as
@@ -182,6 +186,10 @@ func terminalWidth() int {
 
 type palette struct {
 	colour bool
+}
+
+func newPalette() palette {
+	return palette{colour: os.Getenv("NO_COLOR") == ""}
 }
 
 func (p palette) wrap(code, text string) string {
