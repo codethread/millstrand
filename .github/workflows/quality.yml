@@ -34,6 +34,7 @@ jobs:
               - '.splint.edn'
             go:
               - 'cli/**'
+              - 'tools/**'
               - 'go.work'
               - '.golangci.yml'
             shared:
@@ -64,6 +65,9 @@ jobs:
         env:
           SKEIN_TEST_AWAIT_SCALE: '3'
 
+  # The job id and name are what the main ruleset requires as a status check;
+  # renaming either makes every PR unmergeable until the ruleset is updated to
+  # match. It now runs every Go module, not just the CLI.
   cli-go-test:
     name: CLI Go tests
     needs: changes
@@ -83,8 +87,9 @@ jobs:
       - uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: latest
-      - run: go test ./...
-        working-directory: cli
+      # The strand CLI's tests boot a real weaver, which is why this job needs
+      # Java and Clojure; ralph's are pure Go and ride along.
+      - run: make test-go
 
   smoke-test:
     name: Smoke test

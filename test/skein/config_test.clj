@@ -2216,6 +2216,7 @@
     :skein/spools-unsafe-text-search :skein/spools-chime :skein/spools-cron
     :skein/spools-devflow
     :skein/spools-kanban :skein/spools-shuttle :skein/spools-delegation
+    :skein/spools-harness-core :skein/spools-codex-harness :skein/spools-agent-cli
     :skein/spools-bench :skein/spools-treadle})
 
 (deftest pinned-kanban-release-activates-from-source-and-image

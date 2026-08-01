@@ -23,7 +23,7 @@ Read `./devflow/TENETS.md`, `./devflow/PHILOSOPHY.md`, and `./devflow/UBIQUITOUS
 ## Commands
 
 ```sh
-make build                              # repo-local ./bin/strand, ./bin/mill — the agent path for CLI changes
+make build                              # repo-local ./bin/strand, ./bin/mill, ./bin/ralph — the agent path for CLI changes
 mill start                              # supervisor, in a durable terminal
 mill init [--workspace <dir>]           # create/complete a workspace
 mill weaver start|status|stop|repl [--workspace <dir>]
@@ -32,7 +32,7 @@ make dash                               # interactive kanban TUI from the pinned
 make test-warm NS="ns..."               # warm REPL to iterate a slice — never a Done-when gate
 clojure -M:test <ns...>                 # cold focused run — the per-slice Done-when gate
 flock -w 3600 /tmp/skein-test.lock clojure -M:test  # full locked suite — queue acceptance only; CI-blocking
-(cd cli && go test ./...)               # primary validation, CI-blocking
+make test-go                            # every Go module (cli, tools/ralph) — primary validation, CI-blocking
 clojure -M:smoke                        # primary validation, CI-blocking
 make spool-suite-gate                   # pinned external spool suites vs this checkout — CI-blocking (GITLIBS=<dir> overrides the gitlibs cache)
 make fmt-check lint reflect-check docs-check              # blocking CI quality gates, held at zero findings
