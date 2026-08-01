@@ -35,14 +35,22 @@ const (
 
 func renderPretty(w io.Writer, e Error) {
 	paint := palette{colour: os.Getenv("NO_COLOR") == ""}
+	names := stringList(e.Details[availableKey])
+	remedy, hasRemedy := e.Details[tryKey].(string)
+	hasRemedy = hasRemedy && remedy != ""
+
 	sections := []string{headline(e, paint)}
-	if names := stringList(e.Details[availableKey]); len(names) > 0 {
+	if len(names) > 0 {
 		sections = append(sections, section(paint.dim(availableKey+":"), columns(names, terminalWidth())))
 	}
-	if rows := detailRows(e); len(rows) > 0 {
+	// A key that did not earn its own section is still a detail: an `available`
+	// that is not a list of names, or a `try` that is not a string, drops into
+	// the ordinary rows rather than out of the output.
+	sectioned := map[string]bool{availableKey: len(names) > 0, tryKey: hasRemedy}
+	if rows := detailRows(e, sectioned); len(rows) > 0 {
 		sections = append(sections, section(paint.dim("details:"), rows))
 	}
-	if remedy, ok := e.Details[tryKey].(string); ok && remedy != "" {
+	if hasRemedy {
 		sections = append(sections, labelIndent+paint.cyan("try: "+remedy))
 	}
 	_, _ = fmt.Fprintln(w, strings.Join(sections, "\n\n"))
@@ -78,13 +86,13 @@ func spokenCommand(e Error) []string {
 	return command
 }
 
-// detailRows renders every details key that has no section of its own, sorted,
+// detailRows renders every details key that got no section of its own, sorted,
 // with the values the message already quotes left out.
-func detailRows(e Error) []string {
+func detailRows(e Error, sectioned map[string]bool) []string {
 	quoted := QuotedDetails(e.Message, e.Details)
 	keys := []string{}
 	for key := range e.Details {
-		if key == availableKey || key == tryKey {
+		if sectioned[key] {
 			continue
 		}
 		if _, redundant := quoted[key]; redundant {
@@ -111,14 +119,15 @@ func detailRows(e Error) []string {
 
 // detailValue prints strings as themselves and everything else — numbers,
 // booleans, nested maps, the pr-str blobs the weaver stringifies — as compact
-// JSON.
+// JSON. A value that will not encode says so beside itself rather than quietly
+// becoming whatever %v makes of it.
 func detailValue(value any) string {
 	if text, ok := value.(string); ok {
 		return text
 	}
 	encoded, err := encodeJSONNoEscape(value)
 	if err != nil {
-		return fmt.Sprintf("%v", value)
+		return fmt.Sprintf("%v (unrenderable as JSON: %v)", value, err)
 	}
 	return string(encoded)
 }

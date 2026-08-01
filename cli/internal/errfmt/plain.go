@@ -11,10 +11,11 @@ import (
 // prefix — Render adds that — so *client.ResponseError can return it as its Go
 // error string.
 //
-// A local error is its message and nothing else, which is what a bad invocation
-// has always printed.
+// A locally raised error is its message and nothing else, which is what a bad
+// invocation and an unreachable mill have always printed. The `weaver ... error`
+// prefix belongs to a decoded envelope, not to the taxonomy type.
 func (e Error) PlainMessage() string {
-	if e.Type == TypeLocal {
+	if e.Local || e.Type == TypeLocal {
 		return e.Message
 	}
 	message := e.Message

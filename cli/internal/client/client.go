@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -58,6 +59,47 @@ func (e *ResponseError) Error() string {
 // flattening it first, so pretty mode still has the typed fields to work with.
 func (e *ResponseError) forRendering(command []string) errfmt.Error {
 	return errfmt.Error{Type: e.Type, Code: e.Code, Message: e.Message, Details: e.Details, Command: command}
+}
+
+// TransportError marks a failure to reach or speak to the local mill: no
+// socket, stale metadata, a write that never landed, a frame that would not
+// decode. It is raised here rather than decoded from a frame, but its taxonomy
+// is transport all the same (SPEC-002.C4c).
+type TransportError struct {
+	Err error
+}
+
+func (e *TransportError) Error() string { return e.Err.Error() }
+
+func (e *TransportError) Unwrap() error { return e.Err }
+
+// asTransport marks everything a mill call failed with that is not a decoded
+// envelope. Applied once at each call boundary, it saves every caller from
+// re-deciding which failures were the transport's.
+func asTransport(err error) error {
+	if err == nil {
+		return nil
+	}
+	var responseErr *ResponseError
+	if errors.As(err, &responseErr) {
+		return err
+	}
+	return &TransportError{Err: err}
+}
+
+// ForRendering maps whatever a mill call returned into the renderer's input: a
+// decoded envelope keeps its typed fields, an unreachable or skewed mill is
+// transport, and anything else is a bad invocation.
+func ForRendering(err error, command []string) errfmt.Error {
+	var responseErr *ResponseError
+	if errors.As(err, &responseErr) {
+		return responseErr.forRendering(command)
+	}
+	var transportErr *TransportError
+	if errors.As(err, &transportErr) {
+		return errfmt.LocalError(errfmt.TypeTransport, err, command)
+	}
+	return errfmt.FromError(err, command)
 }
 
 func encodeJSONNoEscape(v any) ([]byte, error) {

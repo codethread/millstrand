@@ -3,9 +3,12 @@ package client
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"os"
 	"strings"
 	"testing"
+
+	"skein-strand-cli/internal/errfmt"
 )
 
 // Every test here writes to a buffer, which resolves to plain mode on its own.
@@ -39,6 +42,41 @@ func TestRelayErrorRendersPrettyWithTheTypedFields(t *testing.T) {
 	}, "\n")
 	if er.String() != want {
 		t.Fatalf("pretty relay:\n got:\n%s\nwant:\n%s", er.String(), want)
+	}
+}
+
+// SPEC-002.C4c splits the taxonomy from the origin: an unreachable mill is
+// transport even though the bin raised it locally, and locally raised means the
+// plain line stays bare.
+func TestForRenderingClassifiesTheThreeOrigins(t *testing.T) {
+	command := []string{"kanban", "board"}
+	cases := []struct {
+		name      string
+		err       error
+		wantType  string
+		wantLocal bool
+	}{
+		{"decoded envelope", &ResponseError{Type: "domain", Code: "op/boom", Message: "it broke", Details: map[string]any{}}, "domain", false},
+		{"unreachable mill", asTransport(errors.New("mill socket unreachable; start one with: mill start")), errfmt.TypeTransport, true},
+		{"bad invocation", errors.New("malformed --payload (want name=path): x"), errfmt.TypeLocal, true},
+	}
+	for _, c := range cases {
+		got := ForRendering(c.err, command)
+		if got.Type != c.wantType || got.Local != c.wantLocal {
+			t.Fatalf("%s: type = %q local = %v, want %q / %v", c.name, got.Type, got.Local, c.wantType, c.wantLocal)
+		}
+	}
+}
+
+// Every failure InvokeThroughMill raises itself is a transport failure; only a
+// decoded envelope passes through untouched.
+func TestInvokeThroughMillMarksItsOwnFailuresTransport(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	var out, er bytes.Buffer
+	_, err := InvokeThroughMill(MillWorldRequest{}, map[string]any{"name": "kanban"}, &out, &er)
+	var transportErr *TransportError
+	if !errors.As(err, &transportErr) {
+		t.Fatalf("no running mill must surface as transport, got %#v", err)
 	}
 }
 

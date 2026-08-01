@@ -113,12 +113,36 @@ func TestPrettyHasDefinedOutputForDegenerateErrors(t *testing.T) {
 		{"empty everything", Error{}, "  x unknown error\n"},
 		{"unknown type", Error{Type: "quantum", Message: "strange"}, "  x strange\n"},
 		{"empty details map", Error{Type: "domain", Message: "strange", Details: map[string]any{}}, "  x strange\n"},
-		{"empty available list", Error{Type: "domain", Message: "strange", Details: map[string]any{"available": []any{}}}, "  x strange\n"},
+		// An `available` with nothing in it earns no section, but it is still a
+		// detail the weaver sent, so it says so rather than disappearing.
+		{"empty available list", Error{Type: "domain", Message: "strange", Details: map[string]any{"available": []any{}}}, "  x strange\n\n    details:\n      available  []\n"},
 	}
 	for _, c := range cases {
 		if got := pretty(t, c.in); got != c.want {
 			t.Fatalf("%s: got %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+// A well-known key whose value is the wrong shape must not be swallowed by the
+// section that would have rendered it: the alternatives a failure lists are the
+// most actionable thing it carries.
+func TestPrettyKeepsMalformedWellKnownKeysAsRows(t *testing.T) {
+	got := pretty(t, Error{
+		Type:    "domain",
+		Message: "unknown op",
+		Details: map[string]any{"available": "add, list", "try": []any{"strand help"}},
+	})
+	want := strings.Join([]string{
+		`  x unknown op`,
+		``,
+		`    details:`,
+		`      available  add, list`,
+		`      try        ["strand help"]`,
+		``,
+	}, "\n")
+	if got != want {
+		t.Fatalf("malformed well-known keys:\n got:\n%s\nwant:\n%s", got, want)
 	}
 }
 

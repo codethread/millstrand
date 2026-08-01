@@ -25,6 +25,11 @@ import (
 // It returns the process exit code: 0 on a successful single/stream response, a
 // non-zero code on an error frame or terminator, and 130 on interrupt.
 func InvokeThroughMill(world MillWorldRequest, envelope map[string]any, stdout, stderr io.Writer) (int, error) {
+	code, err := invokeThroughMill(world, envelope, stdout, stderr)
+	return code, asTransport(err)
+}
+
+func invokeThroughMill(world MillWorldRequest, envelope map[string]any, stdout, stderr io.Writer) (int, error) {
 	meta, err := ReadMillMetadata()
 	if err != nil {
 		return 1, err
@@ -180,7 +185,7 @@ func surfaceError(raw json.RawMessage, stderr io.Writer, command []string) (int,
 	if len(raw) == 0 {
 		return 1, errors.New("weaver error")
 	}
-	mode, _ := errfmt.Resolve(stderr)
+	mode := errfmt.ModeFor(stderr)
 	var re ResponseError
 	if err := json.Unmarshal(raw, &re); err != nil {
 		// Nothing decoded, so there is nothing typed to render: the raw frame is

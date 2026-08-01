@@ -68,6 +68,11 @@ func MillCall(operation string, world MillWorldRequest) (any, error) {
 }
 
 func MillCallPayload(operation string, world MillWorldRequest, payload map[string]any) (any, error) {
+	result, err := millCallPayload(operation, world, payload)
+	return result, asTransport(err)
+}
+
+func millCallPayload(operation string, world MillWorldRequest, payload map[string]any) (any, error) {
 	if payload == nil {
 		payload = map[string]any{}
 	}

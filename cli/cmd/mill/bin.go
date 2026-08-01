@@ -94,8 +94,7 @@ func writeMillCommandError(err error, command []string) {
 		_ = json.NewEncoder(millErrorOut).Encode(binErr.binFailureEnvelope())
 		return
 	}
-	mode, _ := errfmt.Resolve(millErrorOut)
-	errfmt.Render(millErrorOut, errfmt.FromError(err, command), mode)
+	errfmt.Render(millErrorOut, client.ForRendering(err, command), errfmt.ModeFor(millErrorOut))
 }
 
 // BinPlan is the typed wire contract returned by bins plan. The custom

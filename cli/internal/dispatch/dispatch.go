@@ -110,7 +110,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		// reaches stderr either way.
 		var responseErr *client.ResponseError
 		if !errors.As(err, &responseErr) {
-			failCommand(stderr, append([]string{p.opName}, p.argv...), err)
+			render(stderr, client.ForRendering(err, append([]string{p.opName}, p.argv...)))
 		}
 		if code == 0 {
 			code = 1
@@ -307,15 +307,14 @@ func printJSON(stdout, stderr io.Writer, v any) int {
 	return 0
 }
 
-// fail renders a locally raised error — bad flags, unreadable payloads,
+// fail renders a bad invocation — unknown flags, unreadable payloads,
 // underivable context — and returns the exit code.
 func fail(stderr io.Writer, err error) int {
-	return failCommand(stderr, nil, err)
+	return render(stderr, errfmt.FromError(err, nil))
 }
 
-func failCommand(stderr io.Writer, command []string, err error) int {
-	mode, _ := errfmt.Resolve(stderr)
-	errfmt.Render(stderr, errfmt.FromError(err, command), mode)
+func render(stderr io.Writer, e errfmt.Error) int {
+	errfmt.Render(stderr, e, errfmt.ModeFor(stderr))
 	return 1
 }
 

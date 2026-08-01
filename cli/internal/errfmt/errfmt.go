@@ -36,6 +36,11 @@ const FormatEnv = "SKEIN_ERROR_FORMAT"
 // the envelope stays domain|protocol|transport (SPEC-004.C24).
 const TypeLocal = "cli"
 
+// TypeTransport is the wire type a locally raised failure to reach or speak to
+// the mill also carries: unreachable, stale, or skewed is transport, and only a
+// bad invocation is TypeLocal (SPEC-002.C4c).
+const TypeTransport = "transport"
+
 // databaseNotInitialized is the one code this package switches on: its bare
 // message is the `mill init` remediation users see, and codes are otherwise
 // explicitly non-contractual (SPEC-005.C7).
@@ -60,16 +65,27 @@ type Error struct {
 	Details map[string]any
 	// Command is what the user typed, binary name excluded.
 	Command []string
+	// Local marks an error the bin raised itself, with no wire envelope behind
+	// it. Type and origin are separate axes: a mill it could not reach is local
+	// and TypeTransport at once.
+	Local bool
 }
 
 // FromError lifts a bare error value — a Cobra failure, a usage complaint, any
 // locally raised error with no envelope behind it — into a local Error.
 func FromError(err error, command []string) Error {
+	return LocalError(TypeLocal, err, command)
+}
+
+// LocalError lifts a locally raised error under an explicit taxonomy type. No
+// envelope stands behind it, so plain rendering stays the bare line whatever
+// the type says.
+func LocalError(errType string, err error, command []string) Error {
 	message := ""
 	if err != nil {
 		message = err.Error()
 	}
-	return Error{Type: TypeLocal, Message: message, Command: command}
+	return Error{Type: errType, Message: message, Command: command, Local: true}
 }
 
 // Render writes e to w in the given mode, terminated by a newline.
@@ -114,6 +130,15 @@ func ValidateFormat() error {
 		names = append(names, string(accepted))
 	}
 	return fmt.Errorf("invalid %s %q: accepted values are %s", FormatEnv, value, strings.Join(names, ", "))
+}
+
+// ModeFor resolves the rendering for w and ignores a malformed
+// SKEIN_ERROR_FORMAT, because both binaries reject one at entry: by the time an
+// error is on its way to stderr, the variable is either valid or is itself the
+// complaint being rendered.
+func ModeFor(w io.Writer) Mode {
+	mode, _ := Resolve(w)
+	return mode
 }
 
 func detect(w io.Writer) Mode {
