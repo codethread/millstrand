@@ -65,12 +65,29 @@
      "result" (help/verbatim-text result) "error" nil "verbatim" true}
     {"protocol_version" protocol/version "request_id" request-id "ok" true "result" result "error" nil}))
 
+(defn- envelope-code
+  "Render an ex-data `:code` as the wire's code string (SPEC-004.C24).
+
+  Codes go through the same rendering as every other detail value so a
+  namespaced keyword keeps its namespace; handed the raw keyword, data.json's
+  Named rule would serialize it via `name` and silently drop the namespace.
+  Anything that still does not render to a string is printed rather than
+  rejected: this runs while serializing an op that has already failed, so
+  throwing here would replace the real domain error with a misleading transport
+  one, and a non-string code is a frame the client cannot decode at all."
+  [details]
+  (if-let [code (:code details)]
+    (let [rendered (json-safe-value code)]
+      (if (string? rendered) rendered (pr-str code)))
+    (if (and (:canonical-query details) (contains? details :available))
+      "query/not-found"
+      "domain/error")))
+
 (defn- error-envelope [e]
   (let [message (ex-message e)
         details (or (ex-data e) {})]
     {"type" "domain"
-     "code" (or (:code details)
-                (if (and (:canonical-query details) (contains? details :available)) "query/not-found" "domain/error"))
+     "code" (envelope-code details)
      "message" message
      "details" (json-safe-value (dissoc details :code))}))
 

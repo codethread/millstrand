@@ -215,6 +215,17 @@
                                 :nested {:reason :policy/nope}
                                 :opaque (Object.)})))
 
+(defn keyword-code-op
+  "Throw a namespaced keyword `:code`, the shape guild ops use."
+  [_ctx]
+  (throw (ex-info "op is deprecated" {:code :operation/deprecated
+                                      :replacement "successor"})))
+
+(defn non-string-code-op
+  "Throw a `:code` that is neither string nor keyword, pinning the wire policy."
+  [_ctx]
+  (throw (ex-info "op blew up" {:code 42})))
+
 (defn subcommand-result-op
   "Return operation-label variants selected by the parsed subcommand path."
   [{:op/keys [name args]}]
@@ -3649,6 +3660,19 @@
         (is (= "op/failed" (get-in response ["error" "code"])))
         (is (= "policy/nope" (get-in response ["error" "details" "nested" "reason"])))
         (is (string? (get-in response ["error" "details" "opaque"])))))))
+
+(deftest json-socket-invoke-error-code-is-always-a-string
+  (with-runtime
+    (fn [rt _]
+      (weaver/register-op! rt 'keyword-code raw-mutating-standard
+                           'skein.weaver-test/keyword-code-op)
+      (weaver/register-op! rt 'non-string-code raw-mutating-standard
+                           'skein.weaver-test/non-string-code-op)
+      (let [response (invoke-request rt "keyword-code" [])]
+        (is (= "operation/deprecated" (get-in response ["error" "code"])))
+        (is (= "successor" (get-in response ["error" "details" "replacement"]))))
+      (let [response (invoke-request rt "non-string-code" [])]
+        (is (= "42" (get-in response ["error" "code"])))))))
 
 (deftest weaver-query-registry-fails-clearly
   (with-runtime
