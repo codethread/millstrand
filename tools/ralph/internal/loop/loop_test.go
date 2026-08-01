@@ -93,8 +93,10 @@ func (w *world) engine(cfg loop.Config) *loop.Engine {
 	if cfg.Pause == 0 {
 		cfg.Pause = time.Millisecond
 	}
-	// Only the opening poll should run; these tests are not about refreshes.
-	cfg.PollInterval = time.Hour
+	if cfg.PollInterval == 0 {
+		// Only the opening poll should run; most tests are not about refreshes.
+		cfg.PollInterval = time.Hour
+	}
 	return loop.New(cfg)
 }
 
@@ -243,6 +245,19 @@ while true; do sleep 1; done
 		}
 	})
 	if out.Reason != loop.ReasonHardStop || out.ExitCode != loop.ExitStopped {
+		t.Fatalf("outcome = %+v", out)
+	}
+}
+
+// Board polling runs beside the iteration loop and must not disturb it. Run
+// under -race, this also exercises the shutdown path where a poll is in flight
+// as the loop ends; the engine joins the poller before closing its channel,
+// since cancelling its context alone would leave it free to send one more
+// snapshot into a closed channel.
+func TestFrequentPollingDoesNotDisturbTheLoop(t *testing.T) {
+	w := newWorld(t, `printf '%s\n' '{"type":"result","subtype":"success","result":"still working"}'`)
+	out, _ := drive(t, w.engine(loop.Config{MaxIterations: 3, PollInterval: time.Millisecond}), nil)
+	if out.Reason != loop.ReasonMaxIterations {
 		t.Fatalf("outcome = %+v", out)
 	}
 }

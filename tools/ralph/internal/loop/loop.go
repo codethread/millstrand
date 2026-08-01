@@ -220,14 +220,25 @@ func (e *Engine) emit(m Msg) {
 // Run drives the loop until it stops, then returns the outcome. The message
 // channel closes before Run returns.
 func (e *Engine) Run(ctx context.Context) Outcome {
-	defer close(e.msgs)
-
 	pollCtx, stopPoll := context.WithCancel(ctx)
-	defer stopPoll()
-	go e.poll(pollCtx)
+	var polling sync.WaitGroup
+	polling.Add(1)
+	go func() {
+		defer polling.Done()
+		e.poll(pollCtx)
+	}()
 
 	outcome := e.run(ctx)
-	e.emit(OutcomeMsg{Outcome: outcome})
+
+	// The poller has to be joined before the channel closes: cancelling its
+	// context alone leaves it free to send one last snapshot.
+	stopPoll()
+	polling.Wait()
+	// The outcome is the one message a renderer cannot afford to lose, so it
+	// blocks rather than being dropped when a slow consumer has filled the
+	// buffer. Both renderers drain until the channel closes.
+	e.msgs <- OutcomeMsg{Outcome: outcome}
+	close(e.msgs)
 	return outcome
 }
 
