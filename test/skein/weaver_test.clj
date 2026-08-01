@@ -224,7 +224,12 @@
 (defn non-string-code-op
   "Throw a `:code` that is neither string nor keyword, pinning the wire policy."
   [_ctx]
-  (throw (ex-info "op blew up" {:code 42})))
+  (throw (ex-info "op blew up" {:code 42 :attempt 1})))
+
+(defn nil-code-op
+  "Throw an explicitly nil `:code`, which is a present value, not an absent one."
+  [_ctx]
+  (throw (ex-info "op blew up" {:code nil})))
 
 (defn subcommand-result-op
   "Return operation-label variants selected by the parsed subcommand path."
@@ -3661,18 +3666,33 @@
         (is (= "policy/nope" (get-in response ["error" "details" "nested" "reason"])))
         (is (string? (get-in response ["error" "details" "opaque"])))))))
 
-(deftest json-socket-invoke-error-code-is-always-a-string
+(deftest json-socket-invoke-renders-keyword-error-codes-whole
   (with-runtime
     (fn [rt _]
       (weaver/register-op! rt 'keyword-code raw-mutating-standard
                            'skein.weaver-test/keyword-code-op)
-      (weaver/register-op! rt 'non-string-code raw-mutating-standard
-                           'skein.weaver-test/non-string-code-op)
       (let [response (invoke-request rt "keyword-code" [])]
         (is (= "operation/deprecated" (get-in response ["error" "code"])))
-        (is (= "successor" (get-in response ["error" "details" "replacement"]))))
-      (let [response (invoke-request rt "non-string-code" [])]
-        (is (= "42" (get-in response ["error" "code"])))))))
+        (is (= "successor" (get-in response ["error" "details" "replacement"])))))))
+
+(deftest json-socket-invoke-reports-an-unusable-error-code-as-the-defect
+  (with-runtime
+    (fn [rt _]
+      (weaver/register-op! rt 'non-string-code raw-mutating-standard
+                           'skein.weaver-test/non-string-code-op)
+      (weaver/register-op! rt 'nil-code raw-mutating-standard
+                           'skein.weaver-test/nil-code-op)
+      (testing "a code the wire cannot carry is named, never coerced"
+        (let [response (invoke-request rt "non-string-code" [])
+              details (get-in response ["error" "details"])]
+          (is (= "domain/invalid-error-code" (get-in response ["error" "code"])))
+          (is (= "42" (get details "error/invalid-code")))
+          (is (= "op blew up" (get details "error/message")))
+          (is (= 1 (get details "attempt")) "the operation's own details survive")))
+      (testing "an explicit nil code is present, not absent"
+        (let [response (invoke-request rt "nil-code" [])]
+          (is (= "domain/invalid-error-code" (get-in response ["error" "code"])))
+          (is (= "nil" (get-in response ["error" "details" "error/invalid-code"]))))))))
 
 (deftest weaver-query-registry-fails-clearly
   (with-runtime

@@ -65,31 +65,56 @@
      "result" (help/verbatim-text result) "error" nil "verbatim" true}
     {"protocol_version" protocol/version "request_id" request-id "ok" true "result" result "error" nil}))
 
-(defn- envelope-code
-  "Render an ex-data `:code` as the wire's code string (SPEC-004.C24).
+(defn- rendered-code
+  "Render a present ex-data `:code` as the wire's code string (SPEC-004.C24),
+  or nil when the value cannot be one.
 
   Codes go through the same rendering as every other detail value so a
   namespaced keyword keeps its namespace; handed the raw keyword, data.json's
-  Named rule would serialize it via `name` and silently drop the namespace.
-  Anything that still does not render to a string is printed rather than
-  rejected: this runs while serializing an op that has already failed, so
-  throwing here would replace the real domain error with a misleading transport
-  one, and a non-string code is a frame the client cannot decode at all."
+  Named rule would serialize it via `name` and drop the namespace."
+  [code]
+  (let [rendered (json-safe-value code)]
+    (when (string? rendered) rendered)))
+
+(defn- inferred-code
+  "Pick the code for an error that carries none: a failed canonical-query
+  lookup is the one shape the socket recognizes by its affordances
+  (SPEC-004.C36b), everything else is the generic domain code."
   [details]
-  (if-let [code (:code details)]
-    (let [rendered (json-safe-value code)]
-      (if (string? rendered) rendered (pr-str code)))
-    (if (and (:canonical-query details) (contains? details :available))
-      "query/not-found"
-      "domain/error")))
+  (if (and (:canonical-query details) (contains? details :available))
+    "query/not-found"
+    "domain/error"))
+
+(defn- invalid-code-envelope
+  "Report the producer defect when `:code` is present but is not a string,
+  keyword, or symbol.
+
+  Coercing the value would publish an invented code and printing it would hide
+  the defect (TEN-003), while throwing would abandon the connection without a
+  frame — this is the last step before the bytes go out. So the defect becomes
+  the error, exactly as the socket answers a malformed request with a frame
+  naming the violation; the operation's own message and details ride along
+  under `error/*` so nothing is lost."
+  [message details]
+  {"type" "domain"
+   "code" "domain/invalid-error-code"
+   "message" "Operation error carries an unusable :code; use a string or keyword"
+   "details" (json-safe-value
+              (-> details
+                  (dissoc :code)
+                  (assoc :error/invalid-code (pr-str (:code details))
+                         :error/message message)))})
 
 (defn- error-envelope [e]
   (let [message (ex-message e)
         details (or (ex-data e) {})]
-    {"type" "domain"
-     "code" (envelope-code details)
-     "message" message
-     "details" (json-safe-value (dissoc details :code))}))
+    (if-not (contains? details :code)
+      {"type" "domain" "code" (inferred-code details) "message" message
+       "details" (json-safe-value details)}
+      (if-let [code (rendered-code (:code details))]
+        {"type" "domain" "code" code "message" message
+         "details" (json-safe-value (dissoc details :code))}
+        (invalid-code-envelope message details)))))
 
 (defn- domain-error [request-id e]
   {"protocol_version" protocol/version "request_id" request-id "ok" false "result" nil
