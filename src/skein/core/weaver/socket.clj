@@ -65,14 +65,59 @@
      "result" (help/verbatim-text result) "error" nil "verbatim" true}
     {"protocol_version" protocol/version "request_id" request-id "ok" true "result" result "error" nil}))
 
+(defn- rendered-code
+  "Render a present ex-data `:code` as the wire's code string (SPEC-004.C24),
+  or nil when the value cannot be one.
+
+  Only a name is a code, so the accepted types are checked before rendering:
+  `json-safe-value` prints whatever it does not recognize, which would turn a
+  UUID or a bare object into an invented code. What it does give the named
+  types is the rendering every other detail value gets, keeping a namespaced
+  keyword whole where data.json's Named rule would serialize it via `name` and
+  drop the namespace."
+  [code]
+  (when (or (string? code) (keyword? code) (symbol? code))
+    (json-safe-value code)))
+
+(defn- inferred-code
+  "Pick the code for an error that carries none: a failed canonical-query
+  lookup is the one shape the socket recognizes by its affordances
+  (SPEC-004.C36b), everything else is the generic domain code."
+  [details]
+  (if (and (:canonical-query details) (contains? details :available))
+    "query/not-found"
+    "domain/error"))
+
+(defn- invalid-code-envelope
+  "Report the producer defect when `:code` is present but is not a string,
+  keyword, or symbol.
+
+  Coercing the value would publish an invented code and printing it would hide
+  the defect (TEN-003), while throwing would abandon the connection without a
+  frame — this is the last step before the bytes go out. So the defect becomes
+  the error, exactly as the socket answers a malformed request with a frame
+  naming the violation; the operation's own message and details ride along
+  under `error/*` so nothing is lost."
+  [message details]
+  {"type" "domain"
+   "code" "domain/invalid-error-code"
+   "message" "Operation error carries an unusable :code; use a string or keyword"
+   "details" (json-safe-value
+              (-> details
+                  (dissoc :code)
+                  (assoc :error/invalid-code (pr-str (:code details))
+                         :error/message message)))})
+
 (defn- error-envelope [e]
   (let [message (ex-message e)
         details (or (ex-data e) {})]
-    {"type" "domain"
-     "code" (or (:code details)
-                (if (and (:canonical-query details) (contains? details :available)) "query/not-found" "domain/error"))
-     "message" message
-     "details" (json-safe-value (dissoc details :code))}))
+    (if-not (contains? details :code)
+      {"type" "domain" "code" (inferred-code details) "message" message
+       "details" (json-safe-value details)}
+      (if-let [code (rendered-code (:code details))]
+        {"type" "domain" "code" code "message" message
+         "details" (json-safe-value (dissoc details :code))}
+        (invalid-code-envelope message details)))))
 
 (defn- domain-error [request-id e]
   {"protocol_version" protocol/version "request_id" request-id "ok" false "result" nil

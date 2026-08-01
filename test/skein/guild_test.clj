@@ -225,6 +225,29 @@
                   :replacement "gate.close.v2"}
                  (ex-data e))))))))
 
+(deftest guild-error-codes-reach-the-socket-namespace-intact
+  (with-runtime
+    (fn [rt _]
+      (test-support/activate-spool! rt :skein/spools-guild 'skein.spools.guild)
+      (guild/register-op! rt 'gate.close.v1 {:doc "Close v1" :returns close-return
+                                             :hook-class :mutating :deadline-class :standard}
+                          'skein.guild-test/close-handler)
+      (guild/register-op! rt 'gate.open.v1 {:doc "Open v1" :input-spec ::close-input
+                                            :returns close-return
+                                            :hook-class :mutating :deadline-class :standard}
+                          'skein.guild-test/close-handler)
+      (guild/deprecate! rt 'gate.close.v1 {:replacement "gate.close.v2"})
+      (testing "deprecation"
+        (let [frame (test-support/socket-invoke rt 'gate.close.v1 [(json-arg {:task "T-1"})])]
+          (is (false? (get frame "ok")))
+          (is (= "operation/deprecated" (get-in frame ["error" "code"])))
+          (is (= "gate.close.v2" (get-in frame ["error" "details" "replacement"])))))
+      (testing "input spec validation"
+        (let [frame (test-support/socket-invoke rt 'gate.open.v1 [(json-arg {:task 42})])]
+          (is (false? (get frame "ok")))
+          (is (= "operation/input-invalid" (get-in frame ["error" "code"])))
+          (is (= "gate.open.v1" (get-in frame ["error" "details" "operation"]))))))))
+
 (deftest malformed-guild-declarations-fail-loudly
   (with-runtime
     (fn [rt _]

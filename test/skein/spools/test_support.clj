@@ -4,7 +4,8 @@
   poll-deadline knob, and the poll-until predicate poller that every
   wait-until/await-eventually/await-* helper across the suite wraps instead
   of reinventing its own deadline/sleep/recur loop."
-  (:require [clojure.edn :as edn]
+  (:require [clojure.data.json :as json]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -13,8 +14,12 @@
             [skein.api.weaver.alpha :as weaver]
             [skein.core.db-test :as db-test]
             [skein.core.weaver.config :as weaver-config]
+            [skein.core.weaver.protocol :as protocol]
             [skein.core.weaver.runtime :as weaver-runtime]
-            [skein.core.weaver.spool-sync :as spool-sync]))
+            [skein.core.weaver.spool-sync :as spool-sync])
+  (:import [java.io BufferedReader BufferedWriter InputStreamReader OutputStreamWriter]
+           [java.net StandardProtocolFamily UnixDomainSocketAddress]
+           [java.nio.channels Channels SocketChannel]))
 
 (defn- invalid-embedded-spools! [source-path family received expected-shape]
   (throw (ex-info "Invalid embedded spools.edn shape"
@@ -180,6 +185,31 @@
       (throw (ex-info "Spool module activation failed"
                       {:module/key key :module/status status :result result})))
     result))
+
+(defn socket-invoke
+  "Invoke `op-name` with `argv` over `rt`'s live JSON socket, returning the
+  parsed response frame.
+
+  The socket is where ex-data becomes wire JSON, so a spool test asserting on
+  the error envelope a client actually receives drives it through here rather
+  than through `weaver/op!`, which hands back native ex-data."
+  [rt op-name argv]
+  (let [{:keys [socket-path nonce]} (:metadata rt)]
+    (with-open [ch (doto (SocketChannel/open StandardProtocolFamily/UNIX)
+                     (.connect (UnixDomainSocketAddress/of ^String socket-path)))
+                rdr (BufferedReader. (InputStreamReader. (Channels/newInputStream ch)))
+                wrt (BufferedWriter. (OutputStreamWriter. (Channels/newOutputStream ch)))]
+      (.write wrt (json/write-str {"protocol_version" protocol/version
+                                   "request_id" "spool-test-request"
+                                   "weaver_id" nonce
+                                   "operation" "invoke"
+                                   "arguments" {"name" (str op-name)
+                                                "argv" (vec argv)
+                                                "payloads" {}}
+                                   "options" {}}))
+      (.newLine wrt)
+      (.flush wrt)
+      (json/read-str (.readLine rdr)))))
 
 (defn poll-until
   "Poll `pred` (a no-arg fn) every `interval-ms` until it returns a truthy
