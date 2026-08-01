@@ -65,8 +65,11 @@ jobs:
         env:
           SKEIN_TEST_AWAIT_SCALE: '3'
 
-  go-test:
-    name: Go tests
+  # The job id and name are what the main ruleset requires as a status check;
+  # renaming either makes every PR unmergeable until the ruleset is updated to
+  # match. It now runs every Go module, not just the CLI.
+  cli-go-test:
+    name: CLI Go tests
     needs: changes
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.clojure == 'true' || needs.changes.outputs.go == 'true' || needs.changes.outputs.shared == 'true' }}
     runs-on: ubuntu-latest
