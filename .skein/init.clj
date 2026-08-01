@@ -90,6 +90,20 @@
                  {:ns 'ct.spools.agent-run
                   :spools ['ct.spools/agent-run]
                   :required? true})
+(runtime/module! runtime :skein/spools-harness-core
+                 {:ns 'ct.spools.harness-core
+                  :spools ['ct.spools/harness-core]
+                  :required? true})
+(runtime/module! runtime :skein/spools-codex-harness
+                 {:ns 'ct.spools.codex-harness
+                  :spools ['ct.spools/codex-harness 'ct.spools/harness-core]
+                  :after [:skein/spools-harness-core]
+                  :required? true})
+(runtime/module! runtime :skein/spools-agent-cli
+                 {:ns 'ct.spools.agent-cli
+                  :spools ['ct.spools/agent-cli 'ct.spools/harness-core]
+                  :after [:skein/spools-harness-core :skein/spools-codex-harness]
+                  :required? true})
 (runtime/module! runtime :skein/spools-delegation
                  {:ns 'ct.spools.delegation
                   :spools ['ct.spools/delegation]
