@@ -165,9 +165,72 @@ func TestSuggestRanksTheRealAvailableLists(t *testing.T) {
 	}
 	for _, c := range cases {
 		got := suggest(c.in, lists[c.name])
-		if !equalNames(got, c.want) {
+		if !sameNames(got, c.want) {
 			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// The last tier is reachable and load-bearing: an error whose message quotes
+// nothing and whose argv tail is not the offender still gets its suggestion out
+// of the details map. This is the tier `strand kanbn card lyv33` depends on.
+func TestSuggestReachesTheUnquotedDetailsTier(t *testing.T) {
+	e := Error{
+		Message: "Operation not found",
+		Command: []string{"kanbn", "card", "lyv33"},
+		Details: map[string]any{"operation": "kanbn", "canonical-operation": "kanbn"},
+	}
+	if got := QuotedDetails(e.Message, e.Details); len(got) != 0 {
+		t.Fatalf("precondition: the message must quote nothing, got %v", got)
+	}
+	if got := rank(e.Command[len(e.Command)-1], opNames); got != nil {
+		t.Fatalf("precondition: the argv tail must not rank, got %v", got)
+	}
+	if got := suggest(e, opNames); !sameNames(got, []string{"kanban"}) {
+		t.Fatalf("the unquoted details tier did not answer: got %v", got)
+	}
+}
+
+// Provenance stands in for a contract the last tier does not have: metadata
+// that happens to land near a real name is not evidence of a typo, so two
+// candidates disagreeing means silence rather than a confident wrong answer.
+func TestSuggestStaysSilentWhenTheUnquotedTierDisagrees(t *testing.T) {
+	// `owner` is a near miss for `list` and the mistyped op is `nots` — the
+	// renderer cannot tell which of the two the user got wrong.
+	ambiguous := Error{
+		Message: "Operation not found",
+		Details: map[string]any{"operation": "nots", "owner": "lest"},
+	}
+	if got := suggest(ambiguous, opNames); got != nil {
+		t.Fatalf("disagreeing candidates must suggest nothing, got %v", got)
+	}
+	// The same error without the stray metadata still answers.
+	clean := Error{Message: "Operation not found", Details: map[string]any{"operation": "nots"}}
+	if got := suggest(clean, opNames); !sameNames(got, []string{"note", "notes"}) {
+		t.Fatalf("unambiguous candidate: got %v", got)
+	}
+	// Agreement across keys carrying the same word is one candidate, not two
+	// voices, so the canonical/non-canonical pairs every producer sends still
+	// answer.
+	paired := Error{
+		Message: "Query not found",
+		Details: map[string]any{"query": "agent-failure", "canonical-query": "agent-failure"},
+	}
+	if got := suggest(paired, queryNames); !sameNames(got, []string{"agent-failures"}) {
+		t.Fatalf("a word repeated under two keys is one candidate: got %v", got)
+	}
+}
+
+// An earlier tier is provenance enough: a quoted value or the typed argv wins
+// outright, and stray metadata never gets a vote.
+func TestSuggestLetsEarlierTiersOverrideStrayMetadata(t *testing.T) {
+	e := Error{
+		Message: `Unknown subcommand "clam"`,
+		Command: []string{"kanban", "clam"},
+		Details: map[string]any{"token": "clam", "owner": "tsk", "reason": "unknown-subcommand"},
+	}
+	if got := suggest(e, kanbanSubcommands); !sameNames(got, []string{"claim"}) {
+		t.Fatalf("the quoted token must win: got %v", got)
 	}
 }
 
@@ -203,7 +266,7 @@ func TestSuggestHoldsTheMatchingPolicy(t *testing.T) {
 		{"an empty token ranks nothing", "", opNames, nil},
 	}
 	for _, c := range cases {
-		if got := rank(c.token, c.names); !equalNames(got, c.want) {
+		if got := rank(c.token, c.names); !sameNames(got, c.want) {
 			t.Errorf("%s: rank(%q) = %v, want %v", c.name, c.token, got, c.want)
 		}
 	}
@@ -296,16 +359,4 @@ func anyList(names []string) []any {
 		items = append(items, name)
 	}
 	return items
-}
-
-func equalNames(got, want []string) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			return false
-		}
-	}
-	return true
 }

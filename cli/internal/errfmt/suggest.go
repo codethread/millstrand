@@ -50,38 +50,88 @@ func levenshtein(a, b string) int {
 // Which value that is stays affordance-driven — no key name is ever spelled out
 // here, because `available` is a convention any op may follow and its
 // companions are called token, arg, query, operation, and whatever a spool
-// picks next. Candidates are tried in order of how strongly they claim to be
-// the offender, and the first one that lands near a name wins: the values the
-// message quotes verbatim, then the last thing the user typed, then the rest of
-// the details map in key order.
+// picks next. Candidates are tried in descending order of how strongly they
+// claim to be the offender, and the first tier that lands near a name answers:
+// the values the message quotes verbatim, then the last thing the user typed,
+// then whatever else the details map is carrying.
 func suggest(e Error, names []string) []string {
-	for _, token := range suggestTokens(e) {
+	quoted := QuotedDetails(e.Message, e.Details)
+	for _, token := range sortedValues(quoted) {
 		if ranked := rank(token, names); len(ranked) > 0 {
 			return ranked
 		}
 	}
-	return nil
-}
-
-// suggestTokens lists the candidate tokens in descending order of claim. The
-// trailing tier is what makes the feature fire on the errors that name their
-// token only in the details map — an unknown op or query says "not found" and
-// carries the word itself alongside — and it is reached only once the quoted
-// value and the typed argv have both come up empty.
-func suggestTokens(e Error) []string {
-	quoted := QuotedDetails(e.Message, e.Details)
-	tokens := append([]string{}, sortedValues(quoted)...)
 	if len(e.Command) > 0 {
-		tokens = append(tokens, e.Command[len(e.Command)-1])
-	}
-	remainder := map[string]string{}
-	for key, value := range e.Details {
-		text, ok := value.(string)
-		if _, alreadyQuoted := quoted[key]; ok && !alreadyQuoted {
-			remainder[key] = text
+		if ranked := rank(e.Command[len(e.Command)-1], names); len(ranked) > 0 {
+			return ranked
 		}
 	}
-	return append(tokens, sortedValues(remainder)...)
+	return agreed(remainingValues(e.Details, quoted), names)
+}
+
+// agreed ranks every candidate in the last tier and answers only when the ones
+// that rank all say the same thing.
+//
+// The tier earns its place on the two errors that need it most: "Operation not
+// found" and "Query not found" quote nothing, put the mistyped word under two
+// keys apiece, and leave an argv tail that is a card id rather than the op. But
+// it is also the tier with no provenance — a piece of metadata could sit two
+// edits from a real name without being what the user mistyped. Agreement is the
+// test that stands in for provenance. When two candidates point different ways
+// the renderer cannot know which one is the typo, and a confident wrong answer
+// sitting above the real list is worse than no answer at all.
+func agreed(candidates, names []string) []string {
+	var chosen []string
+	for _, token := range candidates {
+		ranked := rank(token, names)
+		if len(ranked) == 0 {
+			continue
+		}
+		if chosen != nil && !sameNames(chosen, ranked) {
+			return nil
+		}
+		chosen = ranked
+	}
+	return chosen
+}
+
+// remainingValues collects the details this error carries that no earlier tier
+// has already tried: every string value whose key the message does not quote,
+// in key order, with duplicates dropped so a word repeated under two keys is one
+// candidate rather than two agreeing ones.
+func remainingValues(details map[string]any, quoted map[string]string) []string {
+	byKey := map[string]string{}
+	for key, value := range details {
+		if _, alreadyQuoted := quoted[key]; alreadyQuoted {
+			continue
+		}
+		if text, isString := value.(string); isString {
+			byKey[key] = text
+		}
+	}
+	seen := map[string]bool{}
+	values := []string{}
+	for _, value := range sortedValues(byKey) {
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+		values = append(values, value)
+	}
+	return values
+}
+
+// sameNames reports whether two rankings are the same offer.
+func sameNames(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // sortedValues reads a key→value map out in key order, so an error quoting two
@@ -120,6 +170,9 @@ func rank(token string, names []string) []string {
 		if distance <= maxSuggestDistance {
 			matches = append(matches, match{name: name, distance: distance})
 		}
+	}
+	if len(matches) == 0 {
+		return nil
 	}
 	sort.SliceStable(matches, func(i, j int) bool { return matches[i].distance < matches[j].distance })
 	ranked := make([]string, 0, min(len(matches), maxSuggestions))
