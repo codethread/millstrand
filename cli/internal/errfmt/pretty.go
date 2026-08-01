@@ -41,7 +41,13 @@ func renderPretty(w io.Writer, e Error) {
 
 	sections := []string{headline(e, paint)}
 	if len(names) > 0 {
-		sections = append(sections, section(paint.dim(availableKey+":"), columns(names, terminalWidth())))
+		width := terminalWidth()
+		// Near misses go ahead of the full list: the whole point is that the
+		// answer is readable before the eye reaches sixteen columns of names.
+		if suggestions := suggest(e, names); len(suggestions) > 0 {
+			sections = append(sections, section(paint.dim("did you mean:"), columns(suggestions, width)))
+		}
+		sections = append(sections, section(paint.dim(availableKey+":"), columns(names, width)))
 	}
 	// A key that did not earn its own section is still a detail: an `available`
 	// that is not a list of names, or a `try` that is not a string, drops into
