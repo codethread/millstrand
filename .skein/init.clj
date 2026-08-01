@@ -197,8 +197,8 @@
 ;; separate module so its decomposition and review contract stays focused.
 (runtime/module! runtime :workflow-to-ralph
                  {:file "workflow-to-ralph.clj"
-                  :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows]
+                  :spools ['skein.spools/workflow 'codethread/kanban]
+                  :after [:skein/spools-workflow :skein/spools-kanban :workflows]
                   :required? true})
 ;; workflows_land.clj authors the narrow land policy op: the merge lock, the
 ;; merge queue in front of it, and the kanban lane moves. It is a sibling rather

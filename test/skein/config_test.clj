@@ -444,29 +444,62 @@
 
 (deftest workflow-to-ralph-blocks-labeling-on-every-feature-review
   (with-startup-config-runtime
-    (fn [_rt]
-      (let [description (op! "workflow" ["show" "workflow-to-ralph"])
+    (fn [rt]
+      (let [kanban-add! (requiring-resolve 'ct.spools.kanban/add!)
+            task-add! (requiring-resolve 'ct.spools.kanban/task-add!)
+            epic (get-in (kanban-add! rt "Ralph epic" {"--type" "epic"})
+                         [:card :id])
+            description (op! "workflow" ["show" "workflow-to-ralph"])
             started (op! "workflow" ["start" "prepare-epic"
                                      "--workflow" "workflow-to-ralph"
-                                     "--params" (json/write-str {:epic "epic-1"})])]
+                                     "--params" (json/write-str {:epic epic})])]
         (is (= "workflow-to-ralph/workflow-to-ralph"
                (:definition description)))
-        (is (= "workflow-to-ralph.epic.decompose"
+        (is (= "workflow-to-ralph.epic.validate"
                (:action-ref (first (:ready started)))))
+        (let [definition (var-get
+                          (requiring-resolve
+                           'workflow-to-ralph/workflow-to-ralph))
+              compiled ((requiring-resolve 'skein.spools.workflow/compile)
+                        definition {:epic epic})]
+          (is (= "code"
+                 (get-in (second (:strands compiled))
+                         [:attributes "workflow/gate"]))))
+        (test-alpha/await-quiescent! rt)
         (is (= "breakdown-ready"
                (:checkpoint
                 (first (:ready (op! "workflow"
                                     ["next" "prepare-epic"]))))))
-        (let [review-frontier
+        (let [feature-a (get-in (kanban-add! rt "Feature A" {"--epic" epic})
+                                [:card :id])
+              feature-b (get-in (kanban-add! rt "Feature B" {"--epic" epic})
+                                [:card :id])
+              _task-a (task-add! rt feature-a "Task A" {})
+              _task-b (task-add! rt feature-b "Task B" {})
+              other-epic (get-in (kanban-add! rt "Other epic"
+                                              {"--type" "epic"})
+                                 [:card :id])
+              other-feature (get-in (kanban-add! rt "Other feature"
+                                                 {"--epic" other-epic})
+                                    [:card :id])
+              review-frontier
               (:ready
                (op! "workflow"
                     ["next" "prepare-epic"
                      "--choice" "ready-for-review"
-                     "--input" (json/write-str {:features ["feature-a"
-                                                           "feature-b"]})]))]
-          (is (= ["Review task breakdown for feature feature-a"
-                  "Review task breakdown for feature feature-b"]
+                     "--input" (json/write-str
+                                {:features [feature-a feature-b]})]))]
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo
+               #"not a direct child"
+               ((requiring-resolve 'workflow-to-ralph/label-epic!)
+                {:epic epic :features [other-feature]})))
+          (is (nil? (get-in (weaver/show rt epic)
+                            [:attributes :kanban.label/ralph])))
+          (is (= [(str "Review task breakdown for feature " feature-a)
+                  (str "Review task breakdown for feature " feature-b)]
                  (mapv :title review-frontier)))
+          (is (= #{"approved"} (set (mapcat :choices review-frontier))))
           (is (every? #(= "review-feature" (:checkpoint %)) review-frontier))
           (let [[first-review second-review] review-frontier]
             (op! "workflow" ["next" "prepare-epic"
@@ -478,8 +511,11 @@
                                    "--choice" "approved"])]
               (is (= "workflow-to-ralph.epic.label"
                      (:action-ref (first (:ready after-final-review)))))
-              (is (true? (:done (op! "workflow"
-                                     ["next" "prepare-epic"])))))))))))
+              (test-alpha/await-quiescent! rt)
+              (is (true? (:done (op! "workflow" ["ready" "prepare-epic"]))))
+              (is (= "true"
+                     (get-in (weaver/show rt epic)
+                             [:attributes :kanban.label/ralph]))))))))))
 
 (deftest spool-bump-workflow-publishes-authority-exclusive-cutover-paths
   (with-startup-config-runtime
