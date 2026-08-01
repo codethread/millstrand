@@ -95,31 +95,47 @@ func TestForRenderingClassifiesTheThreeOrigins(t *testing.T) {
 	}
 }
 
-// An error frame that will not decode has nothing typed to render, so the relay
-// leaves it to the caller that renders everything the relay did not. Rendering
-// it here as well put two lines on stderr — two envelopes in JSON mode, where
-// exactly one is the whole contract.
-func TestRelayLeavesAnUndecodableFrameToItsCaller(t *testing.T) {
-	frame := `{"protocol_version":1,"request_id":"r1","ok":false,"result":null,"error":"boom"}` + "\n"
-	var out, er bytes.Buffer
-	code, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, nil)
-	if code == 0 || err == nil {
-		t.Fatalf("expected a non-zero exit and an error, got (%d, %v)", code, err)
+// Every way a failure frame can arrive without a usable envelope is the same
+// fault, and the relay treats it as one: nothing rendered here (rendering it
+// here as well put two lines on stderr — two envelopes in JSON mode, where
+// exactly one is the whole contract), typed transport, raw value preserved. The
+// wire taxonomy stays exactly the three types SPEC-004.C24 declares, so a frame
+// claiming another never reaches a consumer as if the weaver had declared it.
+func TestRelayLeavesAFrameWithoutAnEnvelopeToItsCaller(t *testing.T) {
+	cases := []struct {
+		name  string
+		error string
+		quote string
+	}{
+		{name: "absent error value", error: `null`},
+		{name: "not an object", error: `"boom"`, quote: `"boom"`},
+		{name: "empty object", error: `{}`, quote: `{}`},
+		{name: "missing required fields", error: `{"type":"domain"}`, quote: `"type":"domain"`},
+		{name: "type outside the wire taxonomy", error: `{"type":"cli","code":"c","message":"m","details":{}}`, quote: `"type":"cli"`},
+		{name: "details of the wrong shape", error: `{"type":"domain","code":"c","message":"m","details":null}`, quote: `"details":null`},
 	}
-	if er.Len() != 0 {
-		t.Fatalf("the relay renders nothing it could not decode, got %q", er.String())
-	}
-	var transportErr *TransportError
-	if !errors.As(err, &transportErr) {
-		t.Fatalf("a frame that will not decode is skew, so transport: %#v", err)
-	}
-	if transportErr.Code != errfmt.CodeWeaverResponseMalformed {
-		t.Fatalf("code = %q", transportErr.Code)
-	}
-	// The undecodable error value is the most faithful thing left to say, so it
-	// rides in the message rather than being dropped with the rendering.
-	if !strings.Contains(err.Error(), `"boom"`) {
-		t.Fatalf("the raw error value must survive in the message: %v", err)
+	for _, c := range cases {
+		frame := `{"protocol_version":1,"request_id":"r1","ok":false,"result":null,"error":` + c.error + "}\n"
+		var out, er bytes.Buffer
+		code, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, nil)
+		if code == 0 || err == nil {
+			t.Fatalf("%s: expected a non-zero exit and an error, got (%d, %v)", c.name, code, err)
+		}
+		if er.Len() != 0 {
+			t.Fatalf("%s: the relay renders nothing it could not read, got %q", c.name, er.String())
+		}
+		var transportErr *TransportError
+		if !errors.As(err, &transportErr) {
+			t.Fatalf("%s: a frame without an envelope is skew, so transport: %#v", c.name, err)
+		}
+		if transportErr.Code != errfmt.CodeWeaverResponseMalformed {
+			t.Fatalf("%s: code = %q", c.name, transportErr.Code)
+		}
+		// The raw value is the most faithful thing left to say, so it rides in the
+		// message rather than being dropped with the rendering.
+		if c.quote != "" && !strings.Contains(err.Error(), c.quote) {
+			t.Fatalf("%s: the raw error value must survive in the message: %v", c.name, err)
+		}
 	}
 }
 
@@ -143,15 +159,19 @@ func TestInvokeThroughMillMarksItsOwnFailuresTransport(t *testing.T) {
 	}
 }
 
-// A decoded envelope with no message is not a shape any weaver frame promises,
-// but it decodes cleanly, so it needs a rendering rather than a panic.
-func TestRelayRendersAnEmptyMessageEnvelope(t *testing.T) {
+// An envelope with no message is not a shape any weaver frame promises, and the
+// relay judges it exactly as the mill-call path does rather than passing a
+// half-envelope on as if the weaver had declared it. The frame is not lost: it
+// rides in the message the caller renders.
+func TestRelayRejectsAnEmptyMessageEnvelope(t *testing.T) {
 	frame := `{"protocol_version":1,"request_id":"r1","ok":false,"result":null,"error":{"type":"transport","code":"transport/server-error","message":"","details":{}}}` + "\n"
 	var out, er bytes.Buffer
-	if _, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, nil); err == nil {
-		t.Fatal("expected the typed response error")
+	_, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, nil)
+	var transportErr *TransportError
+	if !errors.As(err, &transportErr) || transportErr.Code != errfmt.CodeWeaverResponseMalformed {
+		t.Fatalf("empty-message envelope = %#v", err)
 	}
-	if er.String() != "error: weaver transport error (transport/server-error): \n" {
-		t.Fatalf("empty-message rendering = %q", er.String())
+	if !strings.Contains(err.Error(), "transport/server-error") {
+		t.Fatalf("the raw frame must survive in the message: %v", err)
 	}
 }

@@ -170,11 +170,15 @@ func TestRenderJSONKeepsTheLineWhenDetailsWillNotEncode(t *testing.T) {
 		Type:    "domain",
 		Code:    "op/failed",
 		Message: "boom",
-		Details: map[string]any{"cycle": make(chan int)},
+		Details: map[string]any{"cycle": make(chan int), "workspace": "/tmp/ws"},
 	})
 	details, ok := decoded["details"].(map[string]any)
 	if !ok || details["errfmt/unrenderable-details"] == nil {
-		t.Fatalf("the dropped details must be named, got %#v", decoded["details"])
+		t.Fatalf("the reason the details went must be named, got %#v", decoded["details"])
+	}
+	dropped, ok := details["errfmt/dropped-keys"].([]any)
+	if !ok || len(dropped) != 2 || dropped[0] != "cycle" || dropped[1] != "workspace" {
+		t.Fatalf("the dropped keys must be named and sorted, got %#v", details["errfmt/dropped-keys"])
 	}
 	if decoded["message"] != "boom" || decoded["code"] != "op/failed" {
 		t.Fatalf("the rest of the envelope survives: %#v", decoded)
