@@ -447,8 +447,8 @@
             params (json/write-str {:epic "ralph-contract"})
             run-id "ralph-contract"
             started (op! "workflow" ["start" run-id
-                                      "--workflow" "ralph-iterate"
-                                      "--params" params])
+                                     "--workflow" "ralph-iterate"
+                                     "--params" params])
             next-step (fn [] (first (:ready (op! "workflow" ["next" run-id]))))]
         (is (= "workflows-ralph/ralph-iterate" (:definition description)))
         (is (= ["orient"] (get-in description [:declared :entry])))
