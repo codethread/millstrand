@@ -137,15 +137,24 @@
 (s/def :batch/burned (s/coll-of map? :kind vector?))
 (s/def :batch/edge-ops (s/coll-of map? :kind vector?))
 (s/def :mutation/operation #{:batch/apply})
+(s/def :pattern/name non-blank-string?)
+(s/def :pattern/input data-first-value?)
 (s/def ::batch-hook-context
-  (s/keys :req [:mutation/operation
-                :batch/source
-                :batch/payload
-                :batch/refs
-                :batch/created
-                :batch/updated
-                :batch/burned
-                :batch/edge-ops]))
+  (s/and
+   (s/keys :req [:mutation/operation
+                 :batch/source
+                 :batch/payload
+                 :batch/refs
+                 :batch/created
+                 :batch/updated
+                 :batch/burned
+                 :batch/edge-ops])
+   #(case (:batch/source %)
+      :apply (and (not (contains? % :pattern/name))
+                  (not (contains? % :pattern/input)))
+      :weave (and (s/valid? :pattern/name (:pattern/name %))
+                  (s/valid? :pattern/input (:pattern/input %)))
+      false)))
 
 (s/def ::strand-id ::id)
 (s/def ::archived? boolean?)

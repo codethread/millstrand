@@ -36,6 +36,26 @@
   [event]
   (swap! captured-batch-events conj event))
 
+(deftest batch-hook-context-spec-discriminates-its-source
+  (let [common {:mutation/operation :batch/apply
+                :batch/payload {}
+                :batch/refs {}
+                :batch/created []
+                :batch/updated []
+                :batch/burned []
+                :batch/edge-ops []}
+        apply-context (assoc common :batch/source :apply)
+        weave-context (assoc common
+                             :batch/source :weave
+                             :pattern/name "demo"
+                             :pattern/input {})]
+    (is (s/valid? ::specs/batch-hook-context apply-context))
+    (is (s/valid? ::specs/batch-hook-context weave-context))
+    (is (not (s/valid? ::specs/batch-hook-context
+                       (dissoc weave-context :pattern/name))))
+    (is (not (s/valid? ::specs/batch-hook-context
+                       (assoc apply-context :pattern/name "unexpected"))))))
+
 (deftest apply-threads-a-caller-request-context-into-the-validation-gate
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
     (let [rt (:runtime ctx)]
