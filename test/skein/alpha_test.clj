@@ -9,6 +9,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is use-fixtures]]
             [skein.api.weaver.alpha :as weaver]
+            [skein.core.specs :as specs]
             [skein.core.weaver.config :as weaver-config]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.core.db-test :as db-test]))
@@ -136,6 +137,8 @@
       (patterns/register-pattern! rt 'name-forms 'skein.alpha-test/name-forms-pattern
                                   ::name-forms-pattern-input)
       (let [entry (patterns/resolve-pattern rt 'name-forms)]
+        (is (nil? (:doc entry)))
+        (is (s/valid? ::specs/pattern-entry entry))
         (is (= entry (patterns/resolve-pattern rt "name-forms"))
             "a raw CLI string resolves the same registered entry")
         (is (= entry (patterns/resolve-pattern rt " :name-forms "))
