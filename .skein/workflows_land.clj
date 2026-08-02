@@ -126,7 +126,9 @@
                                              :land/run-id (attr-value % :land/run-id))
                                       [:id :owner :land/run-id])
                                     locks)
-                       :recovery "Close the corrupt duplicate lock(s), then retry the land operation."})))
+                       :recovery (format-alpha/reflow
+                                  "|Close the corrupt duplicate lock(s), then retry the
+                                   |land operation.")})))
     locks))
 
 (defn- require-owned-merge-lock!
@@ -162,10 +164,14 @@
                              roots)
           run-id (some-> roots first (attr-value :workflow/run-id))]
       (when-not (and (= 1 (count roots)) (s/valid? ::run-id run-id))
-        (throw (ex-info "approved land sign-off batch must pour exactly one workflow root with a usable run-id"
+        (throw (ex-info (format-alpha/reflow
+                        "|Approved land sign-off batches must pour exactly one
+                         |workflow root with a usable run-id.")
                         {:code "land/signoff-run-ambiguous"
                          :roots root-details
-                         :recovery "Inspect the created workflow roots and retry after restoring one usable :workflow/run-id."})))
+                         :recovery (format-alpha/reflow
+                                    "|Inspect the created workflow roots and retry after
+                                     |restoring one usable :workflow/run-id.")})))
       run-id)))
 
 (skein/defhook require-merge-lock-at-signoff-approval
