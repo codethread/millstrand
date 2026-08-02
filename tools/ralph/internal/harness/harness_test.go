@@ -98,6 +98,14 @@ func TestPromptEscapesEpicIDInWorkflowParams(t *testing.T) {
 	}
 }
 
+func TestPromptShellQuotesEpicIDInWorkflowParams(t *testing.T) {
+	got := Prompt("e'1", "Epic one", 1, false)
+
+	if !strings.Contains(got, `--params '{"epic":"e'"'"'1"}'`) {
+		t.Errorf("workflow params must shell-escape apostrophes in epic IDs:\n%s", got)
+	}
+}
+
 func TestLookup(t *testing.T) {
 	for _, name := range Names() {
 		h, err := Lookup(name)

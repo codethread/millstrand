@@ -7,6 +7,7 @@
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [skein.core.db-test :as db-test]
@@ -454,6 +455,11 @@
                                      "ralph/branch" "ralph-contract"
                                      "ralph/worktree" "/tmp/ralph-contract"
                                      "ralph/card" "feature-contract"})
+            context-map {:epic "ralph-contract"
+                         :ralph/feature "feature-contract"
+                         :ralph/branch "ralph-contract"
+                         :ralph/worktree "/tmp/ralph-contract"
+                         :ralph/card "feature-contract"}
             next-step (fn [] (first (:ready (op! "workflow" ["next" run-id]))))]
         (is (= "workflows-ralph/ralph-iterate" (:definition description)))
         (is (= ["orient"] (get-in description [:declared :entry])))
@@ -470,6 +476,9 @@
                   :ralph/worktree "/tmp/ralph-contract"
                   :ralph/card "feature-contract"}
                  (get-in (workflow/current-root run-id) [:attributes :workflow/context]))))
+        (is (s/valid? :workflows-ralph/ralph-context context-map))
+        (is (not (s/valid? :workflows-ralph/ralph-context
+                           (assoc context-map :ralph/card "other-card"))))
         (is (= "ralph.slice-gates" (:action-ref (next-step))))
         (is (= "ralph.quick-review" (:action-ref (next-step))))
         (is (= "ralph.handoff-land" (:action-ref (next-step))))

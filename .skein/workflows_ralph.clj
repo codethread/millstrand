@@ -5,7 +5,8 @@
   state, claims exactly one feature, drives that feature to a landed card, and
   stops at a judgment point that closes the epic only when no feature cards
   remain. The Go binary supplies the polling loop; this workflow owns the work
-  discipline inside one iteration."
+  discipline inside one iteration. Claim metadata persisted in
+  `workflow/context` conforms to `:workflows-ralph/ralph-context`."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.format.alpha :as format-alpha]
@@ -18,6 +19,14 @@
 
 (s/def ::epic non-blank-string?)
 (s/def ::ralph-iterate-params (s/keys :req-un [::epic]))
+(s/def :ralph/feature non-blank-string?)
+(s/def :ralph/branch non-blank-string?)
+(s/def :ralph/worktree non-blank-string?)
+(s/def :ralph/card non-blank-string?)
+(s/def ::ralph-context
+  (s/and
+   (s/keys :req [:ralph/feature :ralph/branch :ralph/worktree :ralph/card])
+   #(= (:ralph/feature %) (:ralph/card %))))
 
 (workflow/defworkflow ralph-iterate
   "Run one Ralph iteration for an epic (family \"ralph\").
@@ -121,8 +130,8 @@
                                 "|Ralph is the epic's coordinator. Start the registered land
                                  |workflow for the claimed feature using the durable values in
                                  |this run's `workflow/context`. First read `strand show <run-id>`
-                                 |and require non-blank `ralph/feature`, `ralph/branch`,
-                                 |`ralph/worktree`, and `ralph/card`; require that feature and card
+                                 |and validate the map against
+                                 |`:workflows-ralph/ralph-context`; require that feature and card
                                  |match. If any value is missing, blank, or inconsistent, fail loudly:
                                  |record the exact context and stop without starting land. Otherwise
                                  |copy those exact values into: `strand workflow start <land-run-id>
