@@ -73,7 +73,10 @@
 (s/def :skein.pattern-explain/fn (s/and string? #(not (str/blank? %))))
 (s/def :skein.pattern-explain/input-spec (s/and string? #(not (str/blank? %))))
 (s/def :skein.pattern-explain/contract map?)
-(s/def :skein.pattern-explain/template map?)
+(s/def :skein.pattern-explain/template
+  (s/or :placeholder string?
+        :object (s/map-of string? :skein.pattern-explain/template)
+        :array (s/coll-of :skein.pattern-explain/template :kind vector?)))
 (s/def :skein.pattern-explain/spec-forms vector?)
 (s/def :skein.pattern-explain/doc (s/and string? #(not (str/blank? %))))
 (s/def ::explain-result
@@ -102,11 +105,14 @@
   ;; shadow the clojure.core vars.
   (let [{:keys [doc input-spec] fn-sym :fn registered-name :name}
         (resolve-pattern runtime pattern-name)]
-    (cond-> (merge {:name registered-name
-                    :fn (str fn-sym)
-                    :input-spec (str input-spec)}
-                   (pattern-input-contract input-spec))
-      doc (assoc :doc doc))))
+    (spool/require-valid!
+     ::explain-result
+     (cond-> (merge {:name registered-name
+                     :fn (str fn-sym)
+                     :input-spec (str input-spec)}
+                    (pattern-input-contract input-spec))
+       doc (assoc :doc doc))
+     "Pattern explanation is invalid")))
 
 (s/fdef explain
   :args (s/cat :runtime map?
