@@ -5,7 +5,9 @@
   (including the socket `:payload/received` gate), and threads attribute values
   through transform hooks. Internal tier shared by the strand-lifecycle and
   batch/weave APIs; registration of hooks stays in the API layer."
-  (:require [skein.core.db :as db]
+  (:require [clojure.spec.alpha :as s]
+            [skein.core.db :as db]
+            [skein.core.specs :as specs]
             [skein.core.weaver.access :as access])
   (:import [java.time Instant]
            [java.util UUID]))
@@ -91,7 +93,7 @@
   (run-validation-hooks! runtime :payload/received ctx))
 
 (defn- require-transform-wrapper! [hook-type hook result]
-  (when-not (and (map? result) (contains? result :hook/value))
+  (when-not (s/valid? ::specs/hook-transform-return result)
     (throw (ex-info "Transform hook must return {:hook/value replacement}"
                     {:code "hook/invalid-return"
                      :hook/type hook-type

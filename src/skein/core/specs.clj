@@ -76,6 +76,8 @@
                    (integer? (:order %)))
                (every? data-first-value? (keys %))
                (every? data-first-value? (vals %)))))
+(s/def ::hook-transform-return
+  (s/and map? #(contains? % :hook/value)))
 (s/def ::hook-registration
   (s/and (s/keys :req-un [:skein.hook/key
                           :skein.hook/types
