@@ -54,9 +54,18 @@
   ([runtime key]
    (unregister-hook! runtime core-registry/repl-owner key))
   ([runtime owner key]
-   (let [key (validate-hook-key! key)]
+   (let [key (spool/require-valid! :skein.hook/key
+                                   (validate-hook-key! key)
+                                   "Hook key is invalid")]
      (core-registry/remove-entry! (access/hook-store runtime) owner key)
      key)))
+
+(defn- public-hook-entry [entry]
+  (let [entry (dissoc entry :fn-value)]
+    (spool/require-valid! ::specs/hook-entry
+                          entry
+                          "Hook registry entry is invalid")
+    entry))
 
 (defn hooks
   "Return data-first lifecycle hook registry entries in execution order.
@@ -67,7 +76,7 @@
   leaves the registry. Each returned entry conforms to
   `::skein.core.specs/hook-entry`."
   [runtime]
-  (mapv #(dissoc % :fn-value)
+  (mapv public-hook-entry
         (sort-by (juxt :order (comp pr-str :key))
                  (vals (access/hook-registry runtime)))))
 
@@ -80,7 +89,7 @@
   has any directly planted `:fn-value` stripped, so no function value or
   internal handle leaves the registry (DELTA-OlrDrt-001.CC9)."
   [runtime]
-  (core-registry/explain (access/hook-store runtime) #(dissoc % :fn-value)))
+  (core-registry/explain (access/hook-store runtime) public-hook-entry))
 
 ;; --- validating and resolving registration input ----------------------
 

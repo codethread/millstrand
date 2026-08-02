@@ -45,12 +45,19 @@
      (core-registry/put-entry! (pattern-store runtime) owner (:name entry) entry)
      entry)))
 
+(defn- public-pattern-entry [entry]
+  (spool/require-valid! ::specs/pattern-entry
+                        entry
+                        "Pattern registry entry is invalid")
+  entry)
+
 (defn patterns
   "Return registered weave pattern metadata from `runtime`, ordered by name.
 
   Each returned entry conforms to `::skein.core.specs/pattern-entry`."
   [runtime]
-  (mapv val (sort-by key (pattern-registry runtime))))
+  (mapv (comp public-pattern-entry val)
+        (sort-by key (pattern-registry runtime))))
 
 (defn resolve-pattern
   "Return the registered weave pattern for a name.
@@ -62,7 +69,7 @@
   [runtime pattern-name]
   (let [canonical-name (canonical-pattern-name pattern-name)
         registered (pattern-registry runtime)]
-    (or (get registered canonical-name)
+    (or (some-> (get registered canonical-name) public-pattern-entry)
         (throw (ex-info "Pattern not found" {:pattern pattern-name
                                              :canonical-pattern canonical-name
                                              :available (sort (keys registered))})))))

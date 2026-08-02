@@ -85,6 +85,19 @@
         (is (= hook-sym (get-in effective [:value :fn]))
             "the hook symbol stays as data")))))
 
+(deftest public-hook-readers-validate-planted-entries
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (let [rt (:runtime ctx)
+          store (access/hook-store rt)]
+      (cr/replace-owner! store :malformed
+                         {:layer :workspace
+                          :entries {:bad {:key :bad}}
+                          :overrides #{}})
+      (is (thrown-with-msg? ExceptionInfo #"Hook registry entry is invalid"
+                            (hooks/hooks rt)))
+      (is (thrown-with-msg? ExceptionInfo #"Hook registry entry is invalid"
+                            (hooks/hook-provenance rt))))))
+
 (deftest hook-registry-is-owner-partition-backed
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
     (let [rt (:runtime ctx)
