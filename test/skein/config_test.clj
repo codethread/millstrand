@@ -108,7 +108,7 @@
   first (workflows.clj references its public CLI-tail helpers at load time),
   then harnesses.clj, the guide op that spawns onto its seats, workflows.clj,
   and the land policy op beside it in
-  workflows_land.clj. attention.clj and nvd_scan.clj are
+  workflows_land.clj and workflows_ralph.clj. attention.clj and nvd_scan.clj are
   deliberately not loaded here — chime rules are asserted through the full
   startup fixture, and the NVD job must never register from a direct load."
   [f]
@@ -150,7 +150,7 @@
   "Copy the repo-local config files into a temporary config dir."
   [target]
   (.mkdirs (io/file target))
-  (doseq [name ["init.clj" "config.clj" "workflows.clj" "workflows_land.clj" "harnesses.clj"
+  (doseq [name ["init.clj" "config.clj" "workflows.clj" "workflows_land.clj" "workflows_ralph.clj" "harnesses.clj"
                 "guide.clj" "attention.clj" "nvd_scan.clj" "reviewers.clj"
                 "kanban_tracker.clj" "module_adapters.clj" "spools.edn"]]
     (io/copy (io/file ".skein" name) (io/file target name)))
