@@ -119,7 +119,8 @@
   The four-argument arity threads an explicit request-context map for trusted
   callers (the connected-client tier); the three-argument arity derives its own
   weave context. A caller-supplied context conforms to
-  `::skein.core.specs/request-context`."
+  `::skein.core.specs/request-context`; the pre-commit hook context conforms to
+  `::skein.core.specs/batch-hook-context`."
   ([runtime pattern-name input]
    (weave! runtime pattern-name input (request-context :weave)))
   ([runtime pattern-name input req-ctx]

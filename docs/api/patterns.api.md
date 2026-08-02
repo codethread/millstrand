@@ -80,5 +80,6 @@ Validate pattern input, invoke the pattern, and apply its create-only batch.
   The four-argument arity threads an explicit request-context map for trusted
   callers (the connected-client tier); the three-argument arity derives its own
   weave context. A caller-supplied context conforms to
-  `::skein.core.specs/request-context`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L116-L154">Source</a></sub></p>
+  `::skein.core.specs/request-context`; the pre-commit hook context conforms to
+  `::skein.core.specs/batch-hook-context`.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L116-L155">Source</a></sub></p>

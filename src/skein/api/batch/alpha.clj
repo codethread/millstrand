@@ -75,7 +75,8 @@
   the transactional engine's output before the pre-commit hook, events, and
   return. Those two seam checks only catch impossible drift and never weaken the
   authority's rejections. A caller-supplied `req-ctx` conforms to
-  `::skein.core.specs/request-context`."
+  `::skein.core.specs/request-context`; the pre-commit hook context conforms to
+  `::skein.core.specs/batch-hook-context`."
   ([runtime payload]
    (apply! runtime payload (lifecycle/request-context :apply-batch)))
   ([runtime payload req-ctx]

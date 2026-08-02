@@ -152,27 +152,34 @@
        (= "approved" (attr-value after :workflow/outcome))))
 
 (defn- require-poured-run-id!
-  "Return the sole run-id of a batch's poured workflow root.
+  "Return the sole run-id named by updated workflow rows.
 
-  An approved sign-off must be attributable to exactly one land run. Multiple
-  roots or a root without a usable run-id make the batch ambiguous and stop the
-  mutation rather than letting a first-match projection choose an owner."
-  [created-rows]
-  (let [roots (filter #(= "root" (attr-value % :workflow/role)) created-rows)]
-    (let [root-details (mapv #(assoc (select-keys % [:id])
-                                     :workflow/run-id (attr-value % :workflow/run-id))
-                             roots)
-          run-id (some-> roots first (attr-value :workflow/run-id))]
-      (when-not (and (= 1 (count roots)) (s/valid? ::run-id run-id))
-        (throw (ex-info (format-alpha/reflow
-                        "|Approved land sign-off batches must pour exactly one
-                         |workflow root with a usable run-id.")
-                        {:code "land/signoff-run-ambiguous"
-                         :roots root-details
-                         :recovery (format-alpha/reflow
-                                    "|Inspect the created workflow roots and retry after
-                                     |restoring one usable :workflow/run-id.")})))
-      run-id)))
+  An approved sign-off updates an existing checkpoint, so its run attribution
+  belongs to `:batch/updated`, not only to continuation roots in
+  `:batch/created`. Multiple run ids or rows without a usable run-id make the
+  batch ambiguous and stop the mutation rather than letting a first-match
+  projection choose an owner."
+  [updated-rows]
+  (let [root-details (mapv (fn [{:keys [after]}]
+                             (assoc (select-keys after [:id])
+                                    :workflow/run-id (attr-value after :workflow/run-id)))
+                           updated-rows)
+        run-ids (->> root-details
+                     (map :workflow/run-id)
+                     (filter #(s/valid? ::run-id %))
+                     distinct
+                     vec)
+        run-id (first run-ids)]
+    (when-not (= 1 (count run-ids))
+      (throw (ex-info (format-alpha/reflow
+                      "|Approved land sign-off batches must update workflow rows
+                       |for exactly one usable run-id.")
+                      {:code "land/signoff-run-ambiguous"
+                       :roots root-details
+                       :recovery (format-alpha/reflow
+                                  "|Inspect the updated sign-off rows and retry after
+                                   |restoring one usable :workflow/run-id.")})))
+    run-id))
 
 (skein/defhook require-merge-lock-at-signoff-approval
   "Veto committing an approved land sign-off that holds no merge lock.
@@ -192,7 +199,7 @@
   {:types #{:batch/apply-before-commit}}
   [ctx]
   (doseq [row (filter signoff-approval-row? (:batch/updated ctx))]
-    (let [run-id (require-poured-run-id! (:batch/created ctx))
+    (let [run-id (require-poured-run-id! (:batch/updated ctx))
           locks (require-sane-merge-locks!)]
       (when-not (some #(= run-id (attr-value % :land/run-id)) locks)
         (throw (ex-info

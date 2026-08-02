@@ -1576,10 +1576,12 @@
   (with-config-runtime
     (fn [rt]
       (let [guard (requiring-resolve 'workflows-land/require-merge-lock-at-signoff-approval)
-            updated [{:after {:id "signoff"
-                              :state "closed"
-                              :attributes {:workflow/decision-point "land-signed-off"
-                                           :workflow/outcome "approved"}}}]
+            updated (fn [run-id]
+                      [{:after {:id (str "signoff-" run-id)
+                                :state "closed"
+                                :attributes {:workflow/decision-point "land-signed-off"
+                                             :workflow/outcome "approved"
+                                             :workflow/run-id run-id}}}])
             root (fn [run-id]
                    {:id (str "root-" run-id)
                     :attributes {:workflow/role "root"
@@ -1589,20 +1591,21 @@
         (weaver/add! rt {:title "Lock B"
                          :attributes {:kind "merge-lock" :land/run-id "land-b"}})
         (let [ambiguous (try
-                          (guard {:batch/created [(root "land-a") (root "land-b")]
-                                  :batch/updated updated})
+                          (guard {:batch/created []
+                                  :batch/updated (into (updated "land-a")
+                                                       (updated "land-b"))})
                           nil
                           (catch clojure.lang.ExceptionInfo error
                             error))
               multiple (try
                          (guard {:batch/created [(root "land-a")]
-                                 :batch/updated updated})
+                                 :batch/updated (updated "land-a")})
                          nil
                          (catch clojure.lang.ExceptionInfo error
                            error))]
           (is (= "land/signoff-run-ambiguous" (:code (ex-data ambiguous))))
-          (is (= [{:id "root-land-a" :workflow/run-id "land-a"}
-                  {:id "root-land-b" :workflow/run-id "land-b"}]
+          (is (= [{:id "signoff-land-a" :workflow/run-id "land-a"}
+                  {:id "signoff-land-b" :workflow/run-id "land-b"}]
                  (:roots (ex-data ambiguous))))
           (is (= "land/multiple-merge-locks" (:code (ex-data multiple))))
           (is (= #{"land-a" "land-b"}
