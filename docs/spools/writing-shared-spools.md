@@ -273,9 +273,7 @@ Require it from spool code when you need fail-loud validation, attribute-key nor
 (require '[skein.api.spool.alpha :as spool])
 ```
 
-- `(fail! message data)` and `(fail! message data cause)` throw `ex-info` with
-  the supplied message, data map, and optional cause. Use this for TEN-003
-  boundary failures so callers receive structured context.
+- `(fail! message data)` and `(fail! message data cause)` throw `ex-info` with the supplied message, data map, and optional cause. Use this for TEN-003 boundary failures so callers receive structured context. When the failure will reach a person at a terminal, reach for a factory in [`skein.api.errors.alpha`](#skeinapierrorsalpha) instead: they funnel through this same `fail!` and stamp the keys the CLI renders.
 - `(reject-unknown-keys! context allowed m)` returns `m` after checking that all
   its keys are in the `allowed` set. Unknown keys throw with `:unknown` and
   `:allowed` data; use this on option maps rather than ignoring typos.
@@ -295,6 +293,33 @@ Require it from spool code when you need fail-loud validation, attribute-key nor
   value. Otherwise it sleeps on the supplied Clock for the positive `poll-ms`
   cadence. Pass `(runtime/clock runtime)` from the spool's explicit-runtime
   boundary; tests can install a manual Clock and avoid wall-time waits.
+
+### `skein.api.errors.alpha`
+
+Require it when a failure will be read by a person at a terminal rather than only by the caller that catches it:
+
+```clojure
+(require '[skein.api.errors.alpha :as errors])
+```
+
+Whatever you throw becomes the error frame the CLI prints. `:code` becomes the frame's code; the rest of the `ex-data` map becomes its details. Three detail keys have a rendering of their own, and everything else is appended as JSON:
+
+- `:available` is a non-empty collection of names. Plain mode folds them into the message as `(available: add, list)`; pretty mode gives them their own section and ranks them against the offending token for a `did you mean:` list. Only strings, keywords, and symbols count as names, because those are the values that reach the client as text. Anything else is dropped item by item, leaving the reader no list at all.
+- `:try` is a command that resolves the failure, printed as a trailing `try: <command>` line in pretty mode. It must be a non-blank string; plain and json modes keep it as an ordinary detail.
+- `:canonical-query` is the query name, appended to the plain-mode message. It must be a name too. Paired with `:available` it also tells the weaver to infer `query/not-found` (SPEC-004.C36b).
+
+The factories name those keys, check their shapes where you throw, and insist on the ones that make each kind of failure worth reading:
+
+- `(not-found! message details)` needs `:token`, the name that was not found, held to the same grammar as the names it will be ranked against. Add `:available`, a non-empty collection of names, whenever the valid set can be listed.
+- `(invalid-argument! message details)` needs `:token`, the rejected value, plus `:expected` or `:available` so the reader learns what would have been accepted. Here `:token` is held to no shape: a rejected argument is as often a number, a map, or `nil` as a name, though only a name can feed did-you-mean.
+- `(conflict! message details)` needs `:try`. A conflict the reader cannot act on is the shape the factory exists to stop shipping.
+- `(remedy details command)` stamps `:try` onto any details map, for an error thrown without a factory.
+
+Each of the three also takes an optional trailing `cause`, matching `spool/fail!`.
+
+Two things are deliberately open. `:code` is free-form and non-contract: only three code strings are pinned anywhere (SPEC-005.C7), nothing in the CLI switches on a code, and the factories never invent one for you. Omit it and the weaver infers a code — including the `query/not-found` a canonical-query lookup owes its callers, which an explicit code would silently replace. Supply one when your surface has a consumer-facing name of its own, as a string, keyword, or symbol; the envelope carries all three whole and answers anything else with `domain/invalid-error-code`. And every key outside the three above is yours: it reaches the terminal untouched in the details JSON, so the map never becomes a closed vocabulary. Any op is free to throw a bare `ex-info` and still render.
+
+Teaching the CLI a fourth special key is renderer work and tests in `cli/internal/errfmt`, not a new entry here. The behavior contract is SPEC-003.C23d.
 
 ### `skein.api.format.alpha`
 
@@ -349,6 +374,8 @@ Shared failure outcomes are defined **once** in the runtime glossary and referen
   "Seed Acme Priority's process-lifetime failure glossary."
   {:apply 'acme.priority/seed-glossary!})
 ```
+
+Glossary outcome names and error `:code` values are separate vocabularies. An outcome name is documentation a verb's `failure-modes` points at; a code is a string on the wire. Nothing in the codebase maps one to the other, and nothing should: codes are free-form by design (SPEC-005.C7), so a mapping would freeze exactly what that clause keeps loose. A handler may of course document both, but only for itself.
 
 Ordering is safe: module publication does not run the direct-registration glossary-ref check, so the ops may publish before the lifecycle seed runs. `help` resolves the referenced-term closure when it is read, and reports a reference it cannot resolve loudly as `discovery/glossary-ref-unresolved` instead of dropping it. A spool that ships its outcomes this way carries them portably wherever its module is declared.
 
@@ -948,7 +975,8 @@ spools](./testing.md).
 ```clojure
 (ns acme.priority.alpha
   "Shared spool: promote/inspect strand priority. Runtime is always explicit."
-  (:require [skein.api.runtime.alpha :as runtime]
+  (:require [skein.api.errors.alpha :as errors]
+            [skein.api.runtime.alpha :as runtime]
             [skein.api.weaver.alpha :as weaver]))
 
 (defn- promotions [runtime]
@@ -959,7 +987,11 @@ spools](./testing.md).
   "Raise `id`'s priority attribute in `runtime` and return the updated strand."
   [runtime id]
   (when-not (weaver/show runtime id)
-    (throw (ex-info "No such strand to promote" {:id id})))     ; fail loudly
+    ;; Fail loudly, and give the reader the id back plus somewhere to look.
+    (errors/not-found! (str "No such strand to promote: " id)
+                       {:code :acme.priority/no-such-strand
+                        :token id
+                        :try "strand list --query work"}))
   (swap! (promotions runtime) inc)
   (weaver/update! runtime id {:attributes {:priority "high"}}))
 
