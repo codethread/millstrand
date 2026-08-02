@@ -25,6 +25,32 @@
 (declare canonical-pattern-name pattern-entry pattern-input-contract validate-pattern-input!
          normalize-weave-strand-attributes weave-payload weave-batch-context)
 
+(defn- pattern-registration-message
+  "Return a caller-facing diagnostic for an already-rejected registration."
+  [{:keys [name doc input-spec] fn-sym :fn}]
+  (cond
+    (not (s/valid? :skein.pattern/name name))
+    "Pattern name is invalid"
+    (not (s/valid? :skein.pattern/doc doc))
+    "Pattern doc must be a non-blank string"
+    (not (s/valid? :skein.pattern/fn fn-sym))
+    "Pattern function must be a fully qualified symbol"
+    (not (s/valid? :skein.pattern/input-spec input-spec))
+    "Pattern input spec must be a keyword or symbol"
+    :else "Pattern registration input is invalid"))
+
+(defn- require-pattern-registration!
+  "Validate the complete registration spec before deriving diagnostics."
+  [registration]
+  (try
+    (spool/require-valid! ::specs/pattern-registration
+                          registration
+                          "Pattern registration input is invalid")
+    (catch clojure.lang.ExceptionInfo error
+      (throw (ex-info (pattern-registration-message registration)
+                      (ex-data error)
+                      error)))))
+
 (defn register-pattern!
   "Register a trusted weaver pattern handler and input spec in `runtime`.
 
@@ -38,18 +64,8 @@
    (let [registration {:name pattern-name
                        :doc doc
                        :fn fn-sym
-                       :input-spec input-spec}
-         message (cond
-                   (not (s/valid? :skein.pattern/name pattern-name))
-                   "Pattern name is invalid"
-                   (not (s/valid? :skein.pattern/doc doc))
-                   "Pattern doc must be a non-blank string"
-                   (not (s/valid? :skein.pattern/fn fn-sym))
-                   "Pattern function must be a fully qualified symbol"
-                   (not (s/valid? :skein.pattern/input-spec input-spec))
-                   "Pattern input spec must be a keyword or symbol"
-                   :else "Pattern registration input is invalid")]
-     (spool/require-valid! ::specs/pattern-registration registration message)
+                       :input-spec input-spec}]
+     (require-pattern-registration! registration)
      (let [entry (pattern-entry pattern-name doc fn-sym input-spec)]
        (core-registry/put-entry! (pattern-store runtime) owner (:name entry) entry)
        entry))))

@@ -13,6 +13,40 @@
 
 (declare validate-hook-fn!)
 
+(defn- hook-registration-message
+  "Return a caller-facing diagnostic for an already-rejected registration."
+  [{:keys [key types opts] fn-sym :fn}]
+  (cond
+    (not (s/valid? :skein.hook/key key))
+    "Hook key must be a keyword, symbol, or string"
+    (not (s/valid? :skein.hook/types types))
+    (cond
+      (not (set? types)) "Hook types must be a set"
+      (empty? types) "Hook types must be non-empty"
+      :else "Hook types must be keywords")
+    (not (s/valid? :skein.hook/fn fn-sym))
+    "Hook function must be a fully qualified symbol"
+    (not (s/valid? :skein.hook/opts opts))
+    (cond
+      (not (map? opts)) "Hook opts must be a map"
+      (and (contains? opts :order)
+           (not (integer? (:order opts))))
+      "Hook :order must be an integer"
+      :else "Hook opts must contain only data-first values")
+    :else "Hook registration input is invalid"))
+
+(defn- require-hook-registration!
+  "Validate the complete registration spec before deriving diagnostics."
+  [registration]
+  (try
+    (spool/require-valid! ::specs/hook-registration
+                          registration
+                          "Hook registration input is invalid")
+    (catch clojure.lang.ExceptionInfo error
+      (throw (ex-info (hook-registration-message registration)
+                      (ex-data error)
+                      error)))))
+
 (defn register-hook!
   "Register or replace a lifecycle hook in `runtime` for selected hook types.
 
@@ -31,26 +65,8 @@
    (register-hook! runtime core-registry/repl-owner key types fn-sym opts))
   ([runtime owner key types fn-sym opts]
    (let [opts (or opts {})
-         registration {:key key :types types :fn fn-sym :opts opts}
-         message (cond
-                   (not (s/valid? :skein.hook/key key))
-                   "Hook key must be a keyword, symbol, or string"
-                   (not (s/valid? :skein.hook/types types))
-                   (cond
-                     (not (set? types)) "Hook types must be a set"
-                     (empty? types) "Hook types must be non-empty"
-                     :else "Hook types must be keywords")
-                   (not (s/valid? :skein.hook/fn fn-sym))
-                   "Hook function must be a fully qualified symbol"
-                   (not (s/valid? :skein.hook/opts opts))
-                   (cond
-                     (not (map? opts)) "Hook opts must be a map"
-                     (and (contains? opts :order)
-                          (not (integer? (:order opts))))
-                     "Hook :order must be an integer"
-                     :else "Hook opts must contain only data-first values")
-                   :else "Hook registration input is invalid")]
-     (spool/require-valid! ::specs/hook-registration registration message)
+         registration {:key key :types types :fn fn-sym :opts opts}]
+     (require-hook-registration! registration)
      (validate-hook-fn! runtime fn-sym)
      (let [entry {:key key
                   :types types

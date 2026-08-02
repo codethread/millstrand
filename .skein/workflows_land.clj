@@ -646,7 +646,11 @@
                 :flags {:pr-number {:type :int
                                     :doc "Positive PR number, required only at push-draft-pr."}}
                 :positionals [{:name :run-id :required? true :doc "Land run id."}]}
-    "choose" {:doc "Choose approved or abort sign-off with lock and card rollback."
+    "choose" {:doc (format-alpha/reflow
+                    "|Choose an approved or aborted sign-off with lock and card
+                     |rollback. For approved sign-off, use `strand land choose
+                     |<run-id> approved`; generic workflow approval is rejected."
+                    )
               :hook-class :mutating :deadline-class :standard
               :annotations
               {:notes ["The choice positional is a closed enum: approved or abort."]}
