@@ -26,7 +26,10 @@
          normalize-weave-strand-attributes weave-payload weave-batch-context)
 
 (defn register-pattern!
-  "Register a trusted weaver pattern handler and input spec in `runtime`."
+  "Register a trusted weaver pattern handler and input spec in `runtime`.
+
+  Registration input conforms to `::skein.core.specs/pattern-registration`,
+  and the returned entry conforms to `::skein.core.specs/pattern-entry`."
   ([runtime pattern-name fn-sym input-spec]
    (register-pattern! runtime core-registry/repl-owner pattern-name nil fn-sym input-spec))
   ([runtime pattern-name doc fn-sym input-spec]

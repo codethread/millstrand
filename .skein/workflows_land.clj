@@ -169,7 +169,11 @@
   run walks the whole land-merge continuation only to be refused at
   terminal cleanup. Rejecting the batch here stops it at sign-off, before
   anything merges. The sign-off's `revise` and `abort` choices and every
-  ordinary land step stay drivable through the generic verbs."
+  ordinary land step stay drivable through the generic verbs. It fails with
+  `land/signoff-run-ambiguous` for an unattributable approval,
+  `land/multiple-merge-locks` for a malformed lock set, and
+  `land/signoff-without-merge-lock` when the approved run holds no matching
+  lock."
   {:types #{:batch/apply-before-commit}}
   [ctx]
   (doseq [row (filter signoff-approval-row? (:batch/updated ctx))]

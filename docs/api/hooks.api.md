@@ -26,7 +26,7 @@ Return owner/provenance diagnostics for `runtime`'s lifecycle hook registry.
   `:layer`, and `:override?`/`:effective?` flags, and its `:value` hook entry
   has any directly planted `:fn-value` stripped, so no function value or
   internal handle leaves the registry (DELTA-OlrDrt-001.CC9).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L71-L80">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L73-L82">Source</a></sub></p>
 
 ## <a name="skein.api.hooks.alpha/hooks">`hooks`</a>
 ``` clojure
@@ -40,7 +40,7 @@ Return data-first lifecycle hook registry entries in execution order.
   Entries are data — the callable binds at dispatch from the `:fn` symbol —
   and any directly planted `:fn-value` is stripped so no function value
   leaves the registry.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L59-L69">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L61-L71">Source</a></sub></p>
 
 ## <a name="skein.api.hooks.alpha/register-hook!">`register-hook!`</a>
 ``` clojure
@@ -58,8 +58,10 @@ Register or replace a lifecycle hook in `runtime` for selected hook types.
   resolvable under the runtime's spool classloader. The entry stores only the
   symbol — every hook binds its callable at dispatch start, so a reload's fresh
   definition is the one that runs. `opts` may carry an integer `:order`
-  (default 0) plus data-first metadata. Returns the registered entry.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L17-L46">Source</a></sub></p>
+  (default 0) plus data-first metadata. Registration input and the returned entry
+  conform to `::skein.core.specs/hook-registration` and
+  `::skein.core.specs/hook-entry`, respectively. Returns the registered entry.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L17-L48">Source</a></sub></p>
 
 ## <a name="skein.api.hooks.alpha/unregister-hook!">`unregister-hook!`</a>
 ``` clojure
@@ -71,4 +73,4 @@ Function.
 Unregister a lifecycle hook by stable key from `runtime` and return that key.
 
   Unregistering an absent key is a no-op returning the validated key.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L48-L57">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L50-L59">Source</a></sub></p>

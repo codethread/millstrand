@@ -23,7 +23,9 @@
   resolvable under the runtime's spool classloader. The entry stores only the
   symbol — every hook binds its callable at dispatch start, so a reload's fresh
   definition is the one that runs. `opts` may carry an integer `:order`
-  (default 0) plus data-first metadata. Returns the registered entry."
+  (default 0) plus data-first metadata. Registration input and the returned entry
+  conform to `::skein.core.specs/hook-registration` and
+  `::skein.core.specs/hook-entry`, respectively. Returns the registered entry."
   ([runtime key types fn-sym]
    (register-hook! runtime core-registry/repl-owner key types fn-sym {}))
   ([runtime key types fn-sym opts]
