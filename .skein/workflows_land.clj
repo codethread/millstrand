@@ -120,7 +120,8 @@
   (let [locks (active-merge-locks)]
     (when (> (count locks) 1)
       (throw (ex-info "multiple active merge locks found; inspect and repair manually"
-                      {:locks (mapv :id locks)})))
+                      {:code "land/multiple-merge-locks"
+                       :locks (mapv :id locks)})))
     locks))
 
 (defn- require-owned-merge-lock!
@@ -143,13 +144,20 @@
        (= "land-signed-off" (attr-value after :workflow/decision-point))
        (= "approved" (attr-value after :workflow/outcome))))
 
-(defn- poured-run-id
-  "Return the run-id of the workflow root a batch pours, or nil."
+(defn- require-poured-run-id!
+  "Return the sole run-id of a batch's poured workflow root.
+
+  An approved sign-off must be attributable to exactly one land run. Multiple
+  roots or a root without a usable run-id make the batch ambiguous and stop the
+  mutation rather than letting a first-match projection choose an owner."
   [created-rows]
-  (some (fn [row]
-          (when (= "root" (attr-value row :workflow/role))
-            (attr-value row :workflow/run-id)))
-        created-rows))
+  (let [roots (filter #(= "root" (attr-value % :workflow/role)) created-rows)]
+    (when-not (= 1 (count roots))
+      (throw (ex-info "approved land sign-off batch must pour exactly one workflow root"
+                      {:code "land/signoff-run-ambiguous"
+                       :roots (mapv :id roots)})))
+    (require-land-input! ::run-id :workflow/run-id
+                         (attr-value (first roots) :workflow/run-id))))
 
 (skein/defhook require-merge-lock-at-signoff-approval
   "Veto committing an approved land sign-off that holds no merge lock.
@@ -165,16 +173,9 @@
   {:types #{:batch/apply-before-commit}}
   [ctx]
   (doseq [row (filter signoff-approval-row? (:batch/updated ctx))]
-    (let [run-id (or (poured-run-id (:batch/created ctx))
-                     (throw (ex-info
-                             (format-alpha/reflow
-                              "|approved land sign-off batch pours no continuation
-                               |root, so the approval cannot be attributed to a
-                               |land run")
-                             {:code "land/signoff-run-unknown"
-                              :checkpoint (:id row)})))]
-      (when-not (some #(= run-id (attr-value % :land/run-id))
-                      (active-merge-locks))
+    (let [run-id (require-poured-run-id! (:batch/created ctx))
+          locks (require-sane-merge-locks!)]
+      (when-not (some #(= run-id (attr-value % :land/run-id)) locks)
         (throw (ex-info
                 (format-alpha/reflow
                  (format
@@ -788,4 +789,3 @@
                              :allowed ["approved" "abort"]})))))
 
       "break-lock" (break-merge-lock! reason))))
-

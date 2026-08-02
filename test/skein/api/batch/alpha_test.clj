@@ -11,6 +11,7 @@
             [skein.api.events.alpha :as events]
             [skein.api.hooks.alpha :as hooks]
             [skein.core.db :as db]
+            [skein.core.specs :as specs]
             [skein.core.weaver.dispatch :as dispatch]
             [skein.test.alpha :as t]))
 
@@ -51,7 +52,8 @@
         (is (= :apply-batch (:request/operation context)))
         (is (= :batch/apply (:mutation/operation context)))
         (is (= :apply (:batch/source context)))
-        (is (= payload (:batch/payload context)))))))
+        (is (= payload (:batch/payload context)))
+        (is (s/valid? ::specs/batch-hook-context context))))))
 
 (deftest apply-rejects-malformed-payloads-loudly
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]

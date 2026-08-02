@@ -1572,6 +1572,37 @@
                  (mapv #(get-in % [:attributes :land/run-id])
                        (active-merge-locks)))))))))
 
+(deftest land-signoff-guard-rejects-ambiguous-roots-and-locks
+  (with-config-runtime
+    (fn [rt]
+      (let [guard (requiring-resolve 'workflows-land/require-merge-lock-at-signoff-approval)
+            updated [{:after {:id "signoff"
+                              :state "closed"
+                              :attributes {:workflow/decision-point "land-signed-off"
+                                           :workflow/outcome "approved"}}}]
+            root (fn [run-id]
+                   {:id (str "root-" run-id)
+                    :attributes {:workflow/role "root"
+                                 :workflow/run-id run-id}})]
+        (weaver/add! rt {:title "Lock A"
+                         :attributes {:kind "merge-lock" :land/run-id "land-a"}})
+        (weaver/add! rt {:title "Lock B"
+                         :attributes {:kind "merge-lock" :land/run-id "land-b"}})
+        (let [ambiguous (try
+                          (guard {:batch/created [(root "land-a") (root "land-b")]
+                                  :batch/updated updated})
+                          nil
+                          (catch clojure.lang.ExceptionInfo error
+                            error))
+              multiple (try
+                         (guard {:batch/created [(root "land-a")]
+                                 :batch/updated updated})
+                         nil
+                         (catch clojure.lang.ExceptionInfo error
+                           error))]
+          (is (= "land/signoff-run-ambiguous" (:code (ex-data ambiguous))))
+          (is (= "land/multiple-merge-locks" (:code (ex-data multiple)))))))))
+
 (deftest land-push-draft-pr-requires-context-and-rolls-back-card-lane
   (with-config-runtime
     (fn [rt]

@@ -74,4 +74,4 @@ Apply one transactional batch graph mutation payload to `runtime`.
   the transactional engine's output before the pre-commit hook, events, and
   return. Those two seam checks only catch impossible drift and never weaken the
   authority's rejections.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/batch/alpha.clj#L24-L96">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/batch/alpha.clj#L25-L97">Source</a></sub></p>

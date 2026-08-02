@@ -10,8 +10,10 @@
             [clojure.string :as str]
             [next.jdbc :as jdbc]
             [skein.api.spec.alpha :as api-spec]
+            [skein.api.spool.alpha :as spool]
             [skein.core.db :as db]
             [skein.core.query :as query]
+            [skein.core.specs :as specs]
             [skein.core.weaver.access :refer [ds normalize pattern-registry pattern-store
                                               with-spool-classloader validate-fn-symbol!]]
             [skein.core.weaver.core-registry :as core-registry]
@@ -243,14 +245,17 @@
 (defn- weave-batch-context
   "Build the `:batch/apply-before-commit` hook context for a weave batch apply."
   [req-ctx pattern-name input payload result]
-  (merge req-ctx
-         {:mutation/operation :batch/apply
-          :batch/source :weave
-          :batch/payload payload
-          :batch/refs (:refs result)
-          :batch/created (:created result)
-          :batch/updated []
-          :batch/burned []
-          :batch/edge-ops (:edges result)
-          :pattern/name pattern-name
-          :pattern/input input}))
+  (let [context (merge req-ctx
+                       {:mutation/operation :batch/apply
+                        :batch/source :weave
+                        :batch/payload payload
+                        :batch/refs (:refs result)
+                        :batch/created (:created result)
+                        :batch/updated []
+                        :batch/burned []
+                        :batch/edge-ops (:edges result)
+                        :pattern/name pattern-name
+                        :pattern/input input})]
+    (spool/require-valid! ::specs/batch-hook-context
+                          context
+                          "Batch hook context is invalid")))

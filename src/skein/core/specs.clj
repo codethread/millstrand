@@ -57,6 +57,32 @@
 (s/def ::attributes json-object-encodable-attributes?)
 (s/def ::attribute-key (s/or :keyword keyword? :string non-blank-string?))
 (s/def ::attribute-key-set (s/coll-of ::attribute-key :kind coll? :min-count 1))
+
+;; Batch lifecycle hooks share one context shape across graph application and
+;; pattern-created batches. The API entry points consult this core-owned spec;
+;; the shared shape stays below the alpha tier so neither API namespace reaches
+;; through another namespace's internal plumbing.
+(s/def :batch/source #{:apply :weave})
+(s/def :batch/payload map?)
+(s/def :batch/refs
+  (s/map-of (s/or :keyword simple-keyword?
+                  :string (s/and string? (complement str/blank?)))
+            ::id))
+(s/def :batch/created (s/coll-of map? :kind vector?))
+(s/def :batch/updated (s/coll-of map? :kind vector?))
+(s/def :batch/burned (s/coll-of map? :kind vector?))
+(s/def :batch/edge-ops (s/coll-of map? :kind vector?))
+(s/def :mutation/operation #{:batch/apply})
+(s/def ::batch-hook-context
+  (s/keys :req [:mutation/operation
+                :batch/source
+                :batch/payload
+                :batch/refs
+                :batch/created
+                :batch/updated
+                :batch/burned
+                :batch/edge-ops]))
+
 (s/def ::strand-id ::id)
 (s/def ::archived? boolean?)
 (s/def ::changed nat-int?)

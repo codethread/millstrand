@@ -10,6 +10,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [next.jdbc :as jdbc]
+            [skein.api.spool.alpha :as spool]
             [skein.core.db :as db]
             [skein.core.specs :as specs]
             [skein.core.weaver.access :as access]
@@ -276,15 +277,18 @@
 ;; --- validation-gate context -------------------------------------------------
 
 (defn- batch-apply-context [req-ctx payload result]
-  (merge req-ctx
-         {:mutation/operation :batch/apply
-          :batch/source :apply
-          :batch/payload payload
-          :batch/refs (:refs result)
-          :batch/created (:created result)
-          :batch/updated (:updated result)
-          :batch/burned (:burned result)
-          :batch/edge-ops (:edges result)}))
+  (let [context (merge req-ctx
+                       {:mutation/operation :batch/apply
+                        :batch/source :apply
+                        :batch/payload payload
+                        :batch/refs (:refs result)
+                        :batch/created (:created result)
+                        :batch/updated (:updated result)
+                        :batch/burned (:burned result)
+                        :batch/edge-ops (:edges result)})]
+    (spool/require-valid! ::specs/batch-hook-context
+                          context
+                          "Batch hook context is invalid")))
 
 ;; --- event fanout ------------------------------------------------------------
 

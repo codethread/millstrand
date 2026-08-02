@@ -7,7 +7,8 @@
   the data-first read shape, and that the hook registry is owner-partition
   backed so owner removal, same-layer collision, and authorized override behave
   end to end (TASK-Olr-002.DW2)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.test :refer [deftest is testing]]
             [skein.api.hooks.alpha :as hooks]
             [skein.core.weaver.access :as access]
             [skein.core.weaver.core-registry :as cr]
@@ -25,10 +26,12 @@
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
     (let [rt (:runtime ctx)]
       (testing "registration returns the data-first entry without its fn value"
-        (is (= {:key :policy :types #{:payload/received} :fn hook-sym
-                :order 5 :metadata {:doc "policy"}}
-               (hooks/register-hook! rt :policy #{:payload/received} hook-sym
-                                     {:order 5 :doc "policy"}))))
+        (let [entry (hooks/register-hook! rt :policy #{:payload/received} hook-sym
+                                          {:order 5 :doc "policy"})]
+          (is (= {:key :policy :types #{:payload/received} :fn hook-sym
+                  :order 5 :metadata {:doc "policy"}}
+                 entry))
+          (is (s/valid? ::hooks/hook-entry entry))))
       (testing "re-registering a key replaces its entry in place"
         (hooks/register-hook! rt :policy #{:strand/add-before-commit} hook-sym {:order 1})
         (is (= [{:key :policy :types #{:strand/add-before-commit} :fn hook-sym
