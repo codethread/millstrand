@@ -5,29 +5,14 @@
   argument. This namespace owns hook validation, function resolution, and
   registry state; synchronous invocation by later lifecycle gates lives in
   `skein.core.weaver.lifecycle`."
-  (:require [clojure.spec.alpha :as s]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [skein.api.spool.alpha :as spool]
+            [skein.core.specs :as specs]
             [skein.core.weaver.access :as access]
             [skein.core.weaver.core-registry :as core-registry]
             [skein.core.weaver.dispatch :as dispatch]))
 
 (declare validate-hook-key! validate-hook-types! validate-hook-opts! validate-hook-fn!)
-
-(s/def ::key
-  (s/or :keyword keyword?
-        :symbol symbol?
-        :string (s/and string? (complement str/blank?))))
-(s/def ::types (s/coll-of keyword? :kind set? :min-count 1))
-(s/def ::fn qualified-symbol?)
-(s/def ::order integer?)
-(s/def ::metadata
-  (s/and map?
-         #(and (every? dispatch/data-first-value? (keys %))
-               (every? dispatch/data-first-value? (vals %)))))
-(s/def ::hook-entry
-  (s/and (s/keys :req-un [::key ::types ::fn ::order ::metadata])
-         #(= #{:key :types :fn :order :metadata} (set (keys %)))))
 
 (defn register-hook!
   "Register or replace a lifecycle hook in `runtime` for selected hook types.
@@ -45,15 +30,20 @@
    (register-hook! runtime core-registry/repl-owner key types fn-sym opts))
   ([runtime owner key types fn-sym opts]
    (let [opts (validate-hook-opts! opts)
-         entry {:key (validate-hook-key! key)
-                :types (validate-hook-types! types)
-                :fn fn-sym
-                :order (get opts :order 0)
-                :metadata (dissoc opts :order)}]
+         key (validate-hook-key! key)
+         types (validate-hook-types! types)]
      (validate-hook-fn! runtime fn-sym)
-     (spool/require-valid! ::hook-entry entry "Hook registry entry is invalid")
-     (core-registry/put-entry! (access/hook-store runtime) owner (:key entry) entry)
-     entry)))
+     (spool/require-valid! ::specs/hook-registration
+                           {:key key :types types :fn fn-sym :opts opts}
+                           "Hook registration input is invalid")
+     (let [entry {:key key
+                  :types types
+                  :fn fn-sym
+                  :order (get opts :order 0)
+                  :metadata (dissoc opts :order)}]
+       (spool/require-valid! ::specs/hook-entry entry "Hook registry entry is invalid")
+       (core-registry/put-entry! (access/hook-store runtime) owner (:key entry) entry)
+       entry))))
 
 (defn unregister-hook!
   "Unregister a lifecycle hook by stable key from `runtime` and return that key.

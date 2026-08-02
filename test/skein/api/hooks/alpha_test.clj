@@ -10,6 +10,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is testing]]
             [skein.api.hooks.alpha :as hooks]
+            [skein.core.specs :as specs]
             [skein.core.weaver.access :as access]
             [skein.core.weaver.core-registry :as cr]
             [skein.test.alpha :as t])
@@ -31,7 +32,7 @@
           (is (= {:key :policy :types #{:payload/received} :fn hook-sym
                   :order 5 :metadata {:doc "policy"}}
                  entry))
-          (is (s/valid? ::hooks/hook-entry entry))))
+          (is (s/valid? ::specs/hook-entry entry))))
       (testing "re-registering a key replaces its entry in place"
         (hooks/register-hook! rt :policy #{:strand/add-before-commit} hook-sym {:order 1})
         (is (= [{:key :policy :types #{:strand/add-before-commit} :fn hook-sym

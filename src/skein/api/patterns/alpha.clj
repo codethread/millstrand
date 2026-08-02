@@ -33,6 +33,12 @@
    (register-pattern! runtime core-registry/repl-owner pattern-name doc fn-sym input-spec))
   ([runtime owner pattern-name doc fn-sym input-spec]
    (let [entry (pattern-entry pattern-name doc fn-sym input-spec)]
+     (spool/require-valid! ::specs/pattern-registration
+                           {:name pattern-name
+                            :doc doc
+                            :fn fn-sym
+                            :input-spec input-spec}
+                           "Pattern registration input is invalid")
      (core-registry/put-entry! (pattern-store runtime) owner (:name entry) entry)
      entry)))
 
@@ -136,10 +142,14 @@
 (defn- pattern-entry
   "Build a validated pattern registry entry; `doc` may be nil for a doc-less entry."
   [pattern-name doc fn-sym input-spec]
-  (cond-> {:name (canonical-pattern-name pattern-name)
-           :fn (validate-fn-symbol! "Pattern" fn-sym)
-           :input-spec (validate-pattern-spec! input-spec)}
-    doc (assoc :doc (validate-pattern-doc! doc))))
+  (let [entry (cond-> {:name (canonical-pattern-name pattern-name)
+                       :fn (validate-fn-symbol! "Pattern" fn-sym)
+                       :input-spec (validate-pattern-spec! input-spec)}
+                doc (assoc :doc (validate-pattern-doc! doc)))]
+    (spool/require-valid! ::specs/pattern-entry
+                          (assoc entry :doc doc)
+                          "Pattern registry entry is invalid")
+    entry))
 
 ;; --- Input contract introspection and caller guidance ---
 

@@ -44,6 +44,65 @@
        (not (str/blank? (namespace x)))
        (not (str/blank? (name x)))))
 
+(defn- data-first-value? [value]
+  (cond
+    (or (nil? value)
+        (string? value)
+        (number? value)
+        (keyword? value)
+        (symbol? value)
+        (boolean? value)
+        (inst? value)
+        (uuid? value)) true
+    (map? value) (and (every? data-first-value? (keys value))
+                      (every? data-first-value? (vals value)))
+    (or (vector? value) (set? value)) (every? data-first-value? value)
+    :else false))
+
+(s/def :skein.hook/key
+  (s/or :keyword keyword?
+        :symbol symbol?
+        :string (s/and string? (complement str/blank?))))
+(s/def :skein.hook/types (s/coll-of keyword? :kind set? :min-count 1))
+(s/def :skein.hook/fn fully-qualified-symbol?)
+(s/def :skein.hook/order integer?)
+(s/def :skein.hook/metadata
+  (s/and map?
+         #(and (every? data-first-value? (keys %))
+               (every? data-first-value? (vals %)))))
+(s/def :skein.hook/opts
+  (s/and map?
+         #(and (every? data-first-value? (keys %))
+               (every? data-first-value? (vals %)))))
+(s/def ::hook-registration
+  (s/and (s/keys :req-un [:skein.hook/key
+                          :skein.hook/types
+                          :skein.hook/fn
+                          :skein.hook/opts])
+         #(= #{:key :types :fn :opts} (set (keys %)))))
+(s/def ::hook-entry
+  (s/and (s/keys :req-un [:skein.hook/key
+                          :skein.hook/types
+                          :skein.hook/fn
+                          :skein.hook/order
+                          :skein.hook/metadata])
+         #(= #{:key :types :fn :order :metadata} (set (keys %)))))
+
+(s/def :skein.pattern/name
+  (s/or :keyword simple-keyword?
+        :symbol simple-symbol?
+        :string (s/and string? (complement str/blank?))))
+(s/def :skein.pattern/doc (s/nilable non-blank-string?))
+(s/def :skein.pattern/fn fully-qualified-symbol?)
+(s/def :skein.pattern/input-spec (s/or :keyword keyword? :symbol symbol?))
+(s/def ::pattern-registration
+  (s/and (s/keys :req-un [:skein.pattern/name
+                          :skein.pattern/doc
+                          :skein.pattern/fn
+                          :skein.pattern/input-spec])
+         #(= #{:name :doc :fn :input-spec} (set (keys %)))))
+(s/def ::pattern-entry ::pattern-registration)
+
 (s/def ::id non-blank-string?)
 (s/def ::generated-id generated-id?)
 (s/def ::from ::id)

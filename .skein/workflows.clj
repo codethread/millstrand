@@ -567,8 +567,11 @@
   the singleton merge lock, and routes to the mechanical `:land-merge`
   continuation. Abort routes to `:land-abort`. Card-backed runs move the card
   to `in_review` when push-draft-pr completes and back to `claimed` on abort.
-  Start and drive it through `strand workflow`; use the `land` op only at the
-  declared lock and lane policy boundaries."
+  Approve only with `strand land choose <land-run-id> approved --input
+  '{\"subject\":\"<semantic squash subject>\",\"body\":\"<squashed commits body>\"}'`;
+  generic workflow approval verbs are rejected by the sign-off guard. Start and
+  drive it through `strand workflow`; use the `land` op only at the declared
+  lock and lane policy boundaries."
   {:entrypoints #{:start}
    :param-spec ::land-params
    :defaults {}}
