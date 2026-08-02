@@ -107,7 +107,7 @@
   Loads the split config modules the way init.clj orders them: config.clj
   first (workflows.clj references its public CLI-tail helpers at load time),
   then harnesses.clj, the guide op that spawns onto its seats, workflows.clj,
-  and the land policy op beside it in
+  and the land and Ralph policy ops beside it in
   workflows_land.clj and workflows_ralph.clj. attention.clj and nvd_scan.clj are
   deliberately not loaded here — chime rules are asserted through the full
   startup fixture, and the NVD job must never register from a direct load."
@@ -140,6 +140,7 @@
             (load-module-source! rt :guide ".skein/guide.clj")
             (load-module-source! rt :workflows ".skein/workflows.clj")
             (load-module-source! rt :workflows-land ".skein/workflows_land.clj")
+            (load-module-source! rt :workflows-ralph ".skein/workflows_ralph.clj")
             (f rt)))
         (finally
           (weaver-runtime/stop! rt)
