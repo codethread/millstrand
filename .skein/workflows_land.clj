@@ -121,7 +121,12 @@
     (when (> (count locks) 1)
       (throw (ex-info "multiple active merge locks found; inspect and repair manually"
                       {:code "land/multiple-merge-locks"
-                       :locks (mapv :id locks)})))
+                       :locks (mapv #(select-keys
+                                      (assoc (select-keys % [:id :owner])
+                                             :land/run-id (attr-value % :land/run-id))
+                                      [:id :owner :land/run-id])
+                                    locks)
+                       :recovery "Close the corrupt duplicate lock(s), then retry the land operation."})))
     locks))
 
 (defn- require-owned-merge-lock!
@@ -152,20 +157,24 @@
   mutation rather than letting a first-match projection choose an owner."
   [created-rows]
   (let [roots (filter #(= "root" (attr-value % :workflow/role)) created-rows)]
-    (when-not (= 1 (count roots))
-      (throw (ex-info "approved land sign-off batch must pour exactly one workflow root"
-                      {:code "land/signoff-run-ambiguous"
-                       :roots (mapv :id roots)})))
-    (require-land-input! ::run-id :workflow/run-id
-                         (attr-value (first roots) :workflow/run-id))))
+    (let [root-details (mapv #(assoc (select-keys % [:id])
+                                     :workflow/run-id (attr-value % :workflow/run-id))
+                             roots)
+          run-id (some-> roots first (attr-value :workflow/run-id))]
+      (when-not (and (= 1 (count roots)) (s/valid? ::run-id run-id))
+        (throw (ex-info "approved land sign-off batch must pour exactly one workflow root with a usable run-id"
+                        {:code "land/signoff-run-ambiguous"
+                         :roots root-details
+                         :recovery "Inspect the created workflow roots and retry after restoring one usable :workflow/run-id."})))
+      run-id)))
 
 (skein/defhook require-merge-lock-at-signoff-approval
   "Veto committing an approved land sign-off that holds no merge lock.
 
-  `strand land choose <run> approved` acquires the singleton merge lock
-  and a merge-train slot before recording the approval, so at commit time
-  the lock strand already names the run. A generic `workflow
-  next`/`choose` approval skips that acquisition; without this gate the
+  `strand land choose <run> approved` acquires the singleton merge lock and a
+  merge-train slot before recording the approval, so at commit time the lock
+  strand already names the run. A generic `strand workflow next` or
+  `strand workflow choose` approval skips that acquisition; without this gate the
   run walks the whole land-merge continuation only to be refused at
   terminal cleanup. Rejecting the batch here stops it at sign-off, before
   anything merges. The sign-off's `revise` and `abort` choices and every

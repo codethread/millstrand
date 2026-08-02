@@ -1601,7 +1601,14 @@
                          (catch clojure.lang.ExceptionInfo error
                            error))]
           (is (= "land/signoff-run-ambiguous" (:code (ex-data ambiguous))))
-          (is (= "land/multiple-merge-locks" (:code (ex-data multiple)))))))))
+          (is (= [{:id "root-land-a" :workflow/run-id "land-a"}
+                  {:id "root-land-b" :workflow/run-id "land-b"}]
+                 (:roots (ex-data ambiguous))))
+          (is (= "land/multiple-merge-locks" (:code (ex-data multiple))))
+          (is (= #{"land-a" "land-b"}
+                 (set (map :land/run-id (:locks (ex-data multiple))))))
+          (is (string? (:recovery (ex-data ambiguous))))
+          (is (string? (:recovery (ex-data multiple)))))))))
 
 (deftest land-push-draft-pr-requires-context-and-rolls-back-card-lane
   (with-config-runtime

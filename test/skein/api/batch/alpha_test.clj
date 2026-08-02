@@ -54,7 +54,20 @@
     (is (not (s/valid? ::specs/batch-hook-context
                        (dissoc weave-context :pattern/name))))
     (is (not (s/valid? ::specs/batch-hook-context
-                       (assoc apply-context :pattern/name "unexpected"))))))
+                       (assoc apply-context :pattern/name "unexpected"))))
+    (is (not (s/valid? ::specs/batch-hook-context
+                       (assoc apply-context :batch/created [{:id "malformed"}]))))
+    (is (not (s/valid? ::specs/batch-hook-context
+                       (assoc apply-context
+                              :batch/edge-ops [{:op :remove
+                                                :from :a
+                                                :to :b
+                                                :type "depends-on"
+                                                :before nil
+                                                :after nil}]))))
+    (is (not (s/valid? ::specs/batch-hook-context
+                       (assoc apply-context
+                              :batch/payload {:strands [{:ref :a :unexpected true}]}))))))
 
 (deftest apply-threads-a-caller-request-context-into-the-validation-gate
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
