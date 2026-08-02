@@ -136,6 +136,57 @@
     (throw (ex-info "land cleanup requires its active merge lock"
                     {:land/run-id feature}))))
 
+(defn- signoff-approval-row?
+  "Return true when an updated batch row closes the land sign-off as approved."
+  [{:keys [after]}]
+  (and (= "closed" (:state after))
+       (= "land-signed-off" (attr-value after :workflow/decision-point))
+       (= "approved" (attr-value after :workflow/outcome))))
+
+(defn- poured-run-id
+  "Return the run-id of the workflow root a batch pours, or nil."
+  [created-rows]
+  (some (fn [row]
+          (when (= "root" (attr-value row :workflow/role))
+            (attr-value row :workflow/run-id)))
+        created-rows))
+
+(skein/defhook require-merge-lock-at-signoff-approval
+  "Veto committing an approved land sign-off that holds no merge lock.
+
+  `strand land choose <run> approved` acquires the singleton merge lock
+  and a merge-train slot before recording the approval, so at commit time
+  the lock strand already names the run. A generic `workflow
+  next`/`choose` approval skips that acquisition; without this gate the
+  run walks the whole land-merge continuation only to be refused at
+  terminal cleanup. Rejecting the batch here stops it at sign-off, before
+  anything merges. The sign-off's `revise` and `abort` choices and every
+  ordinary land step stay drivable through the generic verbs."
+  {:types #{:batch/apply-before-commit}}
+  [ctx]
+  (doseq [row (filter signoff-approval-row? (:batch/updated ctx))]
+    (let [run-id (or (poured-run-id (:batch/created ctx))
+                     (throw (ex-info
+                             (format-alpha/reflow
+                              "|approved land sign-off batch pours no continuation
+                               |root, so the approval cannot be attributed to a
+                               |land run")
+                             {:code "land/signoff-run-unknown"
+                              :checkpoint (:id row)})))]
+      (when-not (some #(= run-id (attr-value % :land/run-id))
+                      (active-merge-locks))
+        (throw (ex-info
+                (format-alpha/reflow
+                 (format
+                  "|land sign-off approval requires the merge lock this run does
+                   |not hold; approve with `strand land choose %s approved`,
+                   |which acquires it — never with generic workflow verbs"
+                  run-id))
+                {:code "land/signoff-without-merge-lock"
+                 :land/run-id run-id
+                 :checkpoint (:id row)})))))
+  nil)
+
 (defn- all-queue-entries
   "Return every merge-queue entry ever created, in any state."
   []

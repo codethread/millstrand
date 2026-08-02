@@ -1529,6 +1529,49 @@
         ;; history is not a land concern: read a run's past through trusted Clojure
         (is (not (contains? status :history)))))))
 
+(deftest land-signoff-generic-approval-is-rejected-without-merge-lock
+  ;; Regression: approving sign-off through generic workflow verbs skipped
+  ;; `land choose`'s merge-lock acquisition, and the run walked the whole
+  ;; land-merge continuation before terminal cleanup refused it. The batch
+  ;; pre-commit hook must refuse the approval at sign-off itself while
+  ;; leaving every other generic drive of a land run untouched.
+  (with-config-runtime
+    (fn [_rt]
+      (start-land! "land-g" "land-g" "/tmp/land-g")
+      (op! "land" ["complete" "land-g" "--pr-number" "500"])
+      (shell-gate-complete! "land-g" "checks green")
+      (op! "workflow" ["complete" "land-g"])
+      (is (= "signoff"
+             (:checkpoint (first (:ready (op! "workflow" ["ready" "land-g"]))))))
+      (let [input (json/write-str {:subject "feat: land g"
+                                   :body "Squashed commits: aaa111"})
+            rejected (try
+                       (op! "workflow" ["choose" "land-g" "approved" "--input" input])
+                       nil
+                       (catch clojure.lang.ExceptionInfo ex ex))]
+        (is (some? rejected) "generic approval must not commit")
+        (is (= "hook/failed" (:code (ex-data rejected))))
+        (is (= "land/signoff-without-merge-lock"
+               (:hook/cause-code (ex-data rejected))))
+        ;; the veto rolled the whole batch back: no lock, no queue entry, no
+        ;; poured continuation, and the run still sits at sign-off
+        (is (empty? (active-merge-locks)))
+        (is (empty? (active-merge-queue)))
+        (is (= "signoff"
+               (:checkpoint (first (:ready (op! "workflow" ["ready" "land-g"]))))))
+        ;; the sign-off's other choices stay generic: revise re-pours the run
+        (let [revised (op! "workflow" ["choose" "land-g" "revise"])]
+          (is (= "land.pr.open" (:action-ref (first (:ready revised))))))
+        (op! "land" ["complete" "land-g" "--pr-number" "500"])
+        (shell-gate-complete! "land-g" "checks green")
+        (op! "workflow" ["complete" "land-g"])
+        ;; the policy verb passes the gate: the lock it acquired is the evidence
+        (let [approved (op! "land" ["choose" "land-g" "approved" "--input" input])]
+          (is (= "land.pr.merge" (:action-ref (first (:ready approved)))))
+          (is (= ["land-g"]
+                 (mapv #(get-in % [:attributes :land/run-id])
+                       (active-merge-locks)))))))))
+
 (deftest land-push-draft-pr-requires-context-and-rolls-back-card-lane
   (with-config-runtime
     (fn [rt]
