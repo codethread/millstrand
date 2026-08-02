@@ -9,6 +9,7 @@
 
 cli/bin/
 /bin/
+/go.work.sum
 site/
 
 .lsp/
