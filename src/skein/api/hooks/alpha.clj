@@ -36,9 +36,10 @@
                    (not (s/valid? :skein.hook/key key))
                    "Hook key must be a keyword, symbol, or string"
                    (not (s/valid? :skein.hook/types types))
-                   (if (and (set? types) (empty? types))
-                     "Hook types must be non-empty"
-                     "Hook types must be a set")
+                   (cond
+                     (not (set? types)) "Hook types must be a set"
+                     (empty? types) "Hook types must be non-empty"
+                     :else "Hook types must be keywords")
                    (not (s/valid? :skein.hook/fn fn-sym))
                    "Hook function must be a fully qualified symbol"
                    (not (s/valid? :skein.hook/opts opts))
