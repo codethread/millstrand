@@ -74,11 +74,15 @@
   consults `::normalized-payload` on that authority's output, and `::result` on
   the transactional engine's output before the pre-commit hook, events, and
   return. Those two seam checks only catch impossible drift and never weaken the
-  authority's rejections."
+  authority's rejections. A caller-supplied `req-ctx` conforms to
+  `::skein.core.specs/request-context`."
   ([runtime payload]
    (apply! runtime payload (lifecycle/request-context :apply-batch)))
   ([runtime payload req-ctx]
-   (let [submitted-payload payload
+   (let [req-ctx (spool/require-valid! ::specs/request-context
+                                       req-ctx
+                                       "Request context is invalid")
+         submitted-payload payload
          normalized-payload (require-normalized-payload!
                              (normalize-strand-attributes
                               runtime req-ctx (db/normalize-batch-payload! payload)))
@@ -221,7 +225,8 @@
 
 (s/fdef apply!
   :args (s/or :default (s/cat :runtime ::runtime :payload map?)
-              :with-ctx (s/cat :runtime ::runtime :payload map? :req-ctx map?))
+              :with-ctx (s/cat :runtime ::runtime :payload map?
+                               :req-ctx ::specs/request-context))
   :ret ::result)
 
 ;; --- seam validation ---------------------------------------------------------

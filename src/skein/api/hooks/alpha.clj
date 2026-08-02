@@ -31,8 +31,7 @@
   ([runtime key types fn-sym opts]
    (register-hook! runtime core-registry/repl-owner key types fn-sym opts))
   ([runtime owner key types fn-sym opts]
-   (let [opts (or opts {})
-         registration {:key key :types types :fn fn-sym :opts opts}]
+   (let [registration {:key key :types types :fn fn-sym :opts opts}]
      (require-hook-registration! registration)
      (validate-hook-fn! runtime fn-sym)
      (let [entry {:key key

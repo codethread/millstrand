@@ -69,6 +69,26 @@
                                              :canonical-pattern canonical-name
                                              :available (sort (keys registered))})))))
 
+(s/def :skein.pattern-explain/name (s/and string? #(not (str/blank? %))))
+(s/def :skein.pattern-explain/fn (s/and string? #(not (str/blank? %))))
+(s/def :skein.pattern-explain/input-spec (s/and string? #(not (str/blank? %))))
+(s/def :skein.pattern-explain/contract map?)
+(s/def :skein.pattern-explain/template map?)
+(s/def :skein.pattern-explain/spec-forms vector?)
+(s/def :skein.pattern-explain/doc (s/and string? #(not (str/blank? %))))
+(s/def ::explain-result
+  (s/and (s/keys :req-un [:skein.pattern-explain/name
+                          :skein.pattern-explain/fn
+                          :skein.pattern-explain/input-spec
+                          :skein.pattern-explain/contract
+                          :skein.pattern-explain/template
+                          :skein.pattern-explain/spec-forms]
+                 :opt-un [:skein.pattern-explain/doc])
+         #(or (= #{:name :fn :input-spec :contract :template :spec-forms}
+                 (set (keys %)))
+              (= #{:name :fn :input-spec :contract :template :spec-forms :doc}
+                 (set (keys %))))))
+
 (defn explain
   "Describe a registered weave pattern and its input contract in `runtime`.
 
@@ -76,7 +96,7 @@
   `:contract` is the nested node tree, `:template` the copyable JSON skeleton,
   and `:spec-forms` the printed form graph, all resolved against the live spec
   registry with no predicate invoked. Missing patterns or unregistered input
-  specs fail loudly."
+  specs fail loudly. The returned map conforms to `::explain-result`."
   [runtime pattern-name]
   ;; :fn and :name are renamed on destructure: locals named `fn` and `name`
   ;; shadow the clojure.core vars.
@@ -91,18 +111,22 @@
 (s/fdef explain
   :args (s/cat :runtime map?
                :pattern-name (s/or :keyword keyword? :symbol symbol? :string string?))
-  :ret map?)
+  :ret ::explain-result)
 
 (defn weave!
   "Validate pattern input, invoke the pattern, and apply its create-only batch.
 
   The four-argument arity threads an explicit request-context map for trusted
   callers (the connected-client tier); the three-argument arity derives its own
-  weave context."
+  weave context. A caller-supplied context conforms to
+  `::skein.core.specs/request-context`."
   ([runtime pattern-name input]
    (weave! runtime pattern-name input (request-context :weave)))
   ([runtime pattern-name input req-ctx]
-   (let [{fn-sym :fn input-spec :input-spec} (resolve-pattern runtime pattern-name)
+   (let [req-ctx (spool/require-valid! ::specs/request-context
+                                       req-ctx
+                                       "Request context is invalid")
+         {fn-sym :fn input-spec :input-spec} (resolve-pattern runtime pattern-name)
          canonical-name (canonical-pattern-name pattern-name)]
      (validate-pattern-input! canonical-name input-spec input)
      (let [batch (with-spool-classloader

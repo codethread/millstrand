@@ -3255,12 +3255,17 @@
                                                         'skein.weaver-test/not-callable-hook
                                                         ::pattern-input)))
       (let [explained (patterns/explain rt :dev-task)]
+        (is (s/valid? ::patterns/explain-result explained))
         (is (str/includes? (get-in explained [:spec-forms 0 "form"])
                            "clojure.spec.alpha/keys"))
         (is (= "map" (get-in explained [:contract "kind"])))
         (is (= ["title"] (mapv #(get % "key")
                                (get-in explained [:contract "required"]))))
         (is (contains? (:template explained) "title")))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Request context is invalid"
+                            (patterns/weave! rt :dev-task {:title "Invalid context"}
+                                             {:request/source :nrepl})))
       (reset! delivered-events [])
       (events/register-handler! rt :capture-weave #{:batch/applied}
                                 'skein.weaver-test/capture-event {})

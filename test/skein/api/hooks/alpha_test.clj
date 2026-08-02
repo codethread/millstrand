@@ -59,6 +59,8 @@
       (is (thrown-with-msg? ExceptionInfo #":order must be an integer"
                             (hooks/register-hook! rt :k #{:payload/received} hook-sym
                                                   {:order :high})))
+      (is (thrown-with-msg? ExceptionInfo #"Hook opts must be a map"
+                            (hooks/register-hook! rt :k #{:payload/received} hook-sym nil)))
       (is (s/valid? ::specs/hook-registration
                     {:key :k :types #{:payload/received} :fn hook-sym
                      :opts {:order 1}}))

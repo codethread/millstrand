@@ -88,6 +88,14 @@
         (is (= payload (:batch/payload context)))
         (is (s/valid? ::specs/batch-hook-context context))))))
 
+(deftest apply-rejects-an-invalid-caller-request-context
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (let [rt (:runtime ctx)]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Request context is invalid"
+                            (batch/apply! rt {:strands []} {:request/source :nrepl})))
+      (is (not (s/valid? ::specs/request-context {:request/source :nrepl}))))))
+
 (deftest apply-rejects-malformed-payloads-loudly
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
     (let [rt (:runtime ctx)]

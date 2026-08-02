@@ -289,6 +289,12 @@
 (s/def :mutation/operation #{:batch/apply})
 (s/def :pattern/name non-blank-string?)
 (s/def :pattern/input data-first-value?)
+(s/def :request/source keyword?)
+(s/def :request/operation keyword?)
+(s/def ::request-context
+  (s/and (s/keys :req [:request/source :request/operation])
+         #(every? data-first-value? (keys %))
+         #(every? data-first-value? (vals %))))
 (s/def ::batch-hook-context
   (s/and
    #(case (:batch/source %)

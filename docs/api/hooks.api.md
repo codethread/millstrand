@@ -27,7 +27,7 @@ Return owner/provenance diagnostics for `runtime`'s lifecycle hook registry.
   has any directly planted `:fn-value` stripped, so no function value or
   internal handle leaves the registry (DELTA-OlrDrt-001.CC9). The returned map
   conforms to `::skein.core.specs/hook-provenance`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L72-L83">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L71-L82">Source</a></sub></p>
 
 ## <a name="skein.api.hooks.alpha/hooks">`hooks`</a>
 ``` clojure
@@ -42,7 +42,7 @@ Return data-first lifecycle hook registry entries in execution order.
   and any directly planted `:fn-value` is stripped so no function value
   leaves the registry. Each returned entry conforms to
   `::skein.core.specs/hook-entry`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L59-L70">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L58-L69">Source</a></sub></p>
 
 ## <a name="skein.api.hooks.alpha/register-hook!">`register-hook!`</a>
 ``` clojure
@@ -63,7 +63,7 @@ Register or replace a lifecycle hook in `runtime` for selected hook types.
   (default 0) plus data-first metadata. Registration input and the returned entry
   conform to `::skein.core.specs/hook-registration` and
   `::skein.core.specs/hook-entry`, respectively. Returns the registered entry.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L17-L45">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L17-L44">Source</a></sub></p>
 
 ## <a name="skein.api.hooks.alpha/unregister-hook!">`unregister-hook!`</a>
 ``` clojure
@@ -75,4 +75,4 @@ Function.
 Unregister a lifecycle hook by stable key from `runtime` and return that key.
 
   Unregistering an absent key is a no-op returning the validated key.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L47-L57">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L46-L56">Source</a></sub></p>
