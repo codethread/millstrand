@@ -9,6 +9,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [next.jdbc :as jdbc]
+            [skein.api.batch.alpha :as batch-api]
             [skein.api.spec.alpha :as api-spec]
             [skein.api.spool.alpha :as spool]
             [skein.core.db :as db]
@@ -120,6 +121,13 @@
                :pattern-name (s/or :keyword keyword? :symbol symbol? :string string?))
   :ret ::explain-result)
 
+(s/def :skein.pattern-weave/ref-key (s/and string? #(not (str/blank? %))))
+(s/def :skein.pattern-weave/refs
+  (s/map-of :skein.pattern-weave/ref-key ::specs/id))
+(s/def ::weave-result
+  (s/and (s/keys :req-un [::batch-api/created :skein.pattern-weave/refs])
+         #(every? #{:created :refs} (keys %))))
+
 (defn weave!
   "Validate pattern input, invoke the pattern, and apply its create-only batch.
 
@@ -150,7 +158,10 @@
                                              :batch/apply-before-commit
                                              (weave-batch-context req-ctx canonical-name input
                                                                   normalized-payload result))
-                      result))]
+                      result))
+           weave-result (spool/require-valid! ::weave-result
+                                              (select-keys result [:created :refs])
+                                              "Pattern weave result is invalid")]
        ;; a weave is a create-only batch apply; without this event, event-driven
        ;; spools (agent-run, the subagent executor) never see pattern-created
        ;; strands until an unrelated mutation happens to trigger their next scan
@@ -159,7 +170,21 @@
                                          :pattern/name canonical-name
                                          :batch/refs (:refs result)
                                          :batch/created (:created result)))
-       (select-keys result [:created :refs])))))
+       weave-result))))
+
+(s/fdef weave!
+  :args (s/or :default (s/cat :runtime map?
+                              :pattern-name (s/or :keyword keyword?
+                                                  :symbol symbol?
+                                                  :string string?)
+                              :input map?)
+              :with-ctx (s/cat :runtime map?
+                               :pattern-name (s/or :keyword keyword?
+                                                   :symbol symbol?
+                                                   :string string?)
+                               :input map?
+                               :req-ctx ::specs/request-context))
+  :ret ::weave-result)
 
 (defn- pattern-registration-message
   "Return a caller-facing diagnostic for an already-rejected registration."
@@ -282,9 +307,9 @@
 ;; --- Weave batch plumbing ---
 
 (defn- require-pattern-batch-vector! [batch]
-  (when-not (vector? batch)
-    (throw (ex-info "Pattern must return a batch strand vector" {:value batch})))
-  batch)
+  (spool/require-valid! ::specs/batch-input
+                        batch
+                        "Pattern batch is invalid"))
 
 (defn- normalize-weave-strand-attributes
   "Run the `:attributes/normalize` transform hooks over every strand in `batch`.
