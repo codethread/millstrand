@@ -72,7 +72,9 @@
                (every? data-first-value? (vals %)))))
 (s/def :skein.hook/opts
   (s/and map?
-         #(and (every? data-first-value? (keys %))
+         #(and (or (not (contains? % :order))
+                   (integer? (:order %)))
+               (every? data-first-value? (keys %))
                (every? data-first-value? (vals %)))))
 (s/def ::hook-registration
   (s/and (s/keys :req-un [:skein.hook/key

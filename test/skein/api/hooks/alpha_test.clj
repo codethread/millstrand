@@ -58,7 +58,13 @@
                             (hooks/register-hook! rt :k #{:payload/received} 'unqualified)))
       (is (thrown-with-msg? ExceptionInfo #":order must be an integer"
                             (hooks/register-hook! rt :k #{:payload/received} hook-sym
-                                                  {:order :high}))))))
+                                                  {:order :high})))
+      (is (s/valid? ::specs/hook-registration
+                    {:key :k :types #{:payload/received} :fn hook-sym
+                     :opts {:order 1}}))
+      (is (not (s/valid? ::specs/hook-registration
+                         {:key :k :types #{:payload/received} :fn hook-sym
+                          :opts {:order :high}}))))))
 
 (deftest hook-provenance-reports-owners-and-shadowing-without-fn-values
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
