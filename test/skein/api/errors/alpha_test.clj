@@ -85,6 +85,12 @@
                                                {:token "doing"
                                                 :available ["pending" "claimed"]}))]
       (is (= ["pending" "claimed"] (:available (ex-data e))))))
+  (testing "the rejected value is held to no shape, unlike a lookup token"
+    ;; An argument is as often a number, a map, or nil as a name, and a factory
+    ;; that cannot carry the offending value is worse than the message it fixes.
+    (doseq [token [42 {:lane "doing"} [1 2] nil false ""]]
+      (let [e (thrown #(errors/invalid-argument! "bad" {:token token :expected "p1"}))]
+        (is (= token (:token (ex-data e)))))))
   (testing "a rejection that says nothing about what is valid is refused"
     (let [e (thrown #(errors/invalid-argument! "bad" {:token "p9"}))]
       (is (re-find #"needs :available or :expected" (ex-message e)))
@@ -109,6 +115,23 @@
   (unusable :try #(errors/conflict! "x" {:try ""}))
   (unusable :try #(errors/conflict! "x" {:try :strand/help})))
 
+(deftest not-found!-holds-its-lookup-token-to-the-name-grammar
+  ;; The one place a token is shape-checked: you looked a name up, and the same
+  ;; grammar governs the names it will be ranked against.
+  (unusable :token #(errors/not-found! "x" {:token 42}))
+  (unusable :token #(errors/not-found! "x" {:token nil}))
+  (unusable :token #(errors/not-found! "x" {:token {:id "x"}})))
+
+(deftest canonical-query-is-checked-like-any-other-rendered-key
+  ;; It reaches the client as the plain-mode message tail and drives the
+  ;; weaver's query/not-found inference, so a value that is not a name would
+  ;; select that code and then vanish from the line the reader sees.
+  (unusable :canonical-query #(errors/not-found! "x" {:token "t" :canonical-query 7}))
+  (unusable :canonical-query #(errors/not-found! "x" {:token "t" :canonical-query ""}))
+  (unusable :canonical-query #(errors/conflict! "x" {:try "y" :canonical-query {}}))
+  (let [e (thrown #(errors/conflict! "x" {:try "y" :canonical-query :work}))]
+    (is (= :work (:canonical-query (ex-data e))))))
+
 (deftest code-accepts-the-names-the-envelope-carries-and-refuses-the-rest
   (testing "string, keyword, and symbol all render whole"
     (doseq [code ["kanban/card-not-found" :kanban/card-not-found 'kanban/card-not-found]]
@@ -129,7 +152,9 @@
 (deftest remedy-stamps-the-try-affordance-onto-any-details-map
   (is (= {:id "abc" :try "mill init"} (errors/remedy {:id "abc"} "mill init")))
   (is (thrown #(errors/remedy {:id "abc"} "")))
-  (is (thrown #(errors/remedy {:id "abc"} ["mill" "init"]))))
+  (is (thrown #(errors/remedy {:id "abc"} ["mill" "init"])))
+  (testing "assoc would quietly turn a non-map into one"
+    (is (re-find #"expects a details map" (ex-message (thrown #(errors/remedy nil "mill")))))))
 
 (deftest details-must-be-a-map
   (is (re-find #"expects a details map" (ex-message (thrown #(errors/not-found! "x" nil)))))

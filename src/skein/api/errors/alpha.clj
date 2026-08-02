@@ -43,6 +43,7 @@
 
 (s/def ::code ::name)
 (s/def ::token ::name)
+(s/def ::canonical-query ::name)
 (s/def ::try (s/and string? (complement str/blank?)))
 
 (s/def ::available
@@ -50,17 +51,26 @@
   ;; be skipped item by item; both leave the reader with no list at all.
   (s/and coll? (complement map?) seq #(every? (partial s/valid? ::name) %)))
 
-(def ^:private affordances
-  "The checkable affordance keys: the spec each must satisfy, and why its shape
-  matters, which becomes the message when an author gets one wrong."
+(def ^:private rendered
+  "The keys the CLI renders specially: the shape each must have, and why that
+  shape matters, which becomes the message when an author gets one wrong.
+  Checked whichever factory threw, because the renderer does not care."
   {:code {:spec ::code
           :why "the envelope carries a string, keyword, or symbol and nothing else"}
    :available {:spec ::available
                :why "the CLI lists only a non-empty collection of names"}
    :try {:spec ::try
          :why "pretty mode's try: line reads only a non-blank string"}
-   :token {:spec ::token
-           :why "did-you-mean matches only a name the details carry as text"}})
+   :canonical-query {:spec ::canonical-query
+                     :why (str "plain mode appends only a name, and the weaver keys"
+                               " its query/not-found inference on this key")}})
+
+(def ^:private lookup-token
+  "`not-found!`'s extra shape: what you looked up is a name, held to the same
+  grammar as the names it is ranked against. No other factory holds `:token` to
+  a shape — `invalid-argument!` rejects numbers and maps as readily as names."
+  {:token {:spec ::token
+           :why "a not-found token is the name that was looked up"}})
 
 ;; --- Factories -------------------------------------------------------------
 
@@ -84,9 +94,12 @@
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns."
   ([message details]
-   (spool/fail! message (checked-details "not-found!" [#{:token}] details)))
+   (spool/fail! message
+                (checked-details "not-found!" [#{:token}] lookup-token details)))
   ([message details cause]
-   (spool/fail! message (checked-details "not-found!" [#{:token}] details) cause)))
+   (spool/fail! message
+                (checked-details "not-found!" [#{:token}] lookup-token details)
+                cause)))
 
 (s/fdef not-found!
   :args (s/cat :message string? :details map?
@@ -103,16 +116,22 @@
   reader back to the docs. `:try` and `:code` behave as they do for
   `not-found!`.
 
+  `:token` here is held to no shape at all — a rejected argument is as often a
+  number, a map, or `nil` as a name, and the factory that refuses to carry the
+  value is worse than the message it improves. Only a `:token` that reaches
+  the client as text and appears in `message` can feed pretty mode's
+  did-you-mean, so a name still buys the most.
+
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns."
   ([message details]
    (spool/fail! message
                 (checked-details "invalid-argument!"
-                                 [#{:token} #{:expected :available}] details)))
+                                 [#{:token} #{:expected :available}] nil details)))
   ([message details cause]
    (spool/fail! message
                 (checked-details "invalid-argument!"
-                                 [#{:token} #{:expected :available}] details)
+                                 [#{:token} #{:expected :available}] nil details)
                 cause)))
 
 (s/fdef invalid-argument!
@@ -133,9 +152,9 @@
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns."
   ([message details]
-   (spool/fail! message (checked-details "conflict!" [#{:try}] details)))
+   (spool/fail! message (checked-details "conflict!" [#{:try}] nil details)))
   ([message details cause]
-   (spool/fail! message (checked-details "conflict!" [#{:try}] details) cause)))
+   (spool/fail! message (checked-details "conflict!" [#{:try}] nil details) cause)))
 
 (s/fdef conflict!
   :args (s/cat :message string? :details map?
@@ -148,11 +167,13 @@
   from a factory above — a bare `ex-info`, or a `skein.api.spool.alpha/fail!`
   call gaining a way out. Fails loudly on a blank or non-string `command`,
   because a `:try` the renderer cannot read drops back into the ordinary
-  detail rows rather than announcing itself."
+  detail rows rather than announcing itself, and on a `details` that is not a
+  map, which `assoc` would otherwise turn into one."
   [details command]
+  (spool/require-valid! map? details "remedy expects a details map")
   (spool/require-valid! ::try command
                         (str "remedy expects a command string: "
-                             (:why (:try affordances))))
+                             (:why (:try rendered))))
   (assoc details :try command))
 
 (s/fdef remedy
@@ -164,18 +185,20 @@
 (defn- checked-details
   "Return `details` ready to throw from the factory named by `context`.
 
-  Each entry in `required` is a set of keys the factory needs at least one of;
-  each affordance key actually present is checked against its registered
-  shape. Keys outside the grammar pass through unexamined — the details map is
-  open by design, and closing it would make the factories a vocabulary."
-  [context required details]
+  Each entry in `required` is a set of keys the factory needs at least one of.
+  `extra` adds factory-specific shapes to the `rendered` table, in the same
+  `{key {:spec :why}}` form; every key either table names is checked when the
+  map carries it. Keys outside both are the author's own and pass through
+  unexamined — the details map is open by design, and closing it would make
+  the factories a vocabulary."
+  [context required extra details]
   (spool/require-valid! map? details (str context " expects a details map"))
   (doseq [group required
           :let [wanted (vec (sort group))]
           :when (not-any? #(contains? details %) group)]
     (spool/fail! (str context " needs " (str/join " or " wanted) " in its details")
                  {:missing wanted :details details}))
-  (doseq [[k {:keys [spec why]}] affordances
+  (doseq [[k {:keys [spec why]}] (merge rendered extra)
           :when (contains? details k)]
     (spool/require-valid! spec (get details k)
                           (str context " received an unusable " k ": " why)))

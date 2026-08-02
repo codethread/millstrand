@@ -51,7 +51,7 @@ Throw an error for a request the current state refuses, and say how to get
 
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L122-L138">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L141-L157">Source</a></sub></p>
 
 ## <a name="skein.api.errors.alpha/invalid-argument!">`invalid-argument!`</a>
 ``` clojure
@@ -70,9 +70,15 @@ Throw an error rejecting a value, saying both what was rejected and what
   reader back to the docs. `:try` and `:code` behave as they do for
   `not-found!`.
 
+  `:token` here is held to no shape at all — a rejected argument is as often a
+  number, a map, or `nil` as a name, and the factory that refuses to carry the
+  value is worse than the message it improves. Only a `:token` that reaches
+  the client as text and appears in `message` can feed pretty mode's
+  did-you-mean, so a name still buys the most.
+
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L95-L116">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L108-L135">Source</a></sub></p>
 
 ## <a name="skein.api.errors.alpha/not-found!">`not-found!`</a>
 ``` clojure
@@ -99,7 +105,7 @@ Throw a not-found error naming what was looked for and, where the set is
 
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L67-L89">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L77-L102">Source</a></sub></p>
 
 ## <a name="skein.api.errors.alpha/remedy">`remedy`</a>
 ``` clojure
@@ -113,5 +119,6 @@ Return `details` with `command` stamped under `:try`.
   from a factory above — a bare `ex-info`, or a `skein.api.spool.alpha/fail!`
   call gaining a way out. Fails loudly on a blank or non-string `command`,
   because a `:try` the renderer cannot read drops back into the ordinary
-  detail rows rather than announcing itself.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L144-L156">Source</a></sub></p>
+  detail rows rather than announcing itself, and on a `details` that is not a
+  map, which `assoc` would otherwise turn into one.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L163-L177">Source</a></sub></p>
