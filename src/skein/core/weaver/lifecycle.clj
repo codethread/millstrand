@@ -56,15 +56,16 @@
          :hook/fn (:fn hook)))
 
 (defn- hook-callable
-  "Return hook's callable under the runtime's spool classloader.
+  "Resolve hook's `:fn` symbol under the runtime's spool classloader.
 
-  Direct registration captured `:fn-value` eagerly; a module-published
-  declaration carries only the `:fn` symbol, bound here at its declared
-  `:hook/dispatch-start` moment. An unresolvable symbol fails loudly and
-  surfaces through the standard `hook/failed` wrapper."
-  [runtime {fn-sym :fn :keys [fn-value]}]
-  (or fn-value
-      (access/with-spool-classloader runtime #(requiring-resolve fn-sym))
+  Every hook binds at its declared `:hook/dispatch-start` moment: direct
+  registration validated the symbol eagerly, module publication stored
+  the declaration verbatim, and both dispatch through the symbol so a
+  synced-root reload's fresh classloader is honoured rather than a stale
+  captured callable. An unresolvable symbol fails loudly and surfaces
+  through the standard `hook/failed` wrapper."
+  [runtime {fn-sym :fn}]
+  (or (access/with-spool-classloader runtime #(requiring-resolve fn-sym))
       (throw (ex-info "Hook function symbol cannot be resolved"
                       {:code "hook/unresolvable" :hook/fn fn-sym}))))
 

@@ -1356,12 +1356,12 @@
                 "the hook saw the decoded removed-edge pre-image")))))))
 
 (deftest weaver-declaration-published-hook-resolves-fn-at-dispatch
-  ;; SPEC-004.C76/C77: module publication stores a hook declaration whose
-  ;; callable is only the `:fn` symbol — `:fn-value` is captured solely by
-  ;; direct `register-hook!`. Dispatch must resolve the symbol at its
-  ;; declared `:hook/dispatch-start` binding moment rather than invoking a
-  ;; nil callable, and an unresolvable symbol must surface through the
-  ;; standard `hook/failed` wrapper.
+  ;; SPEC-004.C76/C77: hook entries are pure data carrying only the `:fn`
+  ;; symbol, however they arrived — module publication stores declarations
+  ;; verbatim. Dispatch must resolve the symbol at the `:hook/dispatch-start`
+  ;; binding moment rather than invoking a captured callable, and an
+  ;; unresolvable symbol must surface through the standard `hook/failed`
+  ;; wrapper.
   (with-runtime
     (fn [rt _]
       (weaver/init rt)
@@ -1497,7 +1497,8 @@
                entry))
         (is (= [entry] (hooks/hooks rt)))
         (is (not (contains? (first (hooks/hooks rt)) :fn-value)))
-        (is (ifn? (:fn-value (get (access/hook-registry rt) :capture))))
+        (is (= entry (get (access/hook-registry rt) :capture))
+            "the stored entry is pure data; the callable binds at dispatch")
         (let [replacement (hooks/register-hook! rt :capture #{:strand/add-before-commit} 'skein.weaver-test/capture-hook {:order 10 :doc "Replaced"})
               early (hooks/register-hook! rt "early" #{:payload/received} 'skein.weaver-test/capture-hook {:order -1})
               peer-a (hooks/register-hook! rt :a #{:payload/received} 'skein.weaver-test/capture-hook {})
