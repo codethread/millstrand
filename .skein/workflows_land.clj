@@ -115,17 +115,29 @@
       (throw (ex-info "land run not found" {:feature feature}))))
 
 (defn- require-sane-merge-locks!
-  "Return active locks, refusing a corrupt multiple-lock state."
+  "Return active locks, refusing corrupt ownership metadata or duplicates."
   []
-  (let [locks (active-merge-locks)]
-    (when (> (count locks) 1)
+  (let [locks (active-merge-locks)
+        details (mapv #(select-keys
+                        (assoc (select-keys % [:id :owner])
+                               :land/run-id (attr-value % :land/run-id))
+                        [:id :owner :land/run-id])
+                      locks)
+        malformed (filterv #(not (s/valid? ::run-id (:land/run-id %))) details)]
+    (cond
+      (seq malformed)
+      (throw (ex-info "active merge lock has invalid ownership metadata"
+                      {:code "land/merge-lock-corrupt"
+                       :locks details
+                       :invalid-locks malformed
+                       :recovery (format-alpha/reflow
+                                  "|Repair or close the malformed active merge lock,
+                                   |then retry the land operation.")}))
+
+      (> (count locks) 1)
       (throw (ex-info "multiple active merge locks found; inspect and repair manually"
                       {:code "land/multiple-merge-locks"
-                       :locks (mapv #(select-keys
-                                      (assoc (select-keys % [:id :owner])
-                                             :land/run-id (attr-value % :land/run-id))
-                                      [:id :owner :land/run-id])
-                                    locks)
+                       :locks details
                        :recovery (format-alpha/reflow
                                   "|Close the corrupt duplicate lock(s), then retry the
                                    |land operation.")})))
@@ -193,6 +205,7 @@
   anything merges. The sign-off's `revise` and `abort` choices and every
   ordinary land step stay drivable through the generic verbs. It fails with
   `land/signoff-run-ambiguous` for an unattributable approval,
+  `land/merge-lock-corrupt` for malformed lock ownership metadata,
   `land/multiple-merge-locks` for a malformed lock set, and
   `land/signoff-without-merge-lock` when the approved run holds no matching
   lock."

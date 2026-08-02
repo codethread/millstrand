@@ -1613,6 +1613,26 @@
           (is (string? (:recovery (ex-data ambiguous))))
           (is (string? (:recovery (ex-data multiple)))))))))
 
+(deftest land-signoff-guard-rejects-corrupt-singleton-lock
+  (with-config-runtime
+    (fn [rt]
+      (let [guard (requiring-resolve 'workflows-land/require-merge-lock-at-signoff-approval)
+            lock (weaver/add! rt {:title "Malformed lock"
+                                  :attributes {:kind "merge-lock"}})
+            error (try
+                    (guard {:batch/updated [{:after {:id "signoff"
+                                                     :state "closed"
+                                                     :attributes {:workflow/decision-point "land-signed-off"
+                                                                  :workflow/outcome "approved"
+                                                                  :workflow/run-id "land-a"}}}]})
+                    nil
+                    (catch clojure.lang.ExceptionInfo error
+                      error))]
+        (is (= "land/merge-lock-corrupt" (:code (ex-data error))))
+        (is (= [{:id (:id lock) :land/run-id nil}]
+               (:invalid-locks (ex-data error))))
+        (is (string? (:recovery (ex-data error))))))))
+
 (deftest land-push-draft-pr-requires-context-and-rolls-back-card-lane
   (with-config-runtime
     (fn [rt]

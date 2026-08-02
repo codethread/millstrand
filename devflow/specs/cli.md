@@ -67,7 +67,7 @@ Dispatcher flags: `--workspace <dir>`, `--cwd <dir>`, `--worktree-root <dir>`, `
   that materialized step, including its declared input contract and route. Each
   checkpoint is joined by its own step id; non-checkpoint views omit the field.
   The shared workflow step-view remains unchanged.
-- **SPEC-002.C39b:** The repo coordination workspace's `land` op requires `strand land choose <land-run-id> approved` for approved sign-off; generic workflow approval is vetoed before commit. Ambiguous sign-off roots fail with `land/signoff-run-ambiguous`, duplicate active merge locks fail with `land/multiple-merge-locks`, and an approved sign-off without its matching merge lock fails with `land/signoff-without-merge-lock`.
+- **SPEC-002.C39b:** The repo coordination workspace's `land` op requires `strand land choose <land-run-id> approved` for approved sign-off; generic workflow approval is vetoed before commit. Ambiguous sign-off roots fail with `land/signoff-run-ambiguous`, malformed active merge-lock ownership metadata fails with `land/merge-lock-corrupt`, duplicate active merge locks fail with `land/multiple-merge-locks`, and an approved sign-off without its matching merge lock fails with `land/signoff-without-merge-lock`.
 
 ## SPEC-002.P4 Mill contracts
 
