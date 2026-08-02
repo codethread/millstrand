@@ -77,6 +77,7 @@
       (cr/replace-owner! store :top
                          {:layer :workspace :entries {:h (entry :high)} :overrides #{:h}})
       (let [{:keys [effective shadowed contenders]} (get (hooks/hook-provenance rt) :h)]
+        (is (s/valid? ::specs/hook-provenance (hooks/hook-provenance rt)))
         (is (= :top (:owner effective)))
         (is (= [:base] (mapv :owner shadowed))
             "the shadowed lower-layer owner is reported as data")
@@ -97,6 +98,13 @@
                             (hooks/hooks rt)))
       (is (thrown-with-msg? ExceptionInfo #"Hook registry entry is invalid"
                             (hooks/hook-provenance rt))))))
+
+(deftest public-hook-provenance-validates-its-envelope
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (let [rt (:runtime ctx)]
+      (with-redefs [cr/explain (constantly {:bad {}})]
+        (is (thrown-with-msg? ExceptionInfo #"Hook provenance is invalid"
+                              (hooks/hook-provenance rt)))))))
 
 (deftest hook-registry-is-owner-partition-backed
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]

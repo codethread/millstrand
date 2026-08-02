@@ -25,8 +25,9 @@ Return owner/provenance diagnostics for `runtime`'s lifecycle hook registry.
   `skein.core.weaver.core-registry/explain`); each contender names its `:owner`,
   `:layer`, and `:override?`/`:effective?` flags, and its `:value` hook entry
   has any directly planted `:fn-value` stripped, so no function value or
-  internal handle leaves the registry (DELTA-OlrDrt-001.CC9).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L112-L121">Source</a></sub></p>
+  internal handle leaves the registry (DELTA-OlrDrt-001.CC9). The returned map
+  conforms to `::skein.core.specs/hook-provenance`.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L118-L129">Source</a></sub></p>
 
 ## <a name="skein.api.hooks.alpha/hooks">`hooks`</a>
 ``` clojure
@@ -41,7 +42,7 @@ Return data-first lifecycle hook registry entries in execution order.
   and any directly planted `:fn-value` is stripped so no function value
   leaves the registry. Each returned entry conforms to
   `::skein.core.specs/hook-entry`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L99-L110">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L105-L116">Source</a></sub></p>
 
 ## <a name="skein.api.hooks.alpha/register-hook!">`register-hook!`</a>
 ``` clojure

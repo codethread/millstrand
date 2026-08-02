@@ -96,6 +96,12 @@
                           "Hook registry entry is invalid")
     entry))
 
+(defn- public-hook-provenance [provenance]
+  (spool/require-valid! ::specs/hook-provenance
+                        provenance
+                        "Hook provenance is invalid")
+  provenance)
+
 (defn hooks
   "Return data-first lifecycle hook registry entries in execution order.
 
@@ -116,9 +122,11 @@
   `skein.core.weaver.core-registry/explain`); each contender names its `:owner`,
   `:layer`, and `:override?`/`:effective?` flags, and its `:value` hook entry
   has any directly planted `:fn-value` stripped, so no function value or
-  internal handle leaves the registry (DELTA-OlrDrt-001.CC9)."
+  internal handle leaves the registry (DELTA-OlrDrt-001.CC9). The returned map
+  conforms to `::skein.core.specs/hook-provenance`."
   [runtime]
-  (core-registry/explain (access/hook-store runtime) public-hook-entry))
+  (public-hook-provenance
+   (core-registry/explain (access/hook-store runtime) public-hook-entry)))
 
 ;; --- resolving registration input --------------------------------------
 

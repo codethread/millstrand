@@ -91,6 +91,29 @@
                           :skein.hook/order
                           :skein.hook/metadata])
          #(= #{:key :types :fn :order :metadata} (set (keys %)))))
+(s/def :skein.hook/owner keyword?)
+(s/def :skein.hook/layer #{:defaults :spools :workspace :direct})
+(s/def :skein.hook/value ::hook-entry)
+(s/def :skein.hook/override? boolean?)
+(s/def :skein.hook/effective? boolean?)
+(s/def ::hook-provenance-contender
+  (s/and (s/keys :req-un [:skein.hook/owner
+                          :skein.hook/layer
+                          :skein.hook/value
+                          :skein.hook/override?
+                          :skein.hook/effective?])
+         #(= #{:owner :layer :value :override? :effective?}
+             (set (keys %)))))
+(s/def :skein.hook/effective ::hook-provenance-contender)
+(s/def :skein.hook/shadowed (s/coll-of ::hook-provenance-contender :kind vector?))
+(s/def :skein.hook/contenders (s/coll-of ::hook-provenance-contender :kind vector?))
+(s/def ::hook-provenance-entry
+  (s/and (s/keys :req-un [:skein.hook/effective
+                          :skein.hook/shadowed
+                          :skein.hook/contenders])
+         #(= #{:effective :shadowed :contenders} (set (keys %)))))
+(s/def ::hook-provenance
+  (s/map-of :skein.hook/key ::hook-provenance-entry))
 
 (s/def :skein.pattern/name
   (s/or :keyword simple-keyword?
