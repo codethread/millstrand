@@ -11,6 +11,7 @@
 ;;   config.clj        — named queries + shared policy validation helpers
 ;;   workflows.clj     — hand-authored workflow definitions
 ;;   workflows_land.clj— the land policy op: merge lock, merge queue, lane moves
+;;   workflows_ralph.clj— the ralph-iterate workflow for one-card epic iterations
 ;;   harnesses.clj     — harness seats + routing policy
 ;;   guide.clj         — the guide op: surface questions answered by a run
 ;;   reviewers.clj     — reviewer rosters
@@ -213,6 +214,15 @@
 ;; drives; it references no Var there, so the order below is for readers.
 (runtime/module! runtime :workflows-land
                  {:file "workflows_land.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows]
+                  :required? true})
+
+;; workflows_ralph.clj owns the one-card-per-iteration Ralph workflow. It is
+;; separate from the general definitions file so Ralph's loop discipline can
+;; evolve without growing the broad hand-authored workflow module.
+(runtime/module! runtime :workflows-ralph
+                 {:file "workflows_ralph.clj"
                   :spools ['skein.spools/workflow]
                   :after [:skein/spools-workflow :workflows]
                   :required? true})
