@@ -137,7 +137,7 @@
       (patterns/register-pattern! rt 'name-forms 'skein.alpha-test/name-forms-pattern
                                   ::name-forms-pattern-input)
       (let [entry (patterns/resolve-pattern rt 'name-forms)]
-        (is (nil? (:doc entry)))
+        (is (not (contains? entry :doc)))
         (is (s/valid? ::specs/pattern-entry entry))
         (is (= entry (patterns/resolve-pattern rt "name-forms"))
             "a raw CLI string resolves the same registered entry")

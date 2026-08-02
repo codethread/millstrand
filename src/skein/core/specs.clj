@@ -101,7 +101,12 @@
                           :skein.pattern/fn
                           :skein.pattern/input-spec])
          #(= #{:name :doc :fn :input-spec} (set (keys %)))))
-(s/def ::pattern-entry ::pattern-registration)
+(s/def ::pattern-entry
+  (s/and (s/keys :req-un [:skein.pattern/name
+                          :skein.pattern/fn
+                          :skein.pattern/input-spec]
+                 :opt-un [:skein.pattern/doc])
+         #(every? #{:name :doc :fn :input-spec} (keys %))))
 
 (s/def ::id non-blank-string?)
 (s/def ::generated-id generated-id?)
