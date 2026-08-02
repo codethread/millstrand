@@ -11,41 +11,8 @@
             [skein.core.weaver.access :as access]
             [skein.core.weaver.core-registry :as core-registry]))
 
-(declare validate-hook-fn!)
-
-(defn- hook-registration-message
-  "Return a caller-facing diagnostic for an already-rejected registration."
-  [{:keys [key types opts] fn-sym :fn}]
-  (cond
-    (not (s/valid? :skein.hook/key key))
-    "Hook key must be a keyword, symbol, or string"
-    (not (s/valid? :skein.hook/types types))
-    (cond
-      (not (set? types)) "Hook types must be a set"
-      (empty? types) "Hook types must be non-empty"
-      :else "Hook types must be keywords")
-    (not (s/valid? :skein.hook/fn fn-sym))
-    "Hook function must be a fully qualified symbol"
-    (not (s/valid? :skein.hook/opts opts))
-    (cond
-      (not (map? opts)) "Hook opts must be a map"
-      (and (contains? opts :order)
-           (not (integer? (:order opts))))
-      "Hook :order must be an integer"
-      :else "Hook opts must contain only data-first values")
-    :else "Hook registration input is invalid"))
-
-(defn- require-hook-registration!
-  "Validate the complete registration spec before deriving diagnostics."
-  [registration]
-  (try
-    (spool/require-valid! ::specs/hook-registration
-                          registration
-                          "Hook registration input is invalid")
-    (catch clojure.lang.ExceptionInfo error
-      (throw (ex-info (hook-registration-message registration)
-                      (ex-data error)
-                      error)))))
+(declare validate-hook-fn! require-hook-registration! public-hook-entry
+         public-hook-provenance)
 
 (defn register-hook!
   "Register or replace a lifecycle hook in `runtime` for selected hook types.
@@ -89,19 +56,6 @@
      (core-registry/remove-entry! (access/hook-store runtime) owner key)
      key)))
 
-(defn- public-hook-entry [entry]
-  (let [entry (dissoc entry :fn-value)]
-    (spool/require-valid! ::specs/hook-entry
-                          entry
-                          "Hook registry entry is invalid")
-    entry))
-
-(defn- public-hook-provenance [provenance]
-  (spool/require-valid! ::specs/hook-provenance
-                        provenance
-                        "Hook provenance is invalid")
-  provenance)
-
 (defn hooks
   "Return data-first lifecycle hook registry entries in execution order.
 
@@ -127,6 +81,53 @@
   [runtime]
   (public-hook-provenance
    (core-registry/explain (access/hook-store runtime) public-hook-entry)))
+
+(defn- hook-registration-message
+  "Return a caller-facing diagnostic for an already-rejected registration."
+  [{:keys [key types opts] fn-sym :fn}]
+  (cond
+    (not (s/valid? :skein.hook/key key))
+    "Hook key must be a keyword, symbol, or string"
+    (not (s/valid? :skein.hook/types types))
+    (cond
+      (not (set? types)) "Hook types must be a set"
+      (empty? types) "Hook types must be non-empty"
+      :else "Hook types must be keywords")
+    (not (s/valid? :skein.hook/fn fn-sym))
+    "Hook function must be a fully qualified symbol"
+    (not (s/valid? :skein.hook/opts opts))
+    (cond
+      (not (map? opts)) "Hook opts must be a map"
+      (and (contains? opts :order)
+           (not (integer? (:order opts))))
+      "Hook :order must be an integer"
+      :else "Hook opts must contain only data-first values")
+    :else "Hook registration input is invalid"))
+
+(defn- require-hook-registration!
+  "Validate the complete registration spec before deriving diagnostics."
+  [registration]
+  (try
+    (spool/require-valid! ::specs/hook-registration
+                          registration
+                          "Hook registration input is invalid")
+    (catch clojure.lang.ExceptionInfo error
+      (throw (ex-info (hook-registration-message registration)
+                      (ex-data error)
+                      error)))))
+
+(defn- public-hook-entry [entry]
+  (let [entry (dissoc entry :fn-value)]
+    (spool/require-valid! ::specs/hook-entry
+                          entry
+                          "Hook registry entry is invalid")
+    entry))
+
+(defn- public-hook-provenance [provenance]
+  (spool/require-valid! ::specs/hook-provenance
+                        provenance
+                        "Hook provenance is invalid")
+  provenance)
 
 ;; --- resolving registration input --------------------------------------
 

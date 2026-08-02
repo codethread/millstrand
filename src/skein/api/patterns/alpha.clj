@@ -23,33 +23,8 @@
   (:import [java.util UUID]))
 
 (declare canonical-pattern-name pattern-entry pattern-input-contract validate-pattern-input!
-         normalize-weave-strand-attributes weave-payload weave-batch-context)
-
-(defn- pattern-registration-message
-  "Return a caller-facing diagnostic for an already-rejected registration."
-  [{:keys [name doc input-spec] fn-sym :fn}]
-  (cond
-    (not (s/valid? :skein.pattern/name name))
-    "Pattern name is invalid"
-    (not (s/valid? :skein.pattern/doc doc))
-    "Pattern doc must be a non-blank string"
-    (not (s/valid? :skein.pattern/fn fn-sym))
-    "Pattern function must be a fully qualified symbol"
-    (not (s/valid? :skein.pattern/input-spec input-spec))
-    "Pattern input spec must be a keyword or symbol"
-    :else "Pattern registration input is invalid"))
-
-(defn- require-pattern-registration!
-  "Validate the complete registration spec before deriving diagnostics."
-  [registration]
-  (try
-    (spool/require-valid! ::specs/pattern-registration
-                          registration
-                          "Pattern registration input is invalid")
-    (catch clojure.lang.ExceptionInfo error
-      (throw (ex-info (pattern-registration-message registration)
-                      (ex-data error)
-                      error)))))
+         normalize-weave-strand-attributes weave-payload weave-batch-context
+         require-pattern-registration! public-pattern-entry)
 
 (defn register-pattern!
   "Register a trusted weaver pattern handler and input spec in `runtime`.
@@ -69,12 +44,6 @@
      (let [entry (pattern-entry pattern-name doc fn-sym input-spec)]
        (core-registry/put-entry! (pattern-store runtime) owner (:name entry) entry)
        entry))))
-
-(defn- public-pattern-entry [entry]
-  (spool/require-valid! ::specs/pattern-entry
-                        entry
-                        "Pattern registry entry is invalid")
-  entry)
 
 (defn patterns
   "Return registered weave pattern metadata from `runtime`, ordered by name.
@@ -158,6 +127,38 @@
                                          :batch/refs (:refs result)
                                          :batch/created (:created result)))
        (select-keys result [:created :refs])))))
+
+(defn- pattern-registration-message
+  "Return a caller-facing diagnostic for an already-rejected registration."
+  [{:keys [name doc input-spec] fn-sym :fn}]
+  (cond
+    (not (s/valid? :skein.pattern/name name))
+    "Pattern name is invalid"
+    (not (s/valid? :skein.pattern/doc doc))
+    "Pattern doc must be a non-blank string"
+    (not (s/valid? :skein.pattern/fn fn-sym))
+    "Pattern function must be a fully qualified symbol"
+    (not (s/valid? :skein.pattern/input-spec input-spec))
+    "Pattern input spec must be a keyword or symbol"
+    :else "Pattern registration input is invalid"))
+
+(defn- require-pattern-registration!
+  "Validate the complete registration spec before deriving diagnostics."
+  [registration]
+  (try
+    (spool/require-valid! ::specs/pattern-registration
+                          registration
+                          "Pattern registration input is invalid")
+    (catch clojure.lang.ExceptionInfo error
+      (throw (ex-info (pattern-registration-message registration)
+                      (ex-data error)
+                      error)))))
+
+(defn- public-pattern-entry [entry]
+  (spool/require-valid! ::specs/pattern-entry
+                        entry
+                        "Pattern registry entry is invalid")
+  entry)
 
 ;; --- Registry entry construction ---
 
