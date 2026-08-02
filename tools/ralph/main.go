@@ -35,6 +35,15 @@ func main() {
 	os.Exit(code)
 }
 
+// fullAuthGrant is the operator authority appended by --full-auth. It hands the
+// agent permissions the repo docs otherwise reserve for the user, so it exists
+// only as an explicit opt-in.
+const fullAuthGrant = "Work with my authority: rebuild and restart mill/weaver CLIs etc. as you " +
+	"need, including bumping sibling spools — this grant is the explicit user " +
+	"sign-off the repo docs require for those steps. Verify such key steps with " +
+	"guidance from the :oracle seat (`strand agent harnesses`). DO NOT tag v1 on " +
+	"skein-src itself, but breaking changes are permitted at this pre-v1 stage."
+
 type options struct {
 	harnessName     string
 	model           string
@@ -46,6 +55,7 @@ type options struct {
 	strandBin       string
 	promptFile      string
 	skipPermissions bool
+	fullAuth        bool
 	headless        bool
 	poll            time.Duration
 	pause           time.Duration
@@ -87,6 +97,8 @@ func run() (int, error) {
 	fs.StringVar(&opts.promptFile, "prompt-file", "", "read the prompt from this file instead of an argument")
 	fs.BoolVar(&opts.skipPermissions, "skip-permissions", skipPermissions,
 		"bypass the harness's permission prompts (a headless run cannot answer them)")
+	fs.BoolVar(&opts.fullAuth, "full-auth", false,
+		"append an operator authority grant to the prompt (rebuild/restart mill and weavers, bump sibling spools)")
 	fs.BoolVar(&opts.headless, "headless", false, "stream plain text instead of opening the TUI")
 	fs.DurationVar(&opts.poll, "poll", 10*time.Second, "board refresh interval")
 	fs.DurationVar(&opts.pause, "pause", 3*time.Second, "breather between iterations")
@@ -123,6 +135,9 @@ func run() (int, error) {
 	}
 	if strings.TrimSpace(prompt) == "" {
 		return loop.ExitUsage, errors.New("the prompt is empty")
+	}
+	if opts.fullAuth {
+		prompt = strings.TrimRight(prompt, "\n") + "\n\n" + fullAuthGrant
 	}
 
 	var extra []string

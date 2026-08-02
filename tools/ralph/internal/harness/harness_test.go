@@ -69,6 +69,7 @@ func TestPromptCarriesLoopMechanics(t *testing.T) {
 		"strand kanban card e1",
 		"strand kanban finish e1 --outcome done",
 		"strand ready --query kanban-epic-pending --param epic=e1",
+		"exactly ONE feature card",
 		"RALPH-STOP: <one-line reason>",
 	} {
 		if !strings.Contains(got, want) {

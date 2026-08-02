@@ -4,7 +4,7 @@ Read `./devflow/TENETS.md`, `./devflow/PHILOSOPHY.md`, and `./devflow/UBIQUITOUS
 
 ## What to read, when
 
-**Arriving in this repo** — run `mill skein prime` once: where the source, docs, and config live. The deep reference is `docs/reference.md`; its "Discovery tiers" section explains the convention behind everything below (`prime` orients, `about` explains an op, `strand help [<op>]` answers exact invocation). `strand guide "<question>"` answers wider questions from a delegated run; `strand about guide` is the manual.
+**Arriving in this repo** — run `mill skein prime` once: where the source, docs, and config live. The deep reference is `docs/reference.md`; its "Discovery tiers" section explains the convention behind everything below (`prime` orients, `about` explains an op, `strand help [<op>]` answers exact invocation). `strand guide "<question>"` answers wider questions from a delegated run; `strand about guide` is the manual. Make liberal use of `strand guide` for skein/strand specifics beyond basic orientation.
 
 **Working with the user** — claim a kanban card first; `strand kanban prime` is the board discipline.
 
