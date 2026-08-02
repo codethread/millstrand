@@ -7,6 +7,7 @@
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [skein.core.db-test :as db-test]
@@ -21,6 +22,7 @@
             [skein.core.weaver.module-publication :as publication]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.core.weaver.spool-sync :as spool-sync]
+            [skein.spools.workflow :as workflow]
             [skein.spools.test-support :as test-support]
             [skein.test.alpha :as test-alpha])
   (:import [java.time Instant]))
@@ -107,8 +109,8 @@
   Loads the split config modules the way init.clj orders them: config.clj
   first (workflows.clj references its public CLI-tail helpers at load time),
   then harnesses.clj, the guide op that spawns onto its seats, workflows.clj,
-  and the land policy op beside it in
-  workflows_land.clj. attention.clj and nvd_scan.clj are
+  and the land and Ralph policy ops beside it in
+  workflows_land.clj and workflows_ralph.clj. attention.clj and nvd_scan.clj are
   deliberately not loaded here — chime rules are asserted through the full
   startup fixture, and the NVD job must never register from a direct load."
   [f]
@@ -140,6 +142,7 @@
             (load-module-source! rt :guide ".skein/guide.clj")
             (load-module-source! rt :workflows ".skein/workflows.clj")
             (load-module-source! rt :workflows-land ".skein/workflows_land.clj")
+            (load-module-source! rt :workflows-ralph ".skein/workflows_ralph.clj")
             (f rt)))
         (finally
           (weaver-runtime/stop! rt)
@@ -150,7 +153,7 @@
   "Copy the repo-local config files into a temporary config dir."
   [target]
   (.mkdirs (io/file target))
-  (doseq [name ["init.clj" "config.clj" "workflows.clj" "workflows_land.clj" "harnesses.clj"
+  (doseq [name ["init.clj" "config.clj" "workflows.clj" "workflows_land.clj" "workflows_ralph.clj" "harnesses.clj"
                 "guide.clj" "attention.clj" "nvd_scan.clj" "reviewers.clj"
                 "kanban_tracker.clj" "module_adapters.clj" "spools.edn"]]
     (io/copy (io/file ".skein" name) (io/file target name)))
@@ -438,6 +441,51 @@
                                   (var-get (requiring-resolve
                                             'config/devflow-runs-query))
                                   {}))))))))
+
+(deftest ralph-workflow-registers-its-contract-and-one-card-sequence
+  (with-startup-config-runtime
+    (fn [_rt]
+      (let [description (op! "workflow" ["show" "ralph-iterate"])
+            params (json/write-str {:epic "ralph-contract"})
+            run-id "ralph-contract"
+            started (op! "workflow" ["start" run-id
+                                     "--workflow" "ralph-iterate"
+                                     "--params" params])
+            context (json/write-str {"ralph/feature" "feature-contract"
+                                     "ralph/branch" "ralph-contract"
+                                     "ralph/worktree" "/tmp/ralph-contract"
+                                     "ralph/card" "feature-contract"})
+            context-map {:epic "ralph-contract"
+                         :ralph/feature "feature-contract"
+                         :ralph/branch "ralph-contract"
+                         :ralph/worktree "/tmp/ralph-contract"
+                         :ralph/card "feature-contract"}
+            next-step (fn [] (first (:ready (op! "workflow" ["next" run-id]))))]
+        (is (= "workflows-ralph/ralph-iterate" (:definition description)))
+        (is (= ["orient"] (get-in description [:declared :entry])))
+        (is (= "workflows-ralph/ralph-iterate-params"
+               (get-in description [:params :spec])))
+        (is (= "ralph.orient" (:action-ref (first (:ready started)))))
+        (is (= "ralph.claim-feature" (:action-ref (next-step))))
+        (let [completed-claim (op! "workflow" ["complete" run-id "--context" context])]
+          (is (= "ralph.work-tasks"
+                 (:action-ref (first (:ready completed-claim)))))
+          (is (= {:epic "ralph-contract"
+                  :ralph/feature "feature-contract"
+                  :ralph/branch "ralph-contract"
+                  :ralph/worktree "/tmp/ralph-contract"
+                  :ralph/card "feature-contract"}
+                 (get-in (workflow/current-root run-id) [:attributes :workflow/context]))))
+        (is (s/valid? :workflows-ralph/ralph-context context-map))
+        (is (not (s/valid? :workflows-ralph/ralph-context
+                           (assoc context-map :ralph/card "other-card"))))
+        (is (= "ralph.slice-gates" (:action-ref (next-step))))
+        (is (= "ralph.quick-review" (:action-ref (next-step))))
+        (is (= "ralph.handoff-land" (:action-ref (next-step))))
+        (is (= "ralph.finish-feature" (:action-ref (next-step))))
+        (let [judgment (next-step)]
+          (is (= "epic-judgment" (:checkpoint judgment)))
+          (is (= ["close-epic" "next-iteration"] (:choices judgment))))))))
 
 (deftest spool-bump-workflow-publishes-authority-exclusive-cutover-paths
   (with-startup-config-runtime

@@ -97,17 +97,6 @@ t1="$("${s[@]}" kanban task add "$f1" "Draft the paragraph" | python3 -c 'import
 
 work="$ws/work"
 mkdir -p "$work"
-cat > "$ws/prompt.txt" <<EOF
-You are driving a throwaway demo epic. Two rules:
-
-1. Every strand command MUST target this world explicitly:
-   $repo/bin/strand --workspace $ws <args>
-2. All file work happens in the current directory ($work). Touch nothing else.
-
-Pick a pending feature card under the epic, claim it (--owner demo --branch demo),
-do exactly what its body says, then finish it with --outcome done. Close the epic
-when no feature cards remain. Keep every step small.
-EOF
 
 cat <<EOF
 
@@ -122,12 +111,12 @@ Run the dashboard against it:
 
   cd $work && $repo/bin/ralph \\
     --workspace $ws --model haiku --max-iterations 3 \\
-    --prompt-file $ws/prompt.txt $epic
+    $epic
 
 Or watch the panes without spending anything, using a stub agent:
 
   cd $work && PATH=$repo/tools/ralph/testdata/bin:\$PATH $repo/bin/ralph \\
-    --workspace $ws --max-iterations 3 $epic "stub run"
+    --workspace $ws --max-iterations 3 $epic
 
 Tear it all down again:
 

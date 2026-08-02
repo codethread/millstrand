@@ -7,6 +7,7 @@
 package harness
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -155,33 +156,45 @@ func Brake(final string) (reason string, pulled bool, err error) {
 	return rest, true, nil
 }
 
-// Prompt builds the per-iteration prompt: the user's own text plus the harness
-// addendum. The addendum is loop mechanics only — how this iteration ends and
-// how to stop the loop. Work discipline belongs on the epic card and its
-// feature cards, which the addendum points at rather than restates.
-func Prompt(user, epicID, epicTitle string, iteration int) string {
+// fullAuthGrant is the operator authority appended by --full-auth. It hands the
+// agent permissions the repo docs otherwise reserve for the user, so it exists
+// only as an explicit opt-in.
+const fullAuthGrant = "Work with my authority: rebuild and restart mill/weaver CLIs etc. as you " +
+	"need, including bumping sibling spools — this grant is the explicit user " +
+	"sign-off the repo docs require for those steps. Verify such key steps with " +
+	"guidance from the :oracle seat (`strand agent harnesses`). DO NOT tag v1 on " +
+	"skein-src itself, but breaking changes are permitted at this pre-v1 stage."
+
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+// Prompt builds the generated per-iteration prompt. Work discipline belongs to
+// the registered ralph-iterate workflow and the epic's feature cards; this
+// prompt carries only the workflow pointer and the Go loop's stop mechanics.
+func Prompt(epicID, epicTitle string, iteration int, fullAuth bool) string {
+	params, err := json.Marshal(map[string]string{"epic": epicID})
+	if err != nil {
+		panic(fmt.Sprintf("marshal ralph workflow params: %v", err))
+	}
+	paramsArg := shellSingleQuote(string(params))
 	var b strings.Builder
-	b.WriteString(user)
-	b.WriteString("\n\n--- ralph harness (tools/ralph, iteration ")
+	b.WriteString("--- ralph harness (tools/ralph, iteration ")
 	fmt.Fprintf(&b, "%d", iteration)
 	b.WriteString(") ---\n")
-	fmt.Fprintf(&b, "You are one iteration of \"ralph\", a foreground loop driving epic %s (%q).\n", epicID, epicTitle)
-	b.WriteString("Every iteration starts with fresh context: orient from live state, not memory.\n")
-	fmt.Fprintf(&b, "`strand kanban card %s` carries the epic's work discipline. Prefer\n", epicID)
-	fmt.Fprintf(&b, "`strand ready --query kanban-epic-pending --param epic=%s` for its pending\n", epicID)
-	b.WriteString("feature cards; for a chosen feature, use\n")
-	b.WriteString("`strand ready --query kanban-feature-work --param feature=<feature-id>` for\n")
-	b.WriteString("its ready work.\n")
-	b.WriteString("The loop re-invokes you until the epic strand is closed, so:\n")
-	b.WriteString("- CRITICAL: when every feature under the epic is complete, close the epic with\n")
+	fmt.Fprintf(&b, "Run the registered `ralph-iterate` workflow for epic %s (%q).\n", epicID, epicTitle)
+	fmt.Fprintf(&b, "Start it with `strand workflow start <run-id> --workflow ralph-iterate --params %s` and drive the workflow to its judgment point.\n", paramsArg)
+	b.WriteString("The workflow and live strands carry the work discipline; this prompt carries the Go loop contract.\n")
+	b.WriteString("CRITICAL: when every feature under the epic is complete, close the epic with\n")
 	fmt.Fprintf(&b, "  `strand kanban finish %s --outcome done` — the loop runs forever otherwise.\n", epicID)
-	b.WriteString("  (Kanban finish is the right close: it records the outcome and leaves clean\n")
-	b.WriteString("  board semantics; a bare state update does not.)\n")
-	b.WriteString("- Leave the world resumable before you finish: work committed and pushed, live\n")
-	b.WriteString("  state updated. The next iteration knows only what the strands say.\n")
-	b.WriteString("- EMERGENCY BRAKE: if you hit a blocker you cannot work around, end your reply\n")
+	b.WriteString("EMERGENCY BRAKE: if you hit a blocker you cannot work around, end your reply\n")
 	fmt.Fprintf(&b, "  with a final line of exactly: %s <one-line reason>\n", BrakePrefix)
-	b.WriteString("  Use it only for hard blockers; it halts the loop immediately.\n")
+	b.WriteString("Use it only for hard blockers; it halts the loop immediately.\n")
+	if fullAuth {
+		b.WriteString("\n")
+		b.WriteString(fullAuthGrant)
+		b.WriteString("\n")
+	}
 	return b.String()
 }
 

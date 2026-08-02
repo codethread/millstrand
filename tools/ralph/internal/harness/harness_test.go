@@ -55,25 +55,54 @@ func TestBrake(t *testing.T) {
 	}
 }
 
-func TestPromptCarriesLoopMechanics(t *testing.T) {
-	got := Prompt("Work every feature.", "e1", "Epic one", 4)
+func TestPromptCarriesWorkflowAndLoopMechanics(t *testing.T) {
+	got := Prompt("e1", "Epic one", 4, false)
 
-	if !strings.HasPrefix(got, "Work every feature.") {
-		t.Errorf("the user's prompt must come first, got:\n%s", got)
+	if strings.Contains(got, "Work every feature.") {
+		t.Errorf("generated prompt must not carry ad-hoc user text:\n%s", got)
 	}
-	// Each of these is a loop exit or the orientation an iteration needs; the
-	// addendum is worthless without them.
+	// These are the workflow pointer and the Go-owned loop contract.
 	for _, want := range []string{
 		"iteration 4",
 		`epic e1 ("Epic one")`,
-		"strand kanban card e1",
+		"strand workflow start <run-id> --workflow ralph-iterate",
+		`{"epic":"e1"}`,
 		"strand kanban finish e1 --outcome done",
-		"strand ready --query kanban-epic-pending --param epic=e1",
 		"RALPH-STOP: <one-line reason>",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("prompt is missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestPromptFullAuthIsExplicit(t *testing.T) {
+	without := Prompt("e1", "Epic one", 1, false)
+	with := Prompt("e1", "Epic one", 1, true)
+
+	if strings.Contains(without, "Work with my authority") {
+		t.Error("full-auth grant must not appear without explicit opt-in")
+	}
+	for _, want := range []string{"Work with my authority", "DO NOT tag v1 on skein-src itself"} {
+		if !strings.Contains(with, want) {
+			t.Errorf("full-auth prompt is missing %q:\n%s", want, with)
+		}
+	}
+}
+
+func TestPromptEscapesEpicIDInWorkflowParams(t *testing.T) {
+	got := Prompt(`e"1\line`, "Epic one", 1, false)
+
+	if !strings.Contains(got, `{"epic":"e\"1\\line"}`) {
+		t.Errorf("workflow params must be valid JSON for special-character epic IDs:\n%s", got)
+	}
+}
+
+func TestPromptShellQuotesEpicIDInWorkflowParams(t *testing.T) {
+	got := Prompt("e'1", "Epic one", 1, false)
+
+	if !strings.Contains(got, `--params '{"epic":"e'"'"'1"}'`) {
+		t.Errorf("workflow params must shell-escape apostrophes in epic IDs:\n%s", got)
 	}
 }
 
