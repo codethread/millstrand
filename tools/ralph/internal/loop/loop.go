@@ -111,10 +111,10 @@ type OutcomeMsg struct {
 // Config is everything the engine needs for a run.
 type Config struct {
 	Epic            string
-	Prompt          string
 	Harness         harness.Harness
 	Settings        harness.Settings
 	SkipPermissions bool
+	FullAuth        bool
 	Extra           []string
 	MaxIterations   int
 	FailureLimit    int
@@ -368,7 +368,7 @@ type iterResult struct {
 
 func (e *Engine) iterate(ctx context.Context, n int, epic board.Strand) iterResult {
 	spec := harness.RunSpec{
-		Prompt:          harness.Prompt(e.cfg.Prompt, epic.ID, epic.Title, n),
+		Prompt:          harness.Prompt(epic.ID, epic.Title, n, e.cfg.FullAuth),
 		Iteration:       n,
 		LogDir:          e.cfg.LogDir,
 		SkipPermissions: e.cfg.SkipPermissions,

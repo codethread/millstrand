@@ -86,7 +86,6 @@ func (w *world) write(name, body string) {
 
 func (w *world) engine(cfg loop.Config) *loop.Engine {
 	cfg.Epic = "e1"
-	cfg.Prompt = "work the epic"
 	cfg.Harness = w.agent
 	cfg.Board = w.client
 	cfg.LogDir = w.logDir

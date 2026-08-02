@@ -35,15 +35,6 @@ func main() {
 	os.Exit(code)
 }
 
-// fullAuthGrant is the operator authority appended by --full-auth. It hands the
-// agent permissions the repo docs otherwise reserve for the user, so it exists
-// only as an explicit opt-in.
-const fullAuthGrant = "Work with my authority: rebuild and restart mill/weaver CLIs etc. as you " +
-	"need, including bumping sibling spools — this grant is the explicit user " +
-	"sign-off the repo docs require for those steps. Verify such key steps with " +
-	"guidance from the :oracle seat (`strand agent harnesses`). DO NOT tag v1 on " +
-	"skein-src itself, but breaking changes are permitted at this pre-v1 stage."
-
 type options struct {
 	harnessName     string
 	model           string
@@ -53,7 +44,6 @@ type options struct {
 	logDir          string
 	workspace       string
 	strandBin       string
-	promptFile      string
 	skipPermissions bool
 	fullAuth        bool
 	headless        bool
@@ -77,7 +67,7 @@ func run() (int, error) {
 	fs := flag.NewFlagSet("ralph", flag.ContinueOnError)
 	fs.Usage = func() {
 		out := fs.Output()
-		_, _ = fmt.Fprint(out, "usage: ralph [flags] <epic-id> \"<prompt>\" [-- <extra harness args>]\n\n"+
+		_, _ = fmt.Fprint(out, "usage: ralph [flags] <epic-id> [-- <extra harness args>]\n\n"+
 			"Drive a kanban epic through repeated headless agent runs.\n\nflags:\n")
 		fs.PrintDefaults()
 		_, _ = fmt.Fprint(out, "\nenvironment: RALPH_HARNESS, RALPH_MODEL, RALPH_EFFORT, RALPH_MAX_ITERATIONS,\n"+
@@ -94,7 +84,6 @@ func run() (int, error) {
 	fs.StringVar(&opts.logDir, "log-dir", os.Getenv("RALPH_LOG_DIR"), "transcript dir (default $TMPDIR/ralph/<epic>-<timestamp>)")
 	fs.StringVar(&opts.workspace, "workspace", os.Getenv("SKEIN_WORKSPACE"), "strand workspace dir (default: the repo's own)")
 	fs.StringVar(&opts.strandBin, "strand", "", "strand binary (default: ./bin/strand beside this binary, else PATH)")
-	fs.StringVar(&opts.promptFile, "prompt-file", "", "read the prompt from this file instead of an argument")
 	fs.BoolVar(&opts.skipPermissions, "skip-permissions", skipPermissions,
 		"bypass the harness's permission prompts (a headless run cannot answer them)")
 	fs.BoolVar(&opts.fullAuth, "full-auth", false,
@@ -111,34 +100,12 @@ func run() (int, error) {
 	}
 
 	args := fs.Args()
-	wantPrompt := opts.promptFile == ""
-	need := 1
-	if wantPrompt {
-		need = 2
-	}
-	if len(args) < need {
+	if len(args) < 1 {
 		fs.Usage()
 		return loop.ExitUsage, nil
 	}
 	epicID := args[0]
-	prompt := ""
 	rest := args[1:]
-	if wantPrompt {
-		prompt = args[1]
-		rest = args[2:]
-	} else {
-		body, err := os.ReadFile(opts.promptFile)
-		if err != nil {
-			return loop.ExitUsage, err
-		}
-		prompt = string(body)
-	}
-	if strings.TrimSpace(prompt) == "" {
-		return loop.ExitUsage, errors.New("the prompt is empty")
-	}
-	if opts.fullAuth {
-		prompt = strings.TrimRight(prompt, "\n") + "\n\n" + fullAuthGrant
-	}
 
 	var extra []string
 	if len(rest) > 0 {
@@ -187,10 +154,10 @@ func run() (int, error) {
 
 	engine := loop.New(loop.Config{
 		Epic:            epicID,
-		Prompt:          prompt,
 		Harness:         agent,
 		Settings:        settings,
 		SkipPermissions: opts.skipPermissions,
+		FullAuth:        opts.fullAuth,
 		Extra:           extra,
 		MaxIterations:   opts.maxIterations,
 		FailureLimit:    opts.failureLimit,
