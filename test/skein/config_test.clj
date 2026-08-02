@@ -440,6 +440,31 @@
                                             'config/devflow-runs-query))
                                   {}))))))))
 
+(deftest ralph-workflow-registers-its-contract-and-one-card-sequence
+  (with-startup-config-runtime
+    (fn [_rt]
+      (let [description (op! "workflow" ["show" "ralph-iterate"])
+            params (json/write-str {:epic "ralph-contract"})
+            run-id "ralph-contract"
+            started (op! "workflow" ["start" run-id
+                                      "--workflow" "ralph-iterate"
+                                      "--params" params])
+            next-step (fn [] (first (:ready (op! "workflow" ["next" run-id]))))]
+        (is (= "workflows-ralph/ralph-iterate" (:definition description)))
+        (is (= ["orient"] (get-in description [:declared :entry])))
+        (is (= "workflows-ralph/ralph-iterate-params"
+               (get-in description [:params :spec])))
+        (is (= "ralph.orient" (:action-ref (first (:ready started)))))
+        (is (= "ralph.claim-feature" (:action-ref (next-step))))
+        (is (= "ralph.work-tasks" (:action-ref (next-step))))
+        (is (= "ralph.slice-gates" (:action-ref (next-step))))
+        (is (= "ralph.quick-review" (:action-ref (next-step))))
+        (is (= "ralph.handoff-land" (:action-ref (next-step))))
+        (is (= "ralph.finish-feature" (:action-ref (next-step))))
+        (let [judgment (next-step)]
+          (is (= "epic-judgment" (:checkpoint judgment)))
+          (is (= ["close-epic" "next-iteration"] (:choices judgment))))))))
+
 (deftest spool-bump-workflow-publishes-authority-exclusive-cutover-paths
   (with-startup-config-runtime
     (fn [_rt]
