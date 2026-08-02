@@ -27,7 +27,7 @@ Describe a registered weave pattern and its input contract in `runtime`.
   and `:spec-forms` the printed form graph, all resolved against the live spec
   registry with no predicate invoked. Missing patterns or unregistered input
   specs fail loudly.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L71-L88">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L72-L89">Source</a></sub></p>
 
 ## <a name="skein.api.patterns.alpha/patterns">`patterns`</a>
 ``` clojure
@@ -38,7 +38,7 @@ Function.
 Return registered weave pattern metadata from `runtime`, ordered by name.
 
   Each returned entry conforms to `::skein.core.specs/pattern-entry`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L48-L54">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L49-L55">Source</a></sub></p>
 
 ## <a name="skein.api.patterns.alpha/register-pattern!">`register-pattern!`</a>
 ``` clojure
@@ -52,7 +52,7 @@ Register a trusted weaver pattern handler and input spec in `runtime`.
 
   Registration input conforms to `::skein.core.specs/pattern-registration`,
   and the returned entry conforms to `::skein.core.specs/pattern-entry`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L29-L46">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L29-L47">Source</a></sub></p>
 
 ## <a name="skein.api.patterns.alpha/resolve-pattern">`resolve-pattern`</a>
 ``` clojure
@@ -66,7 +66,7 @@ Return the registered weave pattern for a name.
   colon), matching `skein.api.graph.alpha/resolve-query` string handling.
 
   Missing patterns fail loudly.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L56-L69">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L57-L70">Source</a></sub></p>
 
 ## <a name="skein.api.patterns.alpha/weave!">`weave!`</a>
 ``` clojure
@@ -80,4 +80,4 @@ Validate pattern input, invoke the pattern, and apply its create-only batch.
   The four-argument arity threads an explicit request-context map for trusted
   callers (the connected-client tier); the three-argument arity derives its own
   weave context.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L95-L129">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L96-L130">Source</a></sub></p>

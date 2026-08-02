@@ -24,7 +24,7 @@
 
 (declare canonical-pattern-name pattern-entry pattern-input-contract validate-pattern-input!
          normalize-weave-strand-attributes weave-payload weave-batch-context
-         require-pattern-registration! public-pattern-entry)
+         require-pattern-registration! public-pattern-entry validate-pattern-fn!)
 
 (defn register-pattern!
   "Register a trusted weaver pattern handler and input spec in `runtime`.
@@ -41,6 +41,7 @@
                        :fn fn-sym
                        :input-spec input-spec}]
      (require-pattern-registration! registration)
+     (validate-pattern-fn! runtime fn-sym)
      (let [entry (pattern-entry pattern-name doc fn-sym input-spec)]
        (core-registry/put-entry! (pattern-store runtime) owner (:name entry) entry)
        entry))))
@@ -159,6 +160,16 @@
                         entry
                         "Pattern registry entry is invalid")
   entry)
+
+(defn- validate-pattern-fn!
+  "Fail loudly unless fn-sym resolves to a callable value in `runtime`."
+  [runtime fn-sym]
+  (let [resolved (with-spool-classloader runtime #(requiring-resolve fn-sym))
+        value (if (var? resolved) @resolved resolved)]
+    (when-not (ifn? value)
+      (throw (ex-info "Pattern function must resolve to a callable value"
+                      {:fn fn-sym :resolved-class (str (class value))})))
+    fn-sym))
 
 ;; --- Registry entry construction ---
 

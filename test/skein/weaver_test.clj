@@ -3249,6 +3249,11 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Pattern doc"
                             (patterns/register-pattern! rt 'bad-doc "" 'skein.weaver-test/test-pattern ::pattern-input)))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"callable"
+                            (patterns/register-pattern! rt 'bad-fn
+                                                        'skein.weaver-test/not-callable-hook
+                                                        ::pattern-input)))
       (let [explained (patterns/explain rt :dev-task)]
         (is (str/includes? (get-in explained [:spec-forms 0 "form"])
                            "clojure.spec.alpha/keys"))
