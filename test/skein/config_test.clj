@@ -1529,6 +1529,127 @@
         ;; history is not a land concern: read a run's past through trusted Clojure
         (is (not (contains? status :history)))))))
 
+(deftest land-signoff-generic-approval-is-rejected-without-merge-lock
+  ;; Regression: approving sign-off through generic workflow verbs skipped
+  ;; `land choose`'s merge-lock acquisition, and the run walked the whole
+  ;; land-merge continuation before terminal cleanup refused it. The batch
+  ;; pre-commit hook must refuse the approval at sign-off itself while
+  ;; leaving every other generic drive of a land run untouched.
+  (with-config-runtime
+    (fn [_rt]
+      (start-land! "land-g" "land-g" "/tmp/land-g")
+      (op! "land" ["complete" "land-g" "--pr-number" "500"])
+      (shell-gate-complete! "land-g" "checks green")
+      (op! "workflow" ["complete" "land-g"])
+      (is (= "signoff"
+             (:checkpoint (first (:ready (op! "workflow" ["ready" "land-g"]))))))
+      (let [input (json/write-str {:subject "feat: land g"
+                                   :body "Squashed commits: aaa111"})
+            rejected (try
+                       (op! "workflow" ["choose" "land-g" "approved" "--input" input])
+                       nil
+                       (catch clojure.lang.ExceptionInfo ex ex))]
+        (is (some? rejected) "generic approval must not commit")
+        (is (= "hook/failed" (:code (ex-data rejected))))
+        (is (= "land/signoff-without-merge-lock"
+               (:hook/cause-code (ex-data rejected))))
+        ;; the veto rolled the whole batch back: no lock, no queue entry, no
+        ;; poured continuation, and the run still sits at sign-off
+        (is (empty? (active-merge-locks)))
+        (is (empty? (active-merge-queue)))
+        (is (= "signoff"
+               (:checkpoint (first (:ready (op! "workflow" ["ready" "land-g"]))))))
+        ;; the sign-off's other choices stay generic: revise re-pours the run
+        (let [revised (op! "workflow" ["choose" "land-g" "revise"])]
+          (is (= "land.pr.open" (:action-ref (first (:ready revised))))))
+        (op! "land" ["complete" "land-g" "--pr-number" "500"])
+        (shell-gate-complete! "land-g" "checks green")
+        (op! "workflow" ["complete" "land-g"])
+        ;; the policy verb passes the gate: the lock it acquired is the evidence
+        (let [approved (op! "land" ["choose" "land-g" "approved" "--input" input])]
+          (is (= "land.pr.merge" (:action-ref (first (:ready approved)))))
+          (is (= ["land-g"]
+                 (mapv #(get-in % [:attributes :land/run-id])
+                       (active-merge-locks)))))))))
+
+(deftest land-signoff-guard-rejects-ambiguous-roots-and-locks
+  (with-config-runtime
+    (fn [rt]
+      (let [guard (requiring-resolve 'workflows-land/require-merge-lock-at-signoff-approval)
+            updated (fn [run-id]
+                      [{:after {:id (str "signoff-" run-id)
+                                :state "closed"
+                                :attributes {:workflow/decision-point "land-signed-off"
+                                             :workflow/outcome "approved"
+                                             :workflow/role "root"
+                                             :workflow/run-id run-id}}}])
+            root (fn [run-id]
+                   {:id (str "root-" run-id)
+                    :attributes {:workflow/role "root"
+                                 :workflow/run-id run-id}})]
+        (weaver/add! rt {:title "Lock A"
+                         :attributes {:kind "merge-lock" :land/run-id "land-a"}})
+        (weaver/add! rt {:title "Lock B"
+                         :attributes {:kind "merge-lock" :land/run-id "land-b"}})
+        (let [ambiguous (try
+                          (guard {:batch/created []
+                                  :batch/updated (into (updated "land-a")
+                                                       (updated "land-b"))})
+                          nil
+                          (catch clojure.lang.ExceptionInfo error
+                            error))
+              malformed (try
+                          (guard {:batch/created []
+                                  :batch/updated (into (updated "land-a")
+                                                       [{:after {:id "signoff-missing"
+                                                                 :state "closed"
+                                                                 :attributes {:workflow/decision-point "land-signed-off"
+                                                                              :workflow/outcome "approved"
+                                                                              :workflow/role "root"}}}])})
+                          nil
+                          (catch clojure.lang.ExceptionInfo error
+                            error))
+              multiple (try
+                         (guard {:batch/created [(root "land-a")]
+                                 :batch/updated (updated "land-a")})
+                         nil
+                         (catch clojure.lang.ExceptionInfo error
+                           error))]
+          (is (= "land/signoff-run-ambiguous" (:code (ex-data ambiguous))))
+          (is (= [{:id "signoff-land-a" :workflow/run-id "land-a"}
+                  {:id "signoff-land-b" :workflow/run-id "land-b"}]
+                 (:roots (ex-data ambiguous))))
+          (is (= "land/signoff-run-ambiguous" (:code (ex-data malformed))))
+          (is (= [{:id "signoff-land-a" :workflow/run-id "land-a"}
+                  {:id "signoff-missing" :workflow/run-id nil}]
+                 (:roots (ex-data malformed))))
+          (is (= "land/multiple-merge-locks" (:code (ex-data multiple))))
+          (is (= #{"land-a" "land-b"}
+                 (set (map :land/run-id (:locks (ex-data multiple))))))
+          (is (string? (:recovery (ex-data ambiguous))))
+          (is (string? (:recovery (ex-data multiple)))))))))
+
+(deftest land-signoff-guard-rejects-corrupt-singleton-lock
+  (with-config-runtime
+    (fn [rt]
+      (let [guard (requiring-resolve 'workflows-land/require-merge-lock-at-signoff-approval)
+            lock (weaver/add! rt {:title "Malformed lock"
+                                  :attributes {:kind "merge-lock"}})
+            error (try
+                    (guard {:batch/updated [{:after {:id "signoff"
+                                                     :state "closed"
+                                                     :attributes {:workflow/decision-point "land-signed-off"
+                                                                  :workflow/outcome "approved"
+                                                                  :workflow/role "root"
+                                                                  :workflow/run-id "land-a"}}}]})
+                    nil
+                    (catch clojure.lang.ExceptionInfo error
+                      error))]
+        (is (= "land/merge-lock-corrupt" (:code (ex-data error))))
+        (is (= [{:id (:id lock) :land/run-id nil}]
+               (:invalid-locks (ex-data error))))
+        (is (string? (:recovery (ex-data error))))))))
+
 (deftest land-push-draft-pr-requires-context-and-rolls-back-card-lane
   (with-config-runtime
     (fn [rt]

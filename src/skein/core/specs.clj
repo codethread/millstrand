@@ -44,6 +44,97 @@
        (not (str/blank? (namespace x)))
        (not (str/blank? (name x)))))
 
+(defn- data-first-value? [value]
+  (cond
+    (or (nil? value)
+        (string? value)
+        (number? value)
+        (keyword? value)
+        (symbol? value)
+        (boolean? value)
+        (inst? value)
+        (uuid? value)) true
+    (map? value) (and (every? data-first-value? (keys value))
+                      (every? data-first-value? (vals value)))
+    (or (vector? value) (set? value)) (every? data-first-value? value)
+    :else false))
+
+(s/def :skein.hook/key
+  (s/or :keyword keyword?
+        :symbol symbol?
+        :string (s/and string? (complement str/blank?))))
+(s/def :skein.hook/types (s/coll-of keyword? :kind set? :min-count 1))
+(s/def :skein.hook/fn fully-qualified-symbol?)
+(s/def :skein.hook/order integer?)
+(s/def :skein.hook/metadata
+  (s/and map?
+         #(and (every? data-first-value? (keys %))
+               (every? data-first-value? (vals %)))))
+(s/def :skein.hook/opts
+  (s/and map?
+         #(and (or (not (contains? % :order))
+                   (integer? (:order %)))
+               (every? data-first-value? (keys %))
+               (every? data-first-value? (vals %)))))
+(s/def ::hook-transform-return
+  (s/and map? #(contains? % :hook/value)))
+(s/def ::hook-registration
+  (s/and (s/keys :req-un [:skein.hook/key
+                          :skein.hook/types
+                          :skein.hook/fn
+                          :skein.hook/opts])
+         #(= #{:key :types :fn :opts} (set (keys %)))))
+(s/def ::hook-entry
+  (s/and (s/keys :req-un [:skein.hook/key
+                          :skein.hook/types
+                          :skein.hook/fn
+                          :skein.hook/order
+                          :skein.hook/metadata])
+         #(= #{:key :types :fn :order :metadata} (set (keys %)))))
+(s/def :skein.hook/owner keyword?)
+(s/def :skein.hook/layer #{:defaults :spools :workspace :direct})
+(s/def :skein.hook/value ::hook-entry)
+(s/def :skein.hook/override? boolean?)
+(s/def :skein.hook/effective? boolean?)
+(s/def ::hook-provenance-contender
+  (s/and (s/keys :req-un [:skein.hook/owner
+                          :skein.hook/layer
+                          :skein.hook/value
+                          :skein.hook/override?
+                          :skein.hook/effective?])
+         #(= #{:owner :layer :value :override? :effective?}
+             (set (keys %)))))
+(s/def :skein.hook/effective ::hook-provenance-contender)
+(s/def :skein.hook/shadowed (s/coll-of ::hook-provenance-contender :kind vector?))
+(s/def :skein.hook/contenders (s/coll-of ::hook-provenance-contender :kind vector?))
+(s/def ::hook-provenance-entry
+  (s/and (s/keys :req-un [:skein.hook/effective
+                          :skein.hook/shadowed
+                          :skein.hook/contenders])
+         #(= #{:effective :shadowed :contenders} (set (keys %)))))
+(s/def ::hook-provenance
+  (s/map-of :skein.hook/key ::hook-provenance-entry))
+
+(s/def :skein.pattern/name
+  (s/or :keyword simple-keyword?
+        :symbol simple-symbol?
+        :string (s/and string? (complement str/blank?))))
+(s/def :skein.pattern/doc (s/nilable non-blank-string?))
+(s/def :skein.pattern/fn fully-qualified-symbol?)
+(s/def :skein.pattern/input-spec (s/or :keyword keyword? :symbol symbol?))
+(s/def ::pattern-registration
+  (s/and (s/keys :req-un [:skein.pattern/name
+                          :skein.pattern/doc
+                          :skein.pattern/fn
+                          :skein.pattern/input-spec])
+         #(= #{:name :doc :fn :input-spec} (set (keys %)))))
+(s/def ::pattern-entry
+  (s/and (s/keys :req-un [:skein.pattern/name
+                          :skein.pattern/fn
+                          :skein.pattern/input-spec]
+                 :opt-un [:skein.pattern/doc])
+         #(every? #{:name :doc :fn :input-spec} (keys %))))
+
 (s/def ::id non-blank-string?)
 (s/def ::generated-id generated-id?)
 (s/def ::from ::id)
@@ -57,6 +148,172 @@
 (s/def ::attributes json-object-encodable-attributes?)
 (s/def ::attribute-key (s/or :keyword keyword? :string non-blank-string?))
 (s/def ::attribute-key-set (s/coll-of ::attribute-key :kind coll? :min-count 1))
+(s/def ::state #{"active" "closed" "replaced"})
+(s/def ::generic-state #{"active" "closed"})
+
+;; Batch lifecycle hooks share one context shape across graph application and
+;; pattern-created batches. The API entry points consult this core-owned spec;
+;; the shared shape stays below the alpha tier so neither API namespace reaches
+;; through another namespace's internal plumbing.
+(s/def :batch/source #{:apply :weave})
+(defn- exact-keys? [allowed value]
+  (= allowed (set (keys value))))
+(defn- keys-subset? [allowed value]
+  (every? allowed (keys value)))
+
+(s/def :skein.batch-hook/ref
+  (s/or :keyword simple-keyword?
+        :symbol simple-symbol?
+        :string (s/and string? (complement str/blank?))))
+(s/def :skein.batch-hook/title ::title)
+(s/def :skein.batch-hook/state ::generic-state)
+(s/def :skein.batch-hook/attributes (s/and map? ::attributes))
+(s/def :skein.batch-hook/strand-patch
+  (s/and (s/keys :req-un [:skein.batch-hook/ref]
+                 :opt-un [:skein.batch-hook/title
+                          :skein.batch-hook/state
+                          :skein.batch-hook/attributes])
+         #(keys-subset? #{:ref :title :state :attributes} %)))
+(s/def :skein.batch-hook/op #{:upsert :remove})
+(s/def :skein.batch-hook/from :skein.batch-hook/ref)
+(s/def :skein.batch-hook/to :skein.batch-hook/ref)
+(s/def :skein.batch-hook/type ::edge-type)
+(s/def :skein.batch-hook/upsert-edge
+  (s/and (s/keys :req-un [:skein.batch-hook/op
+                          :skein.batch-hook/from
+                          :skein.batch-hook/to
+                          :skein.batch-hook/type]
+                 :opt-un [:skein.batch-hook/attributes])
+         #(= :upsert (:op %))
+         #(keys-subset? #{:op :from :to :type :attributes} %)))
+(s/def :skein.batch-hook/remove-edge
+  (s/and (s/keys :req-un [:skein.batch-hook/op
+                          :skein.batch-hook/from
+                          :skein.batch-hook/to
+                          :skein.batch-hook/type])
+         #(= :remove (:op %))
+         #(exact-keys? #{:op :from :to :type} %)))
+(s/def :skein.batch-hook/edge-op
+  (s/or :upsert :skein.batch-hook/upsert-edge
+        :remove :skein.batch-hook/remove-edge))
+(s/def :skein.batch-hook/payload-refs
+  (s/map-of :skein.batch-hook/ref ::id))
+(s/def :skein.batch-hook/payload-strands
+  (s/coll-of :skein.batch-hook/strand-patch :kind vector?))
+(s/def :skein.batch-hook/payload-edges
+  (s/coll-of :skein.batch-hook/edge-op :kind vector?))
+(s/def :skein.batch-hook/payload-burn
+  (s/coll-of :skein.batch-hook/ref :kind vector?))
+(s/def :skein.batch-hook/refs :skein.batch-hook/payload-refs)
+(s/def :skein.batch-hook/strands :skein.batch-hook/payload-strands)
+(s/def :skein.batch-hook/edges :skein.batch-hook/payload-edges)
+(s/def :skein.batch-hook/burn :skein.batch-hook/payload-burn)
+(s/def :batch/payload
+  (s/and (s/keys :opt-un [:skein.batch-hook/refs
+                          :skein.batch-hook/strands
+                          :skein.batch-hook/edges
+                          :skein.batch-hook/burn])
+         #(keys-subset? #{:refs :strands :edges :burn} %)))
+(s/def :skein.batch-hook/result-refs
+  (s/map-of (s/or :keyword simple-keyword?
+                  :string (s/and string? (complement str/blank?)))
+            ::id))
+(s/def :skein.batch-hook/timestamp (s/and string? #(not (str/blank? %))))
+(s/def :skein.batch-hook/created_at :skein.batch-hook/timestamp)
+(s/def :skein.batch-hook/updated_at :skein.batch-hook/timestamp)
+(s/def :skein.batch-hook/strand-row
+  (s/and (s/keys :req-un [:skein.batch-hook/id
+                          :skein.batch-hook/title
+                          :skein.batch-hook/state
+                          :skein.batch-hook/attributes
+                          :skein.batch-hook/created_at
+                          :skein.batch-hook/updated_at])
+         #(exact-keys? #{:id :title :state :attributes :created_at :updated_at} %)))
+(s/def :skein.batch-hook/id ::id)
+(s/def :skein.batch-hook/from_strand_id ::id)
+(s/def :skein.batch-hook/to_strand_id ::id)
+(s/def :skein.batch-hook/edge_type ::edge-type)
+(s/def :skein.batch-hook/edge-row
+  (s/and (s/keys :req-un [:skein.batch-hook/from_strand_id
+                          :skein.batch-hook/to_strand_id
+                          :skein.batch-hook/edge_type
+                          :skein.batch-hook/attributes])
+         #(exact-keys? #{:from_strand_id :to_strand_id :edge_type :attributes} %)))
+(s/def :skein.batch-hook/edge :skein.batch-hook/edge-row)
+(s/def :skein.batch-hook/before (s/nilable :skein.batch-hook/edge-row))
+(s/def :skein.batch-hook/after (s/nilable :skein.batch-hook/edge-row))
+(s/def :skein.batch-hook/edge-transition
+  (s/and (s/keys :req-un [:skein.batch-hook/op
+                          :skein.batch-hook/from
+                          :skein.batch-hook/to
+                          :skein.batch-hook/type
+                          :skein.batch-hook/before
+                          :skein.batch-hook/after])
+         #(exact-keys? #{:op :from :to :type :before :after} %)
+         #(case (:op %)
+            :upsert (some? (:after %))
+            :remove (and (some? (:before %)) (nil? (:after %))))))
+(s/def :skein.batch-hook/weave-edge
+  (s/and (s/keys :req-un [:skein.batch-hook/op
+                          :skein.batch-hook/from
+                          :skein.batch-hook/to
+                          :skein.batch-hook/type
+                          :skein.batch-hook/edge])
+         #(= :upsert (:op %))
+         #(exact-keys? #{:op :from :to :type :edge} %)))
+(s/def :skein.batch-hook/updated-row
+  (s/and (s/keys :req-un [:skein.batch-hook/ref
+                          :skein.batch-hook/id])
+         (fn [value] (every? #(contains? value %) [:before :after]))
+         #(exact-keys? #{:ref :id :before :after} %)
+         #(s/valid? :skein.batch-hook/strand-row (:before %))
+         #(s/valid? :skein.batch-hook/strand-row (:after %))))
+(s/def :skein.batch-hook/burned-row
+  (s/and (s/keys :req-un [:skein.batch-hook/ref
+                          :skein.batch-hook/id])
+         #(contains? % :before)
+         #(exact-keys? #{:ref :id :before} %)
+         #(s/valid? :skein.batch-hook/strand-row (:before %))))
+(s/def :batch/refs :skein.batch-hook/result-refs)
+(s/def :batch/created (s/coll-of :skein.batch-hook/strand-row :kind vector?))
+(s/def :batch/updated (s/coll-of :skein.batch-hook/updated-row :kind vector?))
+(s/def :batch/burned (s/coll-of :skein.batch-hook/burned-row :kind vector?))
+(s/def :batch/apply-edge-ops
+  (s/coll-of :skein.batch-hook/edge-transition :kind vector?))
+(s/def :batch/weave-edge-ops
+  (s/coll-of :skein.batch-hook/weave-edge :kind vector?))
+(s/def :batch/edge-ops
+  (s/coll-of (s/or :apply :skein.batch-hook/edge-transition
+                   :weave :skein.batch-hook/weave-edge)
+             :kind vector?))
+(s/def :mutation/operation #{:batch/apply})
+(s/def :pattern/name non-blank-string?)
+(s/def :pattern/input data-first-value?)
+(s/def :request/source keyword?)
+(s/def :request/operation keyword?)
+(s/def ::request-context
+  (s/and (s/keys :req [:request/source :request/operation])
+         #(every? data-first-value? (keys %))
+         #(every? data-first-value? (vals %))))
+(s/def ::batch-hook-context
+  (s/and
+   #(case (:batch/source %)
+      :apply (and (not (contains? % :pattern/name))
+                  (not (contains? % :pattern/input))
+                  (s/valid? :batch/apply-edge-ops (:batch/edge-ops %)))
+      :weave (and (s/valid? :pattern/name (:pattern/name %))
+                  (s/valid? :pattern/input (:pattern/input %))
+                  (s/valid? :batch/weave-edge-ops (:batch/edge-ops %)))
+      false)
+   (s/keys :req [:mutation/operation
+                 :batch/source
+                 :batch/payload
+                 :batch/refs
+                 :batch/created
+                 :batch/updated
+                 :batch/burned
+                 :batch/edge-ops])))
+
 (s/def ::strand-id ::id)
 (s/def ::archived? boolean?)
 (s/def ::changed nat-int?)
@@ -69,8 +326,6 @@
 (s/def ::omitted-attribute-descriptor
   (s/keys :req [:skein/omitted]
           :req-un [::bytes]))
-(s/def ::state #{"active" "closed" "replaced"})
-(s/def ::generic-state #{"active" "closed"})
 (s/def ::format #{"human" "edn" "json"})
 (s/def ::db non-blank-string?)
 (s/def ::opts (s/keys :req-un [::db ::format]))

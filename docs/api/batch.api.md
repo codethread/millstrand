@@ -73,5 +73,7 @@ Apply one transactional batch graph mutation payload to `runtime`.
   consults `::normalized-payload` on that authority's output, and `::result` on
   the transactional engine's output before the pre-commit hook, events, and
   return. Those two seam checks only catch impossible drift and never weaken the
-  authority's rejections.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/batch/alpha.clj#L24-L96">Source</a></sub></p>
+  authority's rejections. A caller-supplied `req-ctx` conforms to
+  `::skein.core.specs/request-context`; the pre-commit hook context conforms to
+  `::skein.core.specs/batch-hook-context`.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/batch/alpha.clj#L25-L102">Source</a></sub></p>

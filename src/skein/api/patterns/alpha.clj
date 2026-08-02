@@ -9,11 +9,14 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [next.jdbc :as jdbc]
+            [skein.api.batch.alpha :as batch-api]
             [skein.api.spec.alpha :as api-spec]
+            [skein.api.spool.alpha :as spool]
             [skein.core.db :as db]
             [skein.core.query :as query]
+            [skein.core.specs :as specs]
             [skein.core.weaver.access :refer [ds normalize pattern-registry pattern-store
-                                              with-spool-classloader validate-fn-symbol!]]
+                                              with-spool-classloader]]
             [skein.core.weaver.core-registry :as core-registry]
             [skein.core.weaver.dispatch :as dispatch]
             [skein.core.weaver.lifecycle :refer [event-base request-context
@@ -21,23 +24,36 @@
   (:import [java.util UUID]))
 
 (declare canonical-pattern-name pattern-entry pattern-input-contract validate-pattern-input!
-         normalize-weave-strand-attributes weave-payload weave-batch-context)
+         normalize-weave-strand-attributes weave-payload weave-batch-context
+         require-pattern-registration! public-pattern-entry validate-pattern-fn!)
 
 (defn register-pattern!
-  "Register a trusted weaver pattern handler and input spec in `runtime`."
+  "Register a trusted weaver pattern handler and input spec in `runtime`.
+
+  Registration input conforms to `::skein.core.specs/pattern-registration`,
+  and the returned entry conforms to `::skein.core.specs/pattern-entry`."
   ([runtime pattern-name fn-sym input-spec]
    (register-pattern! runtime core-registry/repl-owner pattern-name nil fn-sym input-spec))
   ([runtime pattern-name doc fn-sym input-spec]
    (register-pattern! runtime core-registry/repl-owner pattern-name doc fn-sym input-spec))
   ([runtime owner pattern-name doc fn-sym input-spec]
-   (let [entry (pattern-entry pattern-name doc fn-sym input-spec)]
-     (core-registry/put-entry! (pattern-store runtime) owner (:name entry) entry)
-     entry)))
+   (let [registration {:name pattern-name
+                       :doc doc
+                       :fn fn-sym
+                       :input-spec input-spec}]
+     (require-pattern-registration! registration)
+     (validate-pattern-fn! runtime fn-sym)
+     (let [entry (pattern-entry pattern-name doc fn-sym input-spec)]
+       (core-registry/put-entry! (pattern-store runtime) owner (:name entry) entry)
+       entry))))
 
 (defn patterns
-  "Return registered weave pattern metadata from `runtime`, ordered by name."
+  "Return registered weave pattern metadata from `runtime`, ordered by name.
+
+  Each returned entry conforms to `::skein.core.specs/pattern-entry`."
   [runtime]
-  (mapv val (sort-by key (pattern-registry runtime))))
+  (mapv (comp public-pattern-entry val)
+        (sort-by key (pattern-registry runtime))))
 
 (defn resolve-pattern
   "Return the registered weave pattern for a name.
@@ -45,14 +61,38 @@
   Accepts a simple symbol, keyword, or raw CLI string (trimmed, optional leading
   colon), matching `skein.api.graph.alpha/resolve-query` string handling.
 
-  Missing patterns fail loudly."
+  Missing patterns fail loudly. The returned entry conforms to
+  `::skein.core.specs/pattern-entry`."
   [runtime pattern-name]
   (let [canonical-name (canonical-pattern-name pattern-name)
         registered (pattern-registry runtime)]
-    (or (get registered canonical-name)
+    (or (some-> (get registered canonical-name) public-pattern-entry)
         (throw (ex-info "Pattern not found" {:pattern pattern-name
                                              :canonical-pattern canonical-name
                                              :available (sort (keys registered))})))))
+
+(s/def :skein.pattern-explain/name (s/and string? #(not (str/blank? %))))
+(s/def :skein.pattern-explain/fn (s/and string? #(not (str/blank? %))))
+(s/def :skein.pattern-explain/input-spec (s/and string? #(not (str/blank? %))))
+(s/def :skein.pattern-explain/contract map?)
+(s/def :skein.pattern-explain/template
+  (s/or :placeholder string?
+        :object (s/map-of string? :skein.pattern-explain/template)
+        :array (s/coll-of :skein.pattern-explain/template :kind vector?)))
+(s/def :skein.pattern-explain/spec-forms vector?)
+(s/def :skein.pattern-explain/doc (s/and string? #(not (str/blank? %))))
+(s/def ::explain-result
+  (s/and (s/keys :req-un [:skein.pattern-explain/name
+                          :skein.pattern-explain/fn
+                          :skein.pattern-explain/input-spec
+                          :skein.pattern-explain/contract
+                          :skein.pattern-explain/template
+                          :skein.pattern-explain/spec-forms]
+                 :opt-un [:skein.pattern-explain/doc])
+         #(or (= #{:name :fn :input-spec :contract :template :spec-forms}
+                 (set (keys %)))
+              (= #{:name :fn :input-spec :contract :template :spec-forms :doc}
+                 (set (keys %))))))
 
 (defn explain
   "Describe a registered weave pattern and its input contract in `runtime`.
@@ -61,33 +101,48 @@
   `:contract` is the nested node tree, `:template` the copyable JSON skeleton,
   and `:spec-forms` the printed form graph, all resolved against the live spec
   registry with no predicate invoked. Missing patterns or unregistered input
-  specs fail loudly."
+  specs fail loudly. The returned map conforms to `::explain-result`."
   [runtime pattern-name]
   ;; :fn and :name are renamed on destructure: locals named `fn` and `name`
   ;; shadow the clojure.core vars.
   (let [{:keys [doc input-spec] fn-sym :fn registered-name :name}
         (resolve-pattern runtime pattern-name)]
-    (cond-> (merge {:name registered-name
-                    :fn (str fn-sym)
-                    :input-spec (str input-spec)}
-                   (pattern-input-contract input-spec))
-      doc (assoc :doc doc))))
+    (spool/require-valid!
+     ::explain-result
+     (cond-> (merge {:name registered-name
+                     :fn (str fn-sym)
+                     :input-spec (str input-spec)}
+                    (pattern-input-contract input-spec))
+       doc (assoc :doc doc))
+     "Pattern explanation is invalid")))
 
 (s/fdef explain
   :args (s/cat :runtime map?
                :pattern-name (s/or :keyword keyword? :symbol symbol? :string string?))
-  :ret map?)
+  :ret ::explain-result)
+
+(s/def :skein.pattern-weave/ref-key (s/and string? #(not (str/blank? %))))
+(s/def :skein.pattern-weave/refs
+  (s/map-of :skein.pattern-weave/ref-key ::specs/id))
+(s/def ::weave-result
+  (s/and (s/keys :req-un [::batch-api/created :skein.pattern-weave/refs])
+         #(every? #{:created :refs} (keys %))))
 
 (defn weave!
   "Validate pattern input, invoke the pattern, and apply its create-only batch.
 
   The four-argument arity threads an explicit request-context map for trusted
   callers (the connected-client tier); the three-argument arity derives its own
-  weave context."
+  weave context. A caller-supplied context conforms to
+  `::skein.core.specs/request-context`; the pre-commit hook context conforms to
+  `::skein.core.specs/batch-hook-context`."
   ([runtime pattern-name input]
    (weave! runtime pattern-name input (request-context :weave)))
   ([runtime pattern-name input req-ctx]
-   (let [{fn-sym :fn input-spec :input-spec} (resolve-pattern runtime pattern-name)
+   (let [req-ctx (spool/require-valid! ::specs/request-context
+                                       req-ctx
+                                       "Request context is invalid")
+         {fn-sym :fn input-spec :input-spec} (resolve-pattern runtime pattern-name)
          canonical-name (canonical-pattern-name pattern-name)]
      (validate-pattern-input! canonical-name input-spec input)
      (let [batch (with-spool-classloader
@@ -103,7 +158,10 @@
                                              :batch/apply-before-commit
                                              (weave-batch-context req-ctx canonical-name input
                                                                   normalized-payload result))
-                      result))]
+                      result))
+           weave-result (spool/require-valid! ::weave-result
+                                              (select-keys result [:created :refs])
+                                              "Pattern weave result is invalid")]
        ;; a weave is a create-only batch apply; without this event, event-driven
        ;; spools (agent-run, the subagent executor) never see pattern-created
        ;; strands until an unrelated mutation happens to trigger their next scan
@@ -112,7 +170,63 @@
                                          :pattern/name canonical-name
                                          :batch/refs (:refs result)
                                          :batch/created (:created result)))
-       (select-keys result [:created :refs])))))
+       weave-result))))
+
+(s/fdef weave!
+  :args (s/or :default (s/cat :runtime map?
+                              :pattern-name (s/or :keyword keyword?
+                                                  :symbol symbol?
+                                                  :string string?)
+                              :input map?)
+              :with-ctx (s/cat :runtime map?
+                               :pattern-name (s/or :keyword keyword?
+                                                   :symbol symbol?
+                                                   :string string?)
+                               :input map?
+                               :req-ctx ::specs/request-context))
+  :ret ::weave-result)
+
+(defn- pattern-registration-message
+  "Return a caller-facing diagnostic for an already-rejected registration."
+  [{:keys [name doc input-spec] fn-sym :fn}]
+  (cond
+    (not (s/valid? :skein.pattern/name name))
+    "Pattern name is invalid"
+    (not (s/valid? :skein.pattern/doc doc))
+    "Pattern doc must be a non-blank string"
+    (not (s/valid? :skein.pattern/fn fn-sym))
+    "Pattern function must be a fully qualified symbol"
+    (not (s/valid? :skein.pattern/input-spec input-spec))
+    "Pattern input spec must be a keyword or symbol"
+    :else "Pattern registration input is invalid"))
+
+(defn- require-pattern-registration!
+  "Validate the complete registration spec before deriving diagnostics."
+  [registration]
+  (try
+    (spool/require-valid! ::specs/pattern-registration
+                          registration
+                          "Pattern registration input is invalid")
+    (catch clojure.lang.ExceptionInfo error
+      (throw (ex-info (pattern-registration-message registration)
+                      (ex-data error)
+                      error)))))
+
+(defn- public-pattern-entry [entry]
+  (spool/require-valid! ::specs/pattern-entry
+                        entry
+                        "Pattern registry entry is invalid")
+  entry)
+
+(defn- validate-pattern-fn!
+  "Fail loudly unless fn-sym resolves to a callable value in `runtime`."
+  [runtime fn-sym]
+  (let [resolved (with-spool-classloader runtime #(requiring-resolve fn-sym))
+        value (if (var? resolved) @resolved resolved)]
+    (when-not (ifn? value)
+      (throw (ex-info "Pattern function must resolve to a callable value"
+                      {:fn fn-sym :resolved-class (str (class value))})))
+    fn-sym))
 
 ;; --- Registry entry construction ---
 
@@ -121,23 +235,17 @@
   ;; raw CLI string forms (trimmed, optional leading colon) as query lookups.
   (query/query-lookup-name pattern-name))
 
-(defn- validate-pattern-spec! [spec-name]
-  (when-not (or (keyword? spec-name) (symbol? spec-name))
-    (throw (ex-info "Pattern input spec must be a keyword or symbol" {:spec spec-name})))
-  spec-name)
-
-(defn- validate-pattern-doc! [doc]
-  (when-not (and (string? doc) (not (str/blank? doc)))
-    (throw (ex-info "Pattern doc must be a non-blank string" {:doc doc})))
-  doc)
-
 (defn- pattern-entry
   "Build a validated pattern registry entry; `doc` may be nil for a doc-less entry."
   [pattern-name doc fn-sym input-spec]
-  (cond-> {:name (canonical-pattern-name pattern-name)
-           :fn (validate-fn-symbol! "Pattern" fn-sym)
-           :input-spec (validate-pattern-spec! input-spec)}
-    doc (assoc :doc (validate-pattern-doc! doc))))
+  (let [entry (cond-> {:name (canonical-pattern-name pattern-name)
+                       :fn fn-sym
+                       :input-spec input-spec}
+                doc (assoc :doc doc))]
+    (spool/require-valid! ::specs/pattern-entry
+                          entry
+                          "Pattern registry entry is invalid")
+    entry))
 
 ;; --- Input contract introspection and caller guidance ---
 
@@ -199,9 +307,9 @@
 ;; --- Weave batch plumbing ---
 
 (defn- require-pattern-batch-vector! [batch]
-  (when-not (vector? batch)
-    (throw (ex-info "Pattern must return a batch strand vector" {:value batch})))
-  batch)
+  (spool/require-valid! ::specs/batch-input
+                        batch
+                        "Pattern batch is invalid"))
 
 (defn- normalize-weave-strand-attributes
   "Run the `:attributes/normalize` transform hooks over every strand in `batch`.
@@ -243,14 +351,17 @@
 (defn- weave-batch-context
   "Build the `:batch/apply-before-commit` hook context for a weave batch apply."
   [req-ctx pattern-name input payload result]
-  (merge req-ctx
-         {:mutation/operation :batch/apply
-          :batch/source :weave
-          :batch/payload payload
-          :batch/refs (:refs result)
-          :batch/created (:created result)
-          :batch/updated []
-          :batch/burned []
-          :batch/edge-ops (:edges result)
-          :pattern/name pattern-name
-          :pattern/input input}))
+  (let [context (merge req-ctx
+                       {:mutation/operation :batch/apply
+                        :batch/source :weave
+                        :batch/payload payload
+                        :batch/refs (:refs result)
+                        :batch/created (:created result)
+                        :batch/updated []
+                        :batch/burned []
+                        :batch/edge-ops (:edges result)
+                        :pattern/name pattern-name
+                        :pattern/input input})]
+    (spool/require-valid! ::specs/batch-hook-context
+                          context
+                          "Batch hook context is invalid")))

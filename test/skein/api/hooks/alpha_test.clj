@@ -7,8 +7,10 @@
   the data-first read shape, and that the hook registry is owner-partition
   backed so owner removal, same-layer collision, and authorized override behave
   end to end (TASK-Olr-002.DW2)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.test :refer [deftest is testing]]
             [skein.api.hooks.alpha :as hooks]
+            [skein.core.specs :as specs]
             [skein.core.weaver.access :as access]
             [skein.core.weaver.core-registry :as cr]
             [skein.test.alpha :as t])
@@ -25,10 +27,12 @@
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
     (let [rt (:runtime ctx)]
       (testing "registration returns the data-first entry without its fn value"
-        (is (= {:key :policy :types #{:payload/received} :fn hook-sym
-                :order 5 :metadata {:doc "policy"}}
-               (hooks/register-hook! rt :policy #{:payload/received} hook-sym
-                                     {:order 5 :doc "policy"}))))
+        (let [entry (hooks/register-hook! rt :policy #{:payload/received} hook-sym
+                                          {:order 5 :doc "policy"})]
+          (is (= {:key :policy :types #{:payload/received} :fn hook-sym
+                  :order 5 :metadata {:doc "policy"}}
+                 entry))
+          (is (s/valid? ::specs/hook-entry entry))))
       (testing "re-registering a key replaces its entry in place"
         (hooks/register-hook! rt :policy #{:strand/add-before-commit} hook-sym {:order 1})
         (is (= [{:key :policy :types #{:strand/add-before-commit} :fn hook-sym
@@ -54,7 +58,15 @@
                             (hooks/register-hook! rt :k #{:payload/received} 'unqualified)))
       (is (thrown-with-msg? ExceptionInfo #":order must be an integer"
                             (hooks/register-hook! rt :k #{:payload/received} hook-sym
-                                                  {:order :high}))))))
+                                                  {:order :high})))
+      (is (thrown-with-msg? ExceptionInfo #"Hook opts must be a map"
+                            (hooks/register-hook! rt :k #{:payload/received} hook-sym nil)))
+      (is (s/valid? ::specs/hook-registration
+                    {:key :k :types #{:payload/received} :fn hook-sym
+                     :opts {:order 1}}))
+      (is (not (s/valid? ::specs/hook-registration
+                         {:key :k :types #{:payload/received} :fn hook-sym
+                          :opts {:order :high}}))))))
 
 (deftest hook-provenance-reports-owners-and-shadowing-without-fn-values
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
@@ -67,6 +79,7 @@
       (cr/replace-owner! store :top
                          {:layer :workspace :entries {:h (entry :high)} :overrides #{:h}})
       (let [{:keys [effective shadowed contenders]} (get (hooks/hook-provenance rt) :h)]
+        (is (s/valid? ::specs/hook-provenance (hooks/hook-provenance rt)))
         (is (= :top (:owner effective)))
         (is (= [:base] (mapv :owner shadowed))
             "the shadowed lower-layer owner is reported as data")
@@ -74,6 +87,26 @@
             "no contender leaks the resolved function value")
         (is (= hook-sym (get-in effective [:value :fn]))
             "the hook symbol stays as data")))))
+
+(deftest public-hook-readers-validate-planted-entries
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (let [rt (:runtime ctx)
+          store (access/hook-store rt)]
+      (cr/replace-owner! store :malformed
+                         {:layer :workspace
+                          :entries {:bad {:key :bad}}
+                          :overrides #{}})
+      (is (thrown-with-msg? ExceptionInfo #"Hook registry entry is invalid"
+                            (hooks/hooks rt)))
+      (is (thrown-with-msg? ExceptionInfo #"Hook registry entry is invalid"
+                            (hooks/hook-provenance rt))))))
+
+(deftest public-hook-provenance-validates-its-envelope
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (let [rt (:runtime ctx)]
+      (with-redefs [cr/explain (constantly {:bad {}})]
+        (is (thrown-with-msg? ExceptionInfo #"Hook provenance is invalid"
+                              (hooks/hook-provenance rt)))))))
 
 (deftest hook-registry-is-owner-partition-backed
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]

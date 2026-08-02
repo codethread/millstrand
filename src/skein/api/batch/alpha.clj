@@ -10,6 +10,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [next.jdbc :as jdbc]
+            [skein.api.spool.alpha :as spool]
             [skein.core.db :as db]
             [skein.core.specs :as specs]
             [skein.core.weaver.access :as access]
@@ -73,11 +74,16 @@
   consults `::normalized-payload` on that authority's output, and `::result` on
   the transactional engine's output before the pre-commit hook, events, and
   return. Those two seam checks only catch impossible drift and never weaken the
-  authority's rejections."
+  authority's rejections. A caller-supplied `req-ctx` conforms to
+  `::skein.core.specs/request-context`; the pre-commit hook context conforms to
+  `::skein.core.specs/batch-hook-context`."
   ([runtime payload]
    (apply! runtime payload (lifecycle/request-context :apply-batch)))
   ([runtime payload req-ctx]
-   (let [submitted-payload payload
+   (let [req-ctx (spool/require-valid! ::specs/request-context
+                                       req-ctx
+                                       "Request context is invalid")
+         submitted-payload payload
          normalized-payload (require-normalized-payload!
                              (normalize-strand-attributes
                               runtime req-ctx (db/normalize-batch-payload! payload)))
@@ -220,7 +226,8 @@
 
 (s/fdef apply!
   :args (s/or :default (s/cat :runtime ::runtime :payload map?)
-              :with-ctx (s/cat :runtime ::runtime :payload map? :req-ctx map?))
+              :with-ctx (s/cat :runtime ::runtime :payload map?
+                               :req-ctx ::specs/request-context))
   :ret ::result)
 
 ;; --- seam validation ---------------------------------------------------------
@@ -276,15 +283,18 @@
 ;; --- validation-gate context -------------------------------------------------
 
 (defn- batch-apply-context [req-ctx payload result]
-  (merge req-ctx
-         {:mutation/operation :batch/apply
-          :batch/source :apply
-          :batch/payload payload
-          :batch/refs (:refs result)
-          :batch/created (:created result)
-          :batch/updated (:updated result)
-          :batch/burned (:burned result)
-          :batch/edge-ops (:edges result)}))
+  (let [context (merge req-ctx
+                       {:mutation/operation :batch/apply
+                        :batch/source :apply
+                        :batch/payload payload
+                        :batch/refs (:refs result)
+                        :batch/created (:created result)
+                        :batch/updated (:updated result)
+                        :batch/burned (:burned result)
+                        :batch/edge-ops (:edges result)})]
+    (spool/require-valid! ::specs/batch-hook-context
+                          context
+                          "Batch hook context is invalid")))
 
 ;; --- event fanout ------------------------------------------------------------
 

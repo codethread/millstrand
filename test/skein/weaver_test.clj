@@ -1355,6 +1355,42 @@
             (is (= {:reason "keep"} (get-in context [:batch/edge-ops 0 :before :attributes]))
                 "the hook saw the decoded removed-edge pre-image")))))))
 
+(deftest weaver-declaration-published-hook-resolves-fn-at-dispatch
+  ;; SPEC-004.C76/C77: hook entries are pure data carrying only the `:fn`
+  ;; symbol, however they arrived — module publication stores declarations
+  ;; verbatim. Dispatch must resolve the symbol at the `:hook/dispatch-start`
+  ;; binding moment rather than invoking a captured callable, and an
+  ;; unresolvable symbol must surface through the standard `hook/failed`
+  ;; wrapper.
+  (with-runtime
+    (fn [rt _]
+      (weaver/init rt)
+      (reset! hook-contexts [])
+      (core-registry/put-entry! (:hook-store rt) :declared-module :declared-capture
+                                {:key :declared-capture
+                                 :types #{:strand/add-before-commit}
+                                 :fn 'skein.weaver-test/capture-hook
+                                 :order 0
+                                 :metadata {}})
+      (weaver/add! rt {:title "Declared hook target"})
+      (is (= 1 (count @hook-contexts))
+          "the declaration-only hook fired via its resolved :fn symbol")
+      (is (= :declared-capture (:hook/key (first @hook-contexts))))
+      (core-registry/remove-entry! (:hook-store rt) :declared-module :declared-capture)
+      (core-registry/put-entry! (:hook-store rt) :declared-module :declared-broken
+                                {:key :declared-broken
+                                 :types #{:strand/add-before-commit}
+                                 :fn 'skein.weaver-test-missing/absent-hook
+                                 :order 0
+                                 :metadata {}})
+      (try
+        (weaver/add! rt {:title "Unresolvable hook target"})
+        (is false "expected the unresolvable hook symbol to fail the mutation")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= "hook/failed" (:code (ex-data e))))
+          (is (= :declared-broken (:hook/key (ex-data e))))))
+      (core-registry/remove-entry! (:hook-store rt) :declared-module :declared-broken))))
+
 (deftest weaver-apply-batch-hooks-normalize-context-and-reject-atomically
   (with-runtime
     (fn [rt _]
@@ -1461,7 +1497,8 @@
                entry))
         (is (= [entry] (hooks/hooks rt)))
         (is (not (contains? (first (hooks/hooks rt)) :fn-value)))
-        (is (ifn? (:fn-value (get (access/hook-registry rt) :capture))))
+        (is (= entry (get (access/hook-registry rt) :capture))
+            "the stored entry is pure data; the callable binds at dispatch")
         (let [replacement (hooks/register-hook! rt :capture #{:strand/add-before-commit} 'skein.weaver-test/capture-hook {:order 10 :doc "Replaced"})
               early (hooks/register-hook! rt "early" #{:payload/received} 'skein.weaver-test/capture-hook {:order -1})
               peer-a (hooks/register-hook! rt :a #{:payload/received} 'skein.weaver-test/capture-hook {})
@@ -3212,13 +3249,23 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Pattern doc"
                             (patterns/register-pattern! rt 'bad-doc "" 'skein.weaver-test/test-pattern ::pattern-input)))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"callable"
+                            (patterns/register-pattern! rt 'bad-fn
+                                                        'skein.weaver-test/not-callable-hook
+                                                        ::pattern-input)))
       (let [explained (patterns/explain rt :dev-task)]
+        (is (s/valid? ::patterns/explain-result explained))
         (is (str/includes? (get-in explained [:spec-forms 0 "form"])
                            "clojure.spec.alpha/keys"))
         (is (= "map" (get-in explained [:contract "kind"])))
         (is (= ["title"] (mapv #(get % "key")
                                (get-in explained [:contract "required"]))))
         (is (contains? (:template explained) "title")))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Request context is invalid"
+                            (patterns/weave! rt :dev-task {:title "Invalid context"}
+                                             {:request/source :nrepl})))
       (reset! delivered-events [])
       (events/register-handler! rt :capture-weave #{:batch/applied}
                                 'skein.weaver-test/capture-event {})

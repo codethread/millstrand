@@ -115,12 +115,32 @@
       (throw (ex-info "land run not found" {:feature feature}))))
 
 (defn- require-sane-merge-locks!
-  "Return active locks, refusing a corrupt multiple-lock state."
+  "Return active locks, refusing corrupt ownership metadata or duplicates."
   []
-  (let [locks (active-merge-locks)]
-    (when (> (count locks) 1)
+  (let [locks (active-merge-locks)
+        details (mapv #(select-keys
+                        (assoc (select-keys % [:id :owner])
+                               :land/run-id (attr-value % :land/run-id))
+                        [:id :owner :land/run-id])
+                      locks)
+        malformed (filterv #(not (s/valid? ::run-id (:land/run-id %))) details)]
+    (cond
+      (seq malformed)
+      (throw (ex-info "active merge lock has invalid ownership metadata"
+                      {:code "land/merge-lock-corrupt"
+                       :locks details
+                       :invalid-locks malformed
+                       :recovery (format-alpha/reflow
+                                  "|Repair or close the malformed active merge lock,
+                                   |then retry the land operation.")}))
+
+      (> (count locks) 1)
       (throw (ex-info "multiple active merge locks found; inspect and repair manually"
-                      {:locks (mapv :id locks)})))
+                      {:code "land/multiple-merge-locks"
+                       :locks details
+                       :recovery (format-alpha/reflow
+                                  "|Close the corrupt duplicate lock(s), then retry the
+                                   |land operation.")})))
     locks))
 
 (defn- require-owned-merge-lock!
@@ -135,6 +155,82 @@
                        :expected-run-id feature})))
     (throw (ex-info "land cleanup requires its active merge lock"
                     {:land/run-id feature}))))
+
+(defn- signoff-approval-row?
+  "Return true when an updated batch row closes the land sign-off as approved."
+  [{:keys [after]}]
+  (and (= "closed" (:state after))
+       (= "land-signed-off" (attr-value after :workflow/decision-point))
+       (= "approved" (attr-value after :workflow/outcome))))
+
+(defn- require-poured-run-id!
+  "Return the sole run-id named by updated workflow root rows.
+
+  An approved sign-off updates an existing checkpoint, so its run attribution
+  belongs to the updated root row in `:batch/updated`, not only to
+  continuation roots in `:batch/created`. Multiple run ids or root rows
+  without a usable run-id make the batch ambiguous and stop the mutation rather
+  than letting a first-match projection choose an owner. Every updated root
+  row is checked before the distinct-run-id count, so a valid row cannot mask
+  malformed attribution."
+  [updated-rows]
+  (let [root-details (->> updated-rows
+                          (filter #(= "root" (attr-value (:after %) :workflow/role)))
+                          (mapv (fn [{:keys [after]}]
+                                  (assoc (select-keys after [:id])
+                                         :workflow/run-id (attr-value after :workflow/run-id)))))
+        malformed (filterv #(not (s/valid? ::run-id (:workflow/run-id %)))
+                           root-details)
+        run-ids (->> root-details
+                     (map :workflow/run-id)
+                     distinct
+                     vec)
+        run-id (first run-ids)]
+    (when (or (seq malformed) (not= 1 (count run-ids)))
+      (throw (ex-info (format-alpha/reflow
+                      "|Approved land sign-off batches must update workflow rows
+                       |with usable run-ids for exactly one distinct run.")
+                      {:code "land/signoff-run-ambiguous"
+                       :roots root-details
+                       :recovery (format-alpha/reflow
+                                  "|Inspect the updated sign-off rows and retry after
+                                   |restoring one usable :workflow/run-id.")})))
+    run-id))
+
+(skein/defhook require-merge-lock-at-signoff-approval
+  "Veto committing an approved land sign-off that holds no merge lock.
+
+  `strand land choose <run> approved` acquires the singleton merge lock and a
+  merge-train slot before recording the approval, so at commit time the lock
+  strand already names the run. A generic `strand workflow next` or
+  `strand workflow choose` approval skips that acquisition; without this gate the
+  run walks the whole land-merge continuation only to be refused at
+  terminal cleanup. Rejecting the batch here stops it at sign-off, before
+  anything merges. The sign-off's `revise` and `abort` choices and every
+  ordinary land step stay drivable through the generic verbs. It fails with
+  `land/signoff-run-ambiguous` for an unattributable approval,
+  `land/merge-lock-corrupt` for malformed lock ownership metadata,
+  `land/multiple-merge-locks` for a malformed lock set, and
+  `land/signoff-without-merge-lock` when the approved run holds no matching
+  lock."
+  {:types #{:batch/apply-before-commit}}
+  [ctx]
+  (let [approval-rows (filterv signoff-approval-row? (:batch/updated ctx))]
+    (doseq [row approval-rows]
+      (let [run-id (require-poured-run-id! (:batch/updated ctx))
+            locks (require-sane-merge-locks!)]
+        (when-not (some #(= run-id (attr-value % :land/run-id)) locks)
+          (throw (ex-info
+                  (format-alpha/reflow
+                   (format
+                    "|land sign-off approval requires the merge lock this run does
+                     |not hold; approve with `strand land choose %s approved`,
+                     |which acquires it — never with generic workflow verbs"
+                    run-id))
+                  {:code "land/signoff-without-merge-lock"
+                   :land/run-id run-id
+                   :checkpoint (:id row)}))))))
+  nil)
 
 (defn- all-queue-entries
   "Return every merge-queue entry ever created, in any state."
@@ -575,7 +671,11 @@
                 :flags {:pr-number {:type :int
                                     :doc "Positive PR number, required only at push-draft-pr."}}
                 :positionals [{:name :run-id :required? true :doc "Land run id."}]}
-    "choose" {:doc "Choose approved or abort sign-off with lock and card rollback."
+    "choose" {:doc (format-alpha/reflow
+                    "|Choose an approved or aborted sign-off with lock and card
+                     |rollback. For approved sign-off, use `strand land choose
+                     |<run-id> approved`; generic workflow approval is rejected."
+                    )
               :hook-class :mutating :deadline-class :standard
               :annotations
               {:notes ["The choice positional is a closed enum: approved or abort."]}
@@ -737,4 +837,3 @@
                              :allowed ["approved" "abort"]})))))
 
       "break-lock" (break-merge-lock! reason))))
-

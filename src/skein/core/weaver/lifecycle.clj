@@ -5,7 +5,9 @@
   (including the socket `:payload/received` gate), and threads attribute values
   through transform hooks. Internal tier shared by the strand-lifecycle and
   batch/weave APIs; registration of hooks stays in the API layer."
-  (:require [skein.core.db :as db]
+  (:require [clojure.spec.alpha :as s]
+            [skein.core.db :as db]
+            [skein.core.specs :as specs]
             [skein.core.weaver.access :as access])
   (:import [java.time Instant]
            [java.util UUID]))
@@ -55,9 +57,24 @@
          :hook/key (:key hook)
          :hook/fn (:fn hook)))
 
+(defn- hook-callable
+  "Resolve hook's `:fn` symbol under the runtime's spool classloader.
+
+  Every hook binds at its declared `:hook/dispatch-start` moment: direct
+  registration validated the symbol eagerly, module publication stored
+  the declaration verbatim, and both dispatch through the symbol so a
+  synced-root reload's fresh classloader is honoured rather than a stale
+  captured callable. An unresolvable symbol fails loudly and surfaces
+  through the standard `hook/failed` wrapper."
+  [runtime {fn-sym :fn}]
+  (or (access/with-spool-classloader runtime #(requiring-resolve fn-sym))
+      (throw (ex-info "Hook function symbol cannot be resolved"
+                      {:code "hook/unresolvable" :hook/fn fn-sym}))))
+
 (defn- invoke-hook! [runtime hook-type hook ctx]
   (try
-    (access/with-spool-classloader runtime #((:fn-value hook) ctx))
+    (let [callable (hook-callable runtime hook)]
+      (access/with-spool-classloader runtime #(callable ctx)))
     (catch Throwable t
       (throw (ex-info "Lifecycle hook failed"
                       (hook-failure-data hook-type hook t)
@@ -76,7 +93,7 @@
   (run-validation-hooks! runtime :payload/received ctx))
 
 (defn- require-transform-wrapper! [hook-type hook result]
-  (when-not (and (map? result) (contains? result :hook/value))
+  (when-not (s/valid? ::specs/hook-transform-return result)
     (throw (ex-info "Transform hook must return {:hook/value replacement}"
                     {:code "hook/invalid-return"
                      :hook/type hook-type
@@ -96,7 +113,8 @@
       (require-transform-wrapper!
        hook-type
        hook
-       (access/with-spool-classloader runtime #((:fn-value hook) ctx)))))
+       (let [callable (hook-callable runtime hook)]
+         (access/with-spool-classloader runtime #(callable ctx))))))
     (catch Throwable t
       (throw (ex-info "Lifecycle hook failed"
                       (hook-failure-data hook-type hook t)

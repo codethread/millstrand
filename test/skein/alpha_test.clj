@@ -9,7 +9,10 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is use-fixtures]]
             [skein.api.weaver.alpha :as weaver]
+            [skein.core.specs :as specs]
+            [skein.core.weaver.access :as access]
             [skein.core.weaver.config :as weaver-config]
+            [skein.core.weaver.core-registry :as cr]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.core.db-test :as db-test]))
 (defn test-world [config-dir]
@@ -136,6 +139,8 @@
       (patterns/register-pattern! rt 'name-forms 'skein.alpha-test/name-forms-pattern
                                   ::name-forms-pattern-input)
       (let [entry (patterns/resolve-pattern rt 'name-forms)]
+        (is (not (contains? entry :doc)))
+        (is (s/valid? ::specs/pattern-entry entry))
         (is (= entry (patterns/resolve-pattern rt "name-forms"))
             "a raw CLI string resolves the same registered entry")
         (is (= entry (patterns/resolve-pattern rt " :name-forms "))
@@ -148,6 +153,20 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Pattern not found"
                             (patterns/resolve-pattern rt "absent"))
           "an unknown name still fails with the pattern-not-found contract"))))
+
+(deftest public-pattern-readers-validate-planted-entries
+  (with-runtime
+    (fn [rt]
+      (cr/replace-owner! (access/pattern-store rt) :malformed
+                         {:layer :workspace
+                          :entries {"bad" {:name "bad"}}
+                          :overrides #{}})
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Pattern registry entry is invalid"
+                            (patterns/patterns rt)))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Pattern registry entry is invalid"
+                            (patterns/resolve-pattern rt :bad))))))
 
 (deftest conjoin-where-overlays-an-extra-clause
   (let [bare [:= [:attr :owner] "agent"]

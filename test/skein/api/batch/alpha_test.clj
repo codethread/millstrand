@@ -11,6 +11,7 @@
             [skein.api.events.alpha :as events]
             [skein.api.hooks.alpha :as hooks]
             [skein.core.db :as db]
+            [skein.core.specs :as specs]
             [skein.core.weaver.dispatch :as dispatch]
             [skein.test.alpha :as t]))
 
@@ -35,6 +36,39 @@
   [event]
   (swap! captured-batch-events conj event))
 
+(deftest batch-hook-context-spec-discriminates-its-source
+  (let [common {:mutation/operation :batch/apply
+                :batch/payload {}
+                :batch/refs {}
+                :batch/created []
+                :batch/updated []
+                :batch/burned []
+                :batch/edge-ops []}
+        apply-context (assoc common :batch/source :apply)
+        weave-context (assoc common
+                             :batch/source :weave
+                             :pattern/name "demo"
+                             :pattern/input {})]
+    (is (s/valid? ::specs/batch-hook-context apply-context))
+    (is (s/valid? ::specs/batch-hook-context weave-context))
+    (is (not (s/valid? ::specs/batch-hook-context
+                       (dissoc weave-context :pattern/name))))
+    (is (not (s/valid? ::specs/batch-hook-context
+                       (assoc apply-context :pattern/name "unexpected"))))
+    (is (not (s/valid? ::specs/batch-hook-context
+                       (assoc apply-context :batch/created [{:id "malformed"}]))))
+    (is (not (s/valid? ::specs/batch-hook-context
+                       (assoc apply-context
+                              :batch/edge-ops [{:op :remove
+                                                :from :a
+                                                :to :b
+                                                :type "depends-on"
+                                                :before nil
+                                                :after nil}]))))
+    (is (not (s/valid? ::specs/batch-hook-context
+                       (assoc apply-context
+                              :batch/payload {:strands [{:ref :a :unexpected true}]}))))))
+
 (deftest apply-threads-a-caller-request-context-into-the-validation-gate
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
     (let [rt (:runtime ctx)]
@@ -51,7 +85,16 @@
         (is (= :apply-batch (:request/operation context)))
         (is (= :batch/apply (:mutation/operation context)))
         (is (= :apply (:batch/source context)))
-        (is (= payload (:batch/payload context)))))))
+        (is (= payload (:batch/payload context)))
+        (is (s/valid? ::specs/batch-hook-context context))))))
+
+(deftest apply-rejects-an-invalid-caller-request-context
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (let [rt (:runtime ctx)]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Request context is invalid"
+                            (batch/apply! rt {:strands []} {:request/source :nrepl})))
+      (is (not (s/valid? ::specs/request-context {:request/source :nrepl}))))))
 
 (deftest apply-rejects-malformed-payloads-loudly
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]

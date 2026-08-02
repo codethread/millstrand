@@ -27,3 +27,8 @@
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Attribute archive result is invalid"
                         (#'weaver/require-archive-result!
                          {:strand-id "abc123" :archived? "true" :changed 1 :keys ["owner"]}))))
+
+(deftest transform-hook-return-spec-pins-wrapper-shape
+  (is (s/valid? ::specs/hook-transform-return {:hook/value {}}))
+  (is (not (s/valid? ::specs/hook-transform-return nil)))
+  (is (not (s/valid? ::specs/hook-transform-return {:value {}}))))
