@@ -51,7 +51,7 @@ Throw an error for a request the current state refuses, and say how to get
 
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L141-L157">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L142-L158">Source</a></sub></p>
 
 ## <a name="skein.api.errors.alpha/invalid-argument!">`invalid-argument!`</a>
 ``` clojure
@@ -65,9 +65,9 @@ Throw an error rejecting a value, saying both what was rejected and what
 
   `details` must carry `:token`, the offending value, and at least one of
   `:expected` (free-form prose or a value, rendered as an ordinary detail) or
-  `:available` (a collection of names, rendered as its own section). That pair
-  is the whole point: a rejection that does not say what is valid sends the
-  reader back to the docs. `:try` and `:code` behave as they do for
+  `:available` (a non-empty collection of names, rendered as its own section).
+  That pair is the whole point: a rejection that does not say what is valid
+  sends the reader back to the docs. `:try` and `:code` behave as they do for
   `not-found!`.
 
   `:token` here is held to no shape at all — a rejected argument is as often a
@@ -78,7 +78,7 @@ Throw an error rejecting a value, saying both what was rejected and what
 
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L108-L135">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L109-L136">Source</a></sub></p>
 
 ## <a name="skein.api.errors.alpha/not-found!">`not-found!`</a>
 ``` clojure
@@ -92,10 +92,11 @@ Throw a not-found error naming what was looked for and, where the set is
 
   `details` must carry `:token`, the name that was not found — always known at
   the throw site, and the value pretty mode's did-you-mean ranks the list
-  against. Supply `:available` (a collection of names) whenever the valid set
-  can be enumerated: the CLI prints it as its own section, so the reader sees
-  the answer without reaching for help. `:try` adds a trailing `try: <command>`
-  line in pretty mode and rides along as an ordinary detail elsewhere.
+  against. Supply `:available` (a non-empty collection of names) whenever the
+  valid set can be enumerated: the CLI prints it as its own section, so the
+  reader sees the answer without reaching for help. `:try` adds a trailing
+  `try: <command>` line in pretty mode and rides along as an ordinary detail
+  elsewhere.
 
   Leave `:code` out unless the surface has a consumer-facing name of its own.
   Codes are free-form and non-contract, nothing switches on them, and an
@@ -105,7 +106,7 @@ Throw a not-found error naming what was looked for and, where the set is
 
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L77-L102">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L77-L103">Source</a></sub></p>
 
 ## <a name="skein.api.errors.alpha/remedy">`remedy`</a>
 ``` clojure
@@ -121,4 +122,4 @@ Return `details` with `command` stamped under `:try`.
   because a `:try` the renderer cannot read drops back into the ordinary
   detail rows rather than announcing itself, and on a `details` that is not a
   map, which `assoc` would otherwise turn into one.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L163-L177">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L164-L178">Source</a></sub></p>

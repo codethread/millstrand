@@ -61,9 +61,9 @@
                :why "the CLI lists only a non-empty collection of names"}
    :try {:spec ::try
          :why "pretty mode's try: line reads only a non-blank string"}
-   :canonical-query {:spec ::canonical-query
-                     :why (str "plain mode appends only a name, and the weaver keys"
-                               " its query/not-found inference on this key")}})
+   :canonical-query
+   {:spec ::canonical-query
+    :why "plain mode appends only a name, and query/not-found is keyed on it"}})
 
 (def ^:private lookup-token
   "`not-found!`'s extra shape: what you looked up is a name, held to the same
@@ -80,10 +80,11 @@
 
   `details` must carry `:token`, the name that was not found — always known at
   the throw site, and the value pretty mode's did-you-mean ranks the list
-  against. Supply `:available` (a collection of names) whenever the valid set
-  can be enumerated: the CLI prints it as its own section, so the reader sees
-  the answer without reaching for help. `:try` adds a trailing `try: <command>`
-  line in pretty mode and rides along as an ordinary detail elsewhere.
+  against. Supply `:available` (a non-empty collection of names) whenever the
+  valid set can be enumerated: the CLI prints it as its own section, so the
+  reader sees the answer without reaching for help. `:try` adds a trailing
+  `try: <command>` line in pretty mode and rides along as an ordinary detail
+  elsewhere.
 
   Leave `:code` out unless the surface has a consumer-facing name of its own.
   Codes are free-form and non-contract, nothing switches on them, and an
@@ -111,9 +112,9 @@
 
   `details` must carry `:token`, the offending value, and at least one of
   `:expected` (free-form prose or a value, rendered as an ordinary detail) or
-  `:available` (a collection of names, rendered as its own section). That pair
-  is the whole point: a rejection that does not say what is valid sends the
-  reader back to the docs. `:try` and `:code` behave as they do for
+  `:available` (a non-empty collection of names, rendered as its own section).
+  That pair is the whole point: a rejection that does not say what is valid
+  sends the reader back to the docs. `:try` and `:code` behave as they do for
   `not-found!`.
 
   `:token` here is held to no shape at all — a rejected argument is as often a

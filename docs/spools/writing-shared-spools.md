@@ -273,12 +273,7 @@ Require it from spool code when you need fail-loud validation, attribute-key nor
 (require '[skein.api.spool.alpha :as spool])
 ```
 
-- `(fail! message data)` and `(fail! message data cause)` throw `ex-info` with
-  the supplied message, data map, and optional cause. Use this for TEN-003
-  boundary failures so callers receive structured context. When the failure
-  will reach a person at a terminal, reach for a factory in
-  [`skein.api.errors.alpha`](#skeinapierrorsalpha) instead: they funnel through
-  this same `fail!` and stamp the keys the CLI renders.
+- `(fail! message data)` and `(fail! message data cause)` throw `ex-info` with the supplied message, data map, and optional cause. Use this for TEN-003 boundary failures so callers receive structured context. When the failure will reach a person at a terminal, reach for a factory in [`skein.api.errors.alpha`](#skeinapierrorsalpha) instead: they funnel through this same `fail!` and stamp the keys the CLI renders.
 - `(reject-unknown-keys! context allowed m)` returns `m` after checking that all
   its keys are in the `allowed` set. Unknown keys throw with `:unknown` and
   `:allowed` data; use this on option maps rather than ignoring typos.
@@ -309,13 +304,13 @@ Require it when a failure will be read by a person at a terminal rather than onl
 
 Whatever you throw becomes the error frame the CLI prints. `:code` becomes the frame's code; the rest of the `ex-data` map becomes its details. Three detail keys have a rendering of their own, and everything else is appended as JSON:
 
-- `:available` is a collection of names. Plain mode folds them into the message as `(available: add, list)`; pretty mode gives them their own section and ranks them against the offending token for a `did you mean:` list. Only strings, keywords, and symbols count as names, because those are the values that reach the client as text. Anything else is dropped item by item, leaving the reader no list at all.
+- `:available` is a non-empty collection of names. Plain mode folds them into the message as `(available: add, list)`; pretty mode gives them their own section and ranks them against the offending token for a `did you mean:` list. Only strings, keywords, and symbols count as names, because those are the values that reach the client as text. Anything else is dropped item by item, leaving the reader no list at all.
 - `:try` is a command that resolves the failure, printed as a trailing `try: <command>` line in pretty mode. It must be a non-blank string; plain and json modes keep it as an ordinary detail.
 - `:canonical-query` is the query name, appended to the plain-mode message. It must be a name too. Paired with `:available` it also tells the weaver to infer `query/not-found` (SPEC-004.C36b).
 
 The factories name those keys, check their shapes where you throw, and insist on the ones that make each kind of failure worth reading:
 
-- `(not-found! message details)` needs `:token`, the name that was not found, held to the same grammar as the names it will be ranked against. Add `:available` whenever the valid set can be listed.
+- `(not-found! message details)` needs `:token`, the name that was not found, held to the same grammar as the names it will be ranked against. Add `:available`, a non-empty collection of names, whenever the valid set can be listed.
 - `(invalid-argument! message details)` needs `:token`, the rejected value, plus `:expected` or `:available` so the reader learns what would have been accepted. Here `:token` is held to no shape: a rejected argument is as often a number, a map, or `nil` as a name, though only a name can feed did-you-mean.
 - `(conflict! message details)` needs `:try`. A conflict the reader cannot act on is the shape the factory exists to stop shipping.
 - `(remedy details command)` stamps `:try` onto any details map, for an error thrown without a factory.
