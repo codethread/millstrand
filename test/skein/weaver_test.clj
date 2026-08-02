@@ -1355,6 +1355,42 @@
             (is (= {:reason "keep"} (get-in context [:batch/edge-ops 0 :before :attributes]))
                 "the hook saw the decoded removed-edge pre-image")))))))
 
+(deftest weaver-declaration-published-hook-resolves-fn-at-dispatch
+  ;; SPEC-004.C76/C77: module publication stores a hook declaration whose
+  ;; callable is only the `:fn` symbol — `:fn-value` is captured solely by
+  ;; direct `register-hook!`. Dispatch must resolve the symbol at its
+  ;; declared `:hook/dispatch-start` binding moment rather than invoking a
+  ;; nil callable, and an unresolvable symbol must surface through the
+  ;; standard `hook/failed` wrapper.
+  (with-runtime
+    (fn [rt _]
+      (weaver/init rt)
+      (reset! hook-contexts [])
+      (core-registry/put-entry! (:hook-store rt) :declared-module :declared-capture
+                                {:key :declared-capture
+                                 :types #{:strand/add-before-commit}
+                                 :fn 'skein.weaver-test/capture-hook
+                                 :order 0
+                                 :metadata {}})
+      (weaver/add! rt {:title "Declared hook target"})
+      (is (= 1 (count @hook-contexts))
+          "the declaration-only hook fired via its resolved :fn symbol")
+      (is (= :declared-capture (:hook/key (first @hook-contexts))))
+      (core-registry/remove-entry! (:hook-store rt) :declared-module :declared-capture)
+      (core-registry/put-entry! (:hook-store rt) :declared-module :declared-broken
+                                {:key :declared-broken
+                                 :types #{:strand/add-before-commit}
+                                 :fn 'skein.weaver-test-missing/absent-hook
+                                 :order 0
+                                 :metadata {}})
+      (try
+        (weaver/add! rt {:title "Unresolvable hook target"})
+        (is false "expected the unresolvable hook symbol to fail the mutation")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= "hook/failed" (:code (ex-data e))))
+          (is (= :declared-broken (:hook/key (ex-data e))))))
+      (core-registry/remove-entry! (:hook-store rt) :declared-module :declared-broken))))
+
 (deftest weaver-apply-batch-hooks-normalize-context-and-reject-atomically
   (with-runtime
     (fn [rt _]
