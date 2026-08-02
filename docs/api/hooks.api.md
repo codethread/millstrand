@@ -26,7 +26,7 @@ Return owner/provenance diagnostics for `runtime`'s lifecycle hook registry.
   `:layer`, and `:override?`/`:effective?` flags, and its `:value` hook entry
   has any directly planted `:fn-value` stripped, so no function value or
   internal handle leaves the registry (DELTA-OlrDrt-001.CC9).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L73-L82">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L74-L83">Source</a></sub></p>
 
 ## <a name="skein.api.hooks.alpha/hooks">`hooks`</a>
 ``` clojure
@@ -39,8 +39,9 @@ Return data-first lifecycle hook registry entries in execution order.
   Entries sort by `:order`, then printed key for a deterministic tie-break.
   Entries are data — the callable binds at dispatch from the `:fn` symbol —
   and any directly planted `:fn-value` is stripped so no function value
-  leaves the registry.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L61-L71">Source</a></sub></p>
+  leaves the registry. Each returned entry conforms to
+  `::skein.core.specs/hook-entry`.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/hooks/alpha.clj#L61-L72">Source</a></sub></p>
 
 ## <a name="skein.api.hooks.alpha/register-hook!">`register-hook!`</a>
 ``` clojure

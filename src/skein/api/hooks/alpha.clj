@@ -64,7 +64,8 @@
   Entries sort by `:order`, then printed key for a deterministic tie-break.
   Entries are data — the callable binds at dispatch from the `:fn` symbol —
   and any directly planted `:fn-value` is stripped so no function value
-  leaves the registry."
+  leaves the registry. Each returned entry conforms to
+  `::skein.core.specs/hook-entry`."
   [runtime]
   (mapv #(dissoc % :fn-value)
         (sort-by (juxt :order (comp pr-str :key))

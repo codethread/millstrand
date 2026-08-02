@@ -46,7 +46,9 @@
      entry)))
 
 (defn patterns
-  "Return registered weave pattern metadata from `runtime`, ordered by name."
+  "Return registered weave pattern metadata from `runtime`, ordered by name.
+
+  Each returned entry conforms to `::skein.core.specs/pattern-entry`."
   [runtime]
   (mapv val (sort-by key (pattern-registry runtime))))
 
