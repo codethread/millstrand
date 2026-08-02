@@ -143,7 +143,7 @@
   "Build a validated pattern registry entry; `doc` may be nil for a doc-less entry."
   [pattern-name doc fn-sym input-spec]
   (let [entry {:name (canonical-pattern-name pattern-name)
-               :doc (if (nil? doc) nil (validate-pattern-doc! doc))
+               :doc (when-not (nil? doc) (validate-pattern-doc! doc))
                :fn (validate-fn-symbol! "Pattern" fn-sym)
                :input-spec (validate-pattern-spec! input-spec)}]
     (spool/require-valid! ::specs/pattern-entry
