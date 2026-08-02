@@ -13,6 +13,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.current.alpha :as current]
+            [skein.api.format.alpha :as format-alpha]
             [skein.api.lifecycle.alpha :as lifecycle]
             [ct.spools.devflow :as devflow]
             [skein.spools.workflow :as workflow]))
@@ -43,11 +44,11 @@
                    :attributes {"workflow/artifact" "kanban cards"
                                 "devflow/guide" "decompose"
                                 "workflow/instruction"
-                                (str "Author the epic and feature cards on this repo's "
-                                     "kanban board (`strand kanban add ...`), following "
-                                     "`strand devflow guidance decompose` for the "
-                                     "cold-card contract. The created card strand ids "
-                                     "are the card ids the review handoff expects.")})))
+                                (format-alpha/reflow
+                                 "|Author the epic and feature cards on this repo's kanban board
+                                  |(`strand kanban add ...`), following `strand devflow guidance
+                                  |decompose` for the cold-card contract. The created card strand
+                                  |ids are the card ids the review handoff expects.")})))
 
 (workflow/defworkflow decompose-with-kanban
   "Devflow's decompose stage offering strand cards and this repo's kanban board."

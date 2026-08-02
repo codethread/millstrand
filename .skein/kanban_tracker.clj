@@ -37,7 +37,7 @@
      ::projection
      {:status stage
       :ready (if stage
-               (vec (current/with-runtime runtime (workflow/ready run-id)))
+               (current/with-runtime runtime (workflow/ready run-id))
                [])}
      "Devflow tracker projection must match its owning spec")))
 

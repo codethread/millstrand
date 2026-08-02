@@ -657,6 +657,22 @@
       (is (empty? (filter #(str/starts-with? (:name %) "devflow-")
                           (weaver/ops rt)))))))
 
+(deftest decompose-routes-through-the-workspace-kanban-binding
+  ;; Devflow v17 publishes decompose unbound; the routed `:decompose` name must
+  ;; resolve to this workspace's binding, and its card-authoring defer must
+  ;; offer the kanban target beside devflow's shipped strand target.
+  (with-startup-config-runtime
+    (fn [_rt]
+      (let [description (op! "workflow" ["show" "decompose"])
+            defers (get-in description [:declared :defers])
+            author-cards (first (filter #(= "author-cards" (:defer %)) defers))]
+        (is (= "devflow-targets/decompose-with-kanban" (:definition description))
+            "the workspace binding wins over the spool-published name")
+        (is (some? author-cards) "decompose declares the author-cards defer")
+        (is (= #{"author-card-strands" "kanban-cards"}
+               (set (:workflows author-cards)))
+            "both card-authoring targets are selectable at the defer")))))
+
 (deftest named-queries-return-expected-rows-against-seeded-strands
   ;; TASK-Srm-009.MI1: exercise each registered named query's rows against one
   ;; deterministic seed, so a defquery `:where`/`:params` regression surfaces as a
