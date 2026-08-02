@@ -1581,6 +1581,7 @@
                                 :state "closed"
                                 :attributes {:workflow/decision-point "land-signed-off"
                                              :workflow/outcome "approved"
+                                             :workflow/role "root"
                                              :workflow/run-id run-id}}}])
             root (fn [run-id]
                    {:id (str "root-" run-id)
@@ -1597,6 +1598,17 @@
                           nil
                           (catch clojure.lang.ExceptionInfo error
                             error))
+              malformed (try
+                          (guard {:batch/created []
+                                  :batch/updated (into (updated "land-a")
+                                                       [{:after {:id "signoff-missing"
+                                                                 :state "closed"
+                                                                 :attributes {:workflow/decision-point "land-signed-off"
+                                                                              :workflow/outcome "approved"
+                                                                              :workflow/role "root"}}}])})
+                          nil
+                          (catch clojure.lang.ExceptionInfo error
+                            error))
               multiple (try
                          (guard {:batch/created [(root "land-a")]
                                  :batch/updated (updated "land-a")})
@@ -1607,6 +1619,10 @@
           (is (= [{:id "signoff-land-a" :workflow/run-id "land-a"}
                   {:id "signoff-land-b" :workflow/run-id "land-b"}]
                  (:roots (ex-data ambiguous))))
+          (is (= "land/signoff-run-ambiguous" (:code (ex-data malformed))))
+          (is (= [{:id "signoff-land-a" :workflow/run-id "land-a"}
+                  {:id "signoff-missing" :workflow/run-id nil}]
+                 (:roots (ex-data malformed))))
           (is (= "land/multiple-merge-locks" (:code (ex-data multiple))))
           (is (= #{"land-a" "land-b"}
                  (set (map :land/run-id (:locks (ex-data multiple))))))
@@ -1624,6 +1640,7 @@
                                                      :state "closed"
                                                      :attributes {:workflow/decision-point "land-signed-off"
                                                                   :workflow/outcome "approved"
+                                                                  :workflow/role "root"
                                                                   :workflow/run-id "land-a"}}}]})
                     nil
                     (catch clojure.lang.ExceptionInfo error

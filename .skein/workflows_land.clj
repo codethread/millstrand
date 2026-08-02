@@ -164,28 +164,32 @@
        (= "approved" (attr-value after :workflow/outcome))))
 
 (defn- require-poured-run-id!
-  "Return the sole run-id named by updated workflow rows.
+  "Return the sole run-id named by updated workflow root rows.
 
   An approved sign-off updates an existing checkpoint, so its run attribution
-  belongs to `:batch/updated`, not only to continuation roots in
-  `:batch/created`. Multiple run ids or rows without a usable run-id make the
-  batch ambiguous and stop the mutation rather than letting a first-match
-  projection choose an owner."
+  belongs to the updated root row in `:batch/updated`, not only to
+  continuation roots in `:batch/created`. Multiple run ids or root rows
+  without a usable run-id make the batch ambiguous and stop the mutation rather
+  than letting a first-match projection choose an owner. Every updated root
+  row is checked before the distinct-run-id count, so a valid row cannot mask
+  malformed attribution."
   [updated-rows]
-  (let [root-details (mapv (fn [{:keys [after]}]
-                             (assoc (select-keys after [:id])
-                                    :workflow/run-id (attr-value after :workflow/run-id)))
-                           updated-rows)
+  (let [root-details (->> updated-rows
+                          (filter #(= "root" (attr-value (:after %) :workflow/role)))
+                          (mapv (fn [{:keys [after]}]
+                                  (assoc (select-keys after [:id])
+                                         :workflow/run-id (attr-value after :workflow/run-id)))))
+        malformed (filterv #(not (s/valid? ::run-id (:workflow/run-id %)))
+                           root-details)
         run-ids (->> root-details
                      (map :workflow/run-id)
-                     (filter #(s/valid? ::run-id %))
                      distinct
                      vec)
         run-id (first run-ids)]
-    (when-not (= 1 (count run-ids))
+    (when (or (seq malformed) (not= 1 (count run-ids)))
       (throw (ex-info (format-alpha/reflow
                       "|Approved land sign-off batches must update workflow rows
-                       |for exactly one usable run-id.")
+                       |with usable run-ids for exactly one distinct run.")
                       {:code "land/signoff-run-ambiguous"
                        :roots root-details
                        :recovery (format-alpha/reflow
@@ -211,20 +215,21 @@
   lock."
   {:types #{:batch/apply-before-commit}}
   [ctx]
-  (doseq [row (filter signoff-approval-row? (:batch/updated ctx))]
-    (let [run-id (require-poured-run-id! (:batch/updated ctx))
-          locks (require-sane-merge-locks!)]
-      (when-not (some #(= run-id (attr-value % :land/run-id)) locks)
-        (throw (ex-info
-                (format-alpha/reflow
-                 (format
-                  "|land sign-off approval requires the merge lock this run does
-                   |not hold; approve with `strand land choose %s approved`,
-                   |which acquires it — never with generic workflow verbs"
-                  run-id))
-                {:code "land/signoff-without-merge-lock"
-                 :land/run-id run-id
-                 :checkpoint (:id row)})))))
+  (let [approval-rows (filterv signoff-approval-row? (:batch/updated ctx))]
+    (doseq [row approval-rows]
+      (let [run-id (require-poured-run-id! (:batch/updated ctx))
+            locks (require-sane-merge-locks!)]
+        (when-not (some #(= run-id (attr-value % :land/run-id)) locks)
+          (throw (ex-info
+                  (format-alpha/reflow
+                   (format
+                    "|land sign-off approval requires the merge lock this run does
+                     |not hold; approve with `strand land choose %s approved`,
+                     |which acquires it — never with generic workflow verbs"
+                    run-id))
+                  {:code "land/signoff-without-merge-lock"
+                   :land/run-id run-id
+                   :checkpoint (:id row)}))))))
   nil)
 
 (defn- all-queue-entries
