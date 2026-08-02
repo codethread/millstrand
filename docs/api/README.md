@@ -44,6 +44,7 @@ Two conventions hold across the tier:
 | [`registry`](./registry.api.md) | Your domain owns a family of replaceable declarations and needs a registry kind of its own for other modules to contribute to. |
 | [`cli`](./cli.api.md) | Declaring an op's argv shape as data — the parser and help renderer behind every registered op; never hand-write usage strings. |
 | [`return-shape`](./return-shape.api.md) | Declaring and checking the JSON-compatible values returned by registered ops. |
+| [`errors`](./errors.api.md) | The other half of that surface: throwing a failure that reads well at a terminal, with the `ex-data` keys the CLI renders checked where you throw. |
 | [`spec`](./spec.api.md) | Documenting a registered clojure.spec over the wire: the printed form graph, nested contract tree, copyable JSON template, and structured problems — never a schema, never invoking a predicate. |
 
 ### Vocabulary and prose

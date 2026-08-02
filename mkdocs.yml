@@ -70,6 +70,7 @@ nav:
       - skein.api.cli.alpha: docs/api/cli.api.md
       - skein.api.clock.alpha: docs/api/clock.api.md
       - skein.api.current.alpha: docs/api/current.api.md
+      - skein.api.errors.alpha: docs/api/errors.api.md
       - skein.api.events.alpha: docs/api/events.api.md
       - skein.api.format.alpha: docs/api/format.api.md
       - skein.api.graph.alpha: docs/api/graph.api.md

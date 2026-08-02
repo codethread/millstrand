@@ -17,8 +17,8 @@
 ;; the behavior contracts stay in the root specs.
 (def alpha-api-docs
   (concat
-   (for [nm ["batch" "cli" "clock" "current" "events" "format" "graph" "hooks" "lifecycle"
-             "notes" "patterns" "peers" "registry" "relations" "return-shape"
+   (for [nm ["batch" "cli" "clock" "current" "errors" "events" "format" "graph" "hooks"
+             "lifecycle" "notes" "patterns" "peers" "registry" "relations" "return-shape"
              "runtime" "scheduler" "skein" "spec" "spool" "vocab" "weaver"]]
      {:name nm
       :source (str "src/skein/api/" (if (= nm "return-shape") "return_shape" nm) "/alpha.clj")

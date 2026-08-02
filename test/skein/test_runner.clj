@@ -26,6 +26,7 @@
    'skein.api.return-shape.alpha-test
    'skein.api.spec.alpha-test
    'skein.api.clock.alpha-test
+   'skein.api.errors.alpha-test
    'skein.api.format.alpha-test
    'skein.api.skein-test
    'skein.api.lifecycle.alpha-test

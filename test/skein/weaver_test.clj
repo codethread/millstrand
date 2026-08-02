@@ -10,6 +10,7 @@
             [nrepl.core :as nrepl]
             [skein.api.batch.alpha :as batch]
             [skein.api.current.alpha :as current]
+            [skein.api.errors.alpha :as errors]
             [skein.api.events.alpha :as events]
             [skein.api.hooks.alpha :as hooks]
             [skein.api.graph.alpha :as graph]
@@ -236,6 +237,24 @@
   [_ctx]
   (throw (ex-info "op blew up"
                   {:code (java.util.UUID/fromString "0d1b8e2c-9d3a-4a5e-8f7b-2c6d1e4a9b30")})))
+
+(defn factory-not-found-op
+  "Fail through `skein.api.errors.alpha/not-found!` with every affordance set."
+  [_ctx]
+  (errors/not-found! "No such card \"lyv34\""
+                     {:code :kanban/card-not-found
+                      :token :lyv34
+                      :available [:lyv33 'sc94i "xf1vb"]
+                      :try "strand kanban board"
+                      :lane "pending"}))
+
+(defn factory-canonical-query-op
+  "Fail a canonical-query lookup through the factory, stamping no `:code`."
+  [_ctx]
+  (errors/not-found! "no such query: agent-failure"
+                     {:token "agent-failure"
+                      :canonical-query "agent-failure"
+                      :available ["agent-failures" "work"]}))
 
 (defn subcommand-result-op
   "Return operation-label variants selected by the parsed subcommand path."
@@ -3706,6 +3725,32 @@
           (is (= "domain/invalid-error-code" (get-in response ["error" "code"])))
           (is (= "#uuid \"0d1b8e2c-9d3a-4a5e-8f7b-2c6d1e4a9b30\""
                  (get-in response ["error" "details" "error/invalid-code"]))))))))
+
+(deftest json-socket-invoke-carries-the-error-factory-affordances
+  (with-runtime
+    (fn [rt _]
+      (weaver/register-op! rt 'factory-not-found raw-mutating-standard
+                           'skein.weaver-test/factory-not-found-op)
+      (let [response (invoke-request rt "factory-not-found" [])
+            details (get-in response ["error" "details"])]
+        (is (= "kanban/card-not-found" (get-in response ["error" "code"])))
+        (is (= "lyv34" (get details "token")))
+        (is (= ["lyv33" "sc94i" "xf1vb"] (get details "available"))
+            "every name type the factory accepts arrives as a bare string")
+        (is (= "strand kanban board" (get details "try")))
+        (is (= "pending" (get details "lane")) "details outside the grammar survive")))))
+
+(deftest json-socket-invoke-keeps-inferring-query-not-found-through-the-factory
+  ;; The factories stamp no `:code` of their own precisely so this inference
+  ;; still runs: SPEC-004.C36b owes a failed canonical-query lookup this code,
+  ;; and SPEC-005.C7 pins it as one of the three contractual code strings.
+  (with-runtime
+    (fn [rt _]
+      (weaver/register-op! rt 'factory-canonical-query raw-mutating-standard
+                           'skein.weaver-test/factory-canonical-query-op)
+      (let [response (invoke-request rt "factory-canonical-query" [])]
+        (is (= "query/not-found" (get-in response ["error" "code"])))
+        (is (= "agent-failure" (get-in response ["error" "details" "canonical-query"])))))))
 
 (deftest weaver-query-registry-fails-clearly
   (with-runtime
