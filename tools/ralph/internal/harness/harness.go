@@ -7,6 +7,7 @@
 package harness
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -168,12 +169,16 @@ const fullAuthGrant = "Work with my authority: rebuild and restart mill/weaver C
 // the registered ralph-iterate workflow and the epic's feature cards; this
 // prompt carries only the workflow pointer and the Go loop's stop mechanics.
 func Prompt(epicID, epicTitle string, iteration int, fullAuth bool) string {
+	params, err := json.Marshal(map[string]string{"epic": epicID})
+	if err != nil {
+		panic(fmt.Sprintf("marshal ralph workflow params: %v", err))
+	}
 	var b strings.Builder
 	b.WriteString("--- ralph harness (tools/ralph, iteration ")
 	fmt.Fprintf(&b, "%d", iteration)
 	b.WriteString(") ---\n")
 	fmt.Fprintf(&b, "Run the registered `ralph-iterate` workflow for epic %s (%q).\n", epicID, epicTitle)
-	fmt.Fprintf(&b, "Start it with `strand workflow start <run-id> --workflow ralph-iterate --params '{\"epic\":\"%s\"}'` and drive the workflow to its judgment point.\n", epicID)
+	fmt.Fprintf(&b, "Start it with `strand workflow start <run-id> --workflow ralph-iterate --params '%s'` and drive the workflow to its judgment point.\n", params)
 	b.WriteString("The workflow and live strands carry the work discipline; this prompt carries the Go loop contract.\n")
 	b.WriteString("CRITICAL: when every feature under the epic is complete, close the epic with\n")
 	fmt.Fprintf(&b, "  `strand kanban finish %s --outcome done` — the loop runs forever otherwise.\n", epicID)

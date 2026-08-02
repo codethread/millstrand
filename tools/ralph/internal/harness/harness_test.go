@@ -90,6 +90,14 @@ func TestPromptFullAuthIsExplicit(t *testing.T) {
 	}
 }
 
+func TestPromptEscapesEpicIDInWorkflowParams(t *testing.T) {
+	got := Prompt(`e"1\line`, "Epic one", 1, false)
+
+	if !strings.Contains(got, `{"epic":"e\"1\\line"}`) {
+		t.Errorf("workflow params must be valid JSON for special-character epic IDs:\n%s", got)
+	}
+}
+
 func TestLookup(t *testing.T) {
 	for _, name := range Names() {
 		h, err := Lookup(name)
