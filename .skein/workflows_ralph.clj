@@ -64,8 +64,14 @@
                                    |frontier. Claim it with your owner, branch, and worktree:
                                    |`strand kanban claim <feature-id> --owner <name> --branch
                                    |<branch> --worktree <absolute-path>`. Record the chosen
-                                   |feature id and the branch/worktree on this doing-task before
-                                   |completing. Do not claim a second feature in this iteration."))})
+                                   |feature id and the branch/worktree on this doing-task, then
+                                   |persist all four values on the run root before completing
+                                   |this step with one mutation:
+                                   |`strand workflow complete <run-id> --context
+                                   |'{\"ralph/feature\":\"<feature-id>\",\"ralph/branch\":\"<branch>\",
+                                   |\"ralph/worktree\":\"<worktree>\",\"ralph/card\":\"<feature-id>\"}'`.
+                                   |Do not use `workflow next` here: it cannot carry this context.
+                                   |Do not claim a second feature in this iteration."))})
    (workflow/step :work-tasks
                   (fn [_] "Work the claimed feature's ready tasks")
                   :self
@@ -113,11 +119,16 @@
                                "workflow/instruction"
                                (format-alpha/reflow
                                 "|Ralph is the epic's coordinator. Start the registered land
-                                 |workflow for the claimed feature using its stamped feature,
-                                 |branch, worktree, and card values: `strand workflow start
-                                 |<land-run-id> --workflow land --params
-                                 |'{\"feature\":\"<feature-id>\",\"branch\":\"<branch>\",
-                                 |\"worktree\":\"<worktree>\",\"card\":\"<feature-id>\"}'`.
+                                 |workflow for the claimed feature using the durable values in
+                                 |this run's `workflow/context`. First read `strand show <run-id>`
+                                 |and require non-blank `ralph/feature`, `ralph/branch`,
+                                 |`ralph/worktree`, and `ralph/card`; require that feature and card
+                                 |match. If any value is missing, blank, or inconsistent, fail loudly:
+                                 |record the exact context and stop without starting land. Otherwise
+                                 |copy those exact values into: `strand workflow start <land-run-id>
+                                 |--workflow land --params '{\"feature\":\"<ralph/feature>\",
+                                 |\"branch\":\"<ralph/branch>\",\"worktree\":\"<ralph/worktree>\",
+                                 |\"card\":\"<ralph/card>\"}'`.
                                  |Drive that run through its sign-off and merge train; do not
                                  |merge directly or treat the Ralph loop as the land policy.")})
    (workflow/step :finish-feature
@@ -127,11 +138,14 @@
                   :attributes {"workflow/action-ref" "ralph.finish-feature"
                                "workflow/instruction"
                                (format-alpha/reflow
-                                "|After the land run has completed its cleanup, verify the
-                                 |feature card is closed with `kanban/outcome=done`. If it is
-                                 |still active, finish that exact feature card with `strand
-                                 |kanban finish <feature-id> --outcome done`; leave a concise
-                                 |summary note on the card's doing-task.")})
+                                "|After the land run has completed its cleanup, re-read this run's
+                                 |`workflow/context` and use its validated `ralph/card` value.
+                                 |Verify that exact feature card is closed with
+                                 |`kanban/outcome=done`. If it is still active, finish it with
+                                 |`strand kanban finish <ralph/card> --outcome done`; leave a
+                                 |concise summary note on the card's doing-task. If the context is
+                                 |missing or does not match the landed card, stop and record the
+                                 |mismatch instead of guessing.")})
    (workflow/checkpoint :epic-judgment
                         (fn [{:keys [epic]}]
                           (str "Close " epic " only if no feature cards remain"))

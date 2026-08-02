@@ -21,6 +21,7 @@
             [skein.core.weaver.module-publication :as publication]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.core.weaver.spool-sync :as spool-sync]
+            [skein.spools.workflow :as workflow]
             [skein.spools.test-support :as test-support]
             [skein.test.alpha :as test-alpha])
   (:import [java.time Instant]))
@@ -449,6 +450,10 @@
             started (op! "workflow" ["start" run-id
                                      "--workflow" "ralph-iterate"
                                      "--params" params])
+            context (json/write-str {"ralph/feature" "feature-contract"
+                                     "ralph/branch" "ralph-contract"
+                                     "ralph/worktree" "/tmp/ralph-contract"
+                                     "ralph/card" "feature-contract"})
             next-step (fn [] (first (:ready (op! "workflow" ["next" run-id]))))]
         (is (= "workflows-ralph/ralph-iterate" (:definition description)))
         (is (= ["orient"] (get-in description [:declared :entry])))
@@ -456,7 +461,15 @@
                (get-in description [:params :spec])))
         (is (= "ralph.orient" (:action-ref (first (:ready started)))))
         (is (= "ralph.claim-feature" (:action-ref (next-step))))
-        (is (= "ralph.work-tasks" (:action-ref (next-step))))
+        (let [completed-claim (op! "workflow" ["complete" run-id "--context" context])]
+          (is (= "ralph.work-tasks"
+                 (:action-ref (first (:ready completed-claim)))))
+          (is (= {:epic "ralph-contract"
+                  :ralph/feature "feature-contract"
+                  :ralph/branch "ralph-contract"
+                  :ralph/worktree "/tmp/ralph-contract"
+                  :ralph/card "feature-contract"}
+                 (get-in (workflow/current-root run-id) [:attributes :workflow/context]))))
         (is (= "ralph.slice-gates" (:action-ref (next-step))))
         (is (= "ralph.quick-review" (:action-ref (next-step))))
         (is (= "ralph.handoff-land" (:action-ref (next-step))))
