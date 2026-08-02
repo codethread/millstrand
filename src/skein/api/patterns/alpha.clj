@@ -60,7 +60,8 @@
   Accepts a simple symbol, keyword, or raw CLI string (trimmed, optional leading
   colon), matching `skein.api.graph.alpha/resolve-query` string handling.
 
-  Missing patterns fail loudly."
+  Missing patterns fail loudly. The returned entry conforms to
+  `::skein.core.specs/pattern-entry`."
   [runtime pattern-name]
   (let [canonical-name (canonical-pattern-name pattern-name)
         registered (pattern-registry runtime)]
