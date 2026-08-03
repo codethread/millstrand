@@ -780,7 +780,7 @@ To try a handler out without a module, register it directly from the live REPL:
                           {:purpose :cleanup})
 ```
 
-Handlers are selected by explicit event-type filters such as `:strand/added`, `:strand/updated`, and `:strand/burned`. Every handler has a stable key and a fully qualified function symbol resolvable in the weaver JVM; registering a duplicate key replaces the prior handler, which is what makes reload workflows work.
+Handlers are selected by explicit event-type filters such as `:strand/added`, `:strand/updated`, and `:strand/burned`. Every handler has a stable key and a fully qualified function symbol resolvable in the weaver JVM. Re-registering a key you already own replaces your prior handler, which is what makes reload workflows work; a key another owner supplies collides loudly instead, and `replace-handler!` is the deliberate override there.
 
 Event dispatch is asynchronous after successful mutations. Handler exceptions do not roll back the mutation; inspect bounded failure state from trusted Clojure:
 
