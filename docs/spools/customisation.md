@@ -127,6 +127,10 @@ reloads changed module source, atomically replaces owner partitions, and reconci
 resources. It preserves unrelated modules, queued events, recent failures, and
 spool state. Missing startup files are skipped; present failures fail loudly.
 
+Direct registrations are the one thing refresh can drop. A direct write is not serialized against an in-flight refresh: publication resets each registry to the candidate snapshot taken after source loading, so a direct write landing in the narrow span between that snapshot and publication is overwritten with no error. The window is small and only staged publication sits inside it, but if a registration you made at the REPL disappears while someone else was refreshing, this is why (SPEC-003.C23, constraint F20).
+
+Recovering it takes one look first. The refresh that dropped your entry may have published a module that now owns the same name, and `register-*!` refuses a name another owner supplies, so re-registering blind either restores your entry or fails loudly depending on something you have not checked. Read the current owner first. If the module's version is the one you want, leave it. If you want yours back on top of it, `replace-*!` is the verb that records the override intent, and it is the only one that works across owners. Anything that must survive a refresh belongs in module source rather than a direct write.
+
 For code-only investigation, `reload-code!` takes a root-lib symbol from the
 family's effective `:roots` map and reloads that root's namespaces in dependency
 order:

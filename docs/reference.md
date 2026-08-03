@@ -227,7 +227,7 @@ sign-off rule above.
 
 ## CLI
 
-The `strand` CLI is intentionally small. It is for scripts, low-friction agent use, and JSON automation. It does not evaluate rich Clojure forms or mutate runtime extension state.
+The `strand` CLI is intentionally small. It is for scripts, low-friction agent use, and JSON automation. It does not evaluate rich Clojure forms, and it exposes no verb that mutates runtime extension state. That is a property of the command surface, not of the weaver underneath it: the socket the CLI speaks to is internal plumbing rather than a contract, and its op table does reach registration, so do not read the absent CLI verb as a guarantee that nothing on that wire can register.
 
 Common commands:
 
@@ -633,7 +633,9 @@ Collection only happens under a module contribution. Evaluating a form at the RE
 
 Domain spools own forms for their own kinds the same way — `skein.spools.workflow/defworkflow` and `defexecutor`, `skein.spools.cron/defjob`, `skein.spools.chime/defrule`. Module lifecycle effects are declared with `skein.api.lifecycle.alpha`: `defresource`, `defseed`, and `defreconcile`.
 
-The direct registration functions still exist and still work: `graph/register-query!`, `patterns/register-pattern!`, `events/register-handler!`, `hooks/register-hook!`, and `weaver/register-op!`. Each writes one entry under the direct-registration owner for the weaver lifetime, which makes them a good REPL tool for trying something out. Anything a module owns belongs in a form.
+The direct registration functions still exist and still work: `graph/register-query!`, `patterns/register-pattern!`, `events/register-handler!`, `hooks/register-hook!`, and `weaver/register-op!`. Each writes one entry under the direct-registration owner for the weaver lifetime, which makes them a good REPL tool for trying something out. Anything a module owns belongs in a form. A direct write is also not serialized against an in-flight `refresh!`, so one that lands mid-publication can be overwritten silently ([SPEC-003.C23](../devflow/specs/repl-api.md) constraint F20, explained in [customising your workspace](./spools/customisation.md#reloading-a-live-weaver)).
+
+Retract a direct entry before the same name graduates into a form. The direct-registration owner sits above the module layer, and the collision check runs over the whole candidate at publication, so a direct entry left in place without recorded intent makes the later module publication of that name fail the whole refresh rather than quietly losing. Two ways out, and the order is what matters: `unregister-*!` retracts your own entry so the module's version publishes cleanly, or `replace-*!` records the override intent that deliberately carries the shadow across refresh. Retracting a shadow restores the entry it was shadowing rather than removing the name.
 
 Per-function detail is in the generated [`skein.api.skein.alpha` reference](./api/skein.api.md); [writing shared spools](./spools/writing-shared-spools.md) covers the declaration grammars, the module contract, and how to declare a kind of your own. The contracts behind this section: which namespace owns which form, and what `:override?` means, in [SPEC-003.C17e](../devflow/specs/repl-api.md); collection, owner-complete publication, and removal by omission in [SPEC-004.C46h](../devflow/specs/daemon-runtime.md).
 
@@ -778,7 +780,7 @@ To try a handler out without a module, register it directly from the live REPL:
                           {:purpose :cleanup})
 ```
 
-Handlers are selected by explicit event-type filters such as `:strand/added`, `:strand/updated`, and `:strand/burned`. Every handler has a stable key and a fully qualified function symbol resolvable in the weaver JVM; registering a duplicate key replaces the prior handler, which is what makes reload workflows work.
+Handlers are selected by explicit event-type filters such as `:strand/added`, `:strand/updated`, and `:strand/burned`. Every handler has a stable key and a fully qualified function symbol resolvable in the weaver JVM. Re-registering a key you already own replaces your prior handler, which is what makes reload workflows work; a key another owner supplies collides loudly instead, and `replace-handler!` is the deliberate override there.
 
 Event dispatch is asynchronous after successful mutations. Handler exceptions do not roll back the mutation; inspect bounded failure state from trusted Clojure:
 
