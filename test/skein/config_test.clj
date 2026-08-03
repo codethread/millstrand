@@ -299,7 +299,7 @@
 (def ^:private named-query-names
   "The config-owned named queries whose registered definitions the surface
   baseline preserves, authored as `defquery` blocks in .skein/config.clj."
-  ["run-active" "kanban-feature-work" "workflow-runs" "devflow-runs" "merge-lock"
+  ["run-active" "kanban-feature-work" "workflow-runs" "merge-lock"
    "merge-queue" "work"])
 
 (defn- portable-source
@@ -438,8 +438,8 @@
         (is (= ["generic-feature"]
                (mapv #(get-in % [:attributes :workflow/run-id])
                      (weaver/list (current/runtime)
-                                  (var-get (requiring-resolve
-                                            'config/devflow-runs-query))
+                                  (get (graph/queries (current/runtime))
+                                       "devflow-runs")
                                   {}))))))))
 
 (deftest ralph-workflow-registers-its-contract-and-one-card-sequence
@@ -2209,32 +2209,20 @@
   (with-config-runtime
     (fn [rt]
       (load-file ".skein/kanban_tracker.clj")
-      (let [project (requiring-resolve 'kanban-tracker/devflow-projection)
-            current-root (requiring-resolve 'ct.spools.devflow/current-root)
-            ready (requiring-resolve 'ct.spools.devflow/ready)]
-        (testing "an active root projects its stage and ready steps"
-          (with-redefs-fn {current-root (constantly {:attributes {:devflow/stage "tasks"}})
-                           ready (constantly [{:id "next" :title "Do next" :role "step"}])}
-            #(is (= {:status "tasks"
-                     :ready [{:id "next" :title "Do next" :role "step"}]}
-                    (project rt "active-run")))))
-        (testing "no active root is the accepted nil-status projection"
-          (with-redefs-fn {current-root (constantly nil)
-                           ready (fn [_] (throw (ex-info "must not read steps" {})))}
-            #(is (= {:status nil :ready []}
-                    (project rt "inactive-run")))))
-        (testing "a malformed run id fails at the adapter boundary"
+      (let [project (requiring-resolve
+                     'ct.spools.devflow-kanban-adapter/devflow-projection)]
+        (testing "no active run projects an empty frontier"
+          (is (= {:status nil :ready []}
+                 (project rt "absent"))))
+        (testing "a run id must be a non-blank string"
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-blank string"
-                                (project rt ""))))
-        (testing "an active root without a stage fails loudly"
-          (with-redefs-fn {current-root (constantly {:attributes {}})}
-            #(is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-blank devflow/stage"
-                                   (project rt "missing-stage")))))
-        (testing "malformed ready steps fail the owning kanban projection spec"
-          (with-redefs-fn {current-root (constantly {:attributes {:devflow/stage "tasks"}})
-                           ready (constantly [{}])}
-            #(is (thrown-with-msg? clojure.lang.ExceptionInfo #"projection must match"
-                                   (project rt "malformed-step")))))))))
+                                (project rt " "))))
+        (workflow/start! "tracked" :intake {:feature "tracked"
+                                            :worktree-check "already-in-worktree-ok"})
+        (let [{:keys [status ready]} (project rt "tracked")]
+          (is (= "intake" status))
+          (is (= ["Create or confirm feature worktree for tracked"]
+                 (mapv :title ready))))))))
 
 (deftest repo-local-startup-and-refresh-preserve-registrations
   (with-startup-config-runtime
@@ -2383,7 +2371,7 @@
   #{:skein/spools-batteries :skein/spools-workflow :skein/spools-workflow-cli
     :skein/spools-shell :skein/spools-code
     :skein/spools-unsafe-text-search :skein/spools-chime :skein/spools-cron
-    :skein/spools-devflow
+    :skein/spools-devflow :skein/spools-devflow-kanban-adapter
     :skein/spools-kanban :skein/spools-shuttle :skein/spools-delegation
     :skein/spools-harness-core :skein/spools-codex-harness :skein/spools-agent-cli
     :skein/spools-bench :skein/spools-treadle})

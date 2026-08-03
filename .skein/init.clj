@@ -169,10 +169,16 @@
                  {:ns 'ct.spools.kanban
                   :spools ['codethread/kanban]
                   :required? true})
+(runtime/module! runtime :skein/spools-devflow-kanban-adapter
+                 {:ns 'ct.spools.devflow-kanban-adapter
+                  :spools ['codethread/devflow-kanban-adapter
+                           'codethread/devflow 'codethread/kanban]
+                  :after [:skein/spools-devflow :skein/spools-kanban]
+                  :required? true})
 (runtime/module! runtime :kanban/tracker
                  {:file "kanban_tracker.clj"
-                  :spools ['codethread/kanban 'codethread/devflow]
-                  :after [:skein/spools-kanban :skein/spools-devflow]
+                  :spools ['codethread/devflow-kanban-adapter]
+                  :after [:skein/spools-devflow-kanban-adapter]
                   :required? true})
 
 ;; --- cron timer engine + the NVD scan job -----------------------------------

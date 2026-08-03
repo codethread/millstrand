@@ -41,14 +41,6 @@
    [:= :state "active"]
    [:= [:attr "workflow/role"] "root"]])
 
-(skein/defquery devflow-runs-query
-  "Query for active devflow lifecycle roots."
-  {:usage "strand list --query devflow-runs"}
-  [:and
-   [:= :state "active"]
-   [:= [:attr "workflow/role"] "root"]
-   [:= [:attr "workflow/family"] "devflow"]])
-
 (skein/defquery merge-lock-query
   "Query for the active singleton landing lock."
   {:usage "strand list --query merge-lock"}
