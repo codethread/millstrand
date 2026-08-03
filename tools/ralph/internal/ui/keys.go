@@ -17,6 +17,7 @@ type keyMap struct {
 	Back     key.Binding
 	Follow   key.Binding
 	Refresh  key.Binding
+	Info     key.Binding
 	SoftStop key.Binding
 	HardStop key.Binding
 	Help     key.Binding
@@ -37,6 +38,7 @@ func defaultKeys() keyMap {
 		Back:     key.NewBinding(key.WithKeys("esc", "h", "left"), key.WithHelp("esc", "back")),
 		Follow:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "follow tail")),
 		Refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh board")),
+		Info:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "run info")),
 		SoftStop: key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "soft stop")),
 		HardStop: key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "hard stop")),
 		Help:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
@@ -55,7 +57,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.NextPane, k.PrevPane, k.Up, k.Down, k.PageUp, k.PageDown, k.Top, k.Bottom},
-		{k.Open, k.Back, k.Follow, k.Refresh, k.Help},
+		{k.Open, k.Back, k.Follow, k.Refresh, k.Info, k.Help},
 		{k.SoftStop, k.HardStop, k.Quit},
 	}
 }

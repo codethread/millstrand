@@ -114,6 +114,11 @@ func TestClaudeArgs(t *testing.T) {
 	if args[len(args)-1] != "go" {
 		t.Errorf("the prompt must be the final argument, got %q", args[len(args)-1])
 	}
+	// The generated prompt opens with a `---` banner the CLI would otherwise
+	// reject as an unknown option.
+	if args[len(args)-2] != "--" {
+		t.Errorf("the prompt must follow a %q terminator, got %q", "--", args[len(args)-2])
+	}
 
 	kept := Claude{}.Args(RunSpec{Prompt: "go"}, settings)
 	if slices.Contains(kept, "--dangerously-skip-permissions") {

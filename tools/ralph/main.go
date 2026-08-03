@@ -72,7 +72,7 @@ func run() (int, error) {
 		fs.PrintDefaults()
 		_, _ = fmt.Fprint(out, "\nenvironment: RALPH_HARNESS, RALPH_MODEL, RALPH_EFFORT, RALPH_MAX_ITERATIONS,\n"+
 			"             RALPH_SKIP_PERMISSIONS, RALPH_LOG_DIR, SKEIN_WORKSPACE\n"+
-			"\nkeys: tab panes · enter expand · s soft stop · x hard stop · ? help · q stop/quit\n"+
+			"\nkeys: tab panes · enter expand · e run info · s soft stop · x hard stop · ? help · q stop/quit\n"+
 			"\nexit codes: 0 clean stop, 1 failure, 2 usage, 3 agent brake, 130 hard stop\n")
 	}
 	fs.StringVar(&opts.harnessName, "harness", envOr("RALPH_HARNESS", "claude"),
@@ -173,6 +173,7 @@ func run() (int, error) {
 		HarnessName:   agent.Name(),
 		Settings:      settings,
 		MaxIterations: opts.maxIterations,
+		FailureLimit:  opts.failureLimit,
 		LogDir:        logDir,
 		Workspace:     opts.workspace,
 		SkipPerms:     opts.skipPermissions,

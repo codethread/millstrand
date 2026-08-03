@@ -16,9 +16,13 @@ import (
 	"skein-ralph/internal/loop"
 )
 
-// logLimit caps the live log. Everything ever streamed stays in the raw
+// logLimit caps each iteration's log. Everything ever streamed stays in the raw
 // transcript on disk, so the in-memory tail only has to be long enough to read.
 const logLimit = 2000
+
+// logHistory is how many iterations keep their log in memory. Older ones are
+// dropped to their transcript path, which the iterations pane still offers.
+const logHistory = 20
 
 type pane int
 
@@ -71,6 +75,7 @@ type model struct {
 	detail      viewport.Model
 	detailTitle string
 	showDetail  bool
+	showInfo    bool
 	showHelp    bool
 	confirm     confirmKind
 
@@ -80,6 +85,13 @@ type model struct {
 	iteration int
 	records   []*iterRecord
 	byN       map[int]*iterRecord
+
+	// The log is kept per iteration, keyed by iteration number, so the pane can
+	// show one run at a time. Key zero holds anything logged before the first
+	// iteration started.
+	logs      map[int][]item
+	logView   int
+	logFollow bool
 
 	snapshot board.Snapshot
 	snapErr  error
@@ -114,6 +126,8 @@ func newModel(s Session) model {
 		startedAt: time.Now(),
 		now:       time.Now(),
 		byN:       map[int]*iterRecord{},
+		logs:      map[int][]item{},
+		logFollow: true,
 		focus:     paneLog,
 	}
 	m.panes[paneBoard] = newListPane("board")
@@ -178,11 +192,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case loop.IterationStarted:
+		// Anything logged before the first iteration belongs to it: the loop was
+		// already working towards this run when it was written.
+		if pending := m.logs[0]; len(pending) > 0 {
+			m.logs[msg.N] = pending
+			delete(m.logs, 0)
+		}
 		m.iteration = msg.N
 		rec := &iterRecord{n: msg.N, startedAt: msg.At, transcript: msg.Transcript, running: true}
 		m.records = append(m.records, rec)
 		m.byN[msg.N] = rec
 		m.refreshIterations()
+		if m.logFollow {
+			m.showLog(msg.N)
+		}
+		m.pruneLogs()
 		m.appendLog(item{
 			gutter:  "──",
 			summary: fmt.Sprintf("iteration %d started · %s", msg.N, msg.Transcript),
@@ -290,12 +314,58 @@ func (m *model) absorbFinish(msg loop.IterationFinished) {
 	m.refreshIterations()
 }
 
+// appendLog files an entry under the iteration that produced it, and shows it
+// only if that is the iteration the pane is scoped to.
 func (m *model) appendLog(it item) {
+	entries := append(m.logs[m.iteration], it)
+	if over := len(entries) - logLimit; over > 0 {
+		entries = entries[over:]
+	}
+	m.logs[m.iteration] = entries
+
+	if m.iteration != m.logView {
+		return
+	}
 	m.panes[paneLog].append(it)
 	if over := len(m.panes[paneLog].items) - logLimit; over > 0 {
 		m.panes[paneLog].items = m.panes[paneLog].items[over:]
 		m.panes[paneLog].cursor = max(0, m.panes[paneLog].cursor-over)
 		m.panes[paneLog].offset = max(0, m.panes[paneLog].offset-over)
+	}
+}
+
+// showLog scopes the log pane to one iteration, starting at its tail. The pane
+// keeps its own copy so appending to the live iteration cannot disturb it.
+func (m *model) showLog(n int) {
+	m.logView = n
+	entries, held := m.logs[n]
+	p := &m.panes[paneLog]
+	switch {
+	case held:
+		p.items = append([]item(nil), entries...)
+	case m.byN[n] != nil:
+		// Dropped by pruneLogs; the transcript is still the whole truth.
+		p.items = []item{{
+			gutter:  "──",
+			summary: "log rolled out of memory · transcript " + m.byN[n].transcript,
+			detail:  "This iteration is older than the last " + fmt.Sprintf("%d", logHistory) + " and its log was dropped.\nThe raw stream is still at " + m.byN[n].transcript,
+			tone:    toneMuted,
+		}}
+	default:
+		p.items = nil
+	}
+	p.cursor = max(0, len(p.items)-1)
+	p.offset = 0
+	p.follow = true
+}
+
+// pruneLogs drops the logs of iterations old enough that nobody is reading them
+// in the pane any more; an unbounded run would otherwise hold every event.
+func (m *model) pruneLogs() {
+	for n := range m.logs {
+		if n != m.logView && n <= m.iteration-logHistory {
+			delete(m.logs, n)
+		}
 	}
 }
 
@@ -329,12 +399,20 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.help.ShowAll = m.showHelp
 		return m, nil
 
+	case key.Matches(msg, m.keys.Info):
+		m.showInfo = !m.showInfo
+		return m, nil
+
+	case m.showInfo && key.Matches(msg, m.keys.Back):
+		m.showInfo = false
+		return m, nil
+
 	case m.showDetail && key.Matches(msg, m.keys.Back):
 		m.showDetail = false
 		return m, nil
 
 	case key.Matches(msg, m.keys.Open):
-		if m.showDetail {
+		if m.showDetail || m.showInfo {
 			return m, nil
 		}
 		if it, ok := m.panes[m.focus].selected(); ok {
@@ -382,6 +460,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if p.follow {
 			p.bottom()
 		}
+		if m.focus == paneIters {
+			m.scopeLogToSelection()
+		}
 		return m, nil
 
 	case key.Matches(msg, m.keys.Refresh):
@@ -390,6 +471,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.showInfo {
+		// The popup is static; list keys would scroll a pane nobody can see.
+		return m, nil
+	}
 	if m.showDetail {
 		var cmd tea.Cmd
 		m.detail, cmd = m.detail.Update(msg)
@@ -415,7 +500,24 @@ func (m model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Bottom):
 		p.bottom()
 	}
+	if m.focus == paneIters {
+		m.scopeLogToSelection()
+	}
 	return m, nil
+}
+
+// scopeLogToSelection points the log pane at whichever iteration the iterations
+// pane has under its cursor. Sitting on the newest row resumes following the
+// live run, so a new iteration takes the pane over again.
+func (m *model) scopeLogToSelection() {
+	idx := m.panes[paneIters].cursor
+	if idx < 0 || idx >= len(m.records) {
+		return
+	}
+	m.logFollow = idx == len(m.records)-1
+	if rec := m.records[idx]; rec.n != m.logView {
+		m.showLog(rec.n)
+	}
 }
 
 func (m model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
