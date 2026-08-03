@@ -463,7 +463,7 @@ Declare that owner from `init.clj`:
 For a workspace that already declares a local spool, add the query to that
 module's contribution so owner-complete refresh installs everything together.
 
-`defquery` is one of five [authoring forms](#authoring-forms) for core registry entries. It defines the Var `mine` and collects the query under the registry key `"mine"`. The registry key is the Var name exactly, so `defquery mine-query` registers `"mine-query"`.
+`defquery` is one of six [authoring forms](#authoring-forms) for core registry entries. It defines the Var `mine` and collects the query under the registry key `"mine"`. The registry key is the Var name exactly, so `defquery mine-query` registers `"mine-query"`.
 
 Defining a Clojure var that contains query data is not the same as registering a named query. A
 local var can be passed to graph helpers from your own code, but `strand list --query mine` only
