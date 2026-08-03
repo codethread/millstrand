@@ -11,6 +11,12 @@
   CLI root. The namespace owns no module-level state:
   op handlers read the runtime from their invocation context (`:op/runtime`).
 
+  `defop` declarations are the durable, owner-complete source for this surface.
+  Explicit-runtime registration functions are the live code and test seam, and
+  `skein.repl` supplies the same verbs with the runtime implied for an in-process
+  session. Evaluating an authoring form outside module collection defines its Var
+  but publishes no op.
+
   Production loading follows the ordinary approved-spool path. `mill init` seeds
   `skein.spools/batteries {:skein/source-root \"spools/batteries\"}` in
   `spools.edn`, and its startup module names that root in `:spools`. Deleting

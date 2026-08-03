@@ -12,6 +12,8 @@
 
 `skein.spools.batteries` is the shipped *core strand command surface*. It declares the everyday strand operations — `add`, `update`, `show`, `supersede`, `burn`, `note`, `list`, `ready`, `notes`, `subgraph`, the create-only `weave` op, and the read-only registry-introspection ops `query`, `pattern`, and `vocab` — through `skein.api.skein.alpha/defop`. Each declaration carries an `:arg-spec` parsed by the blessed argv parser `skein.api.cli.alpha` (see [cli.md](../devflow/specs/cli.md) and [repl-api.md](../devflow/specs/repl-api.md)).
 
+These `defop` declarations are the durable, owner-complete source for the command surface. A module source evaluation outside collection defines its Vars but publishes no op. Dynamic spool code and tests may use `skein.api.weaver.alpha/register-op!` with an explicit runtime for a live registration; an in-process `skein.repl` session uses the same verb with the runtime implied. A workspace that needs to mask a spool op durably uses `defop` with `{:override? true}` in a workspace module. The coordinate that acquired the spool does not change those registry rules.
+
 Each op delegates to exactly the `skein.api.*.alpha` call the old JSON socket dispatch used — strand
 lifecycle in `skein.api.weaver.alpha`, queries and traversal in `skein.api.graph.alpha`, weave in
 `skein.api.patterns.alpha` — and returns the same JSON-safe shape, so the ops are drop-in reachable

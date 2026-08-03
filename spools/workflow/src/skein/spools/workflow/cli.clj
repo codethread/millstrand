@@ -482,9 +482,15 @@
             |before choose rather than learning the contract from a rejected
             |payload. executors is the gate-authoring read: each registered
             |waiter with its projected gate-request contract, where the
-            |executor declares one.")
+            |executor declares one. Durable workflow definitions normally enter
+            |the registry through `defworkflow` in module source; direct
+            |registration is the runtime-implied trusted code and test seam for live state.")
    :prime (fmt/reflow
-           "|Run `strand workflow list` to see the registered routines, then
+           "|For durable workflow definitions, author `defworkflow` in module
+            |source and activate its module. For a live code or test change, use
+            |the explicit-runtime registration functions; the connected REPL can
+            |use their runtime-implied forms. Run `strand workflow list` to see the
+            |registered routines, then
             |`strand workflow show intake` (or any listed name) before supplying
             |params: in its JSON, params.contract names every key with its docs,
             |params.template is a copyable skeleton to fill in, and

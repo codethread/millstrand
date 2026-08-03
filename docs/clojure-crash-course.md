@@ -12,6 +12,8 @@ means: call `add!` in the `weaver` namespace with two arguments, `rt` and a map.
 
 ## Names
 
+Skein has one registration story with three calling surfaces. Put durable behavior in a module source with an authoring form such as `skein/defquery`; the form defines a Var and publishes the declaration when its module is collected. For code and tests that already hold a runtime, use the explicit-runtime `skein.api.*.alpha` functions. In the connected REPL, `skein.repl` provides the same verbs with the runtime implied. The REPL is a shorter calling style, not a separate capability.
+
 The strand functions live in `skein.api.weaver.alpha` and all take the weaver runtime first:
 
 ```clojure
@@ -22,6 +24,15 @@ weaver/ready
 weaver/update!
 ```
 
+The explicit-runtime registration form is used by code and tests:
+
+```clojure
+(require '[skein.api.current.alpha :as current]
+         '[skein.api.graph.alpha :as graph])
+
+(graph/register-query! (current/runtime) 'mine [:= [:attr :owner] "ct"])
+```
+
 The live registration verbs live in `skein.repl` and imply the runtime because you are already sitting inside the weaver. `mill weaver repl` starts in `user` with `skein.repl` aliased as `repl`; in another nREPL session, first run `(require '[skein.repl :as repl])`.
 
 ```clojure
@@ -29,6 +40,8 @@ repl/register-query!
 repl/replace-query!
 repl/unregister-query!
 ```
+
+The registry is owner-partitioned and layered. `register-query!` claims a fresh name and fails loudly if another owner already supplies it. `replace-query!` records intent to shadow an existing entry. `unregister-query!` removes only your own entry and restores the entry below it; it does not remove or change the Var. Removing a shadow and registering again is not a substitute for replace.
 
 Common row keys:
 

@@ -8,7 +8,7 @@ The agent family (`agent-run`, `executors.subagent`, `delegation`, `bench`) live
 The spools in this directory ship with Skein as working references. Use them directly, copy them
 as starting points, or study them to author your own.
 
-Every spool loads through one convention: an approved coordinate in `.skein/spools.edn` and a stable `runtime/module!` declaration guarded by its `:spools` roots. Full refresh resolves those roots, collects the module's authoring forms, publishes its owner-complete contribution, and runs its lifecycle declarations. These forms run in trusted config (`.skein/init.clj`) or an explicit-runtime REPL; [customising your workspace](../docs/spools/customisation.md) is the operational walkthrough.
+Every spool loads through one convention: an approved coordinate in `.skein/spools.edn` and a stable `runtime/module!` declaration guarded by its `:spools` roots. Full refresh resolves those roots, collects the module's authoring forms, publishes its owner-complete contribution, and runs its lifecycle declarations. Authoring forms are the durable path and are collected from module source; explicit-runtime registration functions are the live code/test seam, and the in-process REPL supplies the same live verbs with the runtime implied. Evaluating an authoring form at a REPL defines its Var but publishes nothing. [Customising your workspace](../docs/spools/customisation.md) is the operational walkthrough.
 
 Blessed alpha helpers such as `skein.api.peers.alpha` are also explicit-require userland APIs for trusted config and REPL workflows. Use that namespace's `peers` and `call!` helpers when a spool or repo config needs to discover and invoke same-machine sibling weavers.
 
