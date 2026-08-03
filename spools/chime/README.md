@@ -73,14 +73,16 @@ Worked example — notify when a strand that parents other work is closed:
 ```clojure
 (ns my.rules
   "Workspace notification rules."
-  (:require [skein.repl :as repl]
+  (:require [skein.api.current.alpha :as current]
+            [skein.api.weaver.alpha :as weaver]
             [skein.spools.chime :as chime]))
 
 (chime/defrule parent-completed
   "Notify when a strand with parent-of children reaches closed."
   [{:keys [strand]}]
   (when (and (= "closed" (:state strand))
-             (seq (repl/query [:edge/in "parent-of" [:= :id (:id strand)]])))
+             (seq (weaver/list (current/runtime)
+                               [:edge/in "parent-of" [:= :id (:id strand)]] {})))
     {:title (str "Plan complete: " (:title strand))
      :body (str "Strand " (:id strand) " and the work it parents are finished.")}))
 ```

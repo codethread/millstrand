@@ -154,7 +154,7 @@ generations for the classification and the cutover semantics.
 ## REPL hygiene in a shared weaver
 
 Much of this iteration happens from `mill weaver repl`. The REPL (and `mill weaver repl --stdin`) evaluates
-inside the live weaver JVM, usually in the shared `skein.repl` namespace. Exploratory requires and scratch defs mutate that namespace for every other session attached to the
+inside the live weaver JVM, in the shared `user` namespace. Exploratory requires and scratch defs mutate that namespace for every other session attached to the
 same weaver, so use names that are easy to identify and clean up: prefer `:as` aliases over `:refer`, prefix
 aliases and scratch vars with an owner or session prefix (`ct-`, `agent-abc-`, a task slug), and avoid
 unprefixed scratch vars like `result`, `x`, or `data`. Clean aliases with `ns-unalias` and scratch vars with
@@ -176,10 +176,11 @@ For stronger isolation, create an agent-local namespace and call Skein helpers t
 (create-ns 'agent.ct)
 (in-ns 'agent.ct)
 (clojure.core/refer 'clojure.core)
-(require '[skein.repl :as repl]
+(require '[skein.api.current.alpha :as current]
+         '[skein.api.weaver.alpha :as weaver]
          '[clojure.pprint :as ct-pprint])
 
-(ct-pprint/pprint (repl/ready))
+(ct-pprint/pprint (weaver/ready (current/runtime)))
 
 (remove-ns 'agent.ct)
 ```

@@ -188,7 +188,7 @@ mill weaver repl
 From the REPL you can register a named query and see it immediately from the plain CLI, while the weaver keeps running:
 
 ```clojure
-(defquery! 'code '[:= [:attr :type] "code"])
+(repl/register-query! 'code '[:= [:attr :type] "code"])
 ```
 
 <details markdown>

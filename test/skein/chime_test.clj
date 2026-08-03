@@ -9,11 +9,11 @@
             [clojure.test :refer [deftest is testing]]
             [skein.api.events.alpha :as events]
             [skein.api.hooks.alpha :as hooks]
+            [skein.api.current.alpha :as current]
             [skein.api.runtime.alpha :as runtime]
             [skein.api.weaver.alpha :as weaver]
             [skein.core.db-test :as db-test]
             [skein.core.weaver.runtime :as weaver-runtime]
-            [skein.repl :as repl]
             [skein.spools.chime :as chime]
             [skein.spools.test-support :as test-support]
             [skein.test.alpha :as test-alpha]))
@@ -116,7 +116,8 @@
   "README worked example: notify when a strand with parent-of children closes."
   [{:keys [strand]}]
   (when (and (= "closed" (:state strand))
-             (seq (repl/query [:edge/in "parent-of" [:= :id (:id strand)]])))
+             (seq (weaver/list (current/runtime)
+                               [:edge/in "parent-of" [:= :id (:id strand)]] {})))
     {:title (str "Plan complete: " (:title strand))
      :body (str "Strand " (:id strand) " and the work it parents are finished.")}))
 

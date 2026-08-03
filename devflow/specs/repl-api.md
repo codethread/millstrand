@@ -4,58 +4,61 @@
 
 ## SPEC-003.P1 Purpose
 
-The REPL API gives coding agents and human developers a compact interactive Clojure interface over the stripped strand surface and the selected weaver workspace.
+The REPL API gives coding agents and human developers an interactive Clojure interface over the
+selected weaver workspace: the live registration verbs, plus the session machinery that connects a
+JVM to one weaver.
 
 ## SPEC-003.P2 Interface
 
-Helpers in `skein.repl`:
+`skein.repl` publishes exactly two things.
+
+Registration verbs — the `skein.api.*.alpha` matrix with the runtime implied, in-process only:
+
+```clojure
+register-op!       replace-op!       unregister-op!
+register-query!    replace-query!    unregister-query!
+register-pattern!  replace-pattern!  unregister-pattern!
+register-hook!     replace-hook!     unregister-hook!
+register-handler!  replace-handler!  unregister-handler!
+```
+
+Session machinery:
 
 ```clojure
 connect!
-init!
-strand!
-update!
-strand
-supersede!
-burn!
+connected-config-dir
+connected-opts
 burn-by-ids!
-defquery!
-load-queries!
-queries
-query-explain
-query
-strands
-ready
-declare-acyclic-relation!
-acyclic-relations
-defpattern!
-patterns
-pattern
-pattern-explain
-weave!
+burn-history
+recent-burns
+eval-source-forms!
+-main
 ```
+
+Strand reads and mutations are not part of this surface. Interactive callers use the `strand` CLI,
+and in-process code uses the explicit-runtime `skein.api.*.alpha` verbs.
 
 ## SPEC-003.P3 Contracts
 
-- **SPEC-003.C1:** `connect!` selects one active weaver connection by Skein workspace for explicit Clojure client/test workflows. It requires an explicit selected workspace and optional state metadata supplied directly by standalone Clojure/test helpers. It never accepts a database path and no longer silently falls back to an XDG global workspace. Default `mill weaver repl` does not call `connect!`.
-- **SPEC-003.C2:** `mill weaver repl` requires a running `mill`, asks it to resolve the selected workspace, verify that workspace's weaver is running, and return nREPL metadata, then attaches the user's terminal to the selected weaver nREPL endpoint. Mill does not proxy nREPL. Any launched attach client is transport/UI only: user forms are evaluated in the weaver JVM, not in a separate local runtime or through the fixed API bridge.
-- **SPEC-003.C3:** `mill weaver repl --stdin` attaches to the selected running weaver nREPL, reads and evaluates top-level stdin forms in the weaver JVM in order, prints one direct normal Clojure result per form, and exits non-zero on read, eval, or transport failure. Callers that want one machine-readable payload should wrap work in one top-level `do` or `let`.
-- **SPEC-003.C4:** `skein.repl` helpers keep the human-friendly implicit selected-weaver surface: inside the active weaver JVM they use the active runtime, and explicit Clojure client/test workflows use `connect!` plus the fixed-form client bridge. The `skein.api.*.alpha` domain namespaces do not perform implicit runtime discovery or connected-client routing; trusted in-process callers pass a runtime explicitly. This is a deliberate TEN-000@1 in-place rethink to make runtime ownership visible. Weaver/transport failures surface loudly as Clojure exceptions.
-- **SPEC-003.C5:** `init!` is a trusted idempotent helper for explicit schema initialization/testing. Normal CLI setup does not require calling it because weaver startup prepares empty stores.
-- **SPEC-003.C6:** `strand!` creates a strand and returns the created row. Supported arities include a title alone, title with attributes, and title with options containing optional `:state` and `:attributes`.
-- **SPEC-003.C7:** `update!` accepts a strand id and patch map with optional `:title`, `:state`, `:attributes`, and `:edges`. Generic update accepts `active|closed`; `replaced` is reserved for supersession. Other lifecycle keys are not core strand fields.
-- **SPEC-003.C8:** `:edges` are maps with `:type`, `:to`, and optional `:attributes`; each edge is written from the updated strand to `:to`. Edge `:type` values are open relation names matching `[a-z0-9][a-z0-9._/-]*`.
-- **SPEC-003.C8a:** `supersede!` accepts `(supersede! old-id replacement-id)`, delegates to the weaver supersession operation, stores `replacement --supersedes--> old`, marks the old strand `replaced`, rewires incoming `depends-on` edges, and returns the normalized supersession result.
-- **SPEC-003.C8b:** `burn!` and `burn-by-ids!` physically delete strands and incident edges through weaver burn primitives. Missing ids fail loudly.
-- **SPEC-003.C9:** `defquery!` registers a named query expression or parameterized query map in the active weaver's in-memory query registry.
-- **SPEC-003.C10:** `load-queries!` reads one EDN map of query names to query definitions and merges it into the active weaver's in-memory query registry.
-- **SPEC-003.C11:** `queries` returns the active weaver's in-memory query registry. `query-explain` accepts a simple symbol, keyword, or string query name, resolves it against the active weaver's in-memory query registry, and returns serializable caller guidance with the same core fields as CLI `query explain`: canonical name, declared params, referenced params, the effective where expression, the normalized definition, exact EDN form strings, and a short invocation summary. Missing names fail loudly with the existing `query/not-found` behavior including available names. Explicit connected-client workflows route `query-explain` through the fixed-form client operation table.
-- **SPEC-003.C12:** Query registry contents last only for the active weaver lifetime; reload trusted config or call `defquery!` / `load-queries!` again after weaver restart.
-- **SPEC-003.C13:** `query` returns strands matching an ad hoc query definition or weaver-registered query name, with optional runtime parameters.
+- **SPEC-003.C1:** `connect!` selects one active weaver connection by Skein workspace for explicit standalone Clojure client/test workflows. It requires an explicit selected workspace and optional state metadata supplied directly by those helpers. It never accepts a database path and never falls back to an XDG global workspace. `connect!` only records the selection: callers use `skein.core.client` with `connected-config-dir` and `connected-opts` to operate on it. Default `mill weaver repl` does not call `connect!`.
+- **SPEC-003.C2:** `mill weaver repl` requires a running `mill`, asks it to resolve the selected workspace, verify that workspace's weaver is running, and return nREPL metadata, then attaches the user's terminal to the selected weaver nREPL endpoint. Mill does not proxy nREPL. Any launched attach client is transport/UI only: user forms are evaluated in the weaver JVM, in the neutral `user` namespace with `skein.repl` aliased as `repl`, not in a separate local runtime or through the fixed API bridge.
+- **SPEC-003.C3:** `mill weaver repl --stdin` attaches to the selected running weaver nREPL, reads and evaluates top-level stdin forms in order in that weaver's neutral `user` namespace, prints one direct normal Clojure result per form, and exits non-zero on read, eval, or transport failure. Callers that want one machine-readable payload should wrap work in one top-level `do` or `let`.
+- **SPEC-003.C4:** `skein.repl`'s registration verbs imply the active in-process runtime and are unavailable to a standalone connected client. Without that runtime they fail loudly, naming the verb, whether the session is standalone or connected, and the `skein.core.client` alternative. The `skein.api.*.alpha` domain namespaces do not perform implicit runtime discovery or connected-client routing; trusted in-process callers pass a runtime explicitly. `connect!` plus `skein.core.client` is the standalone Clojure client/test path. Weaver and transport failures surface loudly as Clojure exceptions.
+- **SPEC-003.C5:** Withdrawn. `init!` is not part of `skein.repl`; normal weaver startup prepares empty stores.
+- **SPEC-003.C6:** Withdrawn. `strand!` is not part of `skein.repl`.
+- **SPEC-003.C7:** Withdrawn. `update!` is not part of `skein.repl`.
+- **SPEC-003.C8:** Withdrawn with `update!`.
+- **SPEC-003.C8a:** Withdrawn. `supersede!` is not part of `skein.repl`.
+- **SPEC-003.C8b:** Withdrawn. `burn!` is not part of `skein.repl`; `burn-by-ids!` remains its explicit recovery write.
+- **SPEC-003.C9:** `register-query!`, `replace-query!`, and `unregister-query!` are `skein.repl`'s runtime-implied, in-process counterparts to the explicit-runtime `skein.api.graph.alpha` verbs. They claim, deliberately replace, or retract the current direct owner's query entry; the complete owner-partition contract is SPEC-003.C23.
+- **SPEC-003.C10:** `load-queries!` is withdrawn. Query definitions belong in authoring forms or are registered one at a time through the query verb matrix.
+- **SPEC-003.C11:** Withdrawn. `queries` and `query-explain` are not part of `skein.repl`.
+- **SPEC-003.C12:** Direct query registrations last only for the active weaver lifetime. After a weaver restart, reload trusted config for durable authoring-form declarations or call the explicit-runtime or in-process registration verbs again.
+- **SPEC-003.C13:** Withdrawn. `query` is not part of `skein.repl`.
 - **SPEC-003.C13a:** Query predicates include direct edge-existence forms `[:edge/out relation target-query]` and `[:edge/in relation source-query]`. `relation` is a valid relation-name string or a `[:param :name]` reference resolving to one. Endpoint queries are strand-local and fail loudly if they contain nested edge predicates.
-- **SPEC-003.C14:** `strand`, `strands`, `query`, and `ready` return rows with JSON-bearing columns normalized to Clojure values and with the `state` lifecycle field.
-- **SPEC-003.C15:** `ready` returns active strands whose direct `depends-on` dependencies are not active and may be further filtered by an ad hoc or registered query. This is equivalent to `[:and [:= :state "active"] [:not [:edge/out "depends-on" [:= :state "active"]]]]`.
-- **SPEC-003.C15a:** `declare-acyclic-relation!` declares a valid relation name acyclic in durable storage and is idempotent. It fails loudly if edges of that relation already exist. `acyclic-relations` lists declared acyclic relation names.
+- **SPEC-003.C14:** Withdrawn. `strand`, `strands`, `query`, and `ready` are not part of `skein.repl`.
+- **SPEC-003.C15:** Withdrawn. `ready` is not part of `skein.repl`.
+- **SPEC-003.C15a:** Withdrawn. `declare-acyclic-relation!` and `acyclic-relations` are not part of `skein.repl`.
 - **SPEC-003.C16:** Blessed spool-workspace helpers live in explicit `skein.api.runtime.alpha`, not in the preloaded `skein.repl` helper namespace.
 - **SPEC-003.C17:** `skein.api.runtime.alpha` exposes approved spool configuration, owner-complete module declaration and refresh, module/root status and planning, advanced code-only reload, a blessed runtime-local spool-state accessor for trusted spools, `resolve-var` for spool-classloader symbol resolution, `clock` for the runtime-owned Clock, and `now` for its current `java.time.Instant` (SPEC-004.C1a).
 - **SPEC-003.C17a:** `skein.api.clock.alpha` exposes the Clock capability — a validated value, not a protocol, so re-evaluating the namespace never strands a live clock the runtime already holds. `(now clock)` returns a `java.time.Instant`, and `(sleep! clock duration)` sleeps or advances for a non-negative `java.time.Duration` and returns nil. Zero Duration is valid. `(clock now-fn sleep-fn)` builds one, `(clock? value)` tests one, and `(system-clock)` returns the real production implementation. Invalid durations fail loudly.
@@ -70,9 +73,9 @@ weave!
   > **SPEC-003.C19 exception — callback grammar removal.** Removing `:contribute` and `:reconcile` from `module!`, then removing `skein.api.spool.alpha/::spool` and the public `spool` convention, withdraws accepted alpha surface. The break is deliberate under TEN-000@1 and PROP-Auf-001. A parallel namespace or compatibility adapter would preserve two activation grammars and was rejected. This exception applies only to these callback entry points.
 
 - **SPEC-003.C19a:** Converted `skein.api.*.alpha` modules follow the v1 form contract. The `alpha` namespace reads public-first and tells the module's story: the promised vars lead, each carrying a docstring and its top-level composition — a public fn's body shows the meat of the algorithm as named steps (threading where natural) — including its concurrency shape: sequencing, fan-out, and blocking joins read at the top level — never a bare delegation husk. The default shape is one story-ordered file: private helpers below the publics in section-commented concern clusters, a `declare` block up top where reading order fights definition order (an accepted cost). Around five hundred lines the module tips into per-concern plumbing files under `skein.api.<module>.internal[.<concern>]`, which the exclusionary rule of SPEC-005.P1 places outside the contract regardless of var visibility; the line is a rough heuristic judged by the source-form review seat, not arithmetic a gate enforces. A module with no plumbing ships no internal namespace. Public vars stay defined in alpha, never re-exported from internal; an internal namespace (nested concern files included) never requires an alpha namespace, and among `src` namespaces only a module's own alpha or its own internal siblings require its internal. Every public fn's interface is identified from alpha: its named argument/return specs or `s/fdef` register there, keeping their qualified keys on the promised namespace; reusable sub-specs may live in internal when they are plumbing rather than promise. A public fn that is itself the authority for a data shape — a validator or parser whose body defines the grammar — documents that grammar in its docstrings instead of mirroring itself in a spec; a second source of truth is the failure mode there, not the fix. Source lines in a converted module's files stay within 96 columns, with docstrings and comments hard-wrapped in source. `quality.api-form` (run by `quality.conventions-check`) enforces the mechanical parts — public-var docstrings, width, the dependency rules, and the `pending` ratchet; the worked examples are `devflow/archive/26-07-18__g1men-v1-api-format/` and the `return-shape` module itself.
-- **SPEC-003.C20:** `defpattern!` registers a simple pattern name, optional non-blank doc string, fully qualified function symbol, and input spec name in the active weaver's in-memory pattern registry. Supported arities are `(defpattern! name fn-sym input-spec)` and `(defpattern! name doc fn-sym input-spec)`. Duplicate registration follows the owner-partition rules C23 owns: re-registering a name the caller already holds replaces it, and a name another owner supplies collides loudly, with `replace-pattern!` as the deliberate override. The same operations are available through the blessed `skein.api.patterns.alpha` namespace for trusted startup config and activated spools when callers pass the runtime explicitly.
-- **SPEC-003.C21:** `patterns`, `pattern`, and `pattern-explain` inspect active weaver pattern state. Missing pattern lookup fails loudly. Explanations return serializable caller guidance based on the registered spec.
-- **SPEC-003.C22:** `weave!` validates input against the registered spec, calls the registered function with `{:input input}`, requires the result to be a valid batch strand vector, and creates the batch atomically through the weaver.
+- **SPEC-003.C20:** `register-pattern!`, `replace-pattern!`, and `unregister-pattern!` are `skein.repl`'s runtime-implied, in-process counterparts to the explicit-runtime `skein.api.patterns.alpha` verbs. The registration and replacement arities accept a pattern name, optional non-blank doc string, fully qualified function symbol, and input spec name. Their owner-partition contract is SPEC-003.C23: a caller may replace its own entry, another owner's entry requires `replace-pattern!`, and retraction restores any shadowed entry.
+- **SPEC-003.C21:** Withdrawn. `patterns`, `pattern`, and `pattern-explain` are not part of `skein.repl`.
+- **SPEC-003.C22:** Withdrawn. `weave!` is not part of `skein.repl`.
 - **SPEC-003.C23:** The direct per-entry registration functions across the graph, patterns, events, hooks, and weaver APIs (the explicit-owner `put-entry!`/`replace-entry!`/`remove-entry!` core seam and the domain APIs layered over it) remain trusted sharp tools, but every write carries an explicit owner: a direct owner may replace its own keys, while cross-owner replacement requires explicit override intent. Every kind exposes the same three verbs, spelled in that kind's own noun — ops `register-op!`/`replace-op!`/`unregister-op!`, queries `register-query!`/`replace-query!`/`unregister-query!`, patterns `register-pattern!`/`replace-pattern!`/`unregister-pattern!`, hooks `register-hook!`/`replace-hook!`/`unregister-hook!`, and event handlers `register-handler!`/`replace-handler!`/`unregister-handler!` — so the live loop is available for every kind rather than ops alone. `register-*!` claims a name in the caller's own partition and is loud when another owner already supplies it; ops are stricter still and reject any existing name, their own included. `replace-*!` is the deliberate override, loud when the name is absent, and it records the intent that carries a shadow across `refresh!`. `unregister-*!` retracts only the caller's own entry — it cannot delete another owner's, so retracting a shadow restores the shadowed entry rather than removing the name — and returns `{:unregistered <canonical key>}` for every kind. `replace-*!` returns exactly what its kind's `register-*!` returns. Module contribution publication reuses the same validators and effective-registry shapes without calling these functions entry by entry. Known constraint (**F20**): a direct write is not serialized against an in-flight `refresh!`. Publication resets each core registry to the candidate snapshot captured after evaluation and source loading, so a direct write landing in the narrow staging span between that capture and publication is silently overwritten; the window is small (only staged publication sits inside it), and reconcile-time direct writes run after publication and are safe. This trusted-REPL posture is accepted rather than lock-serialized (TEN-002); a caller needing a durable direct write across a concurrent refresh sequences it outside the refresh.
 - **SPEC-003.C23a:** `skein.api.registry.alpha` is the blessed kind-declaration and owner-partition primitive for spool domains (SPEC-005.C2). It declares a registered kind — id, entry spec, binding-moment datum, and layer policy — so a declared kind becomes a valid key the refresh kernel publishes from a module contribution (SPEC-004.C46), and it exposes the direct owner-partition operations: replace or remove one complete owner partition, read immutable effective snapshots, and explain the active, shadowed, and override entries for a kind. It carries no generic resource or effect callbacks; domains do their baseline, durable-write, and lifecycle work through their own APIs around publication. The core owner-registry implementation it fronts stays internal (`skein.core.*`).
 - **SPEC-003.C23b:** A kind declaration may name an optional `:candidate-validator`: a fully qualified symbol the refresh coordinator resolves under the runtime's spool classloader and calls once per refresh with `{:runtime :kind :entries :owners}`, where `:entries` is the kind's complete effective candidate entry map and `:owners` maps each entry key to its winning owner. It runs after every owner's contribution is staged and before any publication, so it is the seam for rules a per-entry `:entry-spec` cannot state: references between entries different owners contributed, deletions an owner expressed by omission, and resolvability of the symbols an entry names. Throwing rejects the whole refresh before `publish!`, so every affected owner retains its previous live partition (SPEC-004.C46, C96). It is a validator, not a reconciler: it performs no registration, no durable write, and no resource effect.
@@ -204,18 +207,15 @@ Maven dependencies declared in an approved spool root's top-level `deps.edn :dep
   cross-talk. `(runtime)` returns the resolved runtime as an escape hatch for
   the explicit-runtime surface this module does not wrap (graph, events,
   hooks).
-- **SPEC-003.C27:** The terse wrappers mirror `skein.repl`'s vocabulary bound to
-  the resolved runtime: `init!`, `strand!`, `strand`, `update!`, `supersede!`,
-  `burn!`, `strands`, `query`, `ready`, `defquery!`, `load-queries!`, `queries`,
-  `query-explain`, `declare-acyclic-relation!`, `acyclic-relations`,
-  `defpattern!`, `patterns`, `pattern`, `pattern-explain`, `weave!`, and `apply!`
-  (batch). One deliberate signature divergence: `load-queries!` takes an
-  already-parsed EDN map of named query definitions, not the file path
-  `skein.repl/load-queries!` reads from disk — trusted in-process code owns its
-  own I/O. Positioning: `skein.repl` is the interactive human, connection-aware
-  surface; `skein.userland.alpha` is the trusted userland-code surface holding an
-  explicit in-process runtime. Same terse vocabulary, different runtime
-  ownership model.
+- **SPEC-003.C27:** The terse wrappers are bound to the resolved runtime:
+  `init!`, `strand!`, `strand`, `update!`, `supersede!`, `burn!`, `strands`,
+  `query`, `ready`, `defquery!`, `load-queries!`, `queries`, `query-explain`,
+  `declare-acyclic-relation!`, `acyclic-relations`, `defpattern!`, `patterns`,
+  `pattern`, `pattern-explain`, `weave!`, and `apply!` (batch).
+  `load-queries!` takes an already-parsed EDN map of named query definitions:
+  trusted in-process code owns its own I/O. `skein.userland.alpha` is trusted
+  userland code holding an explicit in-process runtime; `skein.repl` supplies
+  interactive registration verbs and session machinery.
 
 ## SPEC-003.P6 Example spool init
 

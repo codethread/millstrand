@@ -413,10 +413,12 @@ belongs in recorded history.
 
 Queries can be registered in weaver memory, then consumed by the REPL or CLI.
 
-From the live weaver REPL, `defquery!` registers a query for the current weaver lifetime only:
+From the live weaver REPL, `register-query!` claims a query name for the current weaver lifetime
+only. `replace-query!` takes over a name another owner supplies, and `unregister-query!` retracts
+your own claim:
 
 ```clojure
-(defquery! 'agent-docs
+(repl/register-query! 'agent-docs
   '[:and
     [:= [:attr :owner] "agent"]
     [:= [:attr :area] "docs"]])
@@ -555,11 +557,17 @@ mill weaver repl --workspace "$workspace"
 Useful forms:
 
 ```clojure
-(def id (:id (strand! "Explore workflow" {:owner "ct" :kind "spike"})))
-(strand id)
-(update! id {:state "closed" :attributes {:outcome "captured"}})
-(strands)
-(ready)
+(require '[skein.api.current.alpha :as current]
+         '[skein.api.weaver.alpha :as weaver])
+
+(def rt (current/runtime))
+
+(def id (:id (weaver/add! rt {:title "Explore workflow"
+                              :attributes {:owner "ct" :kind "spike"}})))
+(weaver/show rt id)
+(weaver/update! rt id {:state "closed" :attributes {:outcome "captured"}})
+(weaver/list rt)
+(weaver/ready rt)
 ```
 
 Script the live weaver REPL with stdin:
@@ -568,8 +576,9 @@ Script the live weaver REPL with stdin:
 printf '(skein.api.current.alpha/runtime)\n' | mill weaver repl --stdin --workspace "$workspace"
 ```
 
-The REPL helper namespace includes common strand functions. Privileged runtime loader/config helpers
-are explicit built-in namespaces, not ordinary user spools; require them when needed:
+The session starts in the neutral `user` namespace with `skein.repl` aliased `repl`, which carries
+the live registration verbs. Everything else is an ordinary namespace you require. Privileged runtime
+loader/config helpers are explicit built-in namespaces, not ordinary user spools:
 
 ```clojure
 (require '[skein.api.current.alpha :as current]
@@ -585,8 +594,8 @@ in-process `mill weaver repl`; they throw with remediation from a connected-clie
 in-process runtime.
 
 ```clojure
-(recent-burns 20)             ; scan recent deletions across all strands, newest first
-(burn-history "<burned-id>")  ; every tombstone recorded for one burned id
+(repl/recent-burns 20)             ; scan recent deletions across all strands, newest first
+(repl/burn-history "<burned-id>")  ; every tombstone recorded for one burned id
 ```
 
 Each tombstone carries the burned strand's core fields, its full attribute map (each value tagged

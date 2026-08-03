@@ -70,33 +70,41 @@ mill weaver list | jq -r '.[] | select(.state == "running") | "\(.name)\t\(.conf
 4. Choose **Clojure CLI** or **Generic nREPL** when prompted for the REPL type.
 5. Enter the host and port from `mill weaver list`.
 
-After Calva connects, evaluate this form once to enter Skein's convenience namespace:
+After Calva connects, evaluate this form once to land in the neutral `user` session
+namespace with `skein.repl` aliased:
 
 ```clojure
-(do (require 'skein.repl) (in-ns 'skein.repl))
+(do (in-ns 'user) (require '[skein.repl :as repl]))
 ```
 
-You can now evaluate forms such as:
+You can now iterate on the weaver's live registries:
 
 ```clojure
-(ready)
-(strands)
-(def s (:id (strand! "Try VS Code REPL" {:owner "me"})))
-(strand s)
-(update! s {:state "closed"})
+(repl/register-query! 'mine [:= [:attr :owner] "me"])
+(repl/replace-query! 'mine [:= [:attr :owner] "someone-else"])
+(repl/unregister-query! 'mine)
+```
+
+Reads and strand mutation stay on the `strand` CLI, or on the explicit-runtime
+`skein.api.*.alpha` verbs when you already hold a runtime:
+
+```clojure
+(require '[skein.api.current.alpha :as current]
+         '[skein.api.weaver.alpha :as weaver])
+
+(weaver/ready (current/runtime))
 ```
 
 ## Evaluating from files
 
-When evaluating forms from a file, the file's namespace still matters. For scratch notes or `.skein/init.clj` experiments, prefer an explicit alias:
+When evaluating forms from a file, the file's namespace still matters. Name the alias there too:
 
 ```clojure
 (require '[skein.repl :as repl])
 
 (comment
-  (repl/ready)
-  (def s (:id (repl/strand! "Try editor eval" {:owner "me"})))
-  (repl/update! s {:state "closed"}))
+  (repl/register-query! 'mine [:= [:attr :owner] "me"])
+  (repl/unregister-query! 'mine))
 ```
 
 Stop the weaver when you are finished:
