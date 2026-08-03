@@ -42,6 +42,10 @@
 (s/def ::query-def (s/or :where-vector vector? :detailed map?))
 (s/def ::query-registry (s/map-of string? ::query-def))
 
+;; Every `unregister-*!` across the API namespaces answers with the canonical
+;; registry key it retracted; query names canonicalize to strings.
+(s/def ::unregistered string?)
+
 (defn register-query!
   "Register a named query definition and return its canonical API shape.
 
@@ -49,7 +53,9 @@
   definition compiles before it reaches the registry, so malformed query
   data fails loudly at registration time; `skein.core.query` is the
   grammar authority for definitions and compiles the stored definition at
-  each use."
+  each use. Re-registering a name this owner already holds replaces that
+  entry; a name another owner supplies collides loudly, and `replace-query!`
+  is the deliberate override for it."
   ([runtime query-name query-def]
    (register-query! runtime core-registry/repl-owner query-name query-def))
   ([runtime owner query-name query-def]
@@ -63,6 +69,58 @@
               :owned (s/cat :runtime ::runtime :owner keyword?
                             :query-name ::query-name :query-def ::query-def))
   :ret ::query-registry)
+
+(defn replace-query!
+  "Replace an already-registered query, failing loudly when the name is absent.
+
+  Same signature and return shape as `register-query!`. This is the deliberate
+  override for a name that already exists; unlike `register-query!` it requires
+  the name to be present. When another owner supplies the name — a
+  module-published query, say — the override intent is recorded, which is what
+  lets the direct entry keep shadowing the original across `runtime/refresh!`.
+  `unregister-query!` retracts the shadow and the shadowed entry becomes
+  effective again. Queries are value-registered, so replacing a definition is
+  the whole iteration loop: there is no function body to redefine."
+  ([runtime query-name query-def]
+   (replace-query! runtime core-registry/repl-owner query-name query-def))
+  ([runtime owner query-name query-def]
+   (let [[canonical-name definition :as entry] (validated-entry query-name query-def)
+         registered (access/query-registry runtime)]
+     (when-not (contains? registered canonical-name)
+       (throw (ex-info "Query not registered; cannot replace"
+                       {:query canonical-name
+                        :available (sort (keys registered))})))
+     (core-registry/replace-entry! (access/query-store runtime) owner canonical-name definition)
+     (into {} [entry]))))
+
+(s/fdef replace-query!
+  :args (s/or :direct (s/cat :runtime ::runtime :query-name ::query-name
+                             :query-def ::query-def)
+              :owned (s/cat :runtime ::runtime :owner keyword?
+                            :query-name ::query-name :query-def ::query-def))
+  :ret ::query-registry)
+
+(defn unregister-query!
+  "Retract `owner`'s own registration of `query-name`.
+
+  Removal reaches only into the calling owner's partition, so it is the
+  counterpart of `replace-query!` rather than a way to delete another owner's
+  query: retracting a shadow restores the shadowed definition as effective, and
+  retracting a fresh claim leaves the name unregistered. Unregistering a name
+  this owner never registered is an idempotent no-op. Returns `{:unregistered
+  <canonical-name>}`."
+  ([runtime query-name]
+   (unregister-query! runtime core-registry/repl-owner query-name))
+  ([runtime owner query-name]
+   (let [canonical-name (query/canonical-query-name query-name)]
+     (core-registry/remove-entry! (access/query-store runtime) owner canonical-name)
+     {:unregistered canonical-name})))
+
+(s/fdef unregister-query!
+  :args (s/or :direct (s/cat :runtime ::runtime :query-name ::query-name)
+              :owned (s/cat :runtime ::runtime :owner keyword?
+                            :query-name ::query-name))
+  :ret (s/keys :req-un [::unregistered]))
 
 (defn queries
   "Return registered query definitions keyed by canonical string name."

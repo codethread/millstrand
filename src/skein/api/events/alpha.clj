@@ -1,13 +1,14 @@
 (ns skein.api.events.alpha
   "Explicit-runtime API for managing and inspecting weaver event handlers.
 
-  Registration and unregistration mutate the runtime's weaver-lifetime
-  handler registry; `handlers` and `recent-failures` are the data-first
-  reads over registry and failure state. Every registration is validated
-  loudly at the seam — stable key, non-empty keyword type set, fully
-  qualified function symbol resolvable under the runtime spool
-  classloader, data-first metadata — and entries replace by key for
-  reload workflows. Event submission is not public surface: internal
+  Registration, replacement, and unregistration mutate the runtime's
+  weaver-lifetime handler registry; `handlers` and `recent-failures` are
+  the data-first reads over registry and failure state. Every registration
+  is validated loudly at the seam — stable key, non-empty keyword type set,
+  fully qualified function symbol resolvable under the runtime spool
+  classloader, data-first metadata — and entries replace by key within the
+  registering owner's partition, which is what makes reload workflows
+  idempotent. Event submission is not public surface: internal
   mutation APIs submit events through `skein.core.weaver.dispatch`
   (SPEC-004.C73), and the event-lane quiescence await ships in
   `skein.test.alpha` (SPEC-004.C74b).
@@ -22,37 +23,66 @@
 
 (declare handler-registry recent-failures-state
          validate-handler-key! validate-handler-types! validate-handler-metadata!
-         resolve-handler-fn!)
+         resolve-handler-fn! validated-handler-entry)
 
 (defn register-handler!
-  "Register or replace an event handler in `runtime` for selected event types.
+  "Register an event handler in `runtime` for selected event types.
 
   Builds the registry entry from loudly validated pieces — `key` a keyword,
   symbol, or non-blank string; `types` a non-empty set of event type
   keywords; `fn-sym` a fully qualified symbol resolving to a callable under
   the runtime spool classloader (resolution happens here, so a bad symbol
   fails registration, not dispatch); `metadata` a data-first map — swaps it
-  into the registry, replacing any prior entry with the same key, and
-  returns the entry as data (the resolved function value stays internal)."
+  into the registry, and returns the entry as data (the resolved function
+  value stays internal). Re-registering a key this owner already holds
+  replaces that entry; a key another owner supplies collides loudly, and
+  `replace-handler!` is the deliberate override for it."
   ([runtime key types fn-sym]
    (register-handler! runtime core-registry/repl-owner key types fn-sym {}))
   ([runtime key types fn-sym metadata]
    (register-handler! runtime core-registry/repl-owner key types fn-sym metadata))
   ([runtime owner key types fn-sym metadata]
-   (let [entry {:key (validate-handler-key! key)
-                :types (validate-handler-types! types)
-                :fn fn-sym
-                :fn-value (resolve-handler-fn! runtime fn-sym)
-                :metadata (validate-handler-metadata! metadata)}]
+   (let [entry (validated-handler-entry runtime key types fn-sym metadata)]
      (core-registry/put-entry! (access/handler-store runtime) owner (:key entry) entry)
      (dissoc entry :fn-value))))
 
-(defn unregister-handler!
-  "Unregister the event handler stored under `key` in `runtime`.
+(defn replace-handler!
+  "Replace an already-registered event handler, failing loudly when absent.
 
-  Validates `key` like registration, removes any entry stored under it (a
-  key with no entry is a quiet no-op, so unregistration is idempotent), and
-  returns `{:unregistered key}`."
+  Same signature and return shape as `register-handler!`. This is the
+  deliberate override for a key that already exists; unlike
+  `register-handler!` it requires the key to be present. When another owner
+  supplies the key — a module-published handler, say — the override intent
+  is recorded, which is what lets the direct entry keep shadowing the
+  original across `runtime/refresh!`. `unregister-handler!` retracts the
+  shadow and the shadowed entry becomes effective again. Handlers capture
+  their resolved function value at registration rather than binding it at
+  dispatch, so redefining the underlying fn does not reach a registered
+  handler: iterating one is always this call."
+  ([runtime key types fn-sym]
+   (replace-handler! runtime core-registry/repl-owner key types fn-sym {}))
+  ([runtime key types fn-sym metadata]
+   (replace-handler! runtime core-registry/repl-owner key types fn-sym metadata))
+  ([runtime owner key types fn-sym metadata]
+   (let [entry (validated-handler-entry runtime key types fn-sym metadata)
+         registered (handler-registry runtime)]
+     (when-not (contains? registered (:key entry))
+       (throw (ex-info "Event handler not registered; cannot replace"
+                       {:handler (:key entry)
+                        :available (sort-by pr-str (keys registered))})))
+     (core-registry/replace-entry! (access/handler-store runtime) owner (:key entry) entry)
+     (dissoc entry :fn-value))))
+
+(defn unregister-handler!
+  "Retract `owner`'s own event handler registration for `key` in `runtime`.
+
+  Removal reaches only into the calling owner's partition, so it is the
+  counterpart of `replace-handler!` rather than a way to delete another
+  owner's handler: retracting a shadow restores the shadowed entry as
+  effective, and retracting a fresh claim leaves the key unregistered.
+  Validates `key` like registration; a key this owner never registered is a
+  quiet no-op, so unregistration is idempotent. Returns `{:unregistered
+  key}`."
   ([runtime key]
    (unregister-handler! runtime core-registry/repl-owner key))
   ([runtime owner key]
@@ -132,6 +162,13 @@
                             :types ::types :fn-sym ::fn :metadata ::metadata))
   :ret ::handler-entry)
 
+(s/fdef replace-handler!
+  :args (s/or :direct (s/cat :runtime ::runtime :key ::key :types ::types
+                             :fn-sym ::fn :metadata (s/? ::metadata))
+              :owned (s/cat :runtime ::runtime :owner keyword? :key ::key
+                            :types ::types :fn-sym ::fn :metadata ::metadata))
+  :ret ::handler-entry)
+
 (s/fdef unregister-handler!
   :args (s/or :direct (s/cat :runtime ::runtime :key ::key)
               :owned (s/cat :runtime ::runtime :owner keyword? :key ::key))
@@ -194,6 +231,19 @@
       (throw (ex-info "Event handler metadata must contain only data-first values"
                       {:metadata metadata})))
     metadata))
+
+(defn- validated-handler-entry
+  "Validate one registration's inputs and assemble its registry entry.
+
+  The shared entrance for `register-handler!` and `replace-handler!`. The
+  resolved `:fn-value` is the handler's early-bound callable and never leaves
+  the registry; callers strip it before returning."
+  [runtime key types fn-sym metadata]
+  {:key (validate-handler-key! key)
+   :types (validate-handler-types! types)
+   :fn fn-sym
+   :fn-value (resolve-handler-fn! runtime fn-sym)
+   :metadata (validate-handler-metadata! metadata)})
 
 ;; --- handler function resolution ------------------------------------------------
 

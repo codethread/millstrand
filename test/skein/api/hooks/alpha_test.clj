@@ -39,9 +39,9 @@
                  :order 1 :metadata {}}]
                (hooks/hooks rt))))
       (testing "unregistration is idempotent and validates its key"
-        (is (= :policy (hooks/unregister-hook! rt :policy)))
+        (is (= {:unregistered :policy} (hooks/unregister-hook! rt :policy)))
         (is (= [] (hooks/hooks rt)))
-        (is (= :policy (hooks/unregister-hook! rt :policy)))
+        (is (= {:unregistered :policy} (hooks/unregister-hook! rt :policy)))
         (is (thrown-with-msg? ExceptionInfo #"key must be a keyword, symbol, or string"
                               (hooks/unregister-hook! rt 42)))))))
 

@@ -1505,7 +1505,7 @@
               peer-b (hooks/register-hook! rt :b #{:payload/received} 'skein.weaver-test/capture-hook {})]
           (is (= ["early" :a :b :capture] (mapv :key (hooks/hooks rt))))
           (is (= [early peer-a peer-b replacement] (hooks/hooks rt)))
-          (is (= :a (hooks/unregister-hook! rt :a)))
+          (is (= {:unregistered :a} (hooks/unregister-hook! rt :a)))
           (is (= ["early" :b :capture] (mapv :key (hooks/hooks rt)))))))))
 
 (deftest weaver-hook-registry-validates-inputs
