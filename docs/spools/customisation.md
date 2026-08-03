@@ -292,15 +292,9 @@ Explicit-runtime code threads a `runtime` argument through every call. That is t
             [skein.api.weaver.alpha :as weaver]))
 
 (def ^:dynamic *runtime* nil)
-(defonce ^:private module-default (atom nil))
-
-(defn bind! [runtime]
-  (when (nil? runtime)
-    (throw (ex-info "Cannot bind a nil Skein runtime" {:runtime :nil})))
-  (reset! module-default runtime))
 
 (defn runtime []
-  (or *runtime* @module-default (current/runtime)))
+  (or *runtime* (current/runtime)))
 
 (defmacro with-runtime [runtime & body]
   `(let [runtime# ~runtime]
@@ -328,7 +322,7 @@ Explicit-runtime code threads a `runtime` argument through every call. That is t
   (graph/burn-by-ids! (runtime) ids))
 ```
 
-Resolution is local first: `with-runtime` provides a dynamic value, then `module-default` supplies the workspace helper's bound value, and `current/runtime` reads the active or published ambient runtime. The helper owns that hidden state and its strand CRUD vocabulary. Treat `bind!` as a process-global default for one private session only. On a shared weaver, leave it unset and call the helpers inside `with-runtime`, so each entry point names its target explicitly. The ambient fallback is the final convenience for a weaver-owned session where that ambient runtime is authoritative. Keep this pattern in workspace-owned code; shared spools should keep taking an explicit runtime.
+Resolution is local first: `with-runtime` provides a dynamic value, and `current/runtime` reads the active or published ambient runtime. The helper owns only its strand CRUD vocabulary. On a shared weaver, call the helpers inside `with-runtime`, so each entry point names its target explicitly. The ambient fallback is a convenience for a weaver-owned session where that ambient runtime is authoritative. Keep this pattern in workspace-owned code; shared spools should keep taking an explicit runtime.
 
 ## When a spool leaves your workspace
 
