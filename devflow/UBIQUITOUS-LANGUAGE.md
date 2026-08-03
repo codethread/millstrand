@@ -64,7 +64,7 @@ How code gets into a weaver.
 | **Approval** | A coordinate's presence in `spools.edn`. For a Git family the pinned sha is the consumer's consent. | Install, enable, activate, allowlist |
 | **Acquisition** | Resolving and fetching approved roots. | Install, download, resolve, fetch |
 | **Sync** | Materializing acquired roots into the runtime and reporting per-root outcomes. | Load, install, refresh, reload |
-| **Namespace tiers** | The contractual layering of `skein.*` (SPEC-003.C19). `skein.api.*.alpha` promises accretion within each subnamespace; `skein.core.*` promises nothing; `skein.spools.*` is the spool layer; `skein.repl` is the human surface; `skein.userland.alpha` is downstream ergonomics. | Layers, packages, modules, tiers bare |
+| **Namespace tiers** | The contractual layering of `skein.*` (SPEC-003.C19). `skein.api.*.alpha` promises accretion within each subnamespace; `skein.core.*` promises nothing; `skein.spools.*` is the spool layer; `skein.repl` is the human surface. Workspace-owned helper namespaces are downstream code, not a Skein tier. | Layers, packages, modules, tiers bare |
 | **Unsafe namespace** | A shipped spool namespace whose name marks it as reaching into `skein.core.*`. Only these may touch core, which keeps the coupling visible. | Internal, private, legacy, deprecated |
 
 ## Spool capabilities

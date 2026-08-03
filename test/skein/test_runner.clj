@@ -76,8 +76,6 @@
    'skein.source-root-spools-test
    ;; ambient REPL connection atoms.
    'skein.repl-test
-   ;; module-local bind! is process-global and loud-failure asserts no published runtime.
-   'skein.userland-test
    ;; published singleton semantics.
    'skein.weaver-publication-test
    ;; multiple published peer runtimes verify routing semantics.

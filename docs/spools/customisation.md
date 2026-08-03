@@ -283,42 +283,48 @@ starts, advances, or lists an existing primitive speaks that primitive's terms.
 
 ## Terse daily driving
 
-Explicit-runtime code threads a `runtime` argument through every call, which is the right discipline for
-durable config and a chore at the REPL. In your **own** workspace config you may trade that explicitness for
-terseness: capture the runtime once with `skein.userland.alpha`, then call both the blessed API and any
-explicit-runtime spool through terse wrappers:
+Explicit-runtime code threads a `runtime` argument through every call. That is the right discipline for durable config and can be tedious at the REPL. If your workspace needs shorter calls, put the helper in your own namespace and make the trade explicit:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.userland.alpha :as u]
-         '[acme.priority.alpha :as priority])
+(ns my.helpers
+  (:require [skein.api.current.alpha :as current]
+            [skein.api.graph.alpha :as graph]
+            [skein.api.weaver.alpha :as weaver]))
 
-;; Bind the active in-process runtime once for terse daily calls.
-(u/bind! (current/runtime))
+;; Scoped binding only; keep actual state runtime-owned.
+(def ^:dynamic *runtime* nil)
 
-;; Terse core calls — the runtime is resolved for you.
-(u/strand! "Ship the release" {:owner "me"})
-(u/ready)
+(defn runtime []
+  (or *runtime* (current/runtime)))
 
-;; An explicit-runtime spool still takes the runtime as its first
-;; argument; hand it (u/runtime).
-(priority/promote! (u/runtime) some-id)
+(defmacro with-runtime [runtime & body]
+  `(let [runtime# ~runtime]
+     (when (nil? runtime#)
+       (throw (ex-info "Cannot scope a nil Skein runtime" {:runtime :nil})))
+     (binding [*runtime* runtime#]
+       (current/with-runtime runtime# ~@body))))
+
+(defn strand! [title attributes]
+  (weaver/add! (runtime) {:title title :attributes attributes}))
+
+(defn strand [id]
+  (weaver/show (runtime) id))
+
+(defn strands []
+  (weaver/list (runtime)))
+
+(defn update! [id patch]
+  (weaver/update! (runtime) id patch))
+
+(defn ready []
+  (weaver/ready (runtime)))
+
+(defn burn! [ids]
+  (graph/burn-by-ids! (runtime) ids))
 ```
 
-Here `acme/priority` stands for any approved spool written to the explicit-runtime discipline. The ergonomics
-live entirely on *your* side of the boundary: the spool never learns that `skein.userland.alpha` exists. That
-asymmetry is the whole point: users may trade explicitness for terseness in their own config; shared code may
-not, so `skein.userland.alpha` is userland-only, forever, and no spool you distribute may require it or call
-`bind!`.
+Resolution is local first: `with-runtime` provides a dynamic value scoped to its body, and `current/runtime` reads the active or published ambient runtime. That dynamic binding is not mutable module-level state: this helper has no atom or process-global default. The helper owns only its strand CRUD vocabulary. On a shared weaver, call the helpers inside `with-runtime`, so each entry point names its target explicitly. The ambient fallback is a convenience for a weaver-owned session where that ambient runtime is authoritative. Keep this pattern in workspace-owned code; shared spools should keep taking an explicit runtime.
 
 ## When a spool leaves your workspace
 
-Everything above assumes the code is yours alone, running in your weaver, free to resolve the ambient runtime
-and stay informally structured. Even here, runtime-owned state is the easier default — it survives reloads
-that a module-level atom loses — so the liberties are ambient resolution and loose structure, not unmanaged
-state. The moment other people run your spool, those liberties become bugs: a shared
-spool must work in any weaver runtime, including unpublished runtimes that coexist with others in a single
-JVM, so it takes the runtime explicitly as the first argument of every public function, keeps its state
-runtime-owned, registers behavior by symbol rather than closure, and never touches the ergonomics layer. Those
-rules, the helper namespaces that support them, and the git publishing and pinning story live in
-[writing shared spools](./writing-shared-spools.md) — the one step of the ladder this page does not cover.
+Everything above assumes the code is yours alone, running in your weaver, free to resolve the ambient runtime and stay informally structured. Even here, keep actual state runtime-owned and treat ambient resolution as the convenience — not unmanaged state. The moment other people run your spool, those liberties become bugs: a shared spool must work in any weaver runtime, including unpublished runtimes that coexist with others in a single JVM, so it takes the runtime explicitly as the first argument of every public function, keeps its state runtime-owned, registers behavior by symbol rather than closure, and never touches the ergonomics layer. Those rules, the helper namespaces that support them, and the git publishing and pinning story live in [writing shared spools](./writing-shared-spools.md) — the one step of the ladder this page does not cover.
