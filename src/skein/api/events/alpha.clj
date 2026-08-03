@@ -17,6 +17,7 @@
   the first argument."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [skein.api.spool.alpha :as spool]
             [skein.core.weaver.access :as access]
             [skein.core.weaver.core-registry :as core-registry]
             [skein.core.weaver.dispatch :as dispatch]))
@@ -236,14 +237,20 @@
   "Validate one registration's inputs and assemble its registry entry.
 
   The shared entrance for `register-handler!` and `replace-handler!`. The
-  resolved `:fn-value` is the handler's early-bound callable and never leaves
-  the registry; callers strip it before returning."
+  per-piece validators own the diagnostics a caller acts on — which piece was
+  wrong and why — and `::handler-entry` then checks the assembled entry against
+  the same spec `handlers` and the fdefs publish, so the published shape cannot
+  drift from what registration actually stores. The resolved `:fn-value` is the
+  handler's early-bound callable and never leaves the registry; callers strip it
+  before returning."
   [runtime key types fn-sym metadata]
-  {:key (validate-handler-key! key)
-   :types (validate-handler-types! types)
-   :fn fn-sym
-   :fn-value (resolve-handler-fn! runtime fn-sym)
-   :metadata (validate-handler-metadata! metadata)})
+  (let [entry {:key (validate-handler-key! key)
+               :types (validate-handler-types! types)
+               :fn fn-sym
+               :fn-value (resolve-handler-fn! runtime fn-sym)
+               :metadata (validate-handler-metadata! metadata)}]
+    (spool/require-valid! ::handler-entry entry "Event handler registry entry is invalid")
+    entry))
 
 ;; --- handler function resolution ------------------------------------------------
 
