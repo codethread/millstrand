@@ -440,7 +440,8 @@ Activate the module from trusted startup code:
 For code, tests, or a one-off startup helper that already holds a runtime, use the explicit-runtime verb:
 
 ```clojure
-(require '[skein.api.graph.alpha :as graph])
+(require '[skein.api.current.alpha :as current]
+         '[skein.api.graph.alpha :as graph])
 
 (graph/register-query! (current/runtime) 'agent-docs
   [:and

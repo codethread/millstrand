@@ -484,7 +484,7 @@
             |waiter with its projected gate-request contract, where the
             |executor declares one. Durable workflow definitions normally enter
             |the registry through `defworkflow` in module source; direct
-            |registration is the trusted code and test seam for live state.")
+            |registration is the runtime-implied trusted code and test seam for live state.")
    :prime (fmt/reflow
            "|For durable workflow definitions, author `defworkflow` in module
             |source and activate its module. For a live code or test change, use

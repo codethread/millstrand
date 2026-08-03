@@ -248,6 +248,13 @@ Every `strand` command is a registered op, and ops use the same three-layer orde
 The durable form belongs in the module source:
 
 ```clojure
+(def echo-arg-spec
+  {:op "echo"
+   :doc "Echo the given text."
+   :hook-class :read
+   :deadline-class :standard
+   :positionals [{:name :text :type :string :required? true :doc "Text to echo."}]})
+
 (skein/defop echo
   "Echo raw argv."
   {:arg-spec echo-arg-spec}
@@ -265,7 +272,7 @@ help, parser contract, and handler declaration as one published contribution.
   {:operation name :argv argv})
 ```
 
-Register it from `init.clj` or the live REPL:
+For a temporary live experiment, register it from the connected REPL:
 
 ```clojure
 (require '[skein.api.current.alpha :as current]
