@@ -328,7 +328,7 @@ Explicit-runtime code threads a `runtime` argument through every call. That is t
   (graph/burn-by-ids! (runtime) ids))
 ```
 
-Resolution is local first: `with-runtime` provides a dynamic value, then `module-default` supplies the workspace helper's bound value, and `current/runtime` reads the active or published ambient runtime. The helper owns that hidden state and its strand CRUD vocabulary. A process-global default is unsafe on a shared weaver because one session can redirect another session's calls. Keep this pattern in workspace-owned code; shared spools should keep taking an explicit runtime.
+Resolution is local first: `with-runtime` provides a dynamic value, then `module-default` supplies the workspace helper's bound value, and `current/runtime` reads the active or published ambient runtime. The helper owns that hidden state and its strand CRUD vocabulary. Treat `bind!` as a process-global default for one private session only. On a shared weaver, leave it unset and call the helpers inside `with-runtime`, so each entry point names its target explicitly. The ambient fallback is the final convenience for a weaver-owned session where that ambient runtime is authoritative. Keep this pattern in workspace-owned code; shared spools should keep taking an explicit runtime.
 
 ## When a spool leaves your workspace
 
