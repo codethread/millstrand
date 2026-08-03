@@ -291,6 +291,7 @@ Explicit-runtime code threads a `runtime` argument through every call. That is t
             [skein.api.graph.alpha :as graph]
             [skein.api.weaver.alpha :as weaver]))
 
+;; Scoped binding only; keep actual state runtime-owned.
 (def ^:dynamic *runtime* nil)
 
 (defn runtime []
@@ -322,14 +323,13 @@ Explicit-runtime code threads a `runtime` argument through every call. That is t
   (graph/burn-by-ids! (runtime) ids))
 ```
 
-Resolution is local first: `with-runtime` provides a dynamic value, and `current/runtime` reads the active or published ambient runtime. The helper owns only its strand CRUD vocabulary. On a shared weaver, call the helpers inside `with-runtime`, so each entry point names its target explicitly. The ambient fallback is a convenience for a weaver-owned session where that ambient runtime is authoritative. Keep this pattern in workspace-owned code; shared spools should keep taking an explicit runtime.
+Resolution is local first: `with-runtime` provides a dynamic value scoped to its body, and `current/runtime` reads the active or published ambient runtime. That dynamic binding is not mutable module-level state: this helper has no atom or process-global default. The helper owns only its strand CRUD vocabulary. On a shared weaver, call the helpers inside `with-runtime`, so each entry point names its target explicitly. The ambient fallback is a convenience for a weaver-owned session where that ambient runtime is authoritative. Keep this pattern in workspace-owned code; shared spools should keep taking an explicit runtime.
 
 ## When a spool leaves your workspace
 
 Everything above assumes the code is yours alone, running in your weaver, free to resolve the ambient runtime
-and stay informally structured. Even here, runtime-owned state is the easier default — it survives reloads
-that a module-level atom loses — so the liberties are ambient resolution and loose structure, not unmanaged
-state. The moment other people run your spool, those liberties become bugs: a shared
+and stay informally structured. Even here, keep actual state runtime-owned and treat ambient resolution as
+the convenience — not unmanaged state. The moment other people run your spool, those liberties become bugs: a shared
 spool must work in any weaver runtime, including unpublished runtimes that coexist with others in a single
 JVM, so it takes the runtime explicitly as the first argument of every public function, keeps its state
 runtime-owned, registers behavior by symbol rather than closure, and never touches the ergonomics layer. Those

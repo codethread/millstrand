@@ -77,7 +77,7 @@ unpublished runtime or alongside a second runtime: it mutates the wrong world or
    published runtime. Reach for `skein.api.spool.alpha` (`fail!`,
    `reject-unknown-keys!`, `require-valid!`, `attr-key->str`) instead of
    re-deriving these seams per spool.
-5. **Keep terse helpers in workspace code.** A shared spool must not require a workspace-owned helper, call its `bind!`, or read a process-global default for its own operation. Reusable code takes its runtime explicitly; a process-local default is unsafe when several sessions share one weaver.
+5. **Keep terse helpers in workspace code.** A shared spool must not require a workspace-owned helper or rely on its hidden runtime binding for its own operation. Reusable code takes its runtime explicitly; a process-local default is unsafe when several sessions share one weaver.
 6. **Default to pull-based timing.** When your spool needs time-based work, prefer
    a `wake-at` strand attribute surfaced by a named query to whatever already
    polls the graph; reach for `skein.api.scheduler.alpha` only for the no-poller
