@@ -341,8 +341,7 @@ Write getting-started
 
 ## Named queries: from the REPL to the CLI
 
-A query is a data expression, here "the `owner` attribute equals `ct`". Start with the durable
-module form when the query belongs to a workspace or spool:
+A query is a data expression, here "the `owner` attribute equals `ct`". Start with the durable module form when the query belongs to a workspace or spool:
 
 ```clojure
 (ns my.workspace
@@ -364,10 +363,7 @@ Activate that namespace from trusted startup code:
   {:ns 'my.workspace})
 ```
 
-The authoring form defines the `mine` Var and publishes its query when the module is collected.
-Evaluating the form at a REPL only defines the Var; it does not publish a registration. The module
-form is the path that survives refresh and restart, and it gives the weaver the complete owner
-partition to publish.
+The authoring form defines the `mine` Var and publishes its query when the module is collected. Evaluating the form at a REPL only defines the Var; it does not publish a registration. The module form is the path that survives refresh and restart, and it gives the weaver the complete owner partition to publish.
 
 For a live experiment, use the same verb at the explicit-runtime tier:
 
@@ -385,23 +381,11 @@ Inside `mill weaver repl`, `skein.repl` supplies the same verb with the runtime 
 (repl/register-query! 'mine [:= [:attr :owner] "ct"])
 ```
 
-`register-query!` is the same operation in both live tiers; the explicit-runtime form is for code,
-tests, and startup helpers, while `skein.repl` is the short form for an interactive session. The
-registry is owner-partitioned and layered. Each writer changes its own entry map, and the effective
-name-to-query view is the merge of those partitions.
+`register-query!` is the same operation in both live tiers; the explicit-runtime form is for code, tests, and startup helpers, while `skein.repl` is the short form for an interactive session. The registry is owner-partitioned and layered. Each writer changes its own entry map, and the effective name-to-query view is the merge of those partitions.
 
-Use `replace-query!` when you intend to shadow an existing owner. `unregister-query!` removes only
-your own entry and restores the entry below it; registry verbs never remove or change the Clojure
-Var. Removing a direct shadow and registering again is not a substitute for replace, because the
-other owner's entry still occupies the name. For queries, replacing the value is also how you
-iterate behavior: there is no handler function to redefine, and `query explain` always reads the
-current registered value.
+Use `replace-query!` when you intend to shadow an existing owner. `unregister-query!` removes only your own entry and restores the entry below it; registry verbs never remove or change the Clojure Var. Removing a direct shadow and registering again is not a substitute for replace, because the other owner's entry still occupies the name. For queries, replacing the value is also how you iterate behavior: there is no handler function to redefine, and `query explain` always reads the current registered value.
 
-The same order applies to ops, patterns, hooks, and event handlers: author them with their module
-forms for durable behavior, use explicit-runtime `register/replace/unregister-*!` calls in code or
-tests, and use the runtime-implied `skein.repl` wrappers while iterating live. A workspace can
-durably mask a spool op with `skein/defop {:override? true}` in a workspace module. The coordinate
-used to acquire that spool, local or git-pinned, does not change these registry rules.
+The same order applies to ops, patterns, hooks, and event handlers: author them with their module forms for durable behavior, use explicit-runtime `register/replace/unregister-*!` calls in code or tests, and use the runtime-implied `skein.repl` wrappers while iterating live. A workspace can durably mask a spool op with `skein/defop {:override? true}` in a workspace module. The coordinate used to acquire that spool, local or git-pinned, does not change these registry rules.
 
 The plain CLI can discover and run the same query for as long as this weaver keeps running:
 
@@ -416,14 +400,11 @@ strand ready --query mine
 --query` and `ready --query`. See the [REPL API spec](../devflow/specs/repl-api.md) for the full
 predicate language.
 
-Named queries registered directly last only for the current weaver run. The module form keeps one
-across restarts; the explicit-runtime form is the useful middle ground for trusted code and tests.
+Named queries registered directly are runtime-local, although startup code can reapply one on each restart. That reapplication does not make the entry refresh-safe or owner-complete. The module form keeps one across restarts; the explicit-runtime form is the useful middle ground for trusted code and tests.
 
 ## Startup config: making it stick
 
-Weaver-lifetime state means direct registrations disappear at the next restart. The workspace loads
-trusted startup code — `init.clj`, then a gitignored `init.local.clj` — every time the weaver starts.
-For a small, durable registration, activate a module from that startup code:
+Weaver-lifetime state means direct registrations disappear at the next restart. The workspace loads trusted startup code — `init.clj`, then a gitignored `init.local.clj` — every time the weaver starts. For a small, durable registration, activate a module from that startup code:
 
 ```clojure
 (require '[skein.api.current.alpha :as current]
@@ -433,10 +414,7 @@ For a small, durable registration, activate a module from that startup code:
   {:ns 'my.workspace})
 ```
 
-The module source is the durable owner of the query. The whole ladder — startup files, live
-registration, reloading a weaver, promoting config to a spool, and worked examples — is
-[customising your workspace](./spools/customisation.md); this tutorial stops at showing you the rung
-exists.
+The module source is the durable owner of the query. The whole ladder — startup files, live registration, reloading a weaver, promoting config to a spool, and worked examples — is [customising your workspace](./spools/customisation.md); this tutorial stops at showing you the rung exists.
 
 ## Stop the weaver
 

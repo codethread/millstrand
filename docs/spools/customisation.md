@@ -1,12 +1,6 @@
 # Customising your workspace
 
-Skein's core is deliberately small; most of what your workspace *means* lives in trusted Clojure code the
-weaver loads for you — named queries, weave patterns, event handlers, and ops. This page shows the path
-from a durable module source to live experiments and workspace-owned convenience helpers. Authoring forms
-in module source come first: they are the durable, owner-complete declarations. Explicit-runtime verbs are
-the code and test surface for live state, and `skein.repl` supplies the same verbs with the runtime implied
-for an interactive session. When a spool leaves your workspace, its code must keep the runtime explicit;
-the terse helper layer remains workspace-owned.
+Skein's core is deliberately small; most of what your workspace *means* lives in trusted Clojure code the weaver loads for you — named queries, weave patterns, event handlers, and ops. This page shows the path from a durable module source to live experiments and workspace-owned convenience helpers. Authoring forms in module source come first: they are the durable, owner-complete declarations. Explicit-runtime verbs are the code and test surface for live state, and `skein.repl` supplies the same verbs with the runtime implied for an interactive session. When a spool leaves your workspace, its code must keep the runtime explicit; the terse helper layer remains workspace-owned.
 
 If you have not met the weaver, workspaces, or the strand model yet, read the [tutorial](../tutorial.md) first;
 the [reference](../reference.md) covers the full command and runtime surface. Per-function API detail is
@@ -77,10 +71,7 @@ The declaration names only a source target and world policy; Batteries publishes
 `skein.api.runtime.alpha` is a privileged built-in runtime loader/config helper namespace shipped with Skein —
 not an ordinary user spool, which is why loader/config helpers do not live under `skein.spools.*`.
 
-Startup files matter because runtime registries are weaver-lifetime state: named queries, weave patterns,
-and event handlers registered from a live REPL vanish with the process. Anything you want after every
-restart belongs in startup-loaded code. Put durable behavior in a module source and activate that module
-from `init.clj`:
+Startup files matter because runtime registries are weaver-lifetime state: named queries, weave patterns, and event handlers registered from a live REPL vanish with the process. Anything you want after every restart belongs in startup-loaded code. Put durable behavior in a module source and activate that module from `init.clj`:
 
 ```clojure
 (require '[skein.api.current.alpha :as current]
@@ -90,8 +81,7 @@ from `init.clj`:
   {:ns 'my.workspace})
 ```
 
-The module source owns the query or other registry entries, so refresh and restart can reconstruct them.
-For a quick live experiment in code or a test, call the explicit-runtime function instead:
+The module source owns the query or other registry entries, so refresh and restart can reconstruct them. For a quick live experiment in code or a test, call the explicit-runtime function instead:
 
 ```clojure
 (require '[skein.api.current.alpha :as current]
@@ -100,11 +90,7 @@ For a quick live experiment in code or a test, call the explicit-runtime functio
 (graph/register-query! (current/runtime) 'mine [:= [:attr :owner] "ct"])
 ```
 
-Inside the weaver REPL, `skein.repl/register-query!` is the same operation without the runtime
-argument. Direct registrations are useful for experiments, but they are not durable. Simple workspaces
-can keep activation in `init.clj` and personal activation in gitignored `init.local.clj`; keep substantive
-declarations in module source. When the file starts accumulating real behavior, move it into a local spool —
-that promotion is the [second half of this page](#promoting-config-to-a-local-spool).
+Inside the weaver REPL, `skein.repl/register-query!` is the same operation without the runtime argument. Direct entries are useful for experiments and startup code can reapply them after a restart, but a refresh can still overwrite them. Simple workspaces can keep activation in `init.clj` and personal activation in gitignored `init.local.clj`; keep substantive declarations in module source. When the file starts accumulating real behavior, move it into a local spool — that promotion is the [second half of this page](#promoting-config-to-a-local-spool).
 
 ## Trying config changes in a disposable world
 
@@ -144,14 +130,7 @@ spool state. Missing startup files are skipped; present failures fail loudly.
 
 Direct registrations are the one thing refresh can drop. A direct write is not serialized against an in-flight refresh: publication resets each registry to the candidate snapshot taken after source loading, so a direct write landing in the narrow span between that snapshot and publication is overwritten with no error. The window is small and only staged publication sits inside it, but if a registration you made at the REPL disappears while someone else was refreshing, this is why (SPEC-003.C23, constraint F20).
 
-Recovering it takes one look first. The registry is owner-partitioned and layered: a direct entry lives in
-your partition, while a module or spool owns its own partition. The refresh that dropped your entry may
-have published a module that now owns the same name, and `register-*!` refuses a name another owner supplies.
-Read the current owner before acting. If the module's version is the one you want, leave it. If you want
-yours above it, `replace-*!` records the override intent and carries the shadow across refresh. To end that
-experiment, `unregister-*!` removes only your entry and restores the shadowed value. Remove-then-register is
-not a substitute for replace because the other owner's entry still occupies the name. Anything that must
-survive a refresh belongs in module source rather than a direct write.
+Recovering it takes one look first. The registry is owner-partitioned and layered: a direct entry lives in your partition, while a module or spool owns its own partition. The refresh that dropped your entry may have published a module that now owns the same name, and `register-*!` refuses a name another owner supplies. Read the current owner before acting. If the module's version is the one you want, leave it. If you want yours above it, `replace-*!` records the override intent and carries the shadow across refresh. To end that experiment, `unregister-*!` removes only your entry and restores the shadowed value. Remove-then-register is not a substitute for replace because the other owner's entry still occupies the name. Anything that must survive a refresh belongs in module source rather than a direct write.
 
 For code-only investigation, `reload-code!` takes a root-lib symbol from the
 family's effective `:roots` map and reloads that root's namespaces in dependency
@@ -264,11 +243,7 @@ unload guarantee: restart the weaver when you need a clean runtime.
 
 ## Your own CLI command
 
-Every `strand` command is a registered op, and ops use the same three-layer order as queries. Define a
-durable command with `skein/defop` in module source; use `skein.api.weaver.alpha/register-op!` from
-explicit-runtime code or tests for a live experiment; use `skein.repl/register-op!` from the connected
-REPL. `strand help` lists registered ops and `strand help <op>` explains one. The CLI forwards everything
-after the op name to the handler as string argv.
+Every `strand` command is a registered op, and ops use the same three-layer order as queries. Define a durable command with `skein/defop` in module source; use `skein.api.weaver.alpha/register-op!` from explicit-runtime code or tests for a live experiment; use `skein.repl/register-op!` from the connected REPL. `strand help` lists registered ops and `strand help <op>` explains one. The CLI forwards everything after the op name to the handler as string argv.
 
 The durable form belongs in the module source:
 
@@ -303,12 +278,7 @@ Register it from `init.clj` or the live REPL:
 strand echo --flag value
 ```
 
-Op handlers return data; the CLI prints it as JSON. The explicit-runtime registration is weaver-lifetime
-state, so keep a durable command in module source. To mask a spool op durably, put
-`(skein/defop {:override? true} ...)` in a workspace module; a local-root and a git-pinned spool follow
-the same registry rules. `replace-op!` is the live, intentional shadow; `unregister-op!` retracts only
-your shadow and restores the original. The shipped [kanban board spool](../../spools/kanban.md) is a
-complete example of this pattern: a board surface built from ops, queries, and attributes.
+Op handlers return data; the CLI prints it as JSON. The explicit-runtime registration is weaver-lifetime state, so keep a durable command in module source. To mask a spool op durably, put `(skein/defop {:override? true} ...)` in a workspace module; a local-root and a git-pinned spool follow the same registry rules. `replace-op!` is the live, intentional shadow; `unregister-op!` retracts only your shadow and restores the original. The shipped [kanban board spool](../../spools/kanban.md) is a complete example of this pattern: a board surface built from ops, queries, and attributes.
 
 Name an op by what it exposes. When your command fronts another spool's surface, keep that spool's
 verbs, nouns, and attribute keys — the op is your entry point to the primitive, not a new language
@@ -319,11 +289,7 @@ starts, advances, or lists an existing primitive speaks that primitive's terms.
 
 ## Terse daily driving
 
-Explicit-runtime code threads a `runtime` argument through every call. That is the right discipline for
-durable config and can be tedious at the REPL. If your workspace needs shorter calls, put the helper in
-your own namespace and make the trade explicit. This is workspace-owned userland sugar, not a fourth
-Skein registration tier: authoring forms still own durable declarations, and the explicit-runtime and
-`skein.repl` verbs remain the registration surface.
+Explicit-runtime code threads a `runtime` argument through every call. That is the right discipline for durable config and can be tedious at the REPL. If your workspace needs shorter calls, put the helper in your own namespace and make the trade explicit. This is workspace-owned userland sugar, not a fourth Skein registration tier: authoring forms still own durable declarations, and the explicit-runtime and `skein.repl` verbs remain the registration surface.
 
 ```clojure
 (ns my.helpers

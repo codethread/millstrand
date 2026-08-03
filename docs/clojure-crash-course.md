@@ -12,11 +12,7 @@ means: call `add!` in the `weaver` namespace with two arguments, `rt` and a map.
 
 ## Names
 
-Skein has one registration story with three calling surfaces. Put durable behavior in a module source
-with an authoring form such as `skein/defquery`; the form defines a Var and publishes the declaration
-when its module is collected. For code and tests that already hold a runtime, use the explicit-runtime
-`skein.api.*.alpha` functions. In the connected REPL, `skein.repl` provides the same verbs with the
-runtime implied. The REPL is a shorter calling style, not a separate capability.
+Skein has one registration story with three calling surfaces. Put durable behavior in a module source with an authoring form such as `skein/defquery`; the form defines a Var and publishes the declaration when its module is collected. For code and tests that already hold a runtime, use the explicit-runtime `skein.api.*.alpha` functions. In the connected REPL, `skein.repl` provides the same verbs with the runtime implied. The REPL is a shorter calling style, not a separate capability.
 
 The strand functions live in `skein.api.weaver.alpha` and all take the weaver runtime first:
 
@@ -45,10 +41,7 @@ repl/replace-query!
 repl/unregister-query!
 ```
 
-The registry is owner-partitioned and layered. `register-query!` claims a fresh name and fails
-loudly if another owner already supplies it. `replace-query!` records intent to shadow an existing
-entry. `unregister-query!` removes only your own entry and restores the entry below it; it does not
-remove or change the Var. Removing a shadow and registering again is not a substitute for replace.
+The registry is owner-partitioned and layered. `register-query!` claims a fresh name and fails loudly if another owner already supplies it. `replace-query!` records intent to shadow an existing entry. `unregister-query!` removes only your own entry and restores the entry below it; it does not remove or change the Var. Removing a shadow and registering again is not a substitute for replace.
 
 Common row keys:
 

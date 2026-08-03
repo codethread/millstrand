@@ -55,8 +55,7 @@ The module collects an open jobs-kind declaration and a desired-state lifecycle 
 
 ## Registering jobs
 
-Module authors normally use `defjob`. The form collects replayable declaration data and schedules
-nothing during source evaluation:
+Module authors normally use `defjob`. The form collects replayable declaration data and schedules nothing during source evaluation:
 
 ```clojure
 (cron/defjob :nightly-report
@@ -65,12 +64,9 @@ nothing during source evaluation:
    :handler 'my.jobs/emit-report})
 ```
 
-After owner-complete publication, Cron's lifecycle effect compares the effective job registry with the
-managed job table. It preserves unchanged wakes, reschedules changed jobs, and cancels omitted jobs.
-Removing the Cron module cancels all jobs through the retained lifecycle declaration.
+After owner-complete publication, Cron's lifecycle effect compares the effective job registry with the managed job table. It preserves unchanged wakes, reschedules changed jobs, and cancels omitted jobs. Removing the Cron module cancels all jobs through the retained lifecycle declaration.
 
-For code and tests that already hold a runtime, `register!` is the explicit-runtime seam for a live job
-with a fully-qualified `:handler` symbol:
+For code and tests that already hold a runtime, `register!` is the explicit-runtime seam for a live job with a fully-qualified `:handler` symbol:
 
 ```clojure
 (require '[skein.spools.cron :as cron])

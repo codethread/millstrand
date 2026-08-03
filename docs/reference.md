@@ -435,12 +435,9 @@ Activate the module from trusted startup code:
   {:ns 'my.workspace})
 ```
 
-`defquery` defines the `agent-docs` Var and collects its value only while the module source is
-being evaluated. A Var containing query data is not itself a named query. Module publication owns
-the registry entry, so refresh and restart can reconstruct it from source.
+`defquery` defines the `agent-docs` Var and collects its value only while the module source is being evaluated. A Var containing query data is not itself a named query. Module publication owns the registry entry, so refresh and restart can reconstruct it from source.
 
-For code, tests, or a one-off startup helper that already holds a runtime, use the explicit-runtime
-verb:
+For code, tests, or a one-off startup helper that already holds a runtime, use the explicit-runtime verb:
 
 ```clojure
 (require '[skein.api.graph.alpha :as graph])
@@ -460,9 +457,7 @@ Inside `mill weaver repl`, the same operation is shorter because `skein.repl` su
    [:= [:attr :area] "docs"]])
 ```
 
-The explicit-runtime and REPL tiers are not separate capabilities. They are the live registration
-surface in two calling styles; use the first from code and tests, and the second while iterating in
-the connected weaver.
+The explicit-runtime and REPL tiers are not separate capabilities. They are the live registration surface in two calling styles; use the first from code and tests, and the second while iterating in the connected weaver.
 
 Discover and consume a registered query from the CLI:
 
@@ -476,22 +471,11 @@ strand --workspace "$workspace" ready --query agent-docs
 
 `query list` and `query explain <name>` are the read-only discovery pair for named query definitions. Application stays on the read commands: `list --query <name>` and `ready --query <name>` with repeated `--param key=value` when the query declares runtime params.
 
-Named query registries are not durable by themselves. The module form above is the durable path;
-direct registrations last for the current weaver lifetime. For a workspace that already declares a
-local spool, add the query to that module's contribution so owner-complete refresh installs
-everything together.
+Named query registries are not durable by themselves. The module form above is the durable path; a direct entry is runtime-local, although startup code can reapply it on each restart. Reapplication does not make it refresh-safe or owner-complete. For a workspace that already declares a local spool, add the query to that module's contribution so owner-complete refresh installs everything together.
 
-`defquery` is one of six [authoring forms](#authoring-forms) for core registry entries. It defines a
-Var and collects the query under a registry key with the same name. The registry key is the Var name
-exactly, so `defquery mine-query` registers `"mine-query"`.
+`defquery` is one of six [authoring forms](#authoring-forms) for core registry entries. It defines a Var and collects the query under a registry key with the same name. The registry key is the Var name exactly, so `defquery mine-query` registers `"mine-query"`.
 
-The registry is owner-partitioned and layered. Each writer changes only its own entry map, and the
-effective view is the layered merge. `replace-query!` records intent to shadow an existing name;
-`unregister-query!` removes only the caller's own entry and restores the entry below it. Removing a
-shadow and registering again cannot replace another owner's entry, so remove-then-rerun is not a
-substitute for replace. Registry verbs change the name-to-value binding, not the Var. Queries have
-no function to redefine: their registered value is the behavior, and `query explain` reads the
-current value after a replacement.
+The registry is owner-partitioned and layered. Each writer changes only its own entry map, and the effective view is the layered merge. `replace-query!` records intent to shadow an existing name; `unregister-query!` removes only the caller's own entry and restores the entry below it. Removing a shadow and registering again cannot replace another owner's entry, so remove-then-rerun is not a substitute for replace. Registry verbs change the name-to-value binding, not the Var. Queries have no function to redefine: their registered value is the behavior, and `query explain` reads the current value after a replacement.
 
 `strand list --query mine` returns all matching strands unless you also pass a state filter. Use
 `strand list --query mine --state active` when you only want active matches. `strand ready --query
@@ -660,17 +644,9 @@ Registry entries are authored, not imperatively registered. `skein.api.skein.alp
 
 Each form takes a name, a docstring, an options map, and then the body its kind needs: an argument vector and body for the handler kinds, a query definition value for `defquery`. Every form also accepts `{:override? true}` to record explicit intent to shadow a lower layer. `defop`'s `:arg-spec` is the declared argv shape [`skein.api.cli.alpha`](./api/cli.api.md) parses and renders help from, so a registered op never writes its own usage strings.
 
-The binding moment differs by kind. Ops, patterns, and hooks resolve their callable Var when they
-run, so redefining the function is the live hot loop under a stable contract. Registration metadata,
-including an op's help and arg-spec, stays as it was until the entry is registered again; help can
-therefore describe the old contract during that window. Event handlers capture the function value
-at registration, so replace the handler registration to iterate it. Queries have no callable; the
-registered value is the behavior, and replacing it updates both execution and `query explain`.
+The binding moment differs by kind. Ops, patterns, and hooks resolve their callable Var when they run, so redefining the function is the live hot loop under a stable contract. Registration metadata, including an op's help and arg-spec, stays as it was until the entry is registered again; help can therefore describe the old contract during that window. Event handlers capture the function value at registration, so replace the handler registration to iterate it. Queries have no callable; the registered value is the behavior, and replacing it updates both execution and `query explain`.
 
-The module's coordinate does not affect these registry rules. A workspace module may use
-`(skein/defop {:override? true} ...)` to declare a durable mask over a spool op whether that spool
-came from a local root or a git pin. Same-layer collisions remain errors; the override is the
-consumer's explicit workspace-layer choice.
+The module's coordinate does not affect these registry rules. A workspace module may use `(skein/defop {:override? true} ...)` to declare a durable mask over a spool op whether that spool came from a local root or a git pin. Same-layer collisions remain errors; the override is the consumer's explicit workspace-layer choice.
 
 Collection only happens under a module contribution. Evaluating a form at the REPL, or reloading source with `runtime/reload-code!`, defines the Var and publishes nothing. The same rule explains removal: a refresh replaces an owner's whole partition for a kind, so dropping a form from the source drops its entry at the next refresh. There is no unregister call to remember.
 

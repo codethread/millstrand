@@ -477,7 +477,7 @@
             |result shape — the run, its current root, its complete ready
             |frontier, and whether it is done — so every call tells you what
             |you may do next without a second read. choices is the checkpoint
-           |discovery read: the ready checkpoint's declared inputs projected
+            |discovery read: the ready checkpoint's declared inputs projected
             |against the live spec registry, so a worker authors valid input
             |before choose rather than learning the contract from a rejected
             |payload. executors is the gate-authoring read: each registered
