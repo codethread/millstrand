@@ -564,7 +564,9 @@
   (cond
     (map? value) (into {} (map (fn [[k v]] [k (json-safe-context-value v (conj path k))])) value)
     (sequential? value) (mapv (fn [[idx v]] (json-safe-context-value v (conj path idx))) (map-indexed vector value))
-    (keyword? value) (name value)
+    (keyword? value) (if-let [key-ns (namespace value)]
+                       (str key-ns "/" (name value))
+                       (name value))
     (util/json-scalar? value) value
     (number? value) (fail! "Workflow params cannot be defaulted into workflow/context; non-finite numbers are not JSON-safe"
                            {:path path :value value :type (some-> value type str)})
@@ -574,8 +576,9 @@
 (defn default-context
   "Return the JSON-safe `workflow/context` derived from start! `params`.
 
-  Keyword values become strings; non-finite numbers and other non-JSON-safe
-  values fail loudly (TEN-003) directing the caller to pass `:context` explicitly."
+  Keyword values become strings, preserving `ns/name` for qualified keywords;
+  non-finite numbers and other non-JSON-safe values fail loudly (TEN-003)
+  directing the caller to pass `:context` explicitly."
   [params]
   (when-not (map? params)
     (fail! "Workflow context params must be a map" {:params params}))
