@@ -299,7 +299,7 @@
         (is (some #(= :shell/engine (:key %)) (events/handlers rt))
             "the graph-change event handler is registered")
         (is (= "shell" (:waiter (first (workflow/executor-catalog)))))
-        (is (= shell/stalled-shell-gates-query
+        (is (= shell/stalled-shell-gates
                [:and [:= :state "active"]
                 [:= [:attr "workflow/gate"] "shell"]
                 [:exists [:attr "gate/error"]]]))

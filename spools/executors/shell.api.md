@@ -119,7 +119,7 @@ Function.
 Return durable stall detail for a ready `:shell` gate view, or nil.
 <p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/shell.clj#L348-L356">Source</a></sub></p>
 
-## <a name="skein.spools.executors.shell/stalled-shell-gates-query">`stalled-shell-gates-query`</a>
+## <a name="skein.spools.executors.shell/stalled-shell-gates">`stalled-shell-gates`</a>
 
 
 

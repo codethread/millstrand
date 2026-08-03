@@ -355,7 +355,7 @@
                  {:gate (:id gate) :error (attr gate :gate/error)})]
     (require-valid! ::stall-detail result "Invalid shell gate stall detail")))
 
-(skein/defquery stalled-shell-gates-query
+(skein/defquery stalled-shell-gates
   "Return active shell gates carrying a durable error stamp."
   {}
   [:and [:= :state "active"]

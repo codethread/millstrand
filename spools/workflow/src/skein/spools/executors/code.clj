@@ -88,7 +88,7 @@
                  {:gate (:id gate) :error (attr gate :gate/error)})]
     (require-valid! ::stall-detail result "Invalid code gate stall detail")))
 
-(skein/defquery stalled-code-gates-query
+(skein/defquery stalled-code-gates
   "Return active code gates carrying a durable error stamp."
   {}
   [:and [:= :state "active"]
