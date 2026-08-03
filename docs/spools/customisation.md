@@ -283,9 +283,7 @@ starts, advances, or lists an existing primitive speaks that primitive's terms.
 
 ## Terse daily driving
 
-Explicit-runtime code threads a `runtime` argument through every call. That is the right discipline for
-durable config and can be tedious at the REPL. If your workspace needs shorter calls, put the helper in your
-own namespace and make the trade explicit:
+Explicit-runtime code threads a `runtime` argument through every call. That is the right discipline for durable config and can be tedious at the REPL. If your workspace needs shorter calls, put the helper in your own namespace and make the trade explicit:
 
 ```clojure
 (ns my.helpers
@@ -297,6 +295,8 @@ own namespace and make the trade explicit:
 (defonce ^:private module-default (atom nil))
 
 (defn bind! [runtime]
+  (when (nil? runtime)
+    (throw (ex-info "Cannot bind a nil Skein runtime" {:runtime :nil})))
   (reset! module-default runtime))
 
 (defn runtime []
@@ -325,11 +325,7 @@ own namespace and make the trade explicit:
   (graph/burn-by-ids! (runtime) ids))
 ```
 
-Resolution is local first: `with-runtime` provides a dynamic value, then `module-default` supplies the
-workspace helper's bound value, and `current/runtime` reads the active or published ambient runtime. The
-helper owns that hidden state and its strand CRUD vocabulary. A process-global default is unsafe on a shared
-weaver because one session can redirect another session's calls. Keep this pattern in workspace-owned code;
-shared spools should keep taking an explicit runtime.
+Resolution is local first: `with-runtime` provides a dynamic value, then `module-default` supplies the workspace helper's bound value, and `current/runtime` reads the active or published ambient runtime. The helper owns that hidden state and its strand CRUD vocabulary. A process-global default is unsafe on a shared weaver because one session can redirect another session's calls. Keep this pattern in workspace-owned code; shared spools should keep taking an explicit runtime.
 
 ## When a spool leaves your workspace
 

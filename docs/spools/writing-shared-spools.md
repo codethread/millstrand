@@ -7,9 +7,7 @@ This guide is for authors of spools that **other people** will run — reusable,
 > JVM (tests, embedded tooling, `:publish? false`). It earns that by taking the
 > runtime **explicitly** and never reaching for ambient/singleton state.
 
-If you are only writing your own workspace `init.clj` or local helpers, you do not need this
-discipline. Put any terse wrappers in a workspace-owned namespace ([customising your
-workspace](./customisation.md)). This guide is about the code you ship to others.
+If you are only writing your own workspace `init.clj` or local helpers, you do not need this discipline. Put any terse wrappers in a workspace-owned namespace ([customising your workspace](./customisation.md)). This guide is about the code you ship to others.
 
 ## Why explicit runtime
 
@@ -79,10 +77,7 @@ unpublished runtime or alongside a second runtime: it mutates the wrong world or
    published runtime. Reach for `skein.api.spool.alpha` (`fail!`,
    `reject-unknown-keys!`, `require-valid!`, `attr-key->str`) instead of
    re-deriving these seams per spool.
-5. **Keep terse helpers in workspace code.** A shared spool must not require a
-   workspace-owned helper, call its `bind!`, or read a process-global default for
-   its own operation. Reusable code takes its runtime explicitly; a process-local
-   default is unsafe when several sessions share one weaver.
+5. **Keep terse helpers in workspace code.** A shared spool must not require a workspace-owned helper, call its `bind!`, or read a process-global default for its own operation. Reusable code takes its runtime explicitly; a process-local default is unsafe when several sessions share one weaver.
 6. **Default to pull-based timing.** When your spool needs time-based work, prefer
    a `wake-at` strand attribute surfaced by a named query to whatever already
    polls the graph; reach for `skein.api.scheduler.alpha` only for the no-poller
@@ -1006,11 +1001,7 @@ Everything takes `runtime`. It runs correctly in a published daemon, an unpublis
 
 ### Layering ergonomics in your own config
 
-The consumer's side of this pattern — binding the runtime once in a workspace-owned helper for terse
-daily calls while your spool stays explicit — is workspace customisation, and lives on [that
-page](./customisation.md). The rule that matters here: the ergonomics stay entirely on the user's
-side of the boundary. A shared spool never learns about that helper; users may trade explicitness
-for terseness in their own config, shared code may not.
+The consumer's side of this pattern — binding the runtime once in a workspace-owned helper for terse daily calls while your spool stays explicit — is workspace customisation, and lives on [that page](./customisation.md). The rule that matters here: the ergonomics stay entirely on the user's side of the boundary. A shared spool never learns about that helper; users may trade explicitness for terseness in their own config, shared code may not.
 
 ## Namespace tiers (why this split exists)
 
@@ -1022,9 +1013,7 @@ See [AGENTS.md](../../AGENTS.md) and [SPEC-003](../../devflow/specs/repl-api.md)
 - `skein.spools.*` — the authorable/reference spool layer.
 - `skein.repl` — the interactive human surface (connection-aware).
 
-Workspace-owned helper namespaces sit below this list. They may provide terse
-ergonomics, but they are not a Skein contract tier and shared spools must not
-depend on them.
+Workspace-owned helper namespaces sit below this list. They may provide terse ergonomics, but they are not a Skein contract tier and shared spools must not depend on them.
 - External/shared spool source namespaces use the author's org prefix; codethread
   spools use `ct.spools.<name>`. The `skein.*` prefix is reserved for source
   shipped by the Skein checkout. A source namespace is separate from the
@@ -1032,11 +1021,7 @@ depend on them.
 
 ## Enforcement
 
-Shared-spool source must not require a workspace-owned helper or use its hidden
-runtime default. Local and third-party shared spools are held to that rule by
-review and this guide. If a distributed spool starts depending on workspace
-ergonomics, add a lint over approved roots at module refresh time that rejects
-the dependency.
+Shared-spool source must not require a workspace-owned helper or use its hidden runtime default. Local and third-party shared spools are held to that rule by review and this guide. If a distributed spool starts depending on workspace ergonomics, add a lint over approved roots at module refresh time that rejects the dependency.
 
 ## Unsafe spools
 
