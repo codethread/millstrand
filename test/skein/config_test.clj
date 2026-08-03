@@ -155,7 +155,7 @@
   (.mkdirs (io/file target))
   (doseq [name ["init.clj" "config.clj" "workflows.clj" "workflows_land.clj" "workflows_ralph.clj" "harnesses.clj"
                 "guide.clj" "attention.clj" "nvd_scan.clj" "reviewers.clj"
-                "kanban_tracker.clj" "module_adapters.clj" "spools.edn"]]
+                "module_adapters.clj" "spools.edn"]]
     (io/copy (io/file ".skein" name) (io/file target name)))
   (let [scripts-target (io/file target "scripts")]
     (.mkdirs scripts-target)
@@ -2195,47 +2195,17 @@
            (runtime/resolve-var rt 'workflows/main-ci-watch))
         "cold startup resolves the exact persisted code/fn symbol")))
 
-(defn- assert-kanban-tracker-installed
-  "Assert startup declared the required devflow tracker binding and it is live."
-  [rt]
-  (let [decl (get-in (runtime/status rt) [:modules :kanban/tracker])]
-    (is (some? decl) ":kanban/tracker is a declared module")
-    (is (true? (:required? decl)))
-    (is (nil? (ns-resolve 'kanban-tracker 'install!))
-        "the workspace module exposes no legacy installer")
-    (is (re-find #"Bound tracker: devflow" (:tracker (op! "kanban" ["about"]))))))
-
-(deftest kanban-tracker-devflow-projection-contract
-  (with-config-runtime
-    (fn [rt]
-      (load-file ".skein/kanban_tracker.clj")
-      (let [project (requiring-resolve
-                     'ct.spools.devflow-kanban-adapter/devflow-projection)]
-        (testing "no active run projects an empty frontier"
-          (is (= {:status nil :ready []}
-                 (project rt "absent"))))
-        (testing "a run id must be a non-blank string"
-          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-blank string"
-                                (project rt " "))))
-        (workflow/start! "tracked" :intake {:feature "tracked"
-                                            :worktree-check "already-in-worktree-ok"})
-        (let [{:keys [status ready]} (project rt "tracked")]
-          (is (= "intake" status))
-          (is (= ["Create or confirm feature worktree for tracked"]
-                 (mapv :title ready))))))))
-
 (deftest repo-local-startup-and-refresh-preserve-registrations
   (with-startup-config-runtime
     (fn [rt]
       (assert-config-registrations rt)
       (assert-treadle-installed-after-runtime-dependencies rt)
       (assert-workflow-spool-consent-edges rt)
-      (assert-kanban-tracker-installed rt)
+      (is (nil? (get-in (runtime/status rt) [:modules :kanban/tracker]))
+          "startup no longer declares the withdrawn kanban tracker seed")
       (is (map? (op! "help" ["agent"])))
       (is (seq (op! "agent" ["harnesses"])))
       (is (= "bench about" (:operation (op! "bench" ["about"]))))
-      (is (str/includes? (:tracker (op! "kanban" ["about"]))
-                         "Bound tracker: devflow"))
       (op! "workflow" ["start" "startup-feature"
                        "--workflow" "intake"
                        "--params" (json/write-str {:feature "startup-feature"
@@ -2248,7 +2218,8 @@
                   (vals (:resource/outcomes (runtime/status rt)))))
       (assert-config-registrations rt)
       (assert-workflow-spool-consent-edges rt)
-      (assert-kanban-tracker-installed rt)
+      (is (nil? (get-in (runtime/status rt) [:modules :kanban/tracker]))
+          "refresh does not restore the withdrawn kanban tracker seed")
       ;; Module-owned registrations refresh; the strand graph and run state persist.
       (let [status (op! "workflow" ["ready" "startup-feature"])]
         (is (false? (:done status)))

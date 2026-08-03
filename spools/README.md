@@ -75,10 +75,10 @@ spools](../docs/spools/writing-shared-spools.md#publishing-a-shared-spool-with-g
 | `ct.spools.delegation` | git, sha-pinned (see below) | [delegation/README.md][delegation-contract] | [delegation.api.md][delegation-api] · [cookbook][delegation-cookbook] | Cross-harness subagent surface over agent-run: the `strand agent` verbs, the `agent-plan` weave pattern, delegation/retry/status, and the worker + coordinator guidance. |
 | `ct.spools.executors.subagent` | git, sha-pinned `agent-run` root (see below) | [agent-run/subagent.md][subagent-contract] | [subagent.api.md][subagent-api] · [cookbook][subagent-cookbook] | Workflow gate bridge: fulfills ready `:subagent` gates by spawning agent-run runs and delivering successful results through `workflow/complete!`. |
 | `skein.spools.chime` | `:skein/source-root "spools/chime"` | [chime/README.md](./chime/README.md) | [chime.api.md](./chime.api.md) · [cookbook](./chime.cookbook.md) | Notification engine: watches graph mutations, evaluates user-registered rules, and sends matches through a user-bound local notifier command. |
-| `ct.spools.kanban` | git, sha-pinned (see below) | [kanban.md](https://github.com/codethread/kanban.spool/blob/44ba711f898f0dcc3d5ce2c8b64f16ffd837158b/kanban.md) | — | User-facing kanban board: feature/epic cards, refinement/pending/claimed/in_review lanes, notes and handovers via `strand kanban`; epics have a reversible finish lifecycle (`finish` completes or abandon-cascades, `reopen` inverts an abandon); this repo binds devflow as its tracker through `.skein/kanban_tracker.clj`. |
+| `ct.spools.kanban` | git, sha-pinned (see below) | [kanban.md](https://github.com/codethread/kanban.spool/blob/d6b0cbe2b9650d261305f63334686a181f06de9e/kanban.md) | — | User-facing kanban board: feature/epic cards, refinement/pending/claimed/in_review lanes, notes and handovers via `strand kanban`; epics have a reversible finish lifecycle (`finish` completes or abandon-cascades, `reopen` inverts an abandon). |
 | `skein.spools.cron` | `:skein/source-root "spools/cron"` | [cron/README.md](./cron/README.md) | [cron.api.md](./cron.api.md) · [cookbook](./cron.cookbook.md) | Userland recurrence layer over durable scheduler wakes: registers named interval+jitter jobs, records last-outcome/failure status, and leaves next-fire timing to scheduler introspection. Ships no jobs. |
 | `ct.spools.bench` | git, sha-pinned (see below) | [bench/README.md][bench-contract] | [bench.api.md][bench-api] | Deterministic, containerized benchmarking of coding-agent harnesses: pinned repo/prompt/memory overlays, bench-owned entry execution, normalized metrics, and an agent-run served judge. |
-| `ct.spools.devflow` | git, sha-pinned (see below) | [devflow.md](https://github.com/codethread/devflow.spool/blob/c77486955825e5d4918a4928914578cad61ed08f/devflow.md) | — | Reference devflow lifecycle built on the workflow engine: intake → proposal → spec/plan → tasks/implementation stages with HITL checkpoints. |
+| `ct.spools.devflow` | git, sha-pinned (see below) | [devflow.md](https://github.com/codethread/devflow.spool/blob/053d3b9a37bdedc1ea4e605b8df17410fa014486/devflow.md) | — | Reference devflow lifecycle built on the workflow engine: intake → proposal → spec/plan → tasks/implementation stages with HITL checkpoints. |
 | `skein.spools.dresser` | *(none approved in this repo)* | [dresser.md](https://github.com/codethread/dresser.loom/blob/fea1d340be3591d008cf0ddeb72b0091d95a380d/dresser.md) | — | Brings a repo onto shared working conventions and surfaces convention upgrades later. Two flavours: scaffold a new shared-spool repo, or install a self-contained `.skein/` workspace into any host repo. Applied versions are recorded in the target at `.skein/conventions.edn`. |
 
 [agent-run-contract]: https://github.com/codethread/agent-harness.spool/blob/2e689490d875bc66887b158f34382b97ade4df6b/agent-run/README.md
@@ -129,19 +129,10 @@ coordinate rather than carrying a second pin, so the test and weaver pins cannot
 Developers override the coordinate with a gitignored `spools.local.edn` local root to work
 against a checkout.
 
-`ct.spools.kanban` does not choose a workflow system. This repo declares the
-`:kanban/tracker` module in `.skein/init.clj`; its
-`.skein/kanban_tracker.clj` reconciliation binds devflow with
-`kanban/set-tracker!`, and the projection receives the owning runtime before the
-run id. Repos using another tracker provide the same runtime-aware projection
-contract. Repos that do not project run state omit the binding.
+`ct.spools.kanban` does not choose a workflow system. This repo activates devflow's adapter after both spools are active. Devflow v19 requires no consumer-owned tracker seed.
 
 `ct.spools.kanban` is the second external spool: it lives in
-[`codethread/kanban.spool`](https://github.com/codethread/kanban.spool). Kanban loads independently
-of a tracker; this repo's `.skein/kanban_tracker.clj` binds devflow after both spools are active.
-Like devflow, its pin lives only in `.skein/spools.edn`: a release `:git/tag` plus its peeled
-`:git/sha`. Tests consume that same entry, and developers override it with a gitignored
-`spools.local.edn` local root.
+[`codethread/kanban.spool`](https://github.com/codethread/kanban.spool). Like devflow, its pin lives only in `.skein/spools.edn`: a release `:git/tag` plus its peeled `:git/sha`. Tests consume that same entry, and developers override it with a gitignored `spools.local.edn` local root.
 
 The `ct.spools.agent-run`, `ct.spools.executors.subagent`, `ct.spools.delegation`, and
 `ct.spools.bench` family lives in
