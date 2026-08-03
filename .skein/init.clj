@@ -17,7 +17,6 @@
 ;;   reviewers.clj     — reviewer rosters
 ;;   attention.clj     — chime attention rules
 ;;   nvd_scan.clj      — NVD scan cron job
-;;   kanban_tracker.clj— devflow<->kanban tracker binding
 ;;   module_adapters.clj — repo election of the batteries help transform
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and every
@@ -161,10 +160,9 @@
                   :after [:skein/spools-chime :skein/spools-shuttle]
                   :required? true})
 
-;; --- kanban board + devflow tracker binding ---------------------------------
-;; kanban is an external git-distributed spool. The board loads independently;
-;; the process-lifetime tracker seed below joins it to devflow after both spools
-;; are active. Kanban v16 deliberately exposes no tracker unbind operation.
+;; --- kanban board + devflow adapter -----------------------------------------
+;; kanban is an external git-distributed spool. The adapter integrates the
+;; board with devflow after both spools are active.
 (runtime/module! runtime :skein/spools-kanban
                  {:ns 'ct.spools.kanban
                   :spools ['codethread/kanban]
@@ -175,12 +173,6 @@
                            'codethread/devflow 'codethread/kanban]
                   :after [:skein/spools-devflow :skein/spools-kanban]
                   :required? true})
-(runtime/module! runtime :kanban/tracker
-                 {:file "kanban_tracker.clj"
-                  :spools ['codethread/devflow-kanban-adapter]
-                  :after [:skein/spools-devflow-kanban-adapter]
-                  :required? true})
-
 ;; --- cron timer engine + the NVD scan job -----------------------------------
 ;; Cron is a generic weaver timer engine. Its collected open-kind and lifecycle
 ;; declarations own job publication and scheduling; nvd_scan.clj contributes a

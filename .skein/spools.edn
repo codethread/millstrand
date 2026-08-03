@@ -1,18 +1,19 @@
 {:spools {codethread/kanban
  {:git/url "https://github.com/codethread/kanban.spool.git",
-  :git/sha "b06509fce7b278eed6404e094282887f0f89149c",
-  :git/tag "v21",
+  :git/sha "d6b0cbe2b9650d261305f63334686a181f06de9e",
+  :git/tag "v22",
   :roots {codethread/kanban "."}},
  skein.spools/chime {:skein/source-root "spools/chime"},
  skein.spools/unsafe-text-search
  {:skein/source-root "spools/unsafe-text-search"},
  codethread/devflow
  {:git/url "https://github.com/codethread/devflow.spool.git",
-  :git/sha "031bc04c288c0ac1e614d5a4f9442a8c87b5bd1d",
-  :git/tag "v18",
-  :roots {codethread/devflow ".",
-          codethread/devflow-kanban-adapter "kanban-adapter"},
-  :requires {codethread/kanban "v20"}},
+  :git/sha "053d3b9a37bdedc1ea4e605b8df17410fa014486",
+  :git/tag "v19",
+  :roots
+  {codethread/devflow ".",
+   codethread/devflow-kanban-adapter "kanban-adapter"},
+  :requires {codethread/kanban "v22"}},
  skein.spools/batteries {:skein/source-root "spools/batteries"},
  skein.spools/cron {:skein/source-root "spools/cron"},
  skein.spools/workflow {:skein/source-root "spools/workflow"},
