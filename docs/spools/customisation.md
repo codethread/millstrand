@@ -127,6 +127,15 @@ reloads changed module source, atomically replaces owner partitions, and reconci
 resources. It preserves unrelated modules, queued events, recent failures, and
 spool state. Missing startup files are skipped; present failures fail loudly.
 
+Direct registrations are the one thing refresh can drop. A direct write is not
+serialized against an in-flight refresh: publication resets each registry to the
+candidate snapshot taken after source loading, so a direct write landing in the
+narrow span between that snapshot and publication is overwritten with no error.
+The window is small and only staged publication sits inside it, but if a
+registration you made at the REPL disappears while someone else was refreshing,
+this is why — register it again once the refresh has finished. Anything that must
+survive belongs in module source (SPEC-003.C23, constraint F20).
+
 For code-only investigation, `reload-code!` takes a root-lib symbol from the
 family's effective `:roots` map and reloads that root's namespaces in dependency
 order:

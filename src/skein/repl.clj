@@ -322,8 +322,11 @@
   "Register a runtime pattern in the active weaver pattern registry.
 
   Accepts a simple pattern name, optional non-blank doc string, fully qualified
-  function symbol, and input spec name. Duplicate names replace prior entries for
-  the current weaver lifetime."
+  function symbol, and input spec name. Registration claims the name in the
+  caller's own owner partition for the current weaver lifetime: re-registering a
+  name this caller already holds replaces it, while a name another owner supplies
+  collides loudly. `skein.api.patterns.alpha/replace-pattern!` is the deliberate
+  cross-owner override."
   ([pattern-name fn-sym input-spec]
    (daemon :register-pattern! pattern-name fn-sym input-spec))
   ([pattern-name doc fn-sym input-spec]
