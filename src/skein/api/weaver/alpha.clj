@@ -434,7 +434,11 @@
   "Replace an already-registered op, failing loudly when the name is absent.
 
   Same signature as `register-op!`. This is the deliberate override for a name
-  that already exists; unlike `register-op!` it requires the name to be present."
+  that already exists; unlike `register-op!` it requires the name to be present.
+  When another owner supplies the name — a module-published op, say — the
+  override intent is recorded, which is what lets the direct entry keep
+  shadowing the original across `runtime/refresh!`. `unregister-op!` retracts
+  the shadow and the shadowed entry becomes effective again."
   ([runtime op-name fn-sym]
    (replace-op! runtime core-registry/repl-owner op-name nil fn-sym))
   ([runtime op-name opts fn-sym]
@@ -456,6 +460,31 @@
               :owned (s/cat :runtime ::runtime :owner keyword? :op-name ::op-name
                             :opts ::op-metadata :fn-sym symbol?))
   :ret map?)
+
+;; Every `unregister-*!` across the API namespaces answers with the canonical
+;; registry key it retracted; op keys canonicalize to strings.
+(s/def ::unregistered string?)
+
+(defn unregister-op!
+  "Retract `owner`'s own op registration for `op-name`.
+
+  Removal reaches only into the calling owner's partition, so it is the
+  counterpart of `replace-op!` rather than a way to delete another owner's op:
+  retracting a shadow restores the shadowed entry as effective, and retracting a
+  fresh claim leaves the name unregistered. Unregistering a name this owner
+  never registered is an idempotent no-op. Returns `{:unregistered
+  <canonical-name>}`."
+  ([runtime op-name]
+   (unregister-op! runtime core-registry/repl-owner op-name))
+  ([runtime owner op-name]
+   (let [canonical-name (op-entry/canonical-op-name op-name)]
+     (core-registry/remove-entry! (op-store runtime) owner canonical-name)
+     {:unregistered canonical-name})))
+
+(s/fdef unregister-op!
+  :args (s/or :direct (s/cat :runtime ::runtime :op-name ::op-name)
+              :owned (s/cat :runtime ::runtime :owner keyword? :op-name ::op-name))
+  :ret (s/keys :req-un [::unregistered]))
 
 (defn ops
   "Return registered CLI operation entries for the current weaver runtime."

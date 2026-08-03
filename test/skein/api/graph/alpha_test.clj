@@ -10,7 +10,8 @@
             [skein.api.graph.alpha :as graph]
             [skein.api.hooks.alpha :as hooks]
             [skein.api.weaver.alpha :as weaver]
-            [skein.test.alpha :as t]))
+            [skein.test.alpha :as t])
+  (:import [clojure.lang ExceptionInfo]))
 
 ;; Namespace-level on purpose: hooks are registered by symbol and resolved to
 ;; top-level vars, so capture state cannot be a per-test local.
@@ -39,6 +40,26 @@
         (is (= :burn-batch (:request/operation context)))
         (is (= :strand/burn (:mutation/operation context)))
         (is (= [(:id doomed)] (:strand/requested-ids context)))))))
+
+(deftest query-verbs-validate-their-definition-and-return-the-canonical-shape
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (let [rt (:runtime ctx)]
+      (is (thrown-with-msg? ExceptionInfo #"Query not registered; cannot replace"
+                            (graph/replace-query! rt 'absent [:= :state "active"])))
+      (is (= {"swap" [:= :state "active"]}
+             (graph/register-query! rt 'swap [:= :state "active"])))
+      (is (= {"swap" [:= :state "closed"]}
+             (graph/replace-query! rt 'swap [:= :state "closed"]))
+          "replacement returns register-query!'s canonical shape")
+      (is (= [:= :state "closed"] (graph/resolve-query rt 'swap)))
+      (is (thrown-with-msg? ExceptionInfo #"[Qq]uery"
+                            (graph/replace-query! rt 'swap [:bogus-operator]))
+          "a malformed definition is rejected before it reaches the registry")
+      (is (= [:= :state "closed"] (graph/resolve-query rt 'swap)))
+      (is (= {:unregistered "swap"} (graph/unregister-query! rt 'swap)))
+      (is (not (contains? (graph/queries rt) "swap")))
+      (is (= {:unregistered "swap"} (graph/unregister-query! rt 'swap))
+          "retracting an absent name is an idempotent no-op"))))
 
 (deftest edge-adjacency-is-lenient-for-absent-ids
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]

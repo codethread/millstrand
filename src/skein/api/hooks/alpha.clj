@@ -12,48 +12,73 @@
             [skein.core.weaver.core-registry :as core-registry]))
 
 (declare validate-hook-fn! require-hook-registration! public-hook-entry
-         public-hook-provenance)
+         public-hook-provenance validated-hook-entry)
 
 (defn register-hook!
-  "Register or replace a lifecycle hook in `runtime` for selected hook types.
+  "Register a lifecycle hook in `runtime` for selected hook types.
 
   `key` is the stable registry identity (keyword, symbol, or non-blank string):
-  registering an existing key replaces that entry. `types` is a non-empty set of
-  hook type keywords, and `fn-sym` a fully qualified symbol validated here as
-  resolvable under the runtime's spool classloader. The entry stores only the
-  symbol — every hook binds its callable at dispatch start, so a reload's fresh
-  definition is the one that runs. `opts` may carry an integer `:order`
-  (default 0) plus data-first metadata. Registration input and the returned entry
-  conform to `::skein.core.specs/hook-registration` and
-  `::skein.core.specs/hook-entry`, respectively. Returns the registered entry."
+  re-registering a key this owner already holds replaces that entry, while a key
+  another owner supplies collides loudly — `replace-hook!` is the deliberate
+  override for it. `types` is a non-empty set of hook type keywords, and
+  `fn-sym` a fully qualified symbol validated here as resolvable under the
+  runtime's spool classloader. The entry stores only the symbol — every hook
+  binds its callable at dispatch start, so a reload's fresh definition is the one
+  that runs. `opts` may carry an integer `:order` (default 0) plus data-first
+  metadata. Registration input and the returned entry conform to
+  `::skein.core.specs/hook-registration` and `::skein.core.specs/hook-entry`,
+  respectively. Returns the registered entry."
   ([runtime key types fn-sym]
    (register-hook! runtime core-registry/repl-owner key types fn-sym {}))
   ([runtime key types fn-sym opts]
    (register-hook! runtime core-registry/repl-owner key types fn-sym opts))
   ([runtime owner key types fn-sym opts]
-   (let [registration {:key key :types types :fn fn-sym :opts opts}]
-     (require-hook-registration! registration)
-     (validate-hook-fn! runtime fn-sym)
-     (let [entry {:key key
-                  :types types
-                  :fn fn-sym
-                  :order (get opts :order 0)
-                  :metadata (dissoc opts :order)}]
-       (spool/require-valid! ::specs/hook-entry entry "Hook registry entry is invalid")
-       (core-registry/put-entry! (access/hook-store runtime) owner (:key entry) entry)
-       entry))))
+   (let [entry (validated-hook-entry runtime key types fn-sym opts)]
+     (core-registry/put-entry! (access/hook-store runtime) owner (:key entry) entry)
+     entry)))
+
+(defn replace-hook!
+  "Replace an already-registered lifecycle hook, failing loudly when absent.
+
+  Same signature and return shape as `register-hook!`. This is the deliberate
+  override for a key that already exists; unlike `register-hook!` it requires the
+  key to be present. When another owner supplies the key — a module-published
+  hook, say — the override intent is recorded, which is what lets the direct
+  entry keep shadowing the original across `runtime/refresh!`.
+  `unregister-hook!` retracts the shadow and the shadowed entry becomes effective
+  again. Hooks bind their callable at dispatch start, so iterating a body under a
+  stable contract needs no registry call at all; reach for this when the types,
+  order, metadata, or the symbol itself change."
+  ([runtime key types fn-sym]
+   (replace-hook! runtime core-registry/repl-owner key types fn-sym {}))
+  ([runtime key types fn-sym opts]
+   (replace-hook! runtime core-registry/repl-owner key types fn-sym opts))
+  ([runtime owner key types fn-sym opts]
+   (let [entry (validated-hook-entry runtime key types fn-sym opts)
+         registered (access/hook-registry runtime)]
+     (when-not (contains? registered (:key entry))
+       (throw (ex-info "Hook not registered; cannot replace"
+                       {:hook (:key entry)
+                        :available (sort-by pr-str (keys registered))})))
+     (core-registry/replace-entry! (access/hook-store runtime) owner (:key entry) entry)
+     entry)))
 
 (defn unregister-hook!
-  "Unregister a lifecycle hook by stable key from `runtime` and return that key.
+  "Retract `owner`'s own lifecycle hook registration for `key` from `runtime`.
 
-  Unregistering an absent key is a no-op returning the validated key."
+  Removal reaches only into the calling owner's partition, so it is the
+  counterpart of `replace-hook!` rather than a way to delete another owner's
+  hook: retracting a shadow restores the shadowed entry as effective, and
+  retracting a fresh claim leaves the key unregistered. Unregistering a key this
+  owner never registered is an idempotent no-op. Returns `{:unregistered
+  <key>}`."
   ([runtime key]
    (unregister-hook! runtime core-registry/repl-owner key))
   ([runtime owner key]
    (let [key (spool/require-valid! :skein.hook/key key
                                    "Hook key must be a keyword, symbol, or string")]
      (core-registry/remove-entry! (access/hook-store runtime) owner key)
-     key)))
+     {:unregistered key})))
 
 (defn hooks
   "Return data-first lifecycle hook registry entries in execution order.
@@ -80,6 +105,23 @@
   [runtime]
   (public-hook-provenance
    (core-registry/explain (access/hook-store runtime) public-hook-entry)))
+
+(defn- validated-hook-entry
+  "Validate one registration's inputs and assemble its registry entry.
+
+  The shared entrance for `register-hook!` and `replace-hook!`: the registration
+  shape, then the hook symbol's resolvability, then the entry itself, so a
+  malformed registration never reaches the registry."
+  [runtime key types fn-sym opts]
+  (require-hook-registration! {:key key :types types :fn fn-sym :opts opts})
+  (validate-hook-fn! runtime fn-sym)
+  (let [entry {:key key
+               :types types
+               :fn fn-sym
+               :order (get opts :order 0)
+               :metadata (dissoc opts :order)}]
+    (spool/require-valid! ::specs/hook-entry entry "Hook registry entry is invalid")
+    entry))
 
 (defn- hook-registration-message
   "Return a caller-facing diagnostic for an already-rejected registration."

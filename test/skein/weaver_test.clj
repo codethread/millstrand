@@ -1505,7 +1505,7 @@
               peer-b (hooks/register-hook! rt :b #{:payload/received} 'skein.weaver-test/capture-hook {})]
           (is (= ["early" :a :b :capture] (mapv :key (hooks/hooks rt))))
           (is (= [early peer-a peer-b replacement] (hooks/hooks rt)))
-          (is (= :a (hooks/unregister-hook! rt :a)))
+          (is (= {:unregistered :a} (hooks/unregister-hook! rt :a)))
           (is (= ["early" :b :capture] (mapv :key (hooks/hooks rt)))))))))
 
 (deftest weaver-hook-registry-validates-inputs
@@ -1890,7 +1890,13 @@
                             (weaver/op! rt 'missing [])))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Operation function"
-                            (weaver/register-op! rt 'bad raw-mutating-standard 'unqualified))))))
+                            (weaver/register-op! rt 'bad raw-mutating-standard 'unqualified)))
+      (is (= {:unregistered "undocumented"} (weaver/unregister-op! rt 'undocumented)))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Operation not found"
+                            (weaver/op! rt 'undocumented [])))
+      (is (= {:unregistered "undocumented"} (weaver/unregister-op! rt 'undocumented))
+          "retracting an absent name is an idempotent no-op"))))
 
 (deftest owner-return-coverage-is-derived-from-registry-provenance
   (testing "the built-in read-class ops all declare returns and share provenance"
@@ -3254,6 +3260,21 @@
                             (patterns/register-pattern! rt 'bad-fn
                                                         'skein.weaver-test/not-callable-hook
                                                         ::pattern-input)))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Pattern not registered; cannot replace"
+                            (patterns/replace-pattern! rt 'absent 'skein.weaver-test/test-pattern
+                                                       ::pattern-input)))
+      (is (= {:name "documented-task"
+              :fn 'skein.weaver-test/test-pattern
+              :input-spec ::pattern-input}
+             (patterns/replace-pattern! rt 'documented-task 'skein.weaver-test/test-pattern
+                                        ::pattern-input))
+          "replacement returns register-pattern!'s entry shape; the doc-less arity drops the doc")
+      (is (= {:unregistered "documented-task"}
+             (patterns/unregister-pattern! rt 'documented-task)))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Pattern not found"
+                            (patterns/resolve-pattern rt :documented-task)))
       (let [explained (patterns/explain rt :dev-task)]
         (is (s/valid? ::patterns/explain-result explained))
         (is (str/includes? (get-in explained [:spec-forms 0 "form"])

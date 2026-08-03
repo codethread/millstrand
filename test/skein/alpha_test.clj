@@ -103,7 +103,7 @@
                  :order 5
                  :metadata {:doc "policy"}}]
                (hooks/hooks rt)))
-        (is (= :policy (hooks/unregister-hook! rt :policy)))
+        (is (= {:unregistered :policy} (hooks/unregister-hook! rt :policy)))
         (let [batch-result (batch/apply! rt {:refs {:feature (:id feature)
                                                     :task (:id task)}
                                              :strands [{:ref :task

@@ -38,6 +38,8 @@
    ;; drives its own unpublished runtime per test — no JVM-global state.
    'skein.api.events.alpha-test
    'skein.api.hooks.alpha-test
+   ;; drives one disposable weaver world with its own module source — no shared state.
+   'skein.api.registration-matrix-test
    'skein.alpha-test 'skein.core.client-test 'skein.spools.workflow-test
    ;; each test drives its own disposable runtime and registry — no shared state.
    'skein.spools.workflow-cli-test 'skein.spools.workflow-run-cli-test

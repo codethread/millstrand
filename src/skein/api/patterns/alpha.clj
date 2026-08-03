@@ -25,27 +25,67 @@
 
 (declare canonical-pattern-name pattern-entry pattern-input-contract validate-pattern-input!
          normalize-weave-strand-attributes weave-payload weave-batch-context
-         require-pattern-registration! public-pattern-entry validate-pattern-fn!)
+         require-pattern-registration! public-pattern-entry validate-pattern-fn!
+         validated-pattern-entry)
 
 (defn register-pattern!
   "Register a trusted weaver pattern handler and input spec in `runtime`.
 
   Registration input conforms to `::skein.core.specs/pattern-registration`,
-  and the returned entry conforms to `::skein.core.specs/pattern-entry`."
+  and the returned entry conforms to `::skein.core.specs/pattern-entry`.
+  Re-registering a name this owner already holds replaces that entry; a name
+  another owner supplies collides loudly, and `replace-pattern!` is the
+  deliberate override for it."
   ([runtime pattern-name fn-sym input-spec]
    (register-pattern! runtime core-registry/repl-owner pattern-name nil fn-sym input-spec))
   ([runtime pattern-name doc fn-sym input-spec]
    (register-pattern! runtime core-registry/repl-owner pattern-name doc fn-sym input-spec))
   ([runtime owner pattern-name doc fn-sym input-spec]
-   (let [registration {:name pattern-name
-                       :doc doc
-                       :fn fn-sym
-                       :input-spec input-spec}]
-     (require-pattern-registration! registration)
-     (validate-pattern-fn! runtime fn-sym)
-     (let [entry (pattern-entry pattern-name doc fn-sym input-spec)]
-       (core-registry/put-entry! (pattern-store runtime) owner (:name entry) entry)
-       entry))))
+   (let [entry (validated-pattern-entry runtime pattern-name doc fn-sym input-spec)]
+     (core-registry/put-entry! (pattern-store runtime) owner (:name entry) entry)
+     entry)))
+
+(defn replace-pattern!
+  "Replace an already-registered weave pattern, failing loudly when absent.
+
+  Same signature and return shape as `register-pattern!`. This is the deliberate
+  override for a name that already exists; unlike `register-pattern!` it requires
+  the name to be present. When another owner supplies the name — a
+  module-published pattern, say — the override intent is recorded, which is what
+  lets the direct entry keep shadowing the original across `runtime/refresh!`.
+  `unregister-pattern!` retracts the shadow and the shadowed entry becomes
+  effective again. Patterns resolve their handler symbol at invocation, so
+  iterating a body under a stable contract needs no registry call at all;
+  reach for this when the contract or the symbol itself changes."
+  ([runtime pattern-name fn-sym input-spec]
+   (replace-pattern! runtime core-registry/repl-owner pattern-name nil fn-sym input-spec))
+  ([runtime pattern-name doc fn-sym input-spec]
+   (replace-pattern! runtime core-registry/repl-owner pattern-name doc fn-sym input-spec))
+  ([runtime owner pattern-name doc fn-sym input-spec]
+   (let [entry (validated-pattern-entry runtime pattern-name doc fn-sym input-spec)
+         registered (pattern-registry runtime)]
+     (when-not (contains? registered (:name entry))
+       (throw (ex-info "Pattern not registered; cannot replace"
+                       {:pattern (:name entry)
+                        :available (sort (keys registered))})))
+     (core-registry/replace-entry! (pattern-store runtime) owner (:name entry) entry)
+     entry)))
+
+(defn unregister-pattern!
+  "Retract `owner`'s own registration of `pattern-name` from `runtime`.
+
+  Removal reaches only into the calling owner's partition, so it is the
+  counterpart of `replace-pattern!` rather than a way to delete another owner's
+  pattern: retracting a shadow restores the shadowed entry as effective, and
+  retracting a fresh claim leaves the name unregistered. Unregistering a name
+  this owner never registered is an idempotent no-op. Returns `{:unregistered
+  <canonical-name>}`."
+  ([runtime pattern-name]
+   (unregister-pattern! runtime core-registry/repl-owner pattern-name))
+  ([runtime owner pattern-name]
+   (let [canonical-name (canonical-pattern-name pattern-name)]
+     (core-registry/remove-entry! (pattern-store runtime) owner canonical-name)
+     {:unregistered canonical-name})))
 
 (defn patterns
   "Return registered weave pattern metadata from `runtime`, ordered by name.
@@ -234,6 +274,20 @@
   ;; query-lookup-name, not canonical-query-name: pattern lookups accept the same
   ;; raw CLI string forms (trimmed, optional leading colon) as query lookups.
   (query/query-lookup-name pattern-name))
+
+(defn- validated-pattern-entry
+  "Validate one registration's inputs and assemble its registry entry.
+
+  The shared entrance for `register-pattern!` and `replace-pattern!`: the
+  registration shape, then the handler symbol's resolvability, then the entry
+  itself, so a malformed registration never reaches the registry."
+  [runtime pattern-name doc fn-sym input-spec]
+  (require-pattern-registration! {:name pattern-name
+                                  :doc doc
+                                  :fn fn-sym
+                                  :input-spec input-spec})
+  (validate-pattern-fn! runtime fn-sym)
+  (pattern-entry pattern-name doc fn-sym input-spec))
 
 (defn- pattern-entry
   "Build a validated pattern registry entry; `doc` may be nil for a doc-less entry."
