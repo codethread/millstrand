@@ -27,7 +27,7 @@ Explicit-runtime API for the named-query registry, query selection, strand
 Function.
 
 Return ancestor root ids reachable from `seed-ids`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L263-L268">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L321-L326">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/burn-by-ids!">`burn-by-ids!`</a>
 ``` clojure
@@ -45,7 +45,7 @@ Delete strands by id and enqueue burn events for removed rows.
   threads an explicit request-context map (the same shape
   `skein.api.batch.alpha/apply!` accepts) into the gate; the two-argument
   form derives its own burn context.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L327-L356">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L385-L414">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/coerce-declared-params">`coerce-declared-params`</a>
 ``` clojure
@@ -64,7 +64,7 @@ Coerce string-keyed CLI `params` to a definition's declared keyword names.
   empty map and rejects every name. The helper accepts a bare vector expression
   or a map with vector `:where` and optional sequential keyword `:params`; other
   definitions fail with ex-info at this seam.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L203-L226">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L261-L284">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/conjoin-where">`conjoin-where`</a>
 ``` clojure
@@ -84,7 +84,7 @@ Return a query definition that conjoins `extra-where` onto `query-def`.
   `[:param name]` references at compile time, not here. The helper accepts a
   bare vector expression or a map with vector `:where` and optional sequential
   keyword `:params`; other definitions fail with ex-info at this seam.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L175-L194">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L233-L252">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/incoming-edges">`incoming-edges`</a>
 ``` clojure
@@ -97,7 +97,7 @@ Return normalized `edge-type` edges whose target is one of `to-ids`.
   One indexed lookup for a strand's parents/annotators; no graph traversal.
   Adjacency is lenient: an id absent from storage yields no rows rather than
   a missing-id error (unlike subgraph/ancestor-root-ids seeds).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L296-L303">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L354-L361">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/outgoing-edges">`outgoing-edges`</a>
 ``` clojure
@@ -109,7 +109,7 @@ Return normalized `edge-type` edges whose source is one of `from-ids`.
 
   One indexed lookup for a strand's children; no graph traversal. Lenient
   adjacency: an absent id yields no rows rather than a missing-id error.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L309-L315">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L367-L373">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/queries">`queries`</a>
 ``` clojure
@@ -118,7 +118,7 @@ Return normalized `edge-type` edges whose source is one of `from-ids`.
 Function.
 
 Return registered query definitions keyed by canonical string name.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L67-L70">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L125-L128">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/query-explain">`query-explain`</a>
 ``` clojure
@@ -127,7 +127,7 @@ Return registered query definitions keyed by canonical string name.
 Function.
 
 Describe a registered query definition and how CLI callers invoke it.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L100-L114">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L158-L172">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/query-ids">`query-ids`</a>
 ``` clojure
@@ -136,7 +136,7 @@ Describe a registered query definition and how CLI callers invoke it.
 Function.
 
 Return strand ids matching an ad hoc query definition or registered query name.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L122-L128">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L180-L186">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/referenced-params">`referenced-params`</a>
 ``` clojure
@@ -153,7 +153,7 @@ Return ordered distinct `[:param name]` keyword references in `query-def`.
   carries this same list beside the definition's declared `:params`. The helper
   accepts a bare vector expression or a map with vector `:where` and optional
   sequential keyword `:params`; other definitions fail with ex-info at this seam.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L232-L244">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L290-L302">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/register-query!">`register-query!`</a>
 ``` clojure
@@ -168,8 +168,29 @@ Register a named query definition and return its canonical API shape.
   definition compiles before it reaches the registry, so malformed query
   data fails loudly at registration time; `skein.core.query` is the
   grammar authority for definitions and compiles the stored definition at
-  each use.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L45-L58">Source</a></sub></p>
+  each use. Re-registering a name this owner already holds replaces that
+  entry; a name another owner supplies collides loudly, and `replace-query!`
+  is the deliberate override for it.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L49-L64">Source</a></sub></p>
+
+## <a name="skein.api.graph.alpha/replace-query!">`replace-query!`</a>
+``` clojure
+(replace-query! runtime query-name query-def)
+(replace-query! runtime owner query-name query-def)
+```
+Function.
+
+Replace an already-registered query, failing loudly when the name is absent.
+
+  Same signature and return shape as `register-query!`. This is the deliberate
+  override for a name that already exists; unlike `register-query!` it requires
+  the name to be present. When another owner supplies the name — a
+  module-published query, say — the override intent is recorded, which is what
+  lets the direct entry keep shadowing the original across `runtime/refresh!`.
+  `unregister-query!` retracts the shadow and the shadowed entry becomes
+  effective again. Queries are value-registered, so replacing a definition is
+  the whole iteration loop: there is no function body to redefine.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L73-L94">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/resolve-query">`resolve-query`</a>
 ``` clojure
@@ -180,7 +201,7 @@ Function.
 Return the registered query definition for a simple symbol or keyword name.
 
   Throws ex-info listing the available names when no definition matches.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L76-L81">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L134-L139">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/strands-by-ids">`strands-by-ids`</a>
 ``` clojure
@@ -189,7 +210,7 @@ Return the registered query definition for a simple symbol or keyword name.
 Function.
 
 Return normalized strands for ids, preserving first-seen input order.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L252-L255">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L310-L313">Source</a></sub></p>
 
 ## <a name="skein.api.graph.alpha/subgraph">`subgraph`</a>
 ``` clojure
@@ -199,4 +220,21 @@ Return normalized strands for ids, preserving first-seen input order.
 Function.
 
 Return a normalized strand subgraph rooted at `root-ids`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L279-L287">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L337-L345">Source</a></sub></p>
+
+## <a name="skein.api.graph.alpha/unregister-query!">`unregister-query!`</a>
+``` clojure
+(unregister-query! runtime query-name)
+(unregister-query! runtime owner query-name)
+```
+Function.
+
+Retract `owner`'s own registration of `query-name`.
+
+  Removal reaches only into the calling owner's partition, so it is the
+  counterpart of `replace-query!` rather than a way to delete another owner's
+  query: retracting a shadow restores the shadowed definition as effective, and
+  retracting a fresh claim leaves the name unregistered. Unregistering a name
+  this owner never registered is an idempotent no-op. Returns `{:unregistered
+  <canonical-name>}`.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/graph/alpha.clj#L103-L117">Source</a></sub></p>

@@ -5,13 +5,14 @@
 
 Explicit-runtime API for managing and inspecting weaver event handlers.
 
-  Registration and unregistration mutate the runtime's weaver-lifetime
-  handler registry; `handlers` and `recent-failures` are the data-first
-  reads over registry and failure state. Every registration is validated
-  loudly at the seam — stable key, non-empty keyword type set, fully
-  qualified function symbol resolvable under the runtime spool
-  classloader, data-first metadata — and entries replace by key for
-  reload workflows. Event submission is not public surface: internal
+  Registration, replacement, and unregistration mutate the runtime's
+  weaver-lifetime handler registry; `handlers` and `recent-failures` are
+  the data-first reads over registry and failure state. Every registration
+  is validated loudly at the seam — stable key, non-empty keyword type set,
+  fully qualified function symbol resolvable under the runtime spool
+  classloader, data-first metadata — and entries replace by key within the
+  registering owner's partition, which is what makes reload workflows
+  idempotent. Event submission is not public surface: internal
   mutation APIs submit events through `skein.core.weaver.dispatch`
   (SPEC-004.C73), and the event-lane quiescence await ships in
   `skein.test.alpha` (SPEC-004.C74b).
@@ -35,7 +36,7 @@ Return owner/provenance diagnostics for `runtime`'s event handler registry.
   `:layer`, and `:override?`/`:effective?` flags, and its `:value` handler entry
   has the resolved `:fn-value` stripped, so no function value or internal handle
   leaves the registry (SPEC-004.C66, DELTA-OlrDrt-001.CC9).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L73-L82">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L103-L112">Source</a></sub></p>
 
 ## <a name="skein.api.events.alpha/handlers">`handlers`</a>
 ``` clojure
@@ -48,7 +49,7 @@ Return `runtime`'s event handler registry as data-first entries.
   Each entry is `{:key :types :fn :metadata}` — never the resolved function
   value (SPEC-004.C66) — sorted by printed key so ordering is deterministic
   across mixed key types.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L63-L71">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L93-L101">Source</a></sub></p>
 
 ## <a name="skein.api.events.alpha/recent-failures">`recent-failures`</a>
 ``` clojure
@@ -62,7 +63,7 @@ Return `runtime`'s recent asynchronous handler failures, oldest first.
   each record carries `:handler/key`, `:handler/fn`, `:event/id`,
   `:event/type`, `:exception/message`, and `:failed/at`. Handler exceptions
   never fail the already-committed mutation that emitted the event.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L84-L92">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L114-L122">Source</a></sub></p>
 
 ## <a name="skein.api.events.alpha/register-handler!">`register-handler!`</a>
 ``` clojure
@@ -72,16 +73,40 @@ Return `runtime`'s recent asynchronous handler failures, oldest first.
 ```
 Function.
 
-Register or replace an event handler in `runtime` for selected event types.
+Register an event handler in `runtime` for selected event types.
 
   Builds the registry entry from loudly validated pieces — `key` a keyword,
   symbol, or non-blank string; `types` a non-empty set of event type
   keywords; `fn-sym` a fully qualified symbol resolving to a callable under
   the runtime spool classloader (resolution happens here, so a bad symbol
   fails registration, not dispatch); `metadata` a data-first map — swaps it
-  into the registry, replacing any prior entry with the same key, and
-  returns the entry as data (the resolved function value stays internal).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L27-L48">Source</a></sub></p>
+  into the registry, and returns the entry as data (the resolved function
+  value stays internal). Re-registering a key this owner already holds
+  replaces that entry; a key another owner supplies collides loudly, and
+  `replace-handler!` is the deliberate override for it.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L28-L47">Source</a></sub></p>
+
+## <a name="skein.api.events.alpha/replace-handler!">`replace-handler!`</a>
+``` clojure
+(replace-handler! runtime key types fn-sym)
+(replace-handler! runtime key types fn-sym metadata)
+(replace-handler! runtime owner key types fn-sym metadata)
+```
+Function.
+
+Replace an already-registered event handler, failing loudly when absent.
+
+  Same signature and return shape as `register-handler!`. This is the
+  deliberate override for a key that already exists; unlike
+  `register-handler!` it requires the key to be present. When another owner
+  supplies the key — a module-published handler, say — the override intent
+  is recorded, which is what lets the direct entry keep shadowing the
+  original across `runtime/refresh!`. `unregister-handler!` retracts the
+  shadow and the shadowed entry becomes effective again. Handlers capture
+  their resolved function value at registration rather than binding it at
+  dispatch, so redefining the underlying fn does not reach a registered
+  handler: iterating one is always this call.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L49-L74">Source</a></sub></p>
 
 ## <a name="skein.api.events.alpha/unregister-handler!">`unregister-handler!`</a>
 ``` clojure
@@ -90,9 +115,13 @@ Register or replace an event handler in `runtime` for selected event types.
 ```
 Function.
 
-Unregister the event handler stored under `key` in `runtime`.
+Retract `owner`'s own event handler registration for `key` in `runtime`.
 
-  Validates `key` like registration, removes any entry stored under it (a
-  key with no entry is a quiet no-op, so unregistration is idempotent), and
-  returns `{:unregistered key}`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L50-L61">Source</a></sub></p>
+  Removal reaches only into the calling owner's partition, so it is the
+  counterpart of `replace-handler!` rather than a way to delete another
+  owner's handler: retracting a shadow restores the shadowed entry as
+  effective, and retracting a fresh claim leaves the key unregistered.
+  Validates `key` like registration; a key this owner never registered is a
+  quiet no-op, so unregistration is idempotent. Returns `{:unregistered
+  key}`.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L76-L91">Source</a></sub></p>

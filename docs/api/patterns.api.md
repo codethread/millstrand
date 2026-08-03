@@ -27,7 +27,7 @@ Describe a registered weave pattern and its input contract in `runtime`.
   and `:spec-forms` the printed form graph, all resolved against the live spec
   registry with no predicate invoked. Missing patterns or unregistered input
   specs fail loudly. The returned map conforms to `::explain-result`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L97-L117">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L137-L157">Source</a></sub></p>
 
 ## <a name="skein.api.patterns.alpha/patterns">`patterns`</a>
 ``` clojure
@@ -38,7 +38,7 @@ Function.
 Return registered weave pattern metadata from `runtime`, ordered by name.
 
   Each returned entry conforms to `::skein.core.specs/pattern-entry`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L50-L56">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L90-L96">Source</a></sub></p>
 
 ## <a name="skein.api.patterns.alpha/register-pattern!">`register-pattern!`</a>
 ``` clojure
@@ -52,7 +52,31 @@ Register a trusted weaver pattern handler and input spec in `runtime`.
 
   Registration input conforms to `::skein.core.specs/pattern-registration`,
   and the returned entry conforms to `::skein.core.specs/pattern-entry`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L30-L48">Source</a></sub></p>
+  Re-registering a name this owner already holds replaces that entry; a name
+  another owner supplies collides loudly, and `replace-pattern!` is the
+  deliberate override for it.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L31-L46">Source</a></sub></p>
+
+## <a name="skein.api.patterns.alpha/replace-pattern!">`replace-pattern!`</a>
+``` clojure
+(replace-pattern! runtime pattern-name fn-sym input-spec)
+(replace-pattern! runtime pattern-name doc fn-sym input-spec)
+(replace-pattern! runtime owner pattern-name doc fn-sym input-spec)
+```
+Function.
+
+Replace an already-registered weave pattern, failing loudly when absent.
+
+  Same signature and return shape as `register-pattern!`. This is the deliberate
+  override for a name that already exists; unlike `register-pattern!` it requires
+  the name to be present. When another owner supplies the name — a
+  module-published pattern, say — the override intent is recorded, which is what
+  lets the direct entry keep shadowing the original across `runtime/refresh!`.
+  `unregister-pattern!` retracts the shadow and the shadowed entry becomes
+  effective again. Patterns resolve their handler symbol at invocation, so
+  iterating a body under a stable contract needs no registry call at all;
+  reach for this when the contract or the symbol itself changes.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L48-L72">Source</a></sub></p>
 
 ## <a name="skein.api.patterns.alpha/resolve-pattern">`resolve-pattern`</a>
 ``` clojure
@@ -67,7 +91,24 @@ Return the registered weave pattern for a name.
 
   Missing patterns fail loudly. The returned entry conforms to
   `::skein.core.specs/pattern-entry`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L58-L72">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L98-L112">Source</a></sub></p>
+
+## <a name="skein.api.patterns.alpha/unregister-pattern!">`unregister-pattern!`</a>
+``` clojure
+(unregister-pattern! runtime pattern-name)
+(unregister-pattern! runtime owner pattern-name)
+```
+Function.
+
+Retract `owner`'s own registration of `pattern-name` from `runtime`.
+
+  Removal reaches only into the calling owner's partition, so it is the
+  counterpart of `replace-pattern!` rather than a way to delete another owner's
+  pattern: retracting a shadow restores the shadowed entry as effective, and
+  retracting a fresh claim leaves the name unregistered. Unregistering a name
+  this owner never registered is an idempotent no-op. Returns `{:unregistered
+  <canonical-name>}`.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L74-L88">Source</a></sub></p>
 
 ## <a name="skein.api.patterns.alpha/weave!">`weave!`</a>
 ``` clojure
@@ -83,4 +124,4 @@ Validate pattern input, invoke the pattern, and apply its create-only batch.
   weave context. A caller-supplied context conforms to
   `::skein.core.specs/request-context`; the pre-commit hook context conforms to
   `::skein.core.specs/batch-hook-context`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L131-L173">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/patterns/alpha.clj#L171-L213">Source</a></sub></p>

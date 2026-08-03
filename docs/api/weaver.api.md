@@ -160,7 +160,7 @@ Invoke a registered CLI operation with raw string argv from a root-level
   nil, fails loudly with the expected and actual labels. Raw-envelope ops (no
   `:arg-spec`) receive the context unchanged, still carrying the raw
   `:op/payloads` map.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L541-L600">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L570-L629">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/op-provenance">`op-provenance`</a>
 ``` clojure
@@ -177,7 +177,7 @@ Return owner/provenance diagnostics for `runtime`'s CLI op registry as data.
   system owner, a workspace op under the direct owner — and which lower-layer
   entries an override shadows. Op entries carry the handler symbol as data, not a
   resolved function value (DELTA-OlrDrt-001.CC9).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L524-L535">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L553-L564">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/ops">`ops`</a>
 ``` clojure
@@ -186,7 +186,7 @@ Return owner/provenance diagnostics for `runtime`'s CLI op registry as data.
 Function.
 
 Return registered CLI operation entries for the current weaver runtime.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L460-L463">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L489-L492">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/ready">`ready`</a>
 ``` clojure
@@ -255,7 +255,11 @@ Replace an already-registered op, failing loudly when the name is absent.
 
   Same signature as `register-op!`. This is the deliberate override for a name
   that already exists; unlike `register-op!` it requires the name to be present.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L433-L450">Source</a></sub></p>
+  When another owner supplies the name — a module-published op, say — the
+  override intent is recorded, which is what lets the direct entry keep
+  shadowing the original across `runtime/refresh!`. `unregister-op!` retracts
+  the shadow and the shadowed entry becomes effective again.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L433-L454">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/resolve-op">`resolve-op`</a>
 ``` clojure
@@ -269,7 +273,7 @@ Return the registered CLI operation entry for `op-name`, or fail loudly.
   concurrent registry replacement takes effect only for a later resolve — the
   in-flight lookup and its not-found diagnostic share one immutable view
   (DELTA-OlrDrt-001.CC9/CC10, op symbols resolve at invocation).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L504-L518">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L533-L547">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/show">`show`</a>
 ``` clojure
@@ -317,6 +321,23 @@ Mark all attributes, or an explicit non-empty key set, hot again for one
   This is a trusted in-process primitive only; it has no socket or CLI
   surface, runs no lifecycle hooks, and enqueues no event.
 <p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L272-L290">Source</a></sub></p>
+
+## <a name="skein.api.weaver.alpha/unregister-op!">`unregister-op!`</a>
+``` clojure
+(unregister-op! runtime op-name)
+(unregister-op! runtime owner op-name)
+```
+Function.
+
+Retract `owner`'s own op registration for `op-name`.
+
+  Removal reaches only into the calling owner's partition, so it is the
+  counterpart of `replace-op!` rather than a way to delete another owner's op:
+  retracting a shadow restores the shadowed entry as effective, and retracting a
+  fresh claim leaves the name unregistered. Unregistering a name this owner
+  never registered is an idempotent no-op. Returns `{:unregistered
+  <canonical-name>}`.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L468-L482">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/update!">`update!`</a>
 ``` clojure
