@@ -2,7 +2,7 @@
 
 **Document ID:** `PROP-Sawt-001`
 **Status:** Approved
-**Approved:** 2026-08-03
+**Approved:** 2026-08-03 — Q1 resolved as option (b): the ADR-001 gate is reinterpreted as not binding this design, which adds no condition grammar; the op is a mechanism with minimal surface composing over already-present selection APIs (rationale: ct at sign-off)
 **Related RFCs:** [`2026-06-24-task-query-dsl`](../../rfcs/2026-06-24-task-query-dsl.md)
 **Related root specs:** [`repl-api.md`](../../specs/repl-api.md), [`strand-model.md`](../../specs/strand-model.md) (P9 query grammar), [`daemon-runtime.md`](../../specs/daemon-runtime.md)
 **Related decisions:** [`ADR-001`](../../adrs/0001-thin-cli-over-generic-algebra.md) (P5 parks generic await); design notes with full session provenance in [`design-notes.md`](./design-notes.md)
