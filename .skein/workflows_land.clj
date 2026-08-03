@@ -1,12 +1,11 @@
 (ns workflows-land
   "The coordinator landing policy: the merge train and the narrow `land` op.
 
-  The land WORKFLOW definitions stay in workflows.clj — live runs carry
-  `workflows/...` symbols on their persisted gates — and this module owns the
-  policy the engine has no business knowing: the singleton merge lock, the
+  The land WORKFLOW definitions live in workflows_land_definitions.clj — live
+  runs carry their qualified symbols on persisted gates — and this module owns
+  the policy the engine has no business knowing: the singleton merge lock, the
   first-in first-out merge queue in front of it, and the kanban lane moves that
-  ride along. Nothing here is referenced by workflows.clj, so the two modules
-  stay independent despite splitting one concern's file."
+  ride along. The two modules stay independent."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -18,9 +17,8 @@
             [skein.api.spool.alpha :refer [attr-get entity-projection poll-until!]]
             [skein.spools.workflow :as workflow]))
 
-;; The op's own boundary contracts. The land WORKFLOW params keep their
-;; `:workflows/...` twins beside the definitions they belong to; these govern
-;; what arrives on the CLI.
+;; The op's own boundary contracts. The land workflow definitions own their
+;; run-param specs; these govern what arrives on the CLI.
 (s/def ::non-blank (s/and string? (complement str/blank?)))
 (s/def ::run-id ::non-blank)
 (s/def ::reason ::non-blank)
@@ -188,7 +186,7 @@
         run-id (first run-ids)]
     (when (or (seq malformed) (not= 1 (count run-ids)))
       (throw (ex-info (format-alpha/reflow
-                      "|Approved land sign-off batches must update workflow rows
+                       "|Approved land sign-off batches must update workflow rows
                        |with usable run-ids for exactly one distinct run.")
                       {:code "land/signoff-run-ambiguous"
                        :roots root-details
@@ -674,8 +672,7 @@
     "choose" {:doc (format-alpha/reflow
                     "|Choose an approved or aborted sign-off with lock and card
                      |rollback. For approved sign-off, use `strand land choose
-                     |<run-id> approved`; generic workflow approval is rejected."
-                    )
+                     |<run-id> approved`; generic workflow approval is rejected.")
               :hook-class :mutating :deadline-class :standard
               :annotations
               {:notes ["The choice positional is a closed enum: approved or abort."]}
@@ -800,20 +797,20 @@
               (current/runtime)
               (fn []
                 (let [{:keys [created? entry-created?]}
-                        (acquire-merge-lock-serially! feature (merge-record feature input))]
-                    (try
-                      (workflow/choose! feature :approved input)
-                      (catch Throwable t
-                        (when created?
-                          (suppressing-rollback!
-                           t
-                           #(release-merge-lock! feature "land choose failed")))
-                        (when entry-created?
-                          (suppressing-rollback!
-                           t
-                           #(close-queue-entry! feature "aborted"
-                                                {:queue/broken-reason "land choose failed"})))
-                        (throw t))))))
+                      (acquire-merge-lock-serially! feature (merge-record feature input))]
+                  (try
+                    (workflow/choose! feature :approved input)
+                    (catch Throwable t
+                      (when created?
+                        (suppressing-rollback!
+                         t
+                         #(release-merge-lock! feature "land choose failed")))
+                      (when entry-created?
+                        (suppressing-rollback!
+                         t
+                         #(close-queue-entry! feature "aborted"
+                                              {:queue/broken-reason "land choose failed"})))
+                      (throw t))))))
 
             "abort"
             (let [context (attr-value (workflow/current-root feature) :workflow/context)

@@ -37,12 +37,22 @@
           :main-opts ["-m" "skein.smoke"]}
   :format {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
            :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "test" "dev" "scripts"
-                       ".skein/init.clj" ".skein/config.clj" ".skein/workflows.clj" ".skein/harnesses.clj"
-                       ".skein/attention.clj" ".skein/nvd_scan.clj" ".skein/reviewers.clj"]}
+                       ".skein/init.clj" ".skein/config.clj" ".skein/workflows_support.clj"
+                       ".skein/workflows.clj" ".skein/workflows_land_definitions.clj"
+                       ".skein/workflows_spool_bump.clj" ".skein/workflows_story.clj"
+                       ".skein/workflows_explore.clj" ".skein/workflows_fix.clj"
+                       ".skein/workflows_land.clj" ".skein/workflows_ralph.clj"
+                       ".skein/harnesses.clj" ".skein/attention.clj" ".skein/nvd_scan.clj"
+                       ".skein/reviewers.clj"]}
   :format/fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
                :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "test" "dev" "scripts"
-                           ".skein/init.clj" ".skein/config.clj" ".skein/workflows.clj" ".skein/harnesses.clj"
-                           ".skein/attention.clj" ".skein/nvd_scan.clj" ".skein/reviewers.clj"]}
+                           ".skein/init.clj" ".skein/config.clj" ".skein/workflows_support.clj"
+                           ".skein/workflows.clj" ".skein/workflows_land_definitions.clj"
+                           ".skein/workflows_spool_bump.clj" ".skein/workflows_story.clj"
+                           ".skein/workflows_explore.clj" ".skein/workflows_fix.clj"
+                           ".skein/workflows_land.clj" ".skein/workflows_ralph.clj"
+                           ".skein/harnesses.clj" ".skein/attention.clj" ".skein/nvd_scan.clj"
+                           ".skein/reviewers.clj"]}
   :lint/clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                    :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "test"]}
   :lint/conventions {:extra-paths ["scripts"]

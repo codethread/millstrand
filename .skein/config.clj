@@ -6,9 +6,10 @@
   `skein.spools.workflow` is its generic CLI, `ct.spools.delegation` owns the
   `strand agent` surface plus the `agent-plan` pattern (all activated from
   init.clj). This file registers named queries. Sibling init.clj modules hold
-  the rest of the repo policy: hand-authored workflows in workflows.clj,
-  harness seats in harnesses.clj, chime attention rules in attention.clj, the
-  NVD scan cron job in nvd_scan.clj, and reviewer rosters in reviewers.clj."
+  the rest of the repo policy: hand-authored workflow modules in the
+  workflows_*.clj files, harness seats in harnesses.clj, chime attention rules
+  in attention.clj, the NVD scan cron job in nvd_scan.clj, and reviewer rosters
+  in reviewers.clj."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [skein.api.skein.alpha :as skein]))
@@ -75,7 +76,7 @@
 (defn require-non-blank!
   "Return value when it is a non-blank string, otherwise fail with arg context.
 
-  Public: workflows.clj (loaded after this file) reuses it for the land op."
+  Public: the workflow modules (loaded after this file) reuse it for policy."
   [arg value]
   (when-not (and (string? value) (not (str/blank? value)))
     (throw (ex-info (str (name arg) " must be a non-blank string")
@@ -85,7 +86,7 @@
 (defn parse-json-object-arg
   "Parse a CLI JSON-object argument into a keywordized map, failing loudly.
 
-  Public: workflows.clj (loaded after this file) reuses it for the land op."
+  Public: the workflow modules (loaded after this file) reuse it for policy."
   [op raw]
   (let [value (json/read-str raw :key-fn keyword)]
     (when-not (map? value)
@@ -107,8 +108,8 @@
   `step=` is a whole token rather than a positional slot so it never collides
   with the other optional args (notes, JSON input) sharing the tail. Returns
   `[other-tokens step-id-or-nil]`, failing loudly on a duplicate selector or a
-  blank id. Public: workflows.clj (loaded after this file) reuses it for the
-  land op's tail convention."
+  blank id. Public: the workflow modules (loaded after this file) reuse it for
+  the land op's tail convention."
   [op tail]
   (let [{steps true others false} (group-by #(str/starts-with? % "step=") tail)]
     (when (> (count steps) 1)

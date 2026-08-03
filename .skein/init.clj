@@ -9,7 +9,13 @@
 ;;
 ;; File-per-concern map (each is one module):
 ;;   config.clj        — named queries + shared policy validation helpers
-;;   workflows.clj     — hand-authored workflow definitions
+;;   workflows_support.clj — shared scripts and subprocess helpers
+;;   workflows.clj     — shared workflow authoring patterns + main-CI watcher
+;;   workflows_land_definitions.clj — land workflow definitions
+;;   workflows_spool_bump.clj — third-party spool bump workflow
+;;   workflows_story.clj — module-form story workflow and continuations
+;;   workflows_explore.clj — open-ended exploration workflow
+;;   workflows_fix.clj — light bug-fix workflow
 ;;   workflows_land.clj— the land policy op: merge lock, merge queue, lane moves
 ;;   workflows_ralph.clj— the ralph-iterate workflow for one-card epic iterations
 ;;   harnesses.clj     — harness seats + routing policy
@@ -190,48 +196,77 @@
                   :required? true})
 
 ;; --- config queries/helpers and hand-authored workflows ---------------------
-;; config.clj authors named queries with defquery and public validation helpers
-;; reused by workflows.clj. It is required: a guarded-but-optional module would
-;; drop the query surface.
+;; config.clj authors named queries with defquery and public validation helpers.
 (runtime/module! runtime :config
                  {:file "config.clj"
                   :required? true})
-;; workflows.clj authors the land/story definitions and the delegate-pipeline and
-;; macros-demo patterns. The land policy op is its sibling below. It reuses
-;; config.clj's public validation helper, so it orders after :config as well as
-;; the workflow and delegation spools.
+;; Shared script sources load before the focused workflow modules.
+(runtime/module! runtime :workflows-support
+                 {:file "workflows_support.clj"
+                  :after [:config]
+                  :required? true})
+;; workflows.clj owns the shared authoring patterns and the stable
+;; workflows/main-ci-watch code gate function.
 (runtime/module! runtime :workflows
                  {:file "workflows.clj"
                   :spools ['skein.spools/workflow 'ct.spools/delegation]
                   :after [:skein/spools-workflow :skein/spools-delegation
-                          :config]
+                          :config :workflows-support]
                   :required? true})
-;; workflows_land.clj authors the narrow land policy op: the merge lock, the
-;; merge queue in front of it, and the kanban lane moves. It is a sibling rather
-;; than part of workflows.clj because the policy outgrew the definitions it
-;; drives; it references no Var there, so the order below is for readers.
+;; Each concrete workflow definition owns one focused source module. Keeping
+;; these modules independent lets a change to one routine refresh its own
+;; contribution without growing a broad definitions file.
+(runtime/module! runtime :workflows-land-definitions
+                 {:file "workflows_land_definitions.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows-support]
+                  :required? true})
+(runtime/module! runtime :workflows-spool-bump
+                 {:file "workflows_spool_bump.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows-support]
+                  :required? true})
+(runtime/module! runtime :workflows-story
+                 {:file "workflows_story.clj"
+                  :spools ['skein.spools/workflow 'ct.spools/delegation]
+                  :after [:skein/spools-workflow :skein/spools-delegation
+                          :workflows-support]
+                  :required? true})
+(runtime/module! runtime :workflows-explore
+                 {:file "workflows_explore.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows-support]
+                  :required? true})
+(runtime/module! runtime :workflows-fix
+                 {:file "workflows_fix.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows-support]
+                  :required? true})
+;; workflows_land.clj owns the narrow land policy op: merge lock, merge queue,
+;; and kanban lane moves. It loads after the land definitions it drives.
 (runtime/module! runtime :workflows-land
                  {:file "workflows_land.clj"
                   :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows]
+                  :after [:skein/spools-workflow :workflows
+                          :workflows-land-definitions]
                   :required? true})
-
-;; workflows_ralph.clj owns the one-card-per-iteration Ralph workflow. It is
-;; separate from the general definitions file so Ralph's loop discipline can
-;; evolve without growing the broad hand-authored workflow module.
+;; Ralph remains an independent one-card-per-iteration workflow.
 (runtime/module! runtime :workflows-ralph
                  {:file "workflows_ralph.clj"
                   :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows]
+                  :after [:skein/spools-workflow :workflows
+                          :workflows-land-definitions]
                   :required? true})
 
 ;; The code executor's lifecycle resource scans ready gates when opened. It must load after
-;; workflows.clj so every persisted code/fn symbol owned there can resolve on
-;; the initial scan.
+;; every workflow definition so persisted code/fn symbols resolve on the initial scan.
 (runtime/module! runtime :skein/spools-code
                  {:ns 'skein.spools.executors.code
                   :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows]
+                  :after [:skein/spools-workflow :workflows
+                          :workflows-land-definitions :workflows-spool-bump
+                          :workflows-story :workflows-explore :workflows-fix
+                          :workflows-ralph]
                   :required? true})
 
 ;; The subagent gate executor activates last: its lifecycle resource runs an initial gate
@@ -241,5 +276,5 @@
                  {:ns 'ct.spools.executors.subagent
                   :spools ['ct.spools/agent-run]
                   :after [:skein/spools-shuttle :skein/spools-workflow
-                          :harnesses :workflows]
+                          :harnesses :workflows :workflows-story :workflows-ralph]
                   :required? true})
