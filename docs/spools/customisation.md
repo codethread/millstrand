@@ -262,8 +262,7 @@ The durable form belongs in the module source:
   {:operation "echo" :argv (:op/argv ctx)})
 ```
 
-Activate that module with `runtime/module!` as in the query example above. The form owns the op's
-help, parser contract, and handler declaration as one published contribution.
+Activate that module with `runtime/module!` as in the query example above. The form owns the op's help, parser contract, and handler declaration as one published contribution.
 
 ```clojure
 (ns my.workflow)
