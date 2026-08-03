@@ -303,8 +303,11 @@ Explicit-runtime code threads a `runtime` argument through every call. That is t
   (or *runtime* @module-default (current/runtime)))
 
 (defmacro with-runtime [runtime & body]
-  `(binding [*runtime* ~runtime]
-     (current/with-runtime ~runtime ~@body)))
+  `(do
+     (when (nil? ~runtime)
+       (throw (ex-info "Cannot scope a nil Skein runtime" {:runtime :nil})))
+     (binding [*runtime* ~runtime]
+       (current/with-runtime ~runtime ~@body))))
 
 (defn strand! [title attributes]
   (weaver/add! (runtime) {:title title :attributes attributes}))
