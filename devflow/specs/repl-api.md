@@ -4,9 +4,7 @@
 
 ## SPEC-003.P1 Purpose
 
-The REPL API gives coding agents and human developers an interactive Clojure interface over the
-selected weaver workspace: the live registration verbs, plus the session machinery that connects a
-JVM to one weaver.
+The REPL API gives coding agents and human developers an interactive Clojure interface over the selected weaver workspace: the live registration verbs, plus the session machinery that connects a JVM to one weaver.
 
 ## SPEC-003.P2 Interface
 

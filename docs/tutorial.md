@@ -250,9 +250,7 @@ The [Clojure crash course](./clojure-crash-course.md) covers the rest. For a cus
 trusted Clojure, the worked example lives in [customising your
 workspace](./spools/customisation.md).
 
-`mill weaver repl` starts in the neutral `user` namespace with `skein.repl` aliased `repl`, so the
-live registration verbs are one keystroke away. Strand reads and writes come from
-`skein.api.weaver.alpha`, whose functions take the runtime first — capture it once:
+`mill weaver repl` starts in the neutral `user` namespace with `skein.repl` aliased `repl`, so the live registration verbs are one keystroke away. Strand reads and writes come from `skein.api.weaver.alpha`, whose functions take the runtime first — capture it once:
 
 ```clojure
 (require '[skein.api.current.alpha :as current]
@@ -350,9 +348,7 @@ A query is a data expression, here "the `owner` attribute equals `ct`". Register
 (weaver/list-query rt 'mine {})                          ; run it in the REPL
 ```
 
-`register-query!` is the interactive tier: the runtime is implied because you are sitting inside the
-weaver. `skein.api.graph.alpha/register-query!` is the same verb for code that already holds a
-runtime, and `skein/defquery` in module source is the durable way to ship one.
+`register-query!` is the interactive tier: the runtime is implied because you are sitting inside the weaver. `skein.api.graph.alpha/register-query!` is the same verb for code that already holds a runtime, and `skein/defquery` in module source is the durable way to ship one.
 
 The plain CLI can discover and run the same query for as long as this weaver keeps running:
 

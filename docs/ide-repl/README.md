@@ -70,8 +70,7 @@ mill weaver list | jq -r '.[] | select(.state == "running") | "\(.name)\t\(.conf
 4. Choose **Clojure CLI** or **Generic nREPL** when prompted for the REPL type.
 5. Enter the host and port from `mill weaver list`.
 
-After Calva connects, evaluate this form once to land in the neutral `user` session
-namespace with `skein.repl` aliased:
+After Calva connects, evaluate this form once to land in the neutral `user` session namespace with `skein.repl` aliased:
 
 ```clojure
 (do (in-ns 'user) (require '[skein.repl :as repl]))
@@ -85,8 +84,7 @@ You can now iterate on the weaver's live registries:
 (repl/unregister-query! 'mine)
 ```
 
-Reads and strand mutation stay on the `strand` CLI, or on the explicit-runtime
-`skein.api.*.alpha` verbs when you already hold a runtime:
+Reads and strand mutation stay on the `strand` CLI, or on the explicit-runtime `skein.api.*.alpha` verbs when you already hold a runtime:
 
 ```clojure
 (require '[skein.api.current.alpha :as current]

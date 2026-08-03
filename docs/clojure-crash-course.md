@@ -22,8 +22,7 @@ weaver/ready
 weaver/update!
 ```
 
-The live registration verbs live in `skein.repl` and imply the runtime, because you are
-already sitting inside the weaver:
+The live registration verbs live in `skein.repl` and imply the runtime because you are already sitting inside the weaver. `mill weaver repl` starts in `user` with `skein.repl` aliased as `repl`; in another nREPL session, first run `(require '[skein.repl :as repl])`.
 
 ```clojure
 repl/register-query!

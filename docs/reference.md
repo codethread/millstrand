@@ -413,9 +413,7 @@ belongs in recorded history.
 
 Queries can be registered in weaver memory, then consumed by the REPL or CLI.
 
-From the live weaver REPL, `register-query!` claims a query name for the current weaver lifetime
-only. `replace-query!` takes over a name another owner supplies, and `unregister-query!` retracts
-your own claim:
+From the live weaver REPL, `register-query!` claims a query name for the current weaver lifetime only. `replace-query!` takes over a name another owner supplies, and `unregister-query!` retracts your own claim:
 
 ```clojure
 (repl/register-query! 'agent-docs
@@ -434,9 +432,7 @@ strand --workspace "$workspace" ready --query agent-docs
 
 ```
 
-`query list` and `query explain <name>` are the read-only discovery pair for named query
-definitions. Application stays on the read commands: `list --query <name>` and `ready --query
-<name>` with repeated `--param key=value` when the query declares runtime params.
+`query list` and `query explain <name>` are the read-only discovery pair for named query definitions. Application stays on the read commands: `list --query <name>` and `ready --query <name>` with repeated `--param key=value` when the query declares runtime params.
 
 Named query registries are not durable by themselves. If you want a query after every weaver restart, register it from startup-loaded code.
 
