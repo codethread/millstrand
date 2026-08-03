@@ -25,8 +25,9 @@ const (
 
 // Strand lifecycle states.
 const (
-	stateActive = "active"
-	stateClosed = "closed"
+	stateActive   = "active"
+	stateClosed   = "closed"
+	stateReplaced = "replaced"
 )
 
 // strand is the lean projection `kanban-export` returns for every node.
@@ -87,6 +88,84 @@ func validateAttributes(strands []strand) error {
 	return nil
 }
 
+func validateExport(out export) error {
+	ids := make(map[string]bool, len(out.Strands))
+	for _, s := range out.Strands {
+		if s.ID == "" {
+			return errors.New("strand carries no id")
+		}
+		if ids[s.ID] {
+			return fmt.Errorf("duplicate strand id %s", s.ID)
+		}
+		if s.Title == "" {
+			return fmt.Errorf("strand %s carries no title", s.ID)
+		}
+		if s.CreatedAt == "" {
+			return fmt.Errorf("strand %s carries no created_at", s.ID)
+		}
+		switch s.State {
+		case stateActive, stateClosed, stateReplaced:
+		default:
+			return fmt.Errorf("strand %s has invalid state %q", s.ID, s.State)
+		}
+		ids[s.ID] = true
+	}
+	if !ids[out.RootID] {
+		return fmt.Errorf("export omits its own root %s", out.RootID)
+	}
+	if err := validateEdges("parent-of", out.ParentOf, ids); err != nil {
+		return err
+	}
+	if err := validateParents(out.ParentOf); err != nil {
+		return err
+	}
+	if err := validateEdges("depends-on", out.DependsOn, ids); err != nil {
+		return err
+	}
+	return validateAttributes(out.Strands)
+}
+
+func validateParents(edges []edge) error {
+	parents := make(map[string]string, len(edges))
+	for _, edge := range edges {
+		if parent, exists := parents[edge.To]; exists && parent != edge.From {
+			return fmt.Errorf("strand %s has multiple parent-of parents", edge.To)
+		}
+		parents[edge.To] = edge.From
+	}
+	for child := range parents {
+		seen := map[string]bool{}
+		for current := child; current != ""; current = parents[current] {
+			if seen[current] {
+				return fmt.Errorf("parent-of cycle through %s", current)
+			}
+			seen[current] = true
+		}
+	}
+	return nil
+}
+
+func validateEdges(relation string, edges []edge, ids map[string]bool) error {
+	seen := make(map[string]bool, len(edges))
+	for _, edge := range edges {
+		if edge.From == "" || edge.To == "" {
+			return fmt.Errorf("%s edge carries a blank endpoint", relation)
+		}
+		if edge.From == edge.To {
+			return fmt.Errorf("%s edge %s points to itself", relation, edge.From)
+		}
+		if !ids[edge.From] || !ids[edge.To] {
+			return fmt.Errorf("%s edge %s -> %s has an unknown endpoint", relation, edge.From, edge.To)
+		}
+		key := edge.From + "\x00" + edge.To
+		if seen[key] {
+			return fmt.Errorf("duplicate %s edge %s -> %s", relation, edge.From, edge.To)
+		}
+		seen[key] = true
+	}
+	return nil
+}
+
 // kanban reports whether the strand is board furniture — a card or a task —
 // rather than one of the execution strands that hang under a card.
 func (s strand) kanban() bool {
@@ -113,14 +192,21 @@ type export struct {
 // a root back is refused rather than rendered as an empty tree.
 func decode(r io.Reader) (export, error) {
 	var out export
-	if err := json.NewDecoder(r).Decode(&out); err != nil {
+	decoder := json.NewDecoder(r)
+	if err := decoder.Decode(&out); err != nil {
 		return export{}, fmt.Errorf("unreadable kanban-export payload: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return export{}, errors.New("kanban-export payload carries more than one value")
+		}
+		return export{}, fmt.Errorf("unreadable trailing kanban-export payload: %w", err)
 	}
 	if out.RootID == "" {
 		return export{}, errors.New("kanban-export payload carries no root-id")
 	}
-	if err := validateAttributes(out.Strands); err != nil {
-		return export{}, fmt.Errorf("invalid kanban-export attribute: %w", err)
+	if err := validateExport(out); err != nil {
+		return export{}, fmt.Errorf("invalid kanban-export payload: %w", err)
 	}
 	return out, nil
 }

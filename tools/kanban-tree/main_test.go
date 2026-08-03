@@ -68,7 +68,7 @@ func fakeStrand(t *testing.T, stdout, stderr string, code int) string {
 }
 
 func TestFetchDecodesAnExport(t *testing.T) {
-	bin := fakeStrand(t, `{"root-id":"df2f","strands":[],"parent-of-edges":[],"depends-on-edges":[]}`, "", 0)
+	bin := fakeStrand(t, `{"root-id":"df2f","strands":[{"id":"df2f","title":"Root","state":"active","created_at":"now"}],"parent-of-edges":[],"depends-on-edges":[]}`, "", 0)
 	ex, err := fetch(context.Background(), bin, "", "df2f")
 	if err != nil {
 		t.Fatal(err)
@@ -95,10 +95,47 @@ func TestFetchRefusesARootlessPayload(t *testing.T) {
 }
 
 func TestDecodeRefusesMalformedDisplayAttributes(t *testing.T) {
-	payload := `{"root-id":"df2f","strands":[{"id":"df2f","attributes":{"kanban/card":{}}}]}`
+	payload := `{"root-id":"df2f","strands":[{"id":"df2f","title":"Root","state":"active","created_at":"now","attributes":{"kanban/card":{}}}]}`
 	_, err := decode(strings.NewReader(payload))
 	if err == nil || !strings.Contains(err.Error(), `strand df2f attribute "kanban/card"`) {
 		t.Fatalf("err = %v, want the strand and malformed attribute", err)
+	}
+}
+
+func TestDecodeRefusesInvalidExportShapes(t *testing.T) {
+	root := `{"id":"df2f","title":"Root","state":"active","created_at":"now"}`
+	child := `{"id":"task1","title":"Task","state":"active","created_at":"later"}`
+	for name, tc := range map[string]struct {
+		payload string
+		want    string
+	}{
+		"invalid state": {
+			`{"root-id":"df2f","strands":[{"id":"df2f","title":"Root","state":"open","created_at":"now"}]}`,
+			`invalid state "open"`,
+		},
+		"duplicate id": {
+			`{"root-id":"df2f","strands":[` + root + `,` + root + `]}`,
+			"duplicate strand id df2f",
+		},
+		"unknown edge": {
+			`{"root-id":"df2f","strands":[` + root + `],"parent-of-edges":[{"from_strand_id":"df2f","to_strand_id":"nope"}]}`,
+			"unknown endpoint",
+		},
+		"multiple parent": {
+			`{"root-id":"df2f","strands":[` + root + `,` + child + `,{"id":"other","title":"Other","state":"active","created_at":"later"}],"parent-of-edges":[{"from_strand_id":"df2f","to_strand_id":"task1"},{"from_strand_id":"other","to_strand_id":"task1"}]}`,
+			"multiple parent-of parents",
+		},
+		"trailing value": {
+			`{"root-id":"df2f","strands":[` + root + `]} {}`,
+			"more than one value",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := decode(strings.NewReader(tc.payload))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+		})
 	}
 }
 
