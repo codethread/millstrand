@@ -76,6 +76,43 @@ After Calva connects, evaluate this form once to land in the neutral `user` sess
 (do (in-ns 'user) (require '[skein.repl :as repl]))
 ```
 
+Put behavior that should survive a restart in a module source file first:
+
+```clojure
+(ns my.workspace
+  (:require [skein.api.skein.alpha :as skein]))
+
+(skein/defquery mine
+  "Return strands owned by me."
+  {}
+  [:= [:attr :owner] "me"])
+```
+
+Activate that namespace through `runtime/module!` in trusted startup code and use
+`runtime/refresh!` after changing the file. Evaluating an authoring form in the REPL defines its Var,
+but publishes nothing until the module collects it. That rule keeps the file's owner-complete
+declaration as the durable source.
+
+For a live experiment, code and tests use the explicit-runtime registration functions. In this guide
+the nREPL is inside the weaver JVM, so the runtime-implied wrappers are convenient:
+
+```clojure
+(repl/register-query! 'mine [:= [:attr :owner] "me"])
+(repl/replace-query! 'mine [:= [:attr :owner] "someone-else"])
+(repl/unregister-query! 'mine)
+```
+
+`replace-query!` records intent to shadow an existing owner. `unregister-query!` removes only your
+entry and restores the value below it; registry verbs do not remove or change the `mine` Var. For ops,
+patterns, and hooks, redefining a handler function is the live hot loop under a stable contract, but
+help metadata stays stale until the registration is replaced. Queries are values, so replace the
+registration itself. Event handlers capture their function value at registration and also need a
+replacement to pick up a new body.
+
+The connected nREPL used by Calva is an in-process session. A separate JVM connected through a client
+does not have an in-process runtime, so its registration wrappers fail with remediation; use the
+explicit `skein.core.client` bridge for that transport instead.
+
 You can now iterate on the weaver's live registries:
 
 ```clojure

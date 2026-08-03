@@ -87,7 +87,11 @@ Worked example — notify when a strand that parents other work is closed:
      :body (str "Strand " (:id strand) " and the work it parents are finished.")}))
 ```
 
-Loading this module publishes `:parent-completed` under its module owner. Omission retracts it on refresh. Trusted REPL callers can still use `register!` and `unregister!` for direct, runtime-local rules.
+Loading this module publishes `:parent-completed` under its module owner. Omission retracts it on refresh.
+That authoring-form path is the durable source. Trusted REPL code and tests may use Chime's
+runtime-local `register!` seam for a live rule, and `unregister!` removes only that direct entry;
+neither function changes the rule Var or the module-owned declaration. The rule registry remains local
+to the active runtime.
 
 When a rule is registered, chime treats its currently matching strands as an
 initial seen baseline. Restarting a weaver therefore does not replay every
