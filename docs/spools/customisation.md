@@ -274,10 +274,9 @@ Activate that module with `runtime/module!` as in the query example above. The f
 For a temporary live experiment, register it from the connected REPL:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.weaver.alpha :as weaver])
+(require '[skein.repl :as repl])
 
-(weaver/register-op! (current/runtime) 'echo "Echo raw argv" 'my.workflow/echo-op)
+(repl/register-op! 'echo "Echo raw argv" 'my.workflow/echo-op)
 ```
 
 ```sh
