@@ -4,7 +4,7 @@
 [`codethread/devflow.spool`](https://github.com/codethread/devflow.spool).
 
 The contract doc lives there:
-[`devflow.md`](https://github.com/codethread/devflow.spool/blob/c77486955825e5d4918a4928914578cad61ed08f/devflow.md)
+[`devflow.md`](https://github.com/codethread/devflow.spool/blob/b18b326fca39a513abdaa91a132c9c64fa4c4b2e/devflow.md)
 (snapshot link at the pinned release commit).
 
 This checkout pins the spool in `.skein/spools.edn`. [External spool
