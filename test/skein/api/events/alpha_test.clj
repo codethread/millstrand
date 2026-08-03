@@ -58,6 +58,21 @@
       (is (= [] (events/handlers rt))
           "a rejected registration never partially mutates the registry"))))
 
+(deftest replacement-validates-like-registration-and-returns-the-data-first-entry
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (let [rt (:runtime ctx)]
+      (is (thrown-with-msg? ExceptionInfo #"Event handler not registered; cannot replace"
+                            (events/replace-handler! rt :absent #{:strand/added} handler-sym)))
+      (events/register-handler! rt :swap #{:strand/added} handler-sym)
+      (is (= {:key :swap :types #{:strand/burned} :fn handler-sym :metadata {:doc "swapped"}}
+             (events/replace-handler! rt :swap #{:strand/burned} handler-sym
+                                      {:doc "swapped"}))
+          "replacement returns register-handler!'s shape, with no resolved fn value")
+      (is (thrown-with-msg? ExceptionInfo #"must resolve to a callable value"
+                            (events/replace-handler!
+                             rt :swap #{:strand/added}
+                             'skein.api.events.alpha-test/not-callable))))))
+
 (deftest unregistration-is-idempotent-and-validates-its-key
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
     (let [rt (:runtime ctx)]

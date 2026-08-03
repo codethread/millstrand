@@ -45,6 +45,21 @@
         (is (thrown-with-msg? ExceptionInfo #"key must be a keyword, symbol, or string"
                               (hooks/unregister-hook! rt 42)))))))
 
+(deftest replacement-validates-like-registration-and-returns-the-entry
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (let [rt (:runtime ctx)]
+      (is (thrown-with-msg? ExceptionInfo #"Hook not registered; cannot replace"
+                            (hooks/replace-hook! rt :absent #{:payload/received} hook-sym)))
+      (hooks/register-hook! rt :swap #{:payload/received} hook-sym)
+      (is (= {:key :swap :types #{:strand/add-before-commit} :fn hook-sym
+              :order 3 :metadata {:doc "swapped"}}
+             (hooks/replace-hook! rt :swap #{:strand/add-before-commit} hook-sym
+                                  {:order 3 :doc "swapped"}))
+          "replacement returns register-hook!'s entry shape")
+      (is (thrown-with-msg? ExceptionInfo #":order must be an integer"
+                            (hooks/replace-hook! rt :swap #{:payload/received} hook-sym
+                                                 {:order :high}))))))
+
 (deftest registration-rejects-each-invalid-piece
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
     (let [rt (:runtime ctx)]
