@@ -1,26 +1,26 @@
 {:spools {codethread/kanban
  {:git/url "https://github.com/codethread/kanban.spool.git",
-  :git/sha "d6b0cbe2b9650d261305f63334686a181f06de9e",
-  :git/tag "v22",
+  :git/sha "2947590e7965feb95a239189af3bd55f008d1209",
+  :git/tag "v23",
   :roots {codethread/kanban "."}},
  skein.spools/chime {:skein/source-root "spools/chime"},
  skein.spools/unsafe-text-search
  {:skein/source-root "spools/unsafe-text-search"},
  codethread/devflow
  {:git/url "https://github.com/codethread/devflow.spool.git",
-  :git/sha "053d3b9a37bdedc1ea4e605b8df17410fa014486",
-  :git/tag "v19",
+  :git/sha "b18b326fca39a513abdaa91a132c9c64fa4c4b2e",
+  :git/tag "v20",
   :roots
   {codethread/devflow ".",
    codethread/devflow-kanban-adapter "kanban-adapter"},
-  :requires {codethread/kanban "v22"}},
+  :requires {codethread/kanban "v23"}},
  skein.spools/batteries {:skein/source-root "spools/batteries"},
  skein.spools/cron {:skein/source-root "spools/cron"},
  skein.spools/workflow {:skein/source-root "spools/workflow"},
  ct.spools/agent-run
  {:git/url "https://github.com/codethread/agent-harness.spool.git",
-  :git/sha "bac36c342637b53cbeb138ef8e0e1474287a6a4d",
-  :git/tag "v24",
+  :git/sha "d28bfb35b5fc1891a7a318e06886aa446722241d",
+  :git/tag "v25",
   :roots
   {ct.spools/harness-core "harness-core",
    ct.spools/codex-harness "codex-harness",
