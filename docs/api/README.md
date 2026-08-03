@@ -62,4 +62,4 @@ Two conventions hold across the tier:
 | --- | --- |
 | [`peers`](./peers.api.md) | Discovering and calling local sibling weavers from mill-published runtime metadata. |
 
-Two blessed namespaces live outside `skein.api.*` but inside the same contract tier: [`skein.test.alpha`](./test.api.md) (weaver-world fixtures, lane settling, and clock control) and `skein.userland.alpha` (downstream-only ergonomics that no `skein.*` namespace may require). See [SPEC-005.C2](../../devflow/specs/alpha-surface.md) for the full tier membership.
+One blessed namespace lives outside `skein.api.*` but inside the same contract tier: [`skein.test.alpha`](./test.api.md), which provides weaver-world fixtures, lane settling, and clock control. See [SPEC-005.C2](../../devflow/specs/alpha-surface.md) for the full tier membership.

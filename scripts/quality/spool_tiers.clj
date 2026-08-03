@@ -14,8 +14,8 @@
   `UNSAFE:` exactly when the name is unsafe. Local workspace spools
   under `.skein/spools/` are trusted config accepting the compatibility
   cost (SPEC-004.C40) and are out of scope, as are the sibling fences
-  owned elsewhere: `skein.api.*.internal` by `quality.api-form`,
-  `skein.userland.alpha` by `skein.userland-test`. Kept clj-kondo-free
+  owned elsewhere: `skein.api.*.internal` by `quality.api-form`. Kept
+  clj-kondo-free
   so the findings logic loads on the test classpath; the caller
   supplies kondo's analysis data."
   (:require [clojure.java.io :as io]

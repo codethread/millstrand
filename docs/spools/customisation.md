@@ -283,33 +283,53 @@ starts, advances, or lists an existing primitive speaks that primitive's terms.
 
 ## Terse daily driving
 
-Explicit-runtime code threads a `runtime` argument through every call, which is the right discipline for
-durable config and a chore at the REPL. In your **own** workspace config you may trade that explicitness for
-terseness: capture the runtime once with `skein.userland.alpha`, then call both the blessed API and any
-explicit-runtime spool through terse wrappers:
+Explicit-runtime code threads a `runtime` argument through every call. That is the right discipline for
+durable config and can be tedious at the REPL. If your workspace needs shorter calls, put the helper in your
+own namespace and make the trade explicit:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.userland.alpha :as u]
-         '[acme.priority.alpha :as priority])
+(ns my.helpers
+  (:require [skein.api.current.alpha :as current]
+            [skein.api.graph.alpha :as graph]
+            [skein.api.weaver.alpha :as weaver]))
 
-;; Bind the active in-process runtime once for terse daily calls.
-(u/bind! (current/runtime))
+(def ^:dynamic *runtime* nil)
+(defonce ^:private module-default (atom nil))
 
-;; Terse core calls — the runtime is resolved for you.
-(u/strand! "Ship the release" {:owner "me"})
-(u/ready)
+(defn bind! [runtime]
+  (reset! module-default runtime))
 
-;; An explicit-runtime spool still takes the runtime as its first
-;; argument; hand it (u/runtime).
-(priority/promote! (u/runtime) some-id)
+(defn runtime []
+  (or *runtime* @module-default (current/runtime)))
+
+(defmacro with-runtime [runtime & body]
+  `(binding [*runtime* ~runtime]
+     (current/with-runtime ~runtime ~@body)))
+
+(defn strand! [title attributes]
+  (weaver/add! (runtime) {:title title :attributes attributes}))
+
+(defn strand [id]
+  (weaver/show (runtime) id))
+
+(defn strands []
+  (weaver/list (runtime)))
+
+(defn update! [id patch]
+  (weaver/update! (runtime) id patch))
+
+(defn ready []
+  (weaver/ready (runtime)))
+
+(defn burn! [ids]
+  (graph/burn-by-ids! (runtime) ids))
 ```
 
-Here `acme/priority` stands for any approved spool written to the explicit-runtime discipline. The ergonomics
-live entirely on *your* side of the boundary: the spool never learns that `skein.userland.alpha` exists. That
-asymmetry is the whole point: users may trade explicitness for terseness in their own config; shared code may
-not, so `skein.userland.alpha` is userland-only, forever, and no spool you distribute may require it or call
-`bind!`.
+Resolution is local first: `with-runtime` provides a dynamic value, then `module-default` supplies the
+workspace helper's bound value, and `current/runtime` reads the active or published ambient runtime. The
+helper owns that hidden state and its strand CRUD vocabulary. A process-global default is unsafe on a shared
+weaver because one session can redirect another session's calls. Keep this pattern in workspace-owned code;
+shared spools should keep taking an explicit runtime.
 
 ## When a spool leaves your workspace
 
