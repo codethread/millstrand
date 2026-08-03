@@ -10,14 +10,13 @@
   `(ready)` or `(strand! \"title\")`. Hidden ambient magic is a trade USERS are
   allowed to make; skein namespaces are not.
 
-  Positioning vs `skein.repl`: same terse vocabulary, different runtime
-  ownership model. `skein.repl` is the interactive HUMAN surface - it is
-  connection-aware (`connect!` plus a remote nREPL client bridge) and routes to a
-  published/connected weaver. This module is the trusted USERLAND-CODE surface -
-  it holds one in-process runtime (published OR unpublished, e.g. tests and
+  Positioning vs `skein.repl`: different jobs, not competing vocabularies.
+  `skein.repl` is the interactive HUMAN surface - the live registration verbs
+  plus session machinery (`connect!` and the client bridge for standalone JVMs).
+  This module is the trusted USERLAND-CODE surface for terse strand work - it
+  holds one in-process runtime (published OR unpublished, e.g. tests and
   embedded tooling that started with `:publish? false`), does no connection
-  routing, and fails loudly when no runtime is resolvable. Connected/interactive
-  work belongs in `skein.repl`; hold-your-own-runtime work belongs here.
+  routing, and fails loudly when no runtime is resolvable.
 
   Runtime resolution order for every terse call: the innermost `with-runtime`
   scope, then the `bind!` default, then `skein.api.current.alpha/runtime` (the
@@ -162,8 +161,8 @@
 (defn load-queries!
   "Merge one EDN map of named query definitions into the resolved runtime.
 
-  Deliberately diverges from `skein.repl/load-queries!`, which takes a file
-  path and reads EDN from disk: trusted in-process code owns its own I/O."
+  Takes an already-parsed map rather than a path: trusted in-process code owns
+  its own I/O."
   [registry]
   (let [runtime (resolve-runtime)]
     (reduce-kv (fn [loaded query-name query-def]

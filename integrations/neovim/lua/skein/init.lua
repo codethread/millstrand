@@ -1,6 +1,6 @@
 local M = {}
 
-local init_form = "(do (require 'skein.repl) (in-ns 'skein.repl))"
+local init_form = "(do (in-ns 'user) (require '[skein.repl :as repl]))"
 
 local function notify_error(message)
   vim.notify(message, vim.log.levels.ERROR, { title = "skein.nvim" })

@@ -238,8 +238,8 @@ For editor-driven work, see the [IDE REPL setup guide](./ide-repl/) for connecti
 
 **Reading the Clojure below.** A handful of rules cover everything in this section:
 
-- A call puts the function name first, inside the parentheses: `(strand! "x")`
-  calls `strand!` with `"x"`.
+- A call puts the function name first, inside the parentheses: `(weaver/add! rt m)`
+  calls `add!` with `rt` and `m`.
 - The `!` on a name is a convention for "this changes something", not syntax.
 - A word starting with a colon, like `:owner`, is a **keyword**: a plain,
   self-describing name often used as a map key.
@@ -250,13 +250,17 @@ The [Clojure crash course](./clojure-crash-course.md) covers the rest. For a cus
 trusted Clojure, the worked example lives in [customising your
 workspace](./spools/customisation.md).
 
-`mill weaver repl` starts in Skein's `skein.repl` namespace, where helpers like `strand!`, `strand`,
-`strands`, `ready`, `update!`, and `defquery!` are already defined, so the snippets below need no
-`require` for them. Create a strand and look it up:
+`mill weaver repl` starts in the neutral `user` namespace with `skein.repl` aliased `repl`, so the live registration verbs are one keystroke away. Strand reads and writes come from `skein.api.weaver.alpha`, whose functions take the runtime first — capture it once:
 
 ```clojure
-(def s (:id (strand! "My first REPL strand" {:owner "ct"}))) ; create; keep its :id in s
-(strand s)                                                   ; look it up by id
+(require '[skein.api.current.alpha :as current]
+         '[skein.api.weaver.alpha :as weaver])
+
+(def rt (current/runtime))                        ; the weaver running in this JVM
+
+(def s (:id (weaver/add! rt {:title "My first REPL strand"
+                             :attributes {:owner "ct"}})))   ; create; keep its :id in s
+(weaver/show rt s)                                            ; look it up by id
 ```
 
 Create several related strands in one transactional call. `:ref` values are temporary handles
@@ -264,8 +268,7 @@ Create several related strands in one transactional call. `:ref` values are temp
 binds each handle to its generated id:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.batch.alpha :as batch])   ; transactional graph mutations
+(require '[skein.api.batch.alpha :as batch])   ; transactional graph mutations
 
 (def refs
   (:refs
@@ -287,7 +290,7 @@ Now write a small helper and use it:
   [rows]
   (map #(select-keys % [:id :title]) rows))
 
-(brief (strands))   ; every strand, summarized
+(brief (weaver/list rt))   ; every strand, summarized
 ```
 
 Because the weaver is live, you can improve `brief` while it runs. Redefine it, and the next call uses the new version. No restart, no lost strands:
@@ -300,16 +303,15 @@ Because the weaver is live, you can improve `brief` while it runs. Redefine it, 
   [rows]
   (pprint (map #(select-keys % [:id :title]) rows)))
 
-(brief (strands))   ; same call, now pretty-printed
-(brief (ready))     ; only strands with no active dependency
-(update! s {:state "closed"})   ; close one; the row stays, state becomes "closed"
+(brief (weaver/list rt))          ; same call, now pretty-printed
+(brief (weaver/ready rt))         ; only strands with no active dependency
+(weaver/update! rt s {:state "closed"})   ; close one; the row stays, state becomes "closed"
 ```
 
 Skein ships graph helpers too. `graph/subgraph` walks a declared acyclic relation from a root id and returns the connected strands and edges. Fold that into an ASCII tree:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.graph.alpha :as graph]
+(require '[skein.api.graph.alpha :as graph]
          '[clojure.string :as str])
 
 (defn dag-tree
@@ -342,9 +344,11 @@ Write getting-started
 A query is a data expression, here "the `owner` attribute equals `ct`". Register one by name in the REPL:
 
 ```clojure
-(defquery! 'mine '[:= [:attr :owner] "ct"])   ; register a query named "mine"
-(strands 'mine)                               ; run it in the REPL
+(repl/register-query! 'mine '[:= [:attr :owner] "ct"])   ; claim the name "mine" live
+(weaver/list-query rt 'mine {})                          ; run it in the REPL
 ```
+
+`register-query!` is the interactive tier: the runtime is implied because you are sitting inside the weaver. `skein.api.graph.alpha/register-query!` is the same verb for code that already holds a runtime, and `skein/defquery` in module source is the durable way to ship one.
 
 The plain CLI can discover and run the same query for as long as this weaver keeps running:
 

@@ -5,6 +5,7 @@
             [clojure.string]
             [skein.api.scheduler.alpha :as scheduler]
             [skein.api.weaver.alpha :as weaver-api]
+            [skein.core.client :as client]
             [skein.core.db :as db]
             [skein.core.weaver.metadata :as metadata]
             [skein.core.weaver.runtime :as runtime]
@@ -550,8 +551,13 @@
                               workspace
                               (source-file/render-forms
                                ['(do
-                                   (defpattern! 'runtime-review 'smoke.startup/review-pattern :smoke.startup/review-input)
-                                   (weave! 'runtime-review {:title "Runtime patterned smoke"}))])
+                                   (require '[skein.api.current.alpha :as current]
+                                            '[skein.api.patterns.alpha :as patterns])
+                                   (repl/register-pattern! 'runtime-review
+                                                           'smoke.startup/review-pattern
+                                                           :smoke.startup/review-input)
+                                   (patterns/weave! (current/runtime) 'runtime-review
+                                                    {:title "Runtime patterned smoke"}))])
                               "weaver" "repl" "--stdin"))]
           (assert= ["Runtime patterned smoke" "Review: Runtime patterned smoke"]
                    (titles (:created runtime-woven))
@@ -566,10 +572,12 @@
                                (source-file/render-forms
                                 ['(do
                                     (require '[skein.api.current.alpha :as current]
+                                             '[skein.api.patterns.alpha :as patterns]
                                              '[skein.api.runtime.alpha :as runtime])
                                     (runtime/refresh! (current/runtime))
-                                    {:patterns (patterns)
-                                     :woven (weave! 'reload-review {:title "Reload patterned smoke"})})])
+                                    {:patterns (patterns/patterns (current/runtime))
+                                     :woven (patterns/weave! (current/runtime) 'reload-review
+                                                             {:title "Reload patterned smoke"})})])
                                "weaver" "repl" "--stdin"))]
           ;; refresh! adds the new config-defined reload-review and re-collects
           ;; the startup review-task, while the live REPL-registered runtime-review
@@ -887,36 +895,58 @@
     (let [world (smoke-world db-file)
           runtime (runtime/start! nil {:world world})]
       (try
+        ;; A standalone session selects one world and drives it explicitly
+        ;; through the client bridge; skein.repl holds the selection.
         (repl/connect! (:config-dir world))
-        (repl/init!)
-        (let [a (:id (repl/strand! "First strand" {} {:state "closed"}))
-              b (:id (repl/strand! "Second strand" {:owner "agent"}))]
-          (repl/update! b {:edges [{:type "depends-on" :to a}]})
-          (assert= ["Second strand"] (titles (repl/ready)) "skein.repl ready returns strands with closed dependencies")
-          (repl/defquery! 'agent-owner '[:= [:attr :owner] "agent"])
+        (let [call (fn [op & args]
+                     (apply client/call-world (repl/connected-config-dir)
+                            (repl/connected-opts) op args))
+              a (:id (call :add {:title "First strand" :state "closed"}))
+              b (:id (call :add {:title "Second strand" :attributes {:owner "agent"}}))]
+          (call :update b {:edges [{:type "depends-on" :to a}]})
+          (assert= ["Second strand"] (titles (call :ready))
+                   "the client bridge reads strands with closed dependencies")
+
+          ;; The registration verbs are runtime-implied and in-process, so the
+          ;; same session reaches the live registry without a runtime argument.
+          (assert= {"agent-owner" [:= [:attr :owner] "agent"]}
+                   (repl/register-query! 'agent-owner '[:= [:attr :owner] "agent"])
+                   "skein.repl registers a named query with the runtime implied")
           (assert= ["Second strand"]
-                   (titles (repl/strands 'agent-owner))
-                   "skein.repl consumes a query registered during the weaver lifetime")
-          (assert= ["Second strand"]
-                   (titles (repl/query '[:= [:attr :owner] "agent"]))
-                   "skein.repl retains EDN-rich ad hoc query debugging")
-          (repl/update! b {:state "closed"})
-          (let [closed-b (repl/strand b)]
-            (assert= "closed" (:state closed-b) "skein.repl update! updates state"))
-          (let [scratch (:id (repl/strand! "Scratch REPL strand" {:temporary "true"}))]
-            (repl/burn! scratch)
-            (assert (nil? (repl/strand scratch))
-                    "skein.repl burn! deletes a scratch strand row"))
-          (let [old (:id (repl/strand! "Old REPL strand"))
-                replacement (:id (repl/strand! "Replacement REPL strand"))
-                dependent (:id (repl/strand! "Dependent REPL strand"))]
-            (repl/update! dependent {:edges [{:type "depends-on" :to old}]})
-            (let [result (repl/supersede! old replacement)]
-              (assert= "replaced" (get-in result [:old :after :state]) "skein.repl supersede! marks old strand replaced")
-              (assert= replacement (:replacement-id result) "skein.repl supersede! reports replacement id")
+                   (titles (call :list-query 'agent-owner {}))
+                   "a query registered from the REPL tier is visible over the bridge")
+          (repl/replace-query! 'agent-owner '[:= [:attr :owner] "nobody"])
+          (assert= [] (titles (call :list-query 'agent-owner {}))
+                   "replace-query! swaps the live definition in place")
+          (assert= {:unregistered "agent-owner"} (repl/unregister-query! 'agent-owner)
+                   "unregister-query! retracts this session's own claim")
+
+          (call :update b {:state "closed"})
+          (assert= "closed" (:state (call :show b)) "the bridge updates strand state")
+
+          ;; Burn plus tombstone recovery: in-process only, the whole trio.
+          (let [scratch (:id (call :add {:title "Scratch REPL strand"
+                                         :attributes {:temporary "true"}}))]
+            (assert= {:burned [scratch] :count 1} (repl/burn-by-ids! [scratch])
+                     "burn-by-ids! deletes a scratch strand row")
+            (assert (nil? (call :show scratch)) "the burned strand is gone")
+            (assert= [scratch] (mapv :strand_id (repl/burn-history scratch))
+                     "burn-history recovers the tombstone for the burned id")
+            (assert= [scratch] (mapv :strand_id (repl/recent-burns 10))
+                     "recent-burns scans tombstones across all strands"))
+
+          (let [old (:id (call :add {:title "Old REPL strand"}))
+                replacement (:id (call :add {:title "Replacement REPL strand"}))
+                dependent (:id (call :add {:title "Dependent REPL strand"}))]
+            (call :update dependent {:edges [{:type "depends-on" :to old}]})
+            (let [result (call :supersede old replacement)]
+              (assert= "replaced" (get-in result [:old :after :state])
+                       "supersede marks the old strand replaced")
+              (assert= replacement (:replacement-id result)
+                       "supersede reports the replacement id")
               (assert= #{dependent}
                        (set (map :from (:rewired-dependencies result)))
-                       "skein.repl supersede! rewires direct dependents"))))
+                       "supersede rewires direct dependents"))))
         (smoke-attribute-storage! runtime)
         (smoke-scheduler! runtime)
         (finally

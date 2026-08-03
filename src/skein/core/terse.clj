@@ -1,15 +1,13 @@
 (ns skein.core.terse
-  "Shared internal guards for the terse strand!/query surfaces.
+  "Shared internal guards for the terse strand!/query surface.
 
-  Both terse Clojure surfaces - the interactive `skein.repl` and the
-  downstream userland-only ergonomics layer - expose a 2-arg
-  `strand!` whose second argument is attributes-only, plus a `query` that
-  accepts either a registered query handle or an ad hoc query form. The tiny
-  guards that make those overloads safe (rejecting core strand fields passed as
-  attributes, and distinguishing a named query handle from an ad hoc form) were
-  duplicated verbatim in both surfaces and could silently drift. They live here,
-  in internal core, so both terse surfaces share one source without widening any
-  `skein.api.*.alpha` blessed surface (TEN-004)."
+  The downstream userland-only ergonomics layer exposes a 2-arg `strand!` whose
+  second argument is attributes-only, plus a `query` that accepts either a
+  registered query handle or an ad hoc query form. The tiny guards that make
+  those overloads safe (rejecting core strand fields passed as attributes, and
+  distinguishing a named query handle from an ad hoc form) live here, in
+  internal core, rather than widening any `skein.api.*.alpha` blessed surface
+  (TEN-004)."
   (:require [clojure.string]))
 
 (def ^:private strand-core-keys

@@ -1,6 +1,12 @@
 (ns user
-  (:require [skein.core.weaver.runtime :as weaver-runtime]
-            [skein.repl :refer :all]))
+  "Dev-REPL scratchpad: a disposable demo weaver and a small seeded graph.
+
+  It holds its own runtime and calls the explicit-runtime `skein.api.*.alpha`
+  verbs — the ordinary shape for code that owns a weaver, and a worked example
+  of the user-owned terse helpers `demo-strand!` and `demo-strands` below."
+  (:require [skein.api.graph.alpha :as graph]
+            [skein.api.weaver.alpha :as weaver]
+            [skein.core.weaver.runtime :as weaver-runtime]))
 
 (defonce ^:private demo-runtime (atom nil))
 (defonce ^:private demo-world (atom nil))
@@ -41,36 +47,58 @@
       {:config-dir (:config-dir world)
        :status :weaver-stopped})))
 
-(defn demo!
-  "Connect to the demo weaver and initialize storage."
+(defn demo-runtime!
+  "Return the demo weaver's runtime, failing loudly before it is started.
+
+  Every helper below threads this explicitly; nothing here reads an ambient
+  runtime, so a demo session cannot reach into another world by accident."
   []
-  (let [world (or @demo-world
-                  (throw (ex-info "Start the demo weaver first" {})))]
-    (connect! (:config-dir world))
-    (init!)
-    {:config-dir (:config-dir world)
-     :status :ready}))
+  (or @demo-runtime
+      (throw (ex-info "Start the demo weaver first" {}))))
+
+(defn demo!
+  "Initialize the demo weaver's storage."
+  []
+  (weaver/init (demo-runtime!))
+  {:config-dir (:config-dir @demo-world)
+   :status :ready})
+
+(defn demo-strand!
+  "Create a strand in the demo world with `title` and optional `attributes`."
+  ([title] (demo-strand! title {} {}))
+  ([title attributes] (demo-strand! title attributes {}))
+  ([title attributes lifecycle]
+   (weaver/add! (demo-runtime!) (merge {:title title :attributes attributes} lifecycle))))
+
+(defn demo-strands
+  "Return every strand in the demo world."
+  []
+  (weaver/list (demo-runtime!)))
 
 (defn seed-demo!
   "Initialize the demo world and add a small dependency graph."
   []
   (demo!)
-  (let [design (strand! "Sketch model" {:priority "high" :demo-id "design"} {:state "closed"})
-        docs (strand! "Write docs" {:owner "agent" :demo-id "docs"})
-        impl (strand! "Build feature" {:owner "agent" :demo-id "impl"})]
-    (update! (:id docs) {:edges [{:type "depends-on" :to (:id design)}]})
-    (update! (:id impl) {:edges [{:type "depends-on" :to (:id docs)}]})
-    (strands)))
+  (let [rt (demo-runtime!)
+        design (demo-strand! "Sketch model" {:priority "high" :demo-id "design"} {:state "closed"})
+        docs (demo-strand! "Write docs" {:owner "agent" :demo-id "docs"})
+        impl (demo-strand! "Build feature" {:owner "agent" :demo-id "impl"})]
+    (weaver/update! rt (:id docs) {:edges [{:type "depends-on" :to (:id design)}]})
+    (weaver/update! rt (:id impl) {:edges [{:type "depends-on" :to (:id docs)}]})
+    (demo-strands)))
 
 (comment
   (start-demo-weaver!)
-  (demo!)
   (seed-demo!)
-  (ready)
-  (def docs-id (:id (first (filter #(= "docs" (get-in % [:attributes :demo-id])) (strands)))))
-  (def replacement-docs-id (:id (strand! "Rewrite docs" {:owner "agent" :demo-id "replacement-docs"})))
-  (supersede! docs-id replacement-docs-id)
-  (query [:edge/out "supersedes" [:= [:attr :demo-id] "docs"]])
-  (update! replacement-docs-id {:state "closed"})
-  (ready)
+  (weaver/ready (demo-runtime!))
+  (def docs-id (:id (first (filter #(= "docs" (get-in % [:attributes :demo-id])) (demo-strands)))))
+  (def replacement-docs-id (:id (demo-strand! "Rewrite docs" {:owner "agent" :demo-id "replacement-docs"})))
+  (weaver/supersede! (demo-runtime!) docs-id replacement-docs-id)
+  (weaver/list (demo-runtime!) [:edge/out "supersedes" [:= [:attr :demo-id] "docs"]])
+  (weaver/update! (demo-runtime!) replacement-docs-id {:state "closed"})
+  (weaver/ready (demo-runtime!))
+  ;; The registration verbs, one tier down from skein.repl's runtime-implied twins:
+  (graph/register-query! (demo-runtime!) 'mine [:= [:attr :owner] "agent"])
+  (weaver/list-query (demo-runtime!) 'mine {})
+  (graph/unregister-query! (demo-runtime!) 'mine)
   (stop-demo-weaver!))

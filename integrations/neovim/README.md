@@ -102,7 +102,7 @@ The command runs `mill weaver list`, decodes the JSON rows, shows running weaver
 
 ```vim
 :ConjureConnect <host> <port>
-:ConjureEval (do (require 'skein.repl) (in-ns 'skein.repl))
+:ConjureEval (do (in-ns 'user) (require '[skein.repl :as repl]))
 ```
 
 Errors are reported with `vim.notify` if `mill` is missing, the JSON is malformed, no weavers are running, the selected row lacks nREPL metadata, Conjure commands are unavailable, or Conjure connection/eval commands fail.
@@ -112,38 +112,39 @@ Errors are reported with `vim.notify` if `mill` is missing, the JSON is malforme
 `:SkeinConnect` connects Conjure and evaluates:
 
 ```clojure
-(do (require 'skein.repl) (in-ns 'skein.repl))
+(do (in-ns 'user) (require '[skein.repl :as repl]))
 ```
 
-That makes bare helpers like `(ready)` work at the REPL prompt. When evaluating forms from a file such as `.skein/init.clj`, the file's namespace still matters, so prefer an explicit require/alias:
+That puts the prompt in the neutral `user` namespace with `skein.repl` aliased, so `(repl/register-query! ...)` works without a further require. When evaluating forms from a file such as `.skein/init.clj`, the file's namespace still matters, so name the alias there too:
 
 ```clojure
 (require '[skein.repl :as repl])
 
-(repl/ready)   ; ready strands
-(repl/strands) ; all strands
+(repl/register-query! 'mine [:= [:attr :owner] "me"])  ; claim a live query
+(repl/unregister-query! 'mine)                          ; retract it
 ```
 
 For scratch examples you want to keep in a config or source file, put them in a `comment` block. Clojure ignores the block when loading the file, but Conjure can evaluate forms inside it:
 
 ```clojure
 (comment
-  (require '[skein.repl :as repl]
+  (require '[skein.api.current.alpha :as current]
+           '[skein.api.weaver.alpha :as weaver]
            '[clojure.pprint :refer [pprint]])
 
-  (pprint (repl/ready))
+  (pprint (weaver/ready (current/runtime)))
 
-  (def s (:id (repl/strand! "Try editor eval" {:owner "me"})))
-  (repl/strand s)
-  (repl/update! s {:state "closed"}))
+  (def s (:id (weaver/add! (current/runtime) {:title "Try editor eval"
+                                             :attributes {:owner "me"}})))
+  (weaver/update! (current/runtime) s {:state "closed"}))
 ```
 
-If you want unqualified helpers in a file, explicitly refer them:
+If you want unqualified registration verbs in a file, explicitly refer them:
 
 ```clojure
-(require '[skein.repl :refer [ready strands strand! update!]])
+(require '[skein.repl :refer [register-query! unregister-query!]])
 
 (comment
-  (ready)
-  (strands))
+  (register-query! 'mine [:= [:attr :owner] "me"])
+  (unregister-query! 'mine))
 ```

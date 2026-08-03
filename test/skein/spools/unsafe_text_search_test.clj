@@ -6,7 +6,6 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [skein.api.weaver.alpha :as weaver]
-            [skein.repl :as repl]
             [skein.spools.test-support :as test-support :refer [with-runtime]]
             [skein.spools.unsafe-text-search :as unsafe-text-search]
             [skein.test.alpha :as t]))
@@ -37,7 +36,7 @@
         (is (= :collection (get-in source-entry [:returns :type])))
         (is (nil? (ns-resolve 'skein.spools.unsafe-text-search 'spool))
             "the forms-only module exposes no legacy entry point"))
-      (repl/strand! "Search return coverage" {"topic" "returns"})
+      (weaver/add! rt {:title "Search return coverage" :attributes {"topic" "returns"}})
       (let [entries (filterv #(= 'skein.spools.unsafe-text-search (:provenance %))
                              (weaver/ops rt))
             missing (mapv :name (filter #(not (contains? % :returns)) entries))
@@ -51,8 +50,8 @@
 (deftest search-hits-titles-and-attribute-values
   (with-runtime
     (fn [rt _]
-      (let [design (repl/strand! "Design the payments flow" {"topic" "billing"})]
-        (repl/strand! "Unrelated work" {"topic" "shipping"})
+      (let [design (weaver/add! rt {:title "Design the payments flow" :attributes {"topic" "billing"}})]
+        (weaver/add! rt {:title "Unrelated work" :attributes {"topic" "shipping"}})
         (testing "a title substring hit carries no attribute key"
           (let [rows (unsafe-text-search/search rt {:substring "payments"})]
             (is (= [{:id (:id design) :attr-key nil}]
@@ -67,8 +66,8 @@
 (deftest attr-key-scope-searches-only-that-attribute-and-skips-titles
   (with-runtime
     (fn [rt _]
-      (let [a (repl/strand! "shared token here" {"owner" "shared token"})]
-        (repl/strand! "other" {"note" "shared token"})
+      (let [a (weaver/add! rt {:title "shared token here" :attributes {"owner" "shared token"}})]
+        (weaver/add! rt {:title "other" :attributes {"note" "shared token"}})
         (testing "--attr-key restricts to one attribute key and drops the title branch"
           (let [rows (unsafe-text-search/search rt {:substring "shared token" :attr-key "owner"})]
             (is (= [{:id (:id a) :attr-key "owner"}]
@@ -77,7 +76,7 @@
 (deftest archived-rows-are-invisible-by-default-and-visible-with-archived
   (with-runtime
     (fn [rt _]
-      (let [strand (repl/strand! "Old session" {"transcript" "secretword"})]
+      (let [strand (weaver/add! rt {:title "Old session" :attributes {"transcript" "secretword"}})]
         (weaver/archive-attributes! rt (:id strand) ["transcript"])
         (testing "an archived attribute value is invisible to the query language and to a default search"
           (is (empty? (unsafe-text-search/search rt {:substring "secretword"}))))
@@ -89,8 +88,8 @@
 (deftest substrings-match-literally
   (with-runtime
     (fn [rt _]
-      (let [pct (repl/strand! "Rollout 50% done")]
-        (repl/strand! "Rollout 50X done")
+      (let [pct (weaver/add! rt {:title "Rollout 50% done"})]
+        (weaver/add! rt {:title "Rollout 50X done"})
         (testing "a LIKE metacharacter in the substring matches literally, not as a wildcard"
           (is (= [(:id pct)]
                  (mapv :id (unsafe-text-search/search rt {:substring "50%"})))))))))
@@ -119,7 +118,7 @@
   (with-runtime
     (fn [rt _]
       (dotimes [n 3]
-        (repl/strand! (str "widget number " n)))
+        (weaver/add! rt {:title (str "widget number " n)}))
       (testing "matches within the limit return"
         (is (= 3 (count (unsafe-text-search/search rt {:substring "widget" :limit 3})))))
       (testing "more matches than the limit fail loudly naming --limit"
@@ -132,7 +131,7 @@
 (deftest op-handler-threads-args-and-passes-the-archived-flag-through
   (with-runtime
     (fn [rt _]
-      (let [strand (repl/strand! "Session log" {"transcript" "coldvalue"})]
+      (let [strand (weaver/add! rt {:title "Session log" :attributes {"transcript" "coldvalue"}})]
         (weaver/archive-attributes! rt (:id strand) ["transcript"])
         (testing "absent --archived defaults to hot rows only"
           (is (empty? (unsafe-text-search/search-op {:op/runtime rt :op/args {:substring "coldvalue"}}))))

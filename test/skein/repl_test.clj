@@ -2,10 +2,15 @@
   "Tests for skein.repl interactive convenience wrappers."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is]]
+            [clojure.test :refer [deftest is testing]]
             [nrepl.cmdline]
             [nrepl.core :as nrepl]
-            [skein.core.client]
+            [skein.api.events.alpha :as events]
+            [skein.api.graph.alpha :as graph]
+            [skein.api.hooks.alpha :as hooks]
+            [skein.api.patterns.alpha :as patterns]
+            [skein.api.weaver.alpha :as weaver]
+            [skein.core.client :as client]
             [skein.core.weaver.config :as weaver-config]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.core.db-test :as db-test]
@@ -27,6 +32,38 @@
   [{:ref 'created
     :title (get-in ctx [:input :title])}])
 
+;; Registration resolves these by symbol, so they must be top-level Vars.
+(defn wrapper-op
+  "Op handler fixture for the registration-wrapper loop."
+  [_ctx]
+  :first)
+
+(defn wrapper-op-2
+  "Second op handler fixture, so replace-op! changes something observable."
+  [_ctx]
+  :second)
+
+(defn wrapper-hook
+  "Lifecycle hook fixture for the registration-wrapper loop."
+  [ctx]
+  ctx)
+
+(defn wrapper-handler
+  "Event handler fixture for the registration-wrapper loop."
+  [_event]
+  nil)
+
+(def ^:private raw-read-standard
+  {:hook-class :read :deadline-class :standard})
+
+(defn- registered-op
+  "Return the registered op entry named `op-name`, or nil.
+
+  `weaver/ops` answers with a sorted vector rather than the registry map, so
+  every op assertion here goes through this lookup."
+  [rt op-name]
+  (first (filter #(= op-name (:name %)) (weaver/ops rt))))
+
 (defn with-runtime
   ([f]
    (with-runtime {} f))
@@ -43,14 +80,13 @@
            (weaver-runtime/stop! rt)
            (db-test/delete-sqlite-family! db-file)))))))
 
-(deftest helpers-fail-before-connect
+(deftest connected-accessors-fail-before-connect
   (reset-open-state!)
   (is (thrown-with-msg? clojure.lang.ExceptionInfo
                         #"No Skein weaver world is connected"
-                        (repl/strands)))
-  (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                        #"No Skein weaver world is connected"
-                        (repl/load-queries! "/path/does/not/matter.edn"))))
+                        (repl/connected-config-dir)))
+  (is (= {} (repl/connected-opts))
+      "opts stay empty rather than throwing; the config-dir read is the guard"))
 
 (deftest connect-without-arg-fails-loudly-without-selected-world
   (let [calls (atom [])]
@@ -77,7 +113,7 @@
                             (repl/connect! config-dir)))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"No Skein weaver world is connected"
-                            (repl/strands)))
+                            (repl/connected-config-dir)))
       (finally
         (reset-open-state!)))))
 
@@ -93,7 +129,7 @@
                               (repl/connect! db-file)))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"No Skein weaver world is connected"
-                              (repl/strands)))
+                              (repl/connected-config-dir)))
         (finally
           (db-test/delete-sqlite-family! db-file))))))
 
@@ -101,89 +137,60 @@
   (require 'user :reload)
   (is (some? (ns-resolve 'user 'demo!))))
 
-(deftest helpers-use-in-process-runtime-without-connect
+(deftest explicit-connected-stdin-main-drives-the-weaver-over-the-client-bridge
   (with-runtime
-    (fn [_rt _db-file]
-      (reset-open-state!)
-      (is (= {:database "initialized"} (repl/init!)))
-      (let [design (repl/strand! "Sketch model" {:priority "high"} {:state "closed"})
-            docs (repl/strand! "Write docs" {:owner "agent"})]
-        (repl/update! (:id docs) {:edges [{:type "depends-on" :to (:id design)}]})
-        (is (= {:owner "agent"} (:attributes (repl/strand (:id docs)))))
-        (is (= #{(:id design) (:id docs)} (set (map :id (repl/strands)))))
-        (is (= [(:id docs)] (mapv :id (repl/ready))))
-        (is (= {"agent" [:= [:attr :owner] "agent"]}
-               (repl/defquery! 'agent [:= [:attr :owner] "agent"])))
-        (is (= [(:id docs)] (mapv :id (repl/query :agent))))
-        (is (= {:name "simple"
-                :fn 'skein.repl-test/simple-pattern
-                :input-spec :skein.repl-test/simple-pattern-input}
-               (repl/defpattern! 'simple 'skein.repl-test/simple-pattern :skein.repl-test/simple-pattern-input)))
-        (is (= ["simple"] (mapv :name (repl/patterns))))
-        (is (= "simple" (:name (repl/pattern 'simple))))
-        (is (= "simple" (:name (repl/pattern-explain 'simple))))
-        (is (= ["Pattern strand"]
-               (mapv :title (:created (repl/weave! 'simple {:title "Pattern strand"})))))))))
+    {:publish? false}
+    (fn [rt _]
+      (let [out (java.io.StringWriter.)]
+        (binding [*in* (java.io.StringReader.
+                        (source-file/render-forms
+                         ['(require '[skein.core.client :as client])
+                          '(str *ns*)
+                          '(client/call-world (repl/connected-config-dir)
+                                              (repl/connected-opts)
+                                              :init)
+                          '(client/call-world (repl/connected-config-dir)
+                                              (repl/connected-opts)
+                                              :list)]))
+                  *out* out
+                  *err* (java.io.StringWriter.)]
+          (repl/-main "--stdin" (:config-dir (:metadata rt))))
+        (let [lines (str/split-lines (str out))]
+          (is (= 4 (count lines)))
+          (is (= "user" (read-string (second lines)))
+              "a standalone session evaluates in the neutral namespace, not in skein.repl")
+          (is (= {:database "initialized"} (read-string (nth lines 2))))
+          (is (= [] (read-string (nth lines 3)))))))))
 
-(deftest helpers-use-daemon-backed-strand-flow
-  (with-runtime
-    (fn [rt _db-file]
-      (is (= (:config-dir (:metadata rt)) (repl/connect! (:config-dir (:metadata rt)))))
-      (is (= {:database "initialized"} (repl/init!)))
-      (is (nil? (ns-resolve 'skein.repl 'task!)))
-      (is (nil? (ns-resolve 'skein.repl 'task)))
-      (is (nil? (ns-resolve 'skein.repl 'tasks)))
-      (let [design (repl/strand! "Sketch model" {:priority "high"} {:state "closed"})
-            docs (repl/strand! "Write docs" {:owner "agent"})
-            scratch (repl/strand! "Scratch" {:kind "scratch"})
-            old (repl/strand! "Old impl")
-            replacement (repl/strand! "New impl")]
-        (is (= {:priority "high"} (:attributes design)))
-        (is (= "closed" (:state design)))
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Two-argument strand! treats the second argument as attributes"
-                              (repl/strand! "Ambiguous" {:state "closed"})))
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown core strand fields"
-                              (repl/strand! "Invalid" {} {:priority "high"})))
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown strand update fields"
-                              (repl/update! (:id docs) {:priority "high"})))
-        (repl/update! (:id docs) {:edges [{:type "depends-on" :to (:id design)}]})
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"active or closed"
-                              (repl/update! (:id docs) {:state "replaced"})))
-        (is (= {:owner "agent"} (:attributes (repl/strand (:id docs)))))
-        (is (= #{(:id design) (:id docs) (:id scratch) (:id old) (:id replacement)} (set (map :id (repl/strands)))))
-        (is (= #{(:id docs) (:id scratch) (:id old) (:id replacement)} (set (map :id (repl/ready)))))
-        (let [result (repl/supersede! (:id old) (:id replacement))]
-          (is (= "replaced" (get-in result [:old :after :state])))
-          (is (= [(:id replacement) (:id old) "supersedes"]
-                 ((juxt :from_strand_id :to_strand_id :edge_type) (:supersedes-edge result)))))
-        (is (= {:burned [(:id scratch)] :count 1} (repl/burn! (:id scratch))))
-        (is (nil? (repl/strand (:id scratch))))))))
-
-(deftest explicit-connected-stdin-main-evaluates-fixed-helper-forms
+(deftest stdin-session-can-reach-the-registration-verbs-through-the-repl-alias
   (with-runtime
     (fn [rt _]
       (let [out (java.io.StringWriter.)]
-        (binding [*in* (java.io.StringReader. "(init!)\n(strands)\n(ready)\n")
+        (binding [*in* (java.io.StringReader.
+                        (source-file/render-forms
+                         ['(repl/register-query! 'session-query [:= [:attr :owner] "agent"])
+                          '(repl/unregister-query! 'session-query)]))
                   *out* out
-                  *err* (java.io.StringWriter.)
-                  *ns* (the-ns 'user)]
+                  *err* (java.io.StringWriter.)]
           (repl/-main "--stdin" (:config-dir (:metadata rt))))
         (let [lines (str/split-lines (str out))]
-          (is (= 3 (count lines)))
-          (is (= {:database "initialized"} (read-string (first lines))))
-          (is (= [] (read-string (second lines))))
-          (is (= [] (read-string (nth lines 2)))))))))
+          (is (= 2 (count lines)))
+          (is (= {"session-query" [:= [:attr :owner] "agent"]} (read-string (first lines)))
+              "the session bootstrap aliases skein.repl as repl without an explicit require")
+          (is (= {:unregistered "session-query"} (read-string (second lines)))))))))
 
 (deftest attach-stdin-evaluates-inside-weaver-jvm
   (with-runtime
     (fn [rt _]
       (let [{:keys [endpoint]} (:metadata rt)
             out (java.io.StringWriter.)]
-        (binding [*in* (java.io.StringReader. "(+ 1 2)\n(str \"a\" \"b\")\n@skein.core.weaver.runtime/current-runtime\n")
+        (binding [*in* (java.io.StringReader. "(str *ns*)\n(+ 1 2)\n(str \"a\" \"b\")\n@skein.core.weaver.runtime/current-runtime\n")
                   *out* out
                   *err* (java.io.StringWriter.)]
           ((ns-resolve 'skein.repl 'attach-stdin!) (:host endpoint) (str (:port endpoint))))
-        (let [lines (str/split-lines (str out))]
+        (let [lines (rest (str/split-lines (str out)))]
+          (is (= "\"user\"" (first (str/split-lines (str out))))
+              "attached forms evaluate weaver-side in the neutral namespace")
           (is (= 3 (count lines)))
           (is (= "3" (first lines)))
           (is (= "\"ab\"" (second lines)))
@@ -216,8 +223,10 @@
                             (try
                               (swap! nrepl.cmdline/running-repl assoc :client session)
                               ((:prompt options) 'user)
-                              (let [responses (doall (nrepl/message session {:op "eval" :code "(ready)"}))]
-                                (is (= "[]" (last (keep :value responses)))))
+                              (let [code "[(str *ns*) (= (find-ns 'skein.repl) (get (ns-aliases *ns*) 'repl))]"
+                                    responses (doall (nrepl/message session {:op "eval" :code code}))]
+                                (is (= "[\"user\" true]" (last (keep :value responses)))
+                                    "the prompt bootstrap lands the session in the neutral namespace with skein.repl aliased"))
                               (finally
                                 (swap! nrepl.cmdline/running-repl assoc :client nil)
                                 (.close conn)))))]
@@ -266,95 +275,15 @@
                  (select-keys plan [:status :mode :dry-run?])))
           (is (str/includes? (:caveat plan) "No registry publication")))))))
 
-(deftest query-helpers-use-daemon-backed-task-flow
-  (with-runtime
-    (fn [rt _db-file]
-      (repl/connect! (:config-dir (:metadata rt)))
-      (repl/init!)
-      (let [design (:id (repl/strand! "Design" {:owner "agent"} {:state "closed"}))
-            docs (:id (repl/strand! "Docs" {:owner "agent"}))
-            misc (:id (repl/strand! "Misc" {:owner "human"}))]
-        (repl/update! docs {:edges [{:type "depends-on" :to design}]})
-        (is (= {"agent-ready" {:params [:owner]
-                               :where [:= [:attr :owner] [:param :owner]]}}
-               (repl/defquery! 'agent-ready {:params [:owner]
-                                             :where [:= [:attr :owner] [:param :owner]]})))
-        (is (= {"agent-ready" {:params [:owner]
-                               :where [:= [:attr :owner] [:param :owner]]}}
-               (repl/queries)))
-        (is (= {:name "agent-ready"
-                :params [:owner]
-                :referenced-params [:owner]
-                :where [:= [:attr :owner] [:param :owner]]
-                :definition {:params [:owner]
-                             :where [:= [:attr :owner] [:param :owner]]}
-                :where-form "[:= [:attr :owner] [:param :owner]]"
-                :definition-form "{:params [:owner], :where [:= [:attr :owner] [:param :owner]]}"
-                :summary (str "Invoke this query with `strand list --query <name>` or `strand ready --query <name>` "
-                              "and pass runtime values with repeated `--param key=value` arguments.")}
-               (repl/query-explain :agent-ready)))
-        (try
-          (repl/query-explain :missing)
-          (is false "missing query should fail loudly")
-          (catch clojure.lang.ExceptionInfo e
-            (is (str/includes? (ex-message e) "Query not found"))
-            (is (= ["agent-ready"] (:available (ex-data e))))))
-        (is (= {"agent-ready" {:params [:owner]
-                               :where [:= [:attr :owner] [:param :owner]]}}
-               (repl/queries)))
-        (is (= #{design docs}
-               (set (map :id (repl/strands 'agent-ready {:owner "agent"})))))
-        (is (= [docs]
-               (mapv :id (repl/ready [:= [:attr :owner] "agent"]))))
-        (is (= [docs]
-               (mapv :id (repl/ready :agent-ready {:owner "agent"}))))
-        (is (= [misc]
-               (mapv :id (repl/query :agent-ready {:owner "human"}))))))))
-
-(deftest query-registry-helpers-use-daemon-memory
-  (with-runtime
-    (fn [rt db-file]
-      (repl/connect! (:config-dir (:metadata rt)))
-      (repl/init!)
-      (let [agent (:id (repl/strand! "Agent task" {:owner "agent"}))
-            human (:id (repl/strand! "Human task" {:owner "human"}))]
-        (is (= {"mine" [:= [:attr :owner] "agent"]}
-               (repl/defquery! :mine [:= [:attr :owner] "agent"])))
-        (is (= {"mine" [:= [:attr :owner] "agent"]}
-               (repl/queries)))
-        (is (= "mine" (:name (repl/query-explain "mine"))))
-        (is (= [agent] (mapv :id (repl/strands 'mine))))
-        (weaver-runtime/stop! rt)
-        (let [fresh-rt (weaver-runtime/start! db-file {:world (test-world (:config-dir (:metadata rt)))})]
-          (try
-            (is (= {} (repl/queries)))
-            (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                                  #"Query not found"
-                                  (repl/strands :mine)))
-            (let [query-file (java.io.File/createTempFile "todo-queries" ".edn")]
-              (try
-                (spit query-file (pr-str {'mine [:= [:attr :owner] "human"]}))
-                (is (= {"mine" [:= [:attr :owner] "human"]}
-                       (repl/load-queries! (.getAbsolutePath query-file))))
-                (is (= [human] (mapv :id (repl/query :mine))))
-                (spit query-file "{mine [:= [:attr :owner] \"agent\"]} {:extra true}")
-                (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                                      #"exactly one form"
-                                      (repl/load-queries! (.getAbsolutePath query-file))))
-                (finally
-                  (.delete query-file))))
-            (finally
-              (weaver-runtime/stop! fresh-rt))))))))
-
 (deftest burn-tombstone-reads-use-in-process-datasource
   (with-runtime
-    (fn [_rt _db-file]
+    (fn [rt _db-file]
       (reset-open-state!)
-      (repl/init!)
-      (let [design (:id (repl/strand! "Sketch model" {:priority "high"}))
-            docs (:id (repl/strand! "Write docs" {:owner "agent"}))]
-        (repl/update! docs {:edges [{:type "depends-on" :to design}]})
-        (repl/burn! docs)
+      (weaver/init rt)
+      (let [design (:id (weaver/add! rt {:title "Sketch model" :attributes {:priority "high"}}))
+            docs (:id (weaver/add! rt {:title "Write docs" :attributes {:owner "agent"}}))]
+        (weaver/update! rt docs {:edges [{:type "depends-on" :to design}]})
+        (is (= {:burned [docs] :count 1} (repl/burn-by-ids! [docs])))
         (let [[tombstone :as history] (repl/burn-history docs)]
           (is (= 1 (count history)))
           (is (= docs (:strand_id tombstone)))
@@ -373,12 +302,112 @@
   (reset-open-state!)
   (is (thrown-with-msg? clojure.lang.ExceptionInfo
                         #"mill weaver repl"
+                        (repl/burn-by-ids! ["anything"])))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                        #"mill weaver repl"
                         (repl/burn-history "anything")))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo
                         #"mill weaver repl"
                         (repl/recent-burns 5))))
 
-(deftest helpers-fail-loudly-when-daemon-becomes-unavailable
+(deftest registration-wrappers-drive-the-live-loop-with-the-runtime-implied
+  (with-runtime
+    (fn [rt _db-file]
+      (reset-open-state!)
+      (testing "ops"
+        (is (= "wrap-op" (:name (repl/register-op! 'wrap-op raw-read-standard
+                                                   'skein.repl-test/wrapper-op))))
+        (is (= 'skein.repl-test/wrapper-op (:fn (registered-op rt "wrap-op"))))
+        (is (= 'skein.repl-test/wrapper-op-2
+               (:fn (repl/replace-op! 'wrap-op raw-read-standard
+                                      'skein.repl-test/wrapper-op-2))))
+        (is (= {:unregistered "wrap-op"} (repl/unregister-op! 'wrap-op)))
+        (is (nil? (registered-op rt "wrap-op"))))
+      (testing "queries"
+        (is (= {"wrap-query" [:= [:attr :owner] "a"]}
+               (repl/register-query! 'wrap-query [:= [:attr :owner] "a"])))
+        (is (= {"wrap-query" [:= [:attr :owner] "b"]}
+               (repl/replace-query! 'wrap-query [:= [:attr :owner] "b"])))
+        (is (= [:= [:attr :owner] "b"] (get (graph/queries rt) "wrap-query")))
+        (is (= {:unregistered "wrap-query"} (repl/unregister-query! 'wrap-query)))
+        (is (nil? (get (graph/queries rt) "wrap-query"))))
+      (testing "patterns"
+        (is (= "wrap-pattern" (:name (repl/register-pattern! 'wrap-pattern
+                                                             'skein.repl-test/simple-pattern
+                                                             ::simple-pattern-input))))
+        (is (= "iterated" (:doc (repl/replace-pattern! 'wrap-pattern "iterated"
+                                                       'skein.repl-test/simple-pattern
+                                                       ::simple-pattern-input))))
+        (is (= {:unregistered "wrap-pattern"} (repl/unregister-pattern! 'wrap-pattern)))
+        (is (empty? (patterns/patterns rt))))
+      (testing "hooks"
+        (is (= {:key :wrap-hook :order 0}
+               (select-keys (repl/register-hook! :wrap-hook #{:strand/add-before-commit}
+                                                 'skein.repl-test/wrapper-hook)
+                            [:key :order])))
+        (is (= {:key :wrap-hook :order 7}
+               (select-keys (repl/replace-hook! :wrap-hook #{:strand/add-before-commit}
+                                                'skein.repl-test/wrapper-hook {:order 7})
+                            [:key :order])))
+        (is (= {:unregistered :wrap-hook} (repl/unregister-hook! :wrap-hook)))
+        (is (nil? (get (hooks/hooks rt) :wrap-hook))))
+      (testing "event handlers"
+        (is (= #{:test/wrap} (:types (repl/register-handler! :wrap-handler #{:test/wrap}
+                                                             'skein.repl-test/wrapper-handler))))
+        (is (= {:round 2} (:metadata (repl/replace-handler! :wrap-handler #{:test/wrap}
+                                                            'skein.repl-test/wrapper-handler
+                                                            {:round 2}))))
+        (is (= {:unregistered :wrap-handler} (repl/unregister-handler! :wrap-handler)))
+        (is (nil? (get (events/handlers rt) :wrap-handler)))))))
+
+(deftest registered-queries-last-only-for-the-weaver-lifetime
+  (with-runtime
+    (fn [rt db-file]
+      (reset-open-state!)
+      (is (= {"mine" [:= [:attr :owner] "agent"]}
+             (repl/register-query! :mine [:= [:attr :owner] "agent"])))
+      (is (= {"mine" [:= [:attr :owner] "agent"]} (graph/queries rt)))
+      (weaver-runtime/stop! rt)
+      (let [fresh-rt (weaver-runtime/start! db-file
+                                            {:world (test-world (:config-dir (:metadata rt)))})]
+        (try
+          (is (= {} (graph/queries fresh-rt))
+              "SPEC-003.C12: the registry is weaver-lifetime, not durable")
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                #"Query not registered; cannot replace"
+                                (repl/replace-query! :mine [:= [:attr :owner] "human"])))
+          (finally
+            (weaver-runtime/stop! fresh-rt)))))))
+
+(deftest registration-wrappers-are-in-process-only
+  (reset-open-state!)
+  (let [standalone (ex-data (try (repl/register-query! 'nope [:= :id "x"])
+                                 (catch clojure.lang.ExceptionInfo e e)))]
+    (is (= {:helper 'register-query!
+            :session-mode :standalone
+            :code :skein.repl/no-in-process-runtime}
+           standalone)))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                        #"neither a runtime nor a `connect!` selection"
+                        (repl/unregister-hook! :nope)))
+  (with-runtime
+    {:publish? false}
+    (fn [rt _db-file]
+      (repl/connect! (:config-dir (:metadata rt)))
+      (try
+        (let [connected (try (repl/replace-op! 'nope raw-read-standard 'skein.repl-test/wrapper-op)
+                             (catch clojure.lang.ExceptionInfo e e))]
+          (is (= {:helper 'replace-op!
+                  :session-mode :connected
+                  :code :skein.repl/no-in-process-runtime}
+                 (ex-data connected)))
+          (is (str/includes? (ex-message connected) "`skein.core.client`")
+              "a connected session is pointed at the client bridge it can actually use")
+          (is (str/includes? (ex-message connected) "mill weaver repl")))
+        (finally
+          (reset-open-state!))))))
+
+(deftest client-bridge-fails-loudly-when-the-selected-weaver-goes-away
   (let [db-file (db-test/temp-db-file)
         config-dir (str "/tmp/td-" (java.util.UUID/randomUUID))]
     (.mkdirs (java.io.File. config-dir))
@@ -389,7 +418,9 @@
         (weaver-runtime/stop! rt)
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"metadata is missing or stale"
-                              (repl/strands)))
+                              (client/call-world (repl/connected-config-dir)
+                                                 (repl/connected-opts)
+                                                 :list)))
         (finally
           (reset-open-state!)
           (weaver-runtime/stop! rt)

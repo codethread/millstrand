@@ -15,7 +15,6 @@
             [skein.spools.test-support :as test-support :refer [assert-state-shape with-runtime]]
             [skein.spools.workflow :as workflow]
             [skein.spools.workflow.internal.registry :as wf-registry]
-            [skein.repl :as repl]
             [skein.test.alpha :as test-alpha])
   (:import [java.time Instant]))
 
@@ -67,7 +66,7 @@
                                                :owner "agent"
                                                :include-review true})
             root-id (workflow/molecule-id result)
-            root (repl/strand root-id)
+            root (weaver/show rt root-id)
             subgraph (graph/subgraph rt [root-id])]
         (is (= "Ship workflow spool" (:title root)))
         (is (= "root" (get-in root [:attributes :workflow/role])))
@@ -348,7 +347,7 @@
 
 (deftest workflow-models-pull-request-flow-without-conditional-edges
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (workflow/start! "pr-flow" #'pr-dev {:feature "pr-42"}
                        {:family "pull-request"
                         :context {:feature "pr-42"}})
@@ -360,7 +359,7 @@
         (is (= "Wait for CI on pr-42" (:title gate)))
         (is (= "ci" (:gate gate)))
         (is (= "Judge CI result" (:title (first (:ready (workflow/complete! "pr-flow" {:by "ci-bot"}))))))
-        (is (= "ci-bot" (get-in (repl/strand (:id gate)) [:attributes :workflow/outcome-by]))))
+        (is (= "ci-bot" (get-in (weaver/show rt (:id gate)) [:attributes :workflow/outcome-by]))))
       ;; red verdict routes into the fix-CI loop, which recomposes the CI round
       (is (= "Diagnose CI failure" (:title (first (:ready (workflow/choose! "pr-flow" :red))))))
       (is (= "Push CI fix" (:title (first (:ready (workflow/complete! "pr-flow"))))))
@@ -445,21 +444,21 @@
 
 (deftest workflow-run-not-done-while-blocked-by-external-dependency
   (with-runtime
-    (fn [_rt _]
-      (let [blocker (repl/strand! "External blocker")
+    (fn [rt _]
+      (let [blocker (weaver/add! rt {:title "External blocker"})
             definition (workflow/workflow
                         "Blocked run"
                         (workflow/step :a "Do A" :self)
                         (workflow/step :b "Do B" :self :depends-on [:a]))
             result (workflow/pour! definition {} {:run-id "blocked-run"})
             b-id (get-in result [:refs :b])]
-        (repl/update! b-id {:edges [{:type "depends-on" :to (:id blocker)}]})
+        (weaver/update! rt b-id {:edges [{:type "depends-on" :to (:id blocker)}]})
         (is (= {:title "Do A" :role "step"}
                (select-keys (workflow/ready-step "blocked-run") [:title :role])))
         (is (= {:ready [] :done false} (workflow/complete! "blocked-run")))
         (is (not (workflow/done? "blocked-run")))
         (is (some? (workflow/current-root "blocked-run")))
-        (is (= "active" (:state (repl/strand b-id))))))))
+        (is (= "active" (:state (weaver/show rt b-id))))))))
 
 (deftest workflow-done-fails-loudly-for-unknown-run
   (with-runtime
@@ -483,7 +482,7 @@
 
 (deftest workflow-runtime-supports-parallel-ready-steps
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow
                         "Parallel entry"
                         (workflow/step :a "Do A" :self)
@@ -494,22 +493,22 @@
         (is (= #{"Do A" "Do B"} (set (map :title started))))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Multiple workflow steps are ready"
                               (workflow/complete! "parallel-run")))
-        (is (= "active" (:state (repl/strand a-id))))
-        (is (= "active" (:state (repl/strand b-id))))
+        (is (= "active" (:state (weaver/show rt a-id))))
+        (is (= "active" (:state (weaver/show rt b-id))))
         (let [remaining (:ready (workflow/complete! "parallel-run" {:step a-id}))]
-          (is (= "closed" (:state (repl/strand a-id))))
-          (is (= "active" (:state (repl/strand b-id))))
+          (is (= "closed" (:state (weaver/show rt a-id))))
+          (is (= "active" (:state (weaver/show rt b-id))))
           (is (= [{:title "Do B" :role "step"}]
                  (mapv #(select-keys % [:title :role]) remaining))))))))
 
 (deftest workflow-complete-merges-caller-attributes-onto-the-closed-step
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow "Attrs run" (workflow/step :a "Do A" :self))
             [step] (:ready (workflow/start! "attrs-run" definition {}))]
         (workflow/complete! "attrs-run" {:attributes {"acme/outcome" "ok"
                                                       "acme/exit-code" 7}})
-        (let [strand (repl/strand (:id step))]
+        (let [strand (weaver/show rt (:id step))]
           (is (= "closed" (:state strand)))
           (is (= "ok" (get-in strand [:attributes :acme/outcome])))
           ;; a typed value survives the merge as itself, not as its printed form
@@ -517,7 +516,7 @@
 
 (deftest workflow-complete-context-is-shallow-last-write-wins
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow
                         "Context run"
                         (workflow/step :a "Do A" :self)
@@ -529,7 +528,7 @@
                             {:context {:owner "new"
                                        :nested {:replacement true}
                                        :result :passed}})
-        (is (= "closed" (:state (repl/strand (:id step)))))
+        (is (= "closed" (:state (weaver/show rt (:id step)))))
         (is (= {:owner "new"
                 :nested {:replacement true}
                 :result "passed"}
@@ -558,13 +557,13 @@
                        (catch clojure.lang.ExceptionInfo e e))]
           (is (= "Lifecycle hook failed" (ex-message thrown)))
           (is (= "policy/rejected" (:hook/cause-code (ex-data thrown)))))
-        (is (= "active" (:state (repl/strand (:id step)))))
+        (is (= "active" (:state (weaver/show rt (:id step)))))
         (is (= {:owner "before"}
-               (get-in (repl/strand root-id) [:attributes :workflow/context])))))))
+               (get-in (weaver/show rt root-id) [:attributes :workflow/context])))))))
 
 (deftest workflow-complete-requires-keyword-context-keys
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow
                         "Context keys"
                         (workflow/step :a "Do A" :self)
@@ -574,25 +573,25 @@
                               #"Invalid workflow complete context"
                               (workflow/complete! "context-keys-run"
                                                   {:context {"owner" "agent"}})))
-        (is (= "active" (:state (repl/strand (:id step)))))
+        (is (= "active" (:state (weaver/show rt (:id step)))))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"cannot be defaulted into workflow/context"
                               (workflow/complete! "context-keys-run"
                                                   {:context {:opaque (Object.)}})))
-        (is (= "active" (:state (repl/strand (:id step)))))
+        (is (= "active" (:state (weaver/show rt (:id step)))))
         (is (not (s/valid? :skein.spools.workflow.request/context
                            {:opaque (Object.)})))))))
 
 (deftest workflow-complete-refuses-malformed-persisted-context-before-mutating
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow
                         "Malformed context"
                         (workflow/step :a "Do A" :self)
                         (workflow/step :b "Do B" :self :depends-on [:a]))
             [step] (:ready (workflow/start! "malformed-context-run" definition {}))
             root-id (:id (workflow/current-root "malformed-context-run"))]
-        (repl/update! root-id {:attributes {"workflow/context" "not-a-map"}})
+        (weaver/update! rt root-id {:attributes {"workflow/context" "not-a-map"}})
         (let [thrown (try
                        (workflow/complete! "malformed-context-run"
                                            {:context {:owner "agent"}})
@@ -601,15 +600,15 @@
           (is (= "malformed-context-run" (:run-id (ex-data thrown))))
           (is (= root-id (:root (ex-data thrown))))
           (is (= "not-a-map" (:context (ex-data thrown)))))
-        (is (= "active" (:state (repl/strand (:id step)))))
+        (is (= "active" (:state (weaver/show rt (:id step)))))
         (is (= "not-a-map"
-               (get-in (repl/strand root-id) [:attributes :workflow/context])))))))
+               (get-in (weaver/show rt root-id) [:attributes :workflow/context])))))))
 
 (deftest workflow-complete-holds-direct-callers-to-the-attributes-spec
   ;; The worker CLI validates its request map; a direct Clojure caller reaches
   ;; the same mutation, so the same spec judges it rather than a looser local check.
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow "Bad attrs run" (workflow/step :a "Do A" :self))
             [step] (:ready (workflow/start! "bad-attrs-run" definition {}))]
         (doseq [[label attributes] [["a non-map" "acme/outcome=ok"]
@@ -619,14 +618,14 @@
             (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                   #"Invalid workflow complete attributes"
                                   (workflow/complete! "bad-attrs-run" {:attributes attributes})))))
-        (is (= "active" (:state (repl/strand (:id step)))))
+        (is (= "active" (:state (weaver/show rt (:id step)))))
         (testing "an empty map is a stated no-op, not a rejection"
           (workflow/complete! "bad-attrs-run" {:attributes {}})
-          (is (= "closed" (:state (repl/strand (:id step))))))))))
+          (is (= "closed" (:state (weaver/show rt (:id step))))))))))
 
 (deftest workflow-complete-and-advance-refuse-removed-notes-arg
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow "No notes run"
                                           (workflow/step :a "Do A" :self)
                                           (workflow/step :b "Do B" :self))
@@ -642,11 +641,11 @@
                 (is (= :workflow/notes-removed (:reason (ex-data e))))
                 (is (= label (:op (ex-data e))))))))
         ;; the refusal happens before the guard, so nothing moved
-        (is (= "active" (:state (repl/strand (:id step)))))))))
+        (is (= "active" (:state (weaver/show rt (:id step)))))))))
 
 (deftest workflow-run-history-reads-legacy-outcome-notes-as-an-ordinary-attribute
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       ;; a step closed before the outcome cutover: run-history projects the
       ;; engine's own outcome keys and leaves the historical row on the strand,
       ;; where show and the query language read it like any other attribute.
@@ -657,21 +656,21 @@
           (is (= :step-closed (:type event)))
           (is (not (contains? event :notes))))
         (is (= "closed in 2026"
-               (get-in (repl/strand (:id step)) [:attributes :workflow/outcome-notes])))))))
+               (get-in (weaver/show rt (:id step)) [:attributes :workflow/outcome-notes])))))))
 
 (deftest workflow-complete-fails-loudly-on-invalid-step-and-mutates-nothing
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow "Bad step run" (workflow/step :a "Do A" :self))]
         (workflow/start! "bad-step-run" definition {})
         (let [a-id (:id (workflow/ready-step "bad-step-run"))]
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Requested workflow step is not ready"
                                 (workflow/complete! "bad-step-run" {:step "no-such-step"})))
-          (is (= "active" (:state (repl/strand a-id)))))))))
+          (is (= "active" (:state (weaver/show rt a-id)))))))))
 
 (deftest workflow-gate-requires-by-and-records-who-closed-it
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow
                         "Gated run"
                         (workflow/step :push "Push branch" :self)
@@ -696,11 +695,11 @@
                                 (workflow/complete! "gated-run" {:by nil})))
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Gate steps require a non-blank :by"
                                 (workflow/complete! "gated-run" {:by "  "})))
-          (is (= "active" (:state (repl/strand gate-id))))
+          (is (= "active" (:state (weaver/show rt gate-id))))
           ;; an external actor closes the gate with :by; :deploy becomes ready
           (let [remaining (:ready (workflow/complete! "gated-run" {:by "ci"
                                                                    :attributes {"ci/result" "green"}}))
-                closed (repl/strand gate-id)]
+                closed (weaver/show rt gate-id)]
             (is (= "closed" (:state closed)))
             (is (= "ci" (get-in closed [:attributes :workflow/outcome-by])))
             (is (= "green" (get-in closed [:attributes :ci/result])))
@@ -709,11 +708,11 @@
 
 (deftest workflow-non-gate-step-closes-without-by
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow "Plain run" (workflow/step :a "Do A" :self))
             [step] (:ready (workflow/start! "plain-gate-run" definition {}))]
         (is (= {:ready [] :done true} (workflow/complete! "plain-gate-run")))
-        (let [closed (repl/strand (:id step))]
+        (let [closed (weaver/show rt (:id step))]
           (is (= "closed" (:state closed)))
           (is (nil? (get-in closed [:attributes :workflow/outcome-by]))))))))
 
@@ -721,11 +720,11 @@
   ;; :by is recorded on any step completion when supplied (provenance parity),
   ;; even though only gates require it
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow "Plain run with by" (workflow/step :a "Do A" :self))
             [step] (:ready (workflow/start! "plain-by-run" definition {}))]
         (is (= {:ready [] :done true} (workflow/complete! "plain-by-run" {:by "agent-driver"})))
-        (let [closed (repl/strand (:id step))]
+        (let [closed (weaver/show rt (:id step))]
           (is (= "closed" (:state closed)))
           (is (= "agent-driver" (get-in closed [:attributes :workflow/outcome-by]))))))))
 
@@ -757,7 +756,7 @@
 
 (deftest workflow-routed-choice-swaps-to-single-active-continuation-root
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow
                         "Route to work"
                         (workflow/checkpoint :route "Route somewhere"
@@ -767,7 +766,7 @@
         (workflow/start! "route-to-work" definition {})
         (let [old-root-id (:id (workflow/current-root "route-to-work"))
               remaining (:ready (workflow/choose! "route-to-work" :continue))]
-          (is (= "closed" (:state (repl/strand old-root-id))))
+          (is (= "closed" (:state (weaver/show rt old-root-id))))
           (is (= [{:title "Do follow up work" :role "step"}]
                  (mapv #(select-keys % [:title :role]) remaining)))
           ;; current-root throws on more than one active root, so a non-nil
@@ -779,14 +778,14 @@
 
 (deftest workflow-choose-records-outcome-by
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow
                         "Signoff run"
                         (workflow/checkpoint :approve "Approve it"
                                              :choices [{:key :approved :label "Approve"}]))
             [step] (:ready (workflow/start! "signoff-run" definition {}))]
         (workflow/choose! "signoff-run" :approved {} {:by "agent:reviewer"})
-        (let [strand (repl/strand (:id step))]
+        (let [strand (weaver/show rt (:id step))]
           (is (= "closed" (:state strand)))
           (is (= "approved" (get-in strand [:attributes :workflow/outcome])))
           (is (= "agent:reviewer" (get-in strand [:attributes :workflow/outcome-by]))))))))
@@ -862,7 +861,7 @@
 
 (deftest workflow-revise-choice-loops-back-to-a-fresh-revision-round
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (is (= [{:title "Orient" :role "step"}]
              (mapv #(select-keys % [:title :role])
                    (:ready (workflow/start! "loopy" #'loopy {})))))
@@ -876,9 +875,9 @@
         (is (= "checkpoint" (:role signoff)))
         ;; revise routes back to a fresh revision round under the same run-id
         (let [remaining (:ready (workflow/choose! "loopy" :revise))]
-          (is (= "closed" (:state (repl/strand signoff-id))))
-          (is (= "revise" (get-in (repl/strand signoff-id) [:attributes :workflow/outcome])))
-          (is (= "closed" (:state (repl/strand old-root-id))))
+          (is (= "closed" (:state (weaver/show rt signoff-id))))
+          (is (= "revise" (get-in (weaver/show rt signoff-id) [:attributes :workflow/outcome])))
+          (is (= "closed" (:state (weaver/show rt old-root-id))))
           (let [new-root (workflow/current-root "loopy")]
             (is (some? new-root))
             (is (not= old-root-id (:id new-root))))
@@ -892,7 +891,7 @@
 
 (deftest workflow-routed-choose-failure-keeps-run-resumable
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (workflow/start! "loopy-fail" #'loopy {})
       (workflow/complete! "loopy-fail")
       (workflow/complete! "loopy-fail")
@@ -908,7 +907,7 @@
           (is (some? root))
           (is (= old-root-id (:id root)))
           (is (= "active" (:state root))))
-        (is (= "active" (:state (repl/strand signoff-id))))
+        (is (= "active" (:state (weaver/show rt signoff-id))))
         (is (false? (workflow/done? "loopy-fail")))
         ;; the run stays resumable: retrying the same choice now succeeds
         (is (= [{:title "Do work" :role "step"}]
@@ -917,7 +916,7 @@
 
 (deftest workflow-runtime-selects-among-parallel-ready-checkpoints
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow
                         "Parallel checkpoints"
                         (workflow/checkpoint :x "Pick X"
@@ -931,8 +930,8 @@
                               (workflow/choose! "parallel-checkpoints" :go)))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Multiple workflow steps are ready"
                               (workflow/choice-details "parallel-checkpoints")))
-        (is (= "active" (:state (repl/strand x-id))))
-        (is (= "active" (:state (repl/strand y-id))))
+        (is (= "active" (:state (weaver/show rt x-id))))
+        (is (= "active" (:state (weaver/show rt y-id))))
         ;; choice-details string-keys choice names and detail maps, agreeing
         ;; with choice-detail's shape (archived workflow-engine review, R2)
         (is (= {"go" {"label" "Go X"}}
@@ -940,24 +939,24 @@
         (is (= {"label" "Go Y"}
                (workflow/choice-detail "parallel-checkpoints" :go {:step y-id})))
         (let [remaining (:ready (workflow/choose! "parallel-checkpoints" :go {} {:step x-id}))]
-          (is (= "closed" (:state (repl/strand x-id))))
-          (is (= "go" (get-in (repl/strand x-id) [:attributes :workflow/outcome])))
-          (is (= "active" (:state (repl/strand y-id))))
+          (is (= "closed" (:state (weaver/show rt x-id))))
+          (is (= "go" (get-in (weaver/show rt x-id) [:attributes :workflow/outcome])))
+          (is (= "active" (:state (weaver/show rt y-id))))
           (is (= [y-id] (mapv :id remaining))))))))
 
 (deftest workflow-spool-supports-wisps-bonds-and-squash
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [left-result (workflow/wisp! {:name "Left" :steps [{:id :a :title "A"}]})
             right-result (workflow/wisp! {:name "Right" :steps [{:id :b :title "B"}]})
             left-id (workflow/molecule-id left-result)
             right-id (workflow/molecule-id right-result)]
-        (is (= "wisp" (get-in (repl/strand left-id) [:attributes :workflow/form])))
+        (is (= "wisp" (get-in (weaver/show rt left-id) [:attributes :workflow/form])))
         (workflow/bond! left-id right-id)
         (let [digest (workflow/squash! left-id "Left digest" {:summary "done"})]
           (is (= "closed" (:state digest)))
           (is (= "digest" (get-in digest [:attributes :workflow/role])))
-          (is (nil? (repl/strand left-id))))))))
+          (is (nil? (weaver/show rt left-id))))))))
 
 (deftest workflow-bond-parent-blocks-the-bonded-run
   (with-runtime
@@ -1373,7 +1372,7 @@
 
 (deftest workflow-procedure-join-auto-closes-and-never-surfaces-as-ready
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (let [definition (workflow/workflow
                         "Join demo"
                         (workflow/step :prep "Prep" :self)
@@ -1390,9 +1389,10 @@
           (is (not-any? #(= "procedure" (:role %)) after-inner)))
         ;; the join strand is closed with engine provenance, though it was never
         ;; returned as a ready step nor manually completed
-        (let [join (first (repl/query [:and
-                                       [:= [:attr "workflow/role"] "procedure"]
-                                       [:= [:attr "workflow/procedure"] "inner"]]))]
+        (let [join (first (weaver/list rt [:and
+                                           [:= [:attr "workflow/role"] "procedure"]
+                                           [:= [:attr "workflow/procedure"] "inner"]]
+                                       {}))]
           (is (= "closed" (:state join)))
           (is (= "engine" (get-in join [:attributes :workflow/outcome-by]))))
         (is (= {:ready [] :done true} (workflow/complete! "join-run")))
@@ -1477,7 +1477,7 @@
 
 (deftest workflow-named-next-resolves-and-fails-loudly-on-unknown-name
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (workflow/register-workflow! :wt-second 'skein.spools.workflow-test/registry-second-stage)
       (is (= 'skein.spools.workflow-test/registry-second-stage
              (workflow/workflow-definition :wt-second)))
@@ -1492,7 +1492,7 @@
       (let [go-id (:id (workflow/ready-step "unknown-run"))]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown registered workflow"
                               (workflow/choose! "unknown-run" :advance)))
-        (is (= "active" (:state (repl/strand go-id))))))))
+        (is (= "active" (:state (weaver/show rt go-id))))))))
 
 (deftest workflow-registry-rename-repoints-in-flight-run
   (with-runtime
@@ -1524,7 +1524,7 @@
 
 (deftest workflow-routing-refuses-malformed-persisted-context-before-mutating
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (workflow/register-workflow! :wt-second 'skein.spools.workflow-test/registry-second-stage)
       (workflow/register-workflow! :wt-downstream
                                    'skein.spools.workflow-test/downstream-stage-workflow)
@@ -1536,7 +1536,7 @@
           (workflow/complete! run-id))
         (let [root-id (:id (workflow/current-root run-id))
               checkpoint-id (:id (workflow/ready-step run-id))]
-          (repl/update! root-id {:attributes {"workflow/context" "not-a-map"}})
+          (weaver/update! rt root-id {:attributes {"workflow/context" "not-a-map"}})
           (let [thrown (try
                          (workflow/choose! run-id choice)
                          (catch clojure.lang.ExceptionInfo e e))]
@@ -1544,9 +1544,9 @@
             (is (= run-id (:run-id (ex-data thrown))))
             (is (= root-id (:root (ex-data thrown))))
             (is (= "not-a-map" (:context (ex-data thrown)))))
-          (is (= "active" (:state (repl/strand checkpoint-id))))
+          (is (= "active" (:state (weaver/show rt checkpoint-id))))
           (is (= "not-a-map"
-                 (get-in (repl/strand root-id)
+                 (get-in (weaver/show rt root-id)
                          [:attributes :workflow/context]))))))))
 
 (deftest workflow-revise-repours-definition-skipping-condition-gated-steps
@@ -1666,7 +1666,7 @@
 
 (deftest workflow-run-history-projects-ordered-molecules-and-events
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (workflow/start! "hist" #'introspect-stage-a {:feature "widgets"}
                        {:context {:feature "widgets"}})
       (workflow/complete! "hist")                            ; :draft
@@ -1685,7 +1685,7 @@
             ;; the engine projects its own outcome keys only, so a caller's
             ;; vocabulary is read back off the closed strands the events name
             round-set (fn [mol]
-                        (set (keep #(get-in (repl/strand (:id %)) [:attributes :acme/round])
+                        (set (keep #(get-in (weaver/show rt (:id %)) [:attributes :acme/round])
                                    (:events mol))))]
         (is (= 3 (count history)))
         ;; molecules are ordered by creation; events within a molecule by :at
@@ -1710,7 +1710,7 @@
 
 (deftest workflow-squash-run-refuses-active-then-squashes-to-one-digest
   (with-runtime
-    (fn [_rt _]
+    (fn [rt _]
       (workflow/start! "arch" #'introspect-stage-a {:feature "widgets"}
                        {:context {:feature "widgets"}})
       (workflow/complete! "arch")             ; :draft
@@ -1723,10 +1723,10 @@
       (is (workflow/done? "arch"))
       (let [digest (workflow/squash-run! "arch")
             summary (get-in digest [:attributes :workflow/summary])
-            molecules (repl/query [:and [:= [:attr "workflow/run-id"] "arch"]
-                                   [:= [:attr "workflow/role"] "root"]])
-            digests (repl/query [:and [:= [:attr "workflow/run-id"] "arch"]
-                                 [:= [:attr "workflow/role"] "digest"]])]
+            molecules (weaver/list rt [:and [:= [:attr "workflow/run-id"] "arch"]
+                                       [:= [:attr "workflow/role"] "root"]] {})
+            digests (weaver/list rt [:and [:= [:attr "workflow/run-id"] "arch"]
+                                     [:= [:attr "workflow/role"] "digest"]] {})]
         (is (= "closed" (:state digest)))
         (is (= "digest" (get-in digest [:attributes :workflow/role])))
         (is (= "arch" (get-in digest [:attributes :workflow/run-id])))
@@ -2157,7 +2157,7 @@
                         (catch clojure.lang.ExceptionInfo e e))]
         (is (= :workflow/entrypoint-unsupported (:reason (ex-data thrown))))
         (is (= :continue (:entrypoint (ex-data thrown))))
-        (is (= "active" (:state (repl/strand go-id))))))))
+        (is (= "active" (:state (weaver/show rt go-id))))))))
 
 (deftest registered-call-target-requires-the-call-entrypoint
   (with-runtime
@@ -2277,7 +2277,7 @@
       (let [checkpoint (:id (workflow/ready-step "revise-name-run"))]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown registered workflow"
                               (workflow/choose! "revise-name-run" :again)))
-        (is (= "active" (:state (repl/strand checkpoint))))))))
+        (is (= "active" (:state (weaver/show rt checkpoint))))))))
 
 (deftest redefining-a-var-changes-the-next-transition-not-the-current-run
   ;; PROP-Wcd-001.S8: source load and code reload redefine Vars under a live
@@ -2496,7 +2496,7 @@
               thrown (try (workflow/choose! "route-invalid" :advance {:scope 42})
                           (catch clojure.lang.ExceptionInfo e e))]
           (is (= :workflow/params-invalid (:reason (ex-data thrown))))
-          (is (= "active" (:state (repl/strand go-id)))
+          (is (= "active" (:state (weaver/show rt go-id)))
               "the checkpoint stays ready, so the run is resumable"))
         (is (= ["Implement compact queue for agent"]
                (mapv :title (:ready (workflow/choose! "route-invalid" :advance
@@ -2512,7 +2512,7 @@
             thrown (try (workflow/choose! "revise-run" :bad)
                         (catch clojure.lang.ExceptionInfo e e))]
         (is (= :workflow/params-invalid (:reason (ex-data thrown))))
-        (is (= "active" (:state (repl/strand checkpoint-id)))
+        (is (= "active" (:state (weaver/show rt checkpoint-id)))
             "the run keeps its stage when the revision is rejected"))
       (workflow/choose! "revise-run" :good)
       (is (= "Revise second pass" (:title (workflow/current-root "revise-run"))))
@@ -2546,7 +2546,7 @@
           (is (= :workflow/input-invalid (:reason data)))
           (is (= ::approval-input (:spec data)))
           (is (re-find #"approval-note" (:explain data)))
-          (is (= "active" (:state (repl/strand step-id))))))
+          (is (= "active" (:state (weaver/show rt step-id))))))
       (testing "a choice declaring no input contract takes any map"
         (is (:done (workflow/choose! "input-run" :reject {:anything "goes"}))))
       (testing "valid input records the choice"
@@ -2741,7 +2741,7 @@
               thrown (try (workflow/choose! "gone-input" :approve {:approval-note "x"})
                           (catch clojure.lang.ExceptionInfo e e))]
           (is (= :workflow/input-spec-missing (:reason (ex-data thrown))))
-          (is (= "active" (:state (repl/strand step-id)))))
+          (is (= "active" (:state (weaver/show rt step-id)))))
         (finally (s/def ::approval-input (s/keys :req-un [::approval-note])))))))
 
 (deftest registering-a-definition-with-an-unknown-input-spec-is-refused
@@ -3198,7 +3198,7 @@
           (is (= ["wt-two-step"] (:workflows pending)))
           (let [filled (workflow/defer! "sandwich" :wt-two-step
                                         {:defer-scope "the thing"} {:by "worker-1"})
-                join (repl/strand (:id pending))]
+                join (weaver/show rt (:id pending))]
             (is (= ["Plan the thing"] (mapv :title (:ready filled)))
                 "the expansion is ready; step c is not")
             (is (= "procedure" (get-in join [:attributes :workflow/role]))
@@ -3222,7 +3222,7 @@
             (let [after-ship (workflow/complete! "sandwich")]
               (is (= ["Step c"] (mapv :title (:ready after-ship)))
                   "step c becomes ready only once the expansion's exits close")
-              (is (= "closed" (:state (repl/strand (:id pending))))
+              (is (= "closed" (:state (weaver/show rt (:id pending))))
                   "the join auto-closed through the existing cascade"))
             (is (true? (:done (workflow/complete! "sandwich"))))))))))
 
@@ -3244,7 +3244,7 @@
         (is (false? (:done filled)))
         (complete-ready! "final" "Plan default")
         (let [after-ship (complete-ready! "final" "Ship it")]
-          (is (= "closed" (:state (repl/strand (:id pending))))
+          (is (= "closed" (:state (weaver/show rt (:id pending))))
               "the join closes normally after its selected routine exits")
           (is (false? (:done after-ship))
               "the parallel sibling was never abandoned by filling a final defer")
@@ -3255,7 +3255,7 @@
           (is (= [root-id] (mapv (comp :id :root) molecules))
               "one molecule throughout: no root transfer"))
         (is (= {:label "caller"}
-               (get-in (repl/strand root-id) [:attributes :workflow/context]))
+               (get-in (weaver/show rt root-id) [:attributes :workflow/context]))
             "the declaring root's context is never replaced by the target's")))))
 
 (deftest defer-isolates-the-target-from-caller-params
@@ -3288,7 +3288,7 @@
                           (catch clojure.lang.ExceptionInfo e e))]
           (is (= :workflow/defer-target-not-allowed (:reason (ex-data thrown))))
           (is (= ["wt-devflow" "wt-spike"] (:allowed (ex-data thrown))))
-          (is (= "active" (:state (repl/strand defer-id))))))
+          (is (= "active" (:state (weaver/show rt defer-id))))))
       (testing "a compatible repoint runs the replacement"
         (workflow/register-workflow! :wt-spike 'skein.spools.workflow-test/defer-devflow)
         (workflow/defer! "live-1" :wt-spike {:feature "repointed"})
@@ -3298,9 +3298,9 @@
         (let [defer-id (:id (start-at-defer! "live-2"))
               check (fn [thrown reason]
                       (is (= reason (:reason (ex-data thrown))))
-                      (is (= "active" (:state (repl/strand defer-id)))
+                      (is (= "active" (:state (weaver/show rt defer-id)))
                           "nothing closed, so the worker can retry")
-                      (is (= "defer" (get-in (repl/strand defer-id)
+                      (is (= "defer" (get-in (weaver/show rt defer-id)
                                              [:attributes :workflow/role]))
                           "and nothing was rewritten into a join"))]
           (check (try (workflow/defer! "live-2" :wt-devflow {:feature 42})
@@ -3330,7 +3330,7 @@
             (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                   #"Invalid workflow defer request"
                                   (call)))))
-        (is (= "active" (:state (repl/strand defer-id))))))))
+        (is (= "active" (:state (weaver/show rt defer-id))))))))
 
 (deftest a-ready-defer-is-neither-completed-nor-advanced
   (with-runtime
@@ -3347,7 +3347,7 @@
           (is (= :workflow/ready-next-absent (:reason (ex-data advance-error))))
           (is (re-find #"workflow defer" (:guidance (ex-data advance-error))))
           (is (= [defer-id] (mapv :id (:ready (ex-data advance-error)))))
-          (is (= "active" (:state (repl/strand defer-id)))))
+          (is (= "active" (:state (weaver/show rt defer-id)))))
         (testing "and choose! refuses it as a non-checkpoint"
           (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                 #"not a checkpoint"
@@ -3380,7 +3380,7 @@
         (is (= ["wt-two-step"] (:workflows defer)))
         (is (false? (:done result)))
         (let [after-sibling (complete-ready! "pending" "Sibling work")]
-          (is (= "active" (:state (repl/strand (:id defer)))))
+          (is (= "active" (:state (weaver/show rt (:id defer)))))
           (is (false? (:done after-sibling))
               "an unfilled defer keeps the run unfinished"))
         (is (not-any? #(= (:id defer) (:id %))
@@ -3468,12 +3468,12 @@
         (workflow/start! run-id (defer-sandwich #{:wt-two-step}) {})
         (workflow/complete! run-id)
         (let [pending (workflow/ready-step run-id)]
-          (repl/update! (:id pending) {:attributes {"workflow/defer-path" bad-path}})
+          (weaver/update! rt (:id pending) {:attributes {"workflow/defer-path" bad-path}})
           (let [thrown (try (workflow/defer! run-id :wt-two-step)
                             (catch clojure.lang.ExceptionInfo e e))]
             (is (= :workflow/defer-path-invalid (:reason (ex-data thrown))))
             (is (contains? (ex-data thrown) :path))
-            (is (= "active" (:state (repl/strand (:id pending))))
+            (is (= "active" (:state (weaver/show rt (:id pending))))
                 "a malformed path fails before the fill mutates the defer")))))))
 
 (workflow/defworkflow defer-self-target
@@ -3524,7 +3524,7 @@
               thrown (try (workflow/defer! "cyclic" :wt-self)
                           (catch clojure.lang.ExceptionInfo e e))]
           (is (= :workflow/defer-cyclic (:reason (ex-data thrown))))
-          (is (= "active" (:state (repl/strand (:id pending))))
+          (is (= "active" (:state (weaver/show rt (:id pending))))
               "nothing mutated: the point is still fillable with something else")))
       (testing "two sibling defers may both select the same target"
         (let [definition (workflow/bind-defers
@@ -3537,7 +3537,7 @@
               ids (mapv :id (filter #(= "defer" (:role %)) (:ready result)))]
           (workflow/defer! "siblings" :wt-two-step {} {:step (first ids)})
           (workflow/defer! "siblings" :wt-two-step {} {:step (second ids)})
-          (is (every? #(= "procedure" (get-in (repl/strand %) [:attributes :workflow/role])) ids)
+          (is (every? #(= "procedure" (get-in (weaver/show rt %) [:attributes :workflow/role])) ids)
               "neither sibling is in the other's ancestry, so neither is a cycle"))))))
 
 (deftest a-poured-expansion-keeps-its-fixed-call-ancestry
@@ -3605,14 +3605,14 @@
       (workflow/start! "regen" #'defer-cycle-a {})
       (workflow/defer! "regen" :wt-cycle-b)
       (let [inner (first (filter #(= "defer" (:role %)) (workflow/ready "regen")))
-            path (get-in (repl/strand (:id inner)) [:attributes :workflow/defer-path])
+            path (get-in (weaver/show rt (:id inner)) [:attributes :workflow/defer-path])
             restarted (mapv #(assoc % :fingerprint (str "0000000000000000" (:fingerprint %)))
                             path)]
         (is (= 2 (count path)))
         (is (every? :definition path)
             "every ancestry entry of a registered routine records its symbol")
         ;; exactly what a later generation persists: same symbols, fresh digests
-        (repl/update! (:id inner) {:attributes {"workflow/defer-path" restarted}})
+        (weaver/update! rt (:id inner) {:attributes {"workflow/defer-path" restarted}})
         (let [thrown (try (workflow/defer! "regen" :wt-cycle-a {} {:step (:id inner)})
                           (catch clojure.lang.ExceptionInfo e e))]
           (is (= :workflow/defer-cyclic (:reason (ex-data thrown)))
@@ -3649,7 +3649,7 @@
           (let [after-c (workflow/complete! "fanout")]
             (is (= ["Step c"] (mapv :title (:ready after-c)))
                 "step c waits for the whole expansion, then becomes ready")
-            (is (= "closed" (:state (repl/strand (:id pending)))))))))))
+            (is (= "closed" (:state (weaver/show rt (:id pending)))))))))))
 
 (deftest defer-into-an-empty-target-does-not-stall-the-run
   ;; An empty or fully-conditioned-out target yields no exits, so the join must
@@ -3662,7 +3662,7 @@
       (workflow/complete! "empty-target")
       (let [pending (workflow/ready-step "empty-target")
             filled (workflow/defer! "empty-target" :wt-empty)]
-        (is (= "closed" (:state (repl/strand (:id pending))))
+        (is (= "closed" (:state (weaver/show rt (:id pending))))
             "a join with no expansion to wait for closes immediately")
         (is (= ["Step c"] (mapv :title (:ready filled)))
             "the declaring workflow continues instead of stalling"))
@@ -3719,7 +3719,7 @@
           (is (some? (ex-data thrown)) "the rejected apply surfaces as a failure"))
         (is (= before (count (:strands (graph/subgraph rt [root-id]))))
             "no expansion strand was poured")
-        (let [still (repl/strand (:id pending))]
+        (let [still (weaver/show rt (:id pending))]
           (is (= "active" (:state still)))
           (is (= "defer" (get-in still [:attributes :workflow/role]))
               "the point was not converted to a join by the failed batch"))))))
@@ -3747,12 +3747,12 @@
             result (workflow/start! "defer-cutover" definition {})
             defer-id (:id (first (filter #(= "defer" (:role %)) (:ready result))))
             go-id (:id (first (filter #(= "checkpoint" (:role %)) (:ready result))))]
-        (is (= "active" (:state (repl/strand defer-id))))
+        (is (= "active" (:state (weaver/show rt defer-id))))
         ;; the selector is required because a pending defer is ready beside the
         ;; checkpoint, and trusted choose! resolves the sole ready step by id
         ;; rather than filtering by role — the CLI is where roles partition.
         (workflow/choose! "defer-cutover" :advance {} {:step go-id})
-        (is (= "closed" (:state (repl/strand defer-id)))
+        (is (= "closed" (:state (weaver/show rt defer-id)))
             "the route's cutover force-closes the pending defer with the old root")
         (is (not-any? #(= defer-id (:id %))
                       (mapcat :events (workflow/run-history "defer-cutover")))
@@ -3780,7 +3780,7 @@
           (is (= #{"Step a" "Plan default" "Ship it" "Step c"} (set (map :title events)))
               "the expansion's own steps are ordinary closes; the join is not one")
           (is (= "wt-two-step"
-                 (get-in (repl/strand defer-id) [:attributes :workflow/deferred-workflow]))
+                 (get-in (weaver/show rt defer-id) [:attributes :workflow/deferred-workflow]))
               "the selection is still readable on the strand itself"))))))
 
 (deftest the-removed-dispatch-and-transfer-surface-is-gone
