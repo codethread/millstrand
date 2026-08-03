@@ -327,11 +327,4 @@ Resolution is local first: `with-runtime` provides a dynamic value scoped to its
 
 ## When a spool leaves your workspace
 
-Everything above assumes the code is yours alone, running in your weaver, free to resolve the ambient runtime
-and stay informally structured. Even here, keep actual state runtime-owned and treat ambient resolution as
-the convenience — not unmanaged state. The moment other people run your spool, those liberties become bugs: a shared
-spool must work in any weaver runtime, including unpublished runtimes that coexist with others in a single
-JVM, so it takes the runtime explicitly as the first argument of every public function, keeps its state
-runtime-owned, registers behavior by symbol rather than closure, and never touches the ergonomics layer. Those
-rules, the helper namespaces that support them, and the git publishing and pinning story live in
-[writing shared spools](./writing-shared-spools.md) — the one step of the ladder this page does not cover.
+Everything above assumes the code is yours alone, running in your weaver, free to resolve the ambient runtime and stay informally structured. Even here, keep actual state runtime-owned and treat ambient resolution as the convenience — not unmanaged state. The moment other people run your spool, those liberties become bugs: a shared spool must work in any weaver runtime, including unpublished runtimes that coexist with others in a single JVM, so it takes the runtime explicitly as the first argument of every public function, keeps its state runtime-owned, registers behavior by symbol rather than closure, and never touches the ergonomics layer. Those rules, the helper namespaces that support them, and the git publishing and pinning story live in [writing shared spools](./writing-shared-spools.md) — the one step of the ladder this page does not cover.
