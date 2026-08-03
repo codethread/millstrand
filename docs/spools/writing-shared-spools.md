@@ -683,7 +683,9 @@ Six kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, `:even
 (skein/defquery stalled-shell-gates
   "Return active shell gates whose executor needs attention."
   {}
-  stalled-shell-gates)
+  [:and [:= :state "active"]
+   [:= [:attr "workflow/gate"] "shell"]
+   [:exists [:attr "gate/error"]]])
 ```
 
 A kind the running runtime has not declared fails publication, naming the module and the unknown kinds.
