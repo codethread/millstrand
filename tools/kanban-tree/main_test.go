@@ -113,6 +113,14 @@ func TestDecodeRefusesInvalidExportShapes(t *testing.T) {
 			`{"root-id":"df2f","strands":[{"id":"df2f","title":"Root","state":"open","created_at":"now"}]}`,
 			`invalid state "open"`,
 		},
+		"invalid lane": {
+			`{"root-id":"df2f","strands":[{"id":"df2f","title":"Root","state":"active","created_at":"now","attributes":{"kanban/lane":"backlog"}}]}`,
+			`attribute "kanban/lane" has invalid value "backlog"`,
+		},
+		"invalid outcome": {
+			`{"root-id":"df2f","strands":[{"id":"df2f","title":"Root","state":"closed","created_at":"now","attributes":{"kanban/outcome":"stalled"}}]}`,
+			`attribute "kanban/outcome" has invalid value "stalled"`,
+		},
 		"duplicate id": {
 			`{"root-id":"df2f","strands":[` + root + `,` + root + `]}`,
 			"duplicate strand id df2f",

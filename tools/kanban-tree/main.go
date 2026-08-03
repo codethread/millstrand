@@ -1,4 +1,4 @@
-// Command kanban-tree prints one kanban card as an ASCII tree.
+// Command kanban-tree prints one kanban card as a terminal tree.
 //
 // It reads a card's parent-of subtree through `strand kanban-export` and draws
 // the epic, its features, and their tasks with their titles and derived
@@ -63,7 +63,7 @@ func run() (int, error) {
 	width := flags.Int("width", -1, "clip lines to this many columns (0 disables clipping)")
 	flags.Usage = func() {
 		_, _ = fmt.Fprint(flags.Output(), "usage: kanban-tree [flags] <card-id>\n\n"+
-			"Print a kanban epic or feature card as an ASCII tree of titles,\n"+
+			"Print a kanban epic or feature card as a terminal tree of titles,\n"+
 			"statuses, and the dependencies between them.\n\nflags:\n")
 		flags.PrintDefaults()
 	}

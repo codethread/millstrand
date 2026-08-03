@@ -78,11 +78,46 @@ func validateAttributes(strands []strand) error {
 			if err := json.Unmarshal(raw, &v); err != nil {
 				return fmt.Errorf("strand %s attribute %q: %w", s.ID, key, err)
 			}
-			switch v.(type) {
-			case string, bool, float64:
+			var text string
+			switch t := v.(type) {
+			case string:
+				text = t
+			case bool:
+				text = strconv.FormatBool(t)
+			case float64:
+				text = strconv.FormatFloat(t, 'f', -1, 64)
 			default:
 				return fmt.Errorf("strand %s attribute %q has unsupported %T value", s.ID, key, v)
 			}
+			if err := validateAttributeValue(s.ID, key, text); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateAttributeValue(id, key, value string) error {
+	valid := func(values ...string) bool {
+		for _, candidate := range values {
+			if value == candidate {
+				return true
+			}
+		}
+		return false
+	}
+	switch key {
+	case attrLane:
+		if !valid("refinement", "pending", "claimed", "in_review") {
+			return fmt.Errorf("strand %s attribute %q has invalid value %q", id, key, value)
+		}
+	case attrOutcome:
+		if !valid("done", "abandoned") {
+			return fmt.Errorf("strand %s attribute %q has invalid value %q", id, key, value)
+		}
+	case attrPriority:
+		if !valid("p1", "p2", "p3", "p4") {
+			return fmt.Errorf("strand %s attribute %q has invalid value %q", id, key, value)
 		}
 	}
 	return nil

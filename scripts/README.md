@@ -54,7 +54,7 @@ Ralph expects a running weaver for the workspace it targets. It only ever reads 
 
 ## Kanban tree
 
-`kanban-tree` prints one kanban card, an epic or a feature, as an ASCII tree. The shape of the work reads at a glance: what the card contains, and the order it has to happen in. It is a Go program under `tools/kanban-tree`, built into `./bin/kanban-tree` by `make build` (or `make kanban-tree` on its own). Like ralph, it is repo-local development tooling in its own Go module: no Skein release, no spool.
+`kanban-tree` prints one kanban card, an epic or a feature, as a terminal tree. The shape of the work reads at a glance: what the card contains, and the order it has to happen in. It is a Go program under `tools/kanban-tree`, built into `./bin/kanban-tree` by `make build` (or `make kanban-tree` on its own). Like ralph, it is repo-local development tooling in its own Go module: no Skein release, no spool.
 
 ```sh
 ./bin/kanban-tree <epic-id>            # the epic and its feature cards
