@@ -642,6 +642,7 @@ Registry entries are authored, not imperatively registered. `skein.api.skein.alp
 | `defpattern` | `:patterns`, a weave pattern | `:spec` |
 | `defhook` | `:hooks`, a synchronous pre-commit hook | `:types` |
 | `defhandler` | `:events`, an async post-commit handler | `:types` |
+| `defbin` | `:bins`, a discoverable executable | `:executable` |
 
 Each form takes a name, a docstring, an options map, and then the body its kind needs: an argument vector and body for the handler kinds, a query definition value for `defquery`. Every form also accepts `{:override? true}` to record explicit intent to shadow a lower layer. `defop`'s `:arg-spec` is the declared argv shape [`skein.api.cli.alpha`](./api/cli.api.md) parses and renders help from, so a registered op never writes its own usage strings.
 
@@ -652,6 +653,8 @@ The module's coordinate does not affect these registry rules. A workspace module
 Collection only happens under a module contribution. Evaluating a form at the REPL, or reloading source with `runtime/reload-code!`, defines the Var and publishes nothing. The same rule explains removal: a refresh replaces an owner's whole partition for a kind, so dropping a form from the source drops its entry at the next refresh. There is no unregister call to remember.
 
 Domain spools own forms for their own kinds the same way — `skein.spools.workflow/defworkflow` and `defexecutor`, `skein.spools.cron/defjob`, `skein.spools.chime/defrule`. Module lifecycle effects are declared with `skein.api.lifecycle.alpha`: `defresource`, `defseed`, and `defreconcile`.
+
+`defbin` contributes a module-owned executable declaration rather than a weaver-lifetime runtime registration. `mill bin plan` discovers the effective `:bins` entries, and `mill bin run` executes the selected command in the caller's process with the selected workspace in `SKEIN_WORKSPACE`; the declaration may name a string executable or an anchored family/root path and an argv build recipe.
 
 The direct registration functions still exist and still work: `graph/register-query!`, `patterns/register-pattern!`, `events/register-handler!`, `hooks/register-hook!`, and `weaver/register-op!`. Each writes one entry under the direct-registration owner for the weaver lifetime, which makes them a good REPL tool for trying something out. Anything a module owns belongs in a form. A direct write is also not serialized against an in-flight `refresh!`, so one that lands mid-publication can be overwritten silently ([SPEC-003.C23](../devflow/specs/repl-api.md) constraint F20, explained in [customising your workspace](./spools/customisation.md#reloading-a-live-weaver)).
 
