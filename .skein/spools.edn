@@ -1,7 +1,7 @@
 {:spools {codethread/kanban
  {:git/url "https://github.com/codethread/kanban.spool.git",
-  :git/sha "398a1610d094c85ad9c6691dafd213aaa35d73de",
-  :git/tag "v20",
+  :git/sha "b06509fce7b278eed6404e094282887f0f89149c",
+  :git/tag "v21",
   :roots {codethread/kanban "."}},
  skein.spools/chime {:skein/source-root "spools/chime"},
  skein.spools/unsafe-text-search
