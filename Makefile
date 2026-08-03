@@ -1,12 +1,14 @@
-.PHONY: build ralph install dash api-docs test-go docs-site docs-serve docs-check fmt fmt-check fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
+.PHONY: build ralph kanban-tree install dash api-docs test-go docs-site docs-serve docs-check fmt fmt-check fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
 
 GO_CLI := ./cli/cmd/strand
 MILL_CLI := ./cli/cmd/mill
 # ralph is repo-local development tooling in its own module: it ships with no
 # Skein release, so it stays out of the published skein-strand-cli module.
 RALPH_CLI := ./tools/ralph
+# kanban-tree is repo-local development tooling too, on the same terms.
+KANBAN_TREE_CLI := ./tools/kanban-tree
 # Every Go module in the workspace; the quality targets iterate this list.
-GO_MODULES := cli tools/ralph
+GO_MODULES := cli tools/ralph tools/kanban-tree
 # BuildID falls back to the compiled-in "dev" when git is unavailable; it is
 # informational (skew attribution), so unlike InstalledSource it may degrade.
 BUILD_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
@@ -19,7 +21,7 @@ QUICKDOC_SCRIPT := scripts/generate_api_docs.clj
 
 # repo-local build for agents/worktrees validating CLI changes without touching
 # the user's global install; run the resulting ./bin/strand and ./bin/mill directly
-build: ralph
+build: ralph kanban-tree
 	mkdir -p ./bin
 	go build -ldflags "$(SOURCE_LDFLAGS)" -o ./bin/strand $(GO_CLI)
 	go build -ldflags "$(SOURCE_LDFLAGS)" -o ./bin/mill $(MILL_CLI)
@@ -29,6 +31,12 @@ build: ralph
 ralph:
 	mkdir -p ./bin
 	go build -o ./bin/ralph $(RALPH_CLI)
+
+# kanban-tree reads the board through the strand binary beside it, on the same
+# terms as ralph.
+kanban-tree:
+	mkdir -p ./bin
+	go build -o ./bin/kanban-tree $(KANBAN_TREE_CLI)
 
 # stamp the user's global binaries with the CANONICAL repo checkout (the shared
 # .git common dir's parent), not the invoking worktree, so an install run from a
