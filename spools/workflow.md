@@ -204,17 +204,7 @@ The pull-request model in `test/skein/spools/workflow_test.clj` (`workflow-pr-fl
 start! ──▶ ready / ready-step ──▶ complete! / choose! ──▶ (repeat) ──▶ auto-close
 ```
 
-- `(start! run-id workflow params opts)` — fails if `run-id` already has an
-  active root; pours the workflow with `workflow/run-id run-id`; returns the
-  `{:ready [...] :done boolean}` result. `workflow` may be a pre-built map, a
-  definition var (`#'my.ns/flow`), or a registered workflow keyword. Var and
-  keyword starts derive `:definition`; a registered name also records
-  `workflow/definition-name` and must declare the `:start` entrypoint — the
-  refusal happens before anything is poured. The definition's `:defaults` merge
-  under `params` first, so what the run compiles
-  and persists is the resolved map. When `:context` is absent it defaults from
-  those resolved params, stringifying keyword values and failing loudly on
-  non-JSON-safe values (pass `:context` explicitly for those cases).
+- `(start! run-id workflow params opts)` — fails if `run-id` already has an active root; pours the workflow with `workflow/run-id run-id`; returns the `{:ready [...] :done boolean}` result. `workflow` may be a pre-built map, a definition var (`#'my.ns/flow`), or a registered workflow keyword. Var and keyword starts derive `:definition`; a registered name also records `workflow/definition-name` and must declare the `:start` entrypoint — the refusal happens before anything is poured. The definition's `:defaults` merge under `params` first, so what the run compiles and persists is the resolved map. When `:context` is absent it defaults from those resolved params, stringifying keyword values while preserving qualified `ns/name` spelling, and failing loudly on non-JSON-safe values (pass `:context` explicitly for those cases).
 - `(ready run-id)` / `(ready run-id selector)` — all currently ready,
   agent-facing step views for the run (vector, possibly empty), in definition
   order: the order the author wrote, with each loop round in its own order. Each
@@ -301,7 +291,7 @@ A `call` expands to its inner steps plus a `procedure`-role **join** step that d
   exist for the audit trail, so closing a step can record what happened —
   in your own namespaced keys. The engine keeps no prose field of its own;
   passing the removed `:notes` fails as `workflow/notes-removed`.
-- `:context` — keyword-keyed map shallow-merged over the root's `workflow/context` in the closing transaction. A supplied key replaces its old value whole, including a nested map. Values must be JSON-safe; keyword values become strings.
+- `:context` — keyword-keyed map shallow-merged over the root's `workflow/context` in the closing transaction. A supplied key replaces its old value whole, including a nested map. Values must be JSON-safe; keyword values become strings, preserving `ns/name` for qualified keywords.
 - `:by` — actor identity, recorded as `"workflow/outcome-by"`. **Mandatory**
   when closing a `gate` step (see [§3 "Gates"](#3-definition-layer)); ignored on non-gate steps.
 

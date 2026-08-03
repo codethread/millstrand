@@ -536,6 +536,29 @@
                        [:attributes :workflow/context]))
             "last write wins shallowly, including replacing a nested value")))))
 
+(deftest workflow-context-preserves-qualified-keyword-values-on-the-wire
+  (with-runtime
+    (fn [rt _]
+      (let [definition (workflow/workflow
+                        "Qualified context run"
+                        (workflow/step :a "Do A" :self))
+            [step] (:ready (workflow/start! "qualified-context-run" definition
+                                            {:branch :vcs/branch
+                                             :nested {:source :forge/github}}))
+            root-id (:id (workflow/current-root "qualified-context-run"))]
+        (is (= {:branch "vcs/branch"
+                :nested {:source "forge/github"}}
+               (get-in (weaver/show rt root-id) [:attributes :workflow/context]))
+            "persisted context keeps the namespace in qualified keyword values")
+        (workflow/complete! "qualified-context-run"
+                            {:context {:decision :review/approved}})
+        (is (= "closed" (:state (weaver/show rt (:id step)))))
+        (is (= {:branch "vcs/branch"
+                :nested {:source "forge/github"}
+                :decision "review/approved"}
+               (get-in (weaver/show rt root-id) [:attributes :workflow/context]))
+            "complete context merge preserves qualified keyword values too")))))
+
 (defn reject-complete-batch-hook [ctx]
   (throw (ex-info "complete batch rejected" {:code "policy/rejected" :ctx ctx})))
 
