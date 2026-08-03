@@ -38,8 +38,13 @@ type strand struct {
 	Attributes map[string]json.RawMessage `json:"attributes"`
 }
 
-// attr returns a scalar attribute as a string. Structured values (a nested
-// token map, a list) read as empty: this tool wants attributes for display.
+// displayAttributes are the scalar values kanban-tree reads. Validate them
+// where the export enters so corrupt board data cannot become a plausible tree.
+var displayAttributes = []string{
+	attrCard, attrTask, attrType, attrLane, attrOutcome, attrPriority, attrOwner,
+}
+
+// attr returns a validated scalar attribute as a string.
 func (s strand) attr(key string) string {
 	raw, ok := s.Attributes[key]
 	if !ok {
@@ -47,7 +52,7 @@ func (s strand) attr(key string) string {
 	}
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return ""
+		panic(fmt.Sprintf("validated attribute %q on %s: %v", key, s.ID, err))
 	}
 	switch t := v.(type) {
 	case string:
@@ -57,8 +62,29 @@ func (s strand) attr(key string) string {
 	case float64:
 		return strconv.FormatFloat(t, 'f', -1, 64)
 	default:
-		return ""
+		panic(fmt.Sprintf("validated attribute %q on %s has unsupported %T value", key, s.ID, v))
 	}
+}
+
+func validateAttributes(strands []strand) error {
+	for _, s := range strands {
+		for _, key := range displayAttributes {
+			raw, ok := s.Attributes[key]
+			if !ok {
+				continue
+			}
+			var v any
+			if err := json.Unmarshal(raw, &v); err != nil {
+				return fmt.Errorf("strand %s attribute %q: %w", s.ID, key, err)
+			}
+			switch v.(type) {
+			case string, bool, float64:
+			default:
+				return fmt.Errorf("strand %s attribute %q has unsupported %T value", s.ID, key, v)
+			}
+		}
+	}
+	return nil
 }
 
 // kanban reports whether the strand is board furniture — a card or a task —
@@ -92,6 +118,9 @@ func decode(r io.Reader) (export, error) {
 	}
 	if out.RootID == "" {
 		return export{}, errors.New("kanban-export payload carries no root-id")
+	}
+	if err := validateAttributes(out.Strands); err != nil {
+		return export{}, fmt.Errorf("invalid kanban-export attribute: %w", err)
 	}
 	return out, nil
 }

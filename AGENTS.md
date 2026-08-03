@@ -27,7 +27,7 @@ make build                              # repo-local ./bin/strand, ./bin/mill, .
 mill start                              # supervisor, in a durable terminal
 mill init [--workspace <dir>]           # create/complete a workspace
 mill weaver start|status|stop|repl [--workspace <dir>]
-make dash                               # interactive kanban TUI; ./bin/kanban-tree <card-id> [--tasks] draws one card (scripts/README.md)
+make dash                               # interactive kanban TUI from the pinned spool
 
 make test-warm NS="ns..."               # warm REPL to iterate a slice — never a Done-when gate
 clojure -M:test <ns...>                 # cold focused run — the per-slice Done-when gate

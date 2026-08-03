@@ -302,16 +302,19 @@ func (m *model) status(id string) string {
 			return outcome
 		}
 	}
+	if s.attr(attrTask) == "true" {
+		for _, b := range m.blockers[id] {
+			if m.nodes[b].State == stateActive {
+				return "blocked"
+			}
+		}
+		return "ready"
+	}
 	if lane := s.attr(attrLane); lane != "" {
 		if lane == "in_review" {
 			return "review"
 		}
 		return lane
-	}
-	for _, b := range m.blockers[id] {
-		if m.nodes[b].State == stateActive {
-			return "blocked"
-		}
 	}
 	return "ready"
 }

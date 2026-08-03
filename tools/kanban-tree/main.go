@@ -90,7 +90,10 @@ func run() (int, error) {
 		return exitUsage, fmt.Errorf("expected one card id, got %d", len(args))
 	}
 
-	opts.width = resolveWidth(*width)
+	opts.width, err = resolveWidth(*width)
+	if err != nil {
+		return exitError, err
+	}
 	opts.colour = !*noColour && os.Getenv("NO_COLOR") == "" && isTerminal(os.Stdout)
 	opts.theme = unicodeTheme()
 	if *ascii || !utf8Locale() {
@@ -191,23 +194,31 @@ func resolveStrand(override string) (string, error) {
 }
 
 // resolveWidth turns the flag into a column budget: an explicit value wins,
-// -1 asks for the terminal's own width, and 0 clips nothing.
-func resolveWidth(flagged int) int {
+// -1 asks for the terminal's own width, and 0 deliberately disables clipping.
+func resolveWidth(flagged int) (int, error) {
 	if flagged >= 0 {
-		return flagged
+		return flagged, nil
 	}
-	if columns, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && columns > 0 {
-		return columns
+	if value, set := os.LookupEnv("COLUMNS"); set {
+		columns, err := strconv.Atoi(value)
+		if err != nil || columns <= 0 {
+			return 0, fmt.Errorf("invalid COLUMNS value %q", value)
+		}
+		return columns, nil
 	}
 	if !isTerminal(os.Stdout) {
-		return 0
+		return 0, nil
 	}
-	if out, err := exec.Command("tput", "cols").Output(); err == nil {
-		if columns, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && columns > 0 {
-			return columns
-		}
+	out, err := exec.Command("tput", "cols").Output()
+	if err != nil {
+		return 0, fmt.Errorf("determine terminal width with tput cols: %w", err)
 	}
-	return 120
+	value := strings.TrimSpace(string(out))
+	columns, err := strconv.Atoi(value)
+	if err != nil || columns <= 0 {
+		return 0, fmt.Errorf("invalid tput cols output %q", value)
+	}
+	return columns, nil
 }
 
 // utf8Locale reports whether the terminal has told us it can render more than

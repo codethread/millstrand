@@ -94,6 +94,14 @@ func TestFetchRefusesARootlessPayload(t *testing.T) {
 	}
 }
 
+func TestDecodeRefusesMalformedDisplayAttributes(t *testing.T) {
+	payload := `{"root-id":"df2f","strands":[{"id":"df2f","attributes":{"kanban/card":{}}}]}`
+	_, err := decode(strings.NewReader(payload))
+	if err == nil || !strings.Contains(err.Error(), `strand df2f attribute "kanban/card"`) {
+		t.Fatalf("err = %v, want the strand and malformed attribute", err)
+	}
+}
+
 // `kanban-tree <card> --tasks` reads naturally, so a flag after the card id
 // must still be a flag rather than a second positional.
 func TestParseInterspersedTakesFlagsEitherSideOfTheCardID(t *testing.T) {
@@ -120,13 +128,24 @@ func TestParseInterspersedTakesFlagsEitherSideOfTheCardID(t *testing.T) {
 
 func TestResolveWidthPrefersExplicitThenColumns(t *testing.T) {
 	t.Setenv("COLUMNS", "77")
-	if got := resolveWidth(42); got != 42 {
-		t.Errorf("explicit width = %d, want 42", got)
+	for _, want := range []int{42, 77, 0} {
+		flagged := want
+		if want == 77 {
+			flagged = -1
+		}
+		got, err := resolveWidth(flagged)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("width = %d, want %d", got, want)
+		}
 	}
-	if got := resolveWidth(-1); got != 77 {
-		t.Errorf("width from COLUMNS = %d, want 77", got)
-	}
-	if got := resolveWidth(0); got != 0 {
-		t.Errorf("width = %d, want clipping disabled", got)
+}
+
+func TestResolveWidthRefusesInvalidColumns(t *testing.T) {
+	t.Setenv("COLUMNS", "wide")
+	if _, err := resolveWidth(-1); err == nil || !strings.Contains(err.Error(), `COLUMNS value "wide"`) {
+		t.Fatalf("err = %v, want the invalid COLUMNS value", err)
 	}
 }

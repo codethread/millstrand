@@ -201,7 +201,7 @@ func TestStatusDerivation(t *testing.T) {
 	ex := sketchExport()
 	ex.Strands = append(ex.Strands,
 		feature("drop", "Abandoned idea", stateClosed, "0008", map[string]string{attrLane: "", attrOutcome: "abandoned"}),
-		task("t2", "Cut the tag", stateActive, "0009"),
+		task("t2", "Cut the tag", stateActive, "0009", map[string]string{attrLane: "claimed"}),
 	)
 	ex.ParentOf = append(ex.ParentOf, edge{From: "df2f", To: "drop"}, edge{From: "9duw", To: "t2"})
 	ex.DependsOn = append(ex.DependsOn, edge{From: "t2", To: "t1"})
