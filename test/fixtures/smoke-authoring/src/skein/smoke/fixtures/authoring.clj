@@ -31,7 +31,7 @@
   [ctx]
   {:echoed (:text (:op/args ctx))})
 
-(skein/defquery smoke-authored-query
+(skein/defquery smoke-authored
   "Return strands owned by the authoring-forms fixture."
   {:usage "strand list --query smoke-authored"}
   [:= [:attr :owner] "authored"])

@@ -59,7 +59,7 @@ Function.
 Open the code executor handler and worker resources.
 <p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L107-L119">Source</a></sub></p>
 
-## <a name="skein.spools.executors.code/stalled-code-gates-query">`stalled-code-gates-query`</a>
+## <a name="skein.spools.executors.code/stalled-code-gates">`stalled-code-gates`</a>
 
 
 

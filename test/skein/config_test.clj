@@ -748,7 +748,7 @@
                                         :attributes {:kanban/task "true"}})
             non-task (weaver/add! rt {:title "Non-task child" :state "active"})
             blocker (weaver/add! rt {:title "Blocker" :state "active"})
-            query (var-get (requiring-resolve 'config/kanban-feature-work-query))]
+            query (var-get (requiring-resolve 'config/kanban-feature-work))]
         (weaver/update! rt (:id feature)
                         {:edges [{:type "parent-of" :to (:id ready-task)}
                                  {:type "parent-of" :to (:id blocked-task)}
@@ -939,9 +939,9 @@
                                        (= title "Refinement card") (assoc :kanban/card "true"
                                                                           :kanban/lane "refinement"))}))
       (is (= #{"Step" "Checkpoint" "Plain task" "Pending card"}
-             (set (map :title (weaver/list rt (var-get (requiring-resolve 'config/work-query)) {})))))
+             (set (map :title (weaver/list rt (var-get (requiring-resolve 'config/work)) {})))))
       (is (= #{"Step" "Checkpoint" "Plain task" "Pending card"}
-             (set (map :title (weaver/ready rt (var-get (requiring-resolve 'config/work-query)) {}))))))))
+             (set (map :title (weaver/ready rt (var-get (requiring-resolve 'config/work)) {}))))))))
 
 (deftest reviewers-file-registers-declarative-roster
   ;; exercises the same contribution path init.clj's reviewers module runs

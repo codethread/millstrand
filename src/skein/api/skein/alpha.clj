@@ -5,8 +5,7 @@
   while a runtime module source is evaluated. The retained declaration record is
   replayed for image modules, so source and image activation publish the same
   owner-complete partitions."
-  (:require [clojure.string :as str]
-            [skein.api.runtime.alpha :as runtime]
+  (:require [skein.api.runtime.alpha :as runtime]
             [skein.core.contribution :as contribution]))
 
 (defmacro defop
@@ -34,7 +33,7 @@
      (def ~form-name ~doc
        (contribution/query-declaration '~form-name ~opts ~definition))
      (runtime/collect-entry! :queries
-                             ~(str/replace (str form-name) #"-query$" "")
+                             ~(str form-name)
                              ~form-name
                              (select-keys ~opts #{:override?}))
      (var ~form-name)))

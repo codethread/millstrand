@@ -17,7 +17,7 @@
 ;; Named queries
 ;; ---------------------------------------------------------------------------
 
-(skein/defquery run-active-query
+(skein/defquery run-active
   "Parameterized query for the active strands of one workflow run."
   {:usage "strand list --query run-active --param run-id=<run-id>"}
   {:params [:run-id]
@@ -25,7 +25,7 @@
            [:= :state "active"]
            [:= [:attr "workflow/run-id"] [:param :run-id]]]})
 
-(skein/defquery kanban-feature-work-query
+(skein/defquery kanban-feature-work
   "Parameterized query for active direct task children of one feature card."
   {:usage "strand ready --query kanban-feature-work --param feature=<feature-id>"}
   {:params [:feature]
@@ -34,28 +34,28 @@
            [:= [:attr "kanban/task"] "true"]
            [:edge/in "parent-of" [:= :id [:param :feature]]]]})
 
-(skein/defquery workflow-runs-query
+(skein/defquery workflow-runs
   "Query for active workflow roots (any family)."
   {:usage "strand list --query workflow-runs --limit 500"}
   [:and
    [:= :state "active"]
    [:= [:attr "workflow/role"] "root"]])
 
-(skein/defquery merge-lock-query
+(skein/defquery merge-lock
   "Query for the active singleton landing lock."
   {:usage "strand list --query merge-lock"}
   [:and
    [:= :state "active"]
    [:= [:attr "kind"] "merge-lock"]])
 
-(skein/defquery merge-queue-query
+(skein/defquery merge-queue
   "Query for the runs queued to merge, including the one holding the lock."
   {:usage "strand list --query merge-queue"}
   [:and
    [:= :state "active"]
    [:= [:attr "kind"] "merge-queue-entry"]])
 
-(skein/defquery work-query
+(skein/defquery work
   "Query for active actionable work, excluding workflow plumbing, agent run records, and inert kanban refinement cards."
   {:usage "strand ready --query work"}
   [:and

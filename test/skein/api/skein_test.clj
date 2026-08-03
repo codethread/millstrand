@@ -100,6 +100,8 @@
               (skein/defbin sample-bin "Sample executable."
                 {:executable "sample-bin" :build ["make" "sample-bin"]}))))]
     (is (= #{:ops :queries :patterns :hooks :events :bins} (set (keys contribution))))
+    (is (= [:= :state "active"]
+           (get-in contribution [:queries :entries "sample-query"])))
     (is (= #{"sample"} (get-in contribution [:ops :overrides])))
     (is (= 'skein.api.skein-test/sample-op
            (get-in contribution [:ops :entries "sample" :fn])))
