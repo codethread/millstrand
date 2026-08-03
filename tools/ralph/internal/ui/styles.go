@@ -2,36 +2,46 @@ package ui
 
 import "github.com/charmbracelet/lipgloss"
 
-// The palette is adaptive so the same build reads on light and dark terminals.
+// The palette is the terminal's own ANSI 16, not a scheme of ralph's: every
+// colour below names a slot the user's theme already defines, so the dashboard
+// follows whatever they are looking at — light, dark, or a switch mid-run —
+// without asking the terminal what its background is. Plain text carries no
+// colour at all, which leaves it the terminal's default foreground.
 var (
-	colBase    = lipgloss.AdaptiveColor{Light: "#3c3c43", Dark: "#c8ccd4"}
-	colMuted   = lipgloss.AdaptiveColor{Light: "#7a7a85", Dark: "#7f8694"}
-	colAccent  = lipgloss.AdaptiveColor{Light: "#0b6bcb", Dark: "#7aa2f7"}
-	colOK      = lipgloss.AdaptiveColor{Light: "#137547", Dark: "#9ece6a"}
-	colWarn    = lipgloss.AdaptiveColor{Light: "#a05a00", Dark: "#e0af68"}
-	colErr     = lipgloss.AdaptiveColor{Light: "#b3261e", Dark: "#f7768e"}
-	colSubtle  = lipgloss.AdaptiveColor{Light: "#d5d7de", Dark: "#3b4048"}
-	colInverse = lipgloss.AdaptiveColor{Light: "#ffffff", Dark: "#1a1b26"}
+	colBase   lipgloss.TerminalColor = lipgloss.NoColor{}
+	colMuted  lipgloss.TerminalColor = lipgloss.ANSIColor(8) // bright black
+	colAccent lipgloss.TerminalColor = lipgloss.ANSIColor(4) // blue
+	colOK     lipgloss.TerminalColor = lipgloss.ANSIColor(2) // green
+	colWarn   lipgloss.TerminalColor = lipgloss.ANSIColor(3) // yellow
+	colErr    lipgloss.TerminalColor = lipgloss.ANSIColor(1) // red
 )
 
 var (
-	styleTitle    = lipgloss.NewStyle().Bold(true).Foreground(colInverse).Background(colAccent).Padding(0, 1)
-	styleLabel    = lipgloss.NewStyle().Foreground(colMuted)
-	styleValue    = lipgloss.NewStyle().Foreground(colBase)
-	styleStrong   = lipgloss.NewStyle().Foreground(colBase).Bold(true)
-	styleAccent   = lipgloss.NewStyle().Foreground(colAccent)
-	styleOK       = lipgloss.NewStyle().Foreground(colOK)
-	styleWarn     = lipgloss.NewStyle().Foreground(colWarn)
-	styleErr      = lipgloss.NewStyle().Foreground(colErr)
-	styleMuted    = lipgloss.NewStyle().Foreground(colMuted)
-	styleCursor   = lipgloss.NewStyle().Foreground(colInverse).Background(colAccent)
-	styleSelected = lipgloss.NewStyle().Foreground(colBase).Background(colSubtle)
+	// Reverse swaps the terminal's own foreground and background, so the title
+	// chip and the cursor row stay legible under any theme.
+	styleTitle    = lipgloss.NewStyle().Bold(true).Reverse(true).Padding(0, 1)
+	styleCursor   = lipgloss.NewStyle().Reverse(true)
+	styleSelected = lipgloss.NewStyle().Bold(true)
 
+	styleValue  = lipgloss.NewStyle().Foreground(colBase)
+	styleStrong = lipgloss.NewStyle().Bold(true)
+	styleAccent = lipgloss.NewStyle().Foreground(colAccent)
+	styleOK     = lipgloss.NewStyle().Foreground(colOK)
+	styleWarn   = lipgloss.NewStyle().Foreground(colWarn)
+	styleErr    = lipgloss.NewStyle().Foreground(colErr)
+	styleMuted  = lipgloss.NewStyle().Foreground(colMuted)
+
+	styleHeaderLabel      = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
 	stylePaneTitle        = lipgloss.NewStyle().Foreground(colMuted).Bold(true)
 	stylePaneTitleFocused = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
 
 	styleModal = lipgloss.NewStyle().
 			Border(lipgloss.DoubleBorder()).
 			BorderForeground(colWarn).
+			Padding(1, 3)
+
+	styleInfoModal = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colAccent).
 			Padding(1, 3)
 )

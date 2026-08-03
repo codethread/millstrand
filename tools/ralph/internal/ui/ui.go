@@ -24,6 +24,7 @@ type Session struct {
 	HarnessName   string
 	Settings      harness.Settings
 	MaxIterations int
+	FailureLimit  int
 	LogDir        string
 	Workspace     string
 	SkipPerms     bool

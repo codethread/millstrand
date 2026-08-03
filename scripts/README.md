@@ -13,7 +13,7 @@ These scripts support development and coordination in this repository. Run them 
 
 The binary generates the prompt and directs each run through the registered `ralph-iterate` workflow. Put steering, decisions, and extra context on the epic or feature card as notes so the next iteration can resume from the strands.
 
-By default it opens a full-screen dashboard: the epic and loop status on top, then the feature cards under the epic with the tasks and ready work of whatever is claimed, then a live log of the agent's actions, then one row per iteration. Enter expands the selected line — a tool call's full input, an iteration's stats, final message and transcript path. Press `?` for the full key list.
+By default it opens a full-screen dashboard: the epic and loop status on top, then the feature cards under the epic with the tasks and ready work of whatever is claimed, then a live log of the agent's actions, then one row per iteration. The log shows one iteration at a time: it clears when a new iteration starts, and moving the cursor in the iterations pane points it back at an earlier run. Only the last twenty iterations keep their log in the dashboard; older ones show where their transcript is instead, which is the whole stream anyway. Enter expands the selected line — a tool call's full input, an iteration's stats, final message and transcript path. `e` opens a run-info popup with the log directory, workspace, and the settings the run started with. Press `?` for the full key list.
 
 Two keys stop the run, and both are always shown in the footer:
 

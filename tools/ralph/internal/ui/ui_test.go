@@ -120,6 +120,83 @@ func TestQuitAfterTheLoopFinishes(t *testing.T) {
 	}
 }
 
+// TestLogPaneIsScopedToOneIteration covers both halves of the deal: a new
+// iteration takes the pane over, and the iterations pane can point it back at
+// an earlier run.
+func TestLogPaneIsScopedToOneIteration(t *testing.T) {
+	m := testModel(t, 120, 40)
+	m = update(t, m,
+		loop.IterationStarted{N: 1, Transcript: "/tmp/ralph/e1/iter-1.jsonl", At: time.Now()},
+		loop.StreamMsg{N: 1, Event: harness.Event{Kind: harness.KindTool, Label: "Bash", Text: "first-run-command"}},
+		loop.IterationFinished{N: 1, ExitCode: 0},
+		loop.IterationStarted{N: 2, Transcript: "/tmp/ralph/e1/iter-2.jsonl", At: time.Now()},
+		loop.StreamMsg{N: 2, Event: harness.Event{Kind: harness.KindTool, Label: "Bash", Text: "second-run-command"}},
+	)
+
+	view := m.View()
+	if strings.Contains(view, "first-run-command") {
+		t.Error("a new iteration must clear the log pane of the previous one")
+	}
+	if !strings.Contains(view, "second-run-command") {
+		t.Errorf("the live iteration's events must be showing:\n%s", view)
+	}
+
+	// Walking up the iterations pane scopes the log to the selected run.
+	m.focus = paneIters
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	if m.logView != 1 {
+		t.Fatalf("log is scoped to iteration %d, want 1", m.logView)
+	}
+	view = m.View()
+	if !strings.Contains(view, "first-run-command") {
+		t.Errorf("selecting iteration 1 must show its own events:\n%s", view)
+	}
+	if !strings.Contains(view, "ITERATION 1") {
+		t.Errorf("the pane title must name the iteration it is showing:\n%s", view)
+	}
+
+	// An iteration arriving while an earlier one is selected must not steal it.
+	m = update(t, m, loop.IterationStarted{N: 3, Transcript: "/tmp/ralph/e1/iter-3.jsonl", At: time.Now()})
+	if m.logView != 1 {
+		t.Errorf("log jumped to iteration %d while iteration 1 was selected", m.logView)
+	}
+
+	// Returning to the newest row resumes following the live run.
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	if m.logView != 3 || !m.logFollow {
+		t.Errorf("bottom of the iterations pane must follow the live run, got view %d follow %v",
+			m.logView, m.logFollow)
+	}
+}
+
+func TestRunInfoPopup(t *testing.T) {
+	m := update(t, testModel(t, 120, 40), tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	if !m.showInfo {
+		t.Fatal("e must open the run info popup")
+	}
+	view := m.View()
+	for _, want := range []string{"run info", "/tmp/ralph/e1", "claude", "fable"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("run info is missing %q:\n%s", want, view)
+		}
+	}
+
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if m.showInfo {
+		t.Error("esc must close the run info popup")
+	}
+}
+
+// TestHeaderShowsTheConfiguredFailureLimit guards against the limit being
+// reported as the default when the run was started with another one.
+func TestHeaderShowsTheConfiguredFailureLimit(t *testing.T) {
+	m := testModel(t, 120, 40)
+	m.session.FailureLimit = 7
+	if !strings.Contains(m.View(), "failures 0/7") {
+		t.Errorf("header must report the run's own failure limit:\n%s", m.View())
+	}
+}
+
 func TestViewFitsTheTerminal(t *testing.T) {
 	sizes := []struct{ w, h int }{{80, 24}, {120, 40}, {200, 60}, {60, 20}}
 	for _, size := range sizes {

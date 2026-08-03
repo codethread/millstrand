@@ -11,8 +11,28 @@ import (
 	"skein-ralph/internal/board"
 )
 
-// headerHeight is the fixed run-status block at the top of the screen.
-const headerHeight = 6
+// headerIndent aligns the run-status rows with the panes' own indentation.
+const headerIndent = "  "
+
+// failureLimit is the consecutive-failure budget the loop is running with; the
+// engine's own default stands in when the session did not carry one.
+func (m model) failureLimit() int {
+	if m.session.FailureLimit <= 0 {
+		return 3
+	}
+	return m.session.FailureLimit
+}
+
+// headerHeight is the run-status block plus the row that separates it from the
+// panes. The block breathes differently by terminal size, so it is measured
+// rather than fixed.
+func (m model) headerHeight() int {
+	return lipgloss.Height(m.renderHeader(m.width)) + 1
+}
+
+// airyHeader spends two rows on whitespace: one under the title, one above the
+// board. Short terminals need those rows for the panes instead.
+func (m model) airyHeader() bool { return m.height >= 24 }
 
 func (m model) helpLines() int {
 	if m.showHelp {
@@ -23,10 +43,15 @@ func (m model) helpLines() int {
 
 func (m model) footerHeight() int { return m.helpLines() + 1 }
 
-// contentHeight is everything between the header and the footer, minus the one
-// title line each pane spends.
+// paneChrome is what the three panes spend on themselves: a title line each,
+// and a blank line between them so a pane whose list has filled up still reads
+// as its own block.
+const paneChrome = 3 + 2
+
+// contentHeight is everything between the header and the footer that the panes
+// can fill with rows.
 func (m model) contentHeight() int {
-	return max(9, m.height-headerHeight-m.footerHeight()-3)
+	return max(9, m.height-m.headerHeight()-m.footerHeight()-paneChrome)
 }
 
 // layout splits the content rows across the three panes: board first because it
@@ -70,12 +95,14 @@ func (m model) View() string {
 		b.WriteString(m.renderDetail(inner))
 	case m.confirm != confirmNone:
 		b.WriteString(m.renderConfirm(inner))
+	case m.showInfo:
+		b.WriteString(m.renderInfo(inner))
 	default:
 		boardH, logH, iterH := m.layout()
 		b.WriteString(m.renderPane(paneBoard, "board", boardH, inner))
-		b.WriteByte('\n')
-		b.WriteString(m.renderPane(paneLog, "agent log", logH, inner))
-		b.WriteByte('\n')
+		b.WriteString("\n\n")
+		b.WriteString(m.renderPane(paneLog, m.logPaneTitle(), logH, inner))
+		b.WriteString("\n\n")
 		b.WriteString(m.renderPane(paneIters, "iterations", iterH, inner))
 	}
 	b.WriteByte('\n')
@@ -126,20 +153,73 @@ func (m model) renderHeader(width int) string {
 		cost = fmt.Sprintf(" · tokens %s in / %s out", compactInt(m.totalIn), compactInt(m.totalOut))
 	}
 
-	line := func(label, value string) string {
-		return truncate(styleLabel.Render(pad(label, 7))+value, width)
+	failStyle := styleValue
+	switch {
+	case m.failures >= m.failureLimit():
+		failStyle = styleErr
+	case m.failures > 0:
+		failStyle = styleWarn
 	}
 
-	rows := []string{
-		styleTitle.Render("ralph") + " " + styleMuted.Render(m.stopBanner()),
-		line("epic", styleStrong.Render(s.Epic.ID)+" "+styleValue.Render(title)+"  "+stateStyle.Render("["+epicState+"]")),
-		line("loop", styleValue.Render(fmt.Sprintf("iteration %s · %s · elapsed %s · failures %d/3%s",
-			iterLabel, running, shortDur(m.now.Sub(m.startedAt)), m.failures, cost))),
-		line("agent", styleValue.Render(fmt.Sprintf("%s · model %s · effort %s · %s",
-			s.HarnessName, s.Settings.Model, s.Settings.Effort, perms))),
-		line("logs", styleMuted.Render(s.LogDir+"  "+m.boardAge())),
+	dot := styleMuted.Render(" · ")
+	cell := func(label, value string) string {
+		return headerIndent + styleHeaderLabel.Render(pad(label, 7)) + value
+	}
+
+	loop := cell("LOOP", styleValue.Render("iter ")+styleStrong.Render(iterLabel)+dot+
+		styleValue.Render(running)+dot+
+		styleValue.Render(shortDur(m.now.Sub(m.startedAt))+" elapsed")+dot+
+		failStyle.Render(fmt.Sprintf("failures %d/%d", m.failures, m.failureLimit()))+
+		styleMuted.Render(cost))
+	agent := cell("AGENT", styleValue.Render(s.HarnessName)+dot+
+		styleAccent.Render(s.Settings.Model)+dot+
+		styleValue.Render("effort "+s.Settings.Effort)+dot+
+		styleMuted.Render(perms))
+
+	rows := []string{m.renderTitleRow(width)}
+	if m.airyHeader() {
+		rows = append(rows, "")
+	}
+	rows = append(rows, cell("EPIC", styleStrong.Render(s.Epic.ID)+" "+styleValue.Render(title)+"  "+
+		stateStyle.Render("["+epicState+"]")))
+	if row, ok := sideBySide(loop, agent, width); ok {
+		rows = append(rows, row)
+	} else {
+		rows = append(rows, loop, agent)
+	}
+	if m.airyHeader() {
+		rows = append(rows, "")
+	}
+	for i, row := range rows {
+		rows[i] = truncate(row, width)
 	}
 	return strings.Join(rows, "\n")
+}
+
+// renderTitleRow carries the run's name and stop banner, with the board's
+// freshness and the info-popup hint right-aligned when the width allows. The
+// log paths themselves live in that popup rather than on screen.
+func (m model) renderTitleRow(width int) string {
+	left := headerIndent + styleTitle.Render("ralph") + " " + styleMuted.Render(m.stopBanner())
+	right := styleMuted.Render("board "+m.boardAge()) + styleMuted.Render(" · ") +
+		styleStrong.Render("e") + styleMuted.Render(" info")
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right) - 2
+	if gap < 2 {
+		return left
+	}
+	return left + strings.Repeat(" ", gap) + right
+}
+
+// sideBySide pins the right block to the right edge, where it holds still: the
+// agent's settings are fixed for the run while the loop's own numbers move.
+// Reports false when both blocks will not fit whole, so the caller can stack
+// them rather than truncate live status.
+func sideBySide(left, right string, width int) (string, bool) {
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right) - 1
+	if gap < 2 {
+		return "", false
+	}
+	return left + strings.Repeat(" ", gap) + right, true
 }
 
 func (m model) stopBanner() string {
@@ -158,17 +238,17 @@ func (m model) stopBanner() string {
 
 func (m model) boardAge() string {
 	if m.snapErr != nil {
-		return "· board: " + m.snapErr.Error()
+		return m.snapErr.Error()
 	}
 	if m.snapAt.IsZero() {
-		return "· board: polling…"
+		return "polling…"
 	}
 	if m.finished {
 		// Polling stops with the loop; a growing "ago" would only suggest the
 		// board is still being watched.
-		return "· board as of " + m.snapAt.Format("15:04:05")
+		return "as of " + m.snapAt.Format("15:04:05")
 	}
-	return fmt.Sprintf("· board %s ago", shortDur(m.now.Sub(m.snapAt)))
+	return shortDur(m.now.Sub(m.snapAt)) + " ago"
 }
 
 func (m model) current() *iterRecord {
@@ -176,6 +256,15 @@ func (m model) current() *iterRecord {
 		return nil
 	}
 	return m.records[len(m.records)-1]
+}
+
+// logPaneTitle names the iteration the log is scoped to, so a pane showing an
+// earlier run cannot be mistaken for the live one.
+func (m model) logPaneTitle() string {
+	if m.logView == 0 {
+		return "agent log"
+	}
+	return fmt.Sprintf("agent log · iteration %d", m.logView)
 }
 
 func (m model) renderPane(p pane, title string, height, width int) string {
@@ -205,6 +294,50 @@ func (m model) renderDetail(width int) string {
 	return truncate(head, width) + "\n" +
 		truncate(styleStrong.Render(m.detailTitle), width) + "\n" +
 		m.detail.View()
+}
+
+// renderInfo is the `e` popup: the run's paths and settings, which are read
+// once in a while and would otherwise spend a header row on every frame.
+func (m model) renderInfo(width int) string {
+	s := m.session
+	boxWidth := clamp(width-8, 30, 100)
+	valueWidth := max(10, boxWidth-16)
+
+	row := func(label, value string) string {
+		return styleHeaderLabel.Render(pad(label, 13)) + styleValue.Render(truncate(value, valueWidth))
+	}
+
+	transcript := "not started"
+	if rec := m.current(); rec != nil && rec.transcript != "" {
+		transcript = rec.transcript
+	}
+	workspace := s.Workspace
+	if workspace == "" {
+		workspace = "repo default"
+	}
+	perms := "kept"
+	if s.SkipPerms {
+		perms = "bypassed"
+	}
+
+	body := strings.Join([]string{
+		styleStrong.Render("run info"),
+		"",
+		row("epic", s.Epic.ID+"  "+s.Epic.Title),
+		row("harness", fmt.Sprintf("%s · %s · effort %s", s.HarnessName, s.Settings.Model, s.Settings.Effort)),
+		row("permissions", perms),
+		row("limits", fmt.Sprintf("max %d iterations · %d consecutive failures",
+			s.MaxIterations, m.failureLimit())),
+		row("workspace", workspace),
+		row("logs", s.LogDir),
+		row("transcript", transcript),
+		row("board", m.boardAge()),
+		"",
+		styleMuted.Render("esc or e closes"),
+	}, "\n")
+
+	return lipgloss.Place(width, m.contentHeight()+3, lipgloss.Center, lipgloss.Center,
+		styleInfoModal.Render(body))
 }
 
 func (m model) renderConfirm(width int) string {

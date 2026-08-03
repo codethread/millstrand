@@ -20,6 +20,8 @@ Children are started with `Setpgid` and a hard stop signals the whole group. Kil
 
 `ctrl-c`, `ctrl-d` and `q` must never end a live run on their own. `tea.WithoutSignalHandler()` is what stops Bubble Tea quitting on SIGINT; the tests in `internal/ui` assert that each of those keys produces no command and raises the stop prompt. Treat that as a contract, not a preference.
 
+The log pane is a view onto one iteration's events, not a running tail of everything: the model keeps a log per iteration number and `showLog` swaps which one the pane holds. `logFollow` is what decides whether a new iteration takes the pane over, and it tracks the iterations pane's cursor sitting on the newest row.
+
 The panes are hand-rolled cursor lists rather than `bubbles/list`, which brings filtering and pagination chrome that fights a live tail. A pane tails while its cursor is at the bottom and stops as soon as you scroll up.
 
 Tests use a fake `strand` script and a fake agent script, and drive the engine off its own message channel rather than sleeping. If you need a new loop behaviour covered, add a `newWorld` fixture in `internal/loop/loop_test.go` — do not reach for a timer.

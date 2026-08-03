@@ -44,7 +44,9 @@ func (Claude) Args(spec RunSpec, settings Settings) []string {
 		args = append(args, "--dangerously-skip-permissions")
 	}
 	args = append(args, spec.Extra...)
-	return append(args, spec.Prompt)
+	// The generated prompt opens with a `---` banner, which the CLI would read
+	// as an option; `--` ends option parsing so it lands as the positional.
+	return append(args, "--", spec.Prompt)
 }
 
 type claudeLine struct {
