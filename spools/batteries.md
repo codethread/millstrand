@@ -230,6 +230,17 @@ Each poll runs one clamped lean selection. It reads at most `max + 1` rows when 
 
 This is cardinality waiting, not strand-completion waiting. Closing, superseding, and burning all remove a strand from a query that selects active strands. Use a query that names the lifecycle state you actually need. Long-running callers should cap each wait at about 50 minutes and re-issue it so an idle provider prompt cache does not expire.
 
+Batteries ships four coordination queries for common waits:
+
+| Query | Parameter | Selection |
+| --- | --- | --- |
+| `strand-closed` | `id` | The closed strand with that id. |
+| `strand-active` | `id` | The active strand with that id. |
+| `children-active` | `parent` | Active strands whose `parent-of` edge points to that parent. |
+| `blockers-active` | `id` | Active strands targeted by that strand's `depends-on` edges. |
+
+The cookbook shows the matching `await` command for each query. Attribute-conditioned waits remain config-authored because query parameters bind values, not attribute keys.
+
 #### `notes` — BAT-C14
 
 ```

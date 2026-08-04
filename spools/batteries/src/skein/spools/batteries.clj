@@ -1465,6 +1465,34 @@
             (throw (ex-info "--param requires --query" {})))
           (weaver/ready-lean rt lean-attribute-byte-floor [:exists :id] {} limit)))))
 
+(skein/defquery strand-closed
+  "Return the closed strand identified by `id`, when it exists."
+  {:usage "strand await --query strand-closed --param id=<id> --min-count 1"}
+  {:params [:id]
+   :where [:and [:= :state "closed"]
+           [:= :id [:param :id]]]})
+
+(skein/defquery strand-active
+  "Return the active strand identified by `id`, when it exists."
+  {:usage "strand await --query strand-active --param id=<id> --max-count 0"}
+  {:params [:id]
+   :where [:and [:= :state "active"]
+           [:= :id [:param :id]]]})
+
+(skein/defquery children-active
+  "Return active children of the strand identified by `parent`."
+  {:usage "strand await --query children-active --param parent=<id> --max-count 0"}
+  {:params [:parent]
+   :where [:and [:= :state "active"]
+           [:edge/in "parent-of" [:= :id [:param :parent]]]]})
+
+(skein/defquery blockers-active
+  "Return active blockers of the strand identified by `id`."
+  {:usage "strand await --query blockers-active --param id=<id> --max-count 0"}
+  {:params [:id]
+   :where [:and [:= :state "active"]
+           [:edge/in "depends-on" [:= :id [:param :id]]]]})
+
 (skein/defop await
   "Block until a named query's result count is inside the requested band."
   (op-options 'await await-arg-spec)

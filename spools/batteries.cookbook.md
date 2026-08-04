@@ -217,6 +217,46 @@ result=$(strand await --query review-verdicts --param target=fx91 \
 
 Honest source: the `await` op and its manual-clock band tests in `test/skein/spools/batteries_test.clj`.
 
+### Wait for one strand to close
+
+Use `strand-closed` when success requires the exact strand to reach `closed`:
+
+```sh
+strand await --query strand-closed --param id=tk42 --min-count 1
+```
+
+This does not treat every exit as completion. A replaced or burned strand is absent from `strand-closed`, so the wait times out unless another strand with the same id can satisfy the query.
+
+### Wait for one strand to leave the active set
+
+Use `strand-active` with a maximum of zero when any exit from `active` is enough:
+
+```sh
+strand await --query strand-active --param id=kb07 --max-count 0
+```
+
+Closing, superseding, and burning all satisfy this wait because each removes the strand from the active result set.
+
+### Wait for every active child
+
+Use `children-active` to join all active children linked to one parent:
+
+```sh
+strand await --query children-active --param parent=pl88 --max-count 0
+```
+
+The wait succeeds when no active strand has a `parent-of` edge to `pl88`.
+
+### Wait for dependencies to clear
+
+Use `blockers-active` to wait until a strand has no active `depends-on` targets:
+
+```sh
+strand await --query blockers-active --param id=tk42 --max-count 0
+```
+
+The wait succeeds when every strand targeted by `tk42`'s `depends-on` edges has left the active set.
+
 ---
 
 ## Recipe: Apply a registered pattern with `weave` and JSON input
