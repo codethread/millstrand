@@ -1,63 +1,52 @@
 # Agent Contributor Guide
 
-Read `./devflow/TENETS.md`, `./devflow/PHILOSOPHY.md`, and `./devflow/UBIQUITOUS-LANGUAGE.md` before all work. The first two govern what you may build; the third defines the words this repo uses, and other docs assume you know them. This file holds only what the live surface cannot tell you; everything else is routed by scenario below.
+## About
 
-## What to read, when
+Skein is a runtime for programming the constraints and loops around coding agents.
 
-**Arriving in this repo** — run `mill skein prime` once: where the source, docs, and config live. The deep reference is `docs/reference.md`; its "Discovery tiers" section explains the convention behind everything below (`prime` orients, `about` explains an op, `strand help [<op>]` answers exact invocation). `strand guide "<question>"` answers wider questions from a delegated run; `strand about guide` is the manual.
+- Always read `./devflow/TENETS.md`
+- When designing features, also read `./devflow/PHILOSOPHY.md` and `./devflow/UBIQUITOUS-LANGUAGE.md`
 
-**Working with the user** — claim a kanban card first; `strand kanban prime` is the board discipline.
+| Path | What |
+| --- | --- |
+| `src/skein/` | Core runtime (`api`, `core`, `repl`) |
+| `spools/` | Shipped spools (batteries, workflow, …) |
+| `cli/` | Go CLIs (`strand`, `mill`) |
+| `tools/` | Repo tools (`ralph`, `kanban-tree`) |
+| `.skein/` | This repo's coordination workspace (board, workflows, harnesses) |
 
-**Driving any registered workflow** — this repo activates the shipped worker surface in `.skein/init.clj`: `strand prime workflow` before you start, `strand about workflow` for the manual, `strand help workflow` for exact invocation.
+## Working here
 
-**Starting multi-step work** — `mill strand prime`: the planning/tracking workflow. Feature work starts with the registered `intake` workflow; read `strand workflow show intake` for its parameter contract before starting the run. At proposal sign-off, `approved-to-cards` is the default route: the proposal lands on mainline, a decompose stage authors implementation cards, and the devflow run ends there — implementation is then worked card by card from the board; `scripts/README.md` owns the ralph epic-loop option. The older `approved` → spec-plan/AFK path stays registered but sidelined. Large module changes pour the registered story workflow; invocation and discipline come from `strand prime workflow` and `strand about workflow`. Open-ended exploration runs the registered `explore` workflow; `strand workflow show explore` owns the discipline. Bug fixes run the registered `fix` workflow; `strand workflow show fix` owns the discipline.
+- Always work via a registered workflow — `strand workflow list`, then `strand workflow show <name>`.
+- Always track work through a kanban card, in a worktree — `strand kanban prime`.
+- PRs go through the `land` workflow (`strand workflow show land`).
 
-**Delegating** — `strand prime agent` first; `strand about agent` is the full verb manual. Delegate real work as tracked agent runs, never harness-native subagents (recon-only). Seats and review rosters: `strand agent harnesses` / `strand agent rosters`, with routing policy beside the definitions in `.skein/harnesses.clj` / `.skein/reviewers.clj`.
+## Rules
 
-**Waiting on or recovering runs** — `strand workflow await <run-id>` blocks until a run needs you (`strand help workflow` for the await cap); `strand ready --query work` is the default ready view; failures surface via `strand list --query agent-failures` and `strand agent logs <run-id> --tail 80`.
+- **Never restart a running weaver** without explicit user sign-off. Pickup ladder: `make build` (Go CLI); `runtime/refresh!` (config/startup/module source); targeted `(require 'ns :reload)` only for already-loaded base-classpath namespaces; `runtime/reload-code!` for code-only synced roots. Recipes: `docs/spools/customisation.md`.
+- **Kill by PID only** — never `pkill -f <pattern>` (prompts can quote the pattern and strafe siblings).
+- **Disposable workspaces for workspace-backed tests** (weaver-world fixtures, smoke config) — never the shared `.skein` world. Use `--workspace` from `mktemp -d`; guard with `${ws:?}`. Ordinary suite runs: see the `testing` skill.
+- **CLI changes:** `make build` — run `./bin/*`, never `make install`.
+- **Testing:** use the `testing` skill (warm / Done-when / queue acceptance).
 
-**Landing a finished branch** — coordinator-only: `strand workflow show land`; the workflow manual and root spec own the policy boundaries. `.skein/.land-merge-lock.acquire` is the coordination-owned cross-process mutex file; leave it alone. When another coordinator holds the lock, join the merge train with `strand land await <land-run-id>` rather than retrying the approval or starting competing landing work; `strand help land await` owns the queue discipline. `landed-since` only lists merges recorded after joining the train; regardless of that list, run `git fetch origin && git rev-list --count HEAD..origin/main` before approval. A nonzero count means the branch is behind; rebase onto `origin/main` (never merge main into the branch — landing squashes, so merge commits only add review noise), push, re-establish green CI at the new HEAD, then clear the gate stamp. Do not rely on `gh pr view <n> --json mergeStateStatus` while GitHub is still computing it.
+## Delegation
 
-**Changing shipped behavior** — update the relevant root spec in `devflow/specs/`; namespace tiers are contractual (SPEC-003.C19). **Authoring or changing spools** — `docs/spools/writing-shared-spools.md`; the spool index is `spools/README.md`.
+Farm work out as tracked agent runs (`strand agent …`); never harness-native subagents (recon-only). Load `strand prime agent` first. Multiple agents are valid, especially for recon.
 
-## Commands
+| Scenario | Seat |
+| --- | --- |
+| Mechanical tasks, testing loops, supervised iteration | `luna-high` |
+| Reviews against code during iterative development | `terra-med` |
+| Council / guidance on complex matters | `sol-high` |
 
-```sh
-make build                              # repo-local ./bin/strand, ./bin/mill, ./bin/ralph, ./bin/kanban-tree — the agent path for CLI changes
-mill start                              # supervisor, in a durable terminal
-mill init [--workspace <dir>]           # create/complete a workspace
-mill weaver start|status|stop|repl [--workspace <dir>]
-make dash                               # interactive kanban TUI from the pinned spool
+## Agent loop
 
-make test-warm NS="ns..."               # warm REPL to iterate a slice — never a Done-when gate
-clojure -M:test <ns...>                 # cold focused run — the per-slice Done-when gate
-flock -w 3600 /tmp/skein-test.lock clojure -M:test  # full locked suite — queue acceptance only; CI-blocking
-make test-go                            # every Go module (cli, tools/ralph, tools/kanban-tree) — primary validation, CI-blocking
-clojure -M:smoke                        # primary validation, CI-blocking
-make spool-suite-gate                   # pinned external spool suites vs this checkout — CI-blocking (GITLIBS=<dir> overrides the gitlibs cache)
-make fmt-check lint reflect-check docs-check              # blocking CI quality gates, held at zero findings
-make api-docs                           # regenerate *.api.md after touching any spool or skein.api.*.alpha docstring
-```
-
-`make lint` includes `lint-conventions` (ns docstrings everywhere; no locals named after clojure.core macros; requires embedded in quoted forms must resolve to real namespaces; api-module form per `quality.api-form` — contract in SPEC-003.C19a; shipped spool sources use `skein.core.*` only from unsafe-named namespaces per `quality.spool-tiers` — the unsafe-namespace convention in `docs/spools/writing-shared-spools.md`; no hand-escaped JSON string literal that `json/write-str` would reproduce, per `quality.json-literals`). New splint suppressions need written justification in `.splint.edn`. After validation, `git status --short` must not show generated SQLite or runtime metadata artifacts. Strand data is plain SQLite under a workspace's `data/skein.sqlite`.
-
-## Hard rules
-
-- **Agents never run `make install`** — it clobbers the user's global on-PATH binaries, which is the user's call. Use `make build` and the repo-local binaries.
-- **Never restart a running weaver to pick up changes**; restarting the canonical weaver requires explicit user sign-off (it tears down live agent runs and registries other agents depend on). Pickup ladder: `make build` for Go CLI changes; `runtime/refresh!` for config, startup, and module source changes; a targeted `(require 'the.ns :reload)` only for already-loaded base-classpath namespaces; `runtime/reload-code!` for deliberate code-only work on synced roots (a bare `:reload` is blind to spool classloaders); only JVM-level changes or a refresh-recorded pending generation justify a restart. Semantics and recipes: `docs/spools/customisation.md`.
-- **Kill by PID only**, never `pkill -f <pattern>` — delegated agents' prompts can quote the very command you match, so a pattern kill strafes healthy sibling runs.
-- **Disposable workspaces for everything except coordination.** Tests, smoke runs, and config experiments use `--workspace` worlds from `mktemp -d`, never the user's default workspaces. Hold the path in your own shell variable and guard every expansion with `${ws:?}` — an empty variable must fail the command, not silently resolve to the canonical world.
-- **Warm test output never satisfies a Done-when gate**, and the full suite is serialized across agents: hold the flock (bare `flock`, on PATH via nix), and run it only at queue acceptance. `SKEIN_TEST_AWAIT_SCALE` multiplies await budgets on slow hosts (CI sets 3).
-
-## Repo coordination workspace (.skein)
-
-The repo's `.skein` workspace is the shared coordination world — kanban board, devflow runs, delegation, and cross-agent tracking live there, worked as the scenarios above describe; everything else follows the disposable-workspace rule. Config layout and change discipline live in the `.skein/init.clj` header; smoke-test config changes in a disposable world first (note: `spools.edn` local roots resolve relative to the config dir).
-
-## Implementation boundaries
-
-- Keep SQL and shared persistence behavior in `skein.core.db`; strand attribute values stay JSON `TEXT` in the `attributes` table — no JSONB assumptions.
-- Runtime publication: one ambient runtime per real weaver process (SPEC-004.C8a); tests and embedded runtimes start `:publish? false` and pass the runtime explicitly.
-- Spool state is runtime-owned via `skein.api.runtime.alpha/spool-state`; no module-level atoms in spools.
+| Step | Command |
+| --- | --- |
+| Run | `strand agent delegate <task-id> [--harness …]` |
+| Await | `strand agent await <run-id>` · `strand agent await --under <root>` |
+| Review | `strand agent review <task-id> [--harness …]` |
+| Resume | `strand agent retry <id>` (`--fresh` cold) |
 
 <!-- mill:skein-prime -->
 
@@ -68,3 +57,5 @@ This repo uses Skein strands to track work. Orientation ships in the `mill` CLI:
 - `mill strand prime` — the day-to-day strand workflow; run it before multi-step work.
 - `mill skein prime` — read on demand, only when building on this repo's `.skein/` config or spools.
 <!-- /mill:skein-prime -->
+
+Wider questions: `strand guide "<question>"`.

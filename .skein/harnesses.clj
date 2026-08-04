@@ -177,16 +177,14 @@
     :doc (format-alpha/reflow
           "|{:complexity X :code-taste X :resilience 1 :ui-design X
            | :coordination - :cost 8}
-           |gpt-5.6-luna high via codex. The repo's guide seat: the `guide` op
-           |(.skein/guide.clj) runs here, where a question is answered by
-           |reading the live CLI surface and repo docs rather than by writing
-           |code. High effort buys the extra sweeps a surface map needs over
-           |:luna-low, at the same rate card; the retrieval strengths and the
-           |environment fragility both carry over from :luna-low's benches
-           |(cards vk5re, vw8pf), so route recon and answer-shaped work here
-           |and authored code elsewhere. Code and coordination axes are
-           |untested at high effort — treat any code run as a trial, note the
-           |outcome on the card, and score from the next bench.")}
+           |gpt-5.6-luna high via codex. Repo routing (AGENTS.md): mechanical
+           |tasks, testing loops, and supervised iteration. Also the guide
+           |seat — the `guide` op (.skein/guide.clj) runs here for
+           |answer-shaped surface maps. High effort buys extra sweeps over
+           |:luna-low at the same rate card; environment fragility carries
+           |over from :luna-low's benches (cards vk5re, vw8pf). Code and
+           |coordination axes are untested at high effort — note outcomes on
+           |the card and score from the next bench.")}
    :terra-med
    {:alias-of :codex
     :extra-args ["-m" "gpt-5.6-terra" "-c" "model_reasoning_effort=medium"]
@@ -194,12 +192,13 @@
     :doc (format-alpha/reflow
           "|{:complexity 5 :code-taste 7 :resilience 2 :ui-design 4
            | :coordination 7 :cost 7}
-           |gpt-5.6-terra medium via codex. Well-defined single-concern review
-           |and validation on clean checkouts — benched the cleanest
-           |test-writing of the codex tiers at ~40% of sol's price; missed
-           |cross-package fallout when it could not run tests and gives up on
-           |broken toolchains. Scores: pandora-task-002 bench (card nihrl);
-           |ui-design is a prior.")}
+           |gpt-5.6-terra medium via codex. Repo routing (AGENTS.md): reviews
+           |against code during iterative development. Well-defined
+           |single-concern review and validation on clean checkouts — benched
+           |the cleanest test-writing of the codex tiers at ~40% of sol's
+           |price; missed cross-package fallout when it could not run tests
+           |and gives up on broken toolchains. Scores: pandora-task-002 bench
+           |(card nihrl); ui-design is a prior.")}
    :terra-med-ro
    {:alias-of :codex-ro
     :extra-args ["-m" "gpt-5.6-terra" "-c" "model_reasoning_effort=medium"]
@@ -252,8 +251,9 @@
     :doc (format-alpha/reflow
           "|{:complexity X :code-taste X :resilience X :ui-design X
            | :coordination X :docs-prose 8 :cost 3}
-           |gpt-5.6-sol high via codex. The most complex implementation tasks
-           |before an :oracle escalation, and the default seat for
+           |gpt-5.6-sol high via codex. Repo routing (AGENTS.md): council /
+           |guidance on complex matters. Also the most complex implementation
+           |tasks before an :oracle escalation, and the default seat for
            |agent-facing docs per the registry's docs routing policy: the
            |docs bake-off (card x6gam) benched it competitive on structured
            |long-form pages — independent structural choices, in budget —
