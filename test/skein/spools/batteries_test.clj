@@ -146,6 +146,47 @@
                               [verb [(:hook-class leaf) (:deadline-class leaf)]]))
                        subcommands))))))))
 
+(deftest activate-registers-exact-coordination-query-shapes
+  (with-batteries
+    (fn [rt]
+      (is (= #{"strand-closed" "strand-active" "children-active" "blockers-active"}
+             (set (keys (graph/queries rt)))))
+      (doseq [[query-name params where]
+              [["strand-closed" [:id]
+                [:and [:= :state "closed"] [:= :id [:param :id]]]]
+               ["strand-active" [:id]
+                [:and [:= :state "active"] [:= :id [:param :id]]]]
+               ["children-active" [:parent]
+                [:and [:= :state "active"]
+                 [:edge/in "parent-of" [:= :id [:param :parent]]]]]
+               ["blockers-active" [:id]
+                [:and [:= :state "active"]
+                 [:edge/in "depends-on" [:= :id [:param :id]]]]]]]
+        (let [query (graph/query-explain rt query-name)]
+          (is (= params (:params query)))
+          (is (= where (:where query))))))))
+
+(deftest coordination-queries-select-their-seeded-strands
+  (with-batteries
+    (fn [rt]
+      (let [child (weaver/add! rt {:title "Child"})
+            parent (weaver/add! rt {:title "Parent"
+                                    :edges [{:type "parent-of" :to (:id child)}]})
+            subject (weaver/add! rt {:title "Subject"})
+            blocker (weaver/add! rt {:title "Blocker"})
+            closed (weaver/add! rt {:title "Closed"})]
+        (weaver/update! rt (:id subject)
+                        {:edges [{:type "depends-on" :to (:id blocker)}]})
+        (weaver/update! rt (:id closed) {:state "closed"})
+        (is (= [(:id closed)]
+               (graph/query-ids rt "strand-closed" {:id (:id closed)})))
+        (is (= [(:id subject)]
+               (graph/query-ids rt "strand-active" {:id (:id subject)})))
+        (is (= [(:id child)]
+               (graph/query-ids rt "children-active" {:parent (:id parent)})))
+        (is (= [(:id blocker)]
+               (graph/query-ids rt "blockers-active" {:id (:id subject)})))))))
+
 (deftest production-return-coverage-is-derived-from-batteries-provenance
   (with-batteries
     (fn [rt]
