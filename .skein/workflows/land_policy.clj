@@ -1,4 +1,4 @@
-(ns workflows.land-policy
+(ns ct.workflows.land-policy
   "The coordinator landing policy: the merge train and the narrow `land` op.
 
   The land WORKFLOW definitions live in workflows/land.clj — live

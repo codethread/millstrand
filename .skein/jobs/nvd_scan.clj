@@ -1,4 +1,4 @@
-(ns jobs.nvd-scan
+(ns ct.jobs.nvd-scan
   "The scheduled NVD deep scan (skein.spools.cron job :nvd-scan).
 
   `make deps-report` runs the clj-watson NVD deep scan + govulncheck locally
@@ -180,4 +180,4 @@
 (cron/defjob :nvd-scan
   {:interval-ms nvd-scan-interval-ms
    :jitter-ms nvd-scan-jitter-ms
-   :handler 'jobs.nvd-scan/nvd-scan-tick})
+   :handler 'ct.jobs.nvd-scan/nvd-scan-tick})

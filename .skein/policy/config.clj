@@ -1,4 +1,4 @@
-(ns policy.config
+(ns ct.policy.config
   "Repo-local Skein runtime configuration for skein-src: named queries and the
   validation helpers used by workspace policy.
 

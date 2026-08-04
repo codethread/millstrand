@@ -1,4 +1,4 @@
-(ns notifications.attention
+(ns ct.notifications.attention
   "This repo's chime attention rules: what the devflow considers worth a
   human's attention. The chime engine is vocabulary-agnostic; these rules own
   the workflow, agent-run, gate, and kanban knowledge. Developers bind how they are

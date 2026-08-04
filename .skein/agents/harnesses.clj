@@ -1,4 +1,4 @@
-(ns agents.harnesses
+(ns ct.agents.harnesses
   "Repo-local harness seats and routing policy.
 
   Naming convention: aliases are pure model handles (`:sol-low`,
@@ -381,10 +381,10 @@
 
 (lifecycle/defresource review-contract
   "Own the workspace review-contract binding for the module lifetime."
-  {:open 'agents.harnesses/open-review-contract!
-   :close 'agents.harnesses/close-review-contract!})
+  {:open 'ct.agents.harnesses/open-review-contract!
+   :close 'ct.agents.harnesses/close-review-contract!})
 
 (lifecycle/defresource task-contract
   "Own the workspace task-contract binding for the module lifetime."
-  {:open 'agents.harnesses/open-task-contract!
-   :close 'agents.harnesses/close-task-contract!})
+  {:open 'ct.agents.harnesses/open-task-contract!
+   :close 'ct.agents.harnesses/close-task-contract!})

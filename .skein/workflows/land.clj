@@ -1,10 +1,10 @@
-(ns workflows.land
+(ns ct.workflows.land
   "The coordinator land workflow definitions (family `land`)."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.format.alpha :as format-alpha]
             [skein.spools.workflow :as workflow]
-            [workflows.support :as support]))
+            [ct.workflows.support :as support]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."
@@ -131,7 +131,7 @@
                                ;; Shell would need jq + TSV to emulate the run-state tuple.
                                ;; Code keeps that data as data. The worktree is poured because
                                ;; code gates have no ambient cwd attribute.
-                               "code/fn" "workflows.common/main-ci-watch"
+                               "code/fn" "ct.workflows.common/main-ci-watch"
                                "code/params" (fn [{:keys [worktree]}]
                                                {:worktree worktree})
                                "code/timeout-secs" 5400

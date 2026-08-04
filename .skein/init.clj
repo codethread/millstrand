@@ -198,7 +198,7 @@
                   :after [:config]
                   :required? true})
 ;; workflows/common.clj owns the shared authoring patterns and the stable
-;; workflows.common/main-ci-watch code gate function.
+;; ct.workflows.common/main-ci-watch code gate function.
 (runtime/module! runtime :workflows
                  {:file "workflows/common.clj"
                   :spools ['skein.spools/workflow 'ct.spools/delegation]

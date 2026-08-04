@@ -1,4 +1,4 @@
-(ns workflows.common
+(ns ct.workflows.common
   "The repo's shared workflow authoring examples."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
@@ -165,7 +165,7 @@
   optional non-negative `:poll-interval-ms` and string-to-string `:env` test
   seams. Poured gates supply only the frozen worktree.
 
-  This public Var is persisted as `workflows.common/main-ci-watch` in poured gates;
+  This public Var is persisted as `ct.workflows.common/main-ci-watch` in poured gates;
   keep its qualified name and one-map arity stable for those in-flight runs.
   Completed success/skipped runs are green; every known non-completed status is
   pending; any other completed conclusion fails with the run listing; unknown

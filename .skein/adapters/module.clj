@@ -1,4 +1,4 @@
-(ns adapters.module
+(ns ct.adapters.module
   "Repo-owned module reconciliation helper.
 
   `reconcile-help-transform` is not a branch adapter: it is this canonical
@@ -34,5 +34,5 @@
 
 (lifecycle/defresource batteries-help-transform
   "Own this world's batteries help-transform election for the module lifetime."
-  {:open 'adapters.module/reconcile-help-transform
-   :close 'adapters.module/close-help-transform!})
+  {:open 'ct.adapters.module/reconcile-help-transform
+   :close 'ct.adapters.module/close-help-transform!})

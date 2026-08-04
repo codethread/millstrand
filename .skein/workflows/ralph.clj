@@ -1,4 +1,4 @@
-(ns workflows.ralph
+(ns ct.workflows.ralph
   "The one-card-per-iteration Ralph workflow (family \"ralph\").
 
   Ralph is the coordinator of its epic: each run orients from live kanban
@@ -6,7 +6,7 @@
   stops at a judgment point that closes the epic only when no feature cards
   remain. The Go binary supplies the polling loop; this workflow owns the work
   discipline inside one iteration. Claim metadata persisted in
-  `workflow/context` conforms to `:workflows.ralph/ralph-context`."
+  `workflow/context` conforms to `:ct.workflows.ralph/ralph-context`."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.format.alpha :as format-alpha]
@@ -131,7 +131,7 @@
                                  |workflow for the claimed feature using the durable values in
                                  |this run's `workflow/context`. First read `strand show <run-id>`
                                  |and validate the map against
-                                 |`:workflows.ralph/ralph-context`; require that feature and card
+                                 |`:ct.workflows.ralph/ralph-context`; require that feature and card
                                  |match. If any value is missing, blank, or inconsistent, fail loudly:
                                  |record the exact context and stop without starting land. Otherwise
                                  |copy those exact values into: `strand workflow start <land-run-id>

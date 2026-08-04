@@ -8,7 +8,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]))
 
-;; jobs/nvd_scan.clj is a .skein weaver file (ns `jobs.nvd-scan`), not a classpath
+;; jobs/nvd_scan.clj is a .skein weaver file (ns `ct.jobs.nvd-scan`), not a classpath
 ;; namespace, so load it once exactly as config_test does and resolve its
 ;; (public and private) vars by symbol. Loading it defines vars only; it never
 ;; activates modules or seeds against gh.
@@ -19,9 +19,9 @@
 (use-fixtures :once load-config-once)
 
 (defn- cfn
-  "Resolve a var in the loaded `jobs.nvd-scan` namespace by unqualified name."
+  "Resolve a var in the loaded `ct.jobs.nvd-scan` namespace by unqualified name."
   [name]
-  (requiring-resolve (symbol "jobs.nvd-scan" name)))
+  (requiring-resolve (symbol "ct.jobs.nvd-scan" name)))
 
 (deftest parses-scan-findings
   (let [watson-count (cfn "clj-watson-vuln-count")

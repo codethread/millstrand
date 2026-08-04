@@ -1,10 +1,10 @@
-(ns workflows.story
+(ns ct.workflows.story
   "The module-form story workflow and its continuations (family `story`)."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.format.alpha :as format-alpha]
             [skein.spools.workflow :as workflow]
-            [workflows.support :as support]))
+            [ct.workflows.support :as support]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."

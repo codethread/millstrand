@@ -69,11 +69,12 @@
   publish its complete module contribution — the load path init.clj's `:file`
   modules run, standing in for a full refresh in these focused projections."
   [rt module-key file]
-  (let [ns-sym (symbol (-> file
-                           (str/replace #"^\.skein/" "")
-                           (str/replace #"\.clj$" "")
-                           (str/replace "/" ".")
-                           (str/replace "_" "-")))
+  (let [ns-sym (symbol (str "ct."
+                            (-> file
+                                (str/replace #"^\.skein/" "")
+                                (str/replace #"\.clj$" "")
+                                (str/replace "/" ".")
+                                (str/replace "_" "-"))))
         contribution (:contribution
                       (module-graph/with-contribution-collection
                         {:module/key module-key
@@ -119,7 +120,7 @@
      (publish-authoring! runtime :workflows ".skein/workflows/common.clj")
      ;; the land op lives beside the definitions it drives, in its own module
      (publish-authoring! runtime :workflows.land-policy ".skein/workflows/land_policy.clj")
-     (let [provenances #{'policy.config 'workflows 'workflows.land-policy}
+     (let [provenances #{'ct.policy.config 'workflows 'ct.workflows.land-policy}
            checked (atom #{})
            check! (fn [operation context value]
                     (t/check-op-return! runtime (symbol operation) context value)
@@ -137,8 +138,8 @@
          (is (= #{}
                 (into #{}
                       (keep (fn [{:keys [name returns]}]
-                              (when (and (= 'policy.config (:provenance
-                                                            (weaver/resolve-op runtime (symbol name))))
+                              (when (and (= 'ct.policy.config (:provenance
+                                                               (weaver/resolve-op runtime (symbol name))))
                                          (not (contains? (:required returns {}) :operation)))
                                 name)))
                       entries))))))))
