@@ -54,11 +54,13 @@
             [skein.api.runtime.alpha :as runtime-api]
             [skein.api.runtime.glossary.alpha :as glossary]
             [skein.api.skein.alpha :as skein]
+            [skein.api.spool.alpha :as spool]
             [skein.api.vocab.alpha :as vocab]
             [skein.api.weaver.alpha :as weaver])
   (:import [java.io PushbackReader StringReader]
            [java.nio.file FileVisitResult Files LinkOption SimpleFileVisitor]
-           [java.nio.file.attribute FileAttribute]))
+           [java.nio.file.attribute FileAttribute]
+           [java.time Duration]))
 
 (def ^:private generic-states #{"active" "closed"})
 (def ^:private lean-attribute-byte-floor 1024)
@@ -66,6 +68,8 @@
 (def ^:private read-limit-state-version 1)
 (def ^:private readable-states #{"active" "closed" "replaced"})
 (def ^:private release-tag-pattern #"v([1-9][0-9]*)")
+(def ^:private await-default-timeout-secs 1800)
+(def ^:private await-poll-ms 1000)
 
 (defn- exact-keys? [expected value]
   (and (map? value) (= expected (set (keys value)))))
@@ -697,6 +701,56 @@
         params (graph/coerce-declared-params query-def raw-params)]
     (weaver/ready-lean rt lean-attribute-byte-floor query-def params limit)))
 
+(defn- await-options
+  [{:keys [query param min-count max-count timeout-secs]}]
+  (when (str/blank? query)
+    (throw (ex-info "await --query requires a non-empty name" {})))
+  (when (and (nil? min-count) (nil? max-count))
+    (throw (ex-info "await requires --min-count or --max-count" {})))
+  (doseq [[flag value] [["--min-count" min-count] ["--max-count" max-count]]
+          :when (some? value)]
+    (when (neg? value)
+      (throw (ex-info (str "await " flag " must be non-negative") {flag value}))))
+  (when (and (some? min-count) (some? max-count) (> min-count max-count))
+    (throw (ex-info "await --min-count must not exceed --max-count"
+                    {:min-count min-count :max-count max-count})))
+  (when (and (zero? (or min-count -1)) (nil? max-count))
+    (throw (ex-info "await --min-count 0 alone is vacuous" {:min-count min-count})))
+  (let [timeout-secs (or timeout-secs await-default-timeout-secs)]
+    (when (or (neg? timeout-secs) (> timeout-secs (quot Long/MAX_VALUE 1000)))
+      (throw (ex-info "await --timeout-secs must be non-negative and safely bounded"
+                      {:timeout-secs timeout-secs})))
+    {:query query
+     :raw-params (or param {})
+     :min-count min-count
+     :max-count max-count
+     :timeout-secs timeout-secs}))
+
+(defn- await-query
+  [rt {:keys [query raw-params] :as opts}]
+  (let [query-def (graph/resolve-query rt query)
+        params (graph/coerce-declared-params query-def raw-params)]
+    (assoc opts :query-def query-def :params params)))
+
+(defn- await-probe
+  [rt {:keys [query-def params min-count max-count]}]
+  (let [limit (long (if (some? max-count) (inc max-count) min-count))
+        count (count (weaver/list-lean rt lean-attribute-byte-floor query-def params limit
+                                       {:clamp? true}))]
+    {:count count
+     :satisfied? (and (or (nil? min-count) (<= min-count count))
+                      (or (nil? max-count) (<= count max-count)))}))
+
+(defn- await-result
+  [rt started {:keys [query min-count max-count]} reason probe]
+  {:operation "await"
+   :query query
+   :reason reason
+   :count (:count probe)
+   :min_count min-count
+   :max_count max-count
+   :elapsed_ms (.toMillis (Duration/between started (runtime-api/now rt)))})
+
 (defn- query-list-entry [[name query-def]]
   {:name name
    :params (if (map? query-def) (vec (:params query-def)) [])
@@ -805,6 +859,28 @@
                    :doc "Explicit maximum result count; set above the total for an intentional full read."}}
    :annotations {:use-when ["Selecting actionable strands whose blocking dependencies are already closed."]
                  :failure-modes ["batteries/query-unknown"]}})
+
+(def ^:private await-arg-spec
+  {:op "await"
+   :doc "Block until a named query's result count is inside an inclusive band."
+   :hook-class :read
+   :deadline-class :unbounded
+   :flags {:query {:type :string :doc "Weaver-registered named query."}
+           :param {:type :map :doc "Named-query parameter key=value; repeatable."}
+           :min-count {:type :int :doc "Inclusive minimum result count."}
+           :max-count {:type :int :doc "Inclusive maximum result count."}
+           :timeout-secs
+           {:type :int
+            :doc (format-alpha/reflow
+                  "|Seconds to block before returning the timeout reason (default
+                   |1800). Cap waits at about 50 minutes and re-issue them so an
+                   |idle provider prompt cache does not expire.")}}
+   :annotations
+   {:notes [(format-alpha/reflow
+             "|Await observes query cardinality, not strand completion. Closing,
+              |replacing, or burning a strand all remove it from an active-set
+              |query.")]
+    :failure-modes ["batteries/query-unknown"]}})
 
 (def ^:private subgraph-arg-spec
   {:op "subgraph"
@@ -977,6 +1053,14 @@
                      :count :integer}}
    'list strand-collection-return
    'ready strand-collection-return
+   'await {:type :map
+           :required {:operation :string
+                      :query :string
+                      :reason :string
+                      :count :integer
+                      :min_count [:nullable :integer]
+                      :max_count [:nullable :integer]
+                      :elapsed_ms :integer}}
    'subgraph {:type :map
               :required {:root_ids {:type :collection :items :string}
                          :strands strand-collection-return
@@ -1380,6 +1464,21 @@
       (do (when (seq params)
             (throw (ex-info "--param requires --query" {})))
           (weaver/ready-lean rt lean-attribute-byte-floor [:exists :id] {} limit)))))
+
+(skein/defop await
+  "Block until a named query's result count is inside the requested band."
+  (op-options 'await await-arg-spec)
+  [ctx]
+  (let [rt (:op/runtime ctx)
+        opts (await-query rt (await-options (:op/args ctx)))
+        started (runtime-api/now rt)]
+    (spool/poll-until!
+     (runtime-api/clock rt)
+     {:timeout-ms (* 1000 (long (:timeout-secs opts)))
+      :poll-ms await-poll-ms
+      :check #(await-probe rt opts)
+      :pred->result #(when (:satisfied? %) (await-result rt started opts "satisfied" %))
+      :on-timeout #(await-result rt started opts "timeout" %)})))
 
 (skein/defop subgraph
   "Return a relation-scoped subgraph rooted at one strand."

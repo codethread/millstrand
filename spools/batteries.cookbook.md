@@ -200,6 +200,25 @@ Honest source: the `query`/`list`/`ready` ops in `spools/src/skein/spools/batter
 
 ---
 
+## Recipe: Wait for a query cardinality band
+
+**Situation.** A registered query describes the set whose size controls the next step, and polling `list` in a shell loop would duplicate timeout and cadence code.
+
+**Composition.** Inspect the query first, then pass its parameters and an inclusive count bound to `await`. Timeout is a normal result, so branch on `reason`.
+
+```sh
+strand query explain review-verdicts
+result=$(strand await --query review-verdicts --param target=fx91 \
+  --min-count 2 --timeout-secs 1500)
+[ "$(jq -r .reason <<<"$result")" = satisfied ]
+```
+
+`await` measures the query's result set at each poll. It does not track completion events. Closing, superseding, or burning a strand has the same effect when each action removes that strand from the selected set. The reported count is clamped at the smallest number needed to decide the band, so it is a decision result rather than a progress total. Re-issue waits before about 50 minutes to preserve provider prompt caches during long idle periods.
+
+Honest source: the `await` op and its manual-clock band tests in `test/skein/spools/batteries_test.clj`.
+
+---
+
 ## Recipe: Apply a registered pattern with `weave` and JSON input
 
 **Situation.** A pattern registered in your workspace (this repo ships `agent-plan`, `kanban-batch`, `delegate-pipeline`) builds a whole batch of wired strands from one JSON input, and you want to drive it from a script and keep the ids it hands back.

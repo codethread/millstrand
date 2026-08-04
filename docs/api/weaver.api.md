@@ -112,14 +112,16 @@ Return strands visible to `runtime`, optionally filtered by a query definition.
 (list-lean runtime lean-byte-floor)
 (list-lean runtime lean-byte-floor query-def params)
 (list-lean runtime lean-byte-floor query-def params limit)
+(list-lean runtime lean-byte-floor query-def params limit opts)
 ```
 Function.
 
 Return strands with oversized attributes replaced by descriptors.
 
   The optional limit arity is for the CLI/wire read surface; the trusted
-  in-process arities remain unbounded by default.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L321-L333">Source</a></sub></p>
+  in-process arities remain unbounded by default. Passing `{:clamp? true}` in
+  the final arity returns at most the limit without running an overflow count.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L321-L338">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/list-query">`list-query`</a>
 ``` clojure
@@ -128,7 +130,7 @@ Return strands with oversized attributes replaced by descriptors.
 Function.
 
 Return strands matching a registered query definition.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L343-L346">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L351-L354">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/op!">`op!`</a>
 ``` clojure
@@ -160,7 +162,7 @@ Invoke a registered CLI operation with raw string argv from a root-level
   nil, fails loudly with the expected and actual labels. Raw-envelope ops (no
   `:arg-spec`) receive the context unchanged, still carrying the raw
   `:op/payloads` map.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L570-L629">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L578-L637">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/op-provenance">`op-provenance`</a>
 ``` clojure
@@ -177,7 +179,7 @@ Return owner/provenance diagnostics for `runtime`'s CLI op registry as data.
   system owner, a workspace op under the direct owner — and which lower-layer
   entries an override shadows. Op entries carry the handler symbol as data, not a
   resolved function value (DELTA-OlrDrt-001.CC9).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L553-L564">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L561-L572">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/ops">`ops`</a>
 ``` clojure
@@ -186,7 +188,7 @@ Return owner/provenance diagnostics for `runtime`'s CLI op registry as data.
 Function.
 
 Return registered CLI operation entries for the current weaver runtime.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L489-L492">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L497-L500">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/ready">`ready`</a>
 ``` clojure
@@ -196,7 +198,7 @@ Return registered CLI operation entries for the current weaver runtime.
 Function.
 
 Return ready strands for `runtime`, optionally filtered by a query definition.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L352-L357">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L360-L365">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/ready-lean">`ready-lean`</a>
 ``` clojure
@@ -210,7 +212,7 @@ Return ready strands with oversized attributes replaced by descriptors.
 
   The optional limit arity is for the CLI/wire read surface; the trusted
   in-process arities remain unbounded by default.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L364-L376">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L372-L384">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/register-op!">`register-op!`</a>
 ``` clojure
@@ -241,7 +243,7 @@ Register a trusted weaver-side CLI operation.
   are normally published by owner-complete modules from init.clj or registered
   directly from a live REPL. Module refresh replaces its owner's partition;
   direct registrations remain until explicitly replaced or removed.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L388-L423">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L396-L431">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/replace-op!">`replace-op!`</a>
 ``` clojure
@@ -259,7 +261,7 @@ Replace an already-registered op, failing loudly when the name is absent.
   override intent is recorded, which is what lets the direct entry keep
   shadowing the original across `runtime/refresh!`. `unregister-op!` retracts
   the shadow and the shadowed entry becomes effective again.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L433-L454">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L441-L462">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/resolve-op">`resolve-op`</a>
 ``` clojure
@@ -273,7 +275,7 @@ Return the registered CLI operation entry for `op-name`, or fail loudly.
   concurrent registry replacement takes effect only for a later resolve — the
   in-flight lookup and its not-found diagnostic share one immutable view
   (DELTA-OlrDrt-001.CC9/CC10, op symbols resolve at invocation).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L533-L547">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L541-L555">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/show">`show`</a>
 ``` clojure
@@ -337,7 +339,7 @@ Retract `owner`'s own op registration for `op-name`.
   fresh claim leaves the name unregistered. Unregistering a name this owner
   never registered is an idempotent no-op. Returns `{:unregistered
   <canonical-name>}`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L468-L482">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/weaver/alpha.clj#L476-L490">Source</a></sub></p>
 
 ## <a name="skein.api.weaver.alpha/update!">`update!`</a>
 ``` clojure

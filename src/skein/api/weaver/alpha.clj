@@ -322,7 +322,8 @@
   "Return strands with oversized attributes replaced by descriptors.
 
   The optional limit arity is for the CLI/wire read surface; the trusted
-  in-process arities remain unbounded by default."
+  in-process arities remain unbounded by default. Passing `{:clamp? true}` in
+  the final arity returns at most the limit without running an overflow count."
   ([runtime lean-byte-floor]
    (require-lean-result! (normalize (db/all-strands-lean (ds runtime) lean-byte-floor))))
   ([runtime lean-byte-floor query-def params]
@@ -330,14 +331,21 @@
     (normalize (db/all-strands-lean (ds runtime) lean-byte-floor query-def params))))
   ([runtime lean-byte-floor query-def params limit]
    (require-lean-result!
-    (normalize (db/all-strands-lean (ds runtime) lean-byte-floor query-def params limit)))))
+    (normalize (db/all-strands-lean (ds runtime) lean-byte-floor query-def params limit))))
+  ([runtime lean-byte-floor query-def params limit opts]
+   (require-lean-result!
+    (normalize
+     (db/all-strands-lean (ds runtime) lean-byte-floor query-def params limit opts)))))
 
 (s/fdef list-lean
   :args (s/or :floor (s/cat :runtime ::runtime :lean-byte-floor nat-int?)
               :filtered (s/cat :runtime ::runtime :lean-byte-floor nat-int?
                                :query-def any? :params any?)
               :limited (s/cat :runtime ::runtime :lean-byte-floor nat-int?
-                              :query-def any? :params any? :limit nat-int?))
+                              :query-def any? :params any? :limit nat-int?)
+              :clamped (s/cat :runtime ::runtime :lean-byte-floor nat-int?
+                              :query-def any? :params any? :limit nat-int?
+                              :opts #(= {:clamp? true} %)))
   :ret coll?)
 
 (defn list-query

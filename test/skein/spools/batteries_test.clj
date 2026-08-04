@@ -96,7 +96,7 @@
   (with-batteries
     (fn [rt]
       (testing "all shipped ops are registered under batteries provenance"
-        (doseq [op-name ['add 'update 'show 'supersede 'burn 'list 'ready 'subgraph
+        (doseq [op-name ['add 'update 'show 'supersede 'burn 'list 'ready 'await 'subgraph
                          'weave 'query 'pattern 'note 'notes 'vocab 'spool]]
           (let [entry (op-entry rt op-name)]
             (is (some? entry) (str op-name " should be registered"))
@@ -113,6 +113,7 @@
                                       'burn :mutating
                                       'list :read
                                       'ready :read
+                                      'await :read
                                       'subgraph :read
                                       'weave :mutating
                                       'note :mutating
@@ -120,7 +121,8 @@
                                       'vocab :read}]
           (let [entry (op-entry rt op-name)]
             (is (= hook-class (get-in entry [:arg-spec :hook-class])))
-            (is (= :standard (get-in entry [:arg-spec :deadline-class]))))))
+            (is (= (if (= 'await op-name) :unbounded :standard)
+                   (get-in entry [:arg-spec :deadline-class]))))))
       (testing "read subcommand leaves carry classes"
         (doseq [op-name ['query 'pattern]
                 verb ["list" "explain"]]
@@ -172,6 +174,8 @@
         (check! 'show (weaver/op! rt 'show [(:id first-row)]))
         (check! 'list (weaver/op! rt 'list []))
         (check! 'ready (weaver/op! rt 'ready []))
+        (check! 'await (weaver/op! rt 'await
+                                   ["--query" "all" "--min-count" "1" "--timeout-secs" "0"]))
         (check! 'subgraph (weaver/op! rt 'subgraph [(:id first-row)]))
         (check! 'weave (weaver/op! rt 'weave ["--pattern" "task" "--input"
                                               (json/write-str {:title "Woven"})]))
@@ -710,6 +714,80 @@
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"requires --query"
                                 (weaver/op! rt 'list ["--param" "who=agent"]))))))))
 
+(deftest await-validates-the-band-and-query-boundary
+  (with-batteries
+    (fn [rt]
+      (graph/register-query! rt 'owned {:params [:who]
+                                        :where [:= [:attr :owner] [:param :who]]})
+      (doseq [[argv message]
+              [[[] #"requires a non-empty name"]
+               [["--query" "owned"] #"requires --min-count or --max-count"]
+               [["--query" "owned" "--min-count" "-1"] #"must be non-negative"]
+               [["--query" "owned" "--max-count" "-1"] #"must be non-negative"]
+               [["--query" "owned" "--min-count" "2" "--max-count" "1"] #"must not exceed"]
+               [["--query" "owned" "--min-count" "0"] #"vacuous"]
+               [["--query" "owned" "--max-count" "0" "--timeout-secs" "-1"]
+                #"timeout-secs must be non-negative"]
+               [["--query" "nope" "--max-count" "0"] #"Query not found"]
+               [["--query" "owned" "--param" "other=x" "--max-count" "0"]
+                #"Unknown query parameters"]
+               [["--query" "owned" "--max-count" "0"] #"Missing query param"]]]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo message
+                              (weaver/op! rt 'await argv)))))))
+
+(deftest await-reports-bounded-cardinality-and-timeout-as-data
+  (with-batteries
+    (fn [rt]
+      (t/set-clock! rt (t/manual-clock java.time.Instant/EPOCH))
+      (graph/register-query! rt 'owned {:params [:who]
+                                        :where [:= [:attr :owner] [:param :who]]})
+      (doseq [owner ["agent" "agent" "other"]]
+        (weaver/add! rt {:title owner :attributes {:owner owner}}))
+      (testing "a minimum-only probe clamps at its decision limit"
+        (is (= {:operation "await" :query "owned" :reason "satisfied" :count 1
+                :min_count 1 :max_count nil :elapsed_ms 0}
+               (weaver/op! rt 'await
+                           ["--query" "owned" "--param" "who=other"
+                            "--param" "who=agent" "--min-count" "1"]))))
+      (testing "a maximum probe reads one row past the band"
+        (is (= 2 (:count (weaver/op! rt 'await
+                                     ["--query" "owned" "--param" "who=agent"
+                                      "--max-count" "1" "--timeout-secs" "0"])))))
+      (testing "timeout is a normal result with the complete envelope"
+        (is (= {:operation "await" :query "owned" :reason "timeout" :count 0
+                :min_count 1 :max_count nil :elapsed_ms 2000}
+               (weaver/op! rt 'await
+                           ["--query" "owned" "--param" "who=nobody"
+                            "--min-count" "1" "--timeout-secs" "2"])))))))
+
+(deftest await-supports-twenty-five-concurrent-waiters
+  (with-batteries
+    (fn [rt]
+      (graph/register-query! rt 'all [:exists :id])
+      (weaver/add! rt {:title "Ready" :attributes {}})
+      (let [waiters (mapv (fn [_]
+                            (future
+                              (weaver/op! rt 'await
+                                          ["--query" "all" "--min-count" "1"
+                                           "--timeout-secs" "1"])))
+                          (range 25))
+            results (mapv #(deref % (test-support/await-budget-ms) ::timed-out) waiters)]
+        (is (not-any? #{::timed-out} results))
+        (is (every? #(= "satisfied" (:reason %)) results))))))
+
+(deftest await-freezes-the-query-definition-and-params-before-polling
+  (with-batteries
+    (fn [rt]
+      (graph/register-query! rt 'owned {:params [:who]
+                                        :where [:= [:attr :owner] [:param :who]]})
+      (weaver/add! rt {:title "Original" :attributes {:owner "agent"}})
+      (let [resolved (call-private 'await-query rt
+                                   {:query "owned" :raw-params {"who" "agent"}
+                                    :min-count 1 :max-count nil :timeout-secs 1})]
+        (graph/replace-query! rt 'owned [:= [:attr :owner] "other"])
+        (is (= {:count 1 :satisfied? true}
+               (call-private 'await-probe rt resolved)))))))
+
 (deftest list-and-ready-result-caps-fail-loudly-with-explicit-override
   (with-batteries
     (fn [rt]
@@ -733,6 +811,18 @@
                                 (batteries/set-read-limit! rt 0)))
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"positive integer"
                                 (weaver/op! rt 'list ["--limit" "0"]))))))))
+
+(deftest list-lean-clamped-arity-returns-the-limit-without-overflow-failure
+  (with-batteries
+    (fn [rt]
+      (doseq [n (range 3)]
+        (weaver/add! rt {:title (str "Task " n) :attributes {}}))
+      (is (= 2 (count (weaver/list-lean rt 1024 [:exists :id] {} 2 {:clamp? true}))))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #":clamp\? true"
+                            (weaver/list-lean rt 1024 [:exists :id] {} 2 {})))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #":clamp\? true"
+                            (weaver/list-lean rt 1024 [:exists :id] {} 2
+                                              {:clamp? true :extra true}))))))
 
 (deftest list-ready-and-named-queries-lean-project-large-attributes-only
   (with-batteries
