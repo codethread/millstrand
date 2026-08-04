@@ -1,10 +1,10 @@
-(ns workflows-explore
+(ns workflows.explore
   "The open-ended exploration workflow (family `explore`)."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.format.alpha :as format-alpha]
             [skein.spools.workflow :as workflow]
-            [workflows-support :as support]))
+            [workflows.support :as support]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."

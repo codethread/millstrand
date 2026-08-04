@@ -7,23 +7,24 @@
 ;; module's contribution and lifecycle declarations are collected from its
 ;; authoring forms. Declarations carry only a source target and world policy.
 ;;
-;; File-per-concern map (each is one module):
-;;   config.clj        — named queries + shared policy validation helpers
-;;   workflows_support.clj — shared scripts and subprocess helpers
-;;   workflows.clj     — shared workflow authoring patterns + main-CI watcher
-;;   workflows_land_definitions.clj — land workflow definitions
-;;   workflows_spool_bump.clj — third-party spool bump workflow
-;;   workflows_story.clj — module-form story workflow and continuations
-;;   workflows_explore.clj — open-ended exploration workflow
-;;   workflows_fix.clj — light bug-fix workflow
-;;   workflows_land.clj— the land policy op: merge lock, merge queue, lane moves
-;;   workflows_ralph.clj— the ralph-iterate workflow for one-card epic iterations
-;;   harnesses.clj     — harness seats + routing policy
-;;   guide.clj         — the guide op: surface questions answered by a run
-;;   reviewers.clj     — reviewer rosters
-;;   attention.clj     — chime attention rules
-;;   nvd_scan.clj      — NVD scan cron job
-;;   module_adapters.clj — repo election of the batteries help transform
+;; File-per-concern map (each Clojure file is one module):
+;;   config.clj                 — named queries + shared policy validation helpers
+;;   workflows/support.clj      — shared scripts and subprocess helpers
+;;   workflows/common.clj       — shared workflow patterns + main-CI watcher
+;;   workflows/land.clj         — land workflow definitions
+;;   workflows/land_policy.clj  — land merge lock, queue, and kanban lane policy
+;;   workflows/spool_bump.clj   — third-party spool bump workflow
+;;   workflows/story.clj        — module-form story workflow and continuations
+;;   workflows/explore.clj      — open-ended exploration workflow
+;;   workflows/fix.clj          — light bug-fix workflow
+;;   workflows/ralph.clj        — one-card epic iteration workflow
+;;   workflows/scripts/         — shell programs frozen into workflow gates
+;;   harnesses.clj              — harness seats + routing policy
+;;   guide.clj                  — guide op: surface questions answered by a run
+;;   reviewers.clj              — reviewer rosters
+;;   attention.clj              — chime attention rules
+;;   nvd_scan.clj               — NVD scan cron job
+;;   module_adapters.clj        — repo election of the batteries help transform
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and every
 ;; refresh; a module key it redeclares shadows the one here and wins, and it binds
@@ -201,61 +202,61 @@
                  {:file "config.clj"
                   :required? true})
 ;; Shared script sources load before the focused workflow modules.
-(runtime/module! runtime :workflows-support
-                 {:file "workflows_support.clj"
+(runtime/module! runtime :workflows.support
+                 {:file "workflows/support.clj"
                   :after [:config]
                   :required? true})
-;; workflows.clj owns the shared authoring patterns and the stable
-;; workflows/main-ci-watch code gate function.
+;; workflows/common.clj owns the shared authoring patterns and the stable
+;; workflows.common/main-ci-watch code gate function.
 (runtime/module! runtime :workflows
-                 {:file "workflows.clj"
+                 {:file "workflows/common.clj"
                   :spools ['skein.spools/workflow 'ct.spools/delegation]
                   :after [:skein/spools-workflow :skein/spools-delegation
-                          :config :workflows-support]
+                          :config :workflows.support]
                   :required? true})
 ;; Each concrete workflow definition owns one focused source module. Keeping
 ;; these modules independent lets a change to one routine refresh its own
 ;; contribution without growing a broad definitions file.
-(runtime/module! runtime :workflows-land-definitions
-                 {:file "workflows_land_definitions.clj"
+(runtime/module! runtime :workflows.land
+                 {:file "workflows/land.clj"
                   :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows-support]
+                  :after [:skein/spools-workflow :workflows.support]
                   :required? true})
-(runtime/module! runtime :workflows-spool-bump
-                 {:file "workflows_spool_bump.clj"
+(runtime/module! runtime :workflows.spool-bump
+                 {:file "workflows/spool_bump.clj"
                   :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows-support]
+                  :after [:skein/spools-workflow :workflows.support]
                   :required? true})
-(runtime/module! runtime :workflows-story
-                 {:file "workflows_story.clj"
+(runtime/module! runtime :workflows.story
+                 {:file "workflows/story.clj"
                   :spools ['skein.spools/workflow 'ct.spools/delegation]
                   :after [:skein/spools-workflow :skein/spools-delegation
-                          :workflows-support]
+                          :workflows.support]
                   :required? true})
-(runtime/module! runtime :workflows-explore
-                 {:file "workflows_explore.clj"
+(runtime/module! runtime :workflows.explore
+                 {:file "workflows/explore.clj"
                   :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows-support]
+                  :after [:skein/spools-workflow :workflows.support]
                   :required? true})
-(runtime/module! runtime :workflows-fix
-                 {:file "workflows_fix.clj"
+(runtime/module! runtime :workflows.fix
+                 {:file "workflows/fix.clj"
                   :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows-support]
+                  :after [:skein/spools-workflow :workflows.support]
                   :required? true})
-;; workflows_land.clj owns the narrow land policy op: merge lock, merge queue,
+;; workflows/land_policy.clj owns the narrow land policy op: merge lock, merge queue,
 ;; and kanban lane moves. It loads after the land definitions it drives.
-(runtime/module! runtime :workflows-land
-                 {:file "workflows_land.clj"
+(runtime/module! runtime :workflows.land-policy
+                 {:file "workflows/land_policy.clj"
                   :spools ['skein.spools/workflow]
                   :after [:skein/spools-workflow :workflows
-                          :workflows-land-definitions]
+                          :workflows.land]
                   :required? true})
 ;; Ralph remains an independent one-card-per-iteration workflow.
-(runtime/module! runtime :workflows-ralph
-                 {:file "workflows_ralph.clj"
+(runtime/module! runtime :workflows.ralph
+                 {:file "workflows/ralph.clj"
                   :spools ['skein.spools/workflow]
                   :after [:skein/spools-workflow :workflows
-                          :workflows-land-definitions]
+                          :workflows.land]
                   :required? true})
 
 ;; The code executor's lifecycle resource scans ready gates when opened. It must load after
@@ -264,9 +265,9 @@
                  {:ns 'skein.spools.executors.code
                   :spools ['skein.spools/workflow]
                   :after [:skein/spools-workflow :workflows
-                          :workflows-land-definitions :workflows-spool-bump
-                          :workflows-story :workflows-explore :workflows-fix
-                          :workflows-ralph]
+                          :workflows.land :workflows.spool-bump
+                          :workflows.story :workflows.explore :workflows.fix
+                          :workflows.ralph]
                   :required? true})
 
 ;; The subagent gate executor activates last: its lifecycle resource runs an initial gate
@@ -276,5 +277,5 @@
                  {:ns 'ct.spools.executors.subagent
                   :spools ['ct.spools/agent-run]
                   :after [:skein/spools-shuttle :skein/spools-workflow
-                          :harnesses :workflows :workflows-story :workflows-ralph]
+                          :harnesses :workflows :workflows.story :workflows.ralph]
                   :required? true})

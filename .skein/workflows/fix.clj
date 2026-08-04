@@ -1,9 +1,9 @@
-(ns workflows-fix
+(ns workflows.fix
   "The light bug-fix workflow (family `fix`)."
   (:require [clojure.spec.alpha :as s]
             [skein.api.format.alpha :as format-alpha]
             [skein.spools.workflow :as workflow]
-            [workflows-support :as support]))
+            [workflows.support :as support]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."

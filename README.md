@@ -24,7 +24,7 @@ Here is a small workflow:
                  :depends-on [:signoff]))
 ```
 
-This is Skein code, modelled on this repository's [landing workflow](./.skein/workflows_land_definitions.clj). It compiles to a graph that any agent can consume one ready step at a time, regardless of whether the agent runs through Codex, Claude, or another harness.
+This is Skein code, modelled on this repository's [landing workflow](./.skein/workflows/land.clj). It compiles to a graph that any agent can consume one ready step at a time, regardless of whether the agent runs through Codex, Claude, or another harness.
 
 A `workflow/gate` marks a hand-off point; the gate itself does not perform the work. An executor plugin supplies that behavior and registers its liveness checks with the workflow engine. With the reference subagent executor enabled, the ready `:subagent` gate above is handed to a dedicated agent, which may use a different harness from the coordinator driving the workflow.
 
@@ -261,7 +261,7 @@ Workflows are plain data, so they compose. A `workflow/call` inlines a reusable 
 <details markdown>
 <summary>This repository's landing workflow, condensed</summary>
 
-The example at the top of this page shows the shape. Here is the workflow from this repo's [`.skein/workflows_land_definitions.clj`](./.skein/workflows_land_definitions.clj), condensed but with its executor kinds, enforcement text, and routing intact.
+The example at the top of this page shows the shape. Here is the workflow from this repo's [`.skein/workflows/land.clj`](./.skein/workflows/land.clj), condensed but with its executor kinds, enforcement text, and routing intact.
 
 ```clojure
 (workflow/defworkflow land

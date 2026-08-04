@@ -68,14 +68,16 @@
 (defn- load-module-source!
   "Load one workspace authoring file and publish its complete contribution.
 
-  The owning namespace is derived from the filename through Clojure's own
-  munging, so `workflows_land.clj` reports `workflows-land` and satisfies the
-  module-graph guard that every authoring form come from its module's namespace."
+  The owning namespace is derived from the relative filename through Clojure's
+  path and munging conventions, so `workflows/land_policy.clj` reports
+  `workflows.land-policy` and satisfies the module-graph guard that every
+  authoring form comes from its module's namespace."
   [rt module-key file]
   (let [path (.getCanonicalPath (io/file file))
         ns-sym (symbol (-> file
                            (str/replace #"^\.skein/" "")
                            (str/replace #"\.clj$" "")
+                           (str/replace "/" ".")
                            (str/replace "_" "-")))]
     (publish-contribution!
      rt module-key
@@ -139,17 +141,17 @@
             ((requiring-resolve 'harnesses/open-review-contract!) {:runtime rt})
             ((requiring-resolve 'harnesses/open-task-contract!) {:runtime rt})
             (load-module-source! rt :guide ".skein/guide.clj")
-            (load-module-source! rt :workflows-support ".skein/workflows_support.clj")
-            (load-module-source! rt :workflows ".skein/workflows.clj")
-            (load-module-source! rt :workflows-land-definitions
-                                 ".skein/workflows_land_definitions.clj")
-            (load-module-source! rt :workflows-spool-bump
-                                 ".skein/workflows_spool_bump.clj")
-            (load-module-source! rt :workflows-story ".skein/workflows_story.clj")
-            (load-module-source! rt :workflows-explore ".skein/workflows_explore.clj")
-            (load-module-source! rt :workflows-fix ".skein/workflows_fix.clj")
-            (load-module-source! rt :workflows-land ".skein/workflows_land.clj")
-            (load-module-source! rt :workflows-ralph ".skein/workflows_ralph.clj")
+            (load-module-source! rt :workflows.support ".skein/workflows/support.clj")
+            (load-module-source! rt :workflows ".skein/workflows/common.clj")
+            (load-module-source! rt :workflows.land
+                                 ".skein/workflows/land.clj")
+            (load-module-source! rt :workflows.spool-bump
+                                 ".skein/workflows/spool_bump.clj")
+            (load-module-source! rt :workflows.story ".skein/workflows/story.clj")
+            (load-module-source! rt :workflows.explore ".skein/workflows/explore.clj")
+            (load-module-source! rt :workflows.fix ".skein/workflows/fix.clj")
+            (load-module-source! rt :workflows.land-policy ".skein/workflows/land_policy.clj")
+            (load-module-source! rt :workflows.ralph ".skein/workflows/ralph.clj")
             (f rt)))
         (finally
           (weaver-runtime/stop! rt)
@@ -160,17 +162,19 @@
   "Copy the repo-local config files into a temporary config dir."
   [target]
   (.mkdirs (io/file target))
-  (doseq [name ["init.clj" "config.clj" "workflows_support.clj" "workflows.clj"
-                "workflows_land_definitions.clj" "workflows_spool_bump.clj"
-                "workflows_story.clj" "workflows_explore.clj" "workflows_fix.clj"
-                "workflows_land.clj" "workflows_ralph.clj" "harnesses.clj"
+  (doseq [name ["init.clj" "config.clj" "workflows/support.clj" "workflows/common.clj"
+                "workflows/land.clj" "workflows/spool_bump.clj"
+                "workflows/story.clj" "workflows/explore.clj" "workflows/fix.clj"
+                "workflows/land_policy.clj" "workflows/ralph.clj" "harnesses.clj"
                 "guide.clj" "attention.clj" "nvd_scan.clj" "reviewers.clj"
                 "module_adapters.clj" "spools.edn"]]
-    (io/copy (io/file ".skein" name) (io/file target name)))
-  (let [scripts-target (io/file target "scripts")]
+    (let [destination (io/file target name)]
+      (some-> destination .getParentFile .mkdirs)
+      (io/copy (io/file ".skein" name) destination)))
+  (let [scripts-target (io/file target "workflows" "scripts")]
     (.mkdirs scripts-target)
     (doseq [name ["feature-ci-watch.sh" "land-cleanup.sh" "land-merge.sh"]]
-      (io/copy (io/file ".skein/scripts" name) (io/file scripts-target name))))
+      (io/copy (io/file ".skein/workflows/scripts" name) (io/file scripts-target name))))
   ;; The copied config dir would reinterpret repo-relative local roots. Git
   ;; families remain byte-for-byte sourced from the checked-in approvals.
   (write-embedded-spools! target)
@@ -215,7 +219,7 @@
                (str "(runtime/collect-entry! shuttle/alias-kind "
                     ":f16-probe-seat {:alias-of :codex})\n"
                     "(runtime/collect-entry! workflow/definition-kind "
-                    ":f16-probe-flow 'workflows-story/story)\n")))))
+                    ":f16-probe-flow 'workflows.story/story)\n")))))
 
 (deftest f16-workspace-partition-refresh-deletes-omitted-seats-and-constructors
   ;; F16 regression: the .skein policy files publish their harness seats, reviewer
@@ -249,7 +253,7 @@
                   workflow-definition (requiring-resolve 'skein.spools.workflow/workflow-definition)]
               (is (= :codex (:name (resolve-harness :f16-probe-seat)))
                   "the probe seat resolves through its :alias-of tool after startup")
-              (is (= 'workflows-story/story (workflow-definition :f16-probe-flow))
+              (is (= 'workflows.story/story (workflow-definition :f16-probe-flow))
                   "the probe workflow definition is registered after startup")
               (write-f16-probe! config-dir false)
               (is (contains? #{:applied :unchanged} (:status (runtime/refresh! rt))))
@@ -471,9 +475,9 @@
                          :ralph/worktree "/tmp/ralph-contract"
                          :ralph/card "feature-contract"}
             next-step (fn [] (first (:ready (op! "workflow" ["next" run-id]))))]
-        (is (= "workflows-ralph/ralph-iterate" (:definition description)))
+        (is (= "workflows.ralph/ralph-iterate" (:definition description)))
         (is (= ["orient"] (get-in description [:declared :entry])))
-        (is (= "workflows-ralph/ralph-iterate-params"
+        (is (= "workflows.ralph/ralph-iterate-params"
                (get-in description [:params :spec])))
         (is (= "ralph.orient" (:action-ref (first (:ready started)))))
         (is (= "ralph.claim-feature" (:action-ref (next-step))))
@@ -486,8 +490,8 @@
                   :ralph/worktree "/tmp/ralph-contract"
                   :ralph/card "feature-contract"}
                  (get-in (workflow/current-root run-id) [:attributes :workflow/context]))))
-        (is (s/valid? :workflows-ralph/ralph-context context-map))
-        (is (not (s/valid? :workflows-ralph/ralph-context
+        (is (s/valid? :workflows.ralph/ralph-context context-map))
+        (is (not (s/valid? :workflows.ralph/ralph-context
                            (assoc context-map :ralph/card "other-card"))))
         (is (= "ralph.slice-gates" (:action-ref (next-step))))
         (is (= "ralph.quick-review" (:action-ref (next-step))))
@@ -501,7 +505,7 @@
   (with-startup-config-runtime
     (fn [_rt]
       (let [description (op! "workflow" ["show" "spool-bump"])
-            definition (var-get (requiring-resolve 'workflows-spool-bump/spool-bump))
+            definition (var-get (requiring-resolve 'workflows.spool-bump/spool-bump))
             compile-workflow (requiring-resolve 'skein.spools.workflow/compile)
             params (fn [direct?]
                      (json/write-str
@@ -526,9 +530,9 @@
                       :direct-user-request direct?}))
                    (keep #(get-in % [:attributes "workflow/action-ref"]))
                    set))]
-        (is (= "workflows-spool-bump/spool-bump" (:definition description)))
+        (is (= "workflows.spool-bump/spool-bump" (:definition description)))
         (is (= ["create-branch"] (get-in description [:declared :entry])))
-        (is (= "workflows-spool-bump/spool-bump-params" (get-in description [:params :spec])))
+        (is (= "workflows.spool-bump/spool-bump-params" (get-in description [:params :spec])))
         (is (= "spool-bump.branch.create"
                (:action-ref
                 (first (:ready
@@ -654,8 +658,8 @@
   (with-startup-config-runtime
     (fn [_rt]
       (let [description (op! "workflow" ["show" "explore"])]
-        (is (= "workflows-explore/explore" (:definition description)))
-        (is (= "workflows-explore/explore-params" (get-in description [:params :spec]))))
+        (is (= "workflows.explore/explore" (:definition description)))
+        (is (= "workflows.explore/explore-params" (get-in description [:params :spec]))))
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Value does not satisfy the named spec"
@@ -1172,7 +1176,7 @@
                         "skein-main-ci-unrelated"
                         (make-array java.nio.file.attribute.FileAttribute 0)))
             bin-dir (io/file worktree "bin")
-            watch (requiring-resolve 'workflows/main-ci-watch)]
+            watch (requiring-resolve 'workflows.common/main-ci-watch)]
         (try
           (write-main-ci-fakes! bin-dir)
           (let [original-user-dir (System/getProperty "user.dir")]
@@ -1201,7 +1205,7 @@
                        "skein-main-ci-failing"
                        (make-array java.nio.file.attribute.FileAttribute 0)))
             bin-dir (io/file worktree "bin")
-            watch (requiring-resolve 'workflows/main-ci-watch)]
+            watch (requiring-resolve 'workflows.common/main-ci-watch)]
         (try
           (write-main-ci-fakes! bin-dir)
           (is (thrown-with-msg?
@@ -1221,7 +1225,7 @@
                        "skein-main-ci-malformed"
                        (make-array java.nio.file.attribute.FileAttribute 0)))
             bin-dir (io/file worktree "bin")
-            watch (requiring-resolve 'workflows/main-ci-watch)]
+            watch (requiring-resolve 'workflows.common/main-ci-watch)]
         (try
           (write-main-ci-fakes! bin-dir)
           (is (thrown-with-msg? clojure.lang.ExceptionInfo
@@ -1254,7 +1258,7 @@
             bin-dir (io/file worktree "bin")
             pid-file (io/file worktree "gh.pid")
             watcher (.newWatchService (java.nio.file.FileSystems/getDefault))
-            watch (requiring-resolve 'workflows/main-ci-watch)]
+            watch (requiring-resolve 'workflows.common/main-ci-watch)]
         (try
           (write-main-ci-fakes! bin-dir)
           (is (zero? (:exit (sh/sh "mkfifo" (.getAbsolutePath
@@ -1293,7 +1297,7 @@
             gate-attrs (:attributes (weaver/show rt (get-in completed [:ready 0 :id])))
             [shell-command shell-flag script script-name branch startup-timeout poll-interval]
             (:shell/argv gate-attrs)
-            executable (io/file ".skein/scripts/feature-ci-watch.sh")
+            executable (io/file ".skein/workflows/scripts/feature-ci-watch.sh")
             expected-sha (str/trim (:out (sh/sh "git" "rev-parse" "HEAD")))
             fake-gh-dir (.toFile
                          (java.nio.file.Files/createTempDirectory
@@ -1341,7 +1345,7 @@
             (delete-directory! fake-gh-dir)))))))
 
 (deftest land-merge-script-runs-standalone-with-argv-values
-  (let [executable (io/file ".skein/scripts/land-merge.sh")
+  (let [executable (io/file ".skein/workflows/scripts/land-merge.sh")
         fake-gh-dir (.toFile
                      (java.nio.file.Files/createTempDirectory
                       "skein-land-merge-fake-gh"
@@ -1424,11 +1428,11 @@
             approved-input (get-in choices ["approved" "input-spec"])
             abort-input (get-in choices ["abort" "input-spec"])]
         (is (= #{"approved" "revise" "abort"} (set (keys choices))))
-        (is (= "workflows-land-definitions/land-merge-input" (get approved-input "spec")))
-        (is (= "workflows-land-definitions/land-abort-input" (get abort-input "spec")))
-        (is (= "(clojure.spec.alpha/and (clojure.spec.alpha/keys :req-un [:workflows-land-definitions/subject :workflows-land-definitions/body]) (clojure.core/fn [%] (clojure.core/every? #{:body :subject} (clojure.core/keys %))))"
+        (is (= "workflows.land/land-merge-input" (get approved-input "spec")))
+        (is (= "workflows.land/land-abort-input" (get abort-input "spec")))
+        (is (= "(clojure.spec.alpha/and (clojure.spec.alpha/keys :req-un [:workflows.land/subject :workflows.land/body]) (clojure.core/fn [%] (clojure.core/every? #{:body :subject} (clojure.core/keys %))))"
                (get (first (get approved-input "spec-forms")) "form")))
-        (is (= "(clojure.spec.alpha/and (clojure.spec.alpha/keys :req-un [:workflows-land-definitions/reason]) (clojure.core/fn [%] (clojure.core/every? #{:reason} (clojure.core/keys %))))"
+        (is (= "(clojure.spec.alpha/and (clojure.spec.alpha/keys :req-un [:workflows.land/reason]) (clojure.core/fn [%] (clojure.core/every? #{:reason} (clojure.core/keys %))))"
                (get (first (get abort-input "spec-forms")) "form"))))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Value does not satisfy the named spec"
                             (op! "land" ["choose" "land-x" "approved" "--input" "{}"])))
@@ -1475,7 +1479,7 @@
             gate-attrs (:attributes (weaver/show rt (:id gate)))]
         (is (= "land.main.ci-green" (:action-ref gate)))
         (is (= "code" (:gate gate)))
-        (is (= "workflows/main-ci-watch" (:code/fn gate-attrs)))
+        (is (= "workflows.common/main-ci-watch" (:code/fn gate-attrs)))
         (is (= {:worktree "/tmp/land-x"} (:code/params gate-attrs)))
         (is (= 5400 (:code/timeout-secs gate-attrs))))
       (code-gate-complete! "land-x" "main runs green")
@@ -1585,7 +1589,7 @@
 (deftest land-signoff-guard-rejects-ambiguous-roots-and-locks
   (with-config-runtime
     (fn [rt]
-      (let [guard (requiring-resolve 'workflows-land/require-merge-lock-at-signoff-approval)
+      (let [guard (requiring-resolve 'workflows.land-policy/require-merge-lock-at-signoff-approval)
             updated (fn [run-id]
                       [{:after {:id (str "signoff-" run-id)
                                 :state "closed"
@@ -1642,7 +1646,7 @@
 (deftest land-signoff-guard-rejects-corrupt-singleton-lock
   (with-config-runtime
     (fn [rt]
-      (let [guard (requiring-resolve 'workflows-land/require-merge-lock-at-signoff-approval)
+      (let [guard (requiring-resolve 'workflows.land-policy/require-merge-lock-at-signoff-approval)
             lock (weaver/add! rt {:title "Malformed lock"
                                   :attributes {:kind "merge-lock"}})
             error (try
@@ -2179,7 +2183,7 @@
   (let [decl (get-in (runtime/status rt) [:modules :skein/spools-treadle])]
     (is (some? decl) ":skein/spools-treadle is a declared module")
     (is (every? (set (:after decl))
-                [:harnesses :workflows :workflows-story :workflows-ralph])
+                [:harnesses :workflows :workflows.story :workflows.ralph])
         "treadle depends on harnesses and every subagent workflow module")))
 
 (defn- assert-workflow-spool-consent-edges
@@ -2200,13 +2204,13 @@
            (:spools (get modules :workflows)))
         ":workflows must opt into skein.spools/workflow and ct.spools/delegation")
     (is (= [:skein/spools-workflow :workflows
-            :workflows-land-definitions :workflows-spool-bump
-            :workflows-story :workflows-explore :workflows-fix
-            :workflows-ralph]
+            :workflows.land :workflows.spool-bump
+            :workflows.story :workflows.explore :workflows.fix
+            :workflows.ralph]
            (:after (get modules :skein/spools-code)))
         "the code executor scans only after every code-gate workflow is loaded")
-    (is (= (requiring-resolve 'workflows/main-ci-watch)
-           (runtime/resolve-var rt 'workflows/main-ci-watch))
+    (is (= (requiring-resolve 'workflows.common/main-ci-watch)
+           (runtime/resolve-var rt 'workflows.common/main-ci-watch))
         "cold startup resolves the exact persisted code/fn symbol")))
 
 (deftest repo-local-startup-and-refresh-preserve-registrations

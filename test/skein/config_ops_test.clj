@@ -72,6 +72,7 @@
   (let [ns-sym (symbol (-> file
                            (str/replace #"^\.skein/" "")
                            (str/replace #"\.clj$" "")
+                           (str/replace "/" ".")
                            (str/replace "_" "-")))
         contribution (:contribution
                       (module-graph/with-contribution-collection
@@ -112,13 +113,13 @@
    (fn [runtime]
      (publish-authoring! runtime :config ".skein/config.clj")
      ;; materialize the workflow spool's registry handle so its constructor kind
-     ;; is a declared publication backend before workflows.clj contributes to it
+     ;; is a declared publication backend before workflows/common.clj contributes to it
      (test-support/activate-spool! runtime :skein/spools-workflow
                                    'skein.spools.workflow)
-     (publish-authoring! runtime :workflows ".skein/workflows.clj")
+     (publish-authoring! runtime :workflows ".skein/workflows/common.clj")
      ;; the land op lives beside the definitions it drives, in its own module
-     (publish-authoring! runtime :workflows-land ".skein/workflows_land.clj")
-     (let [provenances #{'config 'workflows 'workflows-land}
+     (publish-authoring! runtime :workflows.land-policy ".skein/workflows/land_policy.clj")
+     (let [provenances #{'config 'workflows 'workflows.land-policy}
            checked (atom #{})
            check! (fn [operation context value]
                     (t/check-op-return! runtime (symbol operation) context value)

@@ -1,7 +1,7 @@
-(ns workflows-land
+(ns workflows.land-policy
   "The coordinator landing policy: the merge train and the narrow `land` op.
 
-  The land WORKFLOW definitions live in workflows_land_definitions.clj — live
+  The land WORKFLOW definitions live in workflows/land.clj — live
   runs carry their qualified symbols on persisted gates — and this module owns
   the policy the engine has no business knowing: the singleton merge lock, the
   first-in first-out merge queue in front of it, and the kanban lane moves that

@@ -539,7 +539,7 @@ Honest source: the `github-pr-bindings` / `bind-attrs` reference in `test/skein/
   fulfill it by spawning an agent-run run and closing the gate with the result — the
   workflow definition never names the run engine.
 
-Honest source: the `delegate-pipeline` weave pattern in this repo's [`.skein/workflows.clj`](../.skein/workflows.clj) (chained `:subagent` gate loop with fn-valued `agent-run/*` attributes and a base-id fan-in to the accept checkpoint).
+Honest source: the `delegate-pipeline` weave pattern in this repo's [`.skein/workflows/common.clj`](../.skein/workflows/common.clj) (chained `:subagent` gate loop with fn-valued `agent-run/*` attributes and a base-id fan-in to the accept checkpoint).
 
 ---
 
