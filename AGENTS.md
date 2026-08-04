@@ -19,7 +19,7 @@ Skein is a runtime for programming the constraints and loops around coding agent
 
 - Always work via a registered workflow — `strand workflow list`, then `strand workflow show <name>`.
 - Always track work through a kanban card, in a worktree — `strand kanban prime`.
-- PRs go through the `land` workflow (`strand workflow show land`).
+- PRs go through the `land` workflow (`strand workflow show land`). Policy verbs live on the `land` op — load `strand prime land` / `strand help land` (not bare `workflow choose`/`complete` at those boundaries).
 
 ## Rules
 
@@ -45,8 +45,11 @@ Farm work out as tracked agent runs (`strand agent …`); never harness-native s
 | --- | --- |
 | Run | `strand agent delegate <task-id> [--harness …]` |
 | Await | `strand agent await <run-id>` · `strand agent await --under <root>` |
-| Review | `strand agent review <task-id> [--harness …]` |
+| Review | `strand agent review <task-id> [--roster …] [--base …]` (task strand, never the kanban card) |
+| Verify | Re-run Done-when in the task cwd, inspect the diff, then `strand update <task-id> --state closed` |
 | Resume | `strand agent retry <id>` (`--fresh` cold) |
+
+Load `strand prime agent` before delegating — run success never closes the served task.
 
 <!-- mill:skein-prime -->
 
