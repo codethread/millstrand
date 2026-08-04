@@ -727,12 +727,47 @@
                              :extra :json}]))
          (keys (:subcommands land-arg-spec)))})
 
+(def ^:private land-meta
+  "Cross-verb narrative for `land`, projected by the `about`/`prime` meta-verbs."
+  {:about (format-alpha/reflow
+           "|land is the coordinator-only policy surface beside the land
+            |workflow. The workflow op discovers, starts, and drives the run
+            |(ready/next/await on ordinary steps and gates). This op owns the
+            |boundaries the engine must not: recording the opened PR and
+            |moving the card (`complete` at push-draft-pr), sign-off that
+            |acquires the merge lock (`choose approved|abort` — never generic
+            |`workflow choose` for approval), joining the merge train
+            |(`await`), and clearing a stalled train head (`break-lock`).
+            |Terminal `complete` releases the lock and closes queue
+            |bookkeeping after merge or abort.")
+   :prime (format-alpha/reflow
+           "|Coordinator landing discipline. Start with
+            |`strand workflow start <run-id> --workflow land --params
+            |'{feature,branch,worktree[,card]}'`, then drive the frontier
+            |with `workflow ready` / `workflow next`. At push-draft-pr: push,
+            |open or reuse a draft PR, then `strand land complete <run-id>
+            |--pr-number <n>` (not bare workflow complete). The ci-green
+            |shell gate watches checks; on failure clear `gate/error` after
+            |fixing to retry. Sign-off review targets a TASK strand — never
+            |the kanban card — via `strand agent review <task-id> --roster
+            |change-review --cwd <worktree> --base origin/main`. Fix rounds
+            |must re-push and re-establish green CI at the new HEAD before
+            |completing that step; the closed ci-green gate does not re-run.
+            |Approve only with `strand land choose <run-id> approved
+            |--input '{\"subject\":\"…\",\"body\":\"…\"}'` after
+            |`git fetch origin && git rev-list --count HEAD..origin/main` is
+            |zero (rebase onto origin/main if not — never merge main in). If
+            |another coordinator holds the lock, `strand land await <run-id>`
+            |joins the train. Finish with the tidy/cleanup frontier, then
+            |terminal `land complete <run-id>` when ready asks for it. Full
+            |verb shapes: `strand help land`.")})
+
 (skein/defop land
   "Enforce coordinator landing policy across workflows, kanban, and merge locks.
 
   Use the generic `workflow` op for every operation that does not cross those
   ownership boundaries."
-  {:returns land-returns :arg-spec land-arg-spec}
+  (merge land-meta {:returns land-returns :arg-spec land-arg-spec})
   [ctx]
   (let [{:keys [subcommand run-id pr-number input reason choice timeout-secs]} (:op/args ctx)
         verb (first subcommand)]
