@@ -9,7 +9,13 @@
 ;;
 ;; File-per-concern map (each is one module):
 ;;   config.clj        — named queries + shared policy validation helpers
-;;   workflows.clj     — hand-authored workflow definitions
+;;   workflows_common.clj — shared shell helpers and basic specs for workflows
+;;   workflows.clj     — the land workflow family (persisted `workflows/...` symbols)
+;;   workflows_patterns.clj — macros-demo and delegate-pipeline weave patterns
+;;   workflows_spool_bump.clj — the spool-bump workflow
+;;   workflows_story.clj — the story workflow family
+;;   workflows_explore.clj — the explore workflow
+;;   workflows_fix.clj — the fix workflow
 ;;   workflows_land.clj— the land policy op: merge lock, merge queue, lane moves
 ;;   workflows_ralph.clj— the ralph-iterate workflow for one-card epic iterations
 ;;   harnesses.clj     — harness seats + routing policy
@@ -196,15 +202,52 @@
 (runtime/module! runtime :config
                  {:file "config.clj"
                   :required? true})
-;; workflows.clj authors the land/story definitions and the delegate-pipeline and
-;; macros-demo patterns. The land policy op is its sibling below. It reuses
-;; config.clj's public validation helper, so it orders after :config as well as
-;; the workflow and delegation spools.
+;; workflows_common.clj authors the shared shell helpers and basic specs reused
+;; by the land and spool-bump workflow modules.
+(runtime/module! runtime :workflows-common
+                 {:file "workflows_common.clj"
+                  :after [:config]
+                  :required? true})
+;; workflows.clj authors the land family only. Live runs carry `workflows/...`
+;; symbols on their persisted gates, so these Vars keep their names. The land
+;; policy op is its sibling below. It reuses config.clj's public validation
+;; helper and workflows_common's shell helpers.
 (runtime/module! runtime :workflows
                  {:file "workflows.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :config :workflows-common]
+                  :required? true})
+;; workflows_patterns.clj authors the macros-demo and delegate-pipeline weave
+;; patterns. delegate-pipeline needs the delegation spool.
+(runtime/module! runtime :workflows-patterns
+                 {:file "workflows_patterns.clj"
                   :spools ['skein.spools/workflow 'ct.spools/delegation]
                   :after [:skein/spools-workflow :skein/spools-delegation
-                          :config]
+                          :workflows-common]
+                  :required? true})
+;; workflows_spool_bump.clj owns the third-party spool bump workflow.
+(runtime/module! runtime :workflows-spool-bump
+                 {:file "workflows_spool_bump.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows-common]
+                  :required? true})
+;; workflows_story.clj owns the module-form story workflow family.
+(runtime/module! runtime :workflows-story
+                 {:file "workflows_story.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows-common]
+                  :required? true})
+;; workflows_explore.clj owns the open-ended explore workflow.
+(runtime/module! runtime :workflows-explore
+                 {:file "workflows_explore.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows-common]
+                  :required? true})
+;; workflows_fix.clj owns the light bug-fix workflow.
+(runtime/module! runtime :workflows-fix
+                 {:file "workflows_fix.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows-common]
                   :required? true})
 ;; workflows_land.clj authors the narrow land policy op: the merge lock, the
 ;; merge queue in front of it, and the kanban lane moves. It is a sibling rather

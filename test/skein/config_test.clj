@@ -205,7 +205,7 @@
                (str "(runtime/collect-entry! shuttle/alias-kind "
                     ":f16-probe-seat {:alias-of :codex})\n"
                     "(runtime/collect-entry! workflow/definition-kind "
-                    ":f16-probe-flow 'workflows/story)\n")))))
+                    ":f16-probe-flow 'workflows-story/story)\n")))))
 
 (deftest f16-workspace-partition-refresh-deletes-omitted-seats-and-constructors
   ;; F16 regression: the .skein policy files publish their harness seats, reviewer
@@ -239,7 +239,7 @@
                   workflow-definition (requiring-resolve 'skein.spools.workflow/workflow-definition)]
               (is (= :codex (:name (resolve-harness :f16-probe-seat)))
                   "the probe seat resolves through its :alias-of tool after startup")
-              (is (= 'workflows/story (workflow-definition :f16-probe-flow))
+              (is (= 'workflows-story/story (workflow-definition :f16-probe-flow))
                   "the probe workflow definition is registered after startup")
               (write-f16-probe! config-dir false)
               (is (contains? #{:applied :unchanged} (:status (runtime/refresh! rt))))
@@ -491,7 +491,7 @@
   (with-startup-config-runtime
     (fn [_rt]
       (let [description (op! "workflow" ["show" "spool-bump"])
-            definition (var-get (requiring-resolve 'workflows/spool-bump))
+            definition (var-get (requiring-resolve 'workflows-spool-bump/spool-bump))
             compile-workflow (requiring-resolve 'skein.spools.workflow/compile)
             params (fn [direct?]
                      (json/write-str
@@ -516,9 +516,9 @@
                       :direct-user-request direct?}))
                    (keep #(get-in % [:attributes "workflow/action-ref"]))
                    set))]
-        (is (= "workflows/spool-bump" (:definition description)))
+        (is (= "workflows-spool-bump/spool-bump" (:definition description)))
         (is (= ["create-branch"] (get-in description [:declared :entry])))
-        (is (= "workflows/spool-bump-params" (get-in description [:params :spec])))
+        (is (= "workflows-spool-bump/spool-bump-params" (get-in description [:params :spec])))
         (is (= "spool-bump.branch.create"
                (:action-ref
                 (first (:ready
@@ -644,8 +644,8 @@
   (with-startup-config-runtime
     (fn [_rt]
       (let [description (op! "workflow" ["show" "explore"])]
-        (is (= "workflows/explore" (:definition description)))
-        (is (= "workflows/explore-params" (get-in description [:params :spec]))))
+        (is (= "workflows-explore/explore" (:definition description)))
+        (is (= "workflows-explore/explore-params" (get-in description [:params :spec]))))
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Value does not satisfy the named spec"

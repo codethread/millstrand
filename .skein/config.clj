@@ -6,8 +6,8 @@
   `skein.spools.workflow` is its generic CLI, `ct.spools.delegation` owns the
   `strand agent` surface plus the `agent-plan` pattern (all activated from
   init.clj). This file registers named queries. Sibling init.clj modules hold
-  the rest of the repo policy: hand-authored workflows in workflows.clj,
-  harness seats in harnesses.clj, chime attention rules in attention.clj, the
+  the rest of the repo policy: hand-authored workflows split across
+  workflows_*.clj modules, harness seats in harnesses.clj, chime attention rules in attention.clj, the
   NVD scan cron job in nvd_scan.clj, and reviewer rosters in reviewers.clj."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
