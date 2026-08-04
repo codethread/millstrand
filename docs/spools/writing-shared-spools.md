@@ -288,6 +288,14 @@ Require it from spool code when you need fail-loud validation, attribute-key nor
   cadence. Pass `(runtime/clock runtime)` from the spool's explicit-runtime
   boundary; tests can install a manual Clock and avoid wall-time waits.
 
+#### Await-shaped ops
+
+An await-shaped op accepts `--timeout-secs` as an `:int` in the inclusive range `0..(quot Long/MAX_VALUE 1000)`, which keeps its millisecond conversion inside a `long`. Name the op's default in the flag's `:doc`. Invalid values fail loudly and carry the rejected value; the range above is authoritative. Put `:deadline-class :unbounded` on the op's arg-spec leaf; this removes the socket's standard request deadline, while `--timeout-secs` remains the finite per-call wait budget. Return a normal result at exit 0 when that budget expires. The result's `reason` is `timeout` for this outcome; successful reasons follow the op's domain. A timeout is data, not an exception.
+
+Build the wait with [`poll-until!`](#skeinapispoolalpha) and pass the runtime Clock as described above. This keeps the production wait on the runtime's clock and lets tests advance a manual Clock without sleeping. Tell callers to cap a blocking await at about 50 minutes and re-issue it so an idle provider prompt cache does not expire.
+
+[`strand await`](../../spools/batteries.md) is the reference implementation; its owning root contract is [SPEC-003.C63c](../../devflow/specs/repl-api.md). Domain waits such as agent supervision, workflow attention, and land queue ordering are not query-cardinality waits and keep their own surfaces. They conform only to the convention in this section.
+
 ### `skein.api.errors.alpha`
 
 Require it when a failure will be read by a person at a terminal rather than only by the caller that catches it:
