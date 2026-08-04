@@ -68,8 +68,8 @@
                                    "|Delete `\"%s\"` from quality.api-form/pending when this is an api
                                     |conversion; run the focused cold tests and `make fmt-check lint
                                     |reflect-check docs-check`; `make api-docs` on docstring changes.
-                                    |The full change-review roster runs once, at the land run's
-                                    |signoff-review step: continue with `strand workflow start
+                                    |The full change-review roster runs once in the land run's
+                                    |review gates: continue with `strand workflow start
                                     |<new-land-run-id> --workflow land --params <land-params-json>`.
                                     |The params name this run's existing feature id; the land run id is
                                     |new. Then close this run."
@@ -98,8 +98,8 @@
                                     |own alpha/internal siblings/tests reach internal). Delete `\"%s\"`
                                     |from quality.api-form/pending when this is an api conversion;
                                     |focused cold tests; `make fmt-check lint reflect-check docs-check`;
-                                    |`make api-docs` on docstring changes. The full roster runs at the
-                                    |land run's signoff-review step: `strand workflow start
+                                    |`make api-docs` on docstring changes. The full roster runs in the
+                                    |land run's review gates: `strand workflow start
                                     |<new-land-run-id> --workflow land --params <land-params-json>`.
                                     |The params name this run's existing feature id; the land run id is
                                     |new. Then close this run."
