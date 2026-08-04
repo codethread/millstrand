@@ -8,23 +8,14 @@
 ;; authoring forms. Declarations carry only a source target and world policy.
 ;;
 ;; File-per-concern map (each Clojure file is one module):
-;;   config.clj                 — named queries + shared policy validation helpers
-;;   workflows/support.clj      — shared scripts and subprocess helpers
-;;   workflows/common.clj       — shared workflow patterns + main-CI watcher
-;;   workflows/land.clj         — land workflow definitions
-;;   workflows/land_policy.clj  — land merge lock, queue, and kanban lane policy
-;;   workflows/spool_bump.clj   — third-party spool bump workflow
-;;   workflows/story.clj        — module-form story workflow and continuations
-;;   workflows/explore.clj      — open-ended exploration workflow
-;;   workflows/fix.clj          — light bug-fix workflow
-;;   workflows/ralph.clj        — one-card epic iteration workflow
-;;   workflows/scripts/         — shell programs frozen into workflow gates
-;;   harnesses.clj              — harness seats + routing policy
-;;   guide.clj                  — guide op: surface questions answered by a run
-;;   reviewers.clj              — reviewer rosters
-;;   attention.clj              — chime attention rules
-;;   nvd_scan.clj               — NVD scan cron job
-;;   module_adapters.clj        — repo election of the batteries help transform
+;;   policy/config.clj            — named queries + shared validation helpers
+;;   workflows/                   — workflow definitions, policy, support, and scripts
+;;   agents/harnesses.clj         — harness seats + routing policy
+;;   agents/guide.clj             — guide op: surface questions answered by a run
+;;   agents/reviewers.clj         — reviewer rosters
+;;   notifications/attention.clj  — chime attention rules
+;;   jobs/nvd_scan.clj            — NVD scan cron job
+;;   adapters/module.clj          — repo election of the batteries help transform
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and every
 ;; refresh; a module key it redeclares shadows the one here and wins, and it binds
@@ -45,7 +36,7 @@
 ;; This repo elects the batteries reference help transform after batteries loads;
 ;; its lifecycle resource releases the singleton when the module is omitted.
 (runtime/module! runtime :module-adapters
-                 {:file "module_adapters.clj"
+                 {:file "adapters/module.clj"
                   :after [:skein/spools-batteries]})
 
 ;; --- workflow engine + shell executor -------------------------------------
@@ -123,35 +114,35 @@
                   :required? true})
 
 ;; --- repo policy over the peer spools ---------------------------------------
-;; harnesses.clj contributes its seats over the :pi harness that agent-run
+;; agents/harnesses.clj contributes its seats over the :pi harness that agent-run
 ;; publishes, as the workspace-owned partitions of agent-run's tool/alias kinds,
 ;; so it orders after both peers. Two lifecycle resources own the singleton
 ;; review/task contract slots and clear them on removal.
 (runtime/module! runtime :harnesses
-                 {:file "harnesses.clj"
+                 {:file "agents/harnesses.clj"
                   :spools ['ct.spools/delegation 'ct.spools/agent-run]
                   :after [:skein/spools-shuttle :skein/spools-delegation]
                   :required? true})
-;; guide.clj publishes the `guide` op, which spawns its answer as an agent run on
-;; a seat harnesses.clj registers, so it orders after both. Nothing else consumes
+;; agents/guide.clj publishes the `guide` op, which spawns its answer as an agent run on
+;; a seat agents/harnesses.clj registers, so it orders after both. Nothing else consumes
 ;; it: dropping this declaration and refreshing removes the op and nothing more.
 (runtime/module! runtime :guide
-                 {:file "guide.clj"
+                 {:file "agents/guide.clj"
                   :spools ['ct.spools/agent-run]
                   :after [:skein/spools-shuttle :harnesses]
                   :required? true})
 ;; The declarative reviewer roster stays a small git-reviewable data document,
 ;; collected as the workspace-owned partition of delegation's roster kind.
 ;; Roster harness aliases resolve at review time, not registration time, so order
-;; relative to harnesses.clj is not load-bearing.
+;; relative to agents/harnesses.clj is not load-bearing.
 (runtime/module! runtime :reviewers
-                 {:file "reviewers.clj"
+                 {:file "agents/reviewers.clj"
                   :spools ['ct.spools/delegation]
                   :after [:skein/spools-delegation]
                   :required? true})
 
 ;; --- chime notification engine + this repo's attention rules ----------------
-;; Chime is vocabulary-agnostic; attention.clj contributes this repo's attention
+;; Chime is vocabulary-agnostic; notifications/attention.clj contributes this repo's attention
 ;; rules (HITL checkpoints, agent failures, gate errors, kanban lifecycle, parked
 ;; runs) with defrule, and each developer binds how they are notified in
 ;; gitignored init.local.clj. Chime's defresource owns its handler, mutation
@@ -162,7 +153,7 @@
                   :spools ['skein.spools/chime]
                   :required? true})
 (runtime/module! runtime :attention
-                 {:file "attention.clj"
+                 {:file "notifications/attention.clj"
                   :spools ['skein.spools/chime 'ct.spools/agent-run]
                   :after [:skein/spools-chime :skein/spools-shuttle]
                   :required? true})
@@ -182,24 +173,24 @@
                   :required? true})
 ;; --- cron timer engine + the NVD scan job -----------------------------------
 ;; Cron is a generic weaver timer engine. Its collected open-kind and lifecycle
-;; declarations own job publication and scheduling; nvd_scan.clj contributes a
+;; declarations own job publication and scheduling; jobs/nvd_scan.clj contributes a
 ;; job through `defjob`, so it is ordered after cron.
 (runtime/module! runtime :skein/spools-cron
                  {:ns 'skein.spools.cron
                   :spools ['skein.spools/cron]
                   :required? true})
-;; The NVD scan job is its own module (not part of config.clj) so config_test's
-;; direct config.clj load never registers the job or seeds against real gh.
+;; The NVD scan job is its own module (not part of policy/config.clj) so config_test's
+;; direct policy/config.clj load never registers the job or seeds against real gh.
 (runtime/module! runtime :nvd-scan
-                 {:file "nvd_scan.clj"
+                 {:file "jobs/nvd_scan.clj"
                   :spools ['skein.spools/cron]
                   :after [:skein/spools-cron :skein/spools-kanban]
                   :required? true})
 
 ;; --- config queries/helpers and hand-authored workflows ---------------------
-;; config.clj authors named queries with defquery and public validation helpers.
+;; policy/config.clj authors named queries with defquery and public validation helpers.
 (runtime/module! runtime :config
-                 {:file "config.clj"
+                 {:file "policy/config.clj"
                   :required? true})
 ;; Shared script sources load before the focused workflow modules.
 (runtime/module! runtime :workflows.support
@@ -271,7 +262,7 @@
                   :required? true})
 
 ;; The subagent gate executor activates last: its lifecycle resource runs an initial gate
-;; scan, so every harness alias harnesses.clj registers must already exist or a
+;; scan, so every harness alias agents/harnesses.clj registers must already exist or a
 ;; durable ready gate would be stamped gate/error on every cold start.
 (runtime/module! runtime :skein/spools-treadle
                  {:ns 'ct.spools.executors.subagent

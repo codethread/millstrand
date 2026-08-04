@@ -1,5 +1,5 @@
 (ns skein.nvd-scan-test
-  "Tests for the scheduled NVD deep-scan job defined in .skein/nvd_scan.clj.
+  "Tests for the scheduled NVD deep-scan job defined in .skein/jobs/nvd_scan.clj.
 
   Covers the injected-seam lock flow (skip when locked / fail loud without a key
   / clean scan / findings raise a p1 card) entirely through fakes, so the suite
@@ -8,20 +8,20 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]))
 
-;; nvd_scan.clj is a .skein weaver file (ns `nvd-scan`), not a classpath
+;; jobs/nvd_scan.clj is a .skein weaver file (ns `jobs.nvd-scan`), not a classpath
 ;; namespace, so load it once exactly as config_test does and resolve its
 ;; (public and private) vars by symbol. Loading it defines vars only; it never
 ;; activates modules or seeds against gh.
 (defn- load-config-once [f]
-  (load-file ".skein/nvd_scan.clj")
+  (load-file ".skein/jobs/nvd_scan.clj")
   (f))
 
 (use-fixtures :once load-config-once)
 
 (defn- cfn
-  "Resolve a var in the loaded `nvd-scan` namespace by unqualified name."
+  "Resolve a var in the loaded `jobs.nvd-scan` namespace by unqualified name."
   [name]
-  (requiring-resolve (symbol "nvd-scan" name)))
+  (requiring-resolve (symbol "jobs.nvd-scan" name)))
 
 (deftest parses-scan-findings
   (let [watson-count (cfn "clj-watson-vuln-count")

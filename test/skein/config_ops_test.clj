@@ -56,7 +56,7 @@
           (spool-sync/sync-approved-spools runtime)
           ;; devflow loads under its own module key first, the way init.clj's
           ;; `:after` ordering loads it before `:config`. Its stages are
-          ;; top-level `defworkflow` forms, so letting config.clj's require pull
+          ;; top-level `defworkflow` forms, so letting policy/config.clj's require pull
           ;; it in for the first time inside the `:config` collector would file
           ;; devflow's declarations under `:config`, which the module-graph
           ;; collection-source guard rightly refuses.
@@ -111,7 +111,7 @@
 (deftest repo-config-ops-declare-and-check-every-production-return-leaf
   (run-with-config-world
    (fn [runtime]
-     (publish-authoring! runtime :config ".skein/config.clj")
+     (publish-authoring! runtime :config ".skein/policy/config.clj")
      ;; materialize the workflow spool's registry handle so its constructor kind
      ;; is a declared publication backend before workflows/common.clj contributes to it
      (test-support/activate-spool! runtime :skein/spools-workflow
@@ -119,7 +119,7 @@
      (publish-authoring! runtime :workflows ".skein/workflows/common.clj")
      ;; the land op lives beside the definitions it drives, in its own module
      (publish-authoring! runtime :workflows.land-policy ".skein/workflows/land_policy.clj")
-     (let [provenances #{'config 'workflows 'workflows.land-policy}
+     (let [provenances #{'policy.config 'workflows 'workflows.land-policy}
            checked (atom #{})
            check! (fn [operation context value]
                     (t/check-op-return! runtime (symbol operation) context value)
@@ -137,8 +137,8 @@
          (is (= #{}
                 (into #{}
                       (keep (fn [{:keys [name returns]}]
-                              (when (and (= 'config (:provenance
-                                                     (weaver/resolve-op runtime (symbol name))))
+                              (when (and (= 'policy.config (:provenance
+                                                            (weaver/resolve-op runtime (symbol name))))
                                          (not (contains? (:required returns {}) :operation)))
                                 name)))
                       entries))))))))

@@ -159,7 +159,7 @@ Contract: [`spools/batteries.md`](../spools/batteries.md).
 
 ## Repo workflows
 
-Registered by the modules under `.skein/workflows/` and `.skein/config.clj`.
+Registered by the modules under `.skein/workflows/` and `.skein/policy/config.clj`.
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |

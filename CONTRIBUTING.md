@@ -20,7 +20,7 @@ Every piece of work takes the same shape, whoever does it:
 
 1. **A kanban card.** Anything you ask for becomes a feature card on the strand-backed board (contract: [`kanban.md`](https://github.com/codethread/kanban.spool/blob/main/kanban.md) in the external kanban.spool repo); half-formed ideas sit in the refinement lane until you promote them.
 2. **The devflow lifecycle.** A coordinator agent runs a feature through devflow — proposal, spec/plan, tasks, implementation — in its own worktree, delegating tasks to worker agents.
-3. **Adversarial review.** Finished changes are reviewed by the declared rosters in [`.skein/reviewers.clj`](./.skein/reviewers.clj): small single-concern reviewers, synthesized cross-vendor so no model family signs off its own work.
+3. **Adversarial review.** Finished changes are reviewed by the declared rosters in [`.skein/agents/reviewers.clj`](./.skein/agents/reviewers.clj): small single-concern reviewers, synthesized cross-vendor so no model family signs off its own work.
 4. **Landing.** A coordinator drives the `land` workflow: draft PR, green CI, roster sign-off, verified squash-merge, green main CI. Read `strand workflow show land`, then use generic workflow verbs and the policy boundaries in `strand help land`.
 
 You sit at the edges: describe outcomes, decide checkpoints, read the board.
@@ -36,7 +36,7 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
   ```
 
 - Watch progress with `make dash` (interactive kanban board), `strand kanban board`, `strand branches [branch]`, and `strand workflow ready <run-id>`. For an ASCII board: `printf "(do (require 'ct.spools.kanban) (ct.spools.kanban/print-board!))\n" | mill weaver repl --stdin`.
-- `strand agent harnesses` lists the model seats and their roles; the routing policy comments sit beside the alias definitions in `.skein/harnesses.clj`.
+- `strand agent harnesses` lists the model seats and their roles; the routing policy comments sit beside the alias definitions in `.skein/agents/harnesses.clj`.
 
 ## Discovery: help, about, prime
 

@@ -113,7 +113,7 @@ that test to touch the real world.
   when it runs.
 - **Reloads keep cadence.** Republishing the same declaration leaves the managed job untouched. Changing its cadence or handler replaces its wake; omitting it cancels the wake.
 
-Honest source: this repo's [`.skein/nvd_scan.clj`](../.skein/nvd_scan.clj), wired
+Honest source: this repo's [`.skein/jobs/nvd_scan.clj`](../.skein/jobs/nvd_scan.clj), wired
 as `:nvd-scan` in [`.skein/init.clj`](../.skein/init.clj).
 
 ---
@@ -170,7 +170,7 @@ any later external call.
   throw; cron records them in `recent-failures` and keeps the cadence.
 
 Honest source: this repo's `:nvd-scan` job in
-[`.skein/nvd_scan.clj`](../.skein/nvd_scan.clj) and its lock/finding tests in
+[`.skein/jobs/nvd_scan.clj`](../.skein/jobs/nvd_scan.clj) and its lock/finding tests in
 [`test/skein/nvd_scan_test.clj`](../test/skein/nvd_scan_test.clj).
 
 ---

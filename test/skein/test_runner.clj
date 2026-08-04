@@ -90,7 +90,7 @@
    ;; runtime-deps intentionally mutates JVM-global tools.deps state.
    "B" ['skein.runtime-deps-test]
    ;; Medium add-libs suites share one JVM to amortize boot without exceeding shard A.
-   ;; nvd-scan-test load-files .skein/nvd_scan.clj (which requires the cron
+   ;; nvd-scan-test load-files .skein/jobs/nvd_scan.clj (which requires the cron
    ;; spool root via add-libs) just as config-test does, so it shares this
    ;; shard's boot.
    "C" ['skein.config-test 'skein.nvd-scan-test]})

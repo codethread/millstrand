@@ -1,4 +1,4 @@
-(ns guide
+(ns agents.guide
   "The `guide` op: answer one skein-surface question from a delegated run.
 
   Skein's surface is deliberately self-describing — help, about, prime,

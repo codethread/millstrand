@@ -108,10 +108,10 @@
 (defn- with-config-runtime
   "Run f with an isolated runtime and the repo-local .skein config loaded.
 
-  Loads the split config modules the way init.clj orders them: config.clj
+  Loads the split config modules the way init.clj orders them: policy/config.clj
   first, then the harness and guide modules, shared workflow support, the
   focused workflow definition modules, and the land policy and Ralph modules.
-  attention.clj and nvd_scan.clj are
+  notifications/attention.clj and jobs/nvd_scan.clj are
   deliberately not loaded here — chime rules are asserted through the full
   startup fixture, and the NVD job must never register from a direct load."
   [f]
@@ -136,11 +136,11 @@
                                           'skein.spools.workflow.cli
                                           :after [:skein/spools-workflow])
             (load-module-namespace! rt :skein/spools-devflow 'ct.spools.devflow)
-            (load-module-source! rt :config ".skein/config.clj")
-            (load-module-source! rt :harnesses ".skein/harnesses.clj")
-            ((requiring-resolve 'harnesses/open-review-contract!) {:runtime rt})
-            ((requiring-resolve 'harnesses/open-task-contract!) {:runtime rt})
-            (load-module-source! rt :guide ".skein/guide.clj")
+            (load-module-source! rt :config ".skein/policy/config.clj")
+            (load-module-source! rt :harnesses ".skein/agents/harnesses.clj")
+            ((requiring-resolve 'agents.harnesses/open-review-contract!) {:runtime rt})
+            ((requiring-resolve 'agents.harnesses/open-task-contract!) {:runtime rt})
+            (load-module-source! rt :guide ".skein/agents/guide.clj")
             (load-module-source! rt :workflows.support ".skein/workflows/support.clj")
             (load-module-source! rt :workflows ".skein/workflows/common.clj")
             (load-module-source! rt :workflows.land
@@ -162,12 +162,12 @@
   "Copy the repo-local config files into a temporary config dir."
   [target]
   (.mkdirs (io/file target))
-  (doseq [name ["init.clj" "config.clj" "workflows/support.clj" "workflows/common.clj"
+  (doseq [name ["init.clj" "policy/config.clj" "workflows/support.clj" "workflows/common.clj"
                 "workflows/land.clj" "workflows/spool_bump.clj"
                 "workflows/story.clj" "workflows/explore.clj" "workflows/fix.clj"
-                "workflows/land_policy.clj" "workflows/ralph.clj" "harnesses.clj"
-                "guide.clj" "attention.clj" "nvd_scan.clj" "reviewers.clj"
-                "module_adapters.clj" "spools.edn"]]
+                "workflows/land_policy.clj" "workflows/ralph.clj" "agents/harnesses.clj"
+                "agents/guide.clj" "notifications/attention.clj" "jobs/nvd_scan.clj" "agents/reviewers.clj"
+                "adapters/module.clj" "spools.edn"]]
     (let [destination (io/file target name)]
       (some-> destination .getParentFile .mkdirs)
       (io/copy (io/file ".skein" name) destination)))
@@ -312,7 +312,7 @@
 
 (def ^:private named-query-names
   "The config-owned named queries whose registered definitions the surface
-  baseline preserves, authored as `defquery` blocks in .skein/config.clj."
+  baseline preserves, authored as `defquery` blocks in .skein/policy/config.clj."
   ["run-active" "kanban-feature-work" "workflow-runs" "merge-lock"
    "merge-queue" "work"])
 
@@ -322,7 +322,7 @@
   The runtime resolves each op's source to an absolute on-disk path — the most
   useful form for the live API — so freezing it verbatim would bind the surface
   baseline to one checkout. Strip the checkout-root prefix here so the frozen
-  surface reads e.g. `.skein/config.clj` and stays portable across CI and other
+  surface reads e.g. `.skein/policy/config.clj` and stays portable across CI and other
   worktrees; `:line` is kept as-is."
   [detail]
   (let [root (str (System/getProperty "user.dir") "/")]
@@ -339,14 +339,14 @@
   registered config-owned surface as plain, EDN-round-trippable data.
 
   The surface is `{:op-help {op -> help-detail} :queries {name -> definition}}`.
-  Only config.clj is loaded (no harnesses/workflows), so this captures exactly the
+  Only policy/config.clj is loaded (no harnesses/workflows), so this captures exactly the
   op/query surface the defquery/defop refactor could have perturbed. Used both
   to snapshot the pre-refactor baseline and to capture the current converted
   config for a byte-identical comparison.
 
   devflow is loaded first, the way init.clj's `:after` ordering loads it before
   `:config`. Its stages are top-level `defworkflow` forms, so letting
-  config.clj's require pull it in for the first time inside the `:config`
+  policy/config.clj's require pull it in for the first time inside the `:config`
   collector would file devflow's declarations under `:config` — which the
   module-graph collection-source guard rightly refuses. It loads outside any
   collection scope: this world declares only the op and query backends the
@@ -401,14 +401,14 @@
   (is (= (var-get (requiring-resolve 'ct.spools.delegation/review-contract))
          ((requiring-resolve 'ct.spools.agent-run/default-review-contract-text))))
   ;; this repo runs the agent-plan task workflow, which no spool registers for
-  ;; it: harnesses.clj opts its serving runs into the exported fragment
+  ;; it: agents/harnesses.clj opts its serving runs into the exported fragment
   (is (= (var-get (requiring-resolve 'ct.spools.delegation/worker-contract))
          ((requiring-resolve 'ct.spools.agent-run/default-task-contract-text))))
   ;; the repo owns chime's attention rules; the chime engine ships none
   (is (= [:agent-failure :gate-error :hitl-checkpoint-ready :kanban-blocked :kanban-completed
           :kanban-started :parked-run]
          (mapv :key ((requiring-resolve 'skein.spools.chime/rules)))))
-  ;; the declarative reviewer rosters register from .skein/reviewers.clj
+  ;; the declarative reviewer rosters register from .skein/agents/reviewers.clj
   (let [rosters ((requiring-resolve 'ct.spools.delegation/rosters))]
     (is (= [:change-review :complex-patch-review :docs-review] (mapv :name rosters)))
     (is (some #(= "test-sleeps" (:name %)) (:seats (first rosters))))))
@@ -417,7 +417,7 @@
   ;; The baseline freezes the config-owned op help and named-query definitions.
   ;; Regenerate it only when a feature deliberately changes that public surface.
   (let [golden (edn/read-string (slurp "test/skein/surface_baseline.edn"))
-        current (capture-config-surface ".skein/config.clj")]
+        current (capture-config-surface ".skein/policy/config.clj")]
     (is (= (:queries golden) (:queries current))
         "every named query definition matches the pre-refactor baseline")
     (doseq [op config-op-names]
@@ -762,7 +762,7 @@
                                         :attributes {:kanban/task "true"}})
             non-task (weaver/add! rt {:title "Non-task child" :state "active"})
             blocker (weaver/add! rt {:title "Blocker" :state "active"})
-            query (var-get (requiring-resolve 'config/kanban-feature-work))]
+            query (var-get (requiring-resolve 'policy.config/kanban-feature-work))]
         (weaver/update! rt (:id feature)
                         {:edges [{:type "parent-of" :to (:id ready-task)}
                                  {:type "parent-of" :to (:id blocked-task)}
@@ -850,7 +850,7 @@
       (is (str/includes? (:err result) message)))))
 
 (deftest chime-attention-rules-register-and-fire
-  ;; TASK-Srm-009.MI1: through the full startup fixture (which loads attention.clj
+  ;; TASK-Srm-009.MI1: through the full startup fixture (which loads notifications/attention.clj
   ;; via init.clj), assert the registered chime rule keys and that the registered
   ;; handlers actually fire — resolving each rule's registered fn symbol and
   ;; invoking it, so a defrule handler/registration regression is caught behavior,
@@ -953,15 +953,15 @@
                                        (= title "Refinement card") (assoc :kanban/card "true"
                                                                           :kanban/lane "refinement"))}))
       (is (= #{"Step" "Checkpoint" "Plain task" "Pending card"}
-             (set (map :title (weaver/list rt (var-get (requiring-resolve 'config/work)) {})))))
+             (set (map :title (weaver/list rt (var-get (requiring-resolve 'policy.config/work)) {})))))
       (is (= #{"Step" "Checkpoint" "Plain task" "Pending card"}
-             (set (map :title (weaver/ready rt (var-get (requiring-resolve 'config/work)) {}))))))))
+             (set (map :title (weaver/ready rt (var-get (requiring-resolve 'policy.config/work)) {}))))))))
 
 (deftest reviewers-file-registers-declarative-roster
   ;; exercises the same contribution path init.clj's reviewers module runs
   (with-config-runtime
     (fn [rt]
-      (load-module-source! rt :reviewers ".skein/reviewers.clj")
+      (load-module-source! rt :reviewers ".skein/agents/reviewers.clj")
       (let [rosters ((requiring-resolve 'ct.spools.delegation/rosters))
             roster (first (filter #(= :change-review (:name %)) rosters))
             complex-roster (first (filter #(= :complex-patch-review (:name %)) rosters))
