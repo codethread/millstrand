@@ -225,7 +225,7 @@ Use `strand-closed` when success requires the exact strand to reach `closed`:
 strand await --query strand-closed --param id=tk42 --min-count 1
 ```
 
-This does not treat every exit as completion. A replaced or burned strand is absent from `strand-closed`, so the wait times out unless another strand with the same id can satisfy the query.
+This does not treat every exit as completion. A replaced or burned strand is absent from `strand-closed`, so the wait times out.
 
 ### Wait for one strand to leave the active set
 
