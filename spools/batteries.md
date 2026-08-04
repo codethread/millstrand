@@ -65,7 +65,7 @@ The contribution owns every op below plus its glossary outcomes. Each op carries
   - `weave --input :stdin` replaces reading raw stdin for `weave`.
 Loud rules (SPEC-003-D003.C2): a reference naming no attached payload fails `:missing-payload`; an
 attached payload that no reference consumed fails `:unused-payloads`.
-- **BAT-C3 (hook classes):** Each invocable arg-spec leaf declares `:hook-class` and `:deadline-class` for metadata-driven gating (SPEC-004-D003). The mutating leaves are `add`, `update`, `supersede`, `burn`, `note`, `weave`, and `spool add`/`spool bump`; the read leaves are `show`, `list`, `ready`, `notes`, `subgraph`, every `query` and `pattern` verb, `vocab`, and `spool about`/`spool status`. All batteries leaves use `:deadline-class :standard`.
+- **BAT-C3 (hook classes):** Each invocable arg-spec leaf declares `:hook-class` and `:deadline-class` for metadata-driven gating (SPEC-004-D003). The mutating leaves are `add`, `update`, `supersede`, `burn`, `note`, `weave`, and `spool add`/`spool bump`; the read leaves are `show`, `list`, `ready`, `await`, `notes`, `subgraph`, every `query` and `pattern` verb, `vocab`, and `spool about`/`spool status`. `await` uses `:deadline-class :unbounded`; every other batteries leaf uses `:deadline-class :standard`.
   Mutating ops pass a request context
   `{:request/source :json-socket :request/operation <op-kw>}` so hooks and
   events observe the same data the old socket dispatch supplied.
@@ -217,6 +217,18 @@ scoped to a named query's result set exactly as `list`. `ready` takes no `--stat
 `ready` uses the lean read tier by default for large attribute values above the fixed 1 KiB floor
 and has no hydration flag; use `show <id>` for full fidelity. It uses the same default cap, trusted
 config override, `--limit N` call override, and loud `read-limit-exceeded` behavior as `list`.
+
+#### `await` — BAT-C26
+
+```
+strand await --query name [--param key=value]… [--min-count N] [--max-count N] [--timeout-secs N]
+```
+
+Blocks until one snapshot of a registered named query contains a count inside the inclusive minimum/maximum band. At least one bound is required. Bounds and timeout seconds must be non-negative, the minimum cannot exceed the maximum, and `--min-count 0` alone is rejected because it is always satisfied. The timeout defaults to 1800 seconds. Query resolution and parameter coercion happen once before polling; unknown queries, undeclared parameters, and missing referenced parameters fail before the wait begins. Repeating one parameter keeps the parser's existing last-write behavior.
+
+Each poll runs one clamped lean selection. It reads at most `max + 1` rows when a maximum exists, or `min` rows for a minimum-only wait. `count` is exact when fewer rows than that limit match and otherwise reports the limit. The result always contains `operation`, `query`, `reason` (`satisfied` or `timeout`), `count`, nullable `min_count` and `max_count`, and `elapsed_ms`. Both reasons exit normally.
+
+This is cardinality waiting, not strand-completion waiting. Closing, superseding, and burning all remove a strand from a query that selects active strands. Use a query that names the lifecycle state you actually need. Long-running callers should cap each wait at about 50 minutes and re-issue it so an idle provider prompt cache does not expire.
 
 #### `notes` — BAT-C14
 

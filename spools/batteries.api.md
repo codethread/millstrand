@@ -55,7 +55,16 @@ Shipped core strand command surface as parser-backed weaver ops.
 Function.
 
 Create a strand with merged attributes, optional state, and outgoing edges.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1297-L1297">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1381-L1381">Source</a></sub></p>
+
+## <a name="skein.spools.batteries/await-op">`await-op`</a>
+``` clojure
+(await-op ctx)
+```
+Function.
+
+Block until a named query's result count is inside the requested band.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1470-L1470">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/batteries-glossary-seed">`batteries-glossary-seed`</a>
 
@@ -63,7 +72,7 @@ Create a strand with merged attributes, optional state, and outgoing edges.
 
 
 Seed the process-lifetime Batteries failure glossary.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1493-L1495">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1592-L1594">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/burn-op">`burn-op`</a>
 ``` clojure
@@ -72,7 +81,7 @@ Seed the process-lifetime Batteries failure glossary.
 Function.
 
 Physically delete one strand by id and return the burn summary.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1347-L1347">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1431-L1431">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/default-help-transform">`default-help-transform`</a>
 ``` clojure
@@ -94,7 +103,7 @@ Render a canonical help envelope (DELTA-Dtf-001.CC1) as readable text.
   branch is which envelope family this is — an envelope-shape choice, never a
   per-node-level one, so the recursive node renderer stays uniform at every depth
   (the forcing-function invariant, DELTA-Dtf-003.D1).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1267-L1285">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1351-L1369">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/list-op">`list-op`</a>
 ``` clojure
@@ -103,7 +112,7 @@ Render a canonical help envelope (DELTA-Dtf-001.CC1) as readable text.
 Function.
 
 List lean-projected strands, optionally filtered by lifecycle state or a named query.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1353-L1353">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1437-L1437">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/note-op">`note-op`</a>
 ``` clojure
@@ -112,7 +121,7 @@ List lean-projected strands, optionally filtered by lifecycle state or a named q
 Function.
 
 Append a note to a target strand's memory via the note primitive.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1433-L1433">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1532-L1532">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/notes-op">`notes-op`</a>
 ``` clojure
@@ -121,7 +130,7 @@ Append a note to a target strand's memory via the note primitive.
 Function.
 
 Return a target strand's notes in note/at order.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1443-L1443">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1542-L1542">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/pattern-op">`pattern-op`</a>
 ``` clojure
@@ -130,7 +139,7 @@ Return a target strand's notes in note/at order.
 Function.
 
 Introspect registered weave patterns: list all metadata or explain one.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1421-L1421">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1520-L1520">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/query-op">`query-op`</a>
 ``` clojure
@@ -139,7 +148,7 @@ Introspect registered weave patterns: list all metadata or explain one.
 Function.
 
 Introspect registered named queries: list all metadata or explain one.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1409-L1409">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1508-L1508">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/read-limit">`read-limit`</a>
 ``` clojure
@@ -148,7 +157,7 @@ Introspect registered named queries: list all metadata or explain one.
 Function.
 
 Return the runtime's batteries read-result cap for CLI list/ready ops.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L234-L237">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L238-L241">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/ready-op">`ready-op`</a>
 ``` clojure
@@ -157,7 +166,7 @@ Return the runtime's batteries read-result cap for CLI list/ready ops.
 Function.
 
 List lean-projected ready strands, optionally from a named query result set.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1370-L1370">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1454-L1454">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/seed-batteries-glossary!">`seed-batteries-glossary!`</a>
 ``` clojure
@@ -168,7 +177,7 @@ Function.
 Seed Batteries' process-lifetime failure glossary.
 
   Input conforms to `::seed-context`; the result conforms to `::seed-result`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1480-L1491">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1579-L1590">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/set-read-limit!">`set-read-limit!`</a>
 ``` clojure
@@ -180,7 +189,7 @@ Set the runtime's batteries read-result cap for CLI list/ready ops.
 
   Intended for trusted workspace config. Invalid values fail loudly instead of
   falling back to the default cap.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L239-L247">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L243-L251">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/show-op">`show-op`</a>
 ``` clojure
@@ -189,7 +198,7 @@ Set the runtime's batteries read-result cap for CLI list/ready ops.
 Function.
 
 Return one normalized strand by id.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1334-L1334">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1418-L1418">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/spool-op">`spool-op`</a>
 ``` clojure
@@ -198,7 +207,7 @@ Return one normalized strand by id.
 Function.
 
 Dispatch validated `strand spool about|add|bump|status` inputs and results.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1459-L1459">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1558-L1558">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/subgraph-op">`subgraph-op`</a>
 ``` clojure
@@ -207,7 +216,7 @@ Dispatch validated `strand spool about|add|bump|status` inputs and results.
 Function.
 
 Return a relation-scoped subgraph rooted at one strand.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1386-L1386">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1485-L1485">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/supersede-op">`supersede-op`</a>
 ``` clojure
@@ -216,7 +225,7 @@ Return a relation-scoped subgraph rooted at one strand.
 Function.
 
 Replace one strand with another and return the supersession result.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1340-L1340">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1424-L1424">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/update-op">`update-op`</a>
 ``` clojure
@@ -225,7 +234,7 @@ Replace one strand with another and return the supersession result.
 Function.
 
 Patch one strand's title, state, attributes, and outgoing edges.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1314-L1314">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1398-L1398">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/vocab-op">`vocab-op`</a>
 ``` clojure
@@ -234,7 +243,7 @@ Patch one strand's title, state, attributes, and outgoing edges.
 Function.
 
 List the runtime's vocabulary declarations, optionally narrowed to one kind.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1450-L1450">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1549-L1549">Source</a></sub></p>
 
 ## <a name="skein.spools.batteries/weave-op">`weave-op`</a>
 ``` clojure
@@ -243,4 +252,4 @@ List the runtime's vocabulary declarations, optionally narrowed to one kind.
 Function.
 
 Apply a registered create-only weave pattern to one JSON input value.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1398-L1398">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/batteries/src/skein/spools/batteries.clj#L1497-L1497">Source</a></sub></p>

@@ -1723,6 +1723,12 @@
                          :remedies ["narrow via --query/--param/--state"
                                     "pass explicit --limit N above the total for an intentional full read"]}))))))
 
+(defn- clamped-select
+  "Return at most limit selected rows without counting matches beyond the limit."
+  [ds select-sql params limit]
+  (require-positive-limit! limit)
+  (execute! ds (into [(str select-sql " LIMIT ?")] (conj (vec params) limit))))
+
 (defn all-strands-lean
   "Return all strand rows with oversized hot attributes replaced by descriptors."
   ([ds lean-byte-floor]
@@ -1756,6 +1762,20 @@
      (attach-batched-attributes
       ds
       (bounded-select! ds select-sql query-params count-sql limit)
+      true
+      lean-byte-floor)))
+  ([ds lean-byte-floor query-def params limit opts]
+   (when-not (= {:clamp? true} opts)
+     (throw (ex-info "all-strands-lean options require :clamp? true"
+                     {:options opts})))
+   (let [{query-sql :sql query-params :params} (compile-query-for-ds ds query-def params)
+         select-sql (str "SELECT " (strand-columns-sql "t") "
+                          FROM strands t
+                          WHERE " query-sql "
+                          ORDER BY t.id")]
+     (attach-batched-attributes
+      ds
+      (clamped-select ds select-sql query-params limit)
       true
       lean-byte-floor))))
 
