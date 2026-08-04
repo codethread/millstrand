@@ -141,6 +141,7 @@
             (load-module-source! rt :harnesses ".skein/agents/harnesses.clj")
             ((requiring-resolve 'ct.agents.harnesses/open-review-contract!) {:runtime rt})
             ((requiring-resolve 'ct.agents.harnesses/open-task-contract!) {:runtime rt})
+            (load-module-source! rt :reviewers ".skein/agents/reviewers.clj")
             (load-module-source! rt :guide ".skein/agents/guide.clj")
             (load-module-source! rt :workflows.support ".skein/workflows/support.clj")
             (load-module-source! rt :workflows ".skein/workflows/common.clj")
@@ -277,13 +278,23 @@
 (defn- start-land!
   "Start the registered land workflow through the generic CLI."
   [run-id branch worktree & [card]]
-  (op! "workflow"
-       ["start" run-id
-        "--workflow" "land"
-        "--params" (json/write-str (cond-> {:feature run-id
-                                            :branch branch
-                                            :worktree worktree}
-                                     card (assoc :card card)))]))
+  (let [review-target (:id (weaver/add! (current/runtime)
+                                        {:title (str "Review target: " run-id)
+                                         :attributes {:kanban/task "true"}}))]
+    (op! "workflow"
+         ["start" run-id
+          "--workflow" "land"
+          "--params" (json/write-str (cond-> {:feature run-id
+                                              :branch branch
+                                              :worktree worktree
+                                              :review-target review-target
+                                              :review-id (str run-id "-review")
+                                              :change-context
+                                              {:commit-range
+                                               (str (str/join (repeat 40 "a")) ".."
+                                                    (str/join (repeat 40 "b")))
+                                               :files ["src/example.clj"]}}
+                                       card (assoc :card card)))])))
 
 (defn- active-merge-locks
   "Return active merge locks from the same query shape as the named query."
@@ -1007,6 +1018,34 @@
   ((requiring-resolve 'skein.spools.workflow/complete!)
    feature {:by "code" :attributes {"code/result" result}}))
 
+(defn- complete-subagent-gates!
+  "Close every ready :subagent gate with the executor's success actor."
+  [feature]
+  (let [ready (:ready (op! "workflow" ["ready" feature]))]
+    (doseq [{:keys [id gate]} ready]
+      (when-not (= "subagent" gate)
+        (throw (ex-info "Expected only ready subagent gates"
+                        {:feature feature :ready ready})))
+      ((requiring-resolve 'skein.spools.workflow/complete!)
+       feature {:step id :by "subagent"
+                :attributes {"agent-run/status" "succeeded"}}))))
+
+(defn- complete-land-review!
+  "Drive the executor-owned review, synthesis, and final-CI test frontier."
+  [feature]
+  (complete-subagent-gates! feature)
+  (complete-subagent-gates! feature)
+  (let [resolve-step (first (:ready (op! "workflow" ["ready" feature])))]
+    (when-not (= "land.review.resolve" (:action-ref resolve-step))
+      (throw (ex-info "Expected land review resolution step"
+                      {:feature feature :ready resolve-step}))))
+  (op! "workflow" ["complete" feature])
+  (let [final-ci (first (:ready (op! "workflow" ["ready" feature])))]
+    (when-not (= "land.ci.final-green" (:action-ref final-ci))
+      (throw (ex-info "Expected final land CI gate"
+                      {:feature feature :ready final-ci}))))
+  (shell-gate-complete! feature "final checks green"))
+
 (defn- write-fake-gh!
   "Write a deterministic `gh` executable for feature-CI watch script tests."
   [dir]
@@ -1412,10 +1451,43 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"No ready workflow step"
                             (op! "workflow" ["complete" "land-x"])))
       (shell-gate-complete! "land-x" "checks green")
-      (is (= "land.signoff.review"
+      (let [context (get-in ((requiring-resolve 'skein.spools.workflow/current-root) "land-x")
+                            [:attributes :workflow/context])
+            target (or (:review-target context) (get context "review-target"))
+            review-id (or (:review-id context) (get context "review-id"))
+            change-context (or (:change-context context) (get context "change-context"))
+            specs ((requiring-resolve 'ct.spools.delegation/roster-review-specs)
+                   :change-review {:target target
+                                   :review-id review-id
+                                   :change-context change-context})
+            gates (:ready (op! "workflow" ["ready" "land-x"]))]
+        (is (= (mapv :name (:reviewers specs))
+               (mapv #(get-in (weaver/show rt (:id %)) [:attributes :review/focus]) gates)))
+        (doseq [[spec gate] (map vector (:reviewers specs) gates)]
+          (let [attrs (:attributes (weaver/show rt (:id gate)))]
+            (is (= "subagent" (:gate gate)))
+            (is (= (name (:harness spec)) (:agent-run/harness attrs)))
+            (is (= (:prompt spec) (:agent-run/prompt attrs)))
+            (doseq [[key value] (:attrs spec)]
+              (is (= value (get attrs (keyword key))))))))
+      (complete-subagent-gates! "land-x")
+      (let [synthesis (first (:ready (op! "workflow" ["ready" "land-x"])))
+            attrs (:attributes (weaver/show rt (:id synthesis)))]
+        (is (= "land.review.synthesis" (:action-ref synthesis)))
+        (is (= "subagent" (:gate synthesis)))
+        (is (= "true" (:panel/synthesis attrs))))
+      (complete-subagent-gates! "land-x")
+      (is (= "land.review.resolve"
              (:action-ref (first (:ready (op! "workflow" ["ready" "land-x"]))))))
-      (let [at-checkpoint (op! "workflow" ["complete" "land-x"])
-            checkpoint (first (:ready at-checkpoint))
+      (op! "workflow" ["complete" "land-x"])
+      (let [final-ci (first (:ready (op! "workflow" ["ready" "land-x"])))
+            attrs (:attributes (weaver/show rt (:id final-ci)))]
+        (is (= "land.ci.final-green" (:action-ref final-ci)))
+        (is (= "shell" (:gate final-ci)))
+        (is (= ["land-final-ci-watch" "land-x" "180" "5"]
+               (drop 3 (:shell/argv attrs)))))
+      (shell-gate-complete! "land-x" "final checks green")
+      (let [checkpoint (first (:ready (op! "workflow" ["ready" "land-x"])))
             next-checkpoint (first (:ready (op! "workflow" ["ready" "land-x"])))
             status-checkpoint (first (:ready (op! "workflow" ["ready" "land-x"])))]
         (is (= "checkpoint" (:role checkpoint)))
@@ -1464,7 +1536,7 @@
       (start-land! "land-z" "land-z" "/tmp/land-z")
       (op! "land" ["complete" "land-z" "--pr-number" "413"])
       (shell-gate-complete! "land-z" "checks green")
-      (op! "workflow" ["complete" "land-z"])
+      (complete-land-review! "land-z")
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"another land run holds the merge lock"
                             (op! "land" ["choose" "land-z" "approved" "--input"
                                          (json/write-str {:subject "feat: land z"
@@ -1544,6 +1616,38 @@
         ;; history is not a land concern: read a run's past through trusted Clojure
         (is (not (contains? status :history)))))))
 
+(deftest land-review-target-and-change-context-fail-before-pour
+  (with-config-runtime
+    (fn [rt]
+      (let [card (:id (weaver/add! rt {:title "Card target"
+                                       :attributes {:kanban/card "true"}}))
+            ordinary (:id (weaver/add! rt {:title "Ordinary target"}))
+            base-params {:feature "land-invalid-review"
+                         :branch "land-invalid-review"
+                         :worktree "/tmp/land-invalid-review"
+                         :review-id "land-invalid-review-pass"
+                         :change-context
+                         {:commit-range
+                          (str (str/join (repeat 40 "a")) ".."
+                               (str/join (repeat 40 "b")))
+                          :files ["src/example.clj"]}}
+            start! (fn [run-id params]
+                     (op! "workflow"
+                          ["start" run-id "--workflow" "land"
+                           "--params" (json/write-str params)]))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"never a kanban card"
+                              (start! "land-card-review"
+                                      (assoc base-params :review-target card))))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"must be a task strand"
+                              (start! "land-ordinary-review"
+                                      (assoc base-params :review-target ordinary))))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Value does not satisfy the named spec"
+                              (start! "land-symbolic-range"
+                                      (-> base-params
+                                          (assoc :review-target ordinary)
+                                          (assoc-in [:change-context :commit-range]
+                                                    "origin/main..HEAD")))))))))
+
 (deftest land-signoff-generic-approval-is-rejected-without-merge-lock
   ;; Regression: approving sign-off through generic workflow verbs skipped
   ;; `land choose`'s merge-lock acquisition, and the run walked the whole
@@ -1555,7 +1659,7 @@
       (start-land! "land-g" "land-g" "/tmp/land-g")
       (op! "land" ["complete" "land-g" "--pr-number" "500"])
       (shell-gate-complete! "land-g" "checks green")
-      (op! "workflow" ["complete" "land-g"])
+      (complete-land-review! "land-g")
       (is (= "signoff"
              (:checkpoint (first (:ready (op! "workflow" ["ready" "land-g"]))))))
       (let [input (json/write-str {:subject "feat: land g"
@@ -1579,7 +1683,7 @@
           (is (= "land.pr.open" (:action-ref (first (:ready revised))))))
         (op! "land" ["complete" "land-g" "--pr-number" "500"])
         (shell-gate-complete! "land-g" "checks green")
-        (op! "workflow" ["complete" "land-g"])
+        (complete-land-review! "land-g")
         ;; the policy verb passes the gate: the lock it acquired is the evidence
         (let [approved (op! "land" ["choose" "land-g" "approved" "--input" input])]
           (is (= "land.pr.merge" (:action-ref (first (:ready approved)))))
@@ -1706,7 +1810,7 @@
       ;; closed without producing :pr-number.
       ((requiring-resolve 'skein.spools.workflow/complete!) "land-invalid-pr")
       (shell-gate-complete! "land-invalid-pr" "checks green")
-      (op! "workflow" ["complete" "land-invalid-pr"])
+      (complete-land-review! "land-invalid-pr")
       (let [old-root ((requiring-resolve 'skein.spools.workflow/current-root)
                       "land-invalid-pr")]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
@@ -1743,7 +1847,7 @@
                      "/tmp/land-abort-idempotent" claimed-card)
         (op! "land" ["complete" "land-abort-idempotent" "--pr-number" "420"])
         (shell-gate-complete! "land-abort-idempotent" "checks green")
-        (op! "workflow" ["complete" "land-abort-idempotent"])
+        (complete-land-review! "land-abort-idempotent")
         ((requiring-resolve 'ct.spools.kanban/rework!) rt claimed-card)
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"Value does not satisfy the named spec"
@@ -1758,7 +1862,7 @@
   (start-land! run-id run-id (str "/tmp/" run-id))
   (op! "land" ["complete" run-id "--pr-number" (str pr-number)])
   (shell-gate-complete! run-id "checks green")
-  (op! "workflow" ["complete" run-id]))
+  (complete-land-review! run-id))
 
 (defn- approve!
   "Approve a land run at its sign-off checkpoint."
@@ -1982,7 +2086,7 @@
       (start-land! "land-reused-lock" "land-reused-lock" "/tmp/land-reused-lock")
       (op! "land" ["complete" "land-reused-lock" "--pr-number" "421"])
       (shell-gate-complete! "land-reused-lock" "checks green")
-      (op! "workflow" ["complete" "land-reused-lock"])
+      (complete-land-review! "land-reused-lock")
       (let [root ((requiring-resolve 'skein.spools.workflow/current-root)
                   "land-reused-lock")
             lock (weaver/add! rt {:title "Merge lock: land-reused-lock"
@@ -2012,7 +2116,7 @@
       (start-land! "land-revise" "land-revise" "/tmp/land-revise")
       (op! "land" ["complete" "land-revise" "--pr-number" "419"])
       (shell-gate-complete! "land-revise" "checks green")
-      (op! "workflow" ["complete" "land-revise"])
+      (complete-land-review! "land-revise")
       (let [old-root ((requiring-resolve 'skein.spools.workflow/current-root) "land-revise")
             old-context (get-in old-root [:attributes :workflow/context])
             revised (op! "workflow" ["choose" "land-revise" "revise"])
@@ -2040,7 +2144,7 @@
             card-id (or (:card context) (get context "card"))]
         (is (= "in_review" (get-in (weaver/show rt card-id) [:attributes :kanban/lane]))))
       (shell-gate-complete! "land-y" "checks green") ; ci-green
-      (op! "workflow" ["complete" "land-y"])           ; signoff-review
+      (complete-land-review! "land-y")
       (let [aborted (op! "land" ["choose" "land-y" "abort" "--input"
                                  (json/write-str {:reason "scope changed"})])]
         (is (= "land choose" (:operation aborted)))
@@ -2064,7 +2168,7 @@
         (start-land! "land-w" "land-w" "/tmp/land-w" card-id)
         (op! "land" ["complete" "land-w" "--pr-number" "415"])      ; push-draft-pr
         (shell-gate-complete! "land-w" "checks green")              ; ci-green
-        (op! "workflow" ["complete" "land-w"])                          ; signoff-review
+        (complete-land-review! "land-w")
         (op! "land" ["choose" "land-w" "approved" "--input"
                      (json/write-str {:subject "feat: land w"
                                       :body "Squashed commits: abc123"})])
@@ -2086,7 +2190,7 @@
       (start-land! "land-lock-x" "land-lock-x" "/tmp/land-lock-x")
       (op! "land" ["complete" "land-lock-x" "--pr-number" "416"])
       (shell-gate-complete! "land-lock-x" "checks green")
-      (op! "workflow" ["complete" "land-lock-x"])
+      (complete-land-review! "land-lock-x")
       (op! "land" ["choose" "land-lock-x" "approved" "--input"
                    (json/write-str {:subject "feat: land lock x"
                                     :body "Squashed commits: abc123"})])

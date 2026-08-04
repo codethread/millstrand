@@ -743,16 +743,19 @@
    :prime (format-alpha/reflow
            "|Coordinator landing discipline. Start with
             |`strand workflow start <run-id> --workflow land --params
-            |'{feature,branch,worktree[,card]}'`, then drive the frontier
-            |with `workflow ready` / `workflow next`. At push-draft-pr: push,
-            |open or reuse a draft PR, then `strand land complete <run-id>
-            |--pr-number <n>` (not bare workflow complete). The ci-green
-            |shell gate watches checks; on failure clear `gate/error` after
-            |fixing to retry. Sign-off review targets a TASK strand — never
-            |the kanban card — via `strand agent review <task-id> --roster
-            |change-review --cwd <worktree> --base origin/main`. Fix rounds
-            |must re-push and re-establish green CI at the new HEAD before
-            |completing that step; the closed ci-green gate does not re-run.
+            |'{feature,branch,worktree,review-target,review-id,change-context
+            |[,card]}'`, then drive the frontier with `workflow ready` /
+            |`workflow next`. `review-target` is the work's TASK strand, never
+            |the kanban card. `change-context` carries a concrete
+            |`<base-sha>..<head-sha>` commit range and its changed-file vector.
+            |At push-draft-pr: push, open or reuse a draft PR, then `strand
+            |land complete <run-id> --pr-number <n>` (not bare workflow
+            |complete). The first ci-green shell gate watches checks. The
+            |workflow then fans the change-review roster into subagent gates
+            |and synthesizes their notes. Resolve the synthesis, commit and
+            |push fixes, and complete resolve-review; final-ci-green checks the
+            |current pushed HEAD before sign-off. On a gate failure, fix the
+            |cause and clear `gate/error` to retry.
             |Approve only with `strand land choose <run-id> approved
             |--input '{\"subject\":\"…\",\"body\":\"…\"}'` after
             |`git fetch origin && git rev-list --count HEAD..origin/main` is

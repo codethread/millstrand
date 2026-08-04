@@ -284,13 +284,23 @@ The example at the top of this page shows the shape. Here is the workflow from t
                  :depends-on [:push-draft-pr]
                  :attributes {"shell/argv" ["sh" "-c" feature-ci-watch-script branch …]})
 
-  (workflow/step :signoff-review "Run the roster review, drive every fix round" :self
-                 :depends-on [:ci-green])
+  ;; One gate per roster seat. The loop fans out after params resolve, and the
+  ;; synthesis dependency on the base id waits for every reviewer.
+  (workflow/gate :reviewer "Review the land change" :subagent
+                 :depends-on [:ci-green]
+                 :loop {:each reviewer-specs})
+  (workflow/gate :review-synthesis "Synthesize review findings" :subagent
+                 :depends-on [:reviewer])
+
+  (workflow/step :resolve-review "Resolve review findings" :self
+                 :depends-on [:review-synthesis])
+  (workflow/gate :final-ci-green "Watch final CI at reviewed HEAD" :shell
+                 :depends-on [:resolve-review])
 
   ;; The checkpoint doesn't merge — it routes. Each choice hands off to a separate
   ;; registered workflow (:land-merge / :land-abort), composed in, not hard-coded.
   (workflow/checkpoint :signoff "Sign off the landing"
-                       :depends-on [:signoff-review]
+                       :depends-on [:final-ci-green]
                        :kind :agent
                        :choices [{:key :approved :label "Approve" :next :land-merge}
                                  {:key :abort    :label "Abort"   :next :land-abort}])))

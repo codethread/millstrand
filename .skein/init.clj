@@ -210,8 +210,9 @@
 ;; contribution without growing a broad definitions file.
 (runtime/module! runtime :workflows.land
                  {:file "workflows/land.clj"
-                  :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows.support]
+                  :spools ['skein.spools/workflow 'ct.spools/delegation]
+                  :after [:skein/spools-workflow :skein/spools-delegation
+                          :reviewers :workflows.support]
                   :required? true})
 (runtime/module! runtime :workflows.spool-bump
                  {:file "workflows/spool_bump.clj"
@@ -268,5 +269,6 @@
                  {:ns 'ct.spools.executors.subagent
                   :spools ['ct.spools/agent-run]
                   :after [:skein/spools-shuttle :skein/spools-workflow
-                          :harnesses :workflows :workflows.story :workflows.ralph]
+                          :harnesses :reviewers :workflows :workflows.land
+                          :workflows.story :workflows.ralph]
                   :required? true})

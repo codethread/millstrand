@@ -64,7 +64,10 @@
        |quality gates per CLAUDE.md; commit everything to the branch. Then hand
        |off to the coordinator land workflow: `strand workflow start
        |<new-land-run-id> --workflow land --params
-       |'{\"feature\":\"%s\",\"branch\":\"%s\",\"worktree\":\"%s\",\"card\":\"%s\"}'`
+       |'{\"feature\":\"%s\",\"branch\":\"%s\",\"worktree\":\"%s\",\"card\":\"%s\",
+       |\"review-target\":\"<task-id>\",\"review-id\":\"<unique-pass-id>\",
+       |\"change-context\":{\"commit-range\":\"<base-sha>..<head-sha>\",
+       |\"files\":[\"<changed-file>\"]}}'`
        |— the land run owns review, merge, and the card finish. Then close this
        |run."
       card branch worktree card))
@@ -76,7 +79,10 @@
        |`card` the card id this run stamped as `fix/card` on the claim-trail
        |step (`strand show <claim-trail-step-id>`): `strand workflow start
        |<new-land-run-id> --workflow land --params
-       |'{\"feature\":\"<fix/card>\",\"branch\":\"%s\",\"worktree\":\"%s\",\"card\":\"<fix/card>\"}'`
+       |'{\"feature\":\"<fix/card>\",\"branch\":\"%s\",\"worktree\":\"%s\",
+       |\"card\":\"<fix/card>\",\"review-target\":\"<task-id>\",
+       |\"review-id\":\"<unique-pass-id>\",\"change-context\":
+       |{\"commit-range\":\"<base-sha>..<head-sha>\",\"files\":[\"<changed-file>\"]}}'`
        |— the land run owns review, merge, and the card finish. Then close this
        |run."
       branch worktree))))

@@ -2,7 +2,11 @@
   "The coordinator land workflow definitions (family `land`)."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [ct.spools.delegation :as agents]
+            [skein.api.current.alpha :as current]
             [skein.api.format.alpha :as format-alpha]
+            [skein.api.spool.alpha :refer [attr-get fail!]]
+            [skein.api.weaver.alpha :as weaver]
             [skein.spools.workflow :as workflow]
             [ct.workflows.support :as support]))
 
@@ -19,11 +23,22 @@
 (s/def ::feature ::non-blank-string)
 (s/def ::branch ::non-blank-string)
 (s/def ::card ::non-blank-string)
+(s/def ::review-target ::non-blank-string)
+(s/def ::review-id ::non-blank-string)
+(s/def ::commit-range
+  (s/and ::non-blank-string
+         #(boolean (re-matches #"(?i)[0-9a-f]{40}\.\.[0-9a-f]{40}" %))))
+(s/def ::files (s/coll-of ::non-blank-string :kind vector? :min-count 1))
+(s/def ::change-context
+  (s/and :ct.spools.delegation/change-context
+         #(s/valid? ::commit-range (:commit-range %))
+         #(s/valid? ::files (:files %))))
 (s/def ::subject ::non-blank-string)
 (s/def ::reason ::non-blank-string)
 (s/def ::pr-number pos-int?)
 
-(s/def ::land-params (s/keys :req-un [::feature ::branch ::worktree]
+(s/def ::land-params (s/keys :req-un [::feature ::branch ::worktree
+                                      ::review-target ::review-id ::change-context]
                              :opt-un [::card]))
 (s/def ::land-merge-params (s/keys :req-un [::feature ::branch ::worktree
                                             ::subject ::body ::pr-number]
@@ -48,6 +63,40 @@
   "Declare the squash subject and body required by the approved choice."
   {:spec ::land-merge-input
    :doc "Semantic squash subject and Squashed commits body for gh pr merge."})
+
+(defn- review-specs
+  "Build and validate the gate-ready change-review specs for one land run."
+  [{:keys [review-target review-id change-context]}]
+  (let [target (weaver/show (current/runtime) review-target)]
+    (when (= "true" (attr-get target :kanban/card))
+      (fail! "Land review targets a task strand, never a kanban card"
+             {:review-target review-target :kanban/card "true"}))
+    (when-not (or (= "true" (attr-get target :kanban/task))
+                  (= "task" (attr-get target :kind)))
+      (fail! "Land review target must be a task strand"
+             {:review-target review-target
+              :kanban/task (attr-get target :kanban/task)
+              :kind (attr-get target :kind)}))
+    (agents/roster-review-specs
+     :change-review
+     {:target review-target
+      :review-id review-id
+      :change-context change-context})))
+
+(defn- reviewer-specs
+  "Return loop items for the land review fan-out."
+  [params]
+  (mapv #(assoc % :id (:name %)) (:reviewers (review-specs params))))
+
+(defn- synthesis-specs
+  "Return the single synthesis item as a loop collection."
+  [params]
+  [(assoc (:synthesizer (review-specs params)) :id :synthesis)])
+
+(defn- item-attr
+  "Read a string-keyed roster attribute from a loop item."
+  [item key]
+  (get (:attrs item) key))
 
 (workflow/defworkflow land-abort
   "Record an intentional abort of a land run.
@@ -206,8 +255,9 @@
   "Drive the coordinator LANDING workflow for a feature branch (family \"land\").
 
   COORDINATOR-ONLY: worker agents never land. This stage pushes the branch,
-  opens a draft PR, watches CI at HEAD, runs roster review, and ends at the
-  sign-off checkpoint. Approval requires the squash subject and body, acquires
+  opens a draft PR, watches CI at HEAD, fans roster review into subagent gates,
+  rechecks CI at the reviewed HEAD, and ends at the sign-off checkpoint.
+  Approval requires the squash subject and body, acquires
   the singleton merge lock, and routes to the mechanical `:land-merge`
   continuation. Abort routes to `:land-abort`. Card-backed runs move the card
   to `in_review` when push-draft-pr completes and back to `claimed` on abort.
@@ -263,41 +313,78 @@
                                     |--attributes '{\"gate/error\":null}'`) to retry. The exit
                                     |code and output tail are recorded on the gate."
                                    branch branch)))})
-   (workflow/step :signoff-review
-                  (fn [{:keys [branch]}] (str "Run roster sign-off review for " branch))
-                  :self
+   (workflow/gate :reviewer
+                  (fn [{:keys [item]}] (str "Review land change: " (:name item)))
+                  :subagent
                   :depends-on [:ci-green]
-                  :attributes {"workflow/action-ref" "land.signoff.review"
+                  :loop {:each reviewer-specs}
+                  :attributes {"workflow/action-ref" "land.review.seat"
+                               "agent-run/harness" (fn [{:keys [item]}] (name (:harness item)))
+                               "agent-run/prompt" (fn [{:keys [item]}] (:prompt item))
+                               "agent-run/cwd" (fn [{:keys [worktree]}] worktree)
+                               "panel/blackboard" (fn [{:keys [item]}]
+                                                    (item-attr item "panel/blackboard"))
+                               "review/roster" (fn [{:keys [item]}]
+                                                 (item-attr item "review/roster"))
+                               "panel/pass" (fn [{:keys [item]}]
+                                              (item-attr item "panel/pass"))
+                               "review/focus" (fn [{:keys [item]}]
+                                                (item-attr item "review/focus"))
                                "workflow/instruction"
-                               (fn [{:keys [worktree card]}]
-                                 (str (format-alpha/reflow
-                                       "|Run the declared roster review against a TASK strand, never
-                                        |the kanban card or work root — findings append as notes on
-                                        |the review target, and card notes stay lean for handover.")
-                                      " "
-                                      (if card
-                                        (str "Pick the card's task tracking this branch's work"
-                                             " (`strand kanban task list " card "`), adding one first if none fits"
-                                             " (`strand kanban task add " card " <title>`). ")
-                                        "Target the task strand for this work under the work root. ")
-                                      "Then: `git -C " worktree " fetch origin` and `strand agent review <task-id>"
-                                      " --roster change-review --cwd " worktree " --base origin/main` — "
-                                      (format-alpha/reflow
-                                       "|the surface pins merge-base(origin/main, HEAD) at spawn,
-                                        |covering only this branch's own work even when main has
-                                        |advanced. Drive every fix round to done; each fix round
-                                        |re-pushes the branch and MUST re-establish green CI at the
-                                        |new HEAD (`gh pr checks <branch> --watch` — the ci-green
-                                        |gate closed at an earlier sha and does not re-run) before
-                                        |this step may complete. SIGN-OFF IS ONLY VALID WITH A
-                                        |PUSHED BRANCH AND GREEN CI — that is why this step follows
-                                        |the CI gate. Record the review pass ids and the final
-                                        |verdict in notes. For card-backed land runs the card moved
-                                        |to in_review when push-draft-pr completed; aborting
-                                        |sign-off moves it back to claimed.")))})
+                               (format-alpha/reflow
+                                "|Machine gate: run one declared change-review seat and append its
+                                 |findings to the review target.")})
+   (workflow/gate :review-synthesis
+                  "Synthesize the land review findings"
+                  :subagent
+                  :depends-on [:reviewer]
+                  :loop {:each synthesis-specs}
+                  :attributes {"workflow/action-ref" "land.review.synthesis"
+                               "agent-run/harness" (fn [{:keys [item]}] (name (:harness item)))
+                               "agent-run/prompt" (fn [{:keys [item]}] (:prompt item))
+                               "agent-run/cwd" (fn [{:keys [worktree]}] worktree)
+                               "panel/blackboard" (fn [{:keys [item]}]
+                                                    (item-attr item "panel/blackboard"))
+                               "review/roster" (fn [{:keys [item]}]
+                                                 (item-attr item "review/roster"))
+                               "panel/pass" (fn [{:keys [item]}]
+                                              (item-attr item "panel/pass"))
+                               "panel/synthesis" (fn [{:keys [item]}]
+                                                   (item-attr item "panel/synthesis"))
+                               "workflow/instruction"
+                               (format-alpha/reflow
+                                "|Machine gate: synthesize this pass's reviewer notes into one
+                                 |verdict.")})
+   (workflow/step :resolve-review
+                  (fn [{:keys [branch]}] (str "Resolve review findings for " branch))
+                  :self
+                  :depends-on [:review-synthesis]
+                  :attributes {"workflow/action-ref" "land.review.resolve"
+                               "workflow/instruction"
+                               (format-alpha/reflow
+                                "|Read the synthesis note on the review target. Resolve every finding,
+                                 |commit and push fixes, and use a targeted follow-up review when a fix
+                                 |materially changes the reviewed surface. Complete this step only when
+                                 |the branch is ready for final CI; the next machine gate checks the
+                                 |actual pushed HEAD.")})
+   (workflow/gate :final-ci-green
+                  (fn [{:keys [branch]}] (str "Watch final CI to green at " branch " HEAD"))
+                  :shell
+                  :depends-on [:resolve-review]
+                  :attributes {"workflow/action-ref" "land.ci.final-green"
+                               "shell/argv" (fn [{:keys [branch]}]
+                                              (support/sh-gate support/feature-ci-watch-script
+                                                               "land-final-ci-watch" branch "180" "5"))
+                               "shell/cwd" (fn [{:keys [worktree]}] worktree)
+                               "shell/timeout-secs" 5400
+                               "workflow/instruction"
+                               (format-alpha/reflow
+                                "|Machine gate: re-run the feature CI watcher after review resolution.
+                                 |It closes only when checks are green at the branch's current pushed
+                                 |HEAD, so sign-off cannot rely on the pre-review CI result.")})
    (workflow/checkpoint :signoff
                         (fn [{:keys [branch]}] (str "Sign off landing " branch))
-                        :depends-on [:signoff-review]
+                        :depends-on [:final-ci-green]
                         :kind :agent
                         :choices [{:key :approved
                                    :label "Approve"

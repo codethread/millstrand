@@ -137,7 +137,10 @@
                                  |copy those exact values into: `strand workflow start <land-run-id>
                                  |--workflow land --params '{\"feature\":\"<ralph/feature>\",
                                  |\"branch\":\"<ralph/branch>\",\"worktree\":\"<ralph/worktree>\",
-                                 |\"card\":\"<ralph/card>\"}'`.
+                                 |\"card\":\"<ralph/card>\",\"review-target\":\"<task-id>\",
+                                 |\"review-id\":\"<unique-pass-id>\",\"change-context\":
+                                 |{\"commit-range\":\"<base-sha>..<head-sha>\",
+                                 |\"files\":[\"<changed-file>\"]}}'`.
                                  |Drive that run through its sign-off and merge train; do not
                                  |merge directly or treat the Ralph loop as the land policy.")})
    (workflow/step :finish-feature
