@@ -1,4 +1,4 @@
-(ns reviewers
+(ns ct.agents.reviewers
   "This repository's declarative reviewer roster.
 
   This file is the source of truth for who reviews a change in this
@@ -25,7 +25,7 @@
 
   Seat shape (validated loudly by ct.spools.delegation/defroster!):
     :name     unique reviewer name; becomes the run's review focus
-    :harness  harness alias from harnesses.clj (resolved at review time)
+    :harness  harness alias from agents/harnesses.clj (resolved at review time)
     :brief    the reviewer's single concern - precise, judgmental, actionable
     :scope    optional prompt-level confinement (guidance text only). The
               changed-file list and pinned range are supplied separately as
@@ -34,7 +34,7 @@
               changes stays deferred to an RFC.
 
   Routing note: pick seats by scanning the scorecards in
-  .skein/harnesses.clj ({:complexity :code-taste :resilience :ui-design
+  .skein/agents/harnesses.clj ({:complexity :code-taste :resilience :ui-design
   :cost}, X = untested), matching the axes the contract actually needs -
   route by waste-type, not call count. In practice (review-sweeps bench
   2026-07-13, card vw8pf): mechanical single-target contracts over a
@@ -48,7 +48,7 @@
   trusting :luna-low on large multi-file changes. Note
   reviewers must run on read/write seats for now: findings append via the
   strand CLI over the weaver socket, which the -ro sandbox blocks (see
-  :codex-ro in harnesses.clj) - read-only stays prompt-discipline. Two
+  :codex-ro in agents/harnesses.clj) - read-only stays prompt-discipline. Two
   sign-off invariants: the synthesizer is never a seat that reviewed, and at
   least one reviewing seat comes from outside the authoring model family."
   (:require [ct.spools.delegation :as agents]

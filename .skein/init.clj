@@ -7,17 +7,15 @@
 ;; module's contribution and lifecycle declarations are collected from its
 ;; authoring forms. Declarations carry only a source target and world policy.
 ;;
-;; File-per-concern map (each is one module):
-;;   config.clj        — named queries + shared policy validation helpers
-;;   workflows.clj     — hand-authored workflow definitions
-;;   workflows_land.clj— the land policy op: merge lock, merge queue, lane moves
-;;   workflows_ralph.clj— the ralph-iterate workflow for one-card epic iterations
-;;   harnesses.clj     — harness seats + routing policy
-;;   guide.clj         — the guide op: surface questions answered by a run
-;;   reviewers.clj     — reviewer rosters
-;;   attention.clj     — chime attention rules
-;;   nvd_scan.clj      — NVD scan cron job
-;;   module_adapters.clj — repo election of the batteries help transform
+;; File-per-concern map (each Clojure file is one module):
+;;   policy/config.clj            — named queries + shared validation helpers
+;;   workflows/                   — workflow definitions, policy, support, and scripts
+;;   agents/harnesses.clj         — harness seats + routing policy
+;;   agents/guide.clj             — guide op: surface questions answered by a run
+;;   agents/reviewers.clj         — reviewer rosters
+;;   notifications/attention.clj  — chime attention rules
+;;   jobs/nvd_scan.clj            — NVD scan cron job
+;;   adapters/module.clj          — repo election of the batteries help transform
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and every
 ;; refresh; a module key it redeclares shadows the one here and wins, and it binds
@@ -38,7 +36,7 @@
 ;; This repo elects the batteries reference help transform after batteries loads;
 ;; its lifecycle resource releases the singleton when the module is omitted.
 (runtime/module! runtime :module-adapters
-                 {:file "module_adapters.clj"
+                 {:file "adapters/module.clj"
                   :after [:skein/spools-batteries]})
 
 ;; --- workflow engine + shell executor -------------------------------------
@@ -116,35 +114,35 @@
                   :required? true})
 
 ;; --- repo policy over the peer spools ---------------------------------------
-;; harnesses.clj contributes its seats over the :pi harness that agent-run
+;; agents/harnesses.clj contributes its seats over the :pi harness that agent-run
 ;; publishes, as the workspace-owned partitions of agent-run's tool/alias kinds,
 ;; so it orders after both peers. Two lifecycle resources own the singleton
 ;; review/task contract slots and clear them on removal.
 (runtime/module! runtime :harnesses
-                 {:file "harnesses.clj"
+                 {:file "agents/harnesses.clj"
                   :spools ['ct.spools/delegation 'ct.spools/agent-run]
                   :after [:skein/spools-shuttle :skein/spools-delegation]
                   :required? true})
-;; guide.clj publishes the `guide` op, which spawns its answer as an agent run on
-;; a seat harnesses.clj registers, so it orders after both. Nothing else consumes
+;; agents/guide.clj publishes the `guide` op, which spawns its answer as an agent run on
+;; a seat agents/harnesses.clj registers, so it orders after both. Nothing else consumes
 ;; it: dropping this declaration and refreshing removes the op and nothing more.
 (runtime/module! runtime :guide
-                 {:file "guide.clj"
+                 {:file "agents/guide.clj"
                   :spools ['ct.spools/agent-run]
                   :after [:skein/spools-shuttle :harnesses]
                   :required? true})
 ;; The declarative reviewer roster stays a small git-reviewable data document,
 ;; collected as the workspace-owned partition of delegation's roster kind.
 ;; Roster harness aliases resolve at review time, not registration time, so order
-;; relative to harnesses.clj is not load-bearing.
+;; relative to agents/harnesses.clj is not load-bearing.
 (runtime/module! runtime :reviewers
-                 {:file "reviewers.clj"
+                 {:file "agents/reviewers.clj"
                   :spools ['ct.spools/delegation]
                   :after [:skein/spools-delegation]
                   :required? true})
 
 ;; --- chime notification engine + this repo's attention rules ----------------
-;; Chime is vocabulary-agnostic; attention.clj contributes this repo's attention
+;; Chime is vocabulary-agnostic; notifications/attention.clj contributes this repo's attention
 ;; rules (HITL checkpoints, agent failures, gate errors, kanban lifecycle, parked
 ;; runs) with defrule, and each developer binds how they are notified in
 ;; gitignored init.local.clj. Chime's defresource owns its handler, mutation
@@ -155,7 +153,7 @@
                   :spools ['skein.spools/chime]
                   :required? true})
 (runtime/module! runtime :attention
-                 {:file "attention.clj"
+                 {:file "notifications/attention.clj"
                   :spools ['skein.spools/chime 'ct.spools/agent-run]
                   :after [:skein/spools-chime :skein/spools-shuttle]
                   :required? true})
@@ -175,71 +173,100 @@
                   :required? true})
 ;; --- cron timer engine + the NVD scan job -----------------------------------
 ;; Cron is a generic weaver timer engine. Its collected open-kind and lifecycle
-;; declarations own job publication and scheduling; nvd_scan.clj contributes a
+;; declarations own job publication and scheduling; jobs/nvd_scan.clj contributes a
 ;; job through `defjob`, so it is ordered after cron.
 (runtime/module! runtime :skein/spools-cron
                  {:ns 'skein.spools.cron
                   :spools ['skein.spools/cron]
                   :required? true})
-;; The NVD scan job is its own module (not part of config.clj) so config_test's
-;; direct config.clj load never registers the job or seeds against real gh.
+;; The NVD scan job is its own module (not part of policy/config.clj) so config_test's
+;; direct policy/config.clj load never registers the job or seeds against real gh.
 (runtime/module! runtime :nvd-scan
-                 {:file "nvd_scan.clj"
+                 {:file "jobs/nvd_scan.clj"
                   :spools ['skein.spools/cron]
                   :after [:skein/spools-cron :skein/spools-kanban]
                   :required? true})
 
 ;; --- config queries/helpers and hand-authored workflows ---------------------
-;; config.clj authors named queries with defquery and public validation helpers
-;; reused by workflows.clj. It is required: a guarded-but-optional module would
-;; drop the query surface.
+;; policy/config.clj authors named queries with defquery and public validation helpers.
 (runtime/module! runtime :config
-                 {:file "config.clj"
+                 {:file "policy/config.clj"
                   :required? true})
-;; workflows.clj authors the land/story definitions and the delegate-pipeline and
-;; macros-demo patterns. The land policy op is its sibling below. It reuses
-;; config.clj's public validation helper, so it orders after :config as well as
-;; the workflow and delegation spools.
+;; Shared script sources load before the focused workflow modules.
+(runtime/module! runtime :workflows.support
+                 {:file "workflows/support.clj"
+                  :after [:config]
+                  :required? true})
+;; workflows/common.clj owns the shared authoring patterns and the stable
+;; ct.workflows.common/main-ci-watch code gate function.
 (runtime/module! runtime :workflows
-                 {:file "workflows.clj"
+                 {:file "workflows/common.clj"
                   :spools ['skein.spools/workflow 'ct.spools/delegation]
                   :after [:skein/spools-workflow :skein/spools-delegation
-                          :config]
+                          :config :workflows.support]
                   :required? true})
-;; workflows_land.clj authors the narrow land policy op: the merge lock, the
-;; merge queue in front of it, and the kanban lane moves. It is a sibling rather
-;; than part of workflows.clj because the policy outgrew the definitions it
-;; drives; it references no Var there, so the order below is for readers.
-(runtime/module! runtime :workflows-land
-                 {:file "workflows_land.clj"
+;; Each concrete workflow definition owns one focused source module. Keeping
+;; these modules independent lets a change to one routine refresh its own
+;; contribution without growing a broad definitions file.
+(runtime/module! runtime :workflows.land
+                 {:file "workflows/land.clj"
                   :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows]
+                  :after [:skein/spools-workflow :workflows.support]
                   :required? true})
-
-;; workflows_ralph.clj owns the one-card-per-iteration Ralph workflow. It is
-;; separate from the general definitions file so Ralph's loop discipline can
-;; evolve without growing the broad hand-authored workflow module.
-(runtime/module! runtime :workflows-ralph
-                 {:file "workflows_ralph.clj"
+(runtime/module! runtime :workflows.spool-bump
+                 {:file "workflows/spool_bump.clj"
                   :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows]
+                  :after [:skein/spools-workflow :workflows.support]
+                  :required? true})
+(runtime/module! runtime :workflows.story
+                 {:file "workflows/story.clj"
+                  :spools ['skein.spools/workflow 'ct.spools/delegation]
+                  :after [:skein/spools-workflow :skein/spools-delegation
+                          :workflows.support]
+                  :required? true})
+(runtime/module! runtime :workflows.explore
+                 {:file "workflows/explore.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows.support]
+                  :required? true})
+(runtime/module! runtime :workflows.fix
+                 {:file "workflows/fix.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows.support]
+                  :required? true})
+;; workflows/land_policy.clj owns the narrow land policy op: merge lock, merge queue,
+;; and kanban lane moves. It loads after the land definitions it drives.
+(runtime/module! runtime :workflows.land-policy
+                 {:file "workflows/land_policy.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows
+                          :workflows.land]
+                  :required? true})
+;; Ralph remains an independent one-card-per-iteration workflow.
+(runtime/module! runtime :workflows.ralph
+                 {:file "workflows/ralph.clj"
+                  :spools ['skein.spools/workflow]
+                  :after [:skein/spools-workflow :workflows
+                          :workflows.land]
                   :required? true})
 
 ;; The code executor's lifecycle resource scans ready gates when opened. It must load after
-;; workflows.clj so every persisted code/fn symbol owned there can resolve on
-;; the initial scan.
+;; every workflow definition so persisted code/fn symbols resolve on the initial scan.
 (runtime/module! runtime :skein/spools-code
                  {:ns 'skein.spools.executors.code
                   :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow :workflows]
+                  :after [:skein/spools-workflow :workflows
+                          :workflows.land :workflows.spool-bump
+                          :workflows.story :workflows.explore :workflows.fix
+                          :workflows.ralph]
                   :required? true})
 
 ;; The subagent gate executor activates last: its lifecycle resource runs an initial gate
-;; scan, so every harness alias harnesses.clj registers must already exist or a
+;; scan, so every harness alias agents/harnesses.clj registers must already exist or a
 ;; durable ready gate would be stamped gate/error on every cold start.
 (runtime/module! runtime :skein/spools-treadle
                  {:ns 'ct.spools.executors.subagent
                   :spools ['ct.spools/agent-run]
                   :after [:skein/spools-shuttle :skein/spools-workflow
-                          :harnesses :workflows]
+                          :harnesses :workflows :workflows.story :workflows.ralph]
                   :required? true})

@@ -1,4 +1,4 @@
-(ns nvd-scan
+(ns ct.jobs.nvd-scan
   "The scheduled NVD deep scan (skein.spools.cron job :nvd-scan).
 
   `make deps-report` runs the clj-watson NVD deep scan + govulncheck locally
@@ -13,7 +13,7 @@
   Every side effect (gh, the login-shell scan, the kanban card) is injected
   into `run-nvd-scan!` so the lock flow is unit-testable without shelling out —
   see test/skein/nvd_scan_test.clj. This is its own init.clj module (not part of
-  config.clj) so config_test's direct config.clj load never registers the job."
+  policy/config.clj) so config_test's direct policy/config.clj load never registers the job."
   (:require [clojure.data.json :as json]
             [skein.spools.cron :as cron]))
 
@@ -180,4 +180,4 @@
 (cron/defjob :nvd-scan
   {:interval-ms nvd-scan-interval-ms
    :jitter-ms nvd-scan-jitter-ms
-   :handler 'nvd-scan/nvd-scan-tick})
+   :handler 'ct.jobs.nvd-scan/nvd-scan-tick})

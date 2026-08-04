@@ -196,7 +196,7 @@ strand ready --query work         # same query, gated to the unblocked frontier
   key isn't a declared parameter fails loudly, and `--param` without a `--query`
   is rejected — you can't accidentally pass a value into nothing.
 
-Honest source: the `query`/`list`/`ready` ops in `spools/src/skein/spools/batteries.clj`, the `list-and-ready-named-queries` and `query-list-and-explain-shapes` tests in `test/skein/spools/batteries_test.clj`, and the `work`/`run-active` queries this repo registers in [`.skein/config.clj`](../.skein/config.clj). Verified against a demo query registered in a disposable workspace.
+Honest source: the `query`/`list`/`ready` ops in `spools/src/skein/spools/batteries.clj`, the `list-and-ready-named-queries` and `query-list-and-explain-shapes` tests in `test/skein/spools/batteries_test.clj`, and the `work`/`run-active` queries this repo registers in [`.skein/policy/config.clj`](../.skein/policy/config.clj). Verified against a demo query registered in a disposable workspace.
 
 ---
 
