@@ -58,7 +58,7 @@ Signatures live only in the generated API doc; contracts and cookbooks link to t
 
 Each spool shipped in this checkout lives in its own root under `spools/<name>/src`, off the production weaver classpath. Its `{:skein/source-root "spools/<name>"}` coordinate resolves against the mill-selected Skein checkout without fetching source or persisting an absolute checkout path. A `:spools`-guarded `runtime/module!` declaration then lets the refresh coordinator load, publish, and reconcile it.
 The repo-local spools also serve as the worked example of authoring your own ([customising your
-workspace](../docs/spools/customisation.md#promoting-config-to-a-local-spool)); for publishing a
+workspace](../docs/spools/customisation.md#workspace-modules-and-local-spools)); for publishing a
 spool for others by git coordinate, SHA-pinned approval, README dependency/activation snippets,
 Maven-only spool-root dependencies, and local development overrides, see [Writing shared
 spools](../docs/spools/writing-shared-spools.md#publishing-a-shared-spool-with-git-distribution).
@@ -192,4 +192,4 @@ The override inherits the shared family's `:roots`, `:requires`, and `:skein/min
   namespaces.
 - A spool publishes owner-complete kind entries through contribution forms and owns runtime effects through lifecycle forms. See [Writing shared spools](../docs/spools/writing-shared-spools.md) for the authoring grammar and each contract doc for exact behavior.
 - To author and load your own spool from a workspace-local root, follow
-  [Authoring your own spool code](../docs/spools/customisation.md#promoting-config-to-a-local-spool).
+  [Authoring your own spool code](../docs/spools/customisation.md#workspace-modules-and-local-spools).

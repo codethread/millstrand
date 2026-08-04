@@ -90,7 +90,7 @@ The module source owns the query or other registry entries, so refresh and resta
 (graph/register-query! (current/runtime) 'mine [:= [:attr :owner] "ct"])
 ```
 
-Inside the weaver REPL, `skein.repl/register-query!` is the same operation without the runtime argument. Direct entries are useful for experiments and startup code can reapply them after a restart, but a refresh can still overwrite them. Simple workspaces can keep activation in `init.clj` and personal activation in gitignored `init.local.clj`; keep substantive declarations in module source. When the file starts accumulating real behavior, move it into a local spool — that promotion is the [second half of this page](#promoting-config-to-a-local-spool).
+Inside the weaver REPL, `skein.repl/register-query!` is the same operation without the runtime argument. Direct entries are useful for experiments and startup code can reapply them after a restart, but a refresh can still overwrite them. Simple workspaces can keep activation in `init.clj` and personal activation in gitignored `init.local.clj`; keep substantive declarations in module source. When the file starts accumulating real behavior, choose a workspace module for repo policy or a local spool for reusable classpath code. The [workspace modules and local spools section](#workspace-modules-and-local-spools) explains the boundary.
 
 ## Trying config changes in a disposable world
 
@@ -181,10 +181,31 @@ For stronger isolation, create an agent-local namespace and call Skein helpers t
 (remove-ns 'agent.ct)
 ```
 
-## Promoting config to a local spool
+## Workspace modules and local spools
 
-When `init.clj` outgrows a handful of registrations, move the behavior into a local spool and leave activation
-behind. Skein treats runtime extensions as trusted Clojure code, and the
+Keep repository-specific policy in workspace `:file` modules. They are loaded from the exact path declared in `init.clj`, so their directories organize the workspace but do not make a classpath. Give every such namespace an owner-qualified root to avoid collisions in the shared weaver JVM:
+
+```text
+.skein/
+  init.clj
+  workflows/
+    ralph.clj
+```
+
+```clojure
+;; workflows/ralph.clj
+(ns acme.workflows.ralph)
+```
+
+```clojure
+;; init.clj
+(runtime/module! runtime :workflows.ralph
+  {:file "workflows/ralph.clj"})
+```
+
+The directory and namespace use the same concern name for discovery, but the `:file` declaration selects the source. It does not add `.skein` to the classpath. If one workspace module requires another, declare the dependency with `:after` so its namespace has loaded first.
+
+Use a local spool when the code needs a classpath root or is worth reusing independently of this workspace. Skein treats runtime extensions as trusted Clojure code, and the
 [reference spools](../../spools/README.md) — including the workflow engine and the external,
 git-distributed devflow lifecycle — double as worked examples of spool design. All of them load the
 same opt-in way yours will. A common layout:
@@ -195,15 +216,19 @@ workspace/
   init.clj
   spools.edn
   spools/
-    my-workflow/
+    acme-workflows/
       deps.edn
-      src/my/workflow.clj
+      src/
+        acme/
+          spools/
+            workflows/
+              mine.clj
 ```
 
-Approve the local spool as an implicit one-root family in `spools.edn`:
+A spool source root is on the classpath, so its path mirrors its namespace. Approve the local spool as an implicit one-root family in `spools.edn`:
 
 ```clojure
-{:spools {my/workflow {:local/root "spools/my-workflow"}}}
+{:spools {acme.spools/workflows {:local/root "spools/acme-workflows"}}}
 ```
 
 A shared local entry has one root at `.` under the entry's symbol. Git families can map
@@ -219,7 +244,7 @@ in the root (if `:paths` is omitted, Skein's namespace loading defaults to `["sr
 Then implement the spool with an authoring form. Every source evaluation collects the module's complete owner partition:
 
 ```clojure
-(ns my.workflow
+(ns acme.spools.workflows.mine
   (:require [skein.api.skein.alpha :as skein]))
 
 (skein/defquery mine
@@ -231,9 +256,9 @@ Then implement the spool with an authoring form. Every source evaluation collect
 `init.clj` names only a source target and world policy:
 
 ```clojure
-(runtime/module! runtime :my/workflow
-  {:ns 'my.workflow
-   :spools ['my/workflow]})
+(runtime/module! runtime :acme.workflows/mine
+  {:ns 'acme.spools.workflows.mine
+   :spools ['acme.spools/workflows]})
 ```
 
 Each piece has one job. `spools.edn` approves source. `runtime/module!` declares the desired module, and the refresh coordinator acquires its roots, collects its declarations, replaces that owner's entries, and reconciles lifecycle effects. A direct `require` from `mill weaver repl` evaluates in the weaver JVM and is useful for trusted experimentation, but for repeatable module activation and status, go through `runtime/module!` or `runtime/refresh!` from startup config or the live REPL.
