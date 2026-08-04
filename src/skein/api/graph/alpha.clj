@@ -42,6 +42,10 @@
 (s/def ::query-def (s/or :where-vector vector? :detailed map?))
 (s/def ::query-registry (s/map-of string? ::query-def))
 
+(def readiness-where
+  "Canonical where-expression for ready strands."
+  [:and [:= :state "active"] [:not [:edge/out "depends-on" [:= :state "active"]]]])
+
 ;; Every `unregister-*!` across the API namespaces answers with the canonical
 ;; registry key it retracted; query names canonicalize to strings.
 (s/def ::unregistered string?)
