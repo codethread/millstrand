@@ -8,6 +8,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :refer [deftest is use-fixtures]]
+            [skein.repl]
             [skein.api.weaver.alpha :as weaver]
             [skein.core.specs :as specs]
             [skein.core.weaver.access :as access]
@@ -167,6 +168,31 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Pattern registry entry is invalid"
                             (patterns/resolve-pattern rt :bad))))))
+
+(deftest readiness-where-is-public-data
+  (is (vector? graph/readiness-where))
+  (is (= [:and [:= :state "active"]
+          [:not [:edge/out "depends-on" [:= :state "active"]]]]
+         graph/readiness-where)))
+
+(deftest readiness-where-matches-ready-path
+  (with-runtime
+    (fn [rt]
+      (weaver/init rt)
+      (let [ready (weaver/add! rt {:title "Ready"})
+            active-target (weaver/add! rt {:title "Active dependency"})
+            blocked (weaver/add! rt {:title "Blocked"})
+            inactive (weaver/add! rt {:title "Inactive" :state "closed"})]
+        (weaver/update! rt (:id blocked)
+                        {:edges [{:type "depends-on" :to (:id active-target)}]})
+        (let [composed-where (graph/conjoin-where [:= :state "active"]
+                                                  graph/readiness-where)
+              ready-ids (set (map :id (weaver/ready rt)))
+              where-ids (set (map :id (weaver/list rt composed-where {})))]
+          (is (= #{(:id ready) (:id active-target)} ready-ids))
+          (is (not (contains? ready-ids (:id blocked))))
+          (is (not (contains? ready-ids (:id inactive))))
+          (is (= ready-ids where-ids)))))))
 
 (deftest conjoin-where-overlays-an-extra-clause
   (let [bare [:= [:attr :owner] "agent"]
