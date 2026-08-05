@@ -2,8 +2,8 @@
   "Request-context arity and fail-loud payload coverage for the batch API.
 
   The broad batch behavior lock — event fanout, attribute normalization, and
-  atomic rejection — lives in `skein.weaver-test`; this namespace pins the
-  explicit caller-supplied request-context arity and the payload grammar's
+  atomic rejection — lives in `skein.core.weaver.hooks-events-test`; this
+  namespace pins the explicit caller-supplied request-context arity and the payload grammar's
   loud rejection at the public surface."
   (:require [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is use-fixtures]]

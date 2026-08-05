@@ -31,8 +31,7 @@
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.spools.cron :as cron]
             [skein.spools.test-support :as test-support]
-            [skein.test.alpha :as test-alpha]
-            [skein.weaver-test :as wt])
+            [skein.test.alpha :as test-alpha])
   (:import [java.time Duration Instant]))
 
 ;; Job and event seams resolved by fully qualified symbol, so their signals are
@@ -73,7 +72,7 @@
 
 (deftest cron-cadence-survives-weaver-restart-and-fires-on-rearm
   (let [db-file (db-test/temp-db-file)
-        world (wt/temp-world)
+        world (test-support/temp-world)
         interval-ms (* 60 60 1000)
         job {:id :survivor :interval-ms interval-ms :jitter-ms 0
              :handler 'skein.e2e.cron.lifecycle-test/record-run}
@@ -121,10 +120,10 @@
             (weaver-runtime/stop! rt2))))
       (finally
         (db-test/delete-sqlite-family! db-file)
-        (wt/delete-tree! (io/file (:config-dir world)))))))
+        (test-support/delete-tree! (io/file (:config-dir world)))))))
 
 (deftest blocking-run-does-not-hold-the-event-lane
-  (wt/with-runtime
+  (test-support/with-runtime
     (fn [rt _db-file]
       (reset! run-started (promise))
       (reset! run-release (promise))

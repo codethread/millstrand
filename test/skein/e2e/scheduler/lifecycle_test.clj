@@ -17,8 +17,7 @@
             [skein.core.db-test :as db-test]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.spools.test-support :as test-support]
-            [skein.test.alpha :as test-alpha]
-            [skein.weaver-test :as wt])
+            [skein.test.alpha :as test-alpha])
   (:import [java.time Duration Instant]))
 
 ;; Resolved by fully qualified symbol, so the fire signal is namespace-level.
@@ -41,7 +40,7 @@
        (mapv :title)))
 
 (deftest scheduled-handler-mutates-graph-and-drains-pending
-  (wt/with-runtime
+  (test-support/with-runtime
     (fn [rt _db-file]
       (test-alpha/set-clock! rt (test-alpha/manual-clock (Instant/ofEpochSecond 0)))
       (scheduler/schedule! rt {:key "seed-strand"
@@ -56,7 +55,7 @@
 
 (deftest pending-wake-survives-weaver-restart-and-fires-on-rearm
   (let [db-file (db-test/temp-db-file)
-        world (wt/temp-world)]
+        world (test-support/temp-world)]
     (try
       (reset! fired (promise))
       ;; First weaver schedules a wake through the blessed API, confirms it is
@@ -95,4 +94,4 @@
             (weaver-runtime/stop! rt2))))
       (finally
         (db-test/delete-sqlite-family! db-file)
-        (wt/delete-tree! (io/file (:config-dir world)))))))
+        (test-support/delete-tree! (io/file (:config-dir world)))))))

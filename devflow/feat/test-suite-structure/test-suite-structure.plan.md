@@ -66,7 +66,7 @@ Outcome: `vxihm` records an independent `sol-low` review commissioned and reconc
 
 ### PLAN-Tst-001.PH3 Weaver behavior suites
 
-Outcome: `ijka8` replaces `weaver_test.clj` with nine focused suites, accounts for all 137 tests exactly once, and proves safe runner placement for classloader and global-state cases.
+Outcome: `ijka8` replaces the former weaver megasuite with nine focused suites, accounts for all 137 tests exactly once, and proves safe runner placement for classloader and global-state cases.
 
 ### PLAN-Tst-001.PH4 Public API boundary
 

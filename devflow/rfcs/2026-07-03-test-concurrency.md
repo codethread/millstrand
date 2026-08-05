@@ -183,7 +183,7 @@ A 2026-07-03 session surfaced three tests that pass solo and on rerun but flap u
   provide, or a per-test wait keyed on the detached process's own state rather
   than wall-clock ordering.
 - **RFC-016.P7.3 — `weaver-test/weaver-apply-batch-emits-batch-event-before-compatibility-fanout`
-  (`test/skein/weaver_test.clj`) — cheap targeted per-test fix candidate,
+  (`test/skein/core/weaver/hooks_events_test.clj`) — cheap targeted per-test fix candidate,
   independent of D3.** The test creates its fixture strands with `weaver/add!`,
   then `reset!`s the capture vector, then registers the `:capture` event
   handler — so the handler is registered *after* the fixture `:strand/added`

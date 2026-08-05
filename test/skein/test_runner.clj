@@ -67,7 +67,15 @@
    'skein.core.weaver.lifecycle-effects-test
    'skein.spools.executors.shell-test 'skein.spools.executors.code-test
    'skein.chime-test
-   'skein.weaver-test])
+   ;; Behavior-owned slices of the former weaver megasuite. Each owns its
+   ;; disposable world and namespace-local callback state.
+   'skein.core.weaver.bins-test
+   'skein.core.weaver.startup-test
+   'skein.core.weaver.graph-query-test
+   'skein.core.weaver.hooks-events-test
+   'skein.core.weaver.ops-help-test
+   'skein.core.weaver.patterns-test
+   'skein.core.weaver.socket-test])
 
 (def serial-namespaces
   "JVM-global namespaces the parent still runs serially outside add-libs shards."
@@ -82,7 +90,11 @@
    ;; multiple published peer runtimes verify routing semantics.
    'skein.peers-test
    ;; globally redefines db transaction seams while checking API guards.
-   'skein.api.batch.alpha-test])
+   'skein.api.batch.alpha-test
+   ;; DynamicClassLoader and retained registry snapshots stay serial until
+   ;; concurrent execution has an explicit proof.
+   'skein.core.weaver.registry-snapshots-test
+   'skein.core.weaver.modules-test])
 
 (def add-libs-shards
   "Subprocess JVM shard groups for tests that mutate JVM-global tools.deps state."

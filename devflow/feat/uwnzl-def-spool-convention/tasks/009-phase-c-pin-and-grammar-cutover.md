@@ -12,7 +12,7 @@ Provision `/Users/ct/dev/projects/skein-src__uwnzl-phase-c` on `codex/uwnzl-phas
 
 - `.skein/spools.edn` and `.skein/init.clj`
 - `src/skein/api/runtime/alpha.clj`
-- `test/skein/weaver_test.clj`, `test/skein/api/runtime/alpha_test.clj`, `test/skein/config_ops_test.clj`, and startup-config fixtures found by the required pre-edit grep
+- `test/skein/core/weaver/modules_test.clj`, `test/skein/api/runtime/alpha_test.clj`, `test/skein/config_ops_test.clj`, and startup-config fixtures found by the required pre-edit grep
 - `devflow/specs/repl-api.md`, `devflow/specs/daemon-runtime.md`, and the new Phase C artifacts `devflow/feat/uwnzl-def-spool-convention/specs/repl-api-phase-c.delta.md` and `devflow/feat/uwnzl-def-spool-convention/specs/daemon-runtime-phase-c.delta.md`
 - the feature proposal, plan, task status, and regenerated `docs/api/runtime.api.md` only where the Phase C merge changes them
 

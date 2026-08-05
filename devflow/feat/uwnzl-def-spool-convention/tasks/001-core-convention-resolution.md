@@ -8,7 +8,7 @@ Type: AFK
 
 Make the refresh coordinator resolve each module's `:contribute`/`:reconcile` entry points from a public `spool` var in its loaded namespace, keep every runtime lifecycle semantic identical, and add the retained last-good resolved set that survives failure, reload, and removal-by-omission. This is the load-bearing seam for the whole feature; tracked on strand `5yfrq` under story `uwnzl-phase-a-core-story`.
 
-Owned files only: `src/skein/core/weaver/module_refresh.clj`, `src/skein/core/weaver/module_graph.clj`, `src/skein/api/runtime/alpha.clj`, `src/skein/api/spool/alpha.clj`, `test/skein/weaver_test.clj`, `test/skein/api/runtime/alpha_test.clj`.
+Owned files only: `src/skein/core/weaver/module_refresh.clj`, `src/skein/core/weaver/module_graph.clj`, `src/skein/api/runtime/alpha.clj`, `src/skein/api/spool/alpha.clj`, `test/skein/core/weaver/modules_test.clj`, `test/skein/api/runtime/alpha_test.clj`.
 
 ## TASK-Dsp-001.P2 Must implement exactly
 
@@ -23,7 +23,7 @@ Owned files only: `src/skein/core/weaver/module_refresh.clj`, `src/skein/core/we
 
 ## TASK-Dsp-001.P3 Done when
 
-- **TASK-Dsp-001.DW1:** `clojure -M:test skein.weaver-test skein.api.runtime.alpha-test` is green.
+- **TASK-Dsp-001.DW1:** `clojure -M:test skein.core.weaver.modules-test skein.api.runtime.alpha-test` is green.
 - **TASK-Dsp-001.DW2:** `git diff --check` is clean and lint over the owned files passes.
 - **TASK-Dsp-001.DW3:** The regression matrix proves runtime semantics unchanged, not merely that resolution works (`PLAN-Dsp-001.V1`).
 

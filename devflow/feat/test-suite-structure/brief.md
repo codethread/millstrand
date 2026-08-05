@@ -29,7 +29,7 @@ The testing spec binds:
 
 - `jdbsl` keeps workspace-owned `.skein` tests under `test/skein/ct` and enforces that boundary. It is complete and landing separately.
 - `ga2sh` consolidates repository-only temp, cleanup, Git, polling, and runtime fixtures while restoring the shipped test API's classpath isolation.
-- `ijka8` splits all 137 tests in `weaver_test.clj` into nine behavior-owned suites. Shared fixtures reuse the existing support surfaces; no third shared helper namespace is added.
+- `ijka8` splits all 137 tests in the former weaver megasuite into nine behavior-owned suites. Shared fixtures reuse the existing support surfaces; no third shared helper namespace is added.
 - `uoyeu` gives scheduler and Cron tests one layer-plus-role directory scheme while preserving their six distinct coverage boundaries.
 - `whu7e` keeps `test/skein/api` as public-contract pins and moves deeper behavior to core or named integration suites. Its quality check governs Skein's repository, not downstream test code.
 
