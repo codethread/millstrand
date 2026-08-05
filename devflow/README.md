@@ -17,6 +17,7 @@ Root specs are canonical for shipped behavior:
 - [REPL API](./specs/repl-api.md) — interactive Clojure helper contract, including recursive arg-spec and return trees, connected REPL, runtime spool workspace helpers, lifecycle hook helpers, and the `skein.test.alpha` author-side weaver-world test helpers.
 - [Weaver Runtime](./specs/daemon-runtime.md) — local long-lived weaver lifecycle, storage model with schema generations and the forward-migration contract, leaf-resolved operation metadata and hook gates, transports, trusted startup config, query registry, the three-kind runtime spool workspace model, and synchronous lifecycle hooks.
 - [Alpha Surface](./specs/alpha-surface.md) — the contract index drawing the line around shipped alpha surface: which tiers are in-contract (root specs, blessed API namespaces, opt-in reference spool docs) and which surface is explicitly internal (mill socket protocol, unenumerated error codes, `skein.core.*`).
+- [Testing contract](./specs/testing.md) — downstream testing tiers, classpath and runtime boundaries, disposable weaver-world isolation, and the boundary between shipped author helpers and repository fixtures.
 
 ## Active features
 
@@ -49,6 +50,7 @@ Default `rg` searches skip `archive/`; use `rg --no-ignore devflow/archive` when
 - `26-06-28__batch-graph-upsert` — shipped transactional trusted Clojure batch graph mutation primitive with local refs, create/update/burn/edge upsert support, weaver events, and `skein.api.batch.alpha/apply!`.
 - `26-06-29__edge-relation-families` — shipped state lifecycle model, declared acyclic relation families, core supersession, edge predicates, relation-scoped traversal, and annotation catalog.
 - `26-07-03__library-author-testing-support` — shipped weaver storage handles with real in-memory SQLite for trusted tests, explicit storage metadata/status, the `skein.test.alpha` author-side weaver-world helpers, and `docs/spools/testing.md`.
+- `26-08-05__test-suite-structure` — shipped the Testing Contract root spec, merged the `await-quiescent!` classpath correction into the Weaver Runtime spec, and reorganised the repository test suite around ownership and layer boundaries.
 - `26-06-29__repo-first-config` — shipped repo-local `.skein` world selection, layered shared/local config, local extension overrides, and fail-loud no-global default behavior.
 - `26-06-29__weaver-lifecycle-hooks` — shipped synchronous trusted lifecycle hooks for payload gating, attribute normalization, and pre-commit mutation policy.
 - `26-06-30__mill-router-runtime` — shipped local Go `mill` router/supervisor, mill-routed `strand` commands, Git-root repo bootstrap, XDG runtime/data worlds, startup storage initialization, and connected REPL attachment through mill metadata.
