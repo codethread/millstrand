@@ -3,9 +3,8 @@
 
   Naming convention: aliases are pure model handles (`:sol-low`,
   `:terra-med`, `:opus`) — never role names, so a seat cannot be routed by
-  connotation. A `-ro` suffix marks the read-only-sandbox variant of a seat.
-  Role policy lives where it is applied: reviewer rosters pick seats in
-  `.skein/agents/reviewers.clj`, workflows take seats as parameters.
+  connotation. Role policy lives where it is applied: reviewer rosters pick seats
+  in `.skein/agents/reviewers.clj`, workflows take seats as parameters.
 
   Every seat doc leads with a scorecard a coordinator can scan:
 

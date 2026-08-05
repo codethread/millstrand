@@ -46,9 +46,7 @@
   :terra-med; judgment-heavy contracts take :sol-med or :opus. Boundary
   caveat: benched on a single-commit three-file diff - re-probe before
   trusting :luna-low on large multi-file changes. Note
-  reviewers must run on read/write seats for now: findings append via the
-  strand CLI over the weaver socket, which the -ro sandbox blocks (see
-  :codex-ro in agents/harnesses.clj) - read-only stays prompt-discipline. Two
+  reviewers append findings via the strand CLI over the weaver socket. Two
   sign-off invariants: the synthesizer is never a seat that reviewed, and at
   least one reviewing seat comes from outside the authoring model family."
   (:require [ct.spools.delegation :as agents]
