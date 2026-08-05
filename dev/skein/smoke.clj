@@ -236,16 +236,17 @@
            (str message " returns the complete S2 envelope")))
 
 (defn- smoke-await-secs [base-secs]
-  (let [scale (if-let [raw (System/getenv "SKEIN_TEST_AWAIT_SCALE")]
+  (let [raw (System/getenv "SKEIN_TEST_AWAIT_SCALE")
+        scale (if raw
                 (try
                   (Double/parseDouble raw)
                   (catch NumberFormatException _
                     (throw (ex-info "SKEIN_TEST_AWAIT_SCALE must be a number"
                                     {:env "SKEIN_TEST_AWAIT_SCALE" :value raw}))))
                 1.0)]
-    (when-not (and (Double/isFinite scale) (pos? scale))
-      (throw (ex-info "SKEIN_TEST_AWAIT_SCALE must be a positive finite number"
-                      {:env "SKEIN_TEST_AWAIT_SCALE" :value scale})))
+    (when-not (and (Double/isFinite scale) (<= 1.0 scale 10.0))
+      (throw (ex-info "SKEIN_TEST_AWAIT_SCALE must be a finite number from 1 through 10"
+                      {:env "SKEIN_TEST_AWAIT_SCALE" :value raw :allowed [1 10]})))
     (str (long (* base-secs scale)))))
 
 (defn- strand-process-builder [workspace args]
@@ -256,6 +257,33 @@
       (.put "SKEIN_SOURCE" checkout-root))
     (.directory builder (outside-repo-dir))
     builder))
+
+(defn- await-probe-ready! [^Process process marker]
+  (loop [attempts 500]
+    (cond
+      (.isFile marker) nil
+      (not (.isAlive process))
+      (throw (ex-info "await process exited before its first probe" {:exit-code (.exitValue process)}))
+      (zero? attempts)
+      (throw (ex-info "await process did not reach its first probe" {:marker (.getAbsolutePath marker)}))
+      :else
+      (do
+        (Thread/sleep 10)
+        (recur (dec attempts))))))
+
+(defn- install-await-probe-signal! [init-path marker]
+  (spit init-path
+        (str (slurp init-path)
+             "\n(require 'skein.api.weaver.alpha)\n"
+             "(let [read-var (ns-resolve 'skein.api.weaver.alpha 'list-lean)\n"
+             "      original (var-get read-var)]\n"
+             "  (alter-var-root read-var\n"
+             "                  (fn [_]\n"
+             "                    (fn [& args]\n"
+             "                      (let [result (apply original args)]\n"
+             "                        (when (= 6 (count args))\n"
+             "                          (spit " (pr-str (.getAbsolutePath marker)) " \"ready\"))\n"
+             "                        result)))))\n")))
 
 (defn assert-contains [haystack needle message]
   (assert (clojure.string/includes? haystack needle)
@@ -385,12 +413,15 @@
 (defn- smoke-await-cli!
   [db-file]
   (let [workspace (.getCanonicalPath (.toFile (smoke-workspace (str db-file ".await"))))
+        init-path (java.io.File. workspace "init.clj")
+        probe-marker (java.io.File. workspace "await-probe-ready")
         await! (fn [& args]
                  (parse-json (apply run-strand-config! workspace "await" args)))
         close! (fn [id]
                  (run-strand-config! workspace "update" id "--state" "closed"))]
     (delete-tree! (smoke-workspace (str db-file ".await")))
     (run-mill-config! workspace "init")
+    (install-await-probe-signal! init-path probe-marker)
     (start-weaver-config! workspace)
     (try
       (let [closed (cli-add-config! workspace "Await already closed" "--state" "closed")]
@@ -401,40 +432,60 @@
          "await observes an already-closed strand on its immediate first probe"))
 
       (let [id (cli-add-config! workspace "Await concurrent close")
+            _ (.delete probe-marker)
             process (.start (strand-process-builder
                              workspace ["await" "--query" "strand-closed"
                                         "--param" (str "id=" id) "--min-count" "1"
-                                        "--timeout-secs" (smoke-await-secs 5)]))]
-        (close! id)
-        (let [output (slurp (.getInputStream process))
-              exit-code (.waitFor process)]
-          (assert= 0 exit-code (str "concurrent close await succeeds\n" output))
-          (assert-await-envelope
-           (parse-json output)
-           {:operation "await" :query "strand-closed" :reason "satisfied"
-            :count 1 :min_count 1 :max_count nil}
-           "await wakes after a concurrent graph mutation")))
+                                        "--timeout-secs" (smoke-await-secs 5)]))
+            failure (atom nil)]
+        (try
+          (await-probe-ready! process probe-marker)
+          (.delete probe-marker)
+          (close! id)
+          (let [output (slurp (.getInputStream process))
+                exit-code (.waitFor process)]
+            (assert= 0 exit-code (str "concurrent close await succeeds\n" output))
+            (assert-await-envelope
+             (parse-json output)
+             {:operation "await" :query "strand-closed" :reason "satisfied"
+              :count 1 :min_count 1 :max_count nil}
+             "await wakes after a concurrent graph mutation"))
+          (catch Throwable t
+            (reset! failure t)
+            (throw t))
+          (finally
+            (cleanup-process! process "concurrent close await" failure))))
 
       (doseq [exit [:close :supersede :burn]]
         (let [id (cli-add-config! workspace (str "Await active exit " (name exit)))
               replacement (when (= :supersede exit)
                             (cli-add-config! workspace "Await replacement"))
+              _ (.delete probe-marker)
               process (.start (strand-process-builder
                                workspace ["await" "--query" "strand-active"
                                           "--param" (str "id=" id) "--max-count" "0"
-                                          "--timeout-secs" (smoke-await-secs 5)]))]
-          (case exit
-            :close (close! id)
-            :supersede (run-strand-config! workspace "supersede" id replacement)
-            :burn (run-strand-config! workspace "burn" id))
-          (let [output (slurp (.getInputStream process))
-                exit-code (.waitFor process)]
-            (assert= 0 exit-code (str (name exit) " active-set await succeeds\n" output))
-            (assert-await-envelope
-             (parse-json output)
-             {:operation "await" :query "strand-active" :reason "satisfied"
-              :count 0 :min_count nil :max_count 0}
-             (str "strand-active is cardinality waiting after " (name exit))))))
+                                          "--timeout-secs" (smoke-await-secs 5)]))
+              failure (atom nil)]
+          (try
+            (await-probe-ready! process probe-marker)
+            (.delete probe-marker)
+            (case exit
+              :close (close! id)
+              :supersede (run-strand-config! workspace "supersede" id replacement)
+              :burn (run-strand-config! workspace "burn" id))
+            (let [output (slurp (.getInputStream process))
+                  exit-code (.waitFor process)]
+              (assert= 0 exit-code (str (name exit) " active-set await succeeds\n" output))
+              (assert-await-envelope
+               (parse-json output)
+               {:operation "await" :query "strand-active" :reason "satisfied"
+                :count 0 :min_count nil :max_count 0}
+               (str "strand-active is cardinality waiting after " (name exit))))
+            (catch Throwable t
+              (reset! failure t)
+              (throw t))
+            (finally
+              (cleanup-process! process (str (name exit) " active-set await") failure)))))
 
       (let [parent (cli-add-config! workspace "Await parent")
             child-a (cli-add-config! workspace "Await child A" "--edge" (str "parent-of:" parent))
