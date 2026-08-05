@@ -2,7 +2,17 @@
 # Run one Go quality operation across every Go module in this checkout.
 set -euo pipefail
 
-operation="${1:?usage: scripts/go-quality <format|format-check|test|lint|security>}"
+usage() {
+  echo "usage: scripts/go-quality <format|format-check|test|lint|security>" >&2
+}
+
+if [ "$#" -ne 1 ]; then
+  echo "go-quality: expected exactly one operation, got $# argument(s): $*" >&2
+  usage
+  exit 2
+fi
+
+operation="$1"
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 modules=(cli tools/ralph tools/kanban-tree)
 

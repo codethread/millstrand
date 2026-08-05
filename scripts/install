@@ -2,6 +2,12 @@
 # Install strand and mill from this checkout, stamped with its canonical source.
 set -euo pipefail
 
+if [ "$#" -ne 0 ]; then
+  echo "install: unexpected arguments: $*" >&2
+  echo "usage: scripts/install" >&2
+  exit 2
+fi
+
 if ! gitdir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
   echo "install: not inside a Skein git checkout; cannot resolve canonical source" >&2
   exit 1
