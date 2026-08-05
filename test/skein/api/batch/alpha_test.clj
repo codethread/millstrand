@@ -13,7 +13,8 @@
             [skein.core.db :as db]
             [skein.core.specs :as specs]
             [skein.core.weaver.dispatch :as dispatch]
-            [skein.test.alpha :as t]))
+            [skein.test.alpha :as t]
+            [skein.spools.test-support :as test-support]))
 
 ;; Namespace-level on purpose: hooks are registered by symbol and resolved to
 ;; top-level vars, so capture state cannot be a per-test local.
@@ -234,7 +235,7 @@
                                 #"Batch result violates its published contract"
                                 (batch/apply! rt {:strands [{:ref :x :title "X"}]}))
               label))
-        (t/await-quiescent! rt)
+        (t/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
         (is (empty? @captured-contexts) label)
         (is (empty? @captured-batch-events) label)))))
 

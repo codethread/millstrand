@@ -12,30 +12,21 @@
             [skein.api.weaver.alpha :as weaver]
             [skein.core.specs :as specs]
             [skein.core.weaver.access :as access]
-            [skein.core.weaver.config :as weaver-config]
             [skein.core.weaver.core-registry :as cr]
             [skein.core.weaver.runtime :as weaver-runtime]
-            [skein.core.db-test :as db-test]))
-(defn test-world [config-dir]
-  (weaver-config/world config-dir
-                       (str config-dir "/state")
-                       (str config-dir "/data")))
+            [skein.spools.test-support :as test-support]))
 
 (defn reset-repl-state! []
   (reset! (var-get (ns-resolve 'skein.repl 'active-config-dir))
           (var-get (ns-resolve 'skein.repl 'no-connection))))
 
 (defn with-runtime [f]
-  (let [db-file (db-test/temp-db-file)
-        config-dir (str "/tmp/skein-alpha-" (java.util.UUID/randomUUID))]
-    (.mkdirs (java.io.File. config-dir))
-    (let [rt (weaver-runtime/start! db-file {:world (test-world config-dir) :publish? false})]
+  (test-support/with-runtime
+    (fn [rt _config-dir]
       (try
         (f rt)
         (finally
-          (reset-repl-state!)
-          (weaver-runtime/stop! rt)
-          (db-test/delete-sqlite-family! db-file))))))
+          (reset-repl-state!))))))
 
 ;; Namespace-level on purpose: hooks are registered by symbol and resolved
 ;; to top-level vars, so capture state cannot be a per-test local. Reset by

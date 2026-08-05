@@ -76,7 +76,7 @@
   (with-shell
     (fn [rt]
       (workflow/start! "pass" (single-gate "pass" {"shell/argv" ["true"]}) {})
-      (test-alpha/await-quiescent! rt)
+      (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
       (let [gate-id (:id (shell-gate-strand rt "pass"))
             closed (await-eventually #(let [g (weaver/show rt gate-id)]
                                         (when (= "closed" (:state g)) g)))]
@@ -90,7 +90,7 @@
   (with-shell
     (fn [rt]
       (workflow/start! "fail" (single-gate "fail" {"shell/argv" ["false"]}) {})
-      (test-alpha/await-quiescent! rt)
+      (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
       (let [gate-id (:id (ready-shell-gate "fail"))
             errored (await-eventually #(let [g (weaver/show rt gate-id)]
                                          (when (attr g :gate/error) g)))]
@@ -112,7 +112,7 @@
             run-count (fn [] (count (remove str/blank? (str/split-lines (slurp counter)))))
             argv (fn [exit] ["sh" "-c" (str "echo run >> '" (.getPath counter) "'; exit " exit)])]
         (workflow/start! "rec" (single-gate "rec" {"shell/argv" (argv 3)}) {})
-        (test-alpha/await-quiescent! rt)
+        (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
         (let [gate-id (:id (ready-shell-gate "rec"))
               errored (await-eventually #(let [g (weaver/show rt gate-id)]
                                            (when (attr g :gate/error) g)))]
@@ -135,7 +135,7 @@
           (weaver/update! rt gate-id {:attributes {"gate/error" nil
                                                    "shell/running" nil
                                                    "shell/argv" (argv 0)}})
-          (test-alpha/await-quiescent! rt)
+          (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
           (let [closed (await-eventually #(let [g (weaver/show rt gate-id)]
                                             (when (= "closed" (:state g)) g)))]
             (is (zero? (attr closed :shell/exit-code)))
@@ -149,7 +149,7 @@
             run-count (fn [] (count (remove str/blank? (str/split-lines (slurp counter)))))
             argv (fn [exit] ["sh" "-c" (str "echo run >> '" (.getPath counter) "'; exit " exit)])]
         (workflow/start! "blank" (single-gate "blank" {"shell/argv" (argv 5)}) {})
-        (test-alpha/await-quiescent! rt)
+        (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
         (let [gate-id (:id (ready-shell-gate "blank"))]
           (await-eventually #(let [g (weaver/show rt gate-id)]
                                (when (attr g :gate/error) g)))
@@ -167,7 +167,7 @@
           ;; removing gate/error (nil patch / JSON null) is the only re-arm: the
           ;; next scan finds an un-errored gate and re-runs the check.
           (weaver/update! rt gate-id {:attributes {"gate/error" nil}})
-          (test-alpha/await-quiescent! rt)
+          (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
           (let [closed (await-eventually #(let [g (weaver/show rt gate-id)]
                                             (when (= "closed" (:state g)) g)))]
             (is (zero? (attr closed :shell/exit-code)))
@@ -192,7 +192,7 @@
                                                       [{"shell/argv" ["true"] "shell/cwd" ""} "shell/cwd"]])]
         (let [run-id (str "invalid-" i)]
           (workflow/start! run-id (single-gate run-id bad) {})
-          (test-alpha/await-quiescent! rt)
+          (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
           (let [gate-id (:id (ready-shell-gate run-id))
                 errored (await-eventually #(let [g (weaver/show rt gate-id)]
                                              (when (attr g :gate/error) g)))]
@@ -211,7 +211,7 @@
       ;; a command exceeding the wall-clock bound is force-killed and stamped
       (workflow/start! "timeout" (single-gate "timeout" {"shell/argv" ["sh" "-c" "sleep 30"]
                                                          "shell/timeout-secs" 1}) {})
-      (test-alpha/await-quiescent! rt)
+      (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
       (let [gate-id (:id (ready-shell-gate "timeout"))
             errored (await-eventually #(let [g (weaver/show rt gate-id)]
                                          (when (attr g :gate/error) g)))]
@@ -221,7 +221,7 @@
       ;; output pipe, so the timeout path must still reach a terminal stamp.
       (workflow/start! "timeout-descendant" (single-gate "timeout-descendant" {"shell/argv" ["sh" "-c" "sleep 30 & sleep 30"]
                                                                                "shell/timeout-secs" 1}) {})
-      (test-alpha/await-quiescent! rt)
+      (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
       (let [gate-id (:id (ready-shell-gate "timeout-descendant"))
             errored (await-eventually #(let [g (weaver/show rt gate-id)]
                                          (when (attr g :gate/error) g)))]
@@ -230,7 +230,7 @@
       ;; a non-positive timeout fails loudly with no process
       (workflow/start! "timeout-bad" (single-gate "timeout-bad" {"shell/argv" ["true"]
                                                                  "shell/timeout-secs" 0}) {})
-      (test-alpha/await-quiescent! rt)
+      (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
       (let [gate-id (:id (ready-shell-gate "timeout-bad"))
             errored (await-eventually #(let [g (weaver/show rt gate-id)]
                                          (when (attr g :gate/error) g)))]
@@ -252,7 +252,7 @@
         (is (nil? (attr (weaver/show rt sub-gate-id) :shell/exit-code))))
       ;; large output is retained only as a bounded tail
       (workflow/start! "big" (single-gate "big" {"shell/argv" ["sh" "-c" "yes 0123456789 | head -c 200000"]}) {})
-      (test-alpha/await-quiescent! rt)
+      (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
       (let [gate-id (:id (shell-gate-strand rt "big"))
             closed (await-eventually #(let [g (weaver/show rt gate-id)]
                                         (when (= "closed" (:state g)) g)))
@@ -276,7 +276,7 @@
           (is (nil? (attr gate :shell/exit-code))))
         ;; close the dependency; the gate becomes ready and the executor runs the check
         (workflow/complete! "comp" {:step (:id first-step)})
-        (test-alpha/await-quiescent! rt))
+        (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)}))
       (let [gate-id (:id (shell-gate-strand rt "comp"))]
         (await-eventually #(= "closed" (:state (weaver/show rt gate-id))))
         (is (zero? (attr (weaver/show rt gate-id) :shell/exit-code)))

@@ -111,7 +111,7 @@
               "the equal config tuple adopts the overdue wake instead of resetting it")
           ;; Release the overdue fire deterministically off the manual clock.
           (let [fired-at-ms (.toEpochMilli (test-alpha/advance! rt2 (Duration/ofSeconds 2)))]
-            (test-alpha/await-quiescent! rt2)
+            (test-alpha/await-quiescent! rt2 {:timeout-ms (test-support/await-budget-ms)})
             (cron/await-quiescent! rt2)
             (is (= :fired (:last-result (first (cron/jobs rt2))))
                 "the adopted wake fired and recorded its result after restart")
@@ -138,7 +138,7 @@
       ;; blocking-run to the cron executor, then returns, so the lane settles
       ;; while the job body is still blocked.
       (test-alpha/advance! rt (Duration/ofSeconds 2))
-      (is (= rt (test-alpha/await-quiescent! rt))
+      (is (= rt (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)}))
           "the lane settles even though the job body is still blocked off-lane")
       (is (deref @run-started (test-support/await-budget-ms) false)
           "the offloaded job body started on the cron executor")
@@ -146,7 +146,7 @@
           "the job body is still blocked mid-run")
       ;; A subsequent event still dispatches while the cron job blocks off-lane.
       (dispatch/enqueue! rt (marker-event))
-      (test-alpha/await-quiescent! rt)
+      (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
       (is (deref @marker-fired (test-support/await-budget-ms) false)
           "a new event dispatches on the lane while the cron job is blocked")
       ;; Release and join before teardown so the executor thread is idle.

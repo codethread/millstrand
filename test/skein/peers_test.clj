@@ -7,15 +7,8 @@
             [skein.core.db-test :as db-test]
             [skein.core.weaver.config :as weaver-config]
             [skein.core.weaver.metadata :as metadata]
-            [skein.core.weaver.runtime :as weaver-runtime]))
-
-(defn- temp-dir [prefix]
-  (.toFile (java.nio.file.Files/createTempDirectory prefix (make-array java.nio.file.attribute.FileAttribute 0))))
-
-(defn- delete-tree! [file]
-  (when (.exists file)
-    (doseq [f (reverse (file-seq file))]
-      (.delete f))))
+            [skein.core.weaver.runtime :as weaver-runtime]
+            [skein.spools.test-support :as test-support]))
 
 (defn peer-test-op [{:op/keys [name argv]}]
   {:name name :argv argv :from :peer-test})
@@ -61,13 +54,13 @@
         (alter-var-root state-root-var (constantly original))))))
 
 (deftest peers-empty-root-test
-  (let [state-root (temp-dir "skein-peers-empty")]
+  (let [state-root (test-support/temp-dir "skein-peers-empty")]
     (with-state-root state-root
       #(is (= [] (peers/peers))))))
 
 (deftest peers-list-running-test
-  (let [state-root (temp-dir "skein-peers-running")
-        workspace (temp-dir "skein-peer-workspace")
+  (let [state-root (test-support/temp-dir "skein-peers-running")
+        workspace (test-support/temp-dir "skein-peer-workspace")
         state-dir (write-peer! state-root "a" workspace "alpha" (current-pid))
         socket-path (.getPath (metadata/socket-file {:state-dir (.getPath state-dir)}))]
     (with-state-root state-root
@@ -83,8 +76,8 @@
          (is (= "alpha" (:name (first rows))))))))
 
 (deftest peers-stale-listed-but-not-resolvable-test
-  (let [state-root (temp-dir "skein-peers-stale")
-        workspace (temp-dir "skein-peer-stale-workspace")]
+  (let [state-root (test-support/temp-dir "skein-peers-stale")
+        workspace (test-support/temp-dir "skein-peer-stale-workspace")]
     (write-peer! state-root "stale" workspace "stale" 999999999)
     (with-state-root state-root
       #(do
@@ -96,7 +89,7 @@
              (is (= :peer/stale (:code (ex-data ex))))))))))
 
 (deftest peers-unknown-name-not-found-test
-  (let [state-root (temp-dir "skein-peers-none")]
+  (let [state-root (test-support/temp-dir "skein-peers-none")]
     (with-state-root state-root
       #(try
          (peers/call! "nobody" "status")
@@ -106,8 +99,8 @@
            (is (= :name (:match-by (ex-data ex)))))))))
 
 (deftest peers-workspace-path-resolution-test
-  (let [state-root (temp-dir "skein-peers-bypath")
-        workspace (temp-dir "skein-peer-bypath-workspace")]
+  (let [state-root (test-support/temp-dir "skein-peers-bypath")
+        workspace (test-support/temp-dir "skein-peer-bypath-workspace")]
     (write-peer! state-root "p" workspace "pathy" 999999999)
     (with-state-root state-root
       #(try
@@ -118,9 +111,9 @@
            (is (= :workspace (:match-by (ex-data ex)))))))))
 
 (deftest peers-duplicate-name-ambiguity-test
-  (let [state-root (temp-dir "skein-peers-ambiguous")
-        workspace-a (temp-dir "skein-peer-a")
-        workspace-b (temp-dir "skein-peer-b")]
+  (let [state-root (test-support/temp-dir "skein-peers-ambiguous")
+        workspace-a (test-support/temp-dir "skein-peer-a")
+        workspace-b (test-support/temp-dir "skein-peer-b")]
     (write-peer! state-root "a" workspace-a "shared" (current-pid))
     (write-peer! state-root "b" workspace-b "shared" (current-pid))
     (with-state-root state-root
@@ -133,7 +126,7 @@
                   (set (map :workspace (:candidates (ex-data ex)))))))))))
 
 (deftest peers-malformed-metadata-fails-test
-  (let [state-root (temp-dir "skein-peers-malformed")
+  (let [state-root (test-support/temp-dir "skein-peers-malformed")
         state-dir (io/file state-root "weavers" "bad")]
     (.mkdirs state-dir)
     (spit (io/file state-dir "weaver.edn") (pr-str {:pid (current-pid) :name "bad"}))
@@ -179,7 +172,7 @@
           (reset! weaver-runtime/current-runtime nil)
           (db-test/delete-sqlite-family! db-a)
           (db-test/delete-sqlite-family! db-b)
-          (delete-tree! root))))))
+          (test-support/delete-tree! root))))))
 
 (deftest call-peer-invoke-and-status-test
   (with-two-runtimes
@@ -278,4 +271,4 @@
       (finally
         (weaver-runtime/stop! rt-b)
         (db-test/delete-sqlite-family! db-b)
-        (delete-tree! root)))))
+        (test-support/delete-tree! root)))))

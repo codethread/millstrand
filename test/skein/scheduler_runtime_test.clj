@@ -334,7 +334,7 @@
       (scheduler/rearm! rt)
       (scheduler/rearm! rt)
       (test-alpha/advance! rt (Duration/ofSeconds 2))
-      (test-alpha/await-quiescent! rt)
+      (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
       (is (= 1 @fire-count) "repeated re-arm must not double-arm the same wake"))))
 
 (deftest reload-rearm-does-not-refire-completed-wake
