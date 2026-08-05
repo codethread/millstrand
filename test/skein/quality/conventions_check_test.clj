@@ -89,6 +89,27 @@
                    {:namespace-definitions
                     [(assoc valid :filename "/tmp/repo/test/skein/ct/config_test.clj")]}))))))
 
+(deftest direct-workspace-path-catches-a-test-before-it-adopts-the-namespace
+  (with-modules
+    {"config-ops" (str "(ns skein.config-ops-test \"Doc.\")\n"
+                       "(load-file \".skein/policy/config.clj\")\n")}
+    (fn [dirs]
+      (let [dir (dirs "config-ops")
+            file (.getPath (io/file dir "alpha.clj"))
+            findings (workspace-tests/check
+                      {:namespace-definitions
+                       [{:name 'skein.config-ops-test :filename file :row 1}]}
+                      (.getPath dir))]
+        (is (= 1 (count findings)))
+        (is (str/includes? (first findings)
+                           "direct workspace path `.skein/policy/config.clj`")))))
+  (testing "incidental and disposable-workspace strings stay out of scope"
+    (is (empty? (workspace-tests/reference-sites
+                 '(identity ["mentions .skein/policy/config.clj"
+                             ".skein"
+                             "/tmp/world/.skein/init.clj"])
+                 1)))))
+
 (deftest private-vars-in-a-converted-alpha-are-not-findings
   (with-modules {"tidy" conformant-source}
     (fn [dirs]

@@ -23,7 +23,9 @@
     from Clojure data; the narrowing rules live in
     `quality.json-literals`;
   - repository workspace tests use `skein.ct.*` exactly under
-    `test/skein/ct/`; the boundary lives in `quality.workspace-tests`."
+    `test/skein/ct/`, and a test that directly names a checked-in `.skein` path
+    belongs there even before it adopts the namespace; the boundary lives in
+    `quality.workspace-tests`."
   (:require [clj-kondo.core :as kondo]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -146,7 +148,7 @@
                   (spool-tiers/check analysis)
                   (spool-var/check)
                   (json-literals/check source-roots)
-                  (workspace-tests/check analysis))]
+                  (workspace-tests/check analysis "test/skein"))]
     (if (seq findings)
       (do (binding [*out* *err*]
             (doseq [f findings] (println f))

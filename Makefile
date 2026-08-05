@@ -131,7 +131,8 @@ lint-splint:
 # spool sources touching skein.core.* only from unsafe-named namespaces
 # (quality.spool-tiers), and JSON authored as Clojure data rather than
 # hand-escaped string literals (quality.json-literals). Workspace-config tests
-# use skein.ct.* exactly under test/skein/ct/ (quality.workspace-tests).
+# use skein.ct.* exactly under test/skein/ct/, and direct checked-in .skein
+# paths cannot appear in tests outside that directory (quality.workspace-tests).
 lint-conventions:
 	@if git grep -n -E 'TEN-''000([^@]|$$)' -- . ':!devflow/TENETS.md'; then \
 		echo 'lint-conventions: bare TEN-''000 reference(s); use TEN-''000@1' >&2; \
