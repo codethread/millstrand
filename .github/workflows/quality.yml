@@ -27,6 +27,7 @@ jobs:
               - 'test/**'
               - 'dev/**'
               - 'spools/**'
+              - 'examples/**'
               - '.skein/**'
               - 'deps.edn'
               - '.clj-kondo/**'

@@ -11,9 +11,8 @@
   lands loudly in `(cron/failures)`.
 
   Every side effect (gh, the login-shell scan, the kanban card) is injected
-  into `run-nvd-scan!` so the lock flow is unit-testable without shelling out —
-  see test/skein/nvd_scan_test.clj. This is its own init.clj module (not part of
-  policy/config.clj) so config_test's direct policy/config.clj load never registers the job."
+  into `run-nvd-scan!` so the lock flow is unit-testable without shelling out.
+  This example is not loaded by the default workspace."
   (:require [clojure.data.json :as json]
             [skein.spools.cron :as cron]))
 

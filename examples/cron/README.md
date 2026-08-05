@@ -21,7 +21,7 @@ job table, an in-flight latch, the failure log, and a jitter RNG. That state
 lives on the active runtime through `skein.api.runtime.alpha/spool-state`, so
 separate runtimes in one JVM do not share jobs or failures.
 
-Cron itself spawns no external processes and ships no jobs. Because real jobs often escalate capability, cron stays behind explicit spool approval. Its shipped source loads through `:skein/source-root`, not the production classpath.
+Cron itself spawns no external processes and ships no jobs. Because real jobs often escalate capability, this example requires explicit spool approval. Its source loads through `:skein/source-root`, not the production classpath.
 
 For recipes, see the [cookbook](../cron.cookbook.md): registering
 interval+jitter jobs, keeping job startup out of broad config tests,
@@ -29,11 +29,11 @@ coordinating many weavers, inspecting status, and testing offloaded jobs.
 
 ## Dependency information
 
-Cron has no spool prerequisites. Approve the shipped root from the selected workspace's `spools.edn`:
+Cron has no spool prerequisites. Approve the example root from the selected workspace's `spools.edn`:
 
 ```clojure
 ;; spools.edn
-{:spools {skein.spools/cron {:skein/source-root "spools/cron"}}}
+{:spools {skein.spools/cron {:skein/source-root "examples/cron"}}}
 ```
 
 ## Activation
@@ -147,8 +147,8 @@ Job execution failures are recorded, not swallowed (TEN-003): a job whose
 
 ## See also
 
-- [`../README.md`](../README.md) — the spool index.
-- [`../chime/README.md`](../chime/README.md) — the sibling notification engine
+- [`../../spools/README.md`](../../spools/README.md) — the spool index.
+- [`../../spools/chime/README.md`](../../spools/chime/README.md) — the sibling notification engine
   this spool mirrors for local-root layout, runtime-owned state, and loud failure
   recording.
 - [`../../docs/spools/writing-shared-spools.md`](../../docs/spools/writing-shared-spools.md) —

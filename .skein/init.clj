@@ -14,7 +14,6 @@
 ;;   agents/guide.clj             — guide op: surface questions answered by a run
 ;;   agents/reviewers.clj         — reviewer rosters
 ;;   notifications/attention.clj  — chime attention rules
-;;   jobs/nvd_scan.clj            — NVD scan cron job
 ;;   adapters/module.clj          — repo election of the batteries help transform
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and every
@@ -171,22 +170,6 @@
                            'codethread/devflow 'codethread/kanban]
                   :after [:skein/spools-devflow :skein/spools-kanban]
                   :required? true})
-;; --- cron timer engine + the NVD scan job -----------------------------------
-;; Cron is a generic weaver timer engine. Its collected open-kind and lifecycle
-;; declarations own job publication and scheduling; jobs/nvd_scan.clj contributes a
-;; job through `defjob`, so it is ordered after cron.
-(runtime/module! runtime :skein/spools-cron
-                 {:ns 'skein.spools.cron
-                  :spools ['skein.spools/cron]
-                  :required? true})
-;; The NVD scan job is its own module (not part of policy/config.clj) so config_test's
-;; direct policy/config.clj load never registers the job or seeds against real gh.
-(runtime/module! runtime :nvd-scan
-                 {:file "jobs/nvd_scan.clj"
-                  :spools ['skein.spools/cron]
-                  :after [:skein/spools-cron :skein/spools-kanban]
-                  :required? true})
-
 ;; --- config queries/helpers and hand-authored workflows ---------------------
 ;; policy/config.clj authors named queries with defquery and public validation helpers.
 (runtime/module! runtime :config

@@ -15,7 +15,6 @@
    codethread/devflow-kanban-adapter "kanban-adapter"},
   :requires {codethread/kanban "v23"}},
  skein.spools/batteries {:skein/source-root "spools/batteries"},
- skein.spools/cron {:skein/source-root "spools/cron"},
  skein.spools/workflow {:skein/source-root "spools/workflow"},
  ct.spools/agent-run
  {:git/url "https://github.com/codethread/agent-harness.spool.git",
