@@ -98,6 +98,24 @@
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"workspace-test analysis does not conform"
                           (check-workspace-analysis {})))))
 
+(deftest workspace-test-check-rejects-malformed-roots
+  (let [analysis {:namespace-definitions []}]
+    (doseq [root ["" 42]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"workspace-test root does not conform"
+                            (workspace-tests/check analysis root))))
+    (let [file (java.io.File/createTempFile "workspace-test-root" ".clj")]
+      (try
+        (let [error (try
+                      (workspace-tests/check analysis (.getPath file))
+                      nil
+                      (catch clojure.lang.ExceptionInfo e e))]
+          (is (some? error))
+          (is (= {:test-root (.getPath file) :expected :directory}
+                 (ex-data error))))
+        (finally
+          (io/delete-file file true))))))
+
 (deftest direct-workspace-path-catches-a-test-before-it-adopts-the-namespace
   (with-modules
     {"config-ops" (str "(ns skein.config-ops-test \"Doc.\")\n"
