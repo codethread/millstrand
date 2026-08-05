@@ -417,8 +417,7 @@
   (is (= (var-get (requiring-resolve 'ct.spools.delegation/worker-contract))
          ((requiring-resolve 'ct.spools.agent-run/default-task-contract-text))))
   ;; the repo owns chime's attention rules; the chime engine ships none
-  (is (= [:agent-failure :gate-error :hitl-checkpoint-ready :kanban-blocked :kanban-completed
-          :kanban-started :parked-run]
+  (is (= [:hitl-checkpoint-ready :kanban-completed :parked-run]
          (mapv :key ((requiring-resolve 'skein.spools.chime/rules)))))
   ;; the declarative reviewer rosters register from .skein/agents/reviewers.clj
   (let [rosters ((requiring-resolve 'ct.spools.delegation/rosters))]
@@ -871,26 +870,29 @@
     (fn [_rt]
       (let [rules ((requiring-resolve 'skein.spools.chime/rules))
             by-key (into {} (map (juxt :key identity)) rules)
-            fire (fn [rule-key strand]
+            fire (fn [rule-key strand ready-ids]
                    (@(requiring-resolve (:fn (get by-key rule-key)))
-                    {:strand strand :ready-ids #{}}))]
+                    {:strand strand :ready-ids ready-ids}))]
         (is (= [:hitl-checkpoint-ready :kanban-completed :parked-run]
                (mapv :key rules)))
         ;; HITL checkpoints fire only when active and ready for a human decision.
         (let [note (fire :hitl-checkpoint-ready
                          {:id "h1" :state "active" :title "Approve change"
                           :attributes {:workflow/role "checkpoint"
-                                       :workflow/checkpoint-kind "human"}})]
+                                       :workflow/checkpoint-kind "human"}}
+                         #{"h1"})]
           (is (= "HITL checkpoint ready: Approve change" (:title note))))
         ;; Kanban completion fires only for closed cards with an explicit done outcome.
         (let [note (fire :kanban-completed
                          {:id "k1" :state "closed" :title "Ship change"
                           :attributes {:kanban/card "true"
-                                       :kanban/outcome "done"}})]
+                                       :kanban/outcome "done"}}
+                         #{})]
           (is (= "Kanban done: Ship change" (:title note))))
         (is (nil? (fire :kanban-completed
                         {:id "k2" :state "active" :title "Still working"
-                         :attributes {:kanban/card "true"}})))))))
+                         :attributes {:kanban/card "true"}}
+                        #{})))))))
 
 (deftest macros-demo-weave-preserves-workspace-example
   (with-config-runtime
