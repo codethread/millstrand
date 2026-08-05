@@ -8,8 +8,7 @@
   init.clj). This file registers named queries. Sibling init.clj modules hold
   the rest of the repo policy: hand-authored modules under workflows/,
   harness seats in agents/harnesses.clj, chime attention rules
-  in notifications/attention.clj, the NVD scan cron job in jobs/nvd_scan.clj, and reviewer rosters
-  in agents/reviewers.clj."
+  in notifications/attention.clj, and reviewer rosters in agents/reviewers.clj."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [skein.api.skein.alpha :as skein]))

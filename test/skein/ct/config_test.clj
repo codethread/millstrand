@@ -104,9 +104,8 @@
   Loads the split config modules the way init.clj orders them: policy/config.clj
   first, then the harness and guide modules, shared workflow support, the
   focused workflow definition modules, and the land policy and Ralph modules.
-  notifications/attention.clj and jobs/nvd_scan.clj are
-  deliberately not loaded here — chime rules are asserted through the full
-  startup fixture, and the NVD job must never register from a direct load."
+  notifications/attention.clj is deliberately not loaded here — chime rules are
+  asserted through the full startup fixture."
   [f]
   (let [db-file (db-test/temp-db-file)
         config-dir (str "/tmp/skein-config-test-" (java.util.UUID/randomUUID))]
@@ -160,7 +159,7 @@
                 "workflows/land.clj" "workflows/spool_bump.clj"
                 "workflows/story.clj" "workflows/explore.clj" "workflows/fix.clj"
                 "workflows/land_policy.clj" "workflows/ralph.clj" "agents/harnesses.clj"
-                "agents/guide.clj" "notifications/attention.clj" "jobs/nvd_scan.clj" "agents/reviewers.clj"
+                "agents/guide.clj" "notifications/attention.clj" "agents/reviewers.clj"
                 "adapters/module.clj" "spools.edn"]]
     (let [destination (io/file target name)]
       (some-> destination .getParentFile .mkdirs)
@@ -2332,6 +2331,13 @@
       (assert-workflow-spool-consent-edges rt)
       (is (nil? (get-in (runtime/status rt) [:modules :kanban/tracker]))
           "startup no longer declares the withdrawn kanban tracker seed")
+      (is (nil? (get-in (runtime/status rt) [:modules :skein/spools-cron]))
+          "the default startup world does not activate the Cron example")
+      (is (nil? (get-in (runtime/status rt) [:modules :nvd-scan]))
+          "the default startup world does not activate the Cron example job")
+      (is (nil? (get-in (spool-sync/approved-spool-syncs rt)
+                        [:spools 'skein.spools/cron]))
+          "the default approval manifest does not distribute the Cron example")
       (is (map? (op! "help" ["agent"])))
       (is (seq (op! "agent" ["harnesses"])))
       (is (= "bench about" (:operation (op! "bench" ["about"]))))
@@ -2470,7 +2476,7 @@
   "The init.clj `:ns` modules whose declarations are collected from forms."
   #{:skein/spools-batteries :skein/spools-workflow :skein/spools-workflow-cli
     :skein/spools-shell :skein/spools-code
-    :skein/spools-unsafe-text-search :skein/spools-chime :skein/spools-cron
+    :skein/spools-unsafe-text-search :skein/spools-chime
     :skein/spools-devflow :skein/spools-devflow-kanban-adapter
     :skein/spools-kanban :skein/spools-shuttle :skein/spools-delegation
     :skein/spools-harness-core :skein/spools-codex-harness :skein/spools-agent-cli

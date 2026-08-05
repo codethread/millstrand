@@ -50,7 +50,8 @@
    "spools/unsafe-text-search/src"
    "spools/guild/src"
    "spools/chime/src"
-   "spools/cron/src"
+   "examples/cron/src"
+   "examples/cron/jobs"
    ".skein"
    "test"])
 

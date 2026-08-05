@@ -11,7 +11,7 @@
    {:name "shell" :source "spools/workflow/src/skein/spools/executors/shell.clj" :outfile "spools/executors/shell.api.md"}
    {:name "code" :source "spools/workflow/src/skein/spools/executors/code.clj" :outfile "spools/executors/code.api.md"}
    {:name "chime" :source "spools/chime/src/skein/spools/chime.clj" :outfile "spools/chime.api.md"}
-   {:name "cron" :source "spools/cron/src/skein/spools/cron.clj" :outfile "spools/cron.api.md"}])
+   {:name "cron" :source "examples/cron/src/skein/spools/cron.clj" :outfile "examples/cron.api.md"}])
 
 ;; The blessed spool-facing API tier (SPEC-005.C2). Generated reference only —
 ;; the behavior contracts stay in the root specs.

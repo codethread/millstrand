@@ -268,7 +268,7 @@ Honest source: `missing-notifier-is-recorded-loudly`, `rule-failures-are-recorde
   rule context map, batch-scan and deduplication semantics.
 - [`chime.api.md`](./chime.api.md) — generated signatures and docstrings for
   every fn referenced above.
-- [`cron.cookbook.md`](./cron.cookbook.md) — the sibling engine's recipes; cron
+- [`cron.cookbook.md`](../examples/cron.cookbook.md) — the sibling engine's recipes; cron
   and chime share the local-root layout, runtime-owned state, and loud-failure
   discipline.
 - [`workflow.cookbook.md`](./workflow.cookbook.md) — the cookbook template these

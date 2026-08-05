@@ -39,7 +39,7 @@ Userland recurrence layer over the weaver's durable scheduler wake primitive.
 Function.
 
 Return Cron's currently managed jobs for a `::lifecycle-context`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L405-L409">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L407-L411">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/apply-jobs!">`apply-jobs!`</a>
 ``` clojure
@@ -48,7 +48,7 @@ Return Cron's currently managed jobs for a `::lifecycle-context`.
 Function.
 
 Converge Cron's managed jobs from a validated `::apply-context`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L427-L442">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L429-L444">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/await-quiescent!">`await-quiescent!`</a>
 ``` clojure
@@ -67,9 +67,9 @@ Block until every offloaded cron job on `runtime` has finished, then return
   latch atom until the count reaches zero or the budget expires on the runtime
   Clock, throwing loudly on timeout (TEN-003), mirroring the event-lane join in
   `skein.test.alpha/await-quiescent!`. `opts` accepts `:timeout-ms` (a
-  positive integer); unknown keys are rejected loudly. The default budget comes
-  from `skein.spools.test-support/await-budget-ms`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L267-L295">Source</a></sub></p>
+  positive integer); unknown keys are rejected loudly. The default budget is ten
+  seconds; pass `:timeout-ms` when a caller needs a different budget.
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L270-L297">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/defjob">`defjob`</a>
 ``` clojure
@@ -84,7 +84,7 @@ Collect one cron job declaration for the current runtime module.
   `register!`. The optional `options` map conforms to `::job-options`. The macro
   performs no scheduling itself; Cron's lifecycle effect applies the complete
   effective declaration after publication.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L377-L388">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L379-L390">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/desired-jobs">`desired-jobs`</a>
 ``` clojure
@@ -93,7 +93,7 @@ Collect one cron job declaration for the current runtime module.
 Function.
 
 Return the effective Cron job declarations for a `::lifecycle-context`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L395-L403">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L397-L405">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/fire-wake">`fire-wake`</a>
 ``` clojure
@@ -112,7 +112,7 @@ Scheduler wake handler for a `cron/<id>` fire, run on the shared event lane.
   cron-owned execution executor, recording an executor rejection loudly cron-side
   without throwing; (5) return so the scheduler completes the delivered wake. The
   job body never runs on the lane.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L237-L265">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L240-L268">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/job-declaration">`job-declaration`</a>
 ``` clojure
@@ -124,7 +124,7 @@ Return a validated Cron job declaration.
 
   `options` conforms to `::job-options`; `job` conforms to `::job` after the
   stable `id` is attached. Override intent remains collection metadata.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L367-L375">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L369-L377">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/job-kind">`job-kind`</a>
 
@@ -132,7 +132,7 @@ Return a validated Cron job declaration.
 
 
 Owner-partitioned kind id for Cron job declarations.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L52-L54">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L57-L59">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/jobs">`jobs`</a>
 ``` clojure
@@ -146,7 +146,7 @@ Return the cron jobs registered on `runtime` as status maps, sorted by id.
   and (once fired) `:last-result`/`:last-fired-at`/`:last-error`. When a job next
   fires lives in its durable `cron/<id>` wake — read scheduler introspection
   (`skein.api.scheduler.alpha/pending`), the single timing view.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L462-L470">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L464-L472">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/recent-failures">`recent-failures`</a>
 ``` clojure
@@ -159,7 +159,7 @@ Return recorded cron failures for this runtime's weaver lifetime, oldest
   `skein.api.events.alpha/recent-failures`. Each entry carries `:kind` (`:run`
   for a `:handler` throw, `:offload` for an execution-executor rejection),
   `:job`, a `:message`, and `:at`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L124-L131">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L127-L134">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/register!">`register!`</a>
 ``` clojure
@@ -192,7 +192,7 @@ Register (or replace) a named cron job on `runtime` as a durable wake.
   no in-memory config yet (fresh JVM adopting a durable wake). A changed tuple arms
   a fresh wake at `now + interval + jitter`; a missing pending wake also arms a
   fresh wake. Returns the job's status map.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L315-L365">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L317-L367">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/remove-jobs!">`remove-jobs!`</a>
 ``` clojure
@@ -201,7 +201,7 @@ Register (or replace) a named cron job on `runtime` as a durable wake.
 Function.
 
 Cancel every managed job for a validated `::lifecycle-context`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L444-L452">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L446-L454">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/scheduled-jobs">`scheduled-jobs`</a>
 
@@ -209,7 +209,7 @@ Cancel every managed job for a validated `::lifecycle-context`.
 
 
 Keep durable Cron wakes converged on the effective published job registry.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L454-L460">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L456-L462">Source</a></sub></p>
 
 ## <a name="skein.spools.cron/unregister!">`unregister!`</a>
 ``` clojure
@@ -228,4 +228,4 @@ Cancel a cron job's pending wake and remove it from `runtime`.
   guarded behind a `pending` check for `cron/<id>` — a missing wake is tolerated
   while genuine scheduler errors still surface
   (`PLAN-cron-on-scheduler-001.R1`).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/cron/src/skein/spools/cron.clj#L183-L203">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/skein/blob/main/examples/cron/src/skein/spools/cron.clj#L186-L206">Source</a></sub></p>
