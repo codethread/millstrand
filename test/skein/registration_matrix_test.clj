@@ -1,14 +1,9 @@
-(ns skein.api.registration-matrix-test
-  "Cross-kind lock on the live registration loop (PROP-Rgs-001.G1/S1).
+(ns skein.registration-matrix-test
+  "Cross-kind integration lock on the live registration loop.
 
   Ops, queries, patterns, hooks, and event handlers each own a suite for their
-  kind-specific behavior. What lives here is the one promise none of those can
-  state alone: that all five kinds answer the same three verbs the same way.
-  One module publishes an entry per kind through the authoring forms, then every
-  kind is driven through the identical table — claim a fresh name, collide loudly
-  on a module-owned one, fail loudly on replacing an absent one, shadow the
-  module entry with `replace-*!`, survive a module republication, and restore the
-  original by retracting the shadow."
+  kind-specific behavior. This namespace checks the shared register, replace,
+  and unregister contract through one disposable module world."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is testing]]
@@ -22,7 +17,6 @@
 
 (s/def ::direct-input (s/keys))
 
-;; Registration resolves these by symbol, so they must be top-level Vars.
 (defn direct-op
   "Op handler fixture for a direct registration."
   [_ctx]
@@ -43,15 +37,10 @@
   [_event]
   nil)
 
-(def ^:private module-ns 'skein.api.registration-matrix-test.module)
+(def ^:private module-ns 'skein.registration-matrix-test.module)
 
 (defn- module-source
-  "Return module source publishing one entry per kind, named with `suffix`.
-
-  Re-emitting the module with a second suffix appended is how the test forces a
-  real republication: a `:file` module refresh reports `:unchanged` unless its
-  contribution actually differs, and adding an entry to every kind guarantees
-  every one of the module's owner partitions is rewritten."
+  "Return module source publishing one entry per kind, named with suffix."
   [suffix]
   (str "(skein/defop mop" suffix " \"Module op.\"\n"
        "  {:arg-spec {:op \"mop" suffix "\" :doc \"Module op.\"\n"
@@ -66,7 +55,7 @@
        "  {:types #{:strand/added}} [_] nil)\n"))
 
 (def ^:private module-preamble
-  (str "(ns skein.api.registration-matrix-test.module\n"
+  (str "(ns skein.registration-matrix-test.module\n"
        "  (:require [clojure.spec.alpha :as s]\n"
        "            [skein.api.skein.alpha :as skein]))\n"
        "(s/def ::module-input (s/keys))\n"))
@@ -75,26 +64,21 @@
   (symbol (str module-ns) suffix))
 
 (defn- direct-sym [suffix]
-  (symbol "skein.api.registration-matrix-test" suffix))
+  (symbol "skein.registration-matrix-test" suffix))
 
 (defn- op-opts
-  "Return direct-registration op metadata for the op registered as `key`."
+  "Return direct-registration op metadata for the op registered as key."
   [key]
   {:arg-spec {:op key :doc "Direct op."
               :hook-class :read :deadline-class :standard}})
 
 (defn- entry-fn
-  "Return the `:fn` of the entry `entries` holds under `key`, or nil."
+  "Return the entry function held under key, or nil."
   [entries key-of key entries-key]
   (some #(when (= key (key-of %)) (entries-key %)) entries))
 
 (def ^:private matrix
-  "One row per registry kind: how to name it, read it, and drive its verbs.
-
-  `:module`, `:fresh`, and `:absent` are plain string labels; `:key` turns one
-  into the registry key that kind stores, and each verb builds its own
-  caller-facing name so the ops-versus-hooks naming difference stays inside the
-  row rather than leaking into the test body."
+  "One row per registry kind: how to name it, read it, and drive its verbs."
   [{:label "ops"
     :key identity
     :module "mop"
@@ -186,9 +170,7 @@
                              :files {"modules/matrix.clj"
                                      (str module-preamble (module-source ""))}}]
     (let [rt (:runtime ctx)]
-      (is (= :applied (:status (t/declare-module! ctx :matrix {:file "modules/matrix.clj"})))
-          "one module publishes an owner-complete entry for all five kinds")
-
+      (is (= :applied (:status (t/declare-module! ctx :matrix {:file "modules/matrix.clj"}))))
       (doseq [{:keys [label key module fresh absent module-tag direct-tag effective
                       register! replace! unregister! collision replace-missing]} matrix]
         (testing label
@@ -199,8 +181,7 @@
             (is (= direct-tag (effective rt (key fresh)))))
           (testing "registering over a module-owned name collides loudly"
             (is (thrown-with-msg? ExceptionInfo collision (register! rt module)))
-            (is (= module-tag (effective rt (key module)))
-                "the rejected registration changed nothing"))
+            (is (= module-tag (effective rt (key module)))))
           (testing "replacing an unregistered name fails loudly"
             (is (thrown-with-msg? ExceptionInfo replace-missing (replace! rt absent)))
             (is (nil? (effective rt (key absent)))))
@@ -210,22 +191,15 @@
           (testing "unregistering a fresh claim retracts it outright"
             (is (= {:unregistered (key fresh)} (unregister! rt fresh)))
             (is (nil? (effective rt (key fresh))))
-            (is (= {:unregistered (key fresh)} (unregister! rt fresh))
-                "retracting an absent name is an idempotent no-op"))))
-
+            (is (= {:unregistered (key fresh)} (unregister! rt fresh))))))
       (testing "every direct shadow survives the module's republication"
         (spit (io/file (:config-dir ctx) "modules/matrix.clj")
               (str module-preamble (module-source "") (module-source "-two")))
         (is (= :applied (:status (t/refresh-modules! ctx {:only [:matrix]}))))
-        (doseq [{:keys [label key module direct-tag effective]} matrix]
-          (testing label
-            (is (= direct-tag (effective rt (key module)))
-                "the shadow outranks the republished module entry")
-            (is (some? (effective rt (key (str module "-two"))))
-                "the module's own partition was genuinely rewritten"))))
-
+        (doseq [{:keys [key module direct-tag effective]} matrix]
+          (is (= direct-tag (effective rt (key module))))
+          (is (some? (effective rt (key (str module "-two")))))))
       (testing "retracting a shadow restores the module's own entry"
-        (doseq [{:keys [label key module module-tag effective unregister!]} matrix]
-          (testing label
-            (is (= {:unregistered (key module)} (unregister! rt module)))
-            (is (= module-tag (effective rt (key module))))))))))
+        (doseq [{:keys [key module module-tag effective unregister!]} matrix]
+          (is (= {:unregistered (key module)} (unregister! rt module)))
+          (is (= module-tag (effective rt (key module)))))))))
