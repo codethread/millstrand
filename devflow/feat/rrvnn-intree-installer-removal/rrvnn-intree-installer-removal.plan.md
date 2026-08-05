@@ -1,6 +1,6 @@
 # In-Tree Installer Removal Plan
 
-**Document ID:** `PLAN-Itr-001` **Feature:** `rrvnn-intree-installer-removal` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) (C45/C46 consumed; C46b amended by DELTA-Itr-001), [repl-api.md](../../specs/repl-api.md) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (DELTA-Itr-001: C46b retraction-less-domain amendment, driven by plan review) **Status:** Reviewed **Last Updated:** 2026-07-24 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID, for example `PLAN-Itr-001.P1`.
+**Document ID:** `PLAN-Itr-001` **Feature:** `rrvnn-intree-installer-removal` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) (C45/C46 consumed; C46b amended by DELTA-Itr-001), [repl-api.md](../../specs/repl-api.md) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (DELTA-Itr-001: C46b retraction-less-domain amendment, driven by plan review) **Status:** Reviewed **Last Updated:** 2026-08-05 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID, for example `PLAN-Itr-001.P1`.
 
 ## PLAN-Itr-001.P1 Goal and scope
 

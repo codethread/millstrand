@@ -1,5 +1,5 @@
 (ns skein.core.weaver.modules-test
-  "Tests for the weaver runtime: transport, op dispatch, and lifecycle."
+  "Tests for module refresh, source loading, and owner lifecycle."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]

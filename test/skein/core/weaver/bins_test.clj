@@ -1,5 +1,5 @@
 (ns skein.core.weaver.bins-test
-  "Tests for the weaver runtime: transport, op dispatch, and lifecycle."
+  "Tests for bin declaration, planning, and executable publication."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]

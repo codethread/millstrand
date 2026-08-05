@@ -1,6 +1,6 @@
 # Core Reconcile Contract + Image Activation Plan
 
-**Document ID:** `PLAN-Cri-001` **Feature:** `fbr4m-core-reconcile-image` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md), [repl-api.md](../../specs/repl-api.md) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md), [specs/repl-api.delta.md](./specs/repl-api.delta.md) **Status:** Reviewed **Last Updated:** 2026-07-23 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID, for example `PLAN-Cri-001.P1`.
+**Document ID:** `PLAN-Cri-001` **Feature:** `fbr4m-core-reconcile-image` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md), [repl-api.md](../../specs/repl-api.md) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md), [specs/repl-api.delta.md](./specs/repl-api.delta.md) **Status:** Reviewed **Last Updated:** 2026-08-05 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID, for example `PLAN-Cri-001.P1`.
 
 ## PLAN-Cri-001.P1 Goal and scope
 

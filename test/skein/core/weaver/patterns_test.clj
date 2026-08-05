@@ -1,5 +1,5 @@
 (ns skein.core.weaver.patterns-test
-  "Tests for the weaver runtime: transport, op dispatch, and lifecycle."
+  "Tests for pattern registration, validation, and execution."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -236,12 +236,15 @@
 (defn wait-for-events [n]
   (test-support/poll-until #(when (<= n (count @delivered-events)) @delivered-events)
                            {:timeout-ms (test-support/await-budget-ms 1000)
-                            :on-timeout (fn [] @delivered-events)}))
+                            :on-timeout #(throw (ex-info "Timed out waiting for events"
+                                                         {:wanted n
+                                                          :events @delivered-events}))}))
 
 (defn wait-until [pred]
   (test-support/poll-until #(when (pred) true)
                            {:timeout-ms (test-support/await-budget-ms 1000)
-                            :on-timeout (constantly false)}))
+                            :on-timeout #(throw (ex-info "Timed out waiting for predicate"
+                                                         {:predicate pred}))}))
 
 (defn test-event [type id]
   {:event/type type

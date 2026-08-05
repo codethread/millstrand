@@ -1,5 +1,5 @@
 (ns skein.core.weaver.ops-help-test
-  "Tests for the weaver runtime: transport, op dispatch, and lifecycle."
+  "Tests for operation registration, help, returns, and argument handling."
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.spec.alpha :as s]

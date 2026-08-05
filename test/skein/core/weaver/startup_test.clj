@@ -1,5 +1,5 @@
 (ns skein.core.weaver.startup-test
-  "Tests for the weaver runtime: transport, op dispatch, and lifecycle."
+  "Tests for startup world resolution, module loading, and runtime lifecycle."
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
             [clojure.java.io :as io]

@@ -1,5 +1,5 @@
 (ns skein.core.weaver.hooks-events-test
-  "Tests for the weaver runtime: transport, op dispatch, and lifecycle."
+  "Tests for hook and event dispatch, failures, snapshots, and cleanup."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -238,12 +238,15 @@
 (defn wait-for-events [n]
   (test-support/poll-until #(when (<= n (count @delivered-events)) @delivered-events)
                            {:timeout-ms (test-support/await-budget-ms 1000)
-                            :on-timeout (fn [] @delivered-events)}))
+                            :on-timeout #(throw (ex-info "Timed out waiting for events"
+                                                         {:wanted n
+                                                          :events @delivered-events}))}))
 
 (defn wait-until [pred]
   (test-support/poll-until #(when (pred) true)
                            {:timeout-ms (test-support/await-budget-ms 1000)
-                            :on-timeout (constantly false)}))
+                            :on-timeout #(throw (ex-info "Timed out waiting for predicate"
+                                                         {:predicate pred}))}))
 
 (defn test-event [type id]
   {:event/type type
@@ -947,7 +950,7 @@
                        :burn [:burnable]}
               result (batch/apply! rt payload)
               context (last @hook-contexts)
-              batch-event (first (filter #(= :batch/applied (:event/type %)) (wait-for-events 5)))]
+              batch-event (first (filter #(= :batch/applied (:event/type %)) (wait-for-events 4)))]
           (is (= {:storyPoints 3} (get-in result [:created 0 :attributes])))
           (is (= {:owner "agent" :storyPoints 5} (get-in result [:updated 0 :after :attributes])))
           (is (= :batch/apply-before-commit (:hook/type context)))

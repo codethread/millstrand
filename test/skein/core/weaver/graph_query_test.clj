@@ -1,5 +1,5 @@
 (ns skein.core.weaver.graph-query-test
-  "Tests for the weaver runtime: transport, op dispatch, and lifecycle."
+  "Tests for graph-query registration, resolution, and failure reporting."
   (:require [clojure.java.io :as io]
             [clojure.test :refer [deftest is]]
             [skein.api.weaver.alpha :as weaver]

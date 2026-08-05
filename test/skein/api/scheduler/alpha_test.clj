@@ -39,7 +39,8 @@
 (defn- await-empty-pending [rt]
   (test-support/poll-until #(when (empty? (scheduler/pending rt)) true)
                            {:timeout-ms (test-support/await-budget-ms 1000)
-                            :on-timeout (constantly false)}))
+                            :on-timeout #(throw (ex-info "Timed out waiting for pending wakes to empty"
+                                                         {:pending (scheduler/pending rt)}))}))
 
 (deftest schedule-persists-and-reads-back-decoded-shape
   (test-support/with-runtime

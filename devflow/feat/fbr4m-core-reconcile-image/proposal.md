@@ -1,6 +1,6 @@
 # Core Reconcile Contract + Image-Module Activation Proposal
 
-**Document ID:** `PROP-Cri-001` **Last Updated:** 2026-07-23 **Related RFCs:** None **Related ADRs:** [ADR-003](../../adrs/0003-spool-activation-lifecycle.md) (P4 decision B, P6 decision D) **Related root specs:** [SPEC-003 repl-api](../../specs/repl-api.md) (P5, P6), [SPEC-004 daemon-runtime](../../specs/daemon-runtime.md) (C45, C46, C94)
+**Document ID:** `PROP-Cri-001` **Last Updated:** 2026-08-05 **Related RFCs:** None **Related ADRs:** [ADR-003](../../adrs/0003-spool-activation-lifecycle.md) (P4 decision B, P6 decision D) **Related root specs:** [SPEC-003 repl-api](../../specs/repl-api.md) (P5, P6), [SPEC-004 daemon-runtime](../../specs/daemon-runtime.md) (C45, C46, C94)
 
 ## PROP-Cri-001.P1 Problem
 

@@ -1,5 +1,5 @@
 (ns skein.core.weaver.socket-test
-  "Tests for the weaver runtime: transport, op dispatch, and lifecycle."
+  "Tests for JSON socket transport, streaming, deadlines, and identity."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
@@ -72,6 +72,7 @@
 (def deadline-gate (atom (promise)))
 (def deadline-started (atom (promise)))
 (def op-side-effects (atom []))
+(def slow-terminated (atom (promise)))
 
 (defn gated-stream-op
   "Emit line 0, block until the test releases the gate, then emit line 1.
@@ -93,9 +94,12 @@
 (defn slow-op
   "Sleep past any short deadline, recording that it ran to completion."
   [_ctx]
-  (Thread/sleep 3000)
-  (swap! op-side-effects conj :slow-finished)
-  {:slow true})
+  (try
+    (Thread/sleep 3000)
+    (swap! op-side-effects conj :slow-finished)
+    {:slow true}
+    (finally
+      (deliver @slow-terminated true))))
 
 (defn gated-deadline-op
   "Signal dispatch, wait for explicit release, then record completion."
@@ -244,12 +248,15 @@
 (defn wait-for-events [n]
   (test-support/poll-until #(when (<= n (count @delivered-events)) @delivered-events)
                            {:timeout-ms (test-support/await-budget-ms 1000)
-                            :on-timeout (fn [] @delivered-events)}))
+                            :on-timeout #(throw (ex-info "Timed out waiting for events"
+                                                         {:wanted n
+                                                          :events @delivered-events}))}))
 
 (defn wait-until [pred]
   (test-support/poll-until #(when (pred) true)
                            {:timeout-ms (test-support/await-budget-ms 1000)
-                            :on-timeout (constantly false)}))
+                            :on-timeout #(throw (ex-info "Timed out waiting for predicate"
+                                                         {:predicate pred}))}))
 
 (defn test-event [type id]
   {:event/type type
@@ -404,6 +411,7 @@
     (reset! deadline-gate (promise))
     (reset! deadline-started (promise))
     (reset! op-side-effects [])
+    (reset! slow-terminated (promise))
     (reset! snapshot-event-runs [])
     (reset! snapshot-hook-runs [])
     (reset! module-contributions {})
@@ -660,7 +668,9 @@
       ;; The deadline cancels the future with interruption, so the handler's
       ;; sleep is aborted and its side effect never records — no orphan work
       ;; survives a reported timeout.
-      (Thread/sleep 3200)
+      (test-support/poll-until #(when (= true (deref @slow-terminated 0 nil)) true)
+                               {:timeout-ms (test-support/await-budget-ms 1000)
+                                :on-timeout #(throw (ex-info "Timed out waiting for slow op termination" {}))})
       (is (= [] @op-side-effects)))))
 
 (deftest json-socket-invoke-payload-hooks-gate-mutating-ops
@@ -929,9 +939,12 @@
           (.flush wrt)
           (let [response (json/read-str (.readLine rdr))]
             (is (false? (get response "ok")))
-            (is (= "protocol/identity-mismatch" (get-in response ["error" "code"]))))))
-      (Thread/sleep 100)
-      (is (.exists (metadata/socket-file (:metadata rt)))))))
+            (is (= "protocol/identity-mismatch"
+                   (get-in response ["error" "code"])))))
+        (test-support/poll-until
+         #(when (.exists (metadata/socket-file (:metadata rt))) true)
+         {:timeout-ms (test-support/await-budget-ms 1000)
+          :on-timeout #(throw (ex-info "Timed out waiting for metadata socket" {}))})))))
 
 (deftest metadata-shape-detects-missing-and-stale-files
   (let [db-file (db-test/temp-db-file)
