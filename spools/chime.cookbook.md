@@ -118,7 +118,7 @@ Honest source: this repo's [`.skein/init.clj`](../.skein/init.clj) chime block a
   concurrent mutation is ordered after registration and still notifies. You
   write the plain predicate; the engine handles "only once."
 
-Honest source: this repo's `agent-failure-rule` and `hitl-checkpoint-ready-rule` in [`.skein/notifications/attention.clj`](../.skein/notifications/attention.clj), registered together in `register-chime-rules!`; the fire-once-per-transition behaviour is pinned by `registered-rules-fire-end-to-end` and `dedup-and-reset-seen` in [`test/skein/chime_test.clj`](../test/skein/chime_test.clj).
+Honest source: this repo's `hitl-checkpoint-ready` and `kanban-completed` rules in [`.skein/notifications/attention.clj`](../.skein/notifications/attention.clj), registered together in `register-chime-rules!`; the fire-once-per-transition behaviour is pinned by `registered-rules-fire-end-to-end` and `dedup-and-reset-seen` in [`test/skein/chime_test.clj`](../test/skein/chime_test.clj).
 
 ---
 
