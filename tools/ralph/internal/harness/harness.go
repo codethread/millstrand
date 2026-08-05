@@ -182,6 +182,7 @@ func Prompt(epicID, epicTitle string, iteration int, fullAuth bool) string {
 	b.WriteString("--- ralph harness (tools/ralph, iteration ")
 	fmt.Fprintf(&b, "%d", iteration)
 	b.WriteString(") ---\n")
+	b.WriteString("Do not delegate implementation work: you are already the mechanical agent. Reviews and council are still encouraged.\n")
 	fmt.Fprintf(&b, "Run the registered `ralph-iterate` workflow for epic %s (%q).\n", epicID, epicTitle)
 	fmt.Fprintf(&b, "Start it with `strand workflow start <run-id> --workflow ralph-iterate --params %s` and drive the workflow to its judgment point.\n", paramsArg)
 	b.WriteString("The workflow and live strands carry the work discipline; this prompt carries the Go loop contract.\n")

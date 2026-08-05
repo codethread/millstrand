@@ -64,6 +64,7 @@ func TestPromptCarriesWorkflowAndLoopMechanics(t *testing.T) {
 	// These are the workflow pointer and the Go-owned loop contract.
 	for _, want := range []string{
 		"iteration 4",
+		"Do not delegate implementation work: you are already the mechanical agent. Reviews and council are still encouraged.",
 		`epic e1 ("Epic one")`,
 		"strand workflow start <run-id> --workflow ralph-iterate",
 		`{"epic":"e1"}`,
