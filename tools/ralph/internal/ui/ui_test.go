@@ -225,6 +225,93 @@ func TestViewFitsTheTerminal(t *testing.T) {
 	}
 }
 
+func TestPreviewMovesAtWidthBreakpoint(t *testing.T) {
+	for _, size := range []struct {
+		name   string
+		width  int
+		bottom bool
+	}{
+		{name: "narrow", width: widePreviewMinWidth - 1, bottom: true},
+		{name: "wide", width: widePreviewMinWidth, bottom: false},
+	} {
+		t.Run(size.name, func(t *testing.T) {
+			m := update(t, testModel(t, size.width, 50),
+				loop.SnapshotMsg{Snapshot: sampleSnapshot()},
+				tea.KeyMsg{Type: tea.KeyShiftTab},
+			)
+			view := m.View()
+			preview := lineContaining(view, "PREVIEW")
+			iterations := lineContaining(view, "ITERATIONS")
+			if preview < 0 || iterations < 0 {
+				t.Fatalf("dashboard is missing preview or iterations:\n%s", view)
+			}
+			if got := preview > iterations; got != size.bottom {
+				t.Errorf("preview below iterations = %v, want %v:\n%s", got, size.bottom, view)
+			}
+			for _, want := range []string{"Epic one", "features  1"} {
+				if !strings.Contains(view, want) {
+					t.Errorf("preview is missing selected board detail %q:\n%s", want, view)
+				}
+			}
+		})
+	}
+}
+
+func TestPreviewMirrorsEachFocusedPane(t *testing.T) {
+	newPreviewModel := func() model {
+		return update(t, testModel(t, 160, 50),
+			loop.SnapshotMsg{Snapshot: sampleSnapshot()},
+			loop.IterationStarted{N: 1, Transcript: "/logs/iter-1.jsonl", Prompt: "log detail", At: time.Now()},
+		)
+	}
+	for _, tc := range []struct {
+		name string
+		key  tea.KeyMsg
+		want string
+	}{
+		{name: "board", key: tea.KeyMsg{Type: tea.KeyShiftTab}, want: "features  1"},
+		{name: "log", want: "log detail"},
+		{name: "iterations", key: tea.KeyMsg{Type: tea.KeyTab}, want: "transcript /logs/iter-1.jsonl"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newPreviewModel()
+			if tc.key.Type != tea.KeyNull {
+				m = update(t, m, tc.key)
+			}
+			if !strings.Contains(m.View(), tc.want) {
+				t.Errorf("preview is missing selected detail %q:\n%s", tc.want, m.View())
+			}
+		})
+	}
+}
+
+func TestPreviewTracksCursorAndEnterUsesTheSameDetail(t *testing.T) {
+	m := update(t, testModel(t, 160, 50),
+		loop.SnapshotMsg{Snapshot: sampleSnapshot()},
+		tea.KeyMsg{Type: tea.KeyShiftTab},
+		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}},
+	)
+	if !strings.Contains(m.View(), "lane      claimed") {
+		t.Errorf("preview did not follow the board cursor:\n%s", m.View())
+	}
+
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	for _, want := range []string{"DETAIL", "lane      claimed"} {
+		if !strings.Contains(m.View(), want) {
+			t.Errorf("Enter did not open the detail shown in the preview (%q):\n%s", want, m.View())
+		}
+	}
+}
+
+func lineContaining(view, want string) int {
+	for i, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, want) {
+			return i
+		}
+	}
+	return -1
+}
+
 func TestBoardPaneShowsFeaturesTasksAndReady(t *testing.T) {
 	m := update(t, testModel(t, 160, 50), loop.SnapshotMsg{Snapshot: sampleSnapshot()})
 	var summaries []string
