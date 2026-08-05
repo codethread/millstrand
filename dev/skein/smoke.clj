@@ -258,18 +258,18 @@
     (.directory builder (outside-repo-dir))
     builder))
 
-(defn- await-probe-ready! [^Process process marker]
-  (loop [attempts 500]
-    (cond
-      (.isFile marker) nil
-      (not (.isAlive process))
-      (throw (ex-info "await process exited before its first probe" {:exit-code (.exitValue process)}))
-      (zero? attempts)
-      (throw (ex-info "await process did not reach its first probe" {:marker (.getAbsolutePath marker)}))
-      :else
-      (do
-        (Thread/sleep 10)
-        (recur (dec attempts))))))
+(defn- await-probe-ready! [^Process process marker watcher]
+  (let [marker-name (.getFileName (.toPath marker))]
+    (loop []
+      (if-let [key (.poll watcher 10 java.util.concurrent.TimeUnit/SECONDS)]
+        (let [ready? (some #(= marker-name (.context %)) (.pollEvents key))]
+          (.reset key)
+          (when-not ready? (recur)))
+        (if (.isAlive process)
+          (throw (ex-info "await process did not reach its first probe before the diagnostic deadline"
+                          {:marker (.getAbsolutePath marker)}))
+          (throw (ex-info "await process exited before its first probe"
+                          {:exit-code (.exitValue process)})))))))
 
 (defn- install-await-probe-signal! [init-path marker]
   (spit init-path
@@ -433,13 +433,18 @@
 
       (let [id (cli-add-config! workspace "Await concurrent close")
             _ (.delete probe-marker)
+            watcher (.newWatchService (java.nio.file.FileSystems/getDefault))
+            _ (.register (.toPath (java.io.File. workspace)) watcher
+                         (into-array java.nio.file.WatchEvent$Kind
+                                     [java.nio.file.StandardWatchEventKinds/ENTRY_CREATE
+                                      java.nio.file.StandardWatchEventKinds/ENTRY_MODIFY]))
             process (.start (strand-process-builder
                              workspace ["await" "--query" "strand-closed"
                                         "--param" (str "id=" id) "--min-count" "1"
                                         "--timeout-secs" (smoke-await-secs 5)]))
             failure (atom nil)]
         (try
-          (await-probe-ready! process probe-marker)
+          (await-probe-ready! process probe-marker watcher)
           (.delete probe-marker)
           (close! id)
           (let [output (slurp (.getInputStream process))
@@ -454,20 +459,28 @@
             (reset! failure t)
             (throw t))
           (finally
-            (cleanup-process! process "concurrent close await" failure))))
+            (try
+              (cleanup-process! process "concurrent close await" failure)
+              (finally
+                (.close watcher))))))
 
       (doseq [exit [:close :supersede :burn]]
         (let [id (cli-add-config! workspace (str "Await active exit " (name exit)))
               replacement (when (= :supersede exit)
                             (cli-add-config! workspace "Await replacement"))
               _ (.delete probe-marker)
+              watcher (.newWatchService (java.nio.file.FileSystems/getDefault))
+              _ (.register (.toPath (java.io.File. workspace)) watcher
+                           (into-array java.nio.file.WatchEvent$Kind
+                                       [java.nio.file.StandardWatchEventKinds/ENTRY_CREATE
+                                        java.nio.file.StandardWatchEventKinds/ENTRY_MODIFY]))
               process (.start (strand-process-builder
                                workspace ["await" "--query" "strand-active"
                                           "--param" (str "id=" id) "--max-count" "0"
                                           "--timeout-secs" (smoke-await-secs 5)]))
               failure (atom nil)]
           (try
-            (await-probe-ready! process probe-marker)
+            (await-probe-ready! process probe-marker watcher)
             (.delete probe-marker)
             (case exit
               :close (close! id)
@@ -485,7 +498,10 @@
               (reset! failure t)
               (throw t))
             (finally
-              (cleanup-process! process (str (name exit) " active-set await") failure)))))
+              (try
+                (cleanup-process! process (str (name exit) " active-set await") failure)
+                (finally
+                  (.close watcher)))))))
 
       (let [parent (cli-add-config! workspace "Await parent")
             child-a (cli-add-config! workspace "Await child A" "--edge" (str "parent-of:" parent))
