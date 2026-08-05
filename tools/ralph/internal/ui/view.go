@@ -43,29 +43,59 @@ func (m model) helpLines() int {
 
 func (m model) footerHeight() int { return m.helpLines() + 1 }
 
-// paneChrome is what the three panes spend on themselves: a title line each,
-// and a blank line between them so a pane whose list has filled up still reads
-// as its own block.
-const paneChrome = 3 + 2
+// A wide terminal can keep the selected item visible beside the three working
+// panes. Narrow terminals stack that preview below them instead.
+const widePreviewMinWidth = 120
 
-// contentHeight is everything between the header and the footer that the panes
-// can fill with rows.
+// paneChrome is three title lines plus two separators between the primary
+// panes. Stacked layout adds the preview title and its separator.
+const (
+	paneChrome        = 3 + 2
+	stackedPaneChrome = 4 + 3
+)
+
+func (m model) sidePreview() bool { return m.width >= widePreviewMinWidth }
+
+func (m model) dashboardChrome() int {
+	if m.sidePreview() {
+		return paneChrome
+	}
+	return stackedPaneChrome
+}
+
+// contentHeight is the stable viewport height for full-screen detail and
+// popups. Dashboard layout has its own chrome calculation below.
 func (m model) contentHeight() int {
 	return max(9, m.height-m.headerHeight()-m.footerHeight()-paneChrome)
 }
 
-// layout splits the content rows across the three panes: board first because it
-// answers "where is the work", log largest because it is what moves.
-func (m model) layout() (boardH, logH, iterH int) {
-	content := m.contentHeight()
-	boardH = clamp(content*40/100, 3, 20)
-	iterH = clamp(content*20/100, 3, 10)
-	logH = content - boardH - iterH
-	if logH < 3 {
-		logH = 3
-		boardH = clamp(content-logH-iterH, 3, 20)
+func (m model) dashboardContentHeight() int {
+	floor := 9
+	if !m.sidePreview() {
+		floor = 7
 	}
-	return boardH, logH, iterH
+	return max(floor, m.height-m.headerHeight()-m.footerHeight()-m.dashboardChrome())
+}
+
+// layout gives board and iteration history their natural list height, capped at
+// roughly a third of the available rows. The live log gets every remaining row.
+func (m model) layout() (boardH, logH, iterH int) {
+	content := m.dashboardContentHeight()
+	maxPaneHeight := max(1, content/3)
+	boardH = clamp(len(m.panes[paneBoard].items), 1, maxPaneHeight)
+	iterH = clamp(len(m.panes[paneIters].items), 1, maxPaneHeight)
+	if !m.sidePreview() {
+		return boardH, content - boardH - iterH - m.stackedPreviewHeight(boardH, iterH), iterH
+	}
+	return boardH, max(1, content-boardH-iterH), iterH
+}
+
+// stackedPreviewHeight reserves a stable, bounded part of the narrow dashboard
+// for the non-scrollable preview without changing pane geometry on cursor moves.
+func (m model) stackedPreviewHeight(boardH, iterH int) int {
+	content := m.dashboardContentHeight()
+	maxPaneHeight := max(1, content/3)
+	return min(maxPaneHeight, max(1, content-boardH-iterH-1))
 }
 
 func (m model) paneHeight(p pane) int {
@@ -99,11 +129,29 @@ func (m model) View() string {
 		b.WriteString(m.renderInfo(inner))
 	default:
 		boardH, logH, iterH := m.layout()
-		b.WriteString(m.renderPane(paneBoard, "board", boardH, inner))
-		b.WriteString("\n\n")
-		b.WriteString(m.renderPane(paneLog, m.logPaneTitle(), logH, inner))
-		b.WriteString("\n\n")
-		b.WriteString(m.renderPane(paneIters, "iterations", iterH, inner))
+		if m.sidePreview() {
+			const gap = 2
+			leftWidth := (inner - gap) * 3 / 5
+			rightWidth := inner - gap - leftWidth
+			left := strings.Join([]string{
+				m.renderPane(paneBoard, "board", boardH, leftWidth),
+				m.renderPane(paneLog, m.logPaneTitle(), logH, leftWidth),
+				m.renderPane(paneIters, "iterations", iterH, leftWidth),
+			}, "\n\n")
+			left = lipgloss.NewStyle().Width(leftWidth).Render(left)
+			right := lipgloss.NewStyle().Width(rightWidth).Render(
+				m.renderPreview(rightWidth, m.dashboardContentHeight()+paneChrome-1))
+			b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, left, strings.Repeat(" ", gap), right))
+		} else {
+			previewH := m.stackedPreviewHeight(boardH, iterH)
+			b.WriteString(m.renderPane(paneBoard, "board", boardH, inner))
+			b.WriteString("\n\n")
+			b.WriteString(m.renderPane(paneLog, m.logPaneTitle(), logH, inner))
+			b.WriteString("\n\n")
+			b.WriteString(m.renderPane(paneIters, "iterations", iterH, inner))
+			b.WriteString("\n\n")
+			b.WriteString(m.renderPreview(inner, previewH))
+		}
 	}
 	b.WriteByte('\n')
 	b.WriteString(m.renderFooter(inner))
@@ -294,6 +342,30 @@ func (m model) renderDetail(width int) string {
 	return truncate(head, width) + "\n" +
 		truncate(styleStrong.Render(m.detailTitle), width) + "\n" +
 		m.detail.View()
+}
+
+// renderPreview is the always-visible, non-interactive counterpart to detail.
+// Enter still opens the same item in the scrollable full-screen detail view.
+func (m model) renderPreview(width, height int) string {
+	if height <= 0 {
+		return ""
+	}
+	head := "  " + stylePaneTitle.Render("PREVIEW")
+	lines := []string{styleMuted.Render("nothing selected")}
+	if it, ok := m.panes[m.focus].selected(); ok {
+		lines = []string{styleStrong.Render(truncate(it.summary, max(1, width-2)))}
+		for _, line := range strings.Split(wrap(it.detail, max(1, width-2)), "\n") {
+			lines = append(lines, truncate(line, max(1, width-2)))
+		}
+	}
+	if len(lines) > height {
+		lines = lines[:height]
+		lines[height-1] = styleMuted.Render(truncate("…", max(1, width-2)))
+	}
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	return truncate(head, width) + "\n" + indent(strings.Join(lines, "\n"), "  ")
 }
 
 // renderInfo is the `e` popup: the run's paths and settings, which are read

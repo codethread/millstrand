@@ -12,6 +12,12 @@ Ralph is a separate Go module (`skein-ralph`) inside the workspace listed in `go
 - `internal/loop` — the engine. It owns iteration control, the stop reasons and exit codes, and the child process group a hard stop kills. It emits typed messages on a channel and never renders anything.
 - `internal/ui` — the Bubble Tea dashboard and the plain headless renderer, both consuming the engine's message channel.
 
+## Dashboard layout
+
+The dashboard has three selectable panes: board, agent log, and iterations. The preview is always visible but never receives focus. It shows the selected row's detail, which is the same content that Enter opens in the scrollable detail view.
+
+At 120 columns and wider, the preview occupies the full-height right column. Below 120 columns it moves below the three selectable panes. The board and iteration panes grow to fit their rows, up to about a third of the available height. The agent log fills the rows between them.
+
 ## Things worth knowing before you change it
 
 The engine is the only place that decides when a loop ends. If you find yourself adding a stop condition to the UI, add it to `loop.Outcome` instead and let the UI report it.
