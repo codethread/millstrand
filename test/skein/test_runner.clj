@@ -93,7 +93,7 @@
    ;; nvd-scan-test load-files .skein/jobs/nvd_scan.clj (which requires the cron
    ;; spool root via add-libs) just as config-test does, so it shares this
    ;; shard's boot.
-   "C" ['skein.config-test 'skein.nvd-scan-test]})
+   "C" ['skein.ct.config-test 'skein.nvd-scan-test]})
 
 (def shard-timeout-minutes 5)
 

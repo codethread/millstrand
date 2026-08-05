@@ -1,4 +1,4 @@
-(ns skein.config-test
+(ns skein.ct.config-test
   "Tests for the repo-local .skein config modules.
 
   Covers registration, the delegate-pipeline weave pattern, the land workflow,

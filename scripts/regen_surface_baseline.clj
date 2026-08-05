@@ -8,10 +8,10 @@
   so runtime add-libs sees the parent deps basis exactly as shard C does (`-X`
   also bypasses the :test alias's test-runner :main-opts)."
   (:require [clojure.pprint :as pprint]
-            [skein.config-test]))
+            [skein.ct.config-test]))
 
 (defn run [_]
-  (let [capture @(requiring-resolve 'skein.config-test/capture-config-surface)
+  (let [capture @(requiring-resolve 'skein.ct.config-test/capture-config-surface)
         surface (capture ".skein/policy/config.clj")]
     (spit "test/skein/surface_baseline.edn"
           (with-out-str (pprint/pprint surface)))
