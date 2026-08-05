@@ -44,14 +44,13 @@
   This lane-settling test primitive waits until the bounded event queue is empty
   and no handler dispatch is in flight. It says nothing about completion signals
   work dispatched off the lane may have initiated. Throws `ex-info` on timeout.
-  The default budget comes from `skein.spools.test-support/await-budget-ms`; pass
-  `:timeout-ms` to override it."
+  The default budget is 10,000 ms; pass `:timeout-ms` to override it."
   ([runtime] (await-quiescent! runtime {}))
   ([runtime {:keys [timeout-ms]}]
    (let [event-system (access/event-system runtime)
          queue ^java.util.concurrent.BlockingQueue (:queue event-system)
          dispatch-in-progress? (:dispatch-in-progress? event-system)
-         timeout-ms (or timeout-ms ((requiring-resolve 'skein.spools.test-support/await-budget-ms)))
+         timeout-ms (or timeout-ms default-timeout-ms)
          _ (when-not (and (integer? timeout-ms) (pos? timeout-ms))
              (throw (ex-info "await-quiescent! :timeout-ms must be a positive integer"
                              {:timeout-ms timeout-ms})))

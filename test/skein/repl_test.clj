@@ -11,15 +11,11 @@
             [skein.api.patterns.alpha :as patterns]
             [skein.api.weaver.alpha :as weaver]
             [skein.core.client :as client]
-            [skein.core.weaver.config :as weaver-config]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.core.db-test :as db-test]
             [skein.repl :as repl]
-            [skein.source-file :as source-file]))
-(defn test-world [config-dir]
-  (weaver-config/world config-dir
-                       (str config-dir "/state")
-                       (str config-dir "/data")))
+            [skein.source-file :as source-file]
+            [skein.spools.test-support :as test-support]))
 
 (defn reset-open-state! []
   (reset! (var-get (ns-resolve 'skein.repl 'active-config-dir))
@@ -69,16 +65,15 @@
    (with-runtime {} f))
   ([opts f]
    (let [db-file (db-test/temp-db-file)
-         config-dir (str "/tmp/td-" (java.util.UUID/randomUUID))]
-     (.mkdirs (java.io.File. config-dir))
-     (let [world (test-world config-dir)
-           rt (weaver-runtime/start! db-file (merge {:world world} opts))]
-       (try
-         (f rt db-file)
-         (finally
-           (reset-open-state!)
-           (weaver-runtime/stop! rt)
-           (db-test/delete-sqlite-family! db-file)))))))
+         config-dir (test-support/temp-dir "skein-repl")
+         world (test-support/test-world config-dir)
+         rt (weaver-runtime/start! db-file (merge {:world world} opts))]
+     (try
+       (f rt db-file)
+       (finally
+         (reset-open-state!)
+         (weaver-runtime/stop! rt)
+         (db-test/delete-sqlite-family! db-file))))))
 
 (deftest connected-accessors-fail-before-connect
   (reset-open-state!)
@@ -369,7 +364,7 @@
       (is (= {"mine" [:= [:attr :owner] "agent"]} (graph/queries rt)))
       (weaver-runtime/stop! rt)
       (let [fresh-rt (weaver-runtime/start! db-file
-                                            {:world (test-world (:config-dir (:metadata rt)))})]
+                                            {:world (test-support/test-world (:config-dir (:metadata rt)))})]
         (try
           (is (= {} (graph/queries fresh-rt))
               "SPEC-003.C12: the registry is weaver-lifetime, not durable")
@@ -411,7 +406,7 @@
   (let [db-file (db-test/temp-db-file)
         config-dir (str "/tmp/td-" (java.util.UUID/randomUUID))]
     (.mkdirs (java.io.File. config-dir))
-    (let [world (test-world config-dir)
+    (let [world (test-support/test-world config-dir)
           rt (weaver-runtime/start! db-file {:world world})]
       (try
         (repl/connect! (:config-dir (:metadata rt)))

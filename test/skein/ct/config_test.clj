@@ -27,14 +27,6 @@
             [skein.test.alpha :as test-alpha])
   (:import [java.time Instant]))
 
-(defn- delete-directory!
-  "Delete a directory tree rooted at `path` if it exists."
-  [path]
-  (let [file (io/file path)]
-    (when (.exists file)
-      (doseq [child (reverse (file-seq file))]
-        (io/delete-file child true)))))
-
 (defn- test-world
   "Return an isolated test world rooted in a temporary directory."
   [config-dir]
@@ -158,7 +150,7 @@
         (finally
           (weaver-runtime/stop! rt)
           (db-test/delete-sqlite-family! db-file)
-          (delete-directory! config-dir))))))
+          (test-support/delete-tree! config-dir))))))
 
 (defn- copy-config-dir!
   "Copy the repo-local config files into a temporary config dir."
@@ -202,7 +194,7 @@
         (finally
           (weaver-runtime/stop! rt)
           (db-test/delete-sqlite-family! db-file)
-          (delete-directory! config-dir))))))
+          (test-support/delete-tree! config-dir))))))
 
 (defn- write-f16-probe!
   "Write the F16 regression probe file into config-dir.
@@ -268,7 +260,7 @@
         (finally
           (weaver-runtime/stop! rt)
           (db-test/delete-sqlite-family! db-file)
-          (delete-directory! config-dir))))))
+          (test-support/delete-tree! config-dir))))))
 
 (defn- op!
   "Invoke a repo-local registered op by name with a CLI-shaped argv."
@@ -382,7 +374,7 @@
         (finally
           (weaver-runtime/stop! rt)
           (db-test/delete-sqlite-family! db-file)
-          (delete-directory! config-dir))))))
+          (test-support/delete-tree! config-dir))))))
 
 (defn- assert-config-registrations
   "Assert the repo-local query/op/pattern registrations are present."
@@ -1248,8 +1240,8 @@
           (is (every? #{(.getCanonicalPath worktree)}
                       (str/split-lines (slurp (io/file worktree "cwd.log")))))
           (finally
-            (delete-directory! unrelated)
-            (delete-directory! worktree)))))))
+            (test-support/delete-tree! unrelated)
+            (test-support/delete-tree! worktree)))))))
 
 (deftest main-ci-watch-preserves-failing-run-listing
   (with-config-runtime
@@ -1269,7 +1261,7 @@
                        :poll-interval-ms 0
                        :env (main-ci-env worktree bin-dir "failing")})))
           (finally
-            (delete-directory! worktree)))))))
+            (test-support/delete-tree! worktree)))))))
 
 (deftest main-ci-watch-fails-loudly-on-malformed-params-and-gh-output
   (with-config-runtime
@@ -1300,7 +1292,7 @@
                        :poll-interval-ms 0
                        :env (main-ci-env worktree bin-dir "unknown-status")})))
           (finally
-            (delete-directory! worktree)))))))
+            (test-support/delete-tree! worktree)))))))
 
 (deftest main-ci-watch-timeout-interrupt-destroys-the-active-child
   (with-config-runtime
@@ -1341,7 +1333,7 @@
                   "interruption destroys and joins the active gh child")))
           (finally
             (.close watcher)
-            (delete-directory! worktree)))))))
+            (test-support/delete-tree! worktree)))))))
 
 (deftest land-feature-ci-watch-waits-for-check-registration-and-preserves-failures
   (with-config-runtime
@@ -1396,7 +1388,7 @@
             (is (= 17 exit))
             (is (= "watch:pr checks land-x --watch --fail-fast\n" out)))
           (finally
-            (delete-directory! fake-gh-dir)))))))
+            (test-support/delete-tree! fake-gh-dir)))))))
 
 (deftest land-merge-script-runs-standalone-with-argv-values
   (let [executable (io/file ".skein/workflows/scripts/land-merge.sh")
@@ -1435,7 +1427,7 @@
               (str "pr merge 412 --squash --subject " subject " --body " body)]
              (str/split-lines (slurp log-file))))
       (finally
-        (delete-directory! fake-gh-dir)))))
+        (test-support/delete-tree! fake-gh-dir)))))
 
 (deftest land-ops-drive-a-poured-run-end-to-end
   (with-config-runtime

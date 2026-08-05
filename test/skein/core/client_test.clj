@@ -4,25 +4,12 @@
   (:require [clojure.test :refer [deftest is use-fixtures]]
             [skein.core.client :as client]
             [skein.api.hooks.alpha :as hooks]
-            [skein.core.weaver.config :as weaver-config]
             [skein.core.weaver.metadata :as metadata]
             [skein.core.weaver.runtime :as weaver-runtime]
-            [skein.core.db-test :as db-test]))
-(defn test-world [config-dir]
-  (weaver-config/world config-dir
-                       (str config-dir "/state")
-                       (str config-dir "/data")))
-
-(defn delete-tree! [file]
-  (doseq [f (reverse (file-seq file))]
-    (.delete f)))
-
+            [skein.core.db-test :as db-test]
+            [skein.spools.test-support :as test-support]))
 (defn temp-world []
-  (let [dir (.toFile (java.nio.file.Files/createTempDirectory
-                      (.toPath (java.io.File. "/tmp"))
-                      "tcw"
-                      (make-array java.nio.file.attribute.FileAttribute 0)))]
-    (test-world (.getCanonicalPath dir))))
+  (test-support/test-world (test-support/temp-dir "tcw")))
 
 ;; Namespace-level on purpose: hooks are registered by symbol and resolved
 ;; to top-level vars, so capture state cannot be a per-test local. Reset by
@@ -48,7 +35,7 @@
       (finally
         (weaver-runtime/stop! rt)
         (db-test/delete-sqlite-family! db-file)
-        (delete-tree! (java.io.File. (:config-dir world)))))))
+        (test-support/delete-tree! (java.io.File. (:config-dir world)))))))
 
 (defn call-world [world op & args]
   (apply client/call-world (:config-dir world) {} op args))
@@ -77,8 +64,8 @@
         (weaver-runtime/stop! rt-b)
         (db-test/delete-sqlite-family! db-a)
         (db-test/delete-sqlite-family! db-b)
-        (delete-tree! (java.io.File. (:config-dir world-a)))
-        (delete-tree! (java.io.File. (:config-dir world-b)))))))
+        (test-support/delete-tree! (java.io.File. (:config-dir world-a)))
+        (test-support/delete-tree! (java.io.File. (:config-dir world-b)))))))
 
 (deftest client-calls-running-daemon-and-returns-clojure-data
   (with-runtime
@@ -194,7 +181,7 @@
       (finally
         (metadata/delete! world)
         (db-test/delete-sqlite-family! db-file)
-        (delete-tree! (java.io.File. (:config-dir world)))))))
+        (test-support/delete-tree! (java.io.File. (:config-dir world)))))))
 
 (deftest client-fails-loudly-for-unreachable-and-non-local-endpoints
   (let [db-file (db-test/temp-db-file)
@@ -220,7 +207,7 @@
       (finally
         (metadata/delete! world)
         (db-test/delete-sqlite-family! db-file)
-        (delete-tree! (java.io.File. (:config-dir world)))))))
+        (test-support/delete-tree! (java.io.File. (:config-dir world)))))))
 
 (deftest client-fails-loudly-for-wrong-daemon-identity
   (with-runtime

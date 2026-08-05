@@ -76,6 +76,69 @@
                        (str config-dir "/state")
                        (str config-dir "/data")))
 
+(defn temp-dir
+  "Create a fresh temporary directory with the supplied name prefix."
+  [prefix]
+  (.toFile (java.nio.file.Files/createTempDirectory
+            (.toPath (io/file "/tmp"))
+            prefix
+            (make-array java.nio.file.attribute.FileAttribute 0))))
+
+(defn- path-input
+  [value]
+  (cond
+    (instance? java.nio.file.Path value) value
+    (instance? java.io.File value) (.toPath ^java.io.File value)
+    (string? value) (.toPath (io/file value))
+    :else (throw (ex-info "Expected a file, path, or string"
+                          {:value value :value-type (some-> value class .getName)}))))
+
+(defn delete-tree!
+  "Delete a file or directory tree, without following directory symlinks.
+
+  Missing roots are already clean and return nil. Any other deletion failure
+  throws `ex-info` with the original root and failing path. Accepts strings,
+  `java.io.File`, and `java.nio.file.Path` values."
+  [root]
+  (let [root-path (path-input root)]
+    (letfn [(delete-path! [path]
+              (try
+                (when (java.nio.file.Files/isDirectory
+                       path
+                       (into-array java.nio.file.LinkOption
+                                   [java.nio.file.LinkOption/NOFOLLOW_LINKS]))
+                  (with-open [children (java.nio.file.Files/newDirectoryStream path)]
+                    (doseq [child children]
+                      (delete-path! child))))
+                (java.nio.file.Files/deleteIfExists path)
+                nil
+                (catch java.io.IOException cause
+                  (throw (ex-info "Failed to delete test path"
+                                  {:root (str root-path)
+                                   :path (str path)}
+                                  cause)))))]
+      (delete-path! root-path))))
+
+(defn run-git!
+  "Run `git` in `dir` with `args`, returning raw stdout on success.
+
+  A non-zero exit throws `ex-info` carrying the argument vector, exit status,
+  stdout, and stderr. The working directory accepts the same file-like values
+  as `clojure.java.io/file`."
+  [dir & args]
+  (let [process (-> (ProcessBuilder. (into-array String (cons "git" args)))
+                    (.directory (io/file dir))
+                    (.start))
+        stderr (future (slurp (.getErrorStream process)))
+        stdout (future (slurp (.getInputStream process)))
+        exit (.waitFor process)
+        stdout @stdout
+        stderr @stderr]
+    (when-not (zero? exit)
+      (throw (ex-info "Git fixture command failed"
+                      {:args args :exit exit :stdout stdout :stderr stderr})))
+    stdout))
+
 (defn temp-config-dir
   "Create a fresh temp directory for a disposable weaver config/state/data
   workspace.
@@ -104,12 +167,19 @@
   each call site."
   ([] (await-budget-ms 10000))
   ([base-ms]
-   (long (* base-ms (if-let [scale (System/getenv "SKEIN_TEST_AWAIT_SCALE")]
-                      (try (Double/parseDouble scale)
-                           (catch NumberFormatException _
-                             (throw (ex-info "SKEIN_TEST_AWAIT_SCALE must be a number"
-                                             {:env "SKEIN_TEST_AWAIT_SCALE" :value scale}))))
-                      1.0)))))
+   (let [scale (if-let [value (System/getenv "SKEIN_TEST_AWAIT_SCALE")]
+                 (try (Double/parseDouble value)
+                      (catch NumberFormatException _
+                        (throw (ex-info "SKEIN_TEST_AWAIT_SCALE must be a number"
+                                        {:env "SKEIN_TEST_AWAIT_SCALE" :value value}))))
+                 1.0)]
+     (when-not (and (Double/isFinite scale) (pos? scale))
+       (throw (ex-info "SKEIN_TEST_AWAIT_SCALE must be finite and positive"
+                       {:env "SKEIN_TEST_AWAIT_SCALE"
+                        :value (System/getenv "SKEIN_TEST_AWAIT_SCALE")
+                        :scale scale
+                        :constraint "finite positive number"})))
+     (long (* base-ms scale)))))
 
 (defn await-budget-secs
   "await-budget-ms in whole seconds, for CLI/API surfaces that take a
@@ -159,9 +229,7 @@
              (weaver-runtime/stop! rt))))
        (finally
          (db-test/delete-sqlite-family! db-file)
-         ;; Runtime-added local roots are retained for the process lifetime by tools.deps.
-         ;; Keep temp config dirs so later add-libs calls do not see stale basis entries.
-         nil)))))
+         (delete-tree! config-dir))))))
 
 (defn activate-spool!
   "Activate a spool module on a bare test runtime.

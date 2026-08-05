@@ -4,19 +4,8 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]
             [nrepl.core :as nrepl]
-            [skein.core.weaver.config :as weaver-config]
-            [skein.core.weaver.runtime :as weaver-runtime]))
-
-(defn test-world [config-dir]
-  (weaver-config/world config-dir
-                       (str config-dir "/state")
-                       (str config-dir "/data")))
-
-(defn- temp-dir [prefix]
-  (.toFile (java.nio.file.Files/createTempDirectory
-            (.toPath (io/file "/tmp"))
-            prefix
-            (make-array java.nio.file.attribute.FileAttribute 0))))
+            [skein.core.weaver.runtime :as weaver-runtime]
+            [skein.spools.test-support :as test-support]))
 
 (defn- write-hot-lib! [config-dir suffix]
   (let [root (io/file config-dir "spools" "runtime-spike")
@@ -65,10 +54,10 @@
                         {:responses responses}))))))
 
 (deftest daemon-runtime-can-hot-add-config-dir-local-root
-  (let [config-dir (temp-dir "skein-runtime-deps-config")
+  (let [config-dir (test-support/temp-dir "skein-runtime-deps-config")
         suffix (str "s" (str/replace (str (java.util.UUID/randomUUID)) "-" ""))]
     (try
-      (let [world (test-world (.getCanonicalPath config-dir))
+      (let [world (test-support/test-world (.getCanonicalPath config-dir))
             rt (weaver-runtime/start! nil {:world world})
             {:keys [root lib marker] lib-ns :ns} (write-hot-lib! config-dir suffix)]
         (try
@@ -95,13 +84,13 @@
           (finally
             (weaver-runtime/stop! rt))))
       (finally
-        nil))))
+        (test-support/delete-tree! config-dir)))))
 
 (deftest module-refresh-loads-maven-deps-before-activation
-  (let [config-dir (temp-dir "skein-runtime-maven-spool-config")
+  (let [config-dir (test-support/temp-dir "skein-runtime-maven-spool-config")
         suffix (str "s" (str/replace (str (java.util.UUID/randomUUID)) "-" ""))]
     (try
-      (let [world (test-world (.getCanonicalPath config-dir))
+      (let [world (test-support/test-world (.getCanonicalPath config-dir))
             rt (weaver-runtime/start! nil {:world world})
             {:keys [lib marker] lib-ns :ns} (write-maven-spool! config-dir suffix)]
         (try
@@ -120,4 +109,4 @@
           (finally
             (weaver-runtime/stop! rt))))
       (finally
-        nil))))
+        (test-support/delete-tree! config-dir)))))

@@ -218,7 +218,7 @@
           ;; drain the event lane and join notifier threads so any parent
           ;; notification would have landed before asserting the still-open
           ;; parent has fired none
-          (test-alpha/await-quiescent! rt)
+          (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
           (await-notifier-threads!)
           (is (not (file-contains? out-file "Plan complete: plan p")))
           (weaver/update! rt (:id parent) {:state "closed"})
@@ -253,7 +253,7 @@
               (chime/register! :phase-failed 'skein.chime-test/phase-failed-rule)
               (let [out-file (bind-file-notifier! second-config)]
                 (weaver/add! second-rt {:title "unrelated mutation"})
-                (test-alpha/await-quiescent! second-rt)
+                (test-alpha/await-quiescent! second-rt {:timeout-ms (test-support/await-budget-ms)})
                 (await-notifier-threads!)
                 (is (not (file-contains? out-file "historical failure")))
                 (weaver/add! second-rt {:title "new failure"
@@ -275,7 +275,7 @@
             mutation-entered (java.util.concurrent.CountDownLatch. 1)
             affected-strands-var #'chime/affected-strands
             original-affected-strands @affected-strands-var]
-        (test-alpha/await-quiescent! rt)
+        (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
         (reset! mutation-reached-hook mutation-entered)
         (hooks/register-hook! rt :test/mutation-reached
                               #{:strand/update-before-commit}
@@ -305,7 +305,7 @@
                   (.countDown release-baseline)
                   @registration
                   @mutation
-                  (test-alpha/await-quiescent! rt)
+                  (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
                   (await-notifier-threads!)
                   (is (file-contains? out-file "failure during registration"))))))
           (finally
@@ -328,7 +328,7 @@
           (chime/scan! {:strand/id blocked})
           ;; drain the event lane and join notifier threads so a notification
           ;; would have landed before asserting the blocked strand fired none
-          (test-alpha/await-quiescent! rt)
+          (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
           (await-notifier-threads!)
           (is (not (file-contains? out-file "Needs human: Approve blocked")))
           (weaver/update! rt (:id blocker) {:state "closed"})
@@ -351,7 +351,7 @@
           (chime/scan! {:strand/id (:id run)})
           ;; drain the event lane and join notifier threads so a duplicate
           ;; notification would have landed before asserting dedup held
-          (test-alpha/await-quiescent! rt)
+          (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
           (await-notifier-threads!)
           (is (= once (slurp out-file)))
           (is (= {:seen 0} (chime/reset-seen!)))

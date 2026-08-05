@@ -150,7 +150,7 @@
                         (request "skein.spools.executors.code-test/return-value"
                                  {:value {"nested" [1 true "ok"]}}))
                        {})
-      (test-alpha/await-quiescent! rt)
+      (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
       (let [gate-id (:id (gate-strand rt "pass"))
             closed (await-eventually #(let [gate (weaver/show rt gate-id)]
                                         (when (= "closed" (:state gate)) gate)))]
@@ -168,7 +168,7 @@
                         "nil"
                         (request "skein.spools.executors.code-test/nil-value" {}))
                        {})
-      (test-alpha/await-quiescent! rt)
+      (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
       (let [gate-id (:id (gate-strand rt "nil"))
             closed (await-eventually #(let [gate (weaver/show rt gate-id)]
                                         (when (= "closed" (:state gate)) gate)))]
@@ -182,7 +182,7 @@
               [["throw" "skein.spools.executors.code-test/throw-value" "code test exploded"]
                ["json" "skein.spools.executors.code-test/non-json-value" "not JSON-safe"]]]
         (workflow/start! run-id (single-gate run-id (request fn-name {})) {})
-        (test-alpha/await-quiescent! rt)
+        (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
         (let [gate-id (:id (ready-code-gate run-id))
               errored (await-eventually #(let [gate (weaver/show rt gate-id)]
                                            (when (attr gate :gate/error) gate)))]
@@ -209,7 +209,7 @@
                  "code/timeout-secs"]])]
         (let [run-id (str "invalid-" index)]
           (workflow/start! run-id (single-gate run-id gate-attrs) {})
-          (test-alpha/await-quiescent! rt)
+          (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
           (let [gate-id (:id (ready-code-gate run-id))
                 errored (await-eventually #(let [gate (weaver/show rt gate-id)]
                                              (when (attr gate :gate/error) gate)))]
@@ -228,7 +228,7 @@
       (let [first-step (first (workflow/ready "late"))]
         (with-redefs [late-value (fn [_params] "new")]
           (workflow/complete! "late" {:step (:id first-step)})
-          (test-alpha/await-quiescent! rt)
+          (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
           (let [gate-id (:id (gate-strand rt "late"))
                 closed (await-eventually #(let [gate (weaver/show rt gate-id)]
                                             (when (= "closed" (:state gate)) gate)))]
@@ -253,7 +253,7 @@
                         (range 9))]
         (try
           (workflow/start! run-id (apply workflow/workflow "Saturation" gates) {})
-          (test-alpha/await-quiescent! rt)
+          (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
           (let [all-gates #(weaver/list rt
                                         [:and
                                          [:= [:attr "workflow/gate"] "code"]
@@ -291,7 +291,7 @@
                    {:value "late"}
                    1))
          {})
-        (test-alpha/await-quiescent! rt)
+        (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
         (let [gate-id (:id (ready-code-gate "stubborn"))
               timed-out (await-eventually #(let [gate (weaver/show rt gate-id)]
                                              (when (attr gate :gate/error) gate)))]
@@ -304,7 +304,7 @@
             (request "skein.spools.executors.code-test/return-value"
                      {:value "fresh"}))
            {})
-          (test-alpha/await-quiescent! rt)
+          (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
           (let [fresh-id (:id (gate-strand rt "fresh"))
                 fresh (await-eventually #(let [gate (weaver/show rt fresh-id)]
                                            (when (= "closed" (:state gate)) gate)))]
@@ -333,7 +333,7 @@
                    {:marker (.getPath marker)}
                    1))
          {})
-        (test-alpha/await-quiescent! rt)
+        (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
         (let [gate-id (:id (ready-code-gate "poll"))
               timed-out (await-eventually #(let [gate (weaver/show rt gate-id)]
                                              (when (attr gate :gate/error) gate)))

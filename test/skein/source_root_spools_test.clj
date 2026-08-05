@@ -13,12 +13,7 @@
             [skein.core.weaver.module-refresh :as module-refresh]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.core.weaver.spool-sync :as spool-sync]
-            [skein.spools.test-support :refer [with-runtime]]))
-
-(defn- temp-dir [prefix]
-  (.toFile (java.nio.file.Files/createTempDirectory
-            (.toPath (io/file "/tmp")) prefix
-            (make-array java.nio.file.attribute.FileAttribute 0))))
+            [skein.spools.test-support :as test-support :refer [with-runtime]]))
 
 (defn- ns-relative [ns-sym]
   (str (-> (str ns-sym) (str/replace \- \_) (str/replace \. \/)) ".clj"))
@@ -105,7 +100,7 @@
 (deftest source-root-resolves-beneath-checkout-spools-and-syncs-a-loaded-root
   (with-runtime
     (fn [rt config-dir]
-      (let [checkout (temp-dir "skein-source-root-checkout")]
+      (let [checkout (test-support/temp-dir "skein-source-root-checkout")]
         (write-checkout-spool! checkout "spools/demo" 'demo.core)
         (write-spools! config-dir {:spools {'demo {:skein/source-root "spools/demo"}}})
         (with-checkout checkout
@@ -130,8 +125,8 @@
 (deftest source-root-rejects-a-symlink-escaping-the-checkout-spools-dir
   (with-runtime
     (fn [rt config-dir]
-      (let [checkout (temp-dir "skein-source-root-checkout")
-            outside (temp-dir "skein-source-root-outside")]
+      (let [checkout (test-support/temp-dir "skein-source-root-checkout")
+            outside (test-support/temp-dir "skein-source-root-outside")]
         (write-checkout-spool! outside "escaped" 'escaped.core)
         (.mkdirs (io/file checkout "spools"))
         (java.nio.file.Files/createSymbolicLink
@@ -176,7 +171,7 @@
   (testing "a source-root spool root whose deps.edn declares the key syncs to a failed root"
     (with-runtime
       (fn [rt config-dir]
-        (let [checkout (temp-dir "skein-source-root-checkout")
+        (let [checkout (test-support/temp-dir "skein-source-root-checkout")
               root (write-checkout-spool! checkout "spools/demo" 'demo.core)]
           (spit (io/file root "deps.edn")
                 (pr-str {:paths ["src"] :deps {'evil/lib {:skein/source-root "spools/other"}}}))
@@ -193,7 +188,7 @@
 (deftest source-root-resolution-never-materializes-git
   (with-runtime
     (fn [rt config-dir]
-      (let [checkout (temp-dir "skein-source-root-checkout")]
+      (let [checkout (test-support/temp-dir "skein-source-root-checkout")]
         (write-checkout-spool! checkout "spools/demo" 'demo.core)
         (write-spools! config-dir {:spools {'demo {:skein/source-root "spools/demo"}}})
         (with-checkout checkout
@@ -223,7 +218,7 @@
 (deftest synced-source-root-provider-wins-over-the-test-classpath-overlap
   (with-runtime
     (fn [rt config-dir]
-      (let [checkout (temp-dir "skein-source-root-checkout")
+      (let [checkout (test-support/temp-dir "skein-source-root-checkout")
             batteries-file (io/file checkout "spools" "batteries" "src" "skein" "spools" "batteries.clj")]
         ;; A source-root batteries whose synced source file differs from the
         ;; batteries source on the ambient test classpath, so provider precedence

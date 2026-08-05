@@ -41,6 +41,7 @@
    ;; drives one disposable weaver world with its own module source — no shared state.
    'skein.api.registration-matrix-test
    'skein.alpha-test 'skein.core.client-test 'skein.spools.workflow-test
+   'skein.spools.test-support-test
    ;; each test drives its own disposable runtime and registry — no shared state.
    'skein.spools.workflow-cli-test 'skein.spools.workflow-run-cli-test
    'skein.spools.batteries-test 'skein.api.spool-test 'skein.ct.config-ops-test

@@ -56,7 +56,7 @@
   the offloaded job body, so a fired job's result is observable."
   [rt]
   (test-alpha/advance! rt (Duration/ofSeconds 2))
-  (test-alpha/await-quiescent! rt)
+  (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
   (cron/await-quiescent! rt))
 
 (deftest register-persists-wake-lists-and-unregisters
@@ -277,7 +277,7 @@
                           :jitter-ms 0
                           :handler 'skein.cron-test/blocking-run})
       (test-alpha/advance! rt (Duration/ofSeconds 2))
-      (test-alpha/await-quiescent! rt)
+      (test-alpha/await-quiescent! rt {:timeout-ms (test-support/await-budget-ms)})
       (is (deref @blocking-started (test-support/await-budget-ms) false)
           "the cron job is in flight before the await starts")
       (let [timeout (is (thrown? clojure.lang.ExceptionInfo

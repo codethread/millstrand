@@ -10,14 +10,10 @@
             [skein.core.weaver.access :as access]
             [skein.core.weaver.spool-sync :as spool-sync]
             [skein.api.events.alpha :as events]
-            [skein.spools.test-support :refer [temp-config-dir with-runtime]]
+            [skein.spools.test-support :refer [delete-tree! run-git! temp-config-dir with-runtime]]
             [skein.api.runtime.alpha :as runtime]
             [skein.source-file :as source-file]
             [skein.test.alpha :as t]))
-
-(defn- delete-recursive [file]
-  (doseq [child (reverse (file-seq file))]
-    (.delete child)))
 
 ;; Namespace-level on purpose: event handlers are registered by symbol and
 ;; resolved to top-level vars, so capture state cannot be a per-test local.
@@ -106,18 +102,6 @@
     (.mkdirs (.getParentFile src-file))
     (spit src-file content)
     src-file))
-
-(defn- run-git! [dir & args]
-  (let [process (-> (ProcessBuilder. (into-array String (cons "git" args)))
-                    (.directory dir)
-                    (.start))
-        stderr (future (slurp (.getErrorStream process)))
-        stdout (future (slurp (.getInputStream process)))
-        exit (.waitFor process)]
-    (when-not (zero? exit)
-      (throw (ex-info "git fixture command failed"
-                      {:args args :exit exit :stdout @stdout :stderr @stderr})))
-    @stdout))
 
 (defn- write-git-lib! [root ns-sym]
   (let [ns-path (-> (str ns-sym)
@@ -759,7 +743,7 @@
                                  (require '~ns-sym)
                                  (~(symbol (str ns-sym) "marker"))))))))
       (finally
-        (delete-recursive root)))))
+        (delete-tree! root)))))
 
 (deftest sync-clears-stale-state-before-structural-failure
   (with-runtime
@@ -917,7 +901,7 @@
             (is (= :loaded (get-in (sync-approved! rt) [:spools lib :status])))
             (is (= :fetched (get-in (sync-state rt) [:spools lib :fetch])))
             (is (false? (.exists (io/file cache-dir "skein" "spools" sha ".git"))))
-            (delete-recursive repo)
+            (delete-tree! repo)
             (let [result (get-in (sync-approved! rt) [:spools lib])]
               (is (= :already-available (:status result)))
               (is (= :cached (:fetch result))))))))))
@@ -1485,7 +1469,7 @@
       (is (false? (.exists tree)))
       (is (true? (.exists outside-file)))
       (finally
-        (delete-recursive base)))))
+        (delete-tree! base)))))
 
 ;; Regression guard: a fetched git spool may contain a legacy spool.edn, but
 ;; sync results are driven solely by the approved coordinate and fetch outcome.

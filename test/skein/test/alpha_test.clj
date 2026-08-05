@@ -71,6 +71,11 @@
       (clock/sleep! new-clock Duration/ZERO)
       (is (= 1 @pump-count)))))
 
+(deftest await-quiescent-default-is-self-contained
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (let [rt (:runtime ctx)]
+      (is (= rt (t/await-quiescent! rt))))))
+
 (deftest check-op-return-selects-declared-return-leaves
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
     (let [rt (:runtime ctx)

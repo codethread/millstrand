@@ -11,42 +11,19 @@
             [skein.core.weaver.config :as weaver-config]
             [skein.core.weaver.module-graph :as module-graph]
             [skein.core.weaver.runtime :as weaver-runtime]
-            [skein.core.weaver.spool-sync :as spool-sync]))
-
-(defn- temp-dir [prefix]
-  (.toFile (java.nio.file.Files/createTempDirectory
-            (java.nio.file.Paths/get "/tmp" (make-array String 0))
-            prefix
-            (make-array java.nio.file.attribute.FileAttribute 0))))
-
-(defn- delete-tree! [^java.io.File root]
-  (when (.exists root)
-    (doseq [^java.io.File file (reverse (file-seq root))]
-      (when-not (.delete file)
-        (throw (ex-info "Failed to delete test file" {:file (.getPath file)}))))))
-
-(defn- run-git! [dir & args]
-  (let [process (-> (ProcessBuilder. ^java.util.List (vec (cons "git" args)))
-                    (.directory dir)
-                    (.start))
-        stderr (future (slurp (.getErrorStream process)))
-        stdout (future (slurp (.getInputStream process)))
-        exit (.waitFor process)]
-    (when-not (zero? exit)
-      (throw (ex-info "Git fixture command failed"
-                      {:args args :exit exit :stdout @stdout :stderr @stderr})))
-    (str/trim @stdout)))
+            [skein.core.weaver.spool-sync :as spool-sync]
+            [skein.spools.test-support :as test-support]))
 
 (defn- git-source! [tag]
-  (let [root (temp-dir "skein-marker-source")]
-    (run-git! root "init" "--quiet")
-    (run-git! root "config" "user.email" "skein-test@example.invalid")
-    (run-git! root "config" "user.name" "Skein Test")
+  (let [root (test-support/temp-dir "skein-marker-source")]
+    (test-support/run-git! root "init" "--quiet")
+    (test-support/run-git! root "config" "user.email" "skein-test@example.invalid")
+    (test-support/run-git! root "config" "user.name" "Skein Test")
     (spit (io/file root "source.txt") "source\n")
-    (run-git! root "add" "source.txt")
-    (run-git! root "commit" "--quiet" "-m" "fixture")
+    (test-support/run-git! root "add" "source.txt")
+    (test-support/run-git! root "commit" "--quiet" "-m" "fixture")
     (when tag
-      (run-git! root "tag" "-a" tag "-m" tag))
+      (test-support/run-git! root "tag" "-a" tag "-m" tag))
     root))
 
 (defn- compiled-runtime-resource! [source-root]
@@ -74,7 +51,7 @@
       f)))
 
 (defn- with-started-runtime [source-root opts f]
-  (let [root (temp-dir "skein-marker-world")
+  (let [root (test-support/temp-dir "skein-marker-world")
         world (test-world root)]
     (try
       (let [rt (with-source-root
@@ -88,7 +65,7 @@
           (finally
             (weaver-runtime/stop! rt))))
       (finally
-        (delete-tree! root)))))
+        (test-support/delete-tree! root)))))
 
 (deftest spool-state-opts-spec-owns-public-shape
   (is (s/valid? ::runtime/spool-state-opts nil))
@@ -118,7 +95,7 @@
             (is (= {:marker "v3" :provenance :tag}
                    (runtime/release-marker rt))))))
       (finally
-        (delete-tree! source-root))))
+        (test-support/delete-tree! source-root))))
   (testing "an untagged source checkout has an explicit none shape"
     (let [source-root (git-source! nil)]
       (try
@@ -129,11 +106,11 @@
             (is (= {:marker nil :provenance :none}
                    (runtime/release-marker rt)))))
         (finally
-          (delete-tree! source-root))))))
+          (test-support/delete-tree! source-root))))))
 
 (deftest compiled-classpath-release-marker-resolution
   (let [source-root (git-source! "v4")
-        world-root (temp-dir "skein-compiled-marker-world")
+        world-root (test-support/temp-dir "skein-compiled-marker-world")
         resource-url (compiled-runtime-resource! source-root)]
     (try
       (with-runtime-resource
@@ -147,12 +124,12 @@
              (finally
                (weaver-runtime/stop! rt)))))
       (finally
-        (delete-tree! world-root)
-        (delete-tree! source-root)))))
+        (test-support/delete-tree! world-root)
+        (test-support/delete-tree! source-root)))))
 
 (deftest non-repo-classpath-release-marker-resolution
-  (let [source-root (temp-dir "skein-non-git-source")
-        world-root (temp-dir "skein-git-failure-world")
+  (let [source-root (test-support/temp-dir "skein-non-git-source")
+        world-root (test-support/temp-dir "skein-git-failure-world")
         resource-url (compiled-runtime-resource! source-root)]
     (try
       (with-runtime-resource
@@ -166,8 +143,8 @@
              (finally
                (weaver-runtime/stop! rt)))))
       (finally
-        (delete-tree! world-root)
-        (delete-tree! source-root)))))
+        (test-support/delete-tree! world-root)
+        (test-support/delete-tree! source-root)))))
 
 (deftest git-inspection-command-failures-remain-loud
   (let [source-root (git-source! nil)
@@ -185,7 +162,7 @@
           (is (= expected-exit (:exit data)))
           (is (not (str/blank? (:stderr data))))))
       (finally
-        (delete-tree! source-root)))))
+        (test-support/delete-tree! source-root)))))
 
 (deftest runtime-result-specs-own-public-shapes
   (is (s/valid? ::specs/release-marker-syntax "v0"))
@@ -553,7 +530,7 @@
 
 (deftest malformed-release-marker-claims-fail-loudly
   (doseq [claim ["1" "v01" "v-1" :v2]]
-    (let [root (temp-dir "skein-invalid-marker")]
+    (let [root (test-support/temp-dir "skein-invalid-marker")]
       (try
         (let [error (try
                       (with-source-root
@@ -567,10 +544,10 @@
           (is (= :invalid-release-marker (:reason (ex-data error))))
           (is (= claim (:marker (ex-data error)))))
         (finally
-          (delete-tree! root))))))
+          (test-support/delete-tree! root))))))
 
 (deftest v0-release-marker-claim-is-reserved
-  (let [root (temp-dir "skein-v0-marker")]
+  (let [root (test-support/temp-dir "skein-v0-marker")]
     (try
       (let [error (try
                     (with-source-root
@@ -587,7 +564,7 @@
                 :provenance :claimed}
                (ex-data error))))
       (finally
-        (delete-tree! root)))))
+        (test-support/delete-tree! root)))))
 
 (deftest spool-config-write-specs-own-public-shapes
   (let [entry {:git/url "https://example.invalid/demo.git"
