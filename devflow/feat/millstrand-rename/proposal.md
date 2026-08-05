@@ -1,8 +1,8 @@
 # Millstrand rename proposal
 
 **Document ID:** `PROP-Msr-001`
-**Status:** Draft
-**Approved:** —
+**Status:** Approved
+**Approved:** 2026-08-05 (user sign-off)
 **Related RFCs:** [RFC-006: Rename to Skein](../../archive/26-06-26__skein-rename/rfcs/2026-06-26-skein-rename.md) (historical precedent; implemented and archived)
 **Related root specs:** [CLI surface](../../specs/cli.md), [weaver runtime](../../specs/daemon-runtime.md), [REPL API](../../specs/repl-api.md), [alpha surface](../../specs/alpha-surface.md), [strand model](../../specs/strand-model.md)
 **Related brief:** [brief.md](./brief.md)
