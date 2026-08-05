@@ -35,7 +35,7 @@ Generated core entries are not a second public authoring grammar. Skein and prov
 The focused cold command is:
 
 ```sh
-clojure -M:test skein.api.skein-test skein.spools.workflow-test skein.cron-test skein.chime-test skein.weaver-test
+clojure -M:test skein.api.skein-test skein.spools.workflow-test skein.spools.cron.runtime-test skein.chime-test skein.weaver-test
 ```
 
 `skein.config-test` is an add-libs shard and runs only through the full suite.

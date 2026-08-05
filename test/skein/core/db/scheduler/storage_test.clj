@@ -1,4 +1,4 @@
-(ns skein.core.scheduler-test
+(ns skein.core.db.scheduler.storage-test
   "Storage-layer coverage for weaver-owned scheduler wakes (RFC-009, PH1).
 
   Scheduler wakes are dedicated SQLite tables, not strands; these tests cover
