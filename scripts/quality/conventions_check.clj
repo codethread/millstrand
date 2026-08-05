@@ -1,7 +1,7 @@
 (ns quality.conventions-check
   "Enforce repo-wide Clojure conventions that prose alone cannot hold.
 
-  Seven checks, all held at zero findings:
+  Eight checks, all held at zero findings:
   - every namespace carries a docstring;
   - no local binding is named after a clojure.core macro (a local named
     `fn` shadows the macro and turns later thunks into eager calls; rename
@@ -21,7 +21,11 @@
     the structural guard lives in `quality.spool-var`;
   - no source hand-escapes JSON that `json/write-str` would reproduce
     from Clojure data; the narrowing rules live in
-    `quality.json-literals`."
+    `quality.json-literals`;
+  - repository workspace tests use `skein.ct.*` exactly under
+    `test/skein/ct/`, and a test that directly names a checked-in `.skein` path
+    belongs there even before it adopts the namespace; the boundary lives in
+    `quality.workspace-tests`."
   (:require [clj-kondo.core :as kondo]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -29,7 +33,8 @@
             [quality.json-literals :as json-literals]
             [quality.source-forms :as source-forms]
             [quality.spool-tiers :as spool-tiers]
-            [quality.spool-var :as spool-var]))
+            [quality.spool-var :as spool-var]
+            [quality.workspace-tests :as workspace-tests]))
 
 (def ^:private source-roots
   ;; Everything lintable: engine, batteries, local-root spools, trusted
@@ -142,7 +147,8 @@
                   (api-form/check analysis)
                   (spool-tiers/check analysis)
                   (spool-var/check)
-                  (json-literals/check source-roots))]
+                  (json-literals/check source-roots)
+                  (workspace-tests/check analysis "test/skein"))]
     (if (seq findings)
       (do (binding [*out* *err*]
             (doseq [f findings] (println f))

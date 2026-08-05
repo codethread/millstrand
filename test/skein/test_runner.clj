@@ -43,7 +43,7 @@
    'skein.alpha-test 'skein.core.client-test 'skein.spools.workflow-test
    ;; each test drives its own disposable runtime and registry — no shared state.
    'skein.spools.workflow-cli-test 'skein.spools.workflow-run-cli-test
-   'skein.spools.batteries-test 'skein.api.spool-test 'skein.config-ops-test
+   'skein.spools.batteries-test 'skein.api.spool-test 'skein.ct.config-ops-test
    ;; large-attr load harness structural smoke: boots its own :publish? false
    ;; world and hand-SQL fixtures in temp dirs — no JVM-global or shared state.
    'skein.large-attr-benchmark-test
@@ -90,10 +90,9 @@
    ;; runtime-deps intentionally mutates JVM-global tools.deps state.
    "B" ['skein.runtime-deps-test]
    ;; Medium add-libs suites share one JVM to amortize boot without exceeding shard A.
-   ;; nvd-scan-test load-files .skein/jobs/nvd_scan.clj (which requires the cron
-   ;; spool root via add-libs) just as config-test does, so it shares this
-   ;; shard's boot.
-   "C" ['skein.config-test 'skein.nvd-scan-test]})
+   ;; Both workspace-config suites load .skein files whose spool roots arrive
+   ;; through add-libs, so they share this shard's boot.
+   "C" ['skein.ct.config-test 'skein.ct.nvd-scan-test]})
 
 (def shard-timeout-minutes 5)
 

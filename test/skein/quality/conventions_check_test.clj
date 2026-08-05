@@ -35,7 +35,8 @@
    [quality.api-form :as api-form]
    [quality.json-literals :as json-literals]
    [quality.spool-tiers :as spool-tiers]
-   [quality.spool-var :as spool-var])
+   [quality.spool-var :as spool-var]
+   [quality.workspace-tests :as workspace-tests])
   (:import
    [java.nio.file Files]
    [java.nio.file.attribute FileAttribute]))
@@ -65,6 +66,83 @@
   "One kondo-shaped var-definition row for `dir`/alpha.clj."
   [dir attrs]
   (merge {:filename (.getPath (io/file dir "alpha.clj")) :row 2} attrs))
+
+(defn- check-workspace-analysis
+  [analysis]
+  (with-modules {"empty" conformant-source}
+    (fn [dirs]
+      (workspace-tests/check analysis (.getPath (dirs "empty"))))))
+
+(deftest workspace-test-namespace-and-directory-map-bidirectionally
+  (let [valid {:name 'skein.ct.config-test
+               :filename "test/skein/ct/config_test.clj" :row 1}
+        external-ct {:name 'ct.spools.example-test
+                     :filename "test/ct/spools/example_test.clj" :row 1}]
+    (is (empty? (check-workspace-analysis
+                 {:namespace-definitions [valid external-ct]})))
+    (testing "the workspace namespace cannot leak outside its directory"
+      (let [[finding] (check-workspace-analysis
+                       {:namespace-definitions
+                        [(assoc valid :filename "test/skein/config_test.clj")]})]
+        (is (str/includes? finding "must be defined under `test/skein/ct/`"))))
+    (testing "the workspace directory cannot carry an unrelated namespace"
+      (let [[finding] (check-workspace-analysis
+                       {:namespace-definitions
+                        [(assoc valid :name 'skein.config-test)]})]
+        (is (str/includes? finding "must declare a `skein.ct.*` namespace"))))
+    (testing "absolute paths preserve the boundary"
+      (is (empty? (check-workspace-analysis
+                   {:namespace-definitions
+                    [(assoc valid :filename "/tmp/repo/test/skein/ct/config_test.clj")]})))))
+  (testing "malformed analysis fails at the public quality boundary"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"workspace-test analysis does not conform"
+                          (check-workspace-analysis {})))))
+
+(deftest workspace-test-check-rejects-malformed-roots
+  (let [analysis {:namespace-definitions []}]
+    (doseq [root ["" 42]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"workspace-test root does not conform"
+                            (workspace-tests/check analysis root))))
+    (let [file (java.io.File/createTempFile "workspace-test-root" ".clj")]
+      (try
+        (let [error (try
+                      (workspace-tests/check analysis (.getPath file))
+                      nil
+                      (catch clojure.lang.ExceptionInfo e e))]
+          (is (some? error))
+          (is (= {:test-root (.getPath file) :expected :directory}
+                 (ex-data error))))
+        (finally
+          (io/delete-file file true))))))
+
+(deftest direct-workspace-path-catches-a-test-before-it-adopts-the-namespace
+  (with-modules
+    {"config-ops" (str "(ns skein.config-ops-test \"Doc.\")\n"
+                       "(load-file \".skein/policy/config.clj\")\n")}
+    (fn [dirs]
+      (let [dir (dirs "config-ops")
+            file (.getPath (io/file dir "alpha.clj"))
+            findings (workspace-tests/check
+                      {:namespace-definitions
+                       [{:name 'skein.config-ops-test :filename file :row 1}]}
+                      (.getPath dir))]
+        (is (= 1 (count findings)))
+        (is (str/includes? (first findings)
+                           "direct workspace path `.skein/policy/config.clj`")))))
+  (testing "incidental and disposable-workspace strings stay out of scope"
+    (with-modules
+      {"generic" (str "(ns skein.generic-test \"Doc.\")\n"
+                      "(def paths [\"mentions .skein/policy/config.clj\"\n"
+                      "            \".skein\"\n"
+                      "            \"/tmp/world/.skein/init.clj\"])\n")}
+      (fn [dirs]
+        (let [dir (dirs "generic")
+              file (.getPath (io/file dir "alpha.clj"))]
+          (is (empty? (workspace-tests/check
+                       {:namespace-definitions
+                        [{:name 'skein.generic-test :filename file :row 1}]}
+                       (.getPath dir)))))))))
 
 (deftest private-vars-in-a-converted-alpha-are-not-findings
   (with-modules {"tidy" conformant-source}

@@ -171,7 +171,7 @@ any later external call.
 
 Honest source: this repo's `:nvd-scan` job in
 [`.skein/jobs/nvd_scan.clj`](../.skein/jobs/nvd_scan.clj) and its lock/finding tests in
-[`test/skein/nvd_scan_test.clj`](../test/skein/nvd_scan_test.clj).
+[`test/skein/ct/nvd_scan_test.clj`](../test/skein/ct/nvd_scan_test.clj).
 
 ---
 

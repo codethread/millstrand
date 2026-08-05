@@ -1,4 +1,4 @@
-(ns skein.config-ops-test
+(ns skein.ct.config-ops-test
   "Focused tests for pure repo-local config operation projections."
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
