@@ -668,7 +668,7 @@
       ;; The deadline cancels the future with interruption, so the handler's
       ;; sleep is aborted and its side effect never records — no orphan work
       ;; survives a reported timeout.
-      (test-support/poll-until #(when (= true (deref @slow-terminated 0 nil)) true)
+      (test-support/poll-until #(true? (deref @slow-terminated 0 nil))
                                {:timeout-ms (test-support/await-budget-ms 1000)
                                 :on-timeout #(throw (ex-info "Timed out waiting for slow op termination" {}))})
       (is (= [] @op-side-effects)))))
