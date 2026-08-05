@@ -261,7 +261,8 @@
 (defn- await-probe-ready! [^Process process marker watcher]
   (let [marker-name (.getFileName (.toPath marker))]
     (loop []
-      (if-let [key (.poll watcher 10 java.util.concurrent.TimeUnit/SECONDS)]
+      (if-let [key (.poll watcher (Long/parseLong (smoke-await-secs 10))
+                          java.util.concurrent.TimeUnit/SECONDS)]
         (let [ready? (some #(= marker-name (.context %)) (.pollEvents key))]
           (.reset key)
           (when-not ready? (recur)))
