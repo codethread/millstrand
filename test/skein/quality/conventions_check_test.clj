@@ -108,6 +108,21 @@
         (is (some #(re-find #"core collaborator redefinition.*skein.core.db/query!" %) findings))
         (is (some #(re-find #"test-megasuite require.*skein.spools-test" %) findings))))))
 
+(deftest api-test-quality-boundary-validates-input-and-output
+  (testing "invalid roots fail at the public boundary"
+    (doseq [root ["" 42]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"api-tests root does not conform"
+                            (api-tests/findings root)))))
+  (testing "invalid findings fail before crossing the public boundary"
+    (with-modules {"ok" conformant-source}
+      (fn [dirs]
+        (with-redefs-fn {#'api-tests/file-findings (constantly [42])}
+          (fn []
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                  #"api-tests findings does not conform"
+                                  (api-tests/findings (.getPath (dirs "ok")))))))))))
+
 (deftest workspace-test-namespace-and-directory-map-bidirectionally
   (let [valid {:name 'skein.ct.config-test
                :filename "test/skein/ct/config_test.clj" :row 1}

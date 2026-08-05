@@ -131,30 +131,43 @@
       [(str (.getPath file) ": quality.api-tests: could not read file: "
             (ex-message error))])))
 
+(s/def ::api-root (s/and string? #(not (str/blank? %))))
+(s/def ::finding string?)
+(s/def ::findings (s/coll-of ::finding :kind vector?))
+
+(defn- require-valid!
+  [spec value label]
+  (when-not (s/valid? spec value)
+    (throw (ex-info (str label " does not conform to " spec)
+                    {:spec spec :value value :explain (s/explain-data spec value)})))
+  value)
+
 (defn findings
-  "Return findings for Clojure files rooted at api-root."
+  "Return `::findings` for Clojure files rooted at `::api-root`.
+
+  Fails loudly when the root or returned findings do not conform."
   [api-root]
+  (require-valid! ::api-root api-root "api-tests root")
   (let [root (io/file api-root)]
     (when-not (.isDirectory root)
       (throw (ex-info "api-tests root does not conform"
                       {:test-root api-root :expected :directory})))
-    (mapcat file-findings
-            (filter #(and (.isFile ^java.io.File %)
-                          (str/ends-with? (.getName ^java.io.File %) ".clj"))
-                    (file-seq root)))))
-
-(s/def ::api-root (s/and string? #(not (str/blank? %))))
-(s/def ::finding string?)
+    (require-valid! ::findings
+                    (vec (mapcat file-findings
+                                 (filter #(and (.isFile ^java.io.File %)
+                                               (str/ends-with? (.getName ^java.io.File %) ".clj"))
+                                         (file-seq root))))
+                    "api-tests findings")))
 
 (s/fdef findings
   :args (s/cat :api-root ::api-root)
-  :ret (s/coll-of ::finding))
+  :ret ::findings)
 
 (defn check
-  "Return API test boundary findings for api-root."
+  "Return `::findings` for API test boundary findings rooted at `::api-root`."
   [api-root]
   (findings api-root))
 
 (s/fdef check
   :args (s/cat :api-root ::api-root)
-  :ret (s/coll-of ::finding))
+  :ret ::findings)
