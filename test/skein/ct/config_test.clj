@@ -874,22 +874,23 @@
             fire (fn [rule-key strand]
                    (@(requiring-resolve (:fn (get by-key rule-key)))
                     {:strand strand :ready-ids #{}}))]
-        (is (= [:agent-failure :gate-error :hitl-checkpoint-ready :kanban-blocked
-                :kanban-completed :kanban-started :parked-run]
+        (is (= [:hitl-checkpoint-ready :kanban-completed :parked-run]
                (mapv :key rules)))
-        ;; gate-error fires on any strand stamped with a gate error
-        (let [note (fire :gate-error {:id "g1" :state "active" :title "Gate A"
-                                      :attributes {:gate/error "spawn failed"}})]
-          (is (= "Gate error: Gate A" (:title note)))
-          (is (str/includes? (:body note) "spawn failed")))
-        ;; and stays silent (no false positive) when the condition is absent
-        (is (nil? (fire :gate-error {:id "g2" :state "active" :title "Clean gate"
-                                     :attributes {}})))
-        ;; agent-failure fires on a failed agent run and carries its error
-        (let [note (fire :agent-failure {:id "r1" :state "active" :title "Run"
-                                         :attributes {:agent-run/phase "failed" :agent-run/error "boom"}})]
-          (is (= "Agent run failed: Run" (:title note)))
-          (is (str/includes? (:body note) "boom")))))))
+        ;; HITL checkpoints fire only when active and ready for a human decision.
+        (let [note (fire :hitl-checkpoint-ready
+                         {:id "h1" :state "active" :title "Approve change"
+                          :attributes {:workflow/role "checkpoint"
+                                       :workflow/checkpoint-kind "human"}})]
+          (is (= "HITL checkpoint ready: Approve change" (:title note))))
+        ;; Kanban completion fires only for closed cards with an explicit done outcome.
+        (let [note (fire :kanban-completed
+                         {:id "k1" :state "closed" :title "Ship change"
+                          :attributes {:kanban/card "true"
+                                       :kanban/outcome "done"}})]
+          (is (= "Kanban done: Ship change" (:title note))))
+        (is (nil? (fire :kanban-completed
+                        {:id "k2" :state "active" :title "Still working"
+                         :attributes {:kanban/card "true"}})))))))
 
 (deftest macros-demo-weave-preserves-workspace-example
   (with-config-runtime
