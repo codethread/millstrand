@@ -67,27 +67,36 @@
   [dir attrs]
   (merge {:filename (.getPath (io/file dir "alpha.clj")) :row 2} attrs))
 
+(defn- check-workspace-analysis
+  [analysis]
+  (with-modules {"empty" conformant-source}
+    (fn [dirs]
+      (workspace-tests/check analysis (.getPath (dirs "empty"))))))
+
 (deftest workspace-test-namespace-and-directory-map-bidirectionally
   (let [valid {:name 'skein.ct.config-test
                :filename "test/skein/ct/config_test.clj" :row 1}
         external-ct {:name 'ct.spools.example-test
                      :filename "test/ct/spools/example_test.clj" :row 1}]
-    (is (empty? (workspace-tests/findings
+    (is (empty? (check-workspace-analysis
                  {:namespace-definitions [valid external-ct]})))
     (testing "the workspace namespace cannot leak outside its directory"
-      (let [[finding] (workspace-tests/findings
+      (let [[finding] (check-workspace-analysis
                        {:namespace-definitions
                         [(assoc valid :filename "test/skein/config_test.clj")]})]
         (is (str/includes? finding "must be defined under `test/skein/ct/`"))))
     (testing "the workspace directory cannot carry an unrelated namespace"
-      (let [[finding] (workspace-tests/findings
+      (let [[finding] (check-workspace-analysis
                        {:namespace-definitions
                         [(assoc valid :name 'skein.config-test)]})]
         (is (str/includes? finding "must declare a `skein.ct.*` namespace"))))
     (testing "absolute paths preserve the boundary"
-      (is (empty? (workspace-tests/findings
+      (is (empty? (check-workspace-analysis
                    {:namespace-definitions
-                    [(assoc valid :filename "/tmp/repo/test/skein/ct/config_test.clj")]}))))))
+                    [(assoc valid :filename "/tmp/repo/test/skein/ct/config_test.clj")]})))))
+  (testing "malformed analysis fails at the public quality boundary"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"workspace-test analysis does not conform"
+                          (check-workspace-analysis {})))))
 
 (deftest direct-workspace-path-catches-a-test-before-it-adopts-the-namespace
   (with-modules

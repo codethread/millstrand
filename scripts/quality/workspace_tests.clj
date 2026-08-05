@@ -5,12 +5,30 @@
   scan catches tests that have not opted in yet: a relative literal beneath
   `.skein/` names this checkout's workspace authoring and therefore belongs in this
   directory too."
-  (:require [clojure.java.io :as io]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [quality.source-forms :as source-forms]))
 
 (def ^:private workspace-test-directory "test/skein/ct/")
 (def ^:private workspace-test-namespace-prefix "skein.ct.")
+
+(s/def ::filename string?)
+(s/def ::name symbol?)
+(s/def ::row pos-int?)
+(s/def ::namespace-definition (s/keys :req-un [::filename ::name ::row]))
+(s/def ::namespace-definitions (s/coll-of ::namespace-definition))
+(s/def ::analysis (s/keys :req-un [::namespace-definitions]))
+(s/def ::test-root (s/and string? (complement str/blank?)))
+(s/def ::finding string?)
+(s/def ::findings (s/coll-of ::finding :kind vector?))
+
+(defn- require-valid!
+  [spec value label]
+  (when-not (s/valid? spec value)
+    (throw (ex-info (str label " does not conform to " spec)
+                    {:spec spec :value value :explain (s/explain-data spec value)})))
+  value)
 
 (defn- normalize-path [filename]
   (some-> filename (str/replace "\\" "/")))
@@ -44,7 +62,7 @@
     (let [line (or (:line (meta form)) line)]
       (mapcat #(reference-sites % line) (seq form)))))
 
-(defn findings
+(defn- namespace-findings
   "Return findings when the `skein.ct.*` namespace family and
   `test/skein/ct/` directory do not map to each other."
   [{:keys [namespace-definitions]}]
@@ -88,8 +106,17 @@
     site))
 
 (defn check
-  "Return workspace-test boundary findings from clj-kondo `analysis` and the
-  Clojure sources under `test-root`."
+  "Return `::findings` for clj-kondo `::analysis` and the Clojure sources
+  beneath `::test-root`.
+
+  Fails loudly when either input is malformed or the test root is not a
+  directory."
   [analysis test-root]
-  (concat (findings analysis)
-          (reference-findings (scan-references test-root))))
+  (require-valid! ::analysis analysis "workspace-test analysis")
+  (require-valid! ::test-root test-root "workspace-test root")
+  (when-not (.isDirectory (io/file test-root))
+    (throw (ex-info "workspace-test root is not a directory"
+                    {:test-root test-root :expected :directory})))
+  (let [result (vec (concat (namespace-findings analysis)
+                            (reference-findings (scan-references test-root))))]
+    (require-valid! ::findings result "workspace-test findings")))
