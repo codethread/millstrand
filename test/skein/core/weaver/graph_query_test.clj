@@ -2,6 +2,7 @@
   "Tests for graph-query registration, resolution, and failure reporting."
   (:require [clojure.java.io :as io]
             [clojure.test :refer [deftest is]]
+            [skein.api.format.alpha :as format-alpha]
             [skein.api.weaver.alpha :as weaver]
             [skein.api.graph.alpha :as graph]
             [skein.core.weaver.config :as weaver-config]
@@ -131,8 +132,9 @@
                 :definition owner-query
                 :where-form (pr-str (:where owner-query))
                 :definition-form (pr-str owner-query)
-                :summary (str "Invoke this query with `strand list --query <name>` or `strand ready --query <name>` "
-                              "and pass runtime values with repeated `--param key=value` arguments.")}
+                :summary (format-alpha/reflow
+                          "|Invoke this query with `strand list --query <name>` or `strand ready --query <name>`
+                           |and pass runtime values with repeated `--param key=value` arguments.")}
                (graph/query-explain rt :mine)))
 
         (try

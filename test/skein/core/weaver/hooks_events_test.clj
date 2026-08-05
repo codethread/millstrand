@@ -821,8 +821,9 @@
         (hooks/register-hook! rt :capture-batch #{:batch/apply-before-commit} 'skein.core.weaver.hooks-events-test/capture-hook {})
         (let [result (batch/apply! rt {:refs {:run (:id run) :old-target (:id old-target)
                                               :new-target (:id new-target) :dep (:id dep)}
-                                       ;; remove precedes the new serves upsert so the single-serves
-                                       ;; rule is satisfied in submitted order (PROP-Xer-001.T1).
+                                       ;; remove precedes the new serves upsert
+                                       ;; so the single-serves rule is satisfied in
+                                       ;; submitted order (PROP-Xer-001.T1).
                                        :edges [{:op :remove :from :run :to :old-target :type "serves"}
                                                {:op :upsert :from :run :to :new-target :type "serves"
                                                 :attributes {:since "new"}}

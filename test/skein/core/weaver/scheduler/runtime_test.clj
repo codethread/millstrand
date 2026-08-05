@@ -296,9 +296,8 @@
   "Wait until key's pending row is gone. The fire promise is delivered inside the
   handler, before run-fire! records completion, so completion is a later event."
   [ds key]
-  (test-support/poll-until #(when (nil? (db/get-pending-wake ds key)) true)
-                           {:timeout-ms (test-support/await-budget-ms 1000)
-                            :on-timeout (constantly false)}))
+  (test-support/poll-until #(nil? (db/get-pending-wake ds key))
+                           {:timeout-ms (test-support/await-budget-ms 1000)}))
 
 (deftest startup-rearm-fires-persisted-overdue-wake
   (let [db-file (db-test/temp-db-file)
