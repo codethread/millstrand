@@ -1,7 +1,7 @@
-(ns skein.scheduler-runtime-test
+(ns skein.core.weaver.scheduler.runtime-test
   "Runtime lifecycle and clock-dispatch coverage for the weaver scheduler (PH2).
 
-  Storage-layer behavior lives in `skein.core.scheduler-test`; here the focus is
+  Storage-layer behavior lives in `skein.core.db.scheduler.storage-test`; here the focus is
   the runtime module `skein.core.weaver.scheduler`: due-row dispatch under a
   deterministic injected clock, at-least-once handling of a saturated event
   lane, handler resolution/invocation/failure capture through `run-fire!`, and
@@ -194,7 +194,7 @@
     (fn [ds]
       (reset! captured nil)
       (db/schedule-wake! ds {:key "wake" :wake-at (instant 100)
-                             :handler 'skein.scheduler-runtime-test/deliver-fire-handler
+                             :handler 'skein.core.weaver.scheduler.runtime-test/deliver-fire-handler
                              :payload {:n 7}})
       (with-scheduler ds 8 500
         (fn [rt st]
@@ -209,7 +209,7 @@
             (is (= "wake" (:key ctx)))
             (is (= (instant 100) (:wake-at ctx)) "wake-at is rebuilt as an Instant")
             (is (= 1 (:attempt ctx)))
-            (is (= 'skein.scheduler-runtime-test/deliver-fire-handler (:handler ctx)))
+            (is (= 'skein.core.weaver.scheduler.runtime-test/deliver-fire-handler (:handler ctx)))
             (is (= {:n 7} (:payload ctx)) "payload is decoded to a keyword map"))
           (is (nil? (db/get-pending-wake ds "wake")) "a fired wake is removed from pending")
           (is (= ["wake"] (mapv :key (db/recent-fires ds))) "completion is recorded in history")
@@ -219,7 +219,7 @@
   (db-test/with-db
     (fn [ds]
       (db/schedule-wake! ds {:key "wake" :wake-at (instant 100)
-                             :handler 'skein.scheduler-runtime-test/throwing-handler})
+                             :handler 'skein.core.weaver.scheduler.runtime-test/throwing-handler})
       (with-scheduler ds 8 500
         (fn [rt st]
           (swap! (:in-flight st) conj "wake")
@@ -238,7 +238,7 @@
   (db-test/with-db
     (fn [ds]
       (db/schedule-wake! ds {:key "wake" :wake-at (instant 100)
-                             :handler 'skein.scheduler-runtime-test.nope/missing})
+                             :handler 'skein.core.weaver.scheduler.runtime-test.nope/missing})
       (with-scheduler ds 8 500
         (fn [rt st]
           (swap! (:in-flight st) conj "wake")
@@ -259,7 +259,7 @@
       (testing "a wake cancelled after dispatch is not invoked"
         (reset! captured nil)
         (db/schedule-wake! ds {:key "gone" :wake-at (instant 100)
-                               :handler 'skein.scheduler-runtime-test/deliver-fire-handler})
+                               :handler 'skein.core.weaver.scheduler.runtime-test/deliver-fire-handler})
         (db/cancel-wake! ds "gone")
         (with-scheduler ds 8 500
           (fn [rt st]
@@ -273,9 +273,9 @@
       (testing "a wake rescheduled after dispatch fires the new generation only"
         (reset! captured nil)
         (db/schedule-wake! ds {:key "moved" :wake-at (instant 1)
-                               :handler 'skein.scheduler-runtime-test/deliver-fire-handler})
+                               :handler 'skein.core.weaver.scheduler.runtime-test/deliver-fire-handler})
         (db/schedule-wake! ds {:key "moved" :wake-at (instant 100000)
-                               :handler 'skein.scheduler-runtime-test/deliver-fire-handler})
+                               :handler 'skein.core.weaver.scheduler.runtime-test/deliver-fire-handler})
         (with-scheduler ds 8 50
           (fn [rt st]
             (swap! (:in-flight st) conj "moved")
@@ -306,7 +306,7 @@
       (let [ds (db/datasource db-file)]
         (db/init! ds)
         (db/schedule-wake! ds {:key "overdue" :wake-at (instant 1)
-                               :handler 'skein.scheduler-runtime-test/deliver-fire-handler
+                               :handler 'skein.core.weaver.scheduler.runtime-test/deliver-fire-handler
                                :payload {:n 7}}))
       (reset! captured nil)
       (reset! fired (promise))
@@ -329,7 +329,7 @@
       (test-alpha/set-clock! rt (test-alpha/manual-clock (instant 0)))
       (db/schedule-wake! (:datasource rt)
                          {:key "soon" :wake-at (instant 1)
-                          :handler 'skein.scheduler-runtime-test/counting-handler})
+                          :handler 'skein.core.weaver.scheduler.runtime-test/counting-handler})
       (scheduler/rearm! rt)
       (scheduler/rearm! rt)
       (scheduler/rearm! rt)
@@ -344,7 +344,7 @@
       (reset! fired (promise))
       (db/schedule-wake! (:datasource rt)
                          {:key "past" :wake-at (instant 1)
-                          :handler 'skein.scheduler-runtime-test/counting-handler})
+                          :handler 'skein.core.weaver.scheduler.runtime-test/counting-handler})
       (scheduler/rearm! rt)
       (is (await-fire) "the overdue wake fires once")
       (is (await-completed (:datasource rt) "past"))

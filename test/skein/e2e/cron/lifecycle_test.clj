@@ -1,4 +1,4 @@
-(ns skein.cron-e2e-test
+(ns skein.e2e.cron.lifecycle-test
   "End-to-end proofs for the two load-bearing properties of the wake-backed cron
   spool (`PLAN-cron-on-scheduler-001.PH2`), driven against real weaver runtimes
   in disposable worlds the way trusted config would drive them.
@@ -76,7 +76,7 @@
         world (wt/temp-world)
         interval-ms (* 60 60 1000)
         job {:id :survivor :interval-ms interval-ms :jitter-ms 0
-             :handler 'skein.cron-e2e-test/record-run}
+             :handler 'skein.e2e.cron.lifecycle-test/record-run}
         ;; A wall-future seed instant keeps the fresh weaver's startup timer
         ;; dormant, so the adopted wake fires only when the manual clock is
         ;; advanced past it (below), never on the wall clock mid-`register!`.
@@ -131,9 +131,9 @@
       (reset! marker-fired (promise))
       (test-alpha/set-clock! rt (test-alpha/manual-clock (Instant/ofEpochSecond 0)))
       (events/register-handler! rt :marker #{:test/marker}
-                                'skein.cron-e2e-test/marker-handler {})
+                                'skein.e2e.cron.lifecycle-test/marker-handler {})
       (cron/register! rt {:id :blocker :interval-ms 1000 :jitter-ms 0
-                          :handler 'skein.cron-e2e-test/blocking-run})
+                          :handler 'skein.e2e.cron.lifecycle-test/blocking-run})
       ;; The fire runs fire-wake on the lane; it arms the next wake and offloads
       ;; blocking-run to the cron executor, then returns, so the lane settles
       ;; while the job body is still blocked.

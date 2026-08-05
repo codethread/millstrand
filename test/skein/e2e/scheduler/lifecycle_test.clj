@@ -1,8 +1,8 @@
-(ns skein.scheduler-e2e-test
+(ns skein.e2e.scheduler.lifecycle-test
   "End-to-end hardening for the weaver scheduler (PH4).
 
-  The storage layer (`skein.core.scheduler-test`), the runtime timer/dispatch
-  module (`skein.scheduler-runtime-test`), and the blessed API tier
+  The storage layer (`skein.core.db.scheduler.storage-test`), the runtime timer/dispatch
+  module (`skein.core.weaver.scheduler.runtime-test`), and the blessed API tier
   (`skein.api.scheduler.alpha-test`) each cover their own seam. This namespace
   exercises the whole primitive against real weaver runtimes in disposable
   worlds the way a userland caller would: schedule through the blessed API, let
@@ -77,7 +77,7 @@
       ;; re-arm from durable pending rows and fire it (SPEC-004.C100).
       (db/schedule-wake! (db/datasource db-file)
                          {:key "survivor" :wake-at (Instant/ofEpochSecond 1)
-                          :handler 'skein.scheduler-e2e-test/add-strand-handler
+                          :handler 'skein.e2e.scheduler.lifecycle-test/add-strand-handler
                           :payload {:title "Survivor strand"}})
       (let [rt2 (weaver-runtime/start! db-file {:world world :publish? false})]
         (try

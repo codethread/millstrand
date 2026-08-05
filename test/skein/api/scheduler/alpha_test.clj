@@ -1,8 +1,8 @@
 (ns skein.api.scheduler.alpha-test
   "API-tier coverage for the blessed scheduler namespace (PH3).
 
-  Storage validation lives in `skein.core.scheduler-test` and runtime timer/
-  dispatch behavior lives in `skein.scheduler-runtime-test`; here the focus is
+  Storage validation lives in `skein.core.db.scheduler.storage-test` and runtime timer/
+  dispatch behavior lives in `skein.core.weaver.scheduler.runtime-test`; here the focus is
   `skein.api.scheduler.alpha` itself: explicit-runtime schedule!/cancel!,
   pending-wake shapes (decoded payload, symbol handler), the classloader
   handler-resolution check this tier adds on top of storage validation, and

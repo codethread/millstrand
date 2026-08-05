@@ -11,7 +11,7 @@
 
 (def parallel-namespaces
   "Test namespaces that are safe to run concurrently, one namespace per worker."
-  ['skein.core.db-test 'skein.core.query-compile-test 'skein.core.contract-props-test 'skein.core.specs-test 'skein.core.scheduler-test
+  ['skein.core.db-test 'skein.core.query-compile-test 'skein.core.contract-props-test 'skein.core.specs-test 'skein.core.db.scheduler.storage-test
    'skein.core.weaver.owner-registry-test
    ;; each test builds its own backing store — no shared state.
    'skein.core.weaver.core-registry-test
@@ -59,8 +59,8 @@
    ;; and settles work through deterministic seams — an injected runtime clock
    ;; for the scheduler and cron timers, event-lane quiescence for the async
    ;; dispatch suites — so there is no JVM-global timer or shared-lane state.
-   'skein.scheduler-runtime-test 'skein.api.scheduler.alpha-test 'skein.scheduler-e2e-test
-   'skein.cron-test 'skein.cron-e2e-test
+   'skein.core.weaver.scheduler.runtime-test 'skein.api.scheduler.alpha-test 'skein.e2e.scheduler.lifecycle-test
+   'skein.spools.cron.runtime-test 'skein.e2e.cron.lifecycle-test
    ;; isolated pure coordinator prototype; injected callables own all effects.
    'skein.lifecycle-spike-test
    ;; production lifecycle transition engine is pure over injected callables.
