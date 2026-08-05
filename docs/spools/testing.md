@@ -100,6 +100,14 @@ transport:
                 (weaver/list (current/runtime)))))))
 ```
 
+## Test ownership
+
+Keep `test/skein/api` for caller-visible contract pins: public argument grammar, validation, result shapes, and error behavior. Suite size does not change that ownership. The CLI parser suite is a large public contract suite and stays in the API tier.
+
+Move tests that inspect `skein.core.*`, redefine core collaborators, resolve private Vars, manage module or filesystem fixtures, run Git diagnostics, or exercise timer dispatch into a named core or integration namespace. Keep those namespaces in the runner group that matches their isolation needs; JVM-global redefinitions stay serial.
+
+The conventions gate checks this boundary as `quality.api-tests`. It permits public fixtures and published spec oracles, but reports direct core implementation use, private core Var resolution, core collaborator redefinitions, and dependencies on integration megasuites.
+
 The context map contains orchestration facts only: `:config-dir`, `:state-dir`, `:data-dir`,
 `:db-path` (file storage only), `:storage`, `:source` (the Skein checkout on your classpath),
 `:runtime`, `:metadata`, and `:timeout-ms`. There are deliberately no strand/query wrappers,

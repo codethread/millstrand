@@ -30,16 +30,20 @@
    'skein.api.format.alpha-test
    'skein.api.skein-test
    'skein.api.lifecycle.alpha-test
+   'skein.core.contribution-test
+   'skein.core.weaver.lifecycle-forms-test
+   'skein.hooks-integration-test
+   'skein.registration-matrix-test
    ;; drives its own unpublished runtime per test — no JVM-global state.
    'skein.api.runtime.glossary.alpha-test
    ;; drives its own unpublished runtime per test — no JVM-global state.
    'skein.api.runtime.help-transform.alpha-test
+   'skein.api.runtime.alpha-test
    'skein.api.graph.alpha-test
    ;; drives its own unpublished runtime per test — no JVM-global state.
    'skein.api.events.alpha-test
    'skein.api.hooks.alpha-test
    ;; drives one disposable weaver world with its own module source — no shared state.
-   'skein.api.registration-matrix-test
    'skein.alpha-test 'skein.core.client-test 'skein.spools.workflow-test
    'skein.spools.test-support-test
    ;; each test drives its own disposable runtime and registry — no shared state.
@@ -80,7 +84,9 @@
 (def serial-namespaces
   "JVM-global namespaces the parent still runs serially outside add-libs shards."
   [;; Release-marker fixtures redefine source checkout resolution.
-   'skein.api.runtime.alpha-test
+   ;; Release-marker, module, reload, and config fixtures redefine runtime
+   ;; internals and therefore remain on the serial island.
+   'skein.runtime.integration-test
    ;; source-root fixtures redefine the JVM-global source-checkout locator.
    'skein.source-root-spools-test
    ;; ambient REPL connection atoms.
@@ -91,6 +97,8 @@
    'skein.peers-test
    ;; globally redefines db transaction seams while checking API guards.
    'skein.api.batch.alpha-test
+   ;; Core batch-boundary tests redefine storage and dispatch collaborators.
+   'skein.core.weaver.batch-boundary-test
    ;; DynamicClassLoader and retained registry snapshots stay serial until
    ;; concurrent execution has an explicit proof.
    'skein.core.weaver.registry-snapshots-test

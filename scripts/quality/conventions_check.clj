@@ -25,11 +25,15 @@
   - repository workspace tests use `skein.ct.*` exactly under
     `test/skein/ct/`, and a test that directly names a checked-in `.skein` path
     belongs there even before it adopts the namespace; the boundary lives in
-    `quality.workspace-tests`."
+    `quality.workspace-tests`;
+  - tests under `test/skein/api` pin public contracts and do not reach core
+    implementation seams or integration megasuites; the boundary lives in
+    `quality.api-tests`."
   (:require [clj-kondo.core :as kondo]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [quality.api-form :as api-form]
+            [quality.api-tests :as api-tests]
             [quality.json-literals :as json-literals]
             [quality.source-forms :as source-forms]
             [quality.spool-tiers :as spool-tiers]
@@ -147,6 +151,7 @@
                   (api-form/check analysis)
                   (spool-tiers/check analysis)
                   (spool-var/check)
+                  (api-tests/check "test/skein/api")
                   (json-literals/check source-roots)
                   (workspace-tests/check analysis "test/skein"))]
     (if (seq findings)

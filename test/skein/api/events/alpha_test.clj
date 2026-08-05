@@ -24,6 +24,11 @@
   "Non-callable var pinning the resolution contract."
   42)
 
+(defn failing-event
+  "Fixture symbol used by the failure-record shape pin."
+  [_event]
+  nil)
+
 (def ^:private handler-sym
   "Qualified symbol of the fixture handler, as registration wants it."
   'skein.api.events.alpha-test/capture-event)
@@ -117,7 +122,7 @@
   ;; that record's documented shape.
   (is (s/valid? ::events/failure-record
                 {:handler/key :fails
-                 :handler/fn 'skein.core.weaver.hooks-events-test/failing-event
+                 :handler/fn 'skein.api.events.alpha-test/failing-event
                  :event/id "evt-1"
                  :event/type :strand/updated
                  :exception/message "handler failed"

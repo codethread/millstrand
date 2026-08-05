@@ -32,6 +32,7 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
+   [quality.api-tests :as api-tests]
    [quality.api-form :as api-form]
    [quality.json-literals :as json-literals]
    [quality.spool-tiers :as spool-tiers]
@@ -72,6 +73,55 @@
   (with-modules {"empty" conformant-source}
     (fn [dirs]
       (workspace-tests/check analysis (.getPath (dirs "empty"))))))
+
+(deftest api-test-boundary-permits-public-fixtures-and-any-suite-size
+  (with-modules
+    {"ok" (str "(ns skein.api.example.alpha-test\n"
+               "  (:require [skein.core.specs :as specs]\n"
+               "            [skein.test.alpha :as t]))\n"
+               "(def cases " (pr-str (vec (range 1000))) ")\n")}
+    (fn [dirs]
+      (is (empty? (api-tests/findings (.getPath (dirs "ok"))))))))
+
+(deftest api-test-boundary-rejects-core-implementation-use
+  (with-modules
+    {"bad" (str "(ns skein.api.example.alpha-test\n"
+                "  (:require [skein.core.db :as db]))\n"
+                "(defn probe [] (db/pending-wakes nil))\n")}
+    (fn [dirs]
+      (let [findings (api-tests/findings (.getPath (dirs "bad")))]
+        (is (= 2 (count findings)))
+        (is (some #(re-find #"direct skein.core implementation use.*skein.core.db" %) findings))
+        (is (some #(re-find #"direct skein.core implementation use.*db/pending-wakes" %) findings))))))
+
+(deftest api-test-boundary-reports-private-vars-redefs-and-megasuites
+  (with-modules
+    {"bad" (str "(ns skein.api.example.alpha-test\n"
+                "  (:require [skein.test.alpha :as t]\n"
+                "            [skein.spools-test :as mega]))\n"
+                "(ns-resolve 'skein.core.weaver.runtime 'secret)\n"
+                "(with-redefs [skein.core.db/query! identity] (t/with-weaver-world []))\n")}
+    (fn [dirs]
+      (let [findings (api-tests/findings (.getPath (dirs "bad")))]
+        (is (= 3 (count findings)))
+        (is (some #(re-find #"private core Var resolution.*skein.core.weaver.runtime" %) findings))
+        (is (some #(re-find #"core collaborator redefinition.*skein.core.db/query!" %) findings))
+        (is (some #(re-find #"test-megasuite require.*skein.spools-test" %) findings))))))
+
+(deftest api-test-quality-boundary-validates-input-and-output
+  (testing "invalid roots fail at the public boundary"
+    (doseq [root ["" 42]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"api-tests root does not conform"
+                            (api-tests/findings root)))))
+  (testing "invalid findings fail before crossing the public boundary"
+    (with-modules {"ok" conformant-source}
+      (fn [dirs]
+        (with-redefs-fn {#'api-tests/file-findings (constantly [42])}
+          (fn []
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                  #"api-tests findings does not conform"
+                                  (api-tests/findings (.getPath (dirs "ok")))))))))))
 
 (deftest workspace-test-namespace-and-directory-map-bidirectionally
   (let [valid {:name 'skein.ct.config-test
