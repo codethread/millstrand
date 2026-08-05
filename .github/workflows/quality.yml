@@ -40,7 +40,7 @@ jobs:
             shared:
               - '.github/workflows/**'
               - 'Makefile'
-              - 'scripts/quality/**'
+              - 'scripts/**'
 
   clojure-test:
     name: Clojure test suite

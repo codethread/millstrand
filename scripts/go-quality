@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Run one Go quality operation across every Go module in this checkout.
+set -euo pipefail
+
+usage() {
+  echo "usage: scripts/go-quality <format|format-check|test|lint|security>" >&2
+}
+
+if [ "$#" -ne 1 ]; then
+  echo "go-quality: expected exactly one operation, got $# argument(s): $*" >&2
+  usage
+  exit 2
+fi
+
+operation="$1"
+root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+modules=(cli tools/ralph tools/kanban-tree)
+
+case "$operation" in
+  format)
+    for module in "${modules[@]}"; do
+      (cd "$root/$module" && go run mvdan.cc/gofumpt@v0.8.0 -w .)
+    done
+    ;;
+  format-check)
+    for module in "${modules[@]}"; do
+      out="$(cd "$root/$module" && go run mvdan.cc/gofumpt@v0.8.0 -l .)"
+      if [ -n "$out" ]; then
+        echo "gofumpt: $module: $out" >&2
+        exit 1
+      fi
+    done
+    ;;
+  test)
+    for module in "${modules[@]}"; do
+      echo "==> go test $module"
+      (cd "$root/$module" && go test ./...)
+    done
+    ;;
+  lint)
+    for module in "${modules[@]}"; do
+      echo "==> golangci-lint $module"
+      (cd "$root/$module" && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6 run --config "$root/.golangci.yml" ./...)
+    done
+    ;;
+  security)
+    for module in "${modules[@]}"; do
+      echo "==> govulncheck $module"
+      (cd "$root/$module" && go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...) || true
+    done
+    ;;
+  *)
+    echo "go-quality: unknown operation '$operation'; expected format, format-check, test, lint, or security" >&2
+    exit 2
+    ;;
+esac
