@@ -224,6 +224,46 @@
   (assert (= expected actual)
           (str message "\nexpected: " (pr-str expected) "\nactual: " (pr-str actual))))
 
+(defn- assert-await-envelope
+  [result expected message]
+  (assert= expected
+           (select-keys result [:operation :query :reason :count :min_count :max_count])
+           message)
+  (assert (and (integer? (:elapsed_ms result)) (not (neg? (:elapsed_ms result))))
+          (str message "\nelapsed_ms must be a present non-negative integer: " (pr-str result)))
+  (assert= #{:operation :query :reason :count :min_count :max_count :elapsed_ms}
+           (set (keys result))
+           (str message " returns the complete S2 envelope")))
+
+(defn- smoke-await-secs [base-secs]
+  (let [scale (if-let [raw (System/getenv "SKEIN_TEST_AWAIT_SCALE")]
+                (try
+                  (Double/parseDouble raw)
+                  (catch NumberFormatException _
+                    (throw (ex-info "SKEIN_TEST_AWAIT_SCALE must be a number"
+                                    {:env "SKEIN_TEST_AWAIT_SCALE" :value raw}))))
+                1.0)]
+    (str (long (* base-secs scale)))))
+
+(defn- start-smoke-mutation! [f]
+  (let [failure (atom nil)
+        thread (doto (Thread. ^Runnable (fn []
+                                          (try
+                                            (Thread/sleep 100)
+                                            (f)
+                                            (catch Throwable t
+                                              (reset! failure t)))))
+                 (.setDaemon true)
+                 (.start))]
+    {:thread thread :failure failure}))
+
+(defn- await-smoke-mutation! [{:keys [^Thread thread failure]}]
+  (.join thread 5000)
+  (when (.isAlive thread)
+    (throw (ex-info "smoke graph mutation did not finish" {})))
+  (when-let [t @failure]
+    (throw t)))
+
 (defn assert-contains [haystack needle message]
   (assert (clojure.string/includes? haystack needle)
           (str message "\nmissing: " (pr-str needle) "\nin: " haystack)))
@@ -348,6 +388,109 @@
       (finally
         (stop-weaver-config! workspace)
         (delete-tree! (smoke-workspace (str db-file ".dispatcher")))))))
+
+(defn smoke-await-cli!
+  "Exercise cardinality waiting through the built CLI and a disposable weaver."
+  [db-file]
+  (let [workspace (.getCanonicalPath (.toFile (smoke-workspace (str db-file ".await"))))
+        await! (fn [& args]
+                 (parse-json (apply run-strand-config! workspace "await" args)))
+        close! (fn [id]
+                 (run-strand-config! workspace "update" id "--state" "closed"))]
+    (delete-tree! (smoke-workspace (str db-file ".await")))
+    (run-mill-config! workspace "init")
+    (start-weaver-config! workspace)
+    (try
+      (let [closed (cli-add-config! workspace "Await already closed" "--state" "closed")]
+        (assert-await-envelope
+         (await! "--query" "strand-closed" "--param" (str "id=" closed) "--min-count" "1")
+         {:operation "await" :query "strand-closed" :reason "satisfied"
+          :count 1 :min_count 1 :max_count nil}
+         "await observes an already-closed strand on its immediate first probe"))
+
+      (let [id (cli-add-config! workspace "Await concurrent close")
+            mutation (start-smoke-mutation! #(close! id))]
+        (assert-await-envelope
+         (await! "--query" "strand-closed" "--param" (str "id=" id)
+                 "--min-count" "1" "--timeout-secs" (smoke-await-secs 5))
+         {:operation "await" :query "strand-closed" :reason "satisfied"
+          :count 1 :min_count 1 :max_count nil}
+         "await wakes after a concurrent graph mutation")
+        (await-smoke-mutation! mutation))
+
+      (doseq [exit [:close :supersede :burn]]
+        (let [id (cli-add-config! workspace (str "Await active exit " (name exit)))
+              replacement (when (= :supersede exit)
+                            (cli-add-config! workspace "Await replacement"))
+              mutation (start-smoke-mutation!
+                        #(case exit
+                           :close (close! id)
+                           :supersede (run-strand-config! workspace "supersede" id replacement)
+                           :burn (run-strand-config! workspace "burn" id)))]
+          (assert-await-envelope
+           (await! "--query" "strand-active" "--param" (str "id=" id)
+                   "--max-count" "0" "--timeout-secs" (smoke-await-secs 5))
+           {:operation "await" :query "strand-active" :reason "satisfied"
+            :count 0 :min_count nil :max_count 0}
+           (str "strand-active is cardinality waiting after " (name exit)))
+          (await-smoke-mutation! mutation)))
+
+      (let [parent (cli-add-config! workspace "Await parent")
+            child-a (cli-add-config! workspace "Await child A" "--edge" (str "parent-of:" parent))
+            child-b (cli-add-config! workspace "Await child B" "--edge" (str "parent-of:" parent))]
+        (close! child-a)
+        (close! child-b)
+        (assert-await-envelope
+         (await! "--query" "children-active" "--param" (str "parent=" parent) "--max-count" "0")
+         {:operation "await" :query "children-active" :reason "satisfied"
+          :count 0 :min_count nil :max_count 0}
+         "children-active provides zero-config fan-in"))
+
+      (let [dependent (cli-add-config! workspace "Await dependent")
+            blocker-a (cli-add-config! workspace "Await blocker A")
+            blocker-b (cli-add-config! workspace "Await blocker B")]
+        (run-strand-config! workspace "update" dependent
+                            "--edge" (str "depends-on:" blocker-a)
+                            "--edge" (str "depends-on:" blocker-b))
+        (close! blocker-a)
+        (close! blocker-b)
+        (assert-await-envelope
+         (await! "--query" "blockers-active" "--param" (str "id=" dependent) "--max-count" "0")
+         {:operation "await" :query "blockers-active" :reason "satisfied"
+          :count 0 :min_count nil :max_count 0}
+         "blockers-active observes a cleared dependency set"))
+
+      (let [missing-id "await-smoke-missing"]
+        (assert-await-envelope
+         (await! "--query" "strand-closed" "--param" (str "id=" missing-id)
+                 "--min-count" "1" "--timeout-secs" (smoke-await-secs 1))
+         {:operation "await" :query "strand-closed" :reason "timeout"
+          :count 0 :min_count 1 :max_count nil}
+         "an impossible band returns timeout as data"))
+
+      (doseq [[args vocabulary]
+              [[["--query" "strand-active" "--param" "id=x"] "requires --min-count or --max-count"]
+               [["--query" "strand-active" "--param" "id=x" "--min-count" "2" "--max-count" "1"] "must not exceed"]
+               [["--query" "strand-active" "--param" "id=x" "--min-count" "-1"] "must be non-negative"]
+               [["--query" "strand-active" "--param" "id=x" "--min-count" "0"] "vacuous"]
+               [["--query" "strand-active" "--param" "id=x" "--max-count" "0" "--timeout-secs" "-1"]
+                "timeout-secs must be non-negative"]
+               [["--query" "no-such-query" "--max-count" "0"] "Query not found"]
+               [["--query" "strand-active" "--param" "other=x" "--max-count" "0"] "Unknown query parameters"]
+               [["--query" "strand-active" "--max-count" "0"] "Missing query param"]]]
+        (assert-contains (apply run-strand-config-fails! workspace "await" args)
+                         vocabulary
+                         (str "await CLI validation fails loudly for " (pr-str args))))
+
+      (assert-await-envelope
+       (await! "--query" "strand-closed" "--param" "id=await-smoke-long"
+               "--min-count" "1" "--timeout-secs" (smoke-await-secs 11))
+       {:operation "await" :query "strand-closed" :reason "timeout"
+        :count 0 :min_count 1 :max_count nil}
+       "an await longer than the standard ten-second socket deadline completes normally")
+      (finally
+        (stop-weaver-config! workspace)
+        (delete-tree! (smoke-workspace (str db-file ".await")))))))
 
 (defn bootstrap-workspace [db-file label]
   (.getCanonicalPath (.toFile (smoke-workspace (str db-file "." label)))))
@@ -792,6 +935,7 @@
   (smoke-bootstrap-clean-config! db-file)
   (smoke-bootstrap-dirty-config! db-file)
   (smoke-dispatcher-surface! db-file)
+  (smoke-await-cli! db-file)
   (smoke-startup-transformations! db-file)
   (smoke-authoring-forms! db-file)
   (smoke-workflow-cli! db-file))
