@@ -32,7 +32,7 @@
   (and (string? value)
        (str/starts-with? value ".skein/")))
 
-(defn reference-sites
+(defn- reference-sites
   "Return `{:line :path}` sites for literal paths into this checkout's
   `.skein` directory in `form`."
   [form line]
@@ -64,7 +64,7 @@
          :else [])))
    namespace-definitions))
 
-(defn reference-findings
+(defn- reference-findings
   "Return findings for checked-in `.skein` path sites outside the workspace
   test directory, including source read failures."
   [sites]

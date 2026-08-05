@@ -104,11 +104,18 @@
         (is (str/includes? (first findings)
                            "direct workspace path `.skein/policy/config.clj`")))))
   (testing "incidental and disposable-workspace strings stay out of scope"
-    (is (empty? (workspace-tests/reference-sites
-                 '(identity ["mentions .skein/policy/config.clj"
-                             ".skein"
-                             "/tmp/world/.skein/init.clj"])
-                 1)))))
+    (with-modules
+      {"generic" (str "(ns skein.generic-test \"Doc.\")\n"
+                      "(def paths [\"mentions .skein/policy/config.clj\"\n"
+                      "            \".skein\"\n"
+                      "            \"/tmp/world/.skein/init.clj\"])\n")}
+      (fn [dirs]
+        (let [dir (dirs "generic")
+              file (.getPath (io/file dir "alpha.clj"))]
+          (is (empty? (workspace-tests/check
+                       {:namespace-definitions
+                        [{:name 'skein.generic-test :filename file :row 1}]}
+                       (.getPath dir)))))))))
 
 (deftest private-vars-in-a-converted-alpha-are-not-findings
   (with-modules {"tidy" conformant-source}
