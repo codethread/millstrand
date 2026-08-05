@@ -113,7 +113,7 @@
    ;; Medium add-libs suites share one JVM to amortize boot without exceeding shard A.
    ;; Both workspace-config suites load .skein files whose spool roots arrive
    ;; through add-libs, so they share this shard's boot.
-   "C" ['skein.ct.config-test 'skein.examples.cron.nvd-scan-test]})
+   "C" ['skein.ct.config-test 'skein.ct.nvd-scan-test]})
 
 (def shard-timeout-minutes 5)
 

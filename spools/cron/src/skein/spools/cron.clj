@@ -24,8 +24,7 @@
   converge through Cron's lifecycle effect after publication, while the durable
   wake in SQLite is the sole authority for when a job next fires. Trusted
   callers may still use `register!` directly."
-  (:require [clojure.math :as math]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [skein.api.format.alpha :as format-alpha]
             [skein.api.lifecycle.alpha :as lifecycle]
@@ -41,10 +40,6 @@
 
 (declare execute-job!)
 
-(def ^:private default-await-timeout-ms
-  "Default budget for joining offloaded Cron jobs."
-  10000)
-
 (def ^:private state-version
   "Shape version for cron's runtime spool-state map. Bump whenever `new-state`'s
   key set changes: spool-state survives module refresh, so a post-upgrade refresh
@@ -57,6 +52,8 @@
 (def job-kind
   "Owner-partitioned kind id for Cron job declarations."
   :skein.spools.cron/jobs)
+(def ^:private repl-owner :skein.owner/repl)
+
 (s/def ::id (s/or :keyword keyword?
                   :string (s/and string? (complement str/blank?))))
 (s/def ::interval-ms pos-int?)
@@ -84,7 +81,7 @@
          #(s/valid? ::reconciled (:reconciled %))
          #(s/valid? ::job-ids (:jobs %))))
 
-(defn- daemon-thread-factory ^ThreadFactory [prefix]
+(defn- ^ThreadFactory daemon-thread-factory [prefix]
   (let [counter (atom 0)]
     (reify ThreadFactory
       (newThread [_ runnable]
@@ -112,12 +109,12 @@
 (defn- state [runtime]
   (runtime/spool-state runtime ::state {:version state-version} new-state))
 
-(defn- executor ^ExecutorService [runtime] (:executor (state runtime)))
+(defn- ^ExecutorService executor [runtime] (:executor (state runtime)))
 (defn- jobs-atom [runtime] (:jobs (state runtime)))
 (defn- job-kinds [runtime]
   (runtime/spool-state runtime ::job-kinds registry/registry))
 (defn- failure-log [runtime] (:failure-log (state runtime)))
-(defn- rng ^Random [runtime] (:rng (state runtime)))
+(defn- ^Random rng [runtime] (:rng (state runtime)))
 
 (defn- record-failure! [runtime entry]
   (let [full (assoc entry :at (str (Instant/now)))]
@@ -140,7 +137,7 @@
   zero or negative bound yields 0."
   [bound-ms ^Random rng]
   (if (pos? bound-ms)
-    (long (math/round (* (- (* 2.0 (.nextDouble rng)) 1.0) (double bound-ms))))
+    (long (Math/round (* (- (* 2.0 (.nextDouble rng)) 1.0) (double bound-ms))))
     0))
 
 (defn- reschedule-delay-ms [interval-ms jitter-ms ^Random rng]
@@ -226,14 +223,14 @@
                 result (handler-fn runtime)]
             (swap! (jobs-atom runtime) update id
                    (fn [j] (when j (assoc j :last-result result
-                                          :last-fired-at fired-at
-                                          :last-error nil)))))
+                                         :last-fired-at fired-at
+                                         :last-error nil)))))
           (catch Throwable t
             (record-failure! runtime {:kind :run :job id
                                       :message (ex-message t) :data (ex-data t)})
             (swap! (jobs-atom runtime) update id
                    (fn [j] (when j (assoc j :last-error (ex-message t)
-                                          :last-fired-at fired-at))))))))
+                                         :last-fired-at fired-at))))))))
     (finally
       (dec-in-flight! runtime))))
 
@@ -278,13 +275,14 @@
   latch atom until the count reaches zero or the budget expires on the runtime
   Clock, throwing loudly on timeout (TEN-003), mirroring the event-lane join in
   `skein.test.alpha/await-quiescent!`. `opts` accepts `:timeout-ms` (a
-  positive integer); unknown keys are rejected loudly. The default budget is ten
-  seconds; pass `:timeout-ms` when a caller needs a different budget."
+  positive integer); unknown keys are rejected loudly. The default budget comes
+  from `skein.spools.test-support/await-budget-ms`."
   ([runtime] (await-quiescent! runtime {}))
   ([runtime {:keys [timeout-ms] :as opts}]
    (reject-unknown-keys! "await-quiescent!" #{:timeout-ms} opts)
    (let [counter (in-flight-count runtime)
-         timeout-ms (or timeout-ms default-await-timeout-ms)]
+         timeout-ms (or timeout-ms
+                        ((requiring-resolve 'skein.spools.test-support/await-budget-ms)))]
      (require-valid! ::timeout-ms timeout-ms
                      "await-quiescent! :timeout-ms must be a positive integer")
      (poll-until!
@@ -411,7 +409,7 @@
   @(jobs-atom runtime))
 
 (defn- apply-job-change!
-  [operation id declaration change!]
+  [runtime operation id declaration change!]
   (try
     (change!)
     (catch Throwable t
@@ -432,12 +430,12 @@
   (require-valid! ::apply-context context "Invalid Cron apply context")
   (let [removed (remove (set (keys desired)) (keys actual))]
     (doseq [id removed]
-      (apply-job-change! :remove id (get actual id)
+      (apply-job-change! runtime :remove id (get actual id)
                          #(unregister! runtime id)))
     (doseq [[id job] desired]
       (when (or (not= (config-tuple job) (some-> (get actual id) config-tuple))
                 (not (wake-pending? runtime id)))
-        (apply-job-change! :apply id job
+        (apply-job-change! runtime :apply id job
                            #(register! runtime (assoc job :id id)))))
     (require-valid! ::reconcile-result
                     {:reconciled :cron :jobs (vec (sort (keys desired)))}

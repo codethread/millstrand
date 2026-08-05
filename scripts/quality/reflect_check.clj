@@ -29,8 +29,7 @@
   (let [roots {"src" "skein"
                "spools/batteries/src" "skein/spools"
                "spools/chime/src" "skein/spools"
-               "examples/cron/src" "skein/spools"
-               "examples/cron/jobs" "ct/jobs"
+               "spools/cron/src" "skein/spools"
                "spools/workflow/src" "skein/spools"
                "spools/unsafe-text-search/src" "skein/spools"
                "spools/guild/src" "skein/spools"}

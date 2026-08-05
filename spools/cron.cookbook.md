@@ -113,9 +113,8 @@ that test to touch the real world.
   when it runs.
 - **Reloads keep cadence.** Republishing the same declaration leaves the managed job untouched. Changing its cadence or handler replaces its wake; omitting it cancels the wake.
 
-Honest source: this repo's example job at
-[`cron/jobs/ct/jobs/nvd_scan.clj`](cron/jobs/ct/jobs/nvd_scan.clj). A workspace that opts into
-Cron can load it from its own startup module.
+Honest source: this repo's [`.skein/jobs/nvd_scan.clj`](../.skein/jobs/nvd_scan.clj), wired
+as `:nvd-scan` in [`.skein/init.clj`](../.skein/init.clj).
 
 ---
 
@@ -170,9 +169,9 @@ any later external call.
 - **A real error still fails loudly.** Missing credentials or command failures
   throw; cron records them in `recent-failures` and keeps the cadence.
 
-Honest source: this repo's example job in
-[`cron/jobs/ct/jobs/nvd_scan.clj`](cron/jobs/ct/jobs/nvd_scan.clj). Its subprocess and card
-side effects are injected at the `run-nvd-scan!` boundary.
+Honest source: this repo's `:nvd-scan` job in
+[`.skein/jobs/nvd_scan.clj`](../.skein/jobs/nvd_scan.clj) and its lock/finding tests in
+[`test/skein/ct/nvd_scan_test.clj`](../test/skein/ct/nvd_scan_test.clj).
 
 ---
 
@@ -253,8 +252,8 @@ and `records-run-failure-without-stopping-cadence` in
   delivery, status, and failure semantics.
 - [`cron.api.md`](./cron.api.md) — generated signatures and docstrings for every
   fn referenced above.
-- [`chime.cookbook.md`](../spools/chime.cookbook.md) — the sibling engine's recipes; cron
+- [`chime.cookbook.md`](./chime.cookbook.md) — the sibling engine's recipes; cron
   and chime share the local-root layout, runtime-owned state, and loud-failure
   discipline.
-- [`workflow.cookbook.md`](../spools/workflow.cookbook.md) — the cookbook template these
+- [`workflow.cookbook.md`](./workflow.cookbook.md) — the cookbook template these
   recipes follow.

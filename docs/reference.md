@@ -113,8 +113,7 @@ the behavior contracts remain the root specs (see the [spec index](#spec-index))
 When working in this repository, also read the "Repo coordination workspace (.skein)" section of the
 root [`AGENTS.md`](../AGENTS.md): the `.skein` shared coordination world, its working discipline,
 and pointers into the live surface (`strand help`, `strand query list`, `strand pattern list`, and `strand workflow list` for registered ops, queries, patterns, and workflows). The config layout — `.skein/init.clj` activation order and its per-concern modules
-(`policy/config.clj`, the focused modules under `workflows/`, `agents/harnesses.clj`,
-`agents/reviewers.clj`, and `notifications/attention.clj`) — is documented in the `init.clj` header itself.
+(`policy/config.clj`, the focused modules under `workflows/`, `agents/harnesses.clj`, `agents/reviewers.clj`, `notifications/attention.clj`, and `jobs/nvd_scan.clj`) — is documented in the `init.clj` header itself.
 
 The focused modules under `.skein/workflows/` author this repo's static `defworkflow` Vars. The shared `workflows/common.clj` module keeps the weave patterns and the `ct.workflows.common/main-ci-watch` code gate; `workflows/land.clj`, `workflows/spool_bump.clj`, `workflows/story.clj`, `workflows/explore.clj`, `workflows/fix.clj`, and `workflows/ralph.clj` each own a workflow family. Because the definitions are static, a worker reads them with the shipped generic surface: `strand workflow list` for the catalogue, `strand workflow show story` for a definition's param contract, then `start`, `ready`, `next`, `complete`, `choose`, `defer`, and `await` to drive a run.
 

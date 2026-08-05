@@ -1,5 +1,5 @@
-(ns skein.examples.cron.nvd-scan-test
-  "Tests for the optional NVD deep-scan job in examples/cron/jobs/ct/jobs/nvd_scan.clj.
+(ns skein.ct.nvd-scan-test
+  "Tests for the scheduled NVD deep-scan job defined in .skein/jobs/nvd_scan.clj.
 
   Covers the injected-seam lock flow (skip when locked / fail loud without a key
   / clean scan / findings raise a p1 card) entirely through fakes, so the suite
@@ -8,10 +8,12 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]))
 
-;; The example job is loaded from its source file so the tests exercise the
-;; same injected seams without activating a workspace module or contacting gh.
+;; jobs/nvd_scan.clj is a .skein weaver file (ns `ct.jobs.nvd-scan`), not a classpath
+;; namespace, so load it once exactly as config-test does and resolve its
+;; (public and private) vars by symbol. Loading it defines vars only; it never
+;; activates modules or seeds against gh.
 (defn- load-config-once [f]
-  (load-file "examples/cron/jobs/ct/jobs/nvd_scan.clj")
+  (load-file ".skein/jobs/nvd_scan.clj")
   (f))
 
 (use-fixtures :once load-config-once)
@@ -20,6 +22,16 @@
   "Resolve a var in the loaded `ct.jobs.nvd-scan` namespace by unqualified name."
   [name]
   (requiring-resolve (symbol "ct.jobs.nvd-scan" name)))
+
+(deftest parses-scan-findings
+  (let [watson-count (cfn "clj-watson-vuln-count")
+        govuln? (cfn "govulncheck-findings?")]
+    (is (= 2 (watson-count "some preamble\nVulnerable dependencies found: 2\ntail")))
+    (is (zero? (watson-count "Vulnerable dependencies found: 0")))
+    (testing "a missing summary line is nil (incomplete scan), never a clean 0"
+      (is (nil? (watson-count "no clj-watson summary line at all"))))
+    (is (true? (boolean (govuln? "=== Symbol Results ===\nVulnerability #1: GO-2024-1\n"))))
+    (is (false? (boolean (govuln? "No vulnerabilities found."))))))
 
 (defn- argv-has?
   "Predicate: every `needle` appears in the space-joined argv."

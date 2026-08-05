@@ -120,11 +120,10 @@ nav:
           - Contract: spools/chime/README.md
           - Cookbook: spools/chime.cookbook.md
           - API: spools/chime.api.md
-  - Examples:
       - Cron Engine:
-          - Contract: examples/cron/README.md
-          - Cookbook: examples/cron.cookbook.md
-          - API: examples/cron.api.md
+          - Contract: spools/cron/README.md
+          - Cookbook: spools/cron.cookbook.md
+          - API: spools/cron.api.md
   - External Spools:
       - Agent Runs:
           - Contract: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/README.md
