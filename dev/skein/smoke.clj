@@ -243,26 +243,19 @@
                     (throw (ex-info "SKEIN_TEST_AWAIT_SCALE must be a number"
                                     {:env "SKEIN_TEST_AWAIT_SCALE" :value raw}))))
                 1.0)]
+    (when-not (and (Double/isFinite scale) (pos? scale))
+      (throw (ex-info "SKEIN_TEST_AWAIT_SCALE must be a positive finite number"
+                      {:env "SKEIN_TEST_AWAIT_SCALE" :value scale})))
     (str (long (* base-secs scale)))))
 
-(defn- start-smoke-mutation! [f]
-  (let [failure (atom nil)
-        thread (doto (Thread. ^Runnable (fn []
-                                          (try
-                                            (Thread/sleep 100)
-                                            (f)
-                                            (catch Throwable t
-                                              (reset! failure t)))))
-                 (.setDaemon true)
-                 (.start))]
-    {:thread thread :failure failure}))
-
-(defn- await-smoke-mutation! [{:keys [^Thread thread failure]}]
-  (.join thread 5000)
-  (when (.isAlive thread)
-    (throw (ex-info "smoke graph mutation did not finish" {})))
-  (when-let [t @failure]
-    (throw t)))
+(defn- strand-process-builder [workspace args]
+  (let [builder (doto (ProcessBuilder. (into [strand-bin "--workspace" workspace] args))
+                  (.redirectErrorStream true))]
+    (doto (.environment builder)
+      (.put "XDG_STATE_HOME" smoke-xdg-state-home)
+      (.put "SKEIN_SOURCE" checkout-root))
+    (.directory builder (outside-repo-dir))
+    builder))
 
 (defn assert-contains [haystack needle message]
   (assert (clojure.string/includes? haystack needle)
@@ -389,8 +382,7 @@
         (stop-weaver-config! workspace)
         (delete-tree! (smoke-workspace (str db-file ".dispatcher")))))))
 
-(defn smoke-await-cli!
-  "Exercise cardinality waiting through the built CLI and a disposable weaver."
+(defn- smoke-await-cli!
   [db-file]
   (let [workspace (.getCanonicalPath (.toFile (smoke-workspace (str db-file ".await"))))
         await! (fn [& args]
@@ -409,31 +401,40 @@
          "await observes an already-closed strand on its immediate first probe"))
 
       (let [id (cli-add-config! workspace "Await concurrent close")
-            mutation (start-smoke-mutation! #(close! id))]
-        (assert-await-envelope
-         (await! "--query" "strand-closed" "--param" (str "id=" id)
-                 "--min-count" "1" "--timeout-secs" (smoke-await-secs 5))
-         {:operation "await" :query "strand-closed" :reason "satisfied"
-          :count 1 :min_count 1 :max_count nil}
-         "await wakes after a concurrent graph mutation")
-        (await-smoke-mutation! mutation))
+            process (.start (strand-process-builder
+                             workspace ["await" "--query" "strand-closed"
+                                        "--param" (str "id=" id) "--min-count" "1"
+                                        "--timeout-secs" (smoke-await-secs 5)]))]
+        (close! id)
+        (let [output (slurp (.getInputStream process))
+              exit-code (.waitFor process)]
+          (assert= 0 exit-code (str "concurrent close await succeeds\n" output))
+          (assert-await-envelope
+           (parse-json output)
+           {:operation "await" :query "strand-closed" :reason "satisfied"
+            :count 1 :min_count 1 :max_count nil}
+           "await wakes after a concurrent graph mutation")))
 
       (doseq [exit [:close :supersede :burn]]
         (let [id (cli-add-config! workspace (str "Await active exit " (name exit)))
               replacement (when (= :supersede exit)
                             (cli-add-config! workspace "Await replacement"))
-              mutation (start-smoke-mutation!
-                        #(case exit
-                           :close (close! id)
-                           :supersede (run-strand-config! workspace "supersede" id replacement)
-                           :burn (run-strand-config! workspace "burn" id)))]
-          (assert-await-envelope
-           (await! "--query" "strand-active" "--param" (str "id=" id)
-                   "--max-count" "0" "--timeout-secs" (smoke-await-secs 5))
-           {:operation "await" :query "strand-active" :reason "satisfied"
-            :count 0 :min_count nil :max_count 0}
-           (str "strand-active is cardinality waiting after " (name exit)))
-          (await-smoke-mutation! mutation)))
+              process (.start (strand-process-builder
+                               workspace ["await" "--query" "strand-active"
+                                          "--param" (str "id=" id) "--max-count" "0"
+                                          "--timeout-secs" (smoke-await-secs 5)]))]
+          (case exit
+            :close (close! id)
+            :supersede (run-strand-config! workspace "supersede" id replacement)
+            :burn (run-strand-config! workspace "burn" id))
+          (let [output (slurp (.getInputStream process))
+                exit-code (.waitFor process)]
+            (assert= 0 exit-code (str (name exit) " active-set await succeeds\n" output))
+            (assert-await-envelope
+             (parse-json output)
+             {:operation "await" :query "strand-active" :reason "satisfied"
+              :count 0 :min_count nil :max_count 0}
+             (str "strand-active is cardinality waiting after " (name exit))))))
 
       (let [parent (cli-add-config! workspace "Await parent")
             child-a (cli-add-config! workspace "Await child A" "--edge" (str "parent-of:" parent))
