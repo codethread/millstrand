@@ -7,7 +7,7 @@
   scheduler wake, so it survives a real weaver stop/start — a fresh weaver adopts
   the pending wake through the startup-config path (re-running the identical
   `register!` with no in-memory config preserves the countdown, `.A4`) and the
-  job fires and re-arms. Unlike `scheduler_e2e_test`'s restart proof, cron's
+  job fires and re-arms. Unlike `skein.e2e.scheduler.lifecycle-test`'s restart proof, cron's
   `fire-wake` needs the in-memory job present before it fires, so the adopted
   wake is released deterministically off a manual clock after `register!` rather
   than by the wall-clock startup timer; the seed instant is therefore placed in
@@ -95,7 +95,7 @@
             (weaver-runtime/stop! rt1))))
       ;; The wake instant arrives while the weaver is down: seed the durable
       ;; cron/<id> row so a fresh weaver finds it overdue, mirroring
-      ;; scheduler_e2e_test's restart seed.
+      ;; skein.e2e.scheduler.lifecycle-test's restart seed.
       (db/schedule-wake! (db/datasource db-file)
                          {:key "cron/survivor" :wake-at seed-at
                           :handler 'skein.spools.cron/fire-wake
