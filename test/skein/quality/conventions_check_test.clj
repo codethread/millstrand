@@ -35,7 +35,8 @@
    [quality.api-form :as api-form]
    [quality.json-literals :as json-literals]
    [quality.spool-tiers :as spool-tiers]
-   [quality.spool-var :as spool-var])
+   [quality.spool-var :as spool-var]
+   [quality.workspace-tests :as workspace-tests])
   (:import
    [java.nio.file Files]
    [java.nio.file.attribute FileAttribute]))
@@ -65,6 +66,28 @@
   "One kondo-shaped var-definition row for `dir`/alpha.clj."
   [dir attrs]
   (merge {:filename (.getPath (io/file dir "alpha.clj")) :row 2} attrs))
+
+(deftest workspace-test-namespace-and-directory-map-bidirectionally
+  (let [valid {:name 'skein.ct.config-test
+               :filename "test/skein/ct/config_test.clj" :row 1}
+        external-ct {:name 'ct.spools.example-test
+                     :filename "test/ct/spools/example_test.clj" :row 1}]
+    (is (empty? (workspace-tests/findings
+                 {:namespace-definitions [valid external-ct]})))
+    (testing "the workspace namespace cannot leak outside its directory"
+      (let [[finding] (workspace-tests/findings
+                       {:namespace-definitions
+                        [(assoc valid :filename "test/skein/config_test.clj")]})]
+        (is (str/includes? finding "must be defined under `test/skein/ct/`"))))
+    (testing "the workspace directory cannot carry an unrelated namespace"
+      (let [[finding] (workspace-tests/findings
+                       {:namespace-definitions
+                        [(assoc valid :name 'skein.config-test)]})]
+        (is (str/includes? finding "must declare a `skein.ct.*` namespace"))))
+    (testing "absolute paths preserve the boundary"
+      (is (empty? (workspace-tests/findings
+                   {:namespace-definitions
+                    [(assoc valid :filename "/tmp/repo/test/skein/ct/config_test.clj")]}))))))
 
 (deftest private-vars-in-a-converted-alpha-are-not-findings
   (with-modules {"tidy" conformant-source}
