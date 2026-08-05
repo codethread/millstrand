@@ -36,7 +36,7 @@ Delete the 7 in-tree spool installers, bring every in-tree reconciler to explici
 
 ### PLAN-Itr-001.PH1 Additive slice: datums, C46b dispatch, helper, conversion
 
-Outcome: A1, A2, A4, A5, and A6 done with the installers still in place (now uncalled): spool datums and guild setter exported, reconcilers dispatch per C46b, `activate-spool!` lands, all 28 call sites and the installer-semantics tests converted, parity gate added. Green gate: `clojure -M:test skein.cron-test skein.guild-test skein.chime-test skein.spools.batteries-test skein.spools.workflow-test skein.spools.unsafe-text-search-test skein.spools.executors.shell-test skein.config-test skein.weaver-test skein.api.runtime.alpha-test` cold. The tree is green at every phase boundary — deletion follows conversion, not the reverse.
+Outcome: A1, A2, A4, A5, and A6 done with the installers still in place (now uncalled): spool datums and guild setter exported, reconcilers dispatch per C46b, `activate-spool!` lands, all 28 call sites and the installer-semantics tests converted, parity gate added. Green gate: `clojure -M:test skein.cron-test skein.guild-test skein.chime-test skein.spools.batteries-test skein.spools.workflow-test skein.spools.unsafe-text-search-test skein.spools.executors.shell-test skein.config-test skein.core.weaver.bins-test skein.core.weaver.startup-test skein.core.weaver.graph-query-test skein.core.weaver.hooks-events-test skein.core.weaver.ops-help-test skein.core.weaver.patterns-test skein.core.weaver.socket-test skein.core.weaver.registry-snapshots-test skein.core.weaver.modules-test skein.api.runtime.alpha-test` cold. The tree is green at every phase boundary — deletion follows conversion, not the reverse.
 
 ### PLAN-Itr-001.PH2 Removal slice: delete the 7 installers
 

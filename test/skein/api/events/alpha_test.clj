@@ -3,7 +3,8 @@
 
   The broad behavior lock — entry shape and replace-by-key round-trips,
   asynchronous dispatch, failure record capture, reload interplay — is
-  deliberately retained in `skein.weaver-test` and `skein.spools-test`,
+  deliberately retained in `skein.core.weaver.hooks-events-test` and
+  `skein.spools-test`,
   not duplicated here. This namespace pins what those locks skip: the loud
   registration seam (every validated piece rejects with its own error and
   leaves the registry untouched), unregistration idempotence, deterministic
@@ -112,11 +113,11 @@
 
 (deftest failure-record-spec-pins-the-promised-key-set
   ;; The live record round-trip (dispatch writes it, `recent-failures` reads
-  ;; it back) is locked in `skein.weaver-test`; this pins the spec against
+  ;; it back) is locked in `skein.core.weaver.hooks-events-test`; this pins the spec against
   ;; that record's documented shape.
   (is (s/valid? ::events/failure-record
                 {:handler/key :fails
-                 :handler/fn 'skein.weaver-test/failing-event
+                 :handler/fn 'skein.core.weaver.hooks-events-test/failing-event
                  :event/id "evt-1"
                  :event/type :strand/updated
                  :exception/message "handler failed"

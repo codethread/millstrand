@@ -577,15 +577,15 @@
     (fn [rt _]
       (is (= {:key :capture
               :types #{:strand/added}
-              :fn 'skein.weaver-test/capture-event
+              :fn 'skein.core.weaver.hooks-events-test/capture-event
               :metadata {:purpose :test}}
-             (events/register-handler! rt :capture #{:strand/added} 'skein.weaver-test/capture-event {:purpose :test})))
+             (events/register-handler! rt :capture #{:strand/added} 'skein.core.weaver.hooks-events-test/capture-event {:purpose :test})))
       (is (= [:capture] (mapv :key (events/handlers rt))))
       (is (= {:key :capture
               :types #{:strand/updated}
-              :fn 'skein.weaver-test/capture-event
+              :fn 'skein.core.weaver.hooks-events-test/capture-event
               :metadata {}}
-             (events/register-handler! rt :capture #{:strand/updated} 'skein.weaver-test/capture-event)))
+             (events/register-handler! rt :capture #{:strand/updated} 'skein.core.weaver.hooks-events-test/capture-event)))
       (is (= #{:strand/updated} (:types (first (events/handlers rt)))))
       (is (= {:unregistered :capture} (events/unregister-handler! rt :capture)))
       (is (= [] (events/handlers rt)))

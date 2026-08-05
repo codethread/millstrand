@@ -15,8 +15,7 @@
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.core.weaver.scheduler :as scheduler]
             [skein.spools.test-support :as test-support]
-            [skein.test.alpha :as test-alpha]
-            [skein.weaver-test :as wt])
+            [skein.test.alpha :as test-alpha])
   (:import [java.time Duration Instant]
            [java.util.concurrent ArrayBlockingQueue]))
 
@@ -297,11 +296,13 @@
   "Wait until key's pending row is gone. The fire promise is delivered inside the
   handler, before run-fire! records completion, so completion is a later event."
   [ds key]
-  (wt/wait-until #(nil? (db/get-pending-wake ds key))))
+  (test-support/poll-until #(when (nil? (db/get-pending-wake ds key)) true)
+                           {:timeout-ms (test-support/await-budget-ms 1000)
+                            :on-timeout (constantly false)}))
 
 (deftest startup-rearm-fires-persisted-overdue-wake
   (let [db-file (db-test/temp-db-file)
-        world (wt/temp-world)]
+        world (test-support/temp-world)]
     (try
       (let [ds (db/datasource db-file)]
         (db/init! ds)
@@ -320,10 +321,10 @@
             (weaver-runtime/stop! rt))))
       (finally
         (db-test/delete-sqlite-family! db-file)
-        (wt/delete-tree! (io/file (:config-dir world)))))))
+        (test-support/delete-tree! (io/file (:config-dir world)))))))
 
 (deftest repeated-rearm-of-future-wake-fires-exactly-once
-  (wt/with-runtime
+  (test-support/with-runtime
     (fn [rt _db-file]
       (reset! fire-count 0)
       (test-alpha/set-clock! rt (test-alpha/manual-clock (instant 0)))
@@ -338,7 +339,7 @@
       (is (= 1 @fire-count) "repeated re-arm must not double-arm the same wake"))))
 
 (deftest reload-rearm-does-not-refire-completed-wake
-  (wt/with-runtime
+  (test-support/with-runtime
     (fn [rt _db-file]
       (reset! fire-count 0)
       (reset! fired (promise))
@@ -355,7 +356,7 @@
 
 (deftest stop-closes-scheduler-executor-thread
   (let [db-file (db-test/temp-db-file)
-        world (wt/temp-world)
+        world (test-support/temp-world)
         rt (weaver-runtime/start! db-file {:world world :publish? false})]
     (try
       (let [executor (:executor (scheduler/state rt))]
@@ -365,4 +366,4 @@
         (is (.isTerminated executor) "the scheduler timer thread is joined on stop"))
       (finally
         (db-test/delete-sqlite-family! db-file)
-        (wt/delete-tree! (io/file (:config-dir world)))))))
+        (test-support/delete-tree! (io/file (:config-dir world)))))))

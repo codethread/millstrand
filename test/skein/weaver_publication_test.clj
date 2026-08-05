@@ -5,20 +5,20 @@
             [skein.core.weaver.metadata :as metadata]
             [skein.core.weaver.runtime :as weaver-runtime]
             [skein.source-file :as source-file]
-            [skein.weaver-test :refer [delete-tree! temp-world]]))
+            [skein.spools.test-support :as test-support]))
 
 (deftest stop-unpublishes-published-runtime
-  (let [world (temp-world)
+  (let [world (test-support/temp-world)
         rt (weaver-runtime/start! nil {:world world})]
     (try
       (is (= rt @weaver-runtime/current-runtime))
       (weaver-runtime/stop! rt)
       (is (nil? @weaver-runtime/current-runtime))
       (finally
-        (delete-tree! (io/file (:config-dir world) ".."))))))
+        (test-support/delete-tree! (io/file (:config-dir world) ".."))))))
 
 (deftest runtime-init-failures-do-not-publish-metadata
-  (let [world (temp-world)
+  (let [world (test-support/temp-world)
         init (io/file (:config-dir world) "init.clj")]
     (try
       (source-file/spit-forms! init ['(throw (ex-info "init failed" {}))])
@@ -30,20 +30,20 @@
       (finally
         (some-> @weaver-runtime/current-runtime weaver-runtime/stop!)
         (metadata/delete! world)
-        (delete-tree! (io/file (:config-dir world)))))))
+        (test-support/delete-tree! (io/file (:config-dir world)))))))
 
 (deftest unpublished-start-does-not-publish
-  (let [world (temp-world)
+  (let [world (test-support/temp-world)
         rt (weaver-runtime/start! nil {:world world :publish? false})]
     (try
       (is (nil? @weaver-runtime/current-runtime))
       (finally
         (weaver-runtime/stop! rt)
-        (delete-tree! (io/file (:config-dir world) ".."))))))
+        (test-support/delete-tree! (io/file (:config-dir world) ".."))))))
 
 (deftest publishing-second-runtime-still-fails-loudly
-  (let [world-a (temp-world)
-        world-b (temp-world)
+  (let [world-a (test-support/temp-world)
+        world-b (test-support/temp-world)
         rt-a (weaver-runtime/start! nil {:world world-a})]
     (try
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
@@ -51,5 +51,5 @@
                             (weaver-runtime/start! nil {:world world-b})))
       (finally
         (weaver-runtime/stop! rt-a)
-        (delete-tree! (io/file (:config-dir world-a) ".."))
-        (delete-tree! (io/file (:config-dir world-b) ".."))))))
+        (test-support/delete-tree! (io/file (:config-dir world-a) ".."))
+        (test-support/delete-tree! (io/file (:config-dir world-b) ".."))))))

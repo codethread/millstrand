@@ -12,8 +12,7 @@
             [skein.api.scheduler.alpha :as scheduler]
             [skein.core.db :as db]
             [skein.spools.test-support :as test-support]
-            [skein.test.alpha :as test-alpha]
-            [skein.weaver-test :as wt])
+            [skein.test.alpha :as test-alpha])
   (:import [java.time Instant]))
 
 (def captured (atom nil))
@@ -38,10 +37,12 @@
   (deref @fired (test-support/await-budget-ms 3000) false))
 
 (defn- await-empty-pending [rt]
-  (wt/wait-until #(empty? (scheduler/pending rt))))
+  (test-support/poll-until #(when (empty? (scheduler/pending rt)) true)
+                           {:timeout-ms (test-support/await-budget-ms 1000)
+                            :on-timeout (constantly false)}))
 
 (deftest schedule-persists-and-reads-back-decoded-shape
-  (wt/with-runtime
+  (test-support/with-runtime
     (fn [rt _db-file]
       (test-alpha/set-clock! rt (test-alpha/manual-clock (Instant/ofEpochSecond 0)))
       (let [far-future (Instant/ofEpochSecond 100000)
@@ -59,7 +60,7 @@
             (s/explain-str ::scheduler/pending-wake created))))))
 
 (deftest schedule-replaces-existing-key-and-resets-attempts
-  (wt/with-runtime
+  (test-support/with-runtime
     (fn [rt _db-file]
       (test-alpha/set-clock! rt (test-alpha/manual-clock (Instant/ofEpochSecond 0)))
       (let [far-future (Instant/ofEpochSecond 100000)]
@@ -73,7 +74,7 @@
           (is (= 1 (count (scheduler/pending rt))) "replacing a key does not duplicate rows"))))))
 
 (deftest schedule-rejects-malformed-wake-without-persisting
-  (wt/with-runtime
+  (test-support/with-runtime
     (fn [rt _db-file]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"must be a map"
                             (scheduler/schedule! rt "not-a-map")))
@@ -92,7 +93,7 @@
       (is (empty? (scheduler/pending rt)) "no row is persisted for any rejected schedule"))))
 
 (deftest schedule-rejects-unresolvable-or-non-callable-handler-without-persisting
-  (wt/with-runtime
+  (test-support/with-runtime
     (fn [rt _db-file]
       (testing "a bare (non-namespaced) symbol is rejected by the wake spec"
         (is (re-find #"fully-qualified-symbol"
@@ -109,7 +110,7 @@
       (is (empty? (scheduler/pending rt)) "no row is persisted for any rejected handler"))))
 
 (deftest cancel-removes-pending-row
-  (wt/with-runtime
+  (test-support/with-runtime
     (fn [rt _db-file]
       (let [far-future (.plusSeconds (Instant/now) 100000)]
         (scheduler/schedule! rt {:key "cancel-me" :wake-at far-future :handler `deliver-fire-handler})
@@ -124,7 +125,7 @@
                               (scheduler/cancel! rt "cancel-me")))))))
 
 (deftest due-wake-dispatches-and-drains-pending
-  (wt/with-runtime
+  (test-support/with-runtime
     (fn [rt _db-file]
       (testing "a due wake fires, completes, and is removed from pending"
         (reset! captured nil)

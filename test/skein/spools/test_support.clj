@@ -76,6 +76,19 @@
                        (str config-dir "/state")
                        (str config-dir "/data")))
 
+(declare temp-dir)
+
+(defn temp-world
+  "Create a disposable world with config, state, and data below one temp root.
+
+  Callers own cleanup of the root through `delete-tree!` on the config-dir's
+  parent, matching the repository's older weaver-world fixtures."
+  []
+  (let [root (temp-dir "skein-weaver-world")
+        config-dir (io/file root "config")]
+    (.mkdirs config-dir)
+    (test-world (.getCanonicalPath config-dir))))
+
 (defn temp-dir
   "Create a fresh temporary directory with the supplied name prefix."
   [prefix]

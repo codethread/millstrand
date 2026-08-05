@@ -3,7 +3,7 @@
 
   The broad graph behavior lock — registry validation, query selection,
   hydration order, traversal, and burn event fanout — lives in
-  `skein.weaver-test` and `skein.core.db-test`; this namespace pins the
+  `skein.core.weaver.graph-query-test` and `skein.core.db-test`; this namespace pins the
   explicit caller-supplied request-context arity of `burn-by-ids!` and the
   lenient adjacency promise at the public surface."
   (:require [clojure.test :refer [deftest is use-fixtures]]

@@ -2,7 +2,8 @@
   "Seam contract coverage for the lifecycle-hooks API.
 
   The broad behavior lock — hook invocation ordering through the lifecycle
-  gates, reload interplay — stays in `skein.weaver-test` and `skein.alpha-test`.
+  gates, reload interplay — stays in `skein.core.weaver.hooks-events-test` and
+  `skein.alpha-test`.
   This namespace pins the loud registration seam, unregistration idempotence,
   the data-first read shape, and that the hook registry is owner-partition
   backed so owner removal, same-layer collision, and authorized override behave
