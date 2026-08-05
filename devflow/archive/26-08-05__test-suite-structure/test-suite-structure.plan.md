@@ -126,6 +126,6 @@ Outcome: `r9hg0` promotes the staged testing spec to `devflow/specs/testing.md` 
 
 ### PLAN-Tst-001.DN5 Finalisation — 2026-08-05
 
-- `ga2sh`, `ijka8`, `uoyeu`, `whu7e`, `vxihm`, and `p3tnh` are closed with outcome `done`; `r9hg0` is the remaining closeout feature under the epic.
+- `ga2sh`, `ijka8`, `uoyeu`, `whu7e`, `vxihm`, and `p3tnh` are closed with outcome `done`; at this pre-close snapshot, `r9hg0` is the remaining closeout feature under the epic.
 - Promoted `SPEC-006` to `devflow/specs/testing.md` with Implemented status, merged `DELTA-Tst-001` into `SPEC-004.C74b`, added the root-spec index entry, and archived the feature folder. The testing guide required no edit because it does not describe the removed test-only default source.
 - `make docs-check` and `git diff --check` pass. The worktree contains only the intended documentation promotion and archive changes; no generated site or runtime artifacts remain.
