@@ -892,7 +892,19 @@
         (is (nil? (fire :kanban-completed
                         {:id "k2" :state "active" :title "Still working"
                          :attributes {:kanban/card "true"}}
-                        #{})))))))
+                        #{})))
+        ;; Parked-run parsing warns with the accepted format and next action.
+        (let [err (java.io.StringWriter.)
+              note (binding [*err* err]
+                     (fire :parked-run
+                           {:id "p1" :state "active" :title "Parked run"
+                            :updated_at "not-a-timestamp"
+                            :attributes {:agent-run/run "true"
+                                         :agent-run/phase "pending"}}
+                           #{"p1"}))]
+          (is (nil? note))
+          (is (str/includes? (str err) "expected UTC format yyyy-MM-dd HH:mm:ss")))
+        ))))
 
 (deftest macros-demo-weave-preserves-workspace-example
   (with-config-runtime

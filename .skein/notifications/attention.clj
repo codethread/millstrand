@@ -68,13 +68,14 @@
          (-> (java.time.LocalDateTime/parse ts sqlite-timestamp-formatter)
              (.toInstant java.time.ZoneOffset/UTC)
              (.toEpochMilli)))
-      (catch Exception e
+      (catch java.time.format.DateTimeParseException e
         (when-not (some #(= ts %) @(logged-ts-parse-failures))
           (swap! (logged-ts-parse-failures)
                  #(vec (take-last timestamp-failure-memory (conj % ts))))
           (binding [*out* *err*]
             (println (str "[attention] WARN parked-run detector could not parse strand updated_at;"
-                          " the detector is disabled for this strand "
+                          " expected UTC format yyyy-MM-dd HH:mm:ss; check the weaver's"
+                          " updated_at source and reload after correcting it "
                           (pr-str {:strand (:id strand) :updated_at ts
                                    :exception/message (ex-message e)})))))
         nil))))
