@@ -3,9 +3,8 @@
 
   Naming convention: aliases are pure model handles (`:sol-low`,
   `:terra-med`, `:opus`) — never role names, so a seat cannot be routed by
-  connotation. A `-ro` suffix marks the read-only-sandbox variant of a seat.
-  Role policy lives where it is applied: reviewer rosters pick seats in
-  `.skein/agents/reviewers.clj`, workflows take seats as parameters.
+  connotation. Role policy lives where it is applied: reviewer rosters pick seats
+  in `.skein/agents/reviewers.clj`, workflows take seats as parameters.
 
   Every seat doc leads with a scorecard a coordinator can scan:
 
@@ -73,9 +72,9 @@
 (def ^:private luna-rates {:input 1.0 :cache-read 0.1 :output 6.0})
 
 (def ^:private harness-defs
-  "Repo-local harness (tool) definitions: the codex tool, its read-only sandbox
-  variant, and interactive tools that cannot alias the headless
-  :claude. Seats (aliases) over these tools live in `alias-defs`."
+  "Repo-local harness (tool) definitions: the codex tool and interactive tools
+  that cannot alias the headless :claude. Seats (aliases) over these tools live
+  in `alias-defs`."
   {;; Sessions persist to disk, so `codex exec resume <session-id>` can
    ;; continue them once a codex-json parse captures session ids; :resume
    ;; splices that subcommand ahead of the prompt (the global flags before it
@@ -104,30 +103,6 @@
            |because codex's default shell_environment_policy strips the PATH
            |entries carrying the strand/mill CLIs. :resume continues the captured
            |session id.")}
-   ;; Enforced read-only variant behind the -ro seats: codex's own sandbox
-   ;; denies writes instead of relying on prompt discipline. KNOWN LIMIT
-   ;; (verified, codex 0.144.2): the seatbelt also blocks AF_UNIX connects,
-   ;; and the shipped review/worker contracts drive the strand CLI over the
-   ;; weaver socket (agent note / strand show) — so -ro seats suit contracts
-   ;; whose findings ride the run result, not standard note-appending roster
-   ;; reviews, until a `-c permissions...` unix-socket grant for the weaver
-   ;; state dir is proven in a disposable world. No approval flag rides the
-   ;; argv: `codex exec` is headless and auto-denies sandboxed writes rather
-   ;; than prompting (exec rejects `-a` as of codex 0.144.3). `codex exec
-   ;; review` (headless --json review over --base/--commit/--uncommitted) is
-   ;; a further candidate harness once ranges can ride argv.
-   :codex-ro
-   {:argv ["codex" "exec" "--json" "--skip-git-repo-check" "--color" "never"
-           "--sandbox" "read-only"
-           "-c" "shell_environment_policy.inherit=all"]
-    :parse :codex-json
-    :resume ["resume" :agent-run/session-id]
-    :cost-rates {:input 1.25 :cache-read 0.125 :output 10.0}
-    :doc (format-alpha/reflow
-          "|Codex CLI headless with the enforced read-only sandbox: identical
-           |event stream, parse, resume, and rate-card behavior to :codex; the
-           |sandbox is the only difference. A seat needing even one write — or
-           |the strand CLI (weaver socket) — belongs on :codex instead.")}
    ;; Interactive TUI tools for `agent delegate --interactive`. These cannot alias
    ;; :claude: the shipped harness is headless (`claude -p`, prompt on stdin)
    ;; and exits immediately inside a multiplexer pane — an interactive launch
@@ -162,14 +137,6 @@
            |authored-code quality. Scores: pandora-task-002 bench (card
            |nihrl) plus the 2026-07-13 explore and review-sweeps benches;
            |ui-design is a prior.")}
-   :luna-low-ro
-   {:alias-of :codex-ro
-    :extra-args ["-m" "gpt-5.6-luna" "-c" "model_reasoning_effort=low"]
-    :cost-rates luna-rates
-    :doc (format-alpha/reflow
-          "|Read-only-sandbox variant of :luna-low (same scorecard). For
-           |contracts whose findings ride the run result — no strand CLI
-           |mid-run (see :codex-ro socket limit).")}
    :luna-high
    {:alias-of :codex
     :extra-args ["-m" "gpt-5.6-luna" "-c" "model_reasoning_effort=high"]
@@ -200,14 +167,6 @@
            |cross-package fallout when it could not run tests and gives up on
            |broken toolchains. Scores: pandora-task-002 bench (card nihrl);
            |ui-design is a prior.")}
-   :terra-med-ro
-   {:alias-of :codex-ro
-    :extra-args ["-m" "gpt-5.6-terra" "-c" "model_reasoning_effort=medium"]
-    :cost-rates terra-rates
-    :doc (format-alpha/reflow
-          "|Read-only-sandbox variant of :terra-med (same scorecard). For
-           |contracts whose findings ride the run result — no strand CLI
-           |mid-run (see :codex-ro socket limit).")}
    :sol-low
    {:alias-of :codex
     :extra-args ["-m" "gpt-5.6-sol" "-c" "model_reasoning_effort=low"]
@@ -237,14 +196,6 @@
            |and track other runs. Scores: pandora-task-002 bench (card nihrl);
            |ui-design is a prior; coordination from the 2026-07-13 three-seat
            |comprehension test.")}
-   :sol-med-ro
-   {:alias-of :codex-ro
-    :extra-args ["-m" "gpt-5.6-sol" "-c" "model_reasoning_effort=medium"]
-    :cost-rates sol-rates
-    :doc (format-alpha/reflow
-          "|Read-only-sandbox variant of :sol-med (same scorecard). For
-           |contracts whose findings ride the run result — no strand CLI
-           |mid-run (see :codex-ro socket limit).")}
    :sol-high
    {:alias-of :codex
     :extra-args ["-m" "gpt-5.6-sol" "-c" "model_reasoning_effort=high"]
