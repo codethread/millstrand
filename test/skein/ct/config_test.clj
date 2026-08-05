@@ -903,8 +903,7 @@
                                          :agent-run/phase "pending"}}
                            #{"p1"}))]
           (is (nil? note))
-          (is (str/includes? (str err) "expected UTC format yyyy-MM-dd HH:mm:ss")))
-        ))))
+          (is (str/includes? (str err) "expected UTC format yyyy-MM-dd HH:mm:ss")))))))
 
 (deftest macros-demo-weave-preserves-workspace-example
   (with-config-runtime
