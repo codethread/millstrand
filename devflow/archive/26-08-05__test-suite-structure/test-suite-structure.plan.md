@@ -5,8 +5,8 @@
 **Proposal:** [proposal.md](./proposal.md)
 **RFCs:** [Library author testing](../../archive/26-07-03__library-author-testing-support/rfcs/2026-06-26-library-author-testing.md), [Test concurrency](../../rfcs/2026-07-03-test-concurrency.md)
 **Root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
-**Feature specs:** [Testing contract](./specs/testing.md), [Weaver Runtime delta](./specs/daemon-runtime.delta.md)
-**Status:** Reviewed
+**Feature specs:** [Testing contract](../../specs/testing.md), [Weaver Runtime delta](./specs/daemon-runtime.delta.md)
+**Status:** Shipped
 **Last Updated:** 2026-08-05
 
 ## PLAN-Tst-001.P1 Goal and scope
@@ -123,3 +123,9 @@ Outcome: `r9hg0` promotes the staged testing spec to `devflow/specs/testing.md` 
 ### PLAN-Tst-001.DN4 Epic health gates — 2026-08-05
 
 - Human follow-up added two P2 review features to the Ralph sequence. `vxihm` checks progress after the fixture and scheduler foundations. `p3tnh` checks delivered outcomes before closeout. The task and feature graphs both enforce the gates so card-driven and broad task scheduling cannot run them early.
+
+### PLAN-Tst-001.DN5 Finalisation — 2026-08-05
+
+- `ga2sh`, `ijka8`, `uoyeu`, `whu7e`, `vxihm`, and `p3tnh` are closed with outcome `done`; `r9hg0` is the remaining closeout feature under the epic.
+- Promoted `SPEC-006` to `devflow/specs/testing.md` with Implemented status, merged `DELTA-Tst-001` into `SPEC-004.C74b`, added the root-spec index entry, and archived the feature folder. The testing guide required no edit because it does not describe the removed test-only default source.
+- `make docs-check` and `git diff --check` pass. The worktree contains only the intended documentation promotion and archive changes; no generated site or runtime artifacts remain.

@@ -1,10 +1,10 @@
 # Testing contract
 
 **Document ID:** `SPEC-006`
-**Status:** Planned
+**Status:** Implemented
 **Last Updated:** 2026-08-05
-**Related RFCs:** [Library author testing](../../../archive/26-07-03__library-author-testing-support/rfcs/2026-06-26-library-author-testing.md), [Test concurrency](../../../rfcs/2026-07-03-test-concurrency.md)
-**Related root specs:** [REPL API](../../../specs/repl-api.md), [Weaver Runtime](../../../specs/daemon-runtime.md), [Alpha Surface](../../../specs/alpha-surface.md)
+**Related RFCs:** [Library author testing](../archive/26-07-03__library-author-testing-support/rfcs/2026-06-26-library-author-testing.md), [Test concurrency](../rfcs/2026-07-03-test-concurrency.md)
+**Related root specs:** [REPL API](./repl-api.md), [Weaver Runtime](./daemon-runtime.md), [Alpha Surface](./alpha-surface.md)
 **Code:** `src/skein/test`, `src/skein/api`
 
 ## SPEC-006.P1 Purpose
