@@ -19,13 +19,25 @@ if ! grep -Fq 'identity-check:' "$repo_root/Makefile"; then
 fi
 
 pages_workflow="$repo_root/.github/workflows/pages.yml"
-if ! grep -Fq 'uses: actions/deploy-pages@v4' "$pages_workflow"; then
-  echo "millstrand CI config: Pages workflow does not use actions/deploy-pages@v4" >&2
-  exit 1
-fi
-
-if ! grep -Fq 'timeout: 900000' "$pages_workflow"; then
-  echo "millstrand CI config: Pages deployment timeout must be 900000 ms" >&2
+if ! awk '
+  /^        uses: actions\/deploy-pages@v4$/ {
+    actions++
+    state = 1
+    next
+  }
+  state == 1 && /^        with:$/ {
+    state = 2
+    next
+  }
+  state == 2 && /^          timeout: 900000$/ {
+    configured++
+    state = 0
+    next
+  }
+  state > 0 && $0 !~ /^[[:space:]]*(#.*)?$/ { state = 0 }
+  END { exit !(actions == 1 && configured == 1) }
+' "$pages_workflow"; then
+  echo "millstrand CI config: expected exactly one actions/deploy-pages@v4 step with adjacent with.timeout=900000" >&2
   exit 1
 fi
 
