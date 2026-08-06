@@ -77,7 +77,7 @@ func TestBootstrapStealthWorldRejectsTrackedWorkspaceBeforeWrites(t *testing.T) 
 
 			_, _, err := BootstrapStealthWorld(repo)
 			var refusal *StealthRefusal
-			if !errors.As(err, &refusal) || refusal.Target != StealthTargetTrackedSkein || refusal.State != StealthStateTracked {
+			if !errors.As(err, &refusal) || refusal.Target != StealthTargetTrackedMillstrand || refusal.State != StealthStateTracked {
 				t.Fatalf("unexpected refusal: %#v err=%v", refusal, err)
 			}
 			if _, err := os.Stat(filepath.Join(repo, ".millstrand", "config.json")); !os.IsNotExist(err) {
@@ -134,7 +134,7 @@ func TestBootstrapStealthWorldSkipsTrackedClaudeGuidance(t *testing.T) {
 
 func TestBootstrapStealthWorldFromLinkedWorktreeUsesGitPrivateExclude(t *testing.T) {
 	repo := initGitRepo(t)
-	gitRun(t, repo, "-c", "user.name=Skein Test", "-c", "user.email=skein@example.test", "commit", "--allow-empty", "-qm", "root")
+	gitRun(t, repo, "-c", "user.name=Millstrand Test", "-c", "user.email=millstrand@example.test", "commit", "--allow-empty", "-qm", "root")
 	linked := filepath.Join(t.TempDir(), "linked")
 	gitRun(t, repo, "worktree", "add", "-qb", "linked-test", linked)
 

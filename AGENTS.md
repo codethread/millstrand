@@ -2,14 +2,14 @@
 
 ## About
 
-Skein is a runtime for programming the constraints and loops around coding agents.
+Millstrand is a runtime for programming the constraints and loops around coding agents.
 
 - Always read `./devflow/TENETS.md`
 - When designing features, also read `./devflow/PHILOSOPHY.md` and `./devflow/UBIQUITOUS-LANGUAGE.md`
 
 | Path | What |
 | --- | --- |
-| `src/skein/` | Core runtime (`api`, `core`, `repl`) |
+| `src/millstrand/` | Core runtime (`api`, `core`, `repl`) |
 | `spools/` | Shipped spools (batteries, workflow, …) |
 | `cli/` | Go CLIs (`strand`, `mill`) |
 | `tools/` | Repo tools (`ralph`, `kanban-tree`) |
@@ -51,14 +51,14 @@ Farm work out as tracked agent runs (`strand agent …`); never harness-native s
 
 Load `strand prime agent` before delegating — run success never closes the served task.
 
-<!-- mill:skein-prime -->
+<!-- mill:millstrand-prime -->
 
-## Skein / strand
+## Millstrand / strand
 
-This repo uses Skein strands to track work. Orientation ships in the `mill` CLI:
+This repo uses Millstrand strands to track work. Orientation ships in the `mill` CLI:
 
 - `mill strand prime` — the day-to-day strand workflow; run it before multi-step work.
-- `mill skein prime` — read on demand, only when building on this repo's `.skein/` config or spools.
-<!-- /mill:skein-prime -->
+- `mill millstrand prime` — read on demand, only when building on this repo's `.skein/` config or spools.
+<!-- /mill:millstrand-prime -->
 
 Wider questions: `strand guide "<question>"`.

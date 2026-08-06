@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.spools.guild">skein.spools.guild</a>
+# <a name="millstrand.spools.guild">millstrand.spools.guild</a>
 
 
 Reference spool for declaring a versioned public weaver operation API.
@@ -15,7 +15,7 @@ Reference spool for declaring a versioned public weaver operation API.
 
 
 
-## <a name="skein.spools.guild/deprecate!">`deprecate!`</a>
+## <a name="millstrand.spools.guild/deprecate!">`deprecate!`</a>
 ``` clojure
 (deprecate! runtime name opts)
 ```
@@ -25,44 +25,44 @@ Replace a registered guild operation in `runtime` with a loud deprecation stub.
 
   `opts` requires `:replacement` and may include `:since`. Deprecated ops never
   return success; invocation throws ex-info with `:code :operation/deprecated`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L272-L296">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/guild/src/millstrand/spools/guild.clj#L272-L296">Source</a></sub></p>
 
-## <a name="skein.spools.guild/deprecated-op">`deprecated-op`</a>
+## <a name="millstrand.spools.guild/deprecated-op">`deprecated-op`</a>
 ``` clojure
 (deprecated-op {:op/keys [name], :as ctx})
 ```
 Function.
 
 Fail loudly for a deprecated guild operation.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L207-L216">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/guild/src/millstrand/spools/guild.clj#L207-L216">Source</a></sub></p>
 
-## <a name="skein.spools.guild/dispatch-op">`dispatch-op`</a>
+## <a name="millstrand.spools.guild/dispatch-op">`dispatch-op`</a>
 ``` clojure
 (dispatch-op {:op/keys [name args], :as ctx})
 ```
 Function.
 
 Dispatch a guild-declared operation after parsing and validating input.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L199-L205">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/guild/src/millstrand/spools/guild.clj#L199-L205">Source</a></sub></p>
 
-## <a name="skein.spools.guild/guild-op">`guild-op`</a>
+## <a name="millstrand.spools.guild/guild-op">`guild-op`</a>
 ``` clojure
 (guild-op #:op{:keys [runtime runtime-metadata]})
 ```
 Function.
 
 Return JSON-safe metadata describing the registered Guild API.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L328-L345">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/guild/src/millstrand/spools/guild.clj#L328-L345">Source</a></sub></p>
 
-## <a name="skein.spools.guild/guild-state">`guild-state`</a>
+## <a name="millstrand.spools.guild/guild-state">`guild-state`</a>
 
 
 
 
 Own Guild's reset and publication boundary for the module lifetime.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L347-L350">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/guild/src/millstrand/spools/guild.clj#L347-L350">Source</a></sub></p>
 
-## <a name="skein.spools.guild/register-op!">`register-op!`</a>
+## <a name="millstrand.spools.guild/register-op!">`register-op!`</a>
 ``` clojure
 (register-op! runtime name opts fn-sym)
 ```
@@ -85,9 +85,9 @@ Register a guild operation in `runtime`'s CLI operation registry.
   arg `:spec` convention (SPEC-003.C70), so `strand help <op>` projects the
   registered spec's contract and template, and invalid input fails with the
   same projection fields plus explain text.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L218-L264">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/guild/src/millstrand/spools/guild.clj#L218-L264">Source</a></sub></p>
 
-## <a name="skein.spools.guild/reset-guild!">`reset-guild!`</a>
+## <a name="millstrand.spools.guild/reset-guild!">`reset-guild!`</a>
 ``` clojure
 (reset-guild! context)
 ```
@@ -99,9 +99,9 @@ Reset Guild's runtime-owned declarations during module open and close.
   `::reset-result`. Guild is the irregular lifecycle boundary: both transitions
   clear its active and deprecated operations, fallback name, and published
   declaration owner. The coordinator retains this callable for omission cleanup.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L312-L326">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/guild/src/millstrand/spools/guild.clj#L312-L326">Source</a></sub></p>
 
-## <a name="skein.spools.guild/set-fallback-guild-name!">`set-fallback-guild-name!`</a>
+## <a name="millstrand.spools.guild/set-fallback-guild-name!">`set-fallback-guild-name!`</a>
 ``` clojure
 (set-fallback-guild-name! runtime guild-name)
 ```
@@ -114,4 +114,4 @@ Record `guild-name` as the fallback guild name in `runtime`'s state.
   module opens or closes; preserving a healthy resource preserves the current
   fallback. Passing nil clears the fallback; a non-nil value must be a
   non-blank string and anything else fails loudly with the offending value.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/guild/src/skein/spools/guild.clj#L298-L310">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/guild/src/millstrand/spools/guild.clj#L298-L310">Source</a></sub></p>

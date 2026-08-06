@@ -1,6 +1,6 @@
-# Skein user reference
+# Millstrand user reference
 
-Skein is a local strand graph for agents and humans. It gives you a durable SQLite-backed graph of
+Millstrand is a local strand graph for agents and humans. It gives you a durable SQLite-backed graph of
 work, notes, dependencies, and workflow state, while keeping the command-line surface small and
 machine-readable.
 
@@ -12,13 +12,13 @@ The short version:
 - The **REPL** is the trusted, high-power surface for customization and exploration.
 - Your workflow model lives mostly in custom **attributes** and your own config/spool code.
 
-This guide is written for Skein users and for agents working inside a user's Skein workspace.
+This guide is written for Millstrand users and for agents working inside a user's Millstrand workspace.
 Maintainer-facing contracts live in [`devflow/specs/`](../devflow/specs/); see the [spec
 index](#spec-index) at the end.
 
 ## Mental model
 
-Skein is daemon-core-first behind a small router. You start `mill` once, ask it to start a weaver
+Millstrand is daemon-core-first behind a small router. You start `mill` once, ask it to start a weaver
 for a selected workspace, then clients send requests through `mill` to that weaver.
 
 ```text
@@ -55,7 +55,7 @@ Only one accepted marker may exist, and it must be a directory. If both `.millst
 mill init
 ```
 
-Mill resolves the Millstrand source checkout used to launch the weaver from `MILLSTRAND_SOURCE`, the install-time source recorded by `make install`, or a canonical Skein checkout cwd. `mill init` does not persist a source path in the selected workspace's `config.json`.
+Mill resolves the Millstrand source checkout used to launch the weaver from `MILLSTRAND_SOURCE`, the install-time source recorded by `make install`, or a canonical Millstrand checkout cwd. `mill init` does not persist a source path in the selected workspace's `config.json`.
 
 A workspace can also be selected explicitly with:
 
@@ -64,7 +64,7 @@ strand --workspace /path/to/workspace ...
 ```
 
 For explicit workspaces, `/path/to/workspace` is the config workspace. Runtime state, metadata,
-sockets, and data are owned by mill under Skein's XDG state root for the selected config identity.
+sockets, and data are owned by mill under Millstrand's XDG state root for the selected config identity.
 
 The important file is `config.json`:
 
@@ -78,15 +78,15 @@ The important file is `config.json`:
 
 ## Agent guidance files
 
-From a Skein source checkout, `make install` installs the Go CLIs (`strand` and `mill`) and records
+From a Millstrand source checkout, `make install` installs the Go CLIs (`strand` and `mill`) and records
 the checkout as mill's default source for weaver launch and the thin nREPL attach client. After
 that, use the CLIs directly: `mill start`, `mill init`, and `mill weaver start`.
 
-`mill init` is the normal repo bootstrap path. With no accepted marker, it creates the canonical repo `.millstrand` workspace; with one accepted marker, it completes that selected workspace. It writes shareable `config.json` with the alpha format marker when absent and leaves shared config files ready to commit. Generated `spools.edn` opts into the batteries command surface with `skein.spools/batteries {:skein/source-root "spools/batteries"}`; generated `init.clj` activates it through a module guarded by that root. The relative coordinate resolves against the mill-selected Millstrand checkout, so no absolute source path is persisted. Deleting the seeded entry is the supported opt-out. Init does not run `git init` or initialize database storage; weaver startup prepares storage.
+`mill init` is the normal repo bootstrap path. With no accepted marker, it creates the canonical repo `.millstrand` workspace; with one accepted marker, it completes that selected workspace. It writes shareable `config.json` with the alpha format marker when absent and leaves shared config files ready to commit. Generated `spools.edn` opts into the batteries command surface with `millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}`; generated `init.clj` activates it through a module guarded by that root. The relative coordinate resolves against the mill-selected Millstrand checkout, so no absolute source path is persisted. Deleting the seeded entry is the supported opt-out. Init does not run `git init` or initialize database storage; weaver startup prepares storage.
 
-`mill init --stealth` provides the same repo-local workspace for personal use without tracked config. It refuses if `.millstrand` or `.ms` is already tracked, maintains a marker-owned block in `.git/info/exclude`, avoids shared agent guidance, and reports every action. An untracked `CLAUDE.local.md` receives the standard Skein guidance when safe; Codex guidance is printed for the user to place according to their own repository policy. See [customising your workspace](./spools/customisation.md#a-private-repo-local-workspace) for the recommended local-spool layout.
+`mill init --stealth` provides the same repo-local workspace for personal use without tracked config. It refuses if `.millstrand` or `.ms` is already tracked, maintains a marker-owned block in `.git/info/exclude`, avoids shared agent guidance, and reports every action. An untracked `CLAUDE.local.md` receives the standard Millstrand guidance when safe; Codex guidance is printed for the user to place according to their own repository policy. See [customising your workspace](./spools/customisation.md#a-private-repo-local-workspace) for the recommended local-spool layout.
 
-User-facing Millstrand documentation lives in the source checkout under `docs/`; the canonical user reference is this page, `docs/reference.md`. Two harness-agnostic orientation commands surface this to agents at runtime, with no running weaver required: `mill millstrand prime` resolves the Millstrand source and prints the paths to the docs, the spool index, and the repo coordination guidance, plus how to extend `.millstrand` or `.ms` config; `mill strand prime` prints the strand planning/tracking workflow. In a repo-world bootstrap, `mill init` also seeds a `## Skein / strand` section in the repository-root `AGENTS.md`/`CLAUDE.md` that points new agents at these two commands. Each shipped spool's per-fn API reference (`spools/*.api.md`) and each blessed `skein.api.*.alpha` namespace's per-fn reference (`docs/api/*.api.md`) is generated from source docstrings and regenerated with `make api-docs` — never hand-edited; see the [spool index](../spools/README.md#doc-triad) for the contract/cookbook/generated-API triad. The [alpha API index](./api/README.md) maps each `skein.api.*.alpha` namespace to the concern it owns; the generated pages are reference only, and the behavior contracts remain the root specs (see the [spec index](#spec-index)).
+User-facing Millstrand documentation lives in the source checkout under `docs/`; the canonical user reference is this page, `docs/reference.md`. Two harness-agnostic orientation commands surface this to agents at runtime, with no running weaver required: `mill millstrand prime` resolves the Millstrand source and prints the paths to the docs, the spool index, and the repo coordination guidance, plus how to extend `.millstrand` or `.ms` config; `mill strand prime` prints the strand planning/tracking workflow. In a repo-world bootstrap, `mill init` also seeds a `## Millstrand / strand` section in the repository-root `AGENTS.md`/`CLAUDE.md` that points new agents at these two commands. Each shipped spool's per-fn API reference (`spools/*.api.md`) and each blessed `millstrand.api.*.alpha` namespace's per-fn reference (`docs/api/*.api.md`) is generated from source docstrings and regenerated with `make api-docs` — never hand-edited; see the [spool index](../spools/README.md#doc-triad) for the contract/cookbook/generated-API triad. The [alpha API index](./api/README.md) maps each `millstrand.api.*.alpha` namespace to the concern it owns; the generated pages are reference only, and the behavior contracts remain the root specs (see the [spec index](#spec-index)).
 
 When working in this repository, also read the "Repo coordination workspace (.skein)" section of the
 root [`AGENTS.md`](../AGENTS.md): the `.skein` shared coordination world, its working discipline,
@@ -251,7 +251,7 @@ Do not expect the CLI to be a package manager, query authoring surface, plugin h
 
 ## Discovery tiers: help, about, prime
 
-Skein has one deliberate convention for "how do I find out?", with three tiers, and they form an
+Millstrand has one deliberate convention for "how do I find out?", with three tiers, and they form an
 escalation path. `prime` orients you; `about` explains an op you are about to lean on; `help`
 answers exact invocation questions. Each is a **meta-verb** you put first, naming the op second:
 `strand prime <op>`, `strand about <op>`, `strand help <op>`. Each tier has a different source of
@@ -273,7 +273,7 @@ A detail response is a canonical envelope, `{schema-version, operation, source, 
 **`prime` is run-first context priming for agents.** A `prime` command prints the working discipline
 for an area: the conventions an agent must load *before* acting, with pointers to deeper docs. `mill
 strand prime` (the day-to-day strand workflow) and `mill millstrand prime` (building on `.millstrand` and the
-source docs, read on demand) need no running weaver: `mill` resolves the Skein source checkout and
+source docs, read on demand) need no running weaver: `mill` resolves the Millstrand source checkout and
 renders the topic file the manifest at `docs/prime/index.json` names, so an already-installed `mill`
 prints current orientation text from a newer checkout. Op-level primes are spool-authored prose
 projected through the builtin `prime` meta-verb (`strand prime agent`), so they can never drift from
@@ -324,7 +324,7 @@ strand --workspace "$workspace" burn <id>
 
 Every burn records a durable forensic tombstone in the same transaction — the burned strand's core
 row, full attribute map, and incident edges (SPEC-001.P3/P8). A tombstone supports hand-recovery,
-not undo: recovery is a REPL-only activity (`skein.repl/burn-history`, `recent-burns`), a replay
+not undo: recovery is a REPL-only activity (`millstrand.repl/burn-history`, `recent-burns`), a replay
 mints a new id, and inbound edges from unburned strands are not restored. See the burn-recovery
 cookbook in the REPL section.
 
@@ -356,14 +356,14 @@ writer-owned decorating attributes.
 
 ## Attributes are the extension point
 
-Skein's core is deliberately small. Most workflow meaning hangs off `attributes`.
+Millstrand's core is deliberately small. Most workflow meaning hangs off `attributes`.
 
 Examples:
 
 ```sh
 strand --workspace "$workspace" add "Draft release notes" \
   --attr owner=agent \
-  --attr project=skein \
+  --attr project=millstrand \
   --attr kind=doc \
   --attr priority=high
 ```
@@ -376,13 +376,13 @@ Your workspace can decide what attributes mean. For example:
 - `temporary=true` can identify rows your own tooling treats as temporary;
 - `external.issue=123` can link to another system if your tooling understands it.
 
-Skein stores attributes as JSON text. CLI input is simple string pairs; `--attr temporary=true`
+Millstrand stores attributes as JSON text. CLI input is simple string pairs; `--attr temporary=true`
 stores the string `"true"`, not a JSON boolean. Trusted Clojure workflows can write richer
 JSON-compatible values.
 
 Because attributes are userland, your own config and spools should define the conventions for your
 workspace. Prefer documenting those conventions in source-controlled docs or in your spool docs.
-Attribute names and cleanup behavior are userland choices, not Skein core.
+Attribute names and cleanup behavior are userland choices, not Millstrand core.
 
 [Modeling attribute values](spools/writing-shared-spools.md#modeling-attribute-values-enums-absence-empty-history)
 covers how to model a value once you own the convention: when a finite state wants an enum, when an
@@ -395,9 +395,9 @@ Queries are named values in the weaver registry. The durable path is a module au
 
 ```clojure
 (ns my.workspace
-  (:require [skein.api.skein.alpha :as skein]))
+  (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(skein/defquery agent-docs
+(millstrand/defquery agent-docs
   "Return agent-owned documentation strands."
   {}
   [:and
@@ -408,8 +408,8 @@ Queries are named values in the weaver registry. The durable path is a module au
 Activate the module from trusted startup code:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.runtime.alpha :as runtime])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
 
 (runtime/module! (current/runtime) :my/workspace
   {:ns 'my.workspace})
@@ -420,8 +420,8 @@ Activate the module from trusted startup code:
 For code, tests, or a one-off startup helper that already holds a runtime, use the explicit-runtime verb:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.graph.alpha :as graph])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.graph.alpha :as graph])
 
 (graph/register-query! (current/runtime) 'agent-docs
   [:and
@@ -429,7 +429,7 @@ For code, tests, or a one-off startup helper that already holds a runtime, use t
    [:= [:attr :area] "docs"]])
 ```
 
-Inside `mill weaver repl`, the same operation is shorter because `skein.repl` supplies the runtime:
+Inside `mill weaver repl`, the same operation is shorter because `millstrand.repl` supplies the runtime:
 
 ```clojure
 (repl/register-query! 'agent-docs
@@ -475,7 +475,7 @@ A query definition is either a bare where expression, or a map with `:where` and
 
 A where expression is an EDN vector of `[operator & args]`:
 
-The grammar is a deliberately narrow boundary surface. New forms must meet the [SPEC-001.P9 acceptance criteria](../devflow/specs/strand-model.md); a selection the grammar cannot express belongs in a registered read op. Put `:hook-class :read` and `:deadline-class` on that flat arg-spec leaf, then compose registered queries and extra filtering in Clojure through the `skein.api.graph.alpha` helpers ([Graph helpers](#graph-helpers)). CLI callers invoke it like any other op.
+The grammar is a deliberately narrow boundary surface. New forms must meet the [SPEC-001.P9 acceptance criteria](../devflow/specs/strand-model.md); a selection the grammar cannot express belongs in a registered read op. Put `:hook-class :read` and `:deadline-class` on that flat arg-spec leaf, then compose registered queries and extra filtering in Clojure through the `millstrand.api.graph.alpha` helpers ([Graph helpers](#graph-helpers)). CLI callers invoke it like any other op.
 
 | Form | Meaning |
 | --- | --- |
@@ -502,7 +502,7 @@ strand has no hot value under `k`.
 `[:param :name]` can stand in for a comparison value, an `:in` collection, or an edge relation
 name. CLI params are strings, passed as repeated `--param key=value` pairs, so scalar params work
 from the CLI; a query whose `:in` collection is a param can only be invoked from the trusted
-surfaces (the REPL `query` helper or `skein.api.graph.alpha`), where params are real EDN values.
+surfaces (the REPL `query` helper or `millstrand.api.graph.alpha`), where params are real EDN values.
 Explicit-runtime registration to invocation looks like:
 
 ```clojure
@@ -525,7 +525,7 @@ to an empty or match-all predicate.
 fields and attribute predicate capability in [SPEC-001.P9](../devflow/specs/strand-model.md), edge
 predicates in [SPEC-003.C13a](../devflow/specs/repl-api.md), and the `ready` equivalence in
 [SPEC-003.C15](../devflow/specs/repl-api.md); the rest reflects the current compiler
-(`skein.core.query`).
+(`millstrand.core.query`).
 
 ## REPL
 
@@ -544,8 +544,8 @@ mill weaver repl --workspace "$workspace"
 Useful forms:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.weaver.alpha :as weaver])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.weaver.alpha :as weaver])
 
 (def rt (current/runtime))
 
@@ -560,23 +560,23 @@ Useful forms:
 Script the live weaver REPL with stdin:
 
 ```sh
-printf '(skein.api.current.alpha/runtime)\n' | mill weaver repl --stdin --workspace "$workspace"
+printf '(millstrand.api.current.alpha/runtime)\n' | mill weaver repl --stdin --workspace "$workspace"
 ```
 
-The session starts in the neutral `user` namespace with `skein.repl` aliased `repl`, which carries
+The session starts in the neutral `user` namespace with `millstrand.repl` aliased `repl`, which carries
 the live registration verbs. Everything else is an ordinary namespace you require. Privileged runtime
 loader/config helpers are explicit built-in namespaces, not ordinary user spools:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.runtime.alpha :as runtime])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
 (runtime/refresh! (current/runtime))
 ```
 
 ### Burn recovery
 
 Burn is deletion, not undo. Every burn writes a forensic tombstone (SPEC-001.P3/P8), read from the
-interactive `skein.repl` surface over the in-process `skein.core.db` read fns. Run these from an
+interactive `millstrand.repl` surface over the in-process `millstrand.core.db` read fns. Run these from an
 in-process `mill weaver repl`; they throw with remediation from a connected-client REPL that has no
 in-process runtime.
 
@@ -591,8 +591,8 @@ Each tombstone carries the burned strand's core fields, its full attribute map (
 recovery is mechanical: assemble a payload from the tombstone and apply it.
 
 ```clojure
-(require '[skein.api.batch.alpha :as batch]
-         '[skein.api.current.alpha :as current])
+(require '[millstrand.api.batch.alpha :as batch]
+         '[millstrand.api.current.alpha :as current])
 
 ;; :refs bind existing strand ids you want to re-point at the recovered strand.
 (batch/apply! (current/runtime)
@@ -613,7 +613,7 @@ The weaver loads trusted startup files from the selected workspace in order — 
 
 ## Authoring forms
 
-Registry entries are authored, not imperatively registered. `skein.api.skein.alpha` ships one macro per core kind. Each one defines an ordinary Clojure Var and collects one validated declaration while a runtime module source is evaluated.
+Registry entries are authored, not imperatively registered. `millstrand.api.millstrand.alpha` ships one macro per core kind. Each one defines an ordinary Clojure Var and collects one validated declaration while a runtime module source is evaluated.
 
 | Form | Kind it collects | Required options |
 | --- | --- | --- |
@@ -624,15 +624,15 @@ Registry entries are authored, not imperatively registered. `skein.api.skein.alp
 | `defhandler` | `:events`, an async post-commit handler | `:types` |
 | `defbin` | `:bins`, a discoverable executable | `:executable` |
 
-Each form takes a name, a docstring, an options map, and then the body its kind needs: an argument vector and body for the handler kinds, a query definition value for `defquery`. Every form also accepts `{:override? true}` to record explicit intent to shadow a lower layer. `defop`'s `:arg-spec` is the declared argv shape [`skein.api.cli.alpha`](./api/cli.api.md) parses and renders help from, so a registered op never writes its own usage strings.
+Each form takes a name, a docstring, an options map, and then the body its kind needs: an argument vector and body for the handler kinds, a query definition value for `defquery`. Every form also accepts `{:override? true}` to record explicit intent to shadow a lower layer. `defop`'s `:arg-spec` is the declared argv shape [`millstrand.api.cli.alpha`](./api/cli.api.md) parses and renders help from, so a registered op never writes its own usage strings.
 
 The binding moment differs by kind. Ops, patterns, and hooks resolve their callable Var when they run, so redefining the function is the live hot loop under a stable contract. Registration metadata, including an op's help and arg-spec, stays as it was until the entry is registered again; help can therefore describe the old contract during that window. Event handlers capture the function value at registration, so replace the handler registration to iterate it. Queries have no callable; the registered value is the behavior, and replacing it updates both execution and `query explain`.
 
-The module's coordinate does not affect these registry rules. A workspace module may use `(skein/defop {:override? true} ...)` to declare a durable mask over a spool op whether that spool came from a local root or a git pin. Same-layer collisions remain errors; the override is the consumer's explicit workspace-layer choice.
+The module's coordinate does not affect these registry rules. A workspace module may use `(millstrand/defop {:override? true} ...)` to declare a durable mask over a spool op whether that spool came from a local root or a git pin. Same-layer collisions remain errors; the override is the consumer's explicit workspace-layer choice.
 
 Collection only happens under a module contribution. Evaluating a form at the REPL, or reloading source with `runtime/reload-code!`, defines the Var and publishes nothing. The same rule explains removal: a refresh replaces an owner's whole partition for a kind, so dropping a form from the source drops its entry at the next refresh. There is no unregister call to remember.
 
-Domain spools own forms for their own kinds the same way — `skein.spools.workflow/defworkflow` and `defexecutor`, `skein.spools.cron/defjob`, `skein.spools.chime/defrule`. Module lifecycle effects are declared with `skein.api.lifecycle.alpha`: `defresource`, `defseed`, and `defreconcile`.
+Domain spools own forms for their own kinds the same way — `millstrand.spools.workflow/defworkflow` and `defexecutor`, `millstrand.spools.cron/defjob`, `millstrand.spools.chime/defrule`. Module lifecycle effects are declared with `millstrand.api.lifecycle.alpha`: `defresource`, `defseed`, and `defreconcile`.
 
 `defbin` contributes a module-owned executable declaration rather than a weaver-lifetime runtime registration. `mill bin plan` discovers the effective `:bins` entries, and `mill bin run` executes the selected command in the caller's process with the selected workspace in `MILLSTRAND_WORKSPACE`; the declaration may name a string executable or an anchored family/root path and an argv build recipe.
 
@@ -640,7 +640,7 @@ The direct registration functions still exist and still work: `graph/register-qu
 
 Retract a direct entry before the same name graduates into a form. The direct-registration owner sits above the module layer, and the collision check runs over the whole candidate at publication, so a direct entry left in place without recorded intent makes the later module publication of that name fail the whole refresh rather than quietly losing. Two ways out, and the order is what matters: `unregister-*!` retracts your own entry so the module's version publishes cleanly, or `replace-*!` records the override intent that deliberately carries the shadow across refresh. Retracting a shadow restores the entry it was shadowing rather than removing the name.
 
-Per-function detail is in the generated [`skein.api.skein.alpha` reference](./api/skein.api.md); [writing shared spools](./spools/writing-shared-spools.md) covers the declaration grammars, the module contract, and how to declare a kind of your own. The contracts behind this section: which namespace owns which form, and what `:override?` means, in [SPEC-003.C17e](../devflow/specs/repl-api.md); collection, owner-complete publication, and removal by omission in [SPEC-004.C46h](../devflow/specs/daemon-runtime.md).
+Per-function detail is in the generated [`millstrand.api.millstrand.alpha` reference](./api/millstrand.api.md); [writing shared spools](./spools/writing-shared-spools.md) covers the declaration grammars, the module contract, and how to declare a kind of your own. The contracts behind this section: which namespace owns which form, and what `:override?` means, in [SPEC-003.C17e](../devflow/specs/repl-api.md); collection, owner-complete publication, and removal by omission in [SPEC-004.C46h](../devflow/specs/daemon-runtime.md).
 
 ## Weave patterns
 
@@ -648,17 +648,17 @@ Weave patterns are trusted owner-defined transformations that turn a JSON-like i
 atomic batch of new strands and edges. They are useful when agents should submit intent and your
 workspace should decide the graph shape.
 
-Pattern registration lives in trusted Clojure config or spools, not in the public CLI. A pattern has a simple name, a handler function loadable in the weaver, and a `clojure.spec` input contract. `skein/defpattern` declares all three in one form, in a module source namespace:
+Pattern registration lives in trusted Clojure config or spools, not in the public CLI. A pattern has a simple name, a handler function loadable in the weaver, and a `clojure.spec` input contract. `millstrand/defpattern` declares all three in one form, in a module source namespace:
 
 ```clojure
 (ns my.workflow
   (:require [clojure.spec.alpha :as s]
-            [skein.api.skein.alpha :as skein]))
+            [millstrand.api.millstrand.alpha :as millstrand]))
 
 (s/def ::title string?)
 (s/def ::task-input (s/keys :req-un [::title]))
 
-(skein/defpattern task
+(millstrand/defpattern task
   "Create an implementation strand and a review strand that depends on it."
   {:spec ::task-input}
   [{:keys [input]}]
@@ -674,8 +674,8 @@ Pattern registration lives in trusted Clojure config or spools, not in the publi
 The form name is the registered pattern name, so this publishes `task` when `my.workflow` is activated as a module. To try a pattern out without a module, register it directly from the live REPL instead:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.patterns.alpha :as patterns])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.patterns.alpha :as patterns])
 
 (patterns/register-pattern! (current/runtime) 'task 'my.workflow/task ::task-input)
 ```
@@ -694,13 +694,13 @@ printf '{"title":"Implement review flow"}\n' | strand --workspace "$workspace" w
 <name>`.
 
 The pattern function runs inside the weaver and receives `{:input input}`. Its return value must be
-the same batch vector shape accepted by Skein's batch primitive: strand maps with optional `:ref`
+the same batch vector shape accepted by Millstrand's batch primitive: strand maps with optional `:ref`
 and `:edges`. Symbolic refs are transient to the batch and are never durable ids. Input spec
 failure, malformed batch output, missing refs, invalid durable targets, cycles, and database errors
 fail loudly and leave no partial batch writes.
 
 `weave --pattern` is the CLI-safe, named, spec-checked, create-only front door over the same
-transactional batch engine as REPL-only `skein.api.batch.alpha/apply!`. Raw batch is the trusted
+transactional batch engine as REPL-only `millstrand.api.batch.alpha/apply!`. Raw batch is the trusted
 loading-dock door: it can create, update, burn, and upsert or remove edges, so it remains a Clojure
 config/REPL workflow instead of a public CLI command.
 
@@ -708,26 +708,26 @@ Like queries, patterns are weaver-lifetime runtime state. Author them in a modul
 
 ## Graph helpers
 
-Skein ships built-in privileged alpha namespaces for trusted runtime transformations. They are
-source-visible helper namespaces from the Skein checkout/classpath, not user/community spools that
-need `spools.edn` approval — `skein.api.spool.alpha` (the spool-authoring helpers `fail!`,
+Millstrand ships built-in privileged alpha namespaces for trusted runtime transformations. They are
+source-visible helper namespaces from the Millstrand checkout/classpath, not user/community spools that
+need `spools.edn` approval — `millstrand.api.spool.alpha` (the spool-authoring helpers `fail!`,
 `reject-unknown-keys!`, `require-valid!`, `attr-key->str`, `attr-get`, `poll-until!`) is
 one of them, the blessed home every reference spool builds on:
 
 `poll-until!` takes a Clock and a relative timeout. Runtime-owned callers pass
-`(skein.api.runtime.alpha/clock runtime)`, keeping time reads and sleeps on one
-authority; tests can install `skein.test.alpha/manual-clock` to avoid wall-time waits.
+`(millstrand.api.runtime.alpha/clock runtime)`, keeping time reads and sleeps on one
+authority; tests can install `millstrand.test.alpha/manual-clock` to avoid wall-time waits.
 
 ```clojure
-(require '[skein.api.graph.alpha :as graph])
+(require '[millstrand.api.graph.alpha :as graph])
 ```
 
 Graph helpers include operations such as query id selection, strand hydration by ids, ancestor-root traversal, subgraph expansion, and burn-by-id helpers.
 
 ```clojure
 (ns my.workflow
-  (:require [skein.api.graph.alpha :as graph]
-            [skein.api.current.alpha :as current]))
+  (:require [millstrand.api.graph.alpha :as graph]
+            [millstrand.api.current.alpha :as current]))
 
 (defn owned-strands [params]
   (let [rt (current/runtime)
@@ -736,7 +736,7 @@ Graph helpers include operations such as query id selection, strand hydration by
      :strands (graph/strands-by-ids rt ids)}))
 ```
 
-Declare the `owned` query beside it with `skein/defquery`, or register it directly from the live REPL:
+Declare the `owned` query beside it with `millstrand/defquery`, or register it directly from the live REPL:
 
 ```clojure
 (graph/register-query! (current/runtime) 'owned [:= [:attr :owner] "ct"])
@@ -749,32 +749,32 @@ printf "(do (require 'my.workflow) (my.workflow/owned-strands {}))\n" \
   | mill weaver repl --stdin --workspace "$workspace"
 ```
 
-Named read surfaces beyond queries are registered CLI operations, authored with `skein/defop`. Their flat arg-spec leaves carry `:hook-class :read` and `:deadline-class`; registration opts carry classes only for raw-envelope ops. They add docs, arg parsing, and `strand <op>` invocation on top of plain trusted functions like the one above.
+Named read surfaces beyond queries are registered CLI operations, authored with `millstrand/defop`. Their flat arg-spec leaves carry `:hook-class :read` and `:deadline-class`; registration opts carry classes only for raw-envelope ops. They add docs, arg parsing, and `strand <op>` invocation on top of plain trusted functions like the one above.
 
 ## Events
 
-Skein ships `skein.api.events.alpha` for trusted config and live REPL workflows that need to react to strand mutations. There are no public JSON socket or `strand` CLI commands for event registration.
+Millstrand ships `millstrand.api.events.alpha` for trusted config and live REPL workflows that need to react to strand mutations. There are no public JSON socket or `strand` CLI commands for event registration.
 
-Author handlers with `skein/defhandler` in startup-loaded code or a weaver-loadable spool. The form name becomes the handler's registry key, and `:types` selects the events it sees:
+Author handlers with `millstrand/defhandler` in startup-loaded code or a weaver-loadable spool. The form name becomes the handler's registry key, and `:types` selects the events it sees:
 
 ```clojure
 (ns my.workflow
-  (:require [skein.api.skein.alpha :as skein]))
+  (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(skein/defhandler cleanup-temporary
+(millstrand/defhandler cleanup-temporary
   "Drop workspace-owned temporary rows after a strand changes."
   {:types #{:strand/updated}
    :metadata {:purpose :cleanup}}
   [event]
-  ;; Handler receives one event map and can call trusted Skein helpers/APIs.
+  ;; Handler receives one event map and can call trusted Millstrand helpers/APIs.
   nil)
 ```
 
 To try a handler out without a module, register it directly from the live REPL:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.events.alpha :as events])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.events.alpha :as events])
 
 (events/register-handler! (current/runtime)
                           :my/cleanup-temporary
@@ -788,8 +788,8 @@ Handlers are selected by explicit event-type filters such as `:strand/added`, `:
 Event dispatch is asynchronous after successful mutations. Handler exceptions do not roll back the mutation; inspect bounded failure state from trusted Clojure:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.events.alpha :as events])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.events.alpha :as events])
 (events/handlers (current/runtime))
 (events/recent-failures (current/runtime))
 ```
@@ -798,15 +798,15 @@ Event handler state is weaver-lifetime runtime state. Author handlers in a modul
 
 ### Hooks run before the commit
 
-Events run after a mutation commits and cannot change it. For code that runs *inside* the mutation, register a lifecycle hook instead. `skein.api.hooks.alpha` owns that registry, and `skein/defhook` authors an entry: a `:types` set of hook types plus an optional integer `:order` fixing its place in the chain.
+Events run after a mutation commits and cannot change it. For code that runs *inside* the mutation, register a lifecycle hook instead. `millstrand.api.hooks.alpha` owns that registry, and `millstrand/defhook` authors an entry: a `:types` set of hook types plus an optional integer `:order` fixing its place in the chain.
 
 There are two flavours, chosen by the hook type. A **validation** hook has its return value ignored and vetoes the mutation by throwing, which rolls the whole transaction back. Those types are `:strand/add-before-commit`, `:strand/update-before-commit`, `:strand/burn-before-commit`, `:strand/supersede-before-commit`, `:batch/apply-before-commit`, and `:payload/received` for a decoded JSON socket request.
 
 ```clojure
-(require '[skein.api.skein.alpha :as skein]
-         '[skein.api.spool.alpha :as spool])
+(require '[millstrand.api.millstrand.alpha :as millstrand]
+         '[millstrand.api.spool.alpha :as spool])
 
-(skein/defhook require-owner
+(millstrand/defhook require-owner
   "Refuse a strand added without an owner attribute."
   {:types #{:strand/add-before-commit} :order 10}
   [ctx]
@@ -820,8 +820,8 @@ The one **transform** type is `:attributes/normalize`, which folds every registe
 Read the chain in execution order, and the owner and shadowing picture behind it, from the same namespace:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.hooks.alpha :as hooks])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.hooks.alpha :as hooks])
 
 (hooks/hooks (current/runtime))
 (hooks/hook-provenance (current/runtime))
@@ -834,7 +834,7 @@ let a named query surface it to whatever already polls the graph. That keeps tim
 inspectable strand data. Reach for the scheduler only for the **no-poller** case — when something
 must proactively happen at instant `T` and there is no client polling to trigger it.
 
-`skein.api.scheduler.alpha` is a blessed explicit-runtime namespace for that case. A wake is keyed
+`millstrand.api.scheduler.alpha` is a blessed explicit-runtime namespace for that case. A wake is keyed
 by a stable caller key, an absolute `java.time.Instant`, a fully qualified handler symbol, and an
 optional JSON-encodable payload; the weaver persists it in dedicated weaver-owned tables (never as a
 strand), re-arms pending wakes across startup and trusted reload, and dispatches due handlers
@@ -843,12 +843,12 @@ must be idempotent. There is no mutating `strand schedule` CLI: scheduling is a 
 REPL/config/API surface only.
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.scheduler.alpha :as scheduler])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.scheduler.alpha :as scheduler])
 
 (defn remind! [{:keys [runtime key payload]}]
   ;; Handler receives one context map and runs on the shared mutation lane.
-  ;; It may call trusted Skein APIs; its return value is ignored.
+  ;; It may call trusted Millstrand APIs; its return value is ignored.
   nil)
 
 (let [rt (current/runtime)]
@@ -867,7 +867,7 @@ spec (`SPEC-003.P4a`) for the full contract.
 
 ## Fail loudly
 
-Skein intentionally fails loudly instead of guessing. Expect errors for malformed config,
+Millstrand intentionally fails loudly instead of guessing. Expect errors for malformed config,
 unsupported fields, missing weavers, stale metadata, invalid edge targets, cycles, unknown queries,
 missing spools, and bad runtime code.
 
@@ -951,7 +951,7 @@ Covers:
 - live weaver REPL functions;
 - `mill weaver repl --stdin` behavior;
 - query registration and execution;
-- `skein.api.runtime.alpha` loader/config helpers;
+- `millstrand.api.runtime.alpha` loader/config helpers;
 - graph, event, and explicit batch helper namespaces;
 - runtime spool workspace activation.
 

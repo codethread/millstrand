@@ -1,5 +1,5 @@
 (ns ct.jobs.nvd-scan
-  "The scheduled NVD deep scan (skein.spools.cron job :nvd-scan).
+  "The scheduled NVD deep scan (millstrand.spools.cron job :nvd-scan).
 
   `make deps-report` runs the clj-watson NVD deep scan + govulncheck locally
   (the fast github-advisory gate stays in CI). This job runs that scan on every
@@ -12,10 +12,10 @@
 
   Every side effect (gh, the login-shell scan, the kanban card) is injected
   into `run-nvd-scan!` so the lock flow is unit-testable without shelling out —
-  see test/skein/nvd_scan_test.clj. This is its own init.clj module (not part of
+  see test/millstrand/nvd_scan_test.clj. This is its own init.clj module (not part of
   policy/config.clj) so config_test's direct policy/config.clj load never registers the job."
   (:require [clojure.data.json :as json]
-            [skein.spools.cron :as cron]))
+            [millstrand.spools.cron :as cron]))
 
 (def ^:private nvd-scan-interval-ms
   "Base cadence: 6 days between NVD deep scans."
@@ -71,7 +71,7 @@
   [run-cmd]
   (let [{:keys [exit out]} (run-cmd ["gh" "issue" "create"
                                      "--title" scan-lock-title
-                                     "--body" "Automated NVD deep-scan lock created by the skein cron :nvd-scan job; closed when the scan finishes."])]
+                                     "--body" "Automated NVD deep-scan lock created by the millstrand cron :nvd-scan job; closed when the scan finishes."])]
     (when-not (zero? exit)
       (throw (ex-info "gh issue create failed" {:exit exit :out out})))
     (or (some-> (re-find #"/issues/(\d+)" out) second parse-long)

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"skein-strand-cli/internal/client"
+	"millstrand-strand-cli/internal/client"
 )
 
 type capture struct {

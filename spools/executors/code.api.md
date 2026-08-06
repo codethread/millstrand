@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.spools.executors.code">skein.spools.executors.code</a>
+# <a name="millstrand.spools.executors.code">millstrand.spools.executors.code</a>
 
 
 Fulfil workflow `:code` gates by invoking trusted Clojure functions.
@@ -15,54 +15,54 @@ Fulfil workflow `:code` gates by invoking trusted Clojure functions.
 
 
 
-## <a name="skein.spools.executors.code/close-code-engine!">`close-code-engine!`</a>
+## <a name="millstrand.spools.executors.code/close-code-engine!">`close-code-engine!`</a>
 ``` clojure
 (close-code-engine! ctx)
 ```
 Function.
 
 Close code executor resources and unregister its event handler.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L121-L128">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/workflow/src/millstrand/spools/executors/code.clj#L121-L128">Source</a></sub></p>
 
-## <a name="skein.spools.executors.code/code-engine">`code-engine`</a>
+## <a name="millstrand.spools.executors.code/code-engine">`code-engine`</a>
 
 
 
 
 Own the code executor handler and worker resources.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L130-L133">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/workflow/src/millstrand/spools/executors/code.clj#L130-L133">Source</a></sub></p>
 
-## <a name="skein.spools.executors.code/code-stalled?">`code-stalled?`</a>
+## <a name="millstrand.spools.executors.code/code-stalled?">`code-stalled?`</a>
 ``` clojure
 (code-stalled? gate-view)
 ```
 Function.
 
 Return durable stall detail for a ready `:code` gate view, or nil.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L81-L89">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/workflow/src/millstrand/spools/executors/code.clj#L81-L89">Source</a></sub></p>
 
-## <a name="skein.spools.executors.code/on-event">`on-event`</a>
+## <a name="millstrand.spools.executors.code/on-event">`on-event`</a>
 ``` clojure
 (on-event _event)
 ```
 Function.
 
 Scan for newly ready code gates after a graph mutation.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L76-L79">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/workflow/src/millstrand/spools/executors/code.clj#L76-L79">Source</a></sub></p>
 
-## <a name="skein.spools.executors.code/open-code-engine!">`open-code-engine!`</a>
+## <a name="millstrand.spools.executors.code/open-code-engine!">`open-code-engine!`</a>
 ``` clojure
 (open-code-engine! ctx)
 ```
 Function.
 
 Open the code executor handler and worker resources.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L107-L119">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/workflow/src/millstrand/spools/executors/code.clj#L107-L119">Source</a></sub></p>
 
-## <a name="skein.spools.executors.code/stalled-code-gates">`stalled-code-gates`</a>
+## <a name="millstrand.spools.executors.code/stalled-code-gates">`stalled-code-gates`</a>
 
 
 
 
 Return active code gates carrying a durable error stamp.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/spools/workflow/src/skein/spools/executors/code.clj#L91-L96">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/workflow/src/millstrand/spools/executors/code.clj#L91-L96">Source</a></sub></p>

@@ -1,6 +1,6 @@
-# Skein tutorial
+# Millstrand tutorial
 
-This tutorial takes you from nothing to a working Skein setup, then a little further, into the live
+This tutorial takes you from nothing to a working Millstrand setup, then a little further, into the live
 REPL and a taste of customisation. You can follow it top to bottom. You do not need to know Clojure
 or any graph tooling to start.
 
@@ -18,9 +18,9 @@ machine](#the-repl-a-live-machine).
 
 ## Prefer to learn by asking?
 
-Skein's own repository is written to be read by coding agents, and it ships agent-facing docs,
+Millstrand's own repository is written to be read by coding agents, and it ships agent-facing docs,
 `prime` orientation commands, and the specs behind every contract. If you already work with a coding
-agent, you can point it at a Skein checkout and ask questions as you go.
+agent, you can point it at a Millstrand checkout and ask questions as you go.
 
 - `mill millstrand prime` prints orientation for the Millstrand source, docs, and how to extend a `.millstrand` or `.ms` config. `mill strand prime` explains the strand planning-and-tracking workflow. Both run with no weaver.
 - `docs/reference.md`, the `spools/` contracts, and `devflow/specs/` hold the real
@@ -47,7 +47,7 @@ You work with strands two ways:
 - The **`strand` CLI** for everyday create, update, and read. Its commands print
   JSON, so scripts and agents can consume them.
 - The **weaver's REPL** for everything richer: querying, mutating, and extending
-  Skein while it runs, without restarting anything. A REPL is an interactive
+  Millstrand while it runs, without restarting anything. A REPL is an interactive
   Clojure prompt; more on it in part two.
 
 The CLI stays deliberately thin. Runtime customization lives in trusted config and the REPL. See [PHILOSOPHY.md](../devflow/PHILOSOPHY.md) for why the line is drawn there.
@@ -56,18 +56,18 @@ The CLI stays deliberately thin. Runtime customization lives in trusted config a
 
 You need a few things on the machine:
 
-- **Git**, and a Git repository to track work in. Skein is repo-first: without
+- **Git**, and a Git repository to track work in. Millstrand is repo-first: without
   `--workspace` it selects a repo's `.millstrand` or `.ms`, so no-flag use needs Git. An
   explicit `--workspace <dir>` bootstraps and runs anywhere, Git or not.
 - **make**, to build and install the CLIs.
 - **Go**, which compiles the `strand` and `mill` command-line tools.
-- **A JVM**, which runs the weaver (Skein is a Clojure program).
+- **A JVM**, which runs the weaver (Millstrand is a Clojure program).
 
 Install those the usual way for your platform before the steps below.
 
 ## Install
 
-Skein installs from a cloned source checkout of this repository.
+Millstrand installs from a cloned source checkout of this repository.
 
 ```sh
 make install
@@ -87,7 +87,7 @@ Leave it running for the rest of this guide.
 
 ## Choosing a workspace
 
-A workspace is one isolated Skein setup. By default `strand` is **repo-first**: when you do not pass `--workspace`, `mill` looks upward for the Git repository root (the "canonical" root that linked worktrees share) and uses that repo's `.millstrand` or `.ms` directory as your workspace. Two worktrees of the same repository talk to the same weaver and the same data.
+A workspace is one isolated Millstrand setup. By default `strand` is **repo-first**: when you do not pass `--workspace`, `mill` looks upward for the Git repository root (the "canonical" root that linked worktrees share) and uses that repo's `.millstrand` or `.ms` directory as your workspace. Two worktrees of the same repository talk to the same weaver and the same data.
 
 If you omit `--workspace` outside a Git repository, the command fails with a remediation message
 instead of guessing. It will not invent a workspace from your current directory or fall back to a
@@ -97,7 +97,7 @@ That selected `.millstrand` or `.ms` directory holds trusted config only. The ru
 
 Only one accepted marker may exist, and it must be a directory. If both `.millstrand` and `.ms` exist, or either marker is a non-directory, Mill fails with the paths and remediation; repair the application marker before retrying. The legacy `.skein` name is rejected as an application marker; preserve it when it is a repository coordination workspace, and use an explicit `--workspace` or migrate application config to `.millstrand`/`.ms` without deleting coordination state.
 
-Create a workspace in the repo you want to use Skein in:
+Create a workspace in the repo you want to use Millstrand in:
 
 ```sh
 mill init
@@ -188,8 +188,8 @@ design=$(strand add "Sketch the model" | jq -r '.id')
 strand add "Build the weaver" --edge depends-on:"$design"
 ```
 
-`depends-on`, `parent-of`, `supersedes`, `serves`, and `notes` are Skein's five **declared acyclic
-relations**: a "relation" is an edge type, and "acyclic" means Skein rejects cycles in each of them
+`depends-on`, `parent-of`, `supersedes`, `serves`, and `notes` are Millstrand's five **declared acyclic
+relations**: a "relation" is an edge type, and "acyclic" means Millstrand rejects cycles in each of them
 (A cannot end up depending on itself through a chain). It also rejects an edge from a strand to
 itself on any relation.
 
@@ -242,11 +242,11 @@ The [Clojure crash course](./clojure-crash-course.md) covers the rest. For a cus
 trusted Clojure, the worked example lives in [customising your
 workspace](./spools/customisation.md).
 
-`mill weaver repl` starts in the neutral `user` namespace with `skein.repl` aliased `repl`, so the live registration verbs are one keystroke away. Strand reads and writes come from `skein.api.weaver.alpha`, whose functions take the runtime first — capture it once:
+`mill weaver repl` starts in the neutral `user` namespace with `millstrand.repl` aliased `repl`, so the live registration verbs are one keystroke away. Strand reads and writes come from `millstrand.api.weaver.alpha`, whose functions take the runtime first — capture it once:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.weaver.alpha :as weaver])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.weaver.alpha :as weaver])
 
 (def rt (current/runtime))                        ; the weaver running in this JVM
 
@@ -260,7 +260,7 @@ Create several related strands in one transactional call. `:ref` values are temp
 binds each handle to its generated id:
 
 ```clojure
-(require '[skein.api.batch.alpha :as batch])   ; transactional graph mutations
+(require '[millstrand.api.batch.alpha :as batch])   ; transactional graph mutations
 
 (def refs
   (:refs
@@ -300,10 +300,10 @@ Because the weaver is live, you can improve `brief` while it runs. Redefine it, 
 (weaver/update! rt s {:state "closed"})   ; close one; the row stays, state becomes "closed"
 ```
 
-Skein ships graph helpers too. `graph/subgraph` walks a declared acyclic relation from a root id and returns the connected strands and edges. Fold that into an ASCII tree:
+Millstrand ships graph helpers too. `graph/subgraph` walks a declared acyclic relation from a root id and returns the connected strands and edges. Fold that into an ASCII tree:
 
 ```clojure
-(require '[skein.api.graph.alpha :as graph]
+(require '[millstrand.api.graph.alpha :as graph]
          '[clojure.string :as str])
 
 (defn dag-tree
@@ -337,9 +337,9 @@ A query is a data expression, here "the `owner` attribute equals `ct`". Start wi
 
 ```clojure
 (ns my.workspace
-  (:require [skein.api.skein.alpha :as skein]))
+  (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(skein/defquery mine
+(millstrand/defquery mine
   "Return strands owned by ct."
   {}
   [:= [:attr :owner] "ct"])
@@ -348,8 +348,8 @@ A query is a data expression, here "the `owner` attribute equals `ct`". Start wi
 Activate that namespace from trusted startup code:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.runtime.alpha :as runtime])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
 
 (runtime/module! (current/runtime) :my/workspace
   {:ns 'my.workspace})
@@ -360,24 +360,24 @@ The authoring form defines the `mine` Var and publishes its query when the modul
 For a live experiment, use the same verb at the explicit-runtime tier:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.graph.alpha :as graph])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.graph.alpha :as graph])
 
 (def rt (current/runtime))
 (graph/register-query! rt 'mine [:= [:attr :owner] "ct"])
 ```
 
-Inside `mill weaver repl`, `skein.repl` supplies the same verb with the runtime implied:
+Inside `mill weaver repl`, `millstrand.repl` supplies the same verb with the runtime implied:
 
 ```clojure
 (repl/register-query! 'mine [:= [:attr :owner] "ct"])
 ```
 
-`register-query!` is the same operation in both live tiers; the explicit-runtime form is for code, tests, and startup helpers, while `skein.repl` is the short form for an interactive session. The registry is owner-partitioned and layered. Each writer changes its own entry map, and the effective name-to-query view is the merge of those partitions.
+`register-query!` is the same operation in both live tiers; the explicit-runtime form is for code, tests, and startup helpers, while `millstrand.repl` is the short form for an interactive session. The registry is owner-partitioned and layered. Each writer changes its own entry map, and the effective name-to-query view is the merge of those partitions.
 
 Use `replace-query!` when you intend to shadow an existing owner. `unregister-query!` removes only your own entry and restores the entry below it; registry verbs never remove or change the Clojure Var. Removing a direct shadow and registering again is not a substitute for replace, because the other owner's entry still occupies the name. For queries, replacing the value is also how you iterate behavior: there is no handler function to redefine, and `query explain` always reads the current registered value.
 
-The same order applies to ops, patterns, hooks, and event handlers: author them with their module forms for durable behavior, use explicit-runtime `register/replace/unregister-*!` calls in code or tests, and use the runtime-implied `skein.repl` wrappers while iterating live. A workspace can durably mask a spool op with `skein/defop {:override? true}` in a workspace module. The coordinate used to acquire that spool, local or git-pinned, does not change these registry rules.
+The same order applies to ops, patterns, hooks, and event handlers: author them with their module forms for durable behavior, use explicit-runtime `register/replace/unregister-*!` calls in code or tests, and use the runtime-implied `millstrand.repl` wrappers while iterating live. A workspace can durably mask a spool op with `millstrand/defop {:override? true}` in a workspace module. The coordinate used to acquire that spool, local or git-pinned, does not change these registry rules.
 
 The plain CLI can discover and run the same query for as long as this weaver keeps running:
 
@@ -399,8 +399,8 @@ Named queries registered directly are runtime-local, although startup code can r
 Weaver-lifetime state means direct registrations disappear at the next restart. The workspace loads trusted startup code — `init.clj`, then a gitignored `init.local.clj` — every time the weaver starts. For a small, durable registration, activate a module from that startup code:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.runtime.alpha :as runtime])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
 
 (runtime/module! (current/runtime) :my/workspace
   {:ns 'my.workspace})
@@ -424,7 +424,7 @@ mill weaver stop --workspace "$workspace"
 
 ## Where to go next
 
-- [Skein user reference](./reference.md) — the complete model, CLI, weaver, REPL,
+- [Millstrand user reference](./reference.md) — the complete model, CLI, weaver, REPL,
   and workspace behavior, with a spec index at the end.
 - [Shipped reference spools](../spools/README.md) — a workflow engine, a feature
   lifecycle, a kanban board, and more, as working code.
@@ -433,8 +433,8 @@ mill weaver stop --workspace "$workspace"
 - [Writing shared spools](./spools/writing-shared-spools.md) — building extensions
   other people can run.
 - [Testing your config and spools](./spools/testing.md) — from disposable worlds
-  to weaver-world integration tests against a chosen Skein checkout.
+  to weaver-world integration tests against a chosen Millstrand checkout.
 - [Clojure crash course](./clojure-crash-course.md) — enough Clojure to be
   comfortable in the REPL.
 - [Tenets](../devflow/TENETS.md) and [philosophy](../devflow/PHILOSOPHY.md) —
-  why Skein is shaped the way it is.
+  why Millstrand is shaped the way it is.

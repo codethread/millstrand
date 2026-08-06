@@ -1,4 +1,4 @@
-(ns skein.lifecycle-spike.engine
+(ns millstrand.lifecycle-spike.engine
   "Bounded lifecycle-engine prototype for the authoring-forms feasibility spike."
   (:require [clojure.set :as set]))
 

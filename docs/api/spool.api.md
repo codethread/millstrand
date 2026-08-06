@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.api.spool.alpha">skein.api.spool.alpha</a>
+# <a name="millstrand.api.spool.alpha">millstrand.api.spool.alpha</a>
 
 
 Blessed spool-authoring helpers: the accretion-compatible home for the shared
@@ -9,7 +9,7 @@ Blessed spool-authoring helpers: the accretion-compatible home for the shared
   The public helper set is `entity-projection`, `fail!`,
   `reject-unknown-keys!`, `require-valid!`, `attr-key->str`, `attr-get`, and
   `poll-until!`, so no blessed namespace has to reach down into a
-  `skein.spools.*` peer to reuse it.
+  `millstrand.spools.*` peer to reuse it.
 
   Reference spools all need the same tiny fail-loud and validation seams: throw
   an `ex-info` with a contextual data map (TEN-003), reject unknown option keys,
@@ -18,14 +18,14 @@ Blessed spool-authoring helpers: the accretion-compatible home for the shared
   attribute back regardless of whether its key arrived keyword- or
   string-keyed, and poll a check fn against a Clock. Those were copy-pasted -
   and had begun to drift - across most shipped spools, and now share this one
-  source instead of re-deriving them per file. `skein.spools.workflow` is a
+  source instead of re-deriving them per file. `millstrand.spools.workflow` is a
   deliberate exception: it keeps its own branded `reject-unknown-keys!` rather
   than adopting this one.
 
 
 
 
-## <a name="skein.api.spool.alpha/attr-get">`attr-get`</a>
+## <a name="millstrand.api.spool.alpha/attr-get">`attr-get`</a>
 ``` clojure
 (attr-get strand k)
 ```
@@ -49,9 +49,9 @@ Read attribute `k` from a normalized strand, tolerating keyword- or
 
   Fails loudly if the selected value is a lean-read omission descriptor, because
   trusted spool readers require a raw full-fidelity attribute value.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spool/alpha.clj#L113-L138">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spool/alpha.clj#L113-L138">Source</a></sub></p>
 
-## <a name="skein.api.spool.alpha/attr-key->str">`attr-key->str`</a>
+## <a name="millstrand.api.spool.alpha/attr-key->str">`attr-key->str`</a>
 ``` clojure
 (attr-key->str k)
 ```
@@ -62,9 +62,9 @@ Coerce an attribute key to its string wire form.
   Keyword keys render as their bare name (dropping the leading colon), preserving
   any namespace; string keys pass through. This is the write-side key coercion,
   not a tolerant reader.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spool/alpha.clj#L100-L107">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spool/alpha.clj#L100-L107">Source</a></sub></p>
 
-## <a name="skein.api.spool.alpha/entity-projection">`entity-projection`</a>
+## <a name="millstrand.api.spool.alpha/entity-projection">`entity-projection`</a>
 ``` clojure
 (entity-projection strand)
 ```
@@ -74,9 +74,9 @@ Return the canonical exact strand entity projection.
 
   Fails loudly when any of `:id`, `:title`, `:state`, or `:attributes` is
   absent. Other fields are discarded.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spool/alpha.clj#L49-L59">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spool/alpha.clj#L49-L59">Source</a></sub></p>
 
-## <a name="skein.api.spool.alpha/fail!">`fail!`</a>
+## <a name="millstrand.api.spool.alpha/fail!">`fail!`</a>
 ``` clojure
 (fail! message data)
 (fail! message data cause)
@@ -87,16 +87,16 @@ Throw an `ex-info` carrying `message` and a contextual `data` map (TEN-003).
 
   The optional `cause` arity threads an underlying throwable so a spool can fail
   loudly without discarding the original exception.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spool/alpha.clj#L28-L36">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spool/alpha.clj#L28-L36">Source</a></sub></p>
 
-## <a name="skein.api.spool.alpha/poll-until!">`poll-until!`</a>
+## <a name="millstrand.api.spool.alpha/poll-until!">`poll-until!`</a>
 ``` clojure
 (poll-until! installed-clock {:keys [timeout-ms poll-ms check pred->result on-timeout], :as opts})
 ```
 Function.
 
-The shared spool-tier long-poll skeleton behind `skein.spools.workflow/await!`
-  and `skein.spools.cron/await-quiescent!`: call `check` (a zero-arg fn) once, test
+The shared spool-tier long-poll skeleton behind `millstrand.spools.workflow/await!`
+  and `millstrand.spools.cron/await-quiescent!`: call `check` (a zero-arg fn) once, test
   its value with `pred->result`, and repeat on `installed-clock` every `poll-ms`
   until either `pred->result` returns a non-nil result or `timeout-ms` has
   elapsed on that Clock.
@@ -107,9 +107,9 @@ The shared spool-tier long-poll skeleton behind `skein.spools.workflow/await!`
   result. `timeout-ms` and `poll-ms` are required; callers own their defaults.
   Fails loudly (TEN-003) before checking or sleeping when the Clock, exact option
   keys, numeric bounds, or required functions are malformed.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spool/alpha.clj#L155-L193">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spool/alpha.clj#L155-L193">Source</a></sub></p>
 
-## <a name="skein.api.spool.alpha/reject-unknown-keys!">`reject-unknown-keys!`</a>
+## <a name="millstrand.api.spool.alpha/reject-unknown-keys!">`reject-unknown-keys!`</a>
 ``` clojure
 (reject-unknown-keys! context allowed m)
 ```
@@ -120,9 +120,9 @@ Return `m`, failing loudly when it carries keys outside `allowed`.
   `context` is a label (typically the builder/op name) that names the offending
   surface in the message, so a spool never silently ignores a mistyped option
   key. `allowed` is a set of permitted keys.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spool/alpha.clj#L65-L75">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spool/alpha.clj#L65-L75">Source</a></sub></p>
 
-## <a name="skein.api.spool.alpha/require-valid!">`require-valid!`</a>
+## <a name="millstrand.api.spool.alpha/require-valid!">`require-valid!`</a>
 ``` clojure
 (require-valid! spec value message)
 ```
@@ -133,4 +133,4 @@ Return `value`, failing loudly with spec explain data when it is invalid.
   The canonical spool boundary-shape seam: pairs a `clojure.spec` check with an
   `:explain` payload (`s/explain-data`) so a rejected shape carries actionable
   context, not just the raw value.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spool/alpha.clj#L85-L94">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spool/alpha.clj#L85-L94">Source</a></sub></p>

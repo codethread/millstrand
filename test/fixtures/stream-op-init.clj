@@ -8,10 +8,10 @@
 ;; stream relay end to end; keep it dependency-free beyond blessed core APIs.
 ;; ns name intentionally differs from the file path: this is a load-file
 ;; fixture, not a classpath namespace, so the -init filename cannot match.
-(ns ^{:clj-kondo/ignore [:namespace-name-mismatch]} skein.test.fixtures.stream-op
+(ns ^{:clj-kondo/ignore [:namespace-name-mismatch]} millstrand.test.fixtures.stream-op
   "Streaming-op fixture registering `test-stream`, loaded via load-file."
-  (:require [skein.api.current.alpha :as current]
-            [skein.api.weaver.alpha :as weaver]))
+  (:require [millstrand.api.current.alpha :as current]
+            [millstrand.api.weaver.alpha :as weaver]))
 
 (defn test-stream-op
   "Emit `--count` lines (default 3), then return the emitted count."
@@ -31,4 +31,4 @@
                                  :deadline-class :unbounded
                                  :flags {:count {:type :int
                                                  :doc "Number of lines to emit (default 3)."}}}}
-                     'skein.test.fixtures.stream-op/test-stream-op)
+                     'millstrand.test.fixtures.stream-op/test-stream-op)

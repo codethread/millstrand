@@ -15,7 +15,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [quality.source-forms :as source-forms]
-            [skein.api.format.alpha :as format-alpha]))
+            [millstrand.api.format.alpha :as format-alpha]))
 (def ^:private public-var-forms #{'def 'defonce 'defn 'defmacro})
 
 (def ^:private spools-root "spools")
@@ -47,7 +47,7 @@
        :has-value? has-value?})))
 
 ;; Keep this evaluated/deferred traversal policy aligned with
-;; skein.core.weaver.module-refresh/namespaces-in-form. This scanner is only the
+;; millstrand.core.weaver.module-refresh/namespaces-in-form. This scanner is only the
 ;; structural pre-merge guard; runtime validation remains authoritative.
 (def ^:private deferred-body-forms
   '#{comment defn defmacro fn fn* quote var})

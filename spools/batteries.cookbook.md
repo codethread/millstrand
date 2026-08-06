@@ -1,4 +1,4 @@
-# Skein Batteries Spool — Cookbook
+# Millstrand Batteries Spool — Cookbook
 
 Scripting recipes for the shipped `strand <op>` surface: how to compose the everyday ops — `add`, `update`, `show`, `supersede`, `burn`, `list`, `ready`, `subgraph`, `weave`, `query`, `pattern` — into shell pipelines that do real work, and *why* each shape is the right one.
 
@@ -67,7 +67,7 @@ strand ready
   outgoing edge; repeat the flag to fan a strand out over several dependencies.
   A malformed spec (no `:`, empty terminal) fails loudly before the update lands.
 
-Honest source: the `add`/`update`/`ready` ops in `spools/src/skein/spools/batteries.clj`, verified against the `list-and-ready` test in `test/skein/spools/batteries_test.clj` and empirically in a disposable workspace (active dependency blocks `ready`; closing it unblocks the dependent).
+Honest source: the `add`/`update`/`ready` ops in `spools/src/millstrand/spools/batteries.clj`, verified against the `list-and-ready` test in `test/millstrand/spools/batteries_test.clj` and empirically in a disposable workspace (active dependency blocks `ready`; closing it unblocks the dependent).
 
 ---
 
@@ -105,7 +105,7 @@ printf '{"priority":3,"blocking":true,"owner":"queue"}' \
   `body=:payload/brief` keeps a long, newline-heavy brief out of the argv
   entirely, which is exactly what a delegation brief or generated markdown needs.
 
-Honest source: the payload-reference rules in [`batteries.md`](./batteries.md) §BAT-C2/C16/C17, the `add-attr-precedence-and-payload-json-bulk` test in `test/skein/spools/batteries_test.clj`, and empirical runs of both forms in a disposable workspace.
+Honest source: the payload-reference rules in [`batteries.md`](./batteries.md) §BAT-C2/C16/C17, the `add-attr-precedence-and-payload-json-bulk` test in `test/millstrand/spools/batteries_test.clj`, and empirical runs of both forms in a disposable workspace.
 
 ---
 
@@ -127,11 +127,11 @@ strand update "$id" --attr gate/error=
 
 **Why this shape.**
 
-- **Absence is a typed null, never a blank string.** JSON `null` lowers to the Clojure nil merge-patch the trusted path uses (`skein.api.weaver.alpha/update!` with `{:attributes {"key" nil}}`); an empty string stays stored as `""`. Modeling an attribute's disappearance as blank text conflates "no value" with "the value is empty", so the CLI keeps them distinct.
+- **Absence is a typed null, never a blank string.** JSON `null` lowers to the Clojure nil merge-patch the trusted path uses (`millstrand.api.weaver.alpha/update!` with `{:attributes {"key" nil}}`); an empty string stays stored as `""`. Modeling an attribute's disappearance as blank text conflates "no value" with "the value is empty", so the CLI keeps them distinct.
 - **`--attr` wins on collision, so a raw `key=` beats a typed null.** If you pass both, the string write lands — reach for a JSON `null` in the `--attributes` object when you mean removal.
 - **Omitting all attribute flags leaves the map untouched.** `update --title …` with no `--attr`/`--attributes` never rewrites attributes.
 
-Honest source: the `update`/BAT-C6/BAT-C20 contract in [`batteries.md`](./batteries.md), the `update-typed-attributes-merge-patch` test in `test/skein/spools/batteries_test.clj`, and the core merge-patch nil deletion in `skein.core.db/update-strand!`.
+Honest source: the `update`/BAT-C6/BAT-C20 contract in [`batteries.md`](./batteries.md), the `update-typed-attributes-merge-patch` test in `test/millstrand/spools/batteries_test.clj`, and the core merge-patch nil deletion in `millstrand.core.db/update-strand!`.
 
 ---
 
@@ -196,7 +196,7 @@ strand ready --query work         # same query, gated to the unblocked frontier
   key isn't a declared parameter fails loudly, and `--param` without a `--query`
   is rejected — you can't accidentally pass a value into nothing.
 
-Honest source: the `query`/`list`/`ready` ops in `spools/src/skein/spools/batteries.clj`, the `list-and-ready-named-queries` and `query-list-and-explain-shapes` tests in `test/skein/spools/batteries_test.clj`, and the `work`/`run-active` queries this repo registers in [`.skein/policy/config.clj`](../.skein/policy/config.clj). Verified against a demo query registered in a disposable workspace.
+Honest source: the `query`/`list`/`ready` ops in `spools/src/millstrand/spools/batteries.clj`, the `list-and-ready-named-queries` and `query-list-and-explain-shapes` tests in `test/millstrand/spools/batteries_test.clj`, and the `work`/`run-active` queries this repo registers in [`.skein/policy/config.clj`](../.skein/policy/config.clj). Verified against a demo query registered in a disposable workspace.
 
 ---
 
@@ -215,7 +215,7 @@ result=$(strand await --query review-verdicts --param target=fx91 \
 
 `await` measures the query's result set at each poll. It does not track completion events. Closing, superseding, or burning a strand has the same effect when each action removes that strand from the selected set. The reported count is clamped at the smallest number needed to decide the band, so it is a decision result rather than a progress total. Re-issue waits before about 50 minutes to preserve provider prompt caches during long idle periods.
 
-Honest source: the `await` op and its manual-clock band tests in `test/skein/spools/batteries_test.clj`.
+Honest source: the `await` op and its manual-clock band tests in `test/millstrand/spools/batteries_test.clj`.
 
 ### Wait for one strand to close
 
@@ -299,7 +299,7 @@ printf '%s' '{
   off the command line. Registering a pattern is a trusted config/REPL job and is
   deliberately not part of this surface; `weave` only *applies* one.
 
-Honest source: the `weave`/`pattern` ops and their strict input parsing in `spools/src/skein/spools/batteries.clj`, the `weave-happy-path-and-json-value`, `weave-loud-input-paths`, and `pattern-list-and-explain-shapes` tests in `test/skein/spools/batteries_test.clj`, and this repo's `agent-plan` usage in [`CLAUDE.md`](../CLAUDE.md). Verified end to end against a demo pattern registered in a disposable workspace (stdin and inline JSON both returned `{:created :refs}`).
+Honest source: the `weave`/`pattern` ops and their strict input parsing in `spools/src/millstrand/spools/batteries.clj`, the `weave-happy-path-and-json-value`, `weave-loud-input-paths`, and `pattern-list-and-explain-shapes` tests in `test/millstrand/spools/batteries_test.clj`, and this repo's `agent-plan` usage in [`CLAUDE.md`](../CLAUDE.md). Verified end to end against a demo pattern registered in a disposable workspace (stdin and inline JSON both returned `{:created :refs}`).
 
 ---
 
@@ -314,8 +314,8 @@ that attribute, then list and burn the matching ids when the parent finishes.
 
 ```clojure
 ;; Register once in trusted config or the live weaver REPL.
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.graph.alpha :as graph])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.graph.alpha :as graph])
 (graph/register-query! (current/runtime) 'temporary-by-owner
                        {:params [:owner]
                         :where [:and
@@ -340,8 +340,8 @@ only the disposable strands selected by that query. Keep decisions, results,
 and other durable work as ordinary strands or notes instead.
 
 Honest source: the `add`, parameterized `list --query`, and `burn` ops in
-`spools/src/skein/spools/batteries.clj`, with their behavior covered by
-`test/skein/spools/batteries_test.clj`.
+`spools/src/millstrand/spools/batteries.clj`, with their behavior covered by
+`test/millstrand/spools/batteries_test.clj`.
 
 ---
 
@@ -387,7 +387,7 @@ strand burn "$typo"                        # => {"burned":["<id>"],"count":1}
   `supersede`, so the "this was replaced by X" relationship always carries the
   edge that says by what.
 
-Honest source: the `supersede`/`burn`/`update` ops in `spools/src/skein/spools/batteries.clj`, the `show-supersede-burn` test in `test/skein/spools/batteries_test.clj`, and empirical runs in a disposable workspace (supersede rewired the dependent and marked the old `replaced`; burn returned `{:burned … :count 1}` and the strand was gone; close kept it in `list --state closed`).
+Honest source: the `supersede`/`burn`/`update` ops in `spools/src/millstrand/spools/batteries.clj`, the `show-supersede-burn` test in `test/millstrand/spools/batteries_test.clj`, and empirical runs in a disposable workspace (supersede rewired the dependent and marked the old `replaced`; burn returned `{:burned … :count 1}` and the strand was gone; close kept it in `list --state closed`).
 
 ---
 

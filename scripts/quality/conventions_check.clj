@@ -7,26 +7,26 @@
     `fn` shadows the macro and turns later thunks into eager calls; rename
     on destructure instead: `{fn-sym :fn}`);
   - every literal `(require ...)` embedded in code-as-data — the quoted
-    forms tests route through `skein.test.alpha/repl!` and init fixtures —
+    forms tests route through `millstrand.test.alpha/repl!` and init fixtures —
     names a namespace that resolves to a source file, so a namespace rename
     cannot silently strand a tested form until weaver-side eval;
-  - converted `skein.api.*` modules keep the v1 form contract
+  - converted `millstrand.api.*` modules keep the v1 form contract
     (SPEC-003.C19a); the check and its shrinking `pending` ratchet live
     in `quality.api-form`;
-  - shipped spool sources use `skein.core.*` only from unsafe-named
+  - shipped spool sources use `millstrand.core.*` only from unsafe-named
     namespaces (SPEC-005.C5) — spools are userland code building on
-    `skein.api.*.alpha`, and the designed exception is nominal; the
+    `millstrand.api.*.alpha`, and the designed exception is nominal; the
     unsafe-namespace convention's rules live in `quality.spool-tiers`;
   - a public `spool` var in a module-loadable namespace is a removed grammar;
     the structural guard lives in `quality.spool-var`;
   - no source hand-escapes JSON that `json/write-str` would reproduce
     from Clojure data; the narrowing rules live in
     `quality.json-literals`;
-  - repository workspace tests use `skein.ct.*` exactly under
-    `test/skein/ct/`, and a test that directly names a checked-in `.skein` path
+  - repository workspace tests use `millstrand.ct.*` exactly under
+    `test/millstrand/ct/`, and a test that directly names a checked-in `.skein` path
     belongs there even before it adopts the namespace; the boundary lives in
     `quality.workspace-tests`;
-  - tests under `test/skein/api` pin public contracts and do not reach core
+  - tests under `test/millstrand/api` pin public contracts and do not reach core
     implementation seams or integration megasuites; the boundary lives in
     `quality.api-tests`."
   (:require [clj-kondo.core :as kondo]
@@ -151,9 +151,9 @@
                   (api-form/check analysis)
                   (spool-tiers/check analysis)
                   (spool-var/check)
-                  (api-tests/check "test/skein/api")
+                  (api-tests/check "test/millstrand/api")
                   (json-literals/check source-roots)
-                  (workspace-tests/check analysis "test/skein"))]
+                  (workspace-tests/check analysis "test/millstrand"))]
     (if (seq findings)
       (do (binding [*out* *err*]
             (doseq [f findings] (println f))

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	DefaultInitCLJ             = "(require '[skein.api.current.alpha :as current]\n         '[skein.api.runtime.alpha :as runtime])\n\n(def runtime (current/runtime))\n\n;; batteries is approved as a shipped source-root spool by default. The module\n;; guard keeps source loading behind that visible approval. The declaration\n;; carries a source target and world policy only: the module's contribution is\n;; the declaration data the authoring forms in `skein.spools.batteries` collect\n;; as its source loads — the strand ops and the glossary seed their documented\n;; failure modes reference.\n(runtime/module! runtime :skein/spools-batteries\n                 {:ns 'skein.spools.batteries\n                  :spools ['skein.spools/batteries]})\n"
+	DefaultInitCLJ             = "(require '[millstrand.api.current.alpha :as current]\n         '[millstrand.api.runtime.alpha :as runtime])\n\n(def runtime (current/runtime))\n\n;; batteries is approved as a shipped source-root spool by default. The module\n;; guard keeps source loading behind that visible approval. The declaration\n;; carries a source target and world policy only: the module's contribution is\n;; the declaration data the authoring forms in `millstrand.spools.batteries` collect\n;; as its source loads — the strand ops and the glossary seed their documented\n;; failure modes reference.\n(runtime/module! runtime :millstrand/spools-batteries\n                 {:ns 'millstrand.spools.batteries\n                  :spools ['millstrand.spools/batteries]})\n"
 	DefaultMillstrandGitignore = "config.local.json\ninit.local.clj\nspools.local.edn\nstate/\ndata/\nweaver.*\n*.sqlite\n*.sqlite-*\n"
 )
 
@@ -40,7 +40,7 @@ func bootstrapWorld(cwd, configDir, source string, injectGuidance bool) (World, 
 	} else if err != nil {
 		return World{}, err
 	}
-	if err := writeMissing(filepath.Join(world.ConfigDir, "spools.edn"), "{:spools {skein.spools/batteries {:skein/source-root \"spools/batteries\"}}}\n"); err != nil {
+	if err := writeMissing(filepath.Join(world.ConfigDir, "spools.edn"), "{:spools {millstrand.spools/batteries {:millstrand/source-root \"spools/batteries\"}}}\n"); err != nil {
 		return World{}, err
 	}
 	if err := writeMissing(filepath.Join(world.ConfigDir, "init.clj"), DefaultInitCLJ); err != nil {
@@ -179,7 +179,7 @@ func repoWorkspace(root string) (string, error) {
 }
 
 func legacyWorkspaceError(path string) error {
-	return fmt.Errorf("legacy Skein workspace marker %s is no longer supported; rename it to %s or run mill init to create the default %s workspace", path, WorkspaceAlias, DefaultWorkspace)
+	return fmt.Errorf("legacy Millstrand workspace marker %s is no longer supported; rename it to %s or run mill init to create the default %s workspace", path, WorkspaceAlias, DefaultWorkspace)
 }
 
 func GitRoot(cwd string) (string, error) {
@@ -194,14 +194,14 @@ func GitRoot(cwd string) (string, error) {
 	cmd.Dir = cwd
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("default Skein workspace requires cwd inside a supported non-bare Git worktree; run `git init` or pass --workspace: %w", err)
+		return "", fmt.Errorf("default Millstrand workspace requires cwd inside a supported non-bare Git worktree; run `git init` or pass --workspace: %w", err)
 	}
 	commonDir := filepath.Clean(strings.TrimSpace(string(out)))
 	if !filepath.IsAbs(commonDir) {
-		return "", fmt.Errorf("git returned non-absolute common dir for default Skein workspace: %s", commonDir)
+		return "", fmt.Errorf("git returned non-absolute common dir for default Millstrand workspace: %s", commonDir)
 	}
 	if filepath.Base(commonDir) != ".git" {
-		return "", fmt.Errorf("unsupported Git layout for default Skein workspace: common Git dir must be a repository .git directory, got %s", commonDir)
+		return "", fmt.Errorf("unsupported Git layout for default Millstrand workspace: common Git dir must be a repository .git directory, got %s", commonDir)
 	}
 	return filepath.Dir(commonDir), nil
 }

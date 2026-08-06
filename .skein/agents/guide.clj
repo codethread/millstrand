@@ -1,19 +1,19 @@
 (ns ct.agents.guide
-  "The `guide` op: answer one skein-surface question from a delegated run.
+  "The `guide` op: answer one millstrand-surface question from a delegated run.
 
-  Skein's surface is deliberately self-describing — help, about, prime,
+  Millstrand's surface is deliberately self-describing — help, about, prime,
   workflow definitions, spool docs — which is cheap to keep true and expensive
   to read. An agent that discovers its way to one answer spends a large slice of
   the context it needed for the actual work.
 
   The op moves that spend onto a disposable seat: it spawns one guide run over
   `ct.spools.agent-run`, hands it the caller's question plus a distilled map of
-  skein — the mental model, the discovery ladder, jq recipes over the help
+  millstrand — the mental model, the discovery ladder, jq recipes over the help
   envelope, where the authored docs live — and returns the run's final message.
   The guide answers AND hands back the discovery commands the caller can re-run
   itself, so a repeat question costs nothing.
 
-  The brief is skein-generic, not skein-src-specific: every path in it is
+  The brief is millstrand-generic, not millstrand-src-specific: every path in it is
   either a live `strand`/`mill` command or discovered at run time, so any repo
   whose workspace registers this module gets a working guide over its own
   surface.
@@ -23,8 +23,8 @@
   harness-native subagent."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [skein.api.format.alpha :as format-alpha]
-            [skein.api.skein.alpha :as skein]
+            [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.api.millstrand.alpha :as millstrand]
             [ct.spools.agent-run :as shuttle]))
 
 (def ^:private default-harness
@@ -51,8 +51,8 @@
 (s/def ::question (s/and string? (complement str/blank?)))
 (s/def ::harness (s/and string? (complement str/blank?)))
 
-(def ^:private skein-model
-  "What skein is, distilled from the user reference so the guide starts
+(def ^:private millstrand-model
+  "What millstrand is, distilled from the user reference so the guide starts
   oriented instead of spending its first sweeps rediscovering the model."
   [(format-alpha/reflow
     "|A weaver daemon owns one workspace: its SQLite strand store, named
@@ -82,7 +82,7 @@
    "strand about <op>                      authored runbook prose: what the op means and who drives it"
    "strand prime <op>                      the run-first discipline for an op family (agent, workflow)"
    "strand <op> about|prime                some spool ops own these as real subcommands (kanban, spool, bench)"
-   "mill skein prime | mill strand prime   skein orientation; needs no running weaver; prints paths into the skein source docs"
+   "mill millstrand prime | mill strand prime   millstrand orientation; needs no running weaver; prints paths into the millstrand source docs"
    "strand workflow list|show <name>       the definition is the truth for a registered workflow: stages, params, gates, choices"
    "strand agent harnesses|rosters         seats and reviewer rosters with their routing docs"
    "strand query list | strand pattern list | strand vocab   named queries, weave patterns, attribute vocabulary"])
@@ -100,11 +100,11 @@
 (def ^:private docs-map
   "Where authored truth lives, found from any repo — no path here is assumed,
   each is printed by a command or discovered in the caller's checkout."
-  ["skein source docs      `mill skein prime` prints their paths: the user reference (reference.md —"
+  ["millstrand source docs      `mill millstrand prime` prints their paths: the user reference (reference.md —"
    "                       Discovery tiers, Strand model, Queries), the spool index, and the config and"
    "                       customisation guides; grep there before calling anything undocumented"
    "the caller's repo      your working directory; its AGENTS.md / CLAUDE.md carry a seeded"
-   "                       `## Skein / strand` section plus repo policy — read them for the"
+   "                       `## Millstrand / strand` section plus repo policy — read them for the"
    "                       conventions this workspace layers on top"
    "workspace config       the config dir (.skein/ unless another workspace is selected) holds init.clj"
    "                       — its header documents which modules activate, in what order — beside the"
@@ -121,16 +121,16 @@
   (str/join
    "\n"
    (concat
-    ["[skein guide]"
+    ["[millstrand guide]"
      (format-alpha/reflow
-      "|Answer one question about the skein/strand surface for another agent
-       |working in a repo that uses skein. Run the commands below as widely as
+      "|Answer one question about the millstrand/strand surface for another agent
+       |working in a repo that uses millstrand. Run the commands below as widely as
        |the question needs; you read the surface so your caller does not have
        |to. Answer from this workspace's live surface, not from memory of any
        |other repo's.")
      ""
-     "[skein in five lines]"]
-    skein-model
+     "[millstrand in five lines]"]
+    millstrand-model
     [""
      "[discovery ladder — cheapest tier first]"]
     discovery-ladder
@@ -174,7 +174,7 @@
   "Return the run strand title for question, clipped to a scannable length."
   [question]
   (let [clean (str/replace (str/trim question) #"\s+" " ")]
-    (str "skein guide: "
+    (str "millstrand guide: "
          (if (> (count clean) title-limit)
            (str (subs clean 0 (dec title-limit)) "…")
            clean))))
@@ -196,7 +196,7 @@
   "Declared surface for the repo-local `guide` op."
   {:op "guide"
    :doc (format-alpha/reflow
-         "|Ask a delegated guide run about this workspace's skein/strand surface, and
+         "|Ask a delegated guide run about this workspace's millstrand/strand surface, and
           |get back both the answer and the discovery commands behind it.")
    :hook-class :mutating
    :deadline-class :unbounded
@@ -236,15 +236,15 @@
   (format-alpha/reflow
    "|`guide` spends a cheap seat's context so you keep yours: it spawns one
     |agent run on this workspace's guide seat, tasked with a distilled map of
-    |skein (the mental model, the discovery ladder, jq recipes over the help
+    |millstrand (the mental model, the discovery ladder, jq recipes over the help
     |envelope, where the authored docs live), and blocks
     |until the run answers. The answer is advice about the surface — the op
     |source, specs, and workflow definitions it cites stay the contract. A run
     |that fails, stalls, or answers with nothing fails the op loudly with its
     |id, so `strand agent logs <run-id>` picks the thread back up."))
 
-(skein/defop guide
-  "Answer one skein-surface question from a delegated guide run."
+(millstrand/defop guide
+  "Answer one millstrand-surface question from a delegated guide run."
   {:arg-spec guide-arg-spec
    :returns guide-returns
    :about guide-about}

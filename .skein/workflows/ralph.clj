@@ -9,8 +9,8 @@
   `workflow/context` conforms to `:ct.workflows.ralph/ralph-context`."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [skein.api.format.alpha :as format-alpha]
-            [skein.spools.workflow :as workflow]))
+            [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.spools.workflow :as workflow]))
 
 (defn- non-blank-string?
   "Return true when value is a non-blank string."

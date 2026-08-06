@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"skein-ralph/internal/board"
-	"skein-ralph/internal/harness"
-	"skein-ralph/internal/loop"
+	"millstrand-ralph/internal/board"
+	"millstrand-ralph/internal/harness"
+	"millstrand-ralph/internal/loop"
 )
 
 // scriptHarness runs a shell script in place of a real agent. It borrows

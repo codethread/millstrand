@@ -19,22 +19,22 @@
                       nubank/matcher-combinators {:mvn/version "3.9.1"}
                       org.clojure/test.check {:mvn/version "1.1.1"}}
          :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
-         :main-opts ["-m" "skein.test-runner"]}
+         :main-opts ["-m" "millstrand.test-runner"]}
   ;; Per-worktree warm test REPL: compose with :test to inherit its classpath and
-  ;; native-access opt — `clojure -M:test:test-repl` boots skein.test.warm.
-  :test-repl {:main-opts ["-m" "skein.test.warm"]}
+  ;; native-access opt — `clojure -M:test:test-repl` boots millstrand.test.warm.
+  :test-repl {:main-opts ["-m" "millstrand.test.warm"]}
   ;; Deliberately self-contained (not composed with :test like :test-repl): the bench
   ;; must run standalone as `clojure -M:large-attr-bench`, and :test's :main-opts
-  ;; (skein.test-runner) would swallow the -m entrypoint under composition.
+  ;; (millstrand.test-runner) would swallow the -m entrypoint under composition.
   :large-attr-bench {:extra-paths ["test" "spools/unsafe-text-search/src"]
                      :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
-                     :main-opts ["-m" "skein.large-attr-benchmark"]}
+                     :main-opts ["-m" "millstrand.large-attr-benchmark"]}
   :repl {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
   :rebel {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]
           :main-opts ["-m" "rebel-readline.main"]}
-  :skein {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
+  :millstrand {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
   :smoke {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]
-          :main-opts ["-m" "skein.smoke"]}
+          :main-opts ["-m" "millstrand.smoke"]}
   :format {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
            :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "test" "dev" "scripts"
                        ".skein/init.clj" ".skein/policy/config.clj" ".skein/workflows/support.clj"

@@ -11,11 +11,11 @@ If you are only writing your own workspace `init.clj` or local helpers, you do n
 
 ## Why explicit runtime
 
-RFC-016 made the weaver runtime an explicit first argument throughout `skein.api.*.alpha`, and split
+RFC-016 made the weaver runtime an explicit first argument throughout `millstrand.api.*.alpha`, and split
 "a runtime exists" from "this process's published ambient runtime". Multiple independent runtimes
 can now run in one JVM, each with its own storage, registries, transports, and events. A shared
-spool that reads the published singleton (`skein.api.current.alpha/runtime` with no scope, or the
-raw `skein.core.weaver.runtime/current-runtime` atom) silently breaks the moment it runs inside an
+spool that reads the published singleton (`millstrand.api.current.alpha/runtime` with no scope, or the
+raw `millstrand.core.weaver.runtime/current-runtime` atom) silently breaks the moment it runs inside an
 unpublished runtime or alongside a second runtime: it mutates the wrong world or throws.
 
 ## The rules for shared spools
@@ -24,11 +24,11 @@ unpublished runtime or alongside a second runtime: it mutates the wrong world or
    resolve it internally. Callers own runtime selection; you thread what you are
    given.
 2. **Keep state runtime-owned.** No module-level `atom`/`def` mutable state. Use
-   [`skein.api.runtime.alpha/spool-state`](../../devflow/specs/repl-api.md) to
+   [`millstrand.api.runtime.alpha/spool-state`](../../devflow/specs/repl-api.md) to
    store per-runtime state keyed by a symbol you own, initialised once:
 
    ```clojure
-   (require '[skein.api.runtime.alpha :as runtime])
+   (require '[millstrand.api.runtime.alpha :as runtime])
 
    (defn- state [runtime]
      (runtime/spool-state runtime ::registry #(atom {})))
@@ -63,24 +63,24 @@ unpublished runtime or alongside a second runtime: it mutates the wrong world or
    store a no-arg `:close-fn` in its map so the runtime releases it on stop and
    on version-mismatch reinit; supply a `:migrate-fn` when a version bump must
    carry durable sub-state across (it then owns the old value's resources). See
-   `skein.api.runtime.alpha/spool-state` and SPEC-004.C95 for the full contract.
+   `millstrand.api.runtime.alpha/spool-state` and SPEC-004.C95 for the full contract.
    The four-argument option map conforms to
-   `:skein.api.runtime.alpha/spool-state-opts`; malformed options fail at the call site.
+   `:millstrand.api.runtime.alpha/spool-state-opts`; malformed options fail at the call site.
    Pin the current key set with a drift-alarm test using
-   `skein.spools.test-support/assert-state-shape`, which fails loudly if
+   `millstrand.spools.test-support/assert-state-shape`, which fails loudly if
    `new-state` and `state-version` drift apart.
 3. **Register behaviour by symbol, not by closure.** Patterns, event
    handlers, and hooks register a fully qualified function *symbol* the weaver
    resolves. This keeps registration serialisable and runtime-portable.
 4. **Fail loudly (TEN-003).** On unexpected input or missing state, throw with
    data. Do not paper over it with a "sensible default" or a fallback to the
-   published runtime. Reach for `skein.api.spool.alpha` (`fail!`,
+   published runtime. Reach for `millstrand.api.spool.alpha` (`fail!`,
    `reject-unknown-keys!`, `require-valid!`, `attr-key->str`) instead of
    re-deriving these seams per spool.
 5. **Keep terse helpers in workspace code.** A shared spool must not require a workspace-owned helper or rely on its hidden runtime binding for its own operation. Reusable code takes its runtime explicitly; a process-local default is unsafe when several sessions share one weaver.
 6. **Default to pull-based timing.** When your spool needs time-based work, prefer
    a `wake-at` strand attribute surfaced by a named query to whatever already
-   polls the graph; reach for `skein.api.scheduler.alpha` only for the no-poller
+   polls the graph; reach for `millstrand.api.scheduler.alpha` only for the no-poller
    case where something must proactively fire at instant `T` with nothing polling
    to trigger it. Scheduler delivery is at-least-once, so any handler you register
    must be idempotent.
@@ -92,7 +92,7 @@ unpublished runtime or alongside a second runtime: it mutates the wrong world or
    concurrent updates each start from a possibly-stale read and the later write
    silently drops the earlier one (a lost-update race). `weaver/update!` returns the
    full merged strand, so a delta write loses no result fidelity. For reads, use
-   the shared tolerant reader `skein.api.spool.alpha/attr-get` (keyword key, bare
+   the shared tolerant reader `millstrand.api.spool.alpha/attr-get` (keyword key, bare
    string fallback) and `attr-key->str` for wire-key coercion rather than
    re-deriving a per-file attribute accessor. This delta write rides SQLite's
    `json_patch`, whose merge semantics treat an explicit `nil` value as a
@@ -102,7 +102,7 @@ unpublished runtime or alongside a second runtime: it mutates the wrong world or
 8. **New names for new concepts; inherited names for inherited concepts.** A
    spool builds on a primitive when it invokes it *or* reproduces its concept —
    reimplementing a registry or lifecycle does not exempt its names. The
-   primitive may be another spool, a blessed `skein.api.*.alpha` namespace, or
+   primitive may be another spool, a blessed `millstrand.api.*.alpha` namespace, or
    a lower layer of your own spool that a preset wraps; in every case the
    surface speaks the primitive's vocabulary exactly as published. That means
    every name a consumer meets — function verbs, op subcommands, flag names,
@@ -115,7 +115,7 @@ unpublished runtime or alongside a second runtime: it mutates the wrong world or
    Layering is decided by who invokes or reproduces whom — never by doc
    assertions or by which layer was written first. When the primitive itself
    publishes synonyms for one concept, converge on the deepest layer's word:
-   a blessed `skein.api.*.alpha` name outranks a spool's, and a spool
+   a blessed `millstrand.api.*.alpha` name outranks a spool's, and a spool
    primitive's outranks its preset's. When the canonical name is already
    taken at your layer by a different shape, the concept keeps the canonical
    name and the colliding shape takes a derived one. Wrapping a primitive
@@ -214,7 +214,7 @@ Choose per attribute:
   `kanban/outcome=done`; a finished run records its result. An empty current
   value is not history: clearing `kanban/lane` says nothing about how the card
   ended, so record the outcome as its own durable value and let the transient
-  key go absent. Skein aims at resumability, not replay (see
+  key go absent. Millstrand aims at resumability, not replay (see
   [PHILOSOPHY](../../devflow/PHILOSOPHY.md)) — history you need is data you write,
   not a value you blank.
 
@@ -249,25 +249,25 @@ This section covers vocab and attribute namespaces, not Clojure source namespace
 [Namespace tiers](#namespace-tiers-why-this-split-exists) for source naming.
 
 A shared spool declares each namespace it owns from a process-lifetime lifecycle seed with `vocab/declare!`, passing its stable module key as the `:owner`. Qualify those namespaces with a project prefix, such as
-`acme/priority`, so they do not collide with Skein core or with another author's spool. The prefix is an authoring convention, not a parser rule. The registry
+`acme/priority`, so they do not collide with Millstrand core or with another author's spool. The prefix is an authoring convention, not a parser rule. The registry
 backs it with the duplicate-owner check: if two owners claim the same namespace, the declaration fails loudly instead of choosing one.
 
 ## Shared helper namespaces
 
-Every reference spool builds on two small blessed helper namespaces, `skein.api.spool.alpha` and
-`skein.api.format.alpha`. Both are source-visible on the Skein checkout/classpath — require them
+Every reference spool builds on two small blessed helper namespaces, `millstrand.api.spool.alpha` and
+`millstrand.api.format.alpha`. Both are source-visible on the Millstrand checkout/classpath — require them
 directly, no `spools.edn` approval needed. They are part of the spool-authoring contract only where
 this guide documents them; prefer them over local copies when writing a shared spool.
 
-### `skein.api.spool.alpha`
+### `millstrand.api.spool.alpha`
 
 Require it from spool code when you need fail-loud validation, attribute-key normalisation, or a caller-owned polling loop:
 
 ```clojure
-(require '[skein.api.spool.alpha :as spool])
+(require '[millstrand.api.spool.alpha :as spool])
 ```
 
-- `(fail! message data)` and `(fail! message data cause)` throw `ex-info` with the supplied message, data map, and optional cause. Use this for TEN-003 boundary failures so callers receive structured context. When the failure will reach a person at a terminal, reach for a factory in [`skein.api.errors.alpha`](#skeinapierrorsalpha) instead: they funnel through this same `fail!` and stamp the keys the CLI renders.
+- `(fail! message data)` and `(fail! message data cause)` throw `ex-info` with the supplied message, data map, and optional cause. Use this for TEN-003 boundary failures so callers receive structured context. When the failure will reach a person at a terminal, reach for a factory in [`millstrand.api.errors.alpha`](#millstrandapierrorsalpha) instead: they funnel through this same `fail!` and stamp the keys the CLI renders.
 - `(reject-unknown-keys! context allowed m)` returns `m` after checking that all
   its keys are in the `allowed` set. Unknown keys throw with `:unknown` and
   `:allowed` data; use this on option maps rather than ignoring typos.
@@ -292,16 +292,16 @@ Require it from spool code when you need fail-loud validation, attribute-key nor
 
 An await-shaped op accepts `--timeout-secs` as an `:int` in the inclusive range `0..(quot Long/MAX_VALUE 1000)`, which keeps its millisecond conversion inside a `long`. Name the op's default in the flag's `:doc`. Invalid values fail loudly and carry the rejected value; the range above is authoritative. Put `:deadline-class :unbounded` on the op's arg-spec leaf; this removes the socket's standard request deadline, while `--timeout-secs` remains the finite per-call wait budget. Return a normal result at exit 0 when that budget expires. The result's `reason` is `timeout` for this outcome; successful reasons follow the op's domain. A timeout is data, not an exception.
 
-Build the wait with [`poll-until!`](#skeinapispoolalpha) and pass the runtime Clock as described above. This keeps the production wait on the runtime's clock and lets tests advance a manual Clock without sleeping. Tell callers to cap a blocking await at about 50 minutes and re-issue it so an idle provider prompt cache does not expire.
+Build the wait with [`poll-until!`](#millstrandapispoolalpha) and pass the runtime Clock as described above. This keeps the production wait on the runtime's clock and lets tests advance a manual Clock without sleeping. Tell callers to cap a blocking await at about 50 minutes and re-issue it so an idle provider prompt cache does not expire.
 
 [`strand await`](../../spools/batteries.md) is the reference implementation; its owning root contract is [SPEC-003.C63c](../../devflow/specs/repl-api.md). Domain waits such as agent supervision, workflow attention, and land queue ordering are not query-cardinality waits and keep their own surfaces. They conform only to the convention in this section.
 
-### `skein.api.errors.alpha`
+### `millstrand.api.errors.alpha`
 
 Require it when a failure will be read by a person at a terminal rather than only by the caller that catches it:
 
 ```clojure
-(require '[skein.api.errors.alpha :as errors])
+(require '[millstrand.api.errors.alpha :as errors])
 ```
 
 Whatever you throw becomes the error frame the CLI prints. `:code` becomes the frame's code; the rest of the `ex-data` map becomes its details. Three detail keys have a rendering of their own, and everything else is appended as JSON:
@@ -323,12 +323,12 @@ Two things are deliberately open. `:code` is free-form and non-contract: only th
 
 Teaching the CLI a fourth special key is renderer work and tests in `cli/internal/errfmt`, not a new entry here. The behavior contract is SPEC-003.C23d.
 
-### `skein.api.format.alpha`
+### `millstrand.api.format.alpha`
 
 Require it when a spool needs to publish prose as data, such as `about` payloads or long rule descriptions:
 
 ```clojure
-(require '[skein.api.format.alpha :as format])
+(require '[millstrand.api.format.alpha :as format])
 ```
 
 Both helpers read `|`-margin strings. The first `|` on each source line marks column 0, so the surrounding Clojure form may be indented freely.
@@ -354,7 +354,7 @@ Example:
 
 ## The discovery surface your spool ships
 
-Skein's discovery convention has three tiers — generated `help`, authored `about`, run-first `prime` — described in [`docs/reference.md`](../reference.md) ("Discovery tiers"). For a spool op this means:
+Millstrand's discovery convention has three tiers — generated `help`, authored `about`, run-first `prime` — described in [`docs/reference.md`](../reference.md) ("Discovery tiers"). For a spool op this means:
 
 1. **Declare your verbs as recursive `:subcommands` arg-spec data; never hand-roll dispatch or usage errors.** A node may nest to the depth your command needs. `strand help <op> <verb> [<verb> ...]` slices any declared node, a trailing `strand <op> <verb> --help`/`-h` rewrites to it, and missing/unknown-verb failures become structured parser errors carrying the walked path and available names. `help`, `-h`, `--help`, and the arg name `subcommand` are reserved and rejected at registration. The old sole-token `<op> help` alias is retired — a bare `<op> help` word now fails with a loud redirect to `strand help <op>`. Bare `<op>` stays a loud non-zero error — never exit-0 help.
 2. **Author leaf classes and per-verb annotations on the arg-spec node, not prose blobs.** Every invocable leaf carries `:hook-class` (`:read` or `:mutating`) and `:deadline-class` (`:standard` or `:unbounded`). Interior nodes carry neither. A flat op's root is its leaf; raw-envelope ops are the sole exception and declare both classes in registration metadata. Each subcommand's spec may carry a closed `use-when`/`notes`/`failure-modes` sub-map (string arrays; `failure-modes` holds glossary outcome **names**). The projection folds them into that verb's node, so `help` stays the single non-drifting source for anything derivable from a verb's shape.
@@ -384,8 +384,8 @@ Ordering is safe: module publication does not run the direct-registration glossa
 ### The `:about`/`:prime` metadata shape is a compatibility boundary
 
 Moving a spool from an `about`/`prime` *subcommand* to `:about`/`:prime` *op-metadata* changes the
-shape consumers see and raises the Skein API floor your spool needs. Treat it as a breaking change:
-ship it under a new release marker and, where relevant, an updated `:skein/min` floor, per
+shape consumers see and raises the Millstrand API floor your spool needs. Treat it as a breaking change:
+ship it under a new release marker and, where relevant, an updated `:millstrand/min` floor, per
 [Versioning and release](#versioning-and-release). Until an op migrates, a declared `about`/`prime`
 subcommand still resolves via `<op> about` while `strand about <op>` returns `discovery/unavailable`
 for that op — the two surfaces are distinct, so migrate the whole op in one release rather than
@@ -425,8 +425,8 @@ A spool repository is one release unit. Approve it once in `spools.edn`, at one 
    :git/sha "0123456789abcdef0123456789abcdef01234567"
    :roots {acme/priority "priority"
            acme/reports "reports"}
-   :requires {skein.spools/workflow "v2"}
-   :skein/min "v1"}}}
+   :requires {millstrand.spools/workflow "v2"}
+   :millstrand/min "v1"}}}
 ```
 
 This family shape makes mixed generations of roots from one repository unrepresentable. `:git/sha`
@@ -459,13 +459,13 @@ Requirement failures share the exception reason
 - `:required-root-not-approved` when no approved family supplies the required root;
 - `:required-root-unmarked` when the family supplying the root has no effective marker, including an
   untagged Git family or a shared local family;
-- `:skein-below-minimum` when the running Skein release marker is below `:skein/min`.
+- `:millstrand-below-minimum` when the running Millstrand release marker is below `:millstrand/min`.
 
 Pin suggestions contain the greatest minimum found for each below-floor family. There is no
 suggestion for an unapproved or unmarked root. A root lib may belong to only one family; duplicate
 ownership fails with `:reason :duplicate-spool-root` and names the root lib and its owning families.
 
-The public runtime validates `:skein/min` against its running release marker. If any family declares
+The public runtime validates `:millstrand/min` against its running release marker. If any family declares
 that floor while the running core has no annotated release marker or explicit startup claim,
 `approved` and refresh acquisition refuse with `:reason :release-marker-unavailable`, the declared floors, and a
 remedy to start the runtime with a release-marker claim. An unmarked core never treats those floors
@@ -510,7 +510,7 @@ Share internal namespaces while the compatibility alarm runs old tests against t
 tree. When the old contract can use the new implementation, put the implementation in the new root
 and keep fresh wrappers in the old root.
 
-Floor raises in `:requires` or `:skein/min` are not breaks. They constrain which release families
+Floor raises in `:requires` or `:millstrand/min` are not breaks. They constrain which release families
 may be assembled; they do not change a published name's input contract. Raise a floor only with
 evidence from tests at that floor.
 
@@ -534,8 +534,8 @@ a newer release.
 
 Test two different facts:
 
-1. Classpath tests prove each declared floor. Pin required roots and Skein at exactly the markers in
-   `:requires` and `:skein/min`, not at newer convenient releases. A floor raise and its test-pin
+1. Classpath tests prove each declared floor. Pin required roots and Millstrand at exactly the markers in
+   `:requires` and `:millstrand/min`, not at newer convenient releases. A floor raise and its test-pin
    bump belong in one commit. A small in-repo check may resolve markers with `git ls-remote` and
    verify that those pins match the declared floors; this is helper or repository policy, not core.
 2. Runtime integration tests prove the consumer path. Keep a literal consumer-workspace fixture
@@ -593,10 +593,10 @@ distinct from the consumer's plural `spools.edn`:
 
 ```clojure
 {:spool/format 1
- :skein/min "v1"
+ :millstrand/min "v1"
  :roots {acme/priority {:root "priority"}
          acme/reports {:root "reports"}}
- :requires {skein.spools/workflow "v2"}}
+ :requires {millstrand.spools/workflow "v2"}}
 ```
 
 The pinned
@@ -613,7 +613,7 @@ fetched transitively.
 
 Core enforces load-boundary checks. Authoring helpers, including the batteries `spool add` and `spool bump` verbs, help users write entries that pass those checks. Userland may replace the helpers, but not the checks.
 
-If a prerequisite is a blessed `skein.api.*.alpha` namespace, document the namespace and why it is required but do not invent a family coordinate for it; blessed API namespaces ship on the selected Skein classpath. Batteries is different: it is an ordinary approved root, normally present through the `skein.spools/batteries {:skein/source-root "spools/batteries"}` entry seeded by `mill init`. Name that root in the module's `:spools` prerequisites when the module needs batteries, and use `:after` when it depends on the batteries module's published contribution. Every external source repository still gets its own family entry.
+If a prerequisite is a blessed `millstrand.api.*.alpha` namespace, document the namespace and why it is required but do not invent a family coordinate for it; blessed API namespaces ship on the selected Millstrand classpath. Batteries is different: it is an ordinary approved root, normally present through the `millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}` entry seeded by `mill init`. Name that root in the module's `:spools` prerequisites when the module needs batteries, and use `:after` when it depends on the batteries module's published contribution. Every external source repository still gets its own family entry.
 
 ## Activating a module
 
@@ -630,8 +630,8 @@ The consumer owns the runtime and declares modules explicitly. The option map is
 
 ```clojure
 ;; .millstrand/init.clj — the consumer's trusted config
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.runtime.alpha :as runtime])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
 
 (def rt (current/runtime))
 
@@ -645,14 +645,14 @@ Under `:required? true`, missing or failed root prerequisites refuse refresh. Na
 
 ### Author contributions with kind-specific forms
 
-Module sources publish registry entries through kind-specific authoring forms. The six core kinds use `skein.api.skein.alpha/defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`. Workflow, Cron, and Chime own `defworkflow`/`defexecutor`, `defjob`, and `defrule`. Each form validates its kind's closed declaration grammar before collection.
+Module sources publish registry entries through kind-specific authoring forms. The six core kinds use `millstrand.api.millstrand.alpha/defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`. Workflow, Cron, and Chime own `defworkflow`/`defexecutor`, `defjob`, and `defrule`. Each form validates its kind's closed declaration grammar before collection.
 
-Ordinary `def` and `defn` forms collect nothing. A contribution form defines its ordinary Var or function and calls `collect-entry!` for the module currently being evaluated. `skein.spools.cron/defjob` is a compact example:
+Ordinary `def` and `defn` forms collect nothing. A contribution form defines its ordinary Var or function and calls `collect-entry!` for the module currently being evaluated. `millstrand.spools.cron/defjob` is a compact example:
 
 ```clojure
 ;; report_job.clj — a module source namespace
 (ns report-job
-  (:require [skein.spools.cron :as cron]))
+  (:require [millstrand.spools.cron :as cron]))
 
 (defn report-tick [runtime]
   ;; ... do the work ...
@@ -663,18 +663,18 @@ Ordinary `def` and `defn` forms collect nothing. A contribution form defines its
    :handler     'report-job/report-tick})
 ```
 
-`defn report-tick` defines a function and contributes nothing. `cron/defjob` defines the job declaration *and* collects it under cron's job kind; that difference is the whole style. `skein.spools.workflow/defworkflow` behaves the same way and states it sharply: loading the namespace always defines the Var, and only an evaluation running under a module contribution collector also collects the entry — which is exactly why an owner that stops evaluating a `defworkflow` form drops that entry by omission at the next refresh.
+`defn report-tick` defines a function and contributes nothing. `cron/defjob` defines the job declaration *and* collects it under cron's job kind; that difference is the whole style. `millstrand.spools.workflow/defworkflow` behaves the same way and states it sharply: loading the namespace always defines the Var, and only an evaluation running under a module contribution collector also collects the entry — which is exactly why an owner that stops evaluating a `defworkflow` form drops that entry by omission at the next refresh.
 
 The source remains a flat sequence of top-level forms. Evaluating a form yourself still publishes nothing: `collect-entry!` is passive outside contribution collection, so REPL evaluation and code-only reloads define Vars and stop there. The coordinator retains the collected declaration record and replays it for image activation. Omitting a form from the next successful source evaluation removes that owner's old entry.
 
 Core forms are the public grammar for hand-authored core entries. Their declaration constructors and normalized maps are internal plumbing, not an authoring escape hatch. A domain that genuinely needs generated entries exposes its own validated factory or batch form.
 
-Six kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, `:events`, and `:bins`. Beyond those the set is open over whatever the running runtime declares. A domain spool declares its own kind with `skein.api.registry.alpha/declare-kind!`, and other modules then contribute entries to it. The shipped workflow executors do exactly this, mixing a domain kind and a core kind in one contribution:
+Six kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, `:events`, and `:bins`. Beyond those the set is open over whatever the running runtime declares. A domain spool declares its own kind with `millstrand.api.registry.alpha/declare-kind!`, and other modules then contribute entries to it. The shipped workflow executors do exactly this, mixing a domain kind and a core kind in one contribution:
 
 ```clojure
 (ns shell-executor
-  (:require [skein.api.skein.alpha :as skein]
-            [skein.spools.workflow :as workflow]))
+  (:require [millstrand.api.millstrand.alpha :as millstrand]
+            [millstrand.spools.workflow :as workflow]))
 
 (workflow/defexecutor shell
   "Return detail when a shell-backed gate needs coordinator attention."
@@ -682,7 +682,7 @@ Six kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, `:even
   [step]
   (gate-stalled? step))
 
-(skein/defquery stalled-shell-gates
+(millstrand/defquery stalled-shell-gates
   "Return active shell gates whose executor needs attention."
   {}
   [:and [:= :state "active"]
@@ -698,22 +698,22 @@ Entry values have no single schema. Each public authoring form documents and val
 
 | Kind | Entry vocabulary |
 | --- | --- |
-| `:ops` | [`register-op!`](../api/weaver.api.md#skein.api.weaver.alpha/register-op!) |
-| `:queries` | [`register-query!`](../api/graph.api.md#skein.api.graph.alpha/register-query!) |
-| `:patterns` | [`register-pattern!`](../api/patterns.api.md#skein.api.patterns.alpha/register-pattern!) |
-| `:hooks` | [`register-hook!`](../api/hooks.api.md#skein.api.hooks.alpha/register-hook!) |
-| `:events` | [`register-handler!`](../api/events.api.md#skein.api.events.alpha/register-handler!) |
-| `:bins` | `skein.api.skein.alpha/defbin` |
+| `:ops` | [`register-op!`](../api/weaver.api.md#millstrand.api.weaver.alpha/register-op!) |
+| `:queries` | [`register-query!`](../api/graph.api.md#millstrand.api.graph.alpha/register-query!) |
+| `:patterns` | [`register-pattern!`](../api/patterns.api.md#millstrand.api.patterns.alpha/register-pattern!) |
+| `:hooks` | [`register-hook!`](../api/hooks.api.md#millstrand.api.hooks.alpha/register-hook!) |
+| `:events` | [`register-handler!`](../api/events.api.md#millstrand.api.events.alpha/register-handler!) |
+| `:bins` | `millstrand.api.millstrand.alpha/defbin` |
 
-A custom kind's entry values are whatever its owner's `:entry-spec` accepts, so read that spool's own contract; [`declare-kind!`](../api/registry.api.md#skein.api.registry.alpha/declare-kind!) is where a kind states its id, spec, and policy.
+A custom kind's entry values are whatever its owner's `:entry-spec` accepts, so read that spool's own contract; [`declare-kind!`](../api/registry.api.md#millstrand.api.registry.alpha/declare-kind!) is where a kind states its id, spec, and policy.
 
 `defbin` declares an executable that consumers can discover and run without cloning the spool. The declaration names an executable and may carry a build argv; it does not run code while the module is evaluated. Use an anchored executable when the file belongs to a family checkout or one of its roots:
 
 ```clojure
 (ns acme.dashboard
-  (:require [skein.api.skein.alpha :as skein]))
+  (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(skein/defbin dashboard
+(millstrand/defbin dashboard
   "Open the dashboard in the caller's terminal."
   {:executable [:family "bin/dashboard"]
    :build ["bun" "install" "--cwd" "dashboard"]})
@@ -733,7 +733,7 @@ exec strand --workspace "$workspace" dashboard render "$@"
 
 Keep the wrapper's cwd assumptions explicit. `mill bin run` preserves the directory from which the operator invoked it; `MILLSTRAND_WORKSPACE` identifies the selected world and is the stable path for `strand` calls. The wrapper should not dial `weaver.sock`, infer a workspace from its cwd, or require the consumer to add the spool checkout to `PATH`. Use `mill bin list` to inspect the declaration, `mill bin build <name>` to run its recipe, and `mill bin run <name> [args...]` to execute it. The `strand` CLI remains a dispatcher and does not execute bins.
 
-A kind provider declares its open kind through a kind declaration form before dependent entries stage. `skein.spools.cron` is the shipped example. A module contributing to another spool's kind names that spool's module in `:after`.
+A kind provider declares its open kind through a kind declaration form before dependent entries stage. `millstrand.spools.cron` is the shipped example. A module contributing to another spool's kind names that spool's module in `:after`.
 
 ### Moving a direct registration into an authoring form
 
@@ -748,7 +748,7 @@ As a contribution it is one line:
 
 ```clojure
 ;; spool source namespace
-(skein/defquery mine
+(millstrand/defquery mine
   "Return strands owned by ct."
   {}
   [:= [:attr :owner] "ct"])
@@ -783,7 +783,7 @@ Use `defseed` for an idempotent process-lifetime action with no cleanup. Use `de
 
 ```clojure
 (ns acme.priority.local
-  (:require [skein.api.lifecycle.alpha :as lifecycle]))
+  (:require [millstrand.api.lifecycle.alpha :as lifecycle]))
 
 (defn open-priority! [{:keys [runtime]}]
   (start-priority-monitor! runtime))
@@ -821,16 +821,16 @@ Two options are optional. `:trigger-kinds` is why the form exists. An unchanged,
 ```clojure
 (lifecycle/defreconcile scheduled-jobs
   "Keep durable Cron wakes converged on the effective published job registry."
-  {:read-desired 'skein.spools.cron/desired-jobs
-   :read-actual 'skein.spools.cron/actual-jobs
-   :apply 'skein.spools.cron/apply-jobs!
-   :on-removed 'skein.spools.cron/remove-jobs!
+  {:read-desired 'millstrand.spools.cron/desired-jobs
+   :read-actual 'millstrand.spools.cron/actual-jobs
+   :apply 'millstrand.spools.cron/apply-jobs!
+   :on-removed 'millstrand.spools.cron/remove-jobs!
    :trigger-kinds #{job-kind}})
 ```
 
 Cron's `apply-jobs!` reads the shape this implies: unregister every id in `actual` that `desired` no longer has, then register or re-register the rest, and return `{:reconciled :cron :jobs [...]}`. Convergence is the callable's job, not the coordinator's — nothing diffs the two maps for you.
 
-The closed option grammar is `skein.api.lifecycle.alpha/::reconcile-options` (`::seed-options` and `::resource-options` for the other two forms). Each form validates its options as the form is evaluated, before anything is collected, so an unknown key or an unqualified callable symbol fails that module's evaluation rather than surfacing later when the effect would have run. Callable *resolution* is a separate, later check the coordinator makes before publishing the candidate image. Contract: [SPEC-003.C17f](../../devflow/specs/repl-api.md).
+The closed option grammar is `millstrand.api.lifecycle.alpha/::reconcile-options` (`::seed-options` and `::resource-options` for the other two forms). Each form validates its options as the form is evaluated, before anything is collected, so an unknown key or an unqualified callable symbol fails that module's evaluation rather than surfacing later when the effect would have run. Callable *resolution* is a separate, later check the coordinator makes before publishing the candidate image. Contract: [SPEC-003.C17f](../../devflow/specs/repl-api.md).
 
 #### What happens when an effect fails
 
@@ -854,9 +854,9 @@ A workspace-relative `:file` module can declare authoring forms in its one names
 ```clojure
 ;; .millstrand/acme_priority.clj
 (ns acme.priority.local
-  (:require [skein.api.skein.alpha :as skein]))
+  (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(skein/defquery mine
+(millstrand/defquery mine
   "Return strands owned by the local priority workflow."
   {}
   [:= [:attr :owner] "priority"])
@@ -881,9 +881,9 @@ no unload semantics.
 
 The policy is intentionally narrow:
 
-- The rule applies to every approved spool root: Git, local, or `:skein/source-root`, from shared `spools.edn` or gitignored `spools.local.edn`.
+- The rule applies to every approved spool root: Git, local, or `:millstrand/source-root`, from shared `spools.edn` or gitignored `spools.local.edn`.
 - Every `:deps` entry must be a Maven coordinate map containing `:mvn/version`.
-- Source-bearing coordinates are rejected in spool-root `deps.edn :deps`, including `:git/url`, `:git/sha`, `:local/root`, and `:skein/source-root`. If a spool composes with another source root, document that root's repository as a family entry in `spools.edn`.
+- Source-bearing coordinates are rejected in spool-root `deps.edn :deps`, including `:git/url`, `:git/sha`, `:local/root`, and `:millstrand/source-root`. If a spool composes with another source root, document that root's repository as a family entry in `spools.edn`.
 - Mutable Maven versions are rejected: no `-SNAPSHOT`, `RELEASE`, or `LATEST`.
 - Repo redirection is rejected: no top-level `:mvn/repos` or `:mvn/local-repo`
   in the spool root.
@@ -926,7 +926,7 @@ Shared `spools.edn`:
 ```clojure
 {:spools
  {acme/priority-spool
-  {:git/url "https://github.com/acme/skein-priority-spool.git"
+  {:git/url "https://github.com/acme/millstrand-priority-spool.git"
    :git/sha "0123456789abcdef0123456789abcdef01234567"
    :git/tag "v3"
    :roots {acme/priority "priority"
@@ -938,11 +938,11 @@ Developer-only `spools.local.edn`:
 ```clojure
 {:spools
  {acme/priority-spool
-  {:local/root "~/dev/projects/skein-priority-spool"
+  {:local/root "~/dev/projects/millstrand-priority-spool"
    :claims "v3"}}}
 ```
 
-The overlay inherits the base family's `:roots`, `:requires`, and `:skein/min`; it replaces the
+The overlay inherits the base family's `:roots`, `:requires`, and `:millstrand/min`; it replaces the
 source coordinate. A missing `:claims` fails loudly. Run the local checkout's compatibility alarm
 against the claimed marker to check the claim. The Maven-only dependency policy still applies to
 every local override root.
@@ -964,10 +964,10 @@ declared floor. Give the test namespace a `-main` that exits non-zero on failure
 
 Consumer-workspace tests declare modules guarded by the roots approved in their fixture, then run
 refresh in the embedded runtime. The test JVM does not independently pin those spool roots in
-Skein's `deps.edn`.
+Millstrand's `deps.edn`.
 
-Use `skein.test.alpha/with-weaver-world` for the consumer-workspace tier and take the runtime it
-hands you explicitly. Reach for `skein.core.weaver.runtime/with-runtime-binding` only when a test
+Use `millstrand.test.alpha/with-weaver-world` for the consumer-workspace tier and take the runtime it
+hands you explicitly. Reach for `millstrand.core.weaver.runtime/with-runtime-binding` only when a test
 must exercise userland code that resolves the ambient runtime, never the shared spool's own
 functions. The general fixture API and isolation rules live in [Testing your config and
 spools](./testing.md).
@@ -979,9 +979,9 @@ spools](./testing.md).
 ```clojure
 (ns acme.priority.alpha
   "Shared spool: promote/inspect strand priority. Runtime is always explicit."
-  (:require [skein.api.errors.alpha :as errors]
-            [skein.api.runtime.alpha :as runtime]
-            [skein.api.weaver.alpha :as weaver]))
+  (:require [millstrand.api.errors.alpha :as errors]
+            [millstrand.api.runtime.alpha :as runtime]
+            [millstrand.api.weaver.alpha :as weaver]))
 
 (defn- promotions [runtime]
   ;; Runtime-owned state, created once per runtime; no module-level atom.
@@ -1015,16 +1015,16 @@ The consumer's side of this pattern — binding the runtime once in a workspace-
 
 See [AGENTS.md](../../AGENTS.md) and [SPEC-003](../../devflow/specs/repl-api.md).
 
-- `skein.api.*.alpha` — blessed, accreting, explicit-runtime API. **Build shared
+- `millstrand.api.*.alpha` — blessed, accreting, explicit-runtime API. **Build shared
   spools on this.**
-- `skein.core.*` — engine internals, no compatibility promise.
-- `skein.spools.*` — the authorable/reference spool layer.
-- `skein.repl` — the interactive human surface (connection-aware).
+- `millstrand.core.*` — engine internals, no compatibility promise.
+- `millstrand.spools.*` — the authorable/reference spool layer.
+- `millstrand.repl` — the interactive human surface (connection-aware).
 
-Workspace-owned helper namespaces sit below this list. They may provide terse ergonomics, but they are not a Skein contract tier and shared spools must not depend on them.
+Workspace-owned helper namespaces sit below this list. They may provide terse ergonomics, but they are not a Millstrand contract tier and shared spools must not depend on them.
 - External/shared spool source namespaces use the author's org prefix; codethread
-  spools use `ct.spools.<name>`. The `skein.*` prefix is reserved for source
-  shipped by the Skein checkout. A source namespace is separate from the
+  spools use `ct.spools.<name>`. The `millstrand.*` prefix is reserved for source
+  shipped by the Millstrand checkout. A source namespace is separate from the
   `.millstrand/spools.edn` coordinate symbol, such as `codethread/<name>`.
 
 ## Enforcement
@@ -1033,21 +1033,21 @@ Shared-spool source must not require a workspace-owned helper or use its hidden 
 
 ## Unsafe spools
 
-Every rule above says: build on `skein.api.*.alpha`, never on `skein.core.*`. Sometimes a genuinely
+Every rule above says: build on `millstrand.api.*.alpha`, never on `millstrand.core.*`. Sometimes a genuinely
 useful capability lives on the wrong side of that line — the blessed surface deliberately doesn't
 expose it, and won't. When you reach past the contract anyway, do it in the open, like a Rust
 `unsafe` block: the capability stays available, the danger stays visible, and the next reader knows
 exactly what they're trusting.
 
-The worked reference is [`skein.spools.unsafe-text-search`](../../spools/unsafe-text-search.md): it requires
-`skein.core.db` and runs SQL against the physical tables to search titles and attribute values,
+The worked reference is [`millstrand.spools.unsafe-text-search`](../../spools/unsafe-text-search.md): it requires
+`millstrand.core.db` and runs SQL against the physical tables to search titles and attribute values,
 including archived rows the query language cannot see. It is a maintained example of rule-breaking,
 not a blessed path. If you must write one, follow the same four markers so the break is never
 silent:
 
 1. **The unsafe namespace name.** The marker is the name: a namespace that
-   touches `skein.core.*` has a segment that is `unsafe` or starts with
-   `unsafe-` (`skein.spools.unsafe-text-search`, `ct.spools.foo.unsafe-db` —
+   touches `millstrand.core.*` has a segment that is `unsafe` or starts with
+   `unsafe-` (`millstrand.spools.unsafe-text-search`, `ct.spools.foo.unsafe-db` —
    segment match, never substring, and the segment is reserved: a namespace
    that stays on the blessed tier may not use it). The name travels where
    metadata cannot: every consumer's require line, stack traces, classpath
@@ -1065,10 +1065,10 @@ silent:
 3. **A README/contract unsafe-declaration section.** The contract doc opens with
    an **Unsafe declaration**: the exact internal namespaces required; why the
    blessed `api.*` surface cannot serve this; and the breakage contract —
-   `skein.core.*` changes freely (TEN-000@1), so the spool may break on any
+   `millstrand.core.*` changes freely (TEN-000@1), so the spool may break on any
    upgrade and is maintained *in-repo, in lockstep* with the storage it reads.
 4. **In-repo lockstep maintenance.** An unsafe spool ships in this repo, beside
-   the internals it couples to, so a `skein.core.*` change and the spool's fix
+   the internals it couples to, so a `millstrand.core.*` change and the spool's fix
    land together. An external spool that copies the pattern pins itself to
    internals that will move and owns its own breakage — say so, and don't
    distribute one.
@@ -1080,7 +1080,7 @@ directory and coordinate too (`unsafe-text-search`), so the contract is visible 
 approval.
 
 For spools shipped in this repo, the tier line is machine-enforced: `make lint` fails on any
-`skein.core.*` usage from a safe-named namespace under `spools/*/src`, on a stale unsafe name that
+`millstrand.core.*` usage from a safe-named namespace under `spools/*/src`, on a stale unsafe name that
 touches no internals, on a safe namespace requiring another spool's unsafe namespace, and on a
 docstring whose `UNSAFE:` lead disagrees with the name (`quality.spool-tiers`). External spools are
 held to the convention by review and this guide; the tracked follow-ups are consumer consent in

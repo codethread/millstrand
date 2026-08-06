@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.api.spec.alpha">skein.api.spec.alpha</a>
+# <a name="millstrand.api.spec.alpha">millstrand.api.spec.alpha</a>
 
 
 Spec-over-wire documentation projection for registered clojure.spec contracts.
@@ -25,12 +25,12 @@ Spec-over-wire documentation projection for registered clojure.spec contracts.
   repeated sibling references expand again.
 
   Failures are `ex-info` whose data carries the published marker
-  `:skein.api.spec.alpha/error` and a `:reason` keyword.
+  `:millstrand.api.spec.alpha/error` and a `:reason` keyword.
 
 
 
 
-## <a name="skein.api.spec.alpha/contract">`contract`</a>
+## <a name="millstrand.api.spec.alpha/contract">`contract`</a>
 ``` clojure
 (contract spec-name)
 ```
@@ -65,9 +65,9 @@ Return the nested contract node tree for registered spec `spec-name`.
   A node expanded from a registered spec reference also carries `"spec"`,
   its qualified name. An unregistered `spec-name` fails loudly as
   `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L53-L86">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spec/alpha.clj#L53-L86">Source</a></sub></p>
 
-## <a name="skein.api.spec.alpha/contract-template">`contract-template`</a>
+## <a name="millstrand.api.spec.alpha/contract-template">`contract-template`</a>
 ``` clojure
 (contract-template node)
 ```
@@ -83,9 +83,9 @@ Return the copyable JSON skeleton for contract `node`.
   grammar stays owned here. `node` must keep the shape `contract` documents —
   that docstring is the node-grammar authority (SPEC-003.C19a); enrichment may
   add or replace `doc` values but not invent node kinds.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L105-L117">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spec/alpha.clj#L105-L117">Source</a></sub></p>
 
-## <a name="skein.api.spec.alpha/explain-text">`explain-text`</a>
+## <a name="millstrand.api.spec.alpha/explain-text">`explain-text`</a>
 ``` clojure
 (explain-text spec-name value)
 ```
@@ -96,9 +96,9 @@ Return `s/explain-str` for `spec-name` and `value` as plain JSON-safe text.
   The printed explanation is what crosses the wire; raw `s/explain-data`
   stays available to trusted Clojure (PROP-Wcd-001.S9). An unregistered
   `spec-name` fails loudly as `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L132-L140">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spec/alpha.clj#L132-L140">Source</a></sub></p>
 
-## <a name="skein.api.spec.alpha/problems">`problems`</a>
+## <a name="millstrand.api.spec.alpha/problems">`problems`</a>
 ``` clojure
 (problems spec-name value)
 ```
@@ -112,9 +112,9 @@ Return the structured spec problems for invalid `value` under `spec-name`.
   check. Detection walks the predicate *form* as data (no string matching,
   nothing invoked). Returns `[]` when the value satisfies the spec. An
   unregistered `spec-name` fails loudly as `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L142-L159">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spec/alpha.clj#L142-L159">Source</a></sub></p>
 
-## <a name="skein.api.spec.alpha/projection">`projection`</a>
+## <a name="millstrand.api.spec.alpha/projection">`projection`</a>
 ``` clojure
 (projection spec-name)
 ```
@@ -125,9 +125,9 @@ Return the composite discovery bundle for registered spec `spec-name`.
   `{"spec" <qualified-name> "spec-forms" <spec-forms> "contract"
   <contract> "template" <template>}` — the named fields every adopting wire
   surface embeds, so discovery and failure speak one vocabulary.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L119-L130">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spec/alpha.clj#L119-L130">Source</a></sub></p>
 
-## <a name="skein.api.spec.alpha/spec-forms">`spec-forms`</a>
+## <a name="millstrand.api.spec.alpha/spec-forms">`spec-forms`</a>
 ``` clojure
 (spec-forms spec-name)
 ```
@@ -148,9 +148,9 @@ Return the ordered printed-form graph rooted at registered spec `spec-name`.
   interpret spec operators, so a keyword literal that happens to name a spec
   is reported the same way as a real key reference. An unregistered
   `spec-name` fails loudly as `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L33-L51">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spec/alpha.clj#L33-L51">Source</a></sub></p>
 
-## <a name="skein.api.spec.alpha/template">`template`</a>
+## <a name="millstrand.api.spec.alpha/template">`template`</a>
 ``` clojure
 (template spec-name)
 ```
@@ -169,4 +169,4 @@ Return a copyable JSON skeleton for registered spec `spec-name`.
   structures under an optional key render as-is and rely on `contract` for
   optionality. An unregistered `spec-name` fails loudly as
   `:spec/unregistered`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/spec/alpha.clj#L88-L103">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/spec/alpha.clj#L88-L103">Source</a></sub></p>

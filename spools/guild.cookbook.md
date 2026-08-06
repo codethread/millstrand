@@ -1,6 +1,6 @@
-# Skein Guild Spool — Cookbook
+# Millstrand Guild Spool — Cookbook
 
-Composition recipes for `skein.spools.guild`: how to publish a stable operation API from one weaver, discover it from another, and evolve it without breaking callers — and *why* each shape is the right one.
+Composition recipes for `millstrand.spools.guild`: how to publish a stable operation API from one weaver, discover it from another, and evolve it without breaking callers — and *why* each shape is the right one.
 
 This is the **how/why** half of the guild docs. The other two are:
 
@@ -13,7 +13,7 @@ This is the **how/why** half of the guild docs. The other two are:
 
 Division of truth: signatures and the argument tables live in the contract and generated API doc; narrative and composition live here. This cookbook never restates a signature — it links to them.
 
-Guild adds no new protocol, server, or permission system: guild ops are ordinary weaver registry entries with a naming convention and a `guild list` introspection op. The agreement surface is userland — a repo publishes its API by registering ops from its checked-in `.skein/init.clj`, which is effectively a public API file. Recipes assume `(require '[skein.spools.guild :as guild])` in trusted config or a live weaver REPL, and a `runtime` in scope — every Guild fn takes it first.
+Guild adds no new protocol, server, or permission system: guild ops are ordinary weaver registry entries with a naming convention and a `guild list` introspection op. The agreement surface is userland — a repo publishes its API by registering ops from its checked-in `.skein/init.clj`, which is effectively a public API file. Recipes assume `(require '[millstrand.spools.guild :as guild])` in trusted config or a live weaver REPL, and a `runtime` in scope — every Guild fn takes it first.
 
 ## How to read a recipe
 
@@ -37,7 +37,7 @@ Each recipe cites the honest source it was distilled from — the spool's own co
 ```clojure
 (ns user
   (:require [clojure.spec.alpha :as s]
-            [skein.spools.guild :as guild]))
+            [millstrand.spools.guild :as guild]))
 
 (s/def ::gate-name string?)
 (s/def ::gate-status-input (s/keys :req-un [::gate-name]))
@@ -47,9 +47,9 @@ Each recipe cites the honest source it was distilled from — the spool's own co
   {:gate (:gate-name input) :satisfied false})
 
 ;; Seat the guild op.
-(runtime/module! runtime :skein/spools-guild
-  {:ns 'skein.spools.guild
-   :spools ['skein.spools/guild]})
+(runtime/module! runtime :millstrand/spools-guild
+  {:ns 'millstrand.spools.guild
+   :spools ['millstrand.spools/guild]})
 (guild/register-op! runtime 'gate.status.v1
   {:doc "Return whether a backend gate is satisfied."
    :input-spec ::gate-status-input}
@@ -82,7 +82,7 @@ A caller invokes it over the ordinary op socket, passing one JSON argument; inpu
   in that runtime and re-seats the `guild` op, so a trusted-config reload
   re-declares your API cleanly rather than stacking stale ops.
 
-Honest source: the worked two-repo example in [`guild.md`](./guild.md), and `register-op-registers-and-invokes-through-op-registry` / `input-spec-invalid-input-fails-loudly-with-structured-data` in [`test/skein/guild_test.clj`](../test/skein/guild_test.clj).
+Honest source: the worked two-repo example in [`guild.md`](./guild.md), and `register-op-registers-and-invokes-through-op-registry` / `input-spec-invalid-input-fails-loudly-with-structured-data` in [`test/millstrand/guild_test.clj`](../test/millstrand/guild_test.clj).
 
 ---
 
@@ -90,11 +90,11 @@ Honest source: the worked two-repo example in [`guild.md`](./guild.md), and `reg
 
 **Situation.** Your weaver wants to call a peer's guild op, but you shouldn't hard-code the assumption that a given version still exists. You want to resolve the peer by its portable name, read what it currently offers, and only then invoke.
 
-**Composition.** The blessed `skein.api.peers.alpha` helpers resolve same-machine peers from mill metadata; `guild list` is the discovery call. Ask the peer what's `:active` and `:deprecated`, then invoke the version you confirmed with `call!`, handing the JSON input through `:argv`.
+**Composition.** The blessed `millstrand.api.peers.alpha` helpers resolve same-machine peers from mill metadata; `guild list` is the discovery call. Ask the peer what's `:active` and `:deprecated`, then invoke the version you confirmed with `call!`, handing the JSON input through `:argv`.
 
 ```clojure
 (require '[clojure.data.json :as json]
-         '[skein.api.peers.alpha :as peers])
+         '[millstrand.api.peers.alpha :as peers])
 
 ;; discover: what does this weaver actually expose right now?
 (peers/call! "backend" "guild" {:argv ["list"]})
@@ -124,7 +124,7 @@ Honest source: the worked two-repo example in [`guild.md`](./guild.md), and `reg
   stream-class op all throw. That is the right default for coordination — a
   missing peer should stop you, not be papered over.
 
-Honest source: the peer-side of the worked example in [`guild.md`](./guild.md) (`peers/call!` and the `guild list` payload) and the `skein.api.peers.alpha` helper listing in the [REPL API spec](../devflow/specs/repl-api.md); the `guild list` `:active` / `:deprecated` shape is pinned by `guild-list-reports-active-and-deprecated-ops` in [`test/skein/guild_test.clj`](../test/skein/guild_test.clj). (The two-weaver call is distilled from the contract's worked example and the listing test rather than run live here.)
+Honest source: the peer-side of the worked example in [`guild.md`](./guild.md) (`peers/call!` and the `guild list` payload) and the `millstrand.api.peers.alpha` helper listing in the [REPL API spec](../devflow/specs/repl-api.md); the `guild list` `:active` / `:deprecated` shape is pinned by `guild-list-reports-active-and-deprecated-ops` in [`test/millstrand/guild_test.clj`](../test/millstrand/guild_test.clj). (The two-weaver call is distilled from the contract's worked example and the listing test rather than run live here.)
 
 ---
 
@@ -161,7 +161,7 @@ Honest source: the peer-side of the worked example in [`guild.md`](./guild.md) (
   `:since` also surface through `guild list`, so the migration path is
   readable from the peer itself rather than buried in a changelog.
 
-Honest source: the naming/evolution conventions and the "never install a noop compatibility stub" rule in [`guild.md`](./guild.md), with the deprecated-op behaviour pinned by `deprecated-op-throws-structured-error-and-never-succeeds` and the listing output by `guild-list-reports-active-and-deprecated-ops` in [`test/skein/guild_test.clj`](../test/skein/guild_test.clj).
+Honest source: the naming/evolution conventions and the "never install a noop compatibility stub" rule in [`guild.md`](./guild.md), with the deprecated-op behaviour pinned by `deprecated-op-throws-structured-error-and-never-succeeds` and the listing output by `guild-list-reports-active-and-deprecated-ops` in [`test/millstrand/guild_test.clj`](../test/millstrand/guild_test.clj).
 
 ---
 
@@ -173,4 +173,4 @@ Honest source: the naming/evolution conventions and the "never install a noop co
 - [`workflow.md`](./workflow.md) — workflow gates are the durable wait points
   guild ops often inspect or complete.
 - [REPL API spec](../devflow/specs/repl-api.md) — the blessed
-  `skein.api.peers.alpha` peering helpers used to discover and call a sibling.
+  `millstrand.api.peers.alpha` peering helpers used to discover and call a sibling.

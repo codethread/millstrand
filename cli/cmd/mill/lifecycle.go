@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"skein-strand-cli/internal/client"
-	"skein-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/client"
+	"millstrand-strand-cli/internal/config"
 )
 
 func resolveLifecycleWorld(req client.MillWorldRequest) (config.World, error) {
@@ -67,7 +67,7 @@ func resolveLaunchSource(cwd string) (string, error) {
 }
 
 func weaverArgs(world config.World, name string) []string {
-	args := []string{"-M:skein", "-m", "skein.core.weaver.runtime", "--workspace", world.ConfigDir, "--state-dir", world.StateDir, "--data-dir", world.DataDir}
+	args := []string{"-M:millstrand", "-m", "millstrand.core.weaver.runtime", "--workspace", world.ConfigDir, "--state-dir", world.StateDir, "--data-dir", world.DataDir}
 	if name != "" {
 		args = append(args, "--name", name)
 	}

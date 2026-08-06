@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.api.errors.alpha">skein.api.errors.alpha</a>
+# <a name="millstrand.api.errors.alpha">millstrand.api.errors.alpha</a>
 
 
 Error factories for op, query, and spool authors: the handful of `ex-data`
@@ -25,14 +25,14 @@ Error factories for op, query, and spool authors: the handful of `ex-data`
   on purpose), so teaching it a new key means renderer work and tests in
   `cli/internal/errfmt`, not a new entry here.
 
-  `skein.api.spool.alpha/fail!` remains the single throwing seam and the
+  `millstrand.api.spool.alpha/fail!` remains the single throwing seam and the
   general escape hatch for an error that carries no affordance at all; every
   factory below funnels through it.
 
 
 
 
-## <a name="skein.api.errors.alpha/conflict!">`conflict!`</a>
+## <a name="millstrand.api.errors.alpha/conflict!">`conflict!`</a>
 ``` clojure
 (conflict! message details)
 (conflict! message details cause)
@@ -51,9 +51,9 @@ Throw an error for a request the current state refuses, and say how to get
 
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L142-L158">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/errors/alpha.clj#L142-L158">Source</a></sub></p>
 
-## <a name="skein.api.errors.alpha/invalid-argument!">`invalid-argument!`</a>
+## <a name="millstrand.api.errors.alpha/invalid-argument!">`invalid-argument!`</a>
 ``` clojure
 (invalid-argument! message details)
 (invalid-argument! message details cause)
@@ -78,9 +78,9 @@ Throw an error rejecting a value, saying both what was rejected and what
 
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L109-L136">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/errors/alpha.clj#L109-L136">Source</a></sub></p>
 
-## <a name="skein.api.errors.alpha/not-found!">`not-found!`</a>
+## <a name="millstrand.api.errors.alpha/not-found!">`not-found!`</a>
 ``` clojure
 (not-found! message details)
 (not-found! message details cause)
@@ -106,9 +106,9 @@ Throw a not-found error naming what was looked for and, where the set is
 
   Every other key is the author's own and reaches the terminal untouched in
   the details JSON. Never returns.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L77-L103">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/errors/alpha.clj#L77-L103">Source</a></sub></p>
 
-## <a name="skein.api.errors.alpha/remedy">`remedy`</a>
+## <a name="millstrand.api.errors.alpha/remedy">`remedy`</a>
 ``` clojure
 (remedy details command)
 ```
@@ -117,9 +117,9 @@ Function.
 Return `details` with `command` stamped under `:try`.
 
   The named door to the remediation affordance for an error that does not come
-  from a factory above — a bare `ex-info`, or a `skein.api.spool.alpha/fail!`
+  from a factory above — a bare `ex-info`, or a `millstrand.api.spool.alpha/fail!`
   call gaining a way out. Fails loudly on a blank or non-string `command`,
   because a `:try` the renderer cannot read drops back into the ordinary
   detail rows rather than announcing itself, and on a `details` that is not a
   map, which `assoc` would otherwise turn into one.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/errors/alpha.clj#L164-L178">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/errors/alpha.clj#L164-L178">Source</a></sub></p>

@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"skein-strand-cli/internal/dispatch"
+	"millstrand-strand-cli/internal/dispatch"
 )
 
 func main() {

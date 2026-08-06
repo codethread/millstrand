@@ -2,8 +2,8 @@
   "The open-ended exploration workflow (family `explore`)."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [skein.api.format.alpha :as format-alpha]
-            [skein.spools.workflow :as workflow]
+            [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.spools.workflow :as workflow]
             [ct.workflows.support :as support]))
 
 (defn- non-blank-string?

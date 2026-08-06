@@ -113,7 +113,7 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 		t.Fatalf("expected spools.edn bootstrap: %v", err)
 	}
 	spools := string(mustReadFile(t, spoolsPath))
-	if want := `skein.spools/batteries {:skein/source-root "spools/batteries"}`; !strings.Contains(spools, want) {
+	if want := `millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}`; !strings.Contains(spools, want) {
 		t.Fatalf("spools.edn missing %q, got:\n%s", want, spools)
 	}
 	if strings.Contains(spools, "{:spools {}}") {
@@ -124,7 +124,7 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 	// The seeded declaration carries a source target and world policy only: the
 	// module's contribution is the declaration data its authoring forms collect,
 	// so the removed entry-point keys must appear nowhere in the file.
-	declaration := "(runtime/module! runtime :skein/spools-batteries\n                 {:ns 'skein.spools.batteries\n                  :spools ['skein.spools/batteries]})"
+	declaration := "(runtime/module! runtime :millstrand/spools-batteries\n                 {:ns 'millstrand.spools.batteries\n                  :spools ['millstrand.spools/batteries]})"
 	if !strings.Contains(got, declaration) {
 		t.Fatalf("init.clj missing the source/world-policy declaration %q, got:\n%s", declaration, got)
 	}
@@ -133,7 +133,7 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 			t.Fatalf("init.clj seeds removed entry-point key %q, got:\n%s", removed, got)
 		}
 	}
-	if strings.Contains(got, "(require 'skein.spools.batteries)") {
+	if strings.Contains(got, "(require 'millstrand.spools.batteries)") {
 		t.Fatalf("init.clj retained the bare batteries require, got:\n%s", got)
 	}
 	if _, err := os.Stat(filepath.Join(cfg, ".git")); !os.IsNotExist(err) {
@@ -195,7 +195,7 @@ func TestWeaverReplStdinAttachesThroughMillMetadata(t *testing.T) {
 		t.Fatalf("weaver start failed: %v\n%s", err, out)
 	}
 	h.waitForStatus(t, dir, runDir)
-	out, err := h.millCmd(dir, runDir, "@skein.core.weaver.runtime/current-runtime\n", "weaver", "repl", "--stdin")
+	out, err := h.millCmd(dir, runDir, "@millstrand.core.weaver.runtime/current-runtime\n", "weaver", "repl", "--stdin")
 	if err != nil {
 		t.Fatalf("repl stdin failed: %v\n%s", err, out)
 	}

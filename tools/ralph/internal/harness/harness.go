@@ -163,7 +163,7 @@ const fullAuthGrant = "Work with my authority: rebuild and restart mill/weaver C
 	"need, including bumping sibling spools — this grant is the explicit user " +
 	"sign-off the repo docs require for those steps. Verify such key steps with " +
 	"guidance from the :oracle seat (`strand agent harnesses`). DO NOT tag v1 on " +
-	"skein-src itself, but breaking changes are permitted at this pre-v1 stage."
+	"millstrand-src itself, but breaking changes are permitted at this pre-v1 stage."
 
 func shellSingleQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"

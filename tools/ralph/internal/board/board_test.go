@@ -172,7 +172,7 @@ func TestAttrIgnoresStructuredValues(t *testing.T) {
 	c := fakeStrand(t, map[string]string{
 		"show e1": `{"id":"e1","title":"Epic one","state":"active","attributes":{
 			"kanban/type":"epic","kanban.label/ralph":"true",
-			"body":{"bytes":3852,"skein/omitted":true},"kanban/count":7}}`,
+			"body":{"bytes":3852,"millstrand/omitted":true},"kanban/count":7}}`,
 	})
 	epic, err := c.Gate(context.Background(), "e1")
 	if err != nil {

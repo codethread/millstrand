@@ -9,13 +9,13 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [skein.api.skein.alpha :as skein]
-            [skein.api.current.alpha :as current]
-            [skein.api.format.alpha :as format-alpha]
-            [skein.api.runtime.alpha :as runtime]
-            [skein.api.weaver.alpha :as weaver]
-            [skein.api.spool.alpha :refer [attr-get entity-projection poll-until!]]
-            [skein.spools.workflow :as workflow]))
+            [millstrand.api.millstrand.alpha :as millstrand]
+            [millstrand.api.current.alpha :as current]
+            [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.api.runtime.alpha :as runtime]
+            [millstrand.api.weaver.alpha :as weaver]
+            [millstrand.api.spool.alpha :refer [attr-get entity-projection poll-until!]]
+            [millstrand.spools.workflow :as workflow]))
 
 ;; The op's own boundary contracts. The land workflow definitions own their
 ;; run-param specs; these govern what arrives on the CLI.
@@ -195,7 +195,7 @@
                                    |restoring one usable :workflow/run-id.")})))
     run-id))
 
-(skein/defhook require-merge-lock-at-signoff-approval
+(millstrand/defhook require-merge-lock-at-signoff-approval
   "Veto committing an approved land sign-off that holds no merge lock.
 
   `strand land choose <run> approved` acquires the singleton merge lock and a
@@ -765,7 +765,7 @@
             |terminal `land complete <run-id>` when ready asks for it. Full
             |verb shapes: `strand help land`.")})
 
-(skein/defop land
+(millstrand/defop land
   "Enforce coordinator landing policy across workflows, kanban, and merge locks.
 
   Use the generic `workflow` op for every operation that does not cross those

@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.api.notes.alpha">skein.api.notes.alpha</a>
+# <a name="millstrand.api.notes.alpha">millstrand.api.notes.alpha</a>
 
 
 Explicit-runtime cross-spool note primitive for strand memory.
@@ -25,7 +25,7 @@ Explicit-runtime cross-spool note primitive for strand memory.
 
 
 
-## <a name="skein.api.notes.alpha/note!">`note!`</a>
+## <a name="millstrand.api.notes.alpha/note!">`note!`</a>
 ``` clojure
 (note! runtime target-id text {:keys [by round], :as opts})
 ```
@@ -41,9 +41,9 @@ Append an immutable note strand to `target-id`'s memory and return its id.
   path can rewrite, delete, or archive them. Fails loudly on blank text, a
   missing target, or a non-integer `:round` (the `note/round` contract is
   single-typed).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/notes/alpha.clj#L29-L59">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/notes/alpha.clj#L29-L59">Source</a></sub></p>
 
-## <a name="skein.api.notes.alpha/notes">`notes`</a>
+## <a name="millstrand.api.notes.alpha/notes">`notes`</a>
 ``` clojure
 (notes runtime target-id {:keys [round]})
 ```
@@ -56,9 +56,9 @@ Return `target-id`'s notes in `note/at` order, optionally one `:round`.
   each note as `{:id :note :at}` plus `:by`/`:round` when present. `:round` must
   be an integer (fails loudly otherwise); ordering parses `note/at` so mixed
   fractional-precision timestamps still sort chronologically.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/notes/alpha.clj#L61-L75">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/notes/alpha.clj#L61-L75">Source</a></sub></p>
 
-## <a name="skein.api.notes.alpha/writer-ref->prompt">`writer-ref->prompt`</a>
+## <a name="millstrand.api.notes.alpha/writer-ref->prompt">`writer-ref->prompt`</a>
 ``` clojure
 (writer-ref->prompt ref)
 ```
@@ -72,4 +72,4 @@ Render `ref` as the note-writing CLI instruction fragment.
   optional string `:by`, and an optional map of string `:decoration` entries;
   malformed refs fail loudly naming the offending field. Renders only the write
   instruction — no read/`agent notes` string.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/notes/alpha.clj#L77-L102">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/notes/alpha.clj#L77-L102">Source</a></sub></p>

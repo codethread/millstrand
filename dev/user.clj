@@ -1,12 +1,12 @@
 (ns user
   "Dev-REPL scratchpad: a disposable demo weaver and a small seeded graph.
 
-  It holds its own runtime and calls the explicit-runtime `skein.api.*.alpha`
+  It holds its own runtime and calls the explicit-runtime `millstrand.api.*.alpha`
   verbs — the ordinary shape for code that owns a weaver, and a worked example
   of the user-owned terse helpers `demo-strand!` and `demo-strands` below."
-  (:require [skein.api.graph.alpha :as graph]
-            [skein.api.weaver.alpha :as weaver]
-            [skein.core.weaver.runtime :as weaver-runtime]))
+  (:require [millstrand.api.graph.alpha :as graph]
+            [millstrand.api.weaver.alpha :as weaver]
+            [millstrand.core.weaver.runtime :as weaver-runtime]))
 
 (defonce ^:private demo-runtime (atom nil))
 (defonce ^:private demo-world (atom nil))
@@ -15,7 +15,7 @@
   (.getAbsolutePath (java.io.File. ".")))
 
 (defn- new-demo-world! []
-  (let [config-dir (.toFile (java.nio.file.Files/createTempDirectory "skein-demo-" (make-array java.nio.file.attribute.FileAttribute 0)))
+  (let [config-dir (.toFile (java.nio.file.Files/createTempDirectory "millstrand-demo-" (make-array java.nio.file.attribute.FileAttribute 0)))
         world {:config-dir (.getCanonicalPath config-dir)
                :state-dir (.getCanonicalPath (java.io.File. config-dir "state"))
                :data-dir (.getCanonicalPath (java.io.File. config-dir "data"))
@@ -97,7 +97,7 @@
   (weaver/list (demo-runtime!) [:edge/out "supersedes" [:= [:attr :demo-id] "docs"]])
   (weaver/update! (demo-runtime!) replacement-docs-id {:state "closed"})
   (weaver/ready (demo-runtime!))
-  ;; The registration verbs, one tier down from skein.repl's runtime-implied twins:
+  ;; The registration verbs, one tier down from millstrand.repl's runtime-implied twins:
   (graph/register-query! (demo-runtime!) 'mine [:= [:attr :owner] "agent"])
   (weaver/list-query (demo-runtime!) 'mine {})
   (graph/unregister-query! (demo-runtime!) 'mine)

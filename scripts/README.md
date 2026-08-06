@@ -1,10 +1,10 @@
 # Repository scripts
 
-These scripts support development and coordination in this repository. Run them from a Skein checkout built with `make build`; agent scripts use the repo-local `bin/strand`.
+These scripts support development and coordination in this repository. Run them from a Millstrand checkout built with `make build`; agent scripts use the repo-local `bin/strand`.
 
 ## Ralph epic loop
 
-`ralph` drives a kanban epic by handing it to a fresh headless agent run over and over until the epic closes. It is a Go program under `tools/ralph`, built into `./bin/ralph` by `make build` (or `make ralph` on its own). It is repo-local development tooling in its own Go module, so it ships with no Skein release and belongs to no spool.
+`ralph` drives a kanban epic by handing it to a fresh headless agent run over and over until the epic closes. It is a Go program under `tools/ralph`, built into `./bin/ralph` by `make build` (or `make ralph` on its own). It is repo-local development tooling in its own Go module, so it ships with no Millstrand release and belongs to no spool.
 
 ```sh
 ./bin/ralph <epic-id>
@@ -32,7 +32,7 @@ Append `--` and any extra harness arguments after the epic id to pass them to `c
 
 `--harness` picks `claude` (the default) or `codex`. `--model` and `--effort` take the harness's own vocabulary; empty means the harness default, which is `fable` at high effort for Claude and `luna-high` for Codex. Codex also accepts the aliases `luna-high`, `luna-low` and `sol-low`, which select `gpt-5.6-luna` or `gpt-5.6-sol` at the matching reasoning effort; any other name is passed through as a Codex model id.
 
-Both harnesses bypass their permission prompts by default because a headless run cannot answer one; `--skip-permissions=false` keeps them. `--max-iterations` caps the run (0 means unlimited, default 30), `--failure-limit` says how many consecutive failed runs end it (default 3), `--log-dir` sets the transcript directory (default `$TMPDIR/ralph/<epic>-<timestamp>`), and `--workspace` selects a non-default strand world. `--full-auth` appends an operator authority grant to the generated prompt: the agent may rebuild and restart mill/weaver CLIs and bump sibling spools as needed (verifying key steps with the `:oracle` seat), with breaking changes permitted pre-v1 but never a v1 tag on skein-src itself.
+Both harnesses bypass their permission prompts by default because a headless run cannot answer one; `--skip-permissions=false` keeps them. `--max-iterations` caps the run (0 means unlimited, default 30), `--failure-limit` says how many consecutive failed runs end it (default 3), `--log-dir` sets the transcript directory (default `$TMPDIR/ralph/<epic>-<timestamp>`), and `--workspace` selects a non-default strand world. `--full-auth` appends an operator authority grant to the generated prompt: the agent may rebuild and restart mill/weaver CLIs and bump sibling spools as needed (verifying key steps with the `:oracle` seat), with breaking changes permitted pre-v1 but never a v1 tag on millstrand-src itself.
 
 Two flags take Go durations: `--poll` is the board refresh interval (default `10s`) and `--pause` is the breather between iterations (default `3s`), which keeps a crash-looping harness from hot-looping. `--strand` overrides which strand binary ralph reads the board through; by default it takes the one sitting beside itself in `./bin`, falling back to `PATH`.
 
@@ -54,7 +54,7 @@ Ralph expects a running weaver for the workspace it targets. It only ever reads 
 
 ## Kanban tree
 
-`kanban-tree` prints one kanban card, an epic or a feature, as a terminal tree. The shape of the work reads at a glance: what the card contains, and the order it has to happen in. It is a Go program under `tools/kanban-tree`, built into `./bin/kanban-tree` by `make build` (or `make kanban-tree` on its own). Like ralph, it is repo-local development tooling in its own Go module: no Skein release, no spool.
+`kanban-tree` prints one kanban card, an epic or a feature, as a terminal tree. The shape of the work reads at a glance: what the card contains, and the order it has to happen in. It is a Go program under `tools/kanban-tree`, built into `./bin/kanban-tree` by `make build` (or `make kanban-tree` on its own). Like ralph, it is repo-local development tooling in its own Go module: no Millstrand release, no spool.
 
 ```sh
 ./bin/kanban-tree <epic-id>            # the epic and its feature cards

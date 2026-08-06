@@ -1,10 +1,10 @@
 
 -----
-# <a name="skein.api.vocab.alpha">skein.api.vocab.alpha</a>
+# <a name="millstrand.api.vocab.alpha">millstrand.api.vocab.alpha</a>
 
 
 Explicit-runtime vocabulary registry: the blessed home for declaring and
-  reading Skein's attribute-namespace and edge-type vocabulary.
+  reading Millstrand's attribute-namespace and edge-type vocabulary.
 
   Every seed and consumer module `declare!`s the attribute namespaces and edge
   types it owns and reads the whole picture back, so the vocabulary a strand
@@ -23,7 +23,7 @@ Explicit-runtime vocabulary registry: the blessed home for declaring and
 
 
 
-## <a name="skein.api.vocab.alpha/declaration-kinds">`declaration-kinds`</a>
+## <a name="millstrand.api.vocab.alpha/declaration-kinds">`declaration-kinds`</a>
 
 
 
@@ -31,9 +31,9 @@ Explicit-runtime vocabulary registry: the blessed home for declaring and
 The two vocabulary kinds a declaration may describe: an attribute namespace
   segment or an edge (relation) type. This set is the `::kind` spec enum and the
   single source of the `vocab --kind` allow-list reused by the batteries op.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/vocab/alpha.clj#L28-L32">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/vocab/alpha.clj#L28-L32">Source</a></sub></p>
 
-## <a name="skein.api.vocab.alpha/declarations">`declarations`</a>
+## <a name="millstrand.api.vocab.alpha/declarations">`declarations`</a>
 ``` clojure
 (declarations runtime)
 (declarations runtime opts)
@@ -47,9 +47,9 @@ Return `runtime`'s declarations as full C1 maps, sorted by `[:kind :name]`.
   `declaration-kinds` fails loudly rather than silently matching nothing.
   Reads the runtime store explicitly — never the published ambient
   singleton.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/vocab/alpha.clj#L72-L90">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/vocab/alpha.clj#L72-L90">Source</a></sub></p>
 
-## <a name="skein.api.vocab.alpha/declare!">`declare!`</a>
+## <a name="millstrand.api.vocab.alpha/declare!">`declare!`</a>
 ``` clojure
 (declare! runtime declaration)
 ```
@@ -64,4 +64,4 @@ Record C1 `declaration` in `runtime`'s vocabulary registry and return it.
   ownership of a namespace or edge type is a hard, single-owner edge. The
   complete direct partition is replaced under the runtime-owned registry handle,
   so concurrent public declarations cannot race past the owner check.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/vocab/alpha.clj#L38-L70">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/vocab/alpha.clj#L38-L70">Source</a></sub></p>

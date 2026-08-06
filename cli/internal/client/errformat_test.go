@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"skein-strand-cli/internal/errfmt"
+	"millstrand-strand-cli/internal/errfmt"
 )
 
 // Every test here writes to a buffer, which resolves to plain mode on its own.

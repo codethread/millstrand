@@ -1,8 +1,8 @@
 (ns ct.workflows.fix
   "The light bug-fix workflow (family `fix`)."
   (:require [clojure.spec.alpha :as s]
-            [skein.api.format.alpha :as format-alpha]
-            [skein.spools.workflow :as workflow]
+            [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.spools.workflow :as workflow]
             [ct.workflows.support :as support]))
 
 (defn- non-blank-string?
@@ -104,7 +104,7 @@
    :defaults {}
    :example {:subject "strand list drops --limit on named queries"
              :branch "fix-list-limit"
-             :worktree "/abs/path/to/skein-src__fix-list-limit"
+             :worktree "/abs/path/to/millstrand-src__fix-list-limit"
              :card "ab1cd"}
    :param-docs {:subject "One-line statement of the bug being fixed."
                 :branch "Fix branch the claim step creates."

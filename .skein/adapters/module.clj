@@ -4,9 +4,9 @@
   `reconcile-help-transform` is not a branch adapter: it is this canonical
   world's config-election of the batteries reference help transform, kept here
   beside the batteries module ordering so the election has an owner."
-  (:require [skein.api.current.alpha :as current]
-            [skein.api.lifecycle.alpha :as lifecycle]
-            [skein.api.runtime.help-transform.alpha :as help-transform]))
+  (:require [millstrand.api.current.alpha :as current]
+            [millstrand.api.lifecycle.alpha :as lifecycle]
+            [millstrand.api.runtime.help-transform.alpha :as help-transform]))
 
 (defn reconcile-help-transform
   "Elect the batteries reference help transform for this canonical world.
@@ -21,15 +21,15 @@
   (current/with-runtime runtime
     (help-transform/register-default-help-transform!
      runtime
-     {:transform @(requiring-resolve 'skein.spools.batteries/default-help-transform)
-      :owner 'skein.spools.batteries}))
+     {:transform @(requiring-resolve 'millstrand.spools.batteries/default-help-transform)
+      :owner 'millstrand.spools.batteries}))
   {:registered :help-transform})
 
 (defn close-help-transform!
   "Release this world's batteries help-transform election."
   [{:keys [runtime]}]
   (help-transform/unregister-default-help-transform!
-   runtime 'skein.spools.batteries)
+   runtime 'millstrand.spools.batteries)
   {:unregistered :help-transform})
 
 (lifecycle/defresource batteries-help-transform

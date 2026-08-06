@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"skein-strand-cli/internal/client"
-	"skein-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/client"
+	"millstrand-strand-cli/internal/config"
 )
 
 func TestBinPlanRejectsMalformedExecShapes(t *testing.T) {

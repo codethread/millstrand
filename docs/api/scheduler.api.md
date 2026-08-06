@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.api.scheduler.alpha">skein.api.scheduler.alpha</a>
+# <a name="millstrand.api.scheduler.alpha">millstrand.api.scheduler.alpha</a>
 
 
 Explicit-runtime API for the weaver-owned no-poller scheduler primitive.
@@ -13,11 +13,11 @@ Explicit-runtime API for the weaver-owned no-poller scheduler primitive.
   repl-001). Delivery is at-least-once: handlers must be idempotent.
 
   This namespace validates the wake against the shared
-  `:skein.core.specs/scheduler-wake` boundary spec (the persistence seam
+  `:millstrand.core.specs/scheduler-wake` boundary spec (the persistence seam
   consults the same spec) and resolves handlers eagerly, so a bad wake or
   handler fails `schedule!`, not dispatch; durable storage lives in
-  `skein.core.db`, and timer arming/dispatch in
-  `skein.core.weaver.scheduler`. Persisted rows return as decoded
+  `millstrand.core.db`, and timer arming/dispatch in
+  `millstrand.core.weaver.scheduler`. Persisted rows return as decoded
   data-first maps (`::pending-wake`, `::cancellation`).
 
   Pull-based `wake-at` strand attributes plus named queries remain the
@@ -27,12 +27,12 @@ Explicit-runtime API for the weaver-owned no-poller scheduler primitive.
 
   Callers own runtime selection and pass the target weaver runtime as the
   first argument to every function here; capture it with
-  `skein.api.current.alpha/runtime` only at trusted entry points.
+  `millstrand.api.current.alpha/runtime` only at trusted entry points.
 
 
 
 
-## <a name="skein.api.scheduler.alpha/cancel!">`cancel!`</a>
+## <a name="millstrand.api.scheduler.alpha/cancel!">`cancel!`</a>
 ``` clojure
 (cancel! runtime key)
 ```
@@ -43,9 +43,9 @@ Cancel a pending wake in `runtime` by stable key.
   Removes whichever generation currently holds `key` and returns the
   cancellation's history row as a decoded `::cancellation` map. A missing
   key fails loudly.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/scheduler/alpha.clj#L52-L61">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/scheduler/alpha.clj#L52-L61">Source</a></sub></p>
 
-## <a name="skein.api.scheduler.alpha/pending">`pending`</a>
+## <a name="millstrand.api.scheduler.alpha/pending">`pending`</a>
 ``` clojure
 (pending runtime)
 ```
@@ -55,9 +55,9 @@ Return all pending wakes in `runtime` as decoded `::pending-wake` maps.
 
   Ordered by wake-at ascending with a stable key tie-break, so the earliest
   pending wake is `(first (pending runtime))`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/scheduler/alpha.clj#L63-L69">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/scheduler/alpha.clj#L63-L69">Source</a></sub></p>
 
-## <a name="skein.api.scheduler.alpha/schedule!">`schedule!`</a>
+## <a name="millstrand.api.scheduler.alpha/schedule!">`schedule!`</a>
 ``` clojure
 (schedule! runtime wake)
 ```
@@ -72,4 +72,4 @@ Persist or replace a durable wake in `runtime` and arm it for dispatch.
   count. Returns the persisted wake as a decoded `::pending-wake` map.
   Malformed keys/instants/payloads and unresolvable or non-callable handlers
   fail loudly; no wake is persisted on failure.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/scheduler/alpha.clj#L35-L50">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/scheduler/alpha.clj#L35-L50">Source</a></sub></p>

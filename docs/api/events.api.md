@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.api.events.alpha">skein.api.events.alpha</a>
+# <a name="millstrand.api.events.alpha">millstrand.api.events.alpha</a>
 
 
 Explicit-runtime API for managing and inspecting weaver event handlers.
@@ -13,9 +13,9 @@ Explicit-runtime API for managing and inspecting weaver event handlers.
   classloader, data-first metadata — and entries replace by key within the
   registering owner's partition, which is what makes reload workflows
   idempotent. Event submission is not public surface: internal
-  mutation APIs submit events through `skein.core.weaver.dispatch`
+  mutation APIs submit events through `millstrand.core.weaver.dispatch`
   (SPEC-004.C73), and the event-lane quiescence await ships in
-  `skein.test.alpha` (SPEC-004.C74b).
+  `millstrand.test.alpha` (SPEC-004.C74b).
 
   Callers own runtime selection and pass the target weaver runtime as
   the first argument.
@@ -23,7 +23,7 @@ Explicit-runtime API for managing and inspecting weaver event handlers.
 
 
 
-## <a name="skein.api.events.alpha/handler-provenance">`handler-provenance`</a>
+## <a name="millstrand.api.events.alpha/handler-provenance">`handler-provenance`</a>
 ``` clojure
 (handler-provenance runtime)
 ```
@@ -32,13 +32,13 @@ Function.
 Return owner/provenance diagnostics for `runtime`'s event handler registry.
 
   Maps each handler key to `{:effective :shadowed :contenders}` (see
-  `skein.core.weaver.core-registry/explain`); each contender names its `:owner`,
+  `millstrand.core.weaver.core-registry/explain`); each contender names its `:owner`,
   `:layer`, and `:override?`/`:effective?` flags, and its `:value` handler entry
   has the resolved `:fn-value` stripped, so no function value or internal handle
   leaves the registry (SPEC-004.C66, DELTA-OlrDrt-001.CC9).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L104-L113">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/events/alpha.clj#L104-L113">Source</a></sub></p>
 
-## <a name="skein.api.events.alpha/handlers">`handlers`</a>
+## <a name="millstrand.api.events.alpha/handlers">`handlers`</a>
 ``` clojure
 (handlers runtime)
 ```
@@ -49,9 +49,9 @@ Return `runtime`'s event handler registry as data-first entries.
   Each entry is `{:key :types :fn :metadata}` — never the resolved function
   value (SPEC-004.C66) — sorted by printed key so ordering is deterministic
   across mixed key types.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L94-L102">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/events/alpha.clj#L94-L102">Source</a></sub></p>
 
-## <a name="skein.api.events.alpha/recent-failures">`recent-failures`</a>
+## <a name="millstrand.api.events.alpha/recent-failures">`recent-failures`</a>
 ``` clojure
 (recent-failures runtime)
 ```
@@ -63,9 +63,9 @@ Return `runtime`'s recent asynchronous handler failures, oldest first.
   each record carries `:handler/key`, `:handler/fn`, `:event/id`,
   `:event/type`, `:exception/message`, and `:failed/at`. Handler exceptions
   never fail the already-committed mutation that emitted the event.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L115-L123">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/events/alpha.clj#L115-L123">Source</a></sub></p>
 
-## <a name="skein.api.events.alpha/register-handler!">`register-handler!`</a>
+## <a name="millstrand.api.events.alpha/register-handler!">`register-handler!`</a>
 ``` clojure
 (register-handler! runtime key types fn-sym)
 (register-handler! runtime key types fn-sym metadata)
@@ -84,9 +84,9 @@ Register an event handler in `runtime` for selected event types.
   value stays internal). Re-registering a key this owner already holds
   replaces that entry; a key another owner supplies collides loudly, and
   `replace-handler!` is the deliberate override for it.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L29-L48">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/events/alpha.clj#L29-L48">Source</a></sub></p>
 
-## <a name="skein.api.events.alpha/replace-handler!">`replace-handler!`</a>
+## <a name="millstrand.api.events.alpha/replace-handler!">`replace-handler!`</a>
 ``` clojure
 (replace-handler! runtime key types fn-sym)
 (replace-handler! runtime key types fn-sym metadata)
@@ -106,9 +106,9 @@ Replace an already-registered event handler, failing loudly when absent.
   their resolved function value at registration rather than binding it at
   dispatch, so redefining the underlying fn does not reach a registered
   handler: iterating one is always this call.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L50-L75">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/events/alpha.clj#L50-L75">Source</a></sub></p>
 
-## <a name="skein.api.events.alpha/unregister-handler!">`unregister-handler!`</a>
+## <a name="millstrand.api.events.alpha/unregister-handler!">`unregister-handler!`</a>
 ``` clojure
 (unregister-handler! runtime key)
 (unregister-handler! runtime owner key)
@@ -124,4 +124,4 @@ Retract `owner`'s own event handler registration for `key` in `runtime`.
   Validates `key` like registration; a key this owner never registered is a
   quiet no-op, so unregistration is idempotent. Returns `{:unregistered
   key}`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/events/alpha.clj#L77-L92">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/events/alpha.clj#L77-L92">Source</a></sub></p>

@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"skein-strand-cli/internal/config"
-	"skein-strand-cli/internal/errfmt"
+	"millstrand-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/errfmt"
 )
 
 const MillProtocolVersion = 2

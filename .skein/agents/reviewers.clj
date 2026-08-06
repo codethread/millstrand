@@ -50,8 +50,8 @@
   sign-off invariants: the synthesizer is never a seat that reviewed, and at
   least one reviewing seat comes from outside the authoring model family."
   (:require [ct.spools.delegation :as agents]
-            [skein.api.format.alpha :as fmt]
-            [skein.api.runtime.alpha :as runtime]))
+            [millstrand.api.format.alpha :as fmt]
+            [millstrand.api.runtime.alpha :as runtime]))
 
 (def change-review
   "Roster fanned out over each reviewed change in this repository."
@@ -117,9 +117,9 @@
      :brief (fmt/reflow
              "|Police source form, not behavior. In changed Clojure files:
               |docstrings and comments are hard-wrapped in source (match the
-              |namespace; 96 columns in skein.api.* modules per
+              |namespace; 96 columns in millstrand.api.* modules per
               |SPEC-003.C19a), and long prose values are |-margin blocks
-              |reflowed through skein.api.format.alpha, never (str ...)
+              |reflowed through millstrand.api.format.alpha, never (str ...)
               |chains or one wide literal.
               |Reading order is public-first and public bodies carry the
               |meat: a promised fn composes named steps into the story
@@ -272,7 +272,7 @@
     {:name "reader-newbie"
      :harness :luna-low
      :brief (str "PERSONA: a developer meeting this material for the first time — no "
-                 "Clojure, no prior Skein vocabulary beyond getting-started. Read the "
+                 "Clojure, no prior Millstrand vocabulary beyond getting-started. Read the "
                  "changed docs top to bottom, in order, taking every instruction "
                  "literally. Report only comprehension breaks: terms used before they are "
                  "explained, steps that assume unstated knowledge, snippets that do not "

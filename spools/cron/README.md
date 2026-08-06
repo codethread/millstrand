@@ -1,8 +1,8 @@
-# Skein Cron Spool
+# Millstrand Cron Spool
 
 ## Overview
 
-`skein.spools.cron` is a userland recurrence layer over the weaver's durable
+`millstrand.spools.cron` is a userland recurrence layer over the weaver's durable
 scheduler wake primitive. It registers named jobs that fire on a fixed interval
 with optional uniform jitter. Each job owns one durable scheduler wake keyed
 `cron/<id>`.
@@ -18,10 +18,10 @@ can update job code without replacing the pending wake.
 
 Cron keeps only runtime-local weaver-lifetime state: an execution executor, the
 job table, an in-flight latch, the failure log, and a jitter RNG. That state
-lives on the active runtime through `skein.api.runtime.alpha/spool-state`, so
+lives on the active runtime through `millstrand.api.runtime.alpha/spool-state`, so
 separate runtimes in one JVM do not share jobs or failures.
 
-Cron itself spawns no external processes and ships no jobs. Because real jobs often escalate capability, cron stays behind explicit spool approval. Its shipped source loads through `:skein/source-root`, not the production classpath.
+Cron itself spawns no external processes and ships no jobs. Because real jobs often escalate capability, cron stays behind explicit spool approval. Its shipped source loads through `:millstrand/source-root`, not the production classpath.
 
 For recipes, see the [cookbook](../cron.cookbook.md): registering
 interval+jitter jobs, keeping job startup out of broad config tests,
@@ -33,7 +33,7 @@ Cron has no spool prerequisites. Approve the shipped root from the selected work
 
 ```clojure
 ;; spools.edn
-{:spools {skein.spools/cron {:skein/source-root "spools/cron"}}}
+{:spools {millstrand.spools/cron {:millstrand/source-root "spools/cron"}}}
 ```
 
 ## Activation
@@ -41,13 +41,13 @@ Cron has no spool prerequisites. Approve the shipped root from the selected work
 Activate it from trusted startup config after syncing approved roots:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.runtime.alpha :as runtime])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
 
 (def runtime (current/runtime))
 (runtime/module! runtime :cron
-  {:ns 'skein.spools.cron
-   :spools ['skein.spools/cron]
+  {:ns 'millstrand.spools.cron
+   :spools ['millstrand.spools/cron]
    :required? true})
 ```
 
@@ -69,7 +69,7 @@ After owner-complete publication, Cron's lifecycle effect compares the effective
 For code and tests that already hold a runtime, `register!` is the explicit-runtime seam for a live job with a fully-qualified `:handler` symbol:
 
 ```clojure
-(require '[skein.spools.cron :as cron])
+(require '[millstrand.spools.cron :as cron])
 
 (cron/register! runtime
   {:id :nightly-report
@@ -105,7 +105,7 @@ once, so job authors must make `:handler` idempotent or otherwise
 duplicate-tolerant.
 
 When a `cron/<id>` wake is delivered, scheduler invokes
-`skein.spools.cron/fire-wake` on the weaver's shared event lane. That handler
+`millstrand.spools.cron/fire-wake` on the weaver's shared event lane. That handler
 does only the cadence work:
 
 1. Decode the job id from the wake payload.
@@ -138,7 +138,7 @@ the second run is harmless.
 ```
 
 `jobs` does not expose the next fire time. Read
-`skein.api.scheduler.alpha/pending` for the pending `cron/<id>` wake when you
+`millstrand.api.scheduler.alpha/pending` for the pending `cron/<id>` wake when you
 need timing. That keeps the scheduler as the single timing surface.
 
 Job execution failures are recorded, not swallowed (TEN-003): a job whose

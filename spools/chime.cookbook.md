@@ -1,6 +1,6 @@
-# Skein Chime Spool — Cookbook
+# Millstrand Chime Spool — Cookbook
 
-Composition recipes for `skein.spools.chime`: how to turn graph mutations into a real attention surface, and *why* each shape is the right one.
+Composition recipes for `millstrand.spools.chime`: how to turn graph mutations into a real attention surface, and *why* each shape is the right one.
 
 This is the **how/why** half of the chime docs. The other two halves are:
 
@@ -19,7 +19,7 @@ Every recipe has the same four parts, so you can skim to the one that matches yo
 1. **Situation** — the shape of problem you're staring at.
 2. **Composition** — which pieces combine, and how.
 3. **Snippet** — a complete, runnable form (assume
-   `(require '[skein.spools.chime :as chime])`).
+   `(require '[millstrand.spools.chime :as chime])`).
 4. **Why this shape** — the reasoning: why chime is built this way, and what the
    alternative would cost.
 
@@ -36,7 +36,7 @@ The one idea under all of it: **chime owns the plumbing, your config owns the ju
 **Composition.** One `set-notifier!` call with an `{:argv [..]}` binding. Chime spawns that argv per notification with the **title appended as the last argument and the body written to stdin**, so any command shaped like `my-notify <title>` (body on stdin) works. Put the call in your gitignored `init.local.clj`, which the weaver loads after the shared startup files on every start and reload.
 
 ```clojure
-(require '[skein.spools.chime :as chime])
+(require '[millstrand.spools.chime :as chime])
 
 ;; A notification helper that takes the title as an argument, body on stdin:
 (chime/set-notifier! {:argv ["cc-notify"]})
@@ -46,7 +46,7 @@ The one idea under all of it: **chime owns the plumbing, your config owns the ju
 ;;   #!/bin/sh
 ;;   title=$1; body=$(cat)
 ;;   osascript -e "display notification \"$body\" with title \"$title\""
-(chime/set-notifier! {:argv ["/Users/me/.local/bin/skein-notify"]})
+(chime/set-notifier! {:argv ["/Users/me/.local/bin/millstrand-notify"]})
 
 ;; Confirm the binding, then prove the path end to end without waiting for a rule:
 (chime/notifier)
@@ -69,7 +69,7 @@ The one idea under all of it: **chime owns the plumbing, your config owns the ju
   startup and reload. Putting the call in `init.local.clj` makes that automatic —
   the file re-runs on both.
 
-Honest source: this repo's [`.skein/init.clj`](../.skein/init.clj) chime block and [CLAUDE.md](../CLAUDE.md)'s chime note (`cc-notify` / `osascript` per-developer binding in `init.local.clj`); the argv-and-stdin behaviour is exercised by `notifier-binding-and-manual-notify` in [`test/skein/chime_test.clj`](../test/skein/chime_test.clj), which binds a script that appends the title and stdin body to a file and asserts both arrive.
+Honest source: this repo's [`.skein/init.clj`](../.skein/init.clj) chime block and [CLAUDE.md](../CLAUDE.md)'s chime note (`cc-notify` / `osascript` per-developer binding in `init.local.clj`); the argv-and-stdin behaviour is exercised by `notifier-binding-and-manual-notify` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj), which binds a script that appends the title and stdin body to a file and asserts both arrive.
 
 ---
 
@@ -82,7 +82,7 @@ Honest source: this repo's [`.skein/init.clj`](../.skein/init.clj) chime block a
 ```clojure
 (ns my.rules
   "Workspace attention rules."
-  (:require [skein.spools.chime :as chime]))
+  (:require [millstrand.spools.chime :as chime]))
 
 (defn agent-failed
   "Notify when a delegated run has failed or exhausted its attempts."
@@ -118,7 +118,7 @@ Honest source: this repo's [`.skein/init.clj`](../.skein/init.clj) chime block a
   concurrent mutation is ordered after registration and still notifies. You
   write the plain predicate; the engine handles "only once."
 
-Honest source: this repo's `hitl-checkpoint-ready` and `kanban-completed` rules in [`.skein/notifications/attention.clj`](../.skein/notifications/attention.clj), registered together in `register-chime-rules!`; the fire-once-per-transition behaviour is pinned by `registered-rules-fire-end-to-end` and `dedup-and-reset-seen` in [`test/skein/chime_test.clj`](../test/skein/chime_test.clj).
+Honest source: this repo's `hitl-checkpoint-ready` and `kanban-completed` rules in [`.skein/notifications/attention.clj`](../.skein/notifications/attention.clj), registered together in `register-chime-rules!`; the fire-once-per-transition behaviour is pinned by `registered-rules-fire-end-to-end` and `dedup-and-reset-seen` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj).
 
 ---
 
@@ -132,7 +132,7 @@ Honest source: this repo's `hitl-checkpoint-ready` and `kanban-completed` rules 
 (ns my.rules
   "Workspace attention rules."
   (:require [clojure.string :as str]
-            [skein.spools.chime :as chime]
+            [millstrand.spools.chime :as chime]
             [ct.spools.agent-run :as agent-run]))
 
 (defn interactive-session-running
@@ -217,7 +217,7 @@ carries `mode`, `backend`, `session`, and `attach` for interactive summaries.
   the strand's `updated_at` age lets a rule notice the absence of progress, which
   is the failure mode a mutation-only trigger would miss entirely.
 
-Honest source: this repo's `hitl-checkpoint-ready-rule` and `parked-run-rule` in [`.skein/notifications/attention.clj`](../.skein/notifications/attention.clj); readiness firing on both born-ready and later-unblocked strands is covered by `ready-rule-fires-born-ready-and-when-unblocked` in [`test/skein/chime_test.clj`](../test/skein/chime_test.clj).
+Honest source: this repo's `hitl-checkpoint-ready-rule` and `parked-run-rule` in [`.skein/notifications/attention.clj`](../.skein/notifications/attention.clj); readiness firing on both born-ready and later-unblocked strands is covered by `ready-rule-fires-born-ready-and-when-unblocked` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj).
 
 ---
 
@@ -258,7 +258,7 @@ Honest source: this repo's `hitl-checkpoint-ready-rule` and `parked-run-rule` in
   clears that memory without touching registrations — the right tool when testing
   a rule interactively, the wrong reflex for a genuinely-once notification.
 
-Honest source: `missing-notifier-is-recorded-loudly`, `rule-failures-are-recorded`, and `dedup-and-reset-seen` in [`test/skein/chime_test.clj`](../test/skein/chime_test.clj); the loud-failure discipline is the same one this repo relies on in [`.skein/init.clj`](../.skein/init.clj) ("Unbound chime records loud notifier-missing failures").
+Honest source: `missing-notifier-is-recorded-loudly`, `rule-failures-are-recorded`, and `dedup-and-reset-seen` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj); the loud-failure discipline is the same one this repo relies on in [`.skein/init.clj`](../.skein/init.clj) ("Unbound chime records loud notifier-missing failures").
 
 ---
 

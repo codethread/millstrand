@@ -1,4 +1,4 @@
-# Clojure crash course for Skein users
+# Clojure crash course for Millstrand users
 
 This is a tiny Clojure primer for using `mill weaver repl`.
 
@@ -12,9 +12,9 @@ means: call `add!` in the `weaver` namespace with two arguments, `rt` and a map.
 
 ## Names
 
-Skein has one registration story with three calling surfaces. Put durable behavior in a module source with an authoring form such as `skein/defquery`; the form defines a Var and publishes the declaration when its module is collected. For code and tests that already hold a runtime, use the explicit-runtime `skein.api.*.alpha` functions. In the connected REPL, `skein.repl` provides the same verbs with the runtime implied. The REPL is a shorter calling style, not a separate capability.
+Millstrand has one registration story with three calling surfaces. Put durable behavior in a module source with an authoring form such as `millstrand/defquery`; the form defines a Var and publishes the declaration when its module is collected. For code and tests that already hold a runtime, use the explicit-runtime `millstrand.api.*.alpha` functions. In the connected REPL, `millstrand.repl` provides the same verbs with the runtime implied. The REPL is a shorter calling style, not a separate capability.
 
-The strand functions live in `skein.api.weaver.alpha` and all take the weaver runtime first:
+The strand functions live in `millstrand.api.weaver.alpha` and all take the weaver runtime first:
 
 ```clojure
 weaver/add!
@@ -27,13 +27,13 @@ weaver/update!
 The explicit-runtime registration form is used by code and tests:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.graph.alpha :as graph])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.graph.alpha :as graph])
 
 (graph/register-query! (current/runtime) 'mine [:= [:attr :owner] "ct"])
 ```
 
-The live registration verbs live in `skein.repl` and imply the runtime because you are already sitting inside the weaver. `mill weaver repl` starts in `user` with `skein.repl` aliased as `repl`; in another nREPL session, first run `(require '[skein.repl :as repl])`.
+The live registration verbs live in `millstrand.repl` and imply the runtime because you are already sitting inside the weaver. `mill weaver repl` starts in `user` with `millstrand.repl` aliased as `repl`; in another nREPL session, first run `(require '[millstrand.repl :as repl])`.
 
 ```clojure
 repl/register-query!
@@ -57,8 +57,8 @@ Keywords such as `:owner` or `:example_outcome` inside `:attributes` are user-ch
 ## Bind a value
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.weaver.alpha :as weaver])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.weaver.alpha :as weaver])
 
 (def rt (current/runtime))
 (def s (:id (weaver/add! rt {:title "My first strand"})))
@@ -118,11 +118,11 @@ A namespace groups related names, like a module or file. `.skein/policy/config.c
 ## Require helper namespaces
 
 ```clojure
-(require '[skein.api.runtime.alpha :as runtime]
-         '[skein.api.graph.alpha :as graph])
+(require '[millstrand.api.runtime.alpha :as runtime]
+         '[millstrand.api.graph.alpha :as graph])
 ```
 
-These are privileged built-in helper namespaces shipped with Skein. The aliases let you call functions like `runtime/refresh!` and `graph/strands-by-ids`.
+These are privileged built-in helper namespaces shipped with Millstrand. The aliases let you call functions like `runtime/refresh!` and `graph/strands-by-ids`.
 
 ## Quick reference
 
@@ -143,7 +143,7 @@ Terms to use when discussing Clojure with an agent (or another dev), so requests
 - **function** / **fn** — not "method". `weaver/add!`, `ref-symbol`, `plan-strand` are all functions.
 - **var** — a top-level name created by `def`/`defn`/`defonce`, e.g. "`devflow-workflows` is a var" or "check the `ref-symbol` fn". Say "the `X` var" only when `X` isn't a function.
 - **atom** — mutable state held in a var, e.g. "`devflow-summary-notifications` is a defonce atom"; "reset the atom" / "check the atom".
-- **namespace** — a named group of vars, e.g. `config`, `skein.api.runtime.alpha`.
+- **namespace** — a named group of vars, e.g. `config`, `millstrand.api.runtime.alpha`.
 - **keyword** — a `:like-this` token, usually a map key.
 - **symbol** — a bare name like `foo` or `config/foo`, used to refer to a var or namespace.
 - **macro** — code that generates code at compile time, e.g. `defn` itself is a macro (expands to a `def` of a function).

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"skein-strand-cli/internal/errfmt"
+	"millstrand-strand-cli/internal/errfmt"
 )
 
 const protocolVersion = 1

@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"skein-ralph/internal/board"
+	"millstrand-ralph/internal/board"
 )
 
 // headerIndent aligns the run-status rows with the panes' own indentation.

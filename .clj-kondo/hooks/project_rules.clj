@@ -15,8 +15,8 @@
 
 (defn- spool-file? [filename]
   (boolean (and filename
-                (or (str/includes? filename "/spools/src/skein/spools/")
-                    (str/includes? filename "\\spools\\src\\skein\\spools\\")))))
+                (or (str/includes? filename "/spools/src/millstrand/spools/")
+                    (str/includes? filename "\\spools\\src\\millstrand\\spools\\")))))
 
 (defn ns-docstring
   "Require every namespace form to carry a docstring immediately after the ns symbol."

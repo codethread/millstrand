@@ -1,11 +1,11 @@
 # Customising your workspace
 
-Skein's core is deliberately small; most of what your workspace *means* lives in trusted Clojure code the weaver loads for you — named queries, weave patterns, event handlers, and ops. This page shows the path from a durable module source to live experiments and workspace-owned convenience helpers. Authoring forms in module source come first: they are the durable, owner-complete declarations. Explicit-runtime verbs are the code and test surface for live state, and `skein.repl` supplies the same verbs with the runtime implied for an interactive session. When a spool leaves your workspace, its code must keep the runtime explicit; the terse helper layer remains workspace-owned.
+Millstrand's core is deliberately small; most of what your workspace *means* lives in trusted Clojure code the weaver loads for you — named queries, weave patterns, event handlers, and ops. This page shows the path from a durable module source to live experiments and workspace-owned convenience helpers. Authoring forms in module source come first: they are the durable, owner-complete declarations. Explicit-runtime verbs are the code and test surface for live state, and `millstrand.repl` supplies the same verbs with the runtime implied for an interactive session. When a spool leaves your workspace, its code must keep the runtime explicit; the terse helper layer remains workspace-owned.
 
 If you have not met the weaver, workspaces, or the strand model yet, read the [tutorial](../tutorial.md) first;
 the [reference](../reference.md) covers the full command and runtime surface. Per-function API detail is
 deliberately absent from this page: the generated [alpha API reference](../api/README.md) documents every
-`skein.api.*.alpha` function, and this page only shows how the pieces compose.
+`millstrand.api.*.alpha` function, and this page only shows how the pieces compose.
 
 ## The files mill init gives you
 
@@ -40,31 +40,31 @@ failing files fail loudly with file context. The generated `init.clj` is intenti
 ```clojure
 ;; spools.edn
 {:spools
- {skein.spools/batteries {:skein/source-root "spools/batteries"}}}
+ {millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}}}
 ```
 
 ```clojure
 ;; init.clj
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.runtime.alpha :as runtime])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
 
 (def runtime (current/runtime))
 
-(runtime/module! runtime :skein/spools-batteries
-  {:ns 'skein.spools.batteries
-   :spools ['skein.spools/batteries]})
+(runtime/module! runtime :millstrand/spools-batteries
+  {:ns 'millstrand.spools.batteries
+   :spools ['millstrand.spools/batteries]})
 ```
 
-The declaration names only a source target and world policy; Batteries publishes through authoring forms in its source. The source-root coordinate is relative to the mill-selected Skein checkout, so bootstrap persists no absolute checkout path. Delete the seeded entry to opt out of batteries; the guarded module then publishes no batteries ops.
+The declaration names only a source target and world policy; Batteries publishes through authoring forms in its source. The source-root coordinate is relative to the mill-selected Millstrand checkout, so bootstrap persists no absolute checkout path. Delete the seeded entry to opt out of batteries; the guarded module then publishes no batteries ops.
 
-`skein.api.runtime.alpha` is a privileged built-in runtime loader/config helper namespace shipped with Skein —
-not an ordinary user spool, which is why loader/config helpers do not live under `skein.spools.*`.
+`millstrand.api.runtime.alpha` is a privileged built-in runtime loader/config helper namespace shipped with Millstrand —
+not an ordinary user spool, which is why loader/config helpers do not live under `millstrand.spools.*`.
 
 Startup files matter because runtime registries are weaver-lifetime state: named queries, weave patterns, and event handlers registered from a live REPL vanish with the process. Anything you want after every restart belongs in startup-loaded code. Put durable behavior in a module source and activate that module from `init.clj`:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.runtime.alpha :as runtime])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
 
 (runtime/module! (current/runtime) :my/workspace
   {:ns 'my.workspace})
@@ -73,13 +73,13 @@ Startup files matter because runtime registries are weaver-lifetime state: named
 The module source owns the query or other registry entries, so refresh and restart can reconstruct them. For a quick live experiment in code or a test, call the explicit-runtime function instead:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.graph.alpha :as graph])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.graph.alpha :as graph])
 
 (graph/register-query! (current/runtime) 'mine [:= [:attr :owner] "ct"])
 ```
 
-Inside the weaver REPL, `skein.repl/register-query!` is the same operation without the runtime argument. Direct entries are useful for experiments and startup code can reapply them after a restart, but a refresh can still overwrite them. Simple workspaces can keep activation in `init.clj` and personal activation in gitignored `init.local.clj`; keep substantive declarations in module source. When the file starts accumulating real behavior, choose a workspace module for repo policy or a local spool for reusable classpath code. The [workspace modules and local spools section](#workspace-modules-and-local-spools) explains the boundary.
+Inside the weaver REPL, `millstrand.repl/register-query!` is the same operation without the runtime argument. Direct entries are useful for experiments and startup code can reapply them after a restart, but a refresh can still overwrite them. Simple workspaces can keep activation in `init.clj` and personal activation in gitignored `init.local.clj`; keep substantive declarations in module source. When the file starts accumulating real behavior, choose a workspace module for repo policy or a local spool for reusable classpath code. The [workspace modules and local spools section](#workspace-modules-and-local-spools) explains the boundary.
 
 ## Trying config changes in a disposable world
 
@@ -98,7 +98,7 @@ The `${ws:?}` guard makes an empty variable fail the command instead of silently
 workspace. If the candidate config is wrong, startup tells you with file context, and you throw the directory
 away.
 
-Once a customisation is worth keeping, it is worth automated coverage: [`skein.test.alpha`](./testing.md)
+Once a customisation is worth keeping, it is worth automated coverage: [`millstrand.test.alpha`](./testing.md)
 weaver worlds take `:init`, `:spools-edn`, and `:files` fixtures, so a test exercises exactly the artifacts
 this page has you writing.
 
@@ -107,8 +107,8 @@ this page has you writing.
 Use refresh during development instead of restarting the weaver:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.runtime.alpha :as runtime])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
 (runtime/refresh! (current/runtime))
 ```
 
@@ -126,11 +126,11 @@ family's effective `:roots` map and reloads that root's namespaces in dependency
 order:
 
 ```clojure
-(runtime/reload-code! (current/runtime) 'skein.spools/kanban)
+(runtime/reload-code! (current/runtime) 'millstrand.spools/kanban)
 ```
 
 The result names the root lib, canonical root, and namespaces in reload order, and conforms to
-`:skein.api.runtime.alpha/reload-code-result`. It deliberately performs no
+`:millstrand.api.runtime.alpha/reload-code-result`. It deliberately performs no
 publication or resource reconciliation; use a targeted refresh for the normal
 path.
 
@@ -155,14 +155,14 @@ Much of this iteration happens from `mill weaver repl`. The REPL (and `mill weav
 (ns-unmap *ns* 'ct-config-publics)
 ```
 
-For stronger isolation, create an agent-local namespace and call Skein helpers through an alias:
+For stronger isolation, create an agent-local namespace and call Millstrand helpers through an alias:
 
 ```clojure
 (create-ns 'agent.ct)
 (in-ns 'agent.ct)
 (clojure.core/refer 'clojure.core)
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.weaver.alpha :as weaver]
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.weaver.alpha :as weaver]
          '[clojure.pprint :as ct-pprint])
 
 (ct-pprint/pprint (weaver/ready (current/runtime)))
@@ -194,7 +194,7 @@ Keep repository-specific policy in workspace `:file` modules. They are loaded fr
 
 The directory and namespace use the same concern name for discovery, but the `:file` declaration selects the source. It does not add `.millstrand` to the classpath. If one workspace module requires another, declare the dependency with `:after` so its namespace has loaded first.
 
-Use a local spool when the code needs a classpath root or is worth reusing independently of this workspace. Skein treats runtime extensions as trusted Clojure code, and the
+Use a local spool when the code needs a classpath root or is worth reusing independently of this workspace. Millstrand treats runtime extensions as trusted Clojure code, and the
 [reference spools](../../spools/README.md) — including the workflow engine and the external,
 git-distributed devflow lifecycle — double as worked examples of spool design. All of them load the
 same opt-in way yours will. A common layout:
@@ -224,7 +224,7 @@ A shared local entry has one root at `.` under the entry's symbol. Git families 
 several roots with `:roots`; local overlays inherit that map from their shared Git family. Relative
 `:local/root` values resolve against the selected workspace. Absolute paths are accepted as
 explicit user-approved paths, and `~` expands to your home directory. Create a minimal `deps.edn`
-in the root (if `:paths` is omitted, Skein's namespace loading defaults to `["src"]`):
+in the root (if `:paths` is omitted, Millstrand's namespace loading defaults to `["src"]`):
 
 ```clojure
 {:paths ["src"]}
@@ -234,9 +234,9 @@ Then implement the spool with an authoring form. Every source evaluation collect
 
 ```clojure
 (ns acme.spools.workflows.mine
-  (:require [skein.api.skein.alpha :as skein]))
+  (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(skein/defquery mine
+(millstrand/defquery mine
   "Return strands owned by ct."
   {}
   [:= [:attr :owner] "ct"])
@@ -257,7 +257,7 @@ unload guarantee: restart the weaver when you need a clean runtime.
 
 ## Your own CLI command
 
-Every `strand` command is a registered op, and ops use the same three-layer order as queries. Define a durable command with `skein/defop` in module source; use `skein.api.weaver.alpha/register-op!` from explicit-runtime code or tests for a live experiment; use `skein.repl/register-op!` from the connected REPL. `strand help` lists registered ops and `strand help <op>` explains one. The CLI forwards everything after the op name to the handler as string argv.
+Every `strand` command is a registered op, and ops use the same three-layer order as queries. Define a durable command with `millstrand/defop` in module source; use `millstrand.api.weaver.alpha/register-op!` from explicit-runtime code or tests for a live experiment; use `millstrand.repl/register-op!` from the connected REPL. `strand help` lists registered ops and `strand help <op>` explains one. The CLI forwards everything after the op name to the handler as string argv.
 
 The durable form belongs in the module source:
 
@@ -269,7 +269,7 @@ The durable form belongs in the module source:
    :deadline-class :standard
    :positionals [{:name :text :type :string :required? true :doc "Text to echo."}]})
 
-(skein/defop echo
+(millstrand/defop echo
   "Echo raw argv."
   {:arg-spec echo-arg-spec}
   [ctx]
@@ -288,7 +288,7 @@ Activate that module with `runtime/module!` as in the query example above. The f
 For a temporary live experiment, register it from the connected REPL:
 
 ```clojure
-(require '[skein.repl :as repl])
+(require '[millstrand.repl :as repl])
 
 (repl/register-op! 'echo "Echo raw argv" 'my.workflow/echo-op)
 ```
@@ -297,7 +297,7 @@ For a temporary live experiment, register it from the connected REPL:
 strand echo --flag value
 ```
 
-Op handlers return data; the CLI prints it as JSON. The explicit-runtime registration is weaver-lifetime state, so keep a durable command in module source. To mask a spool op durably, put `(skein/defop {:override? true} ...)` in a workspace module; a local-root and a git-pinned spool follow the same registry rules. `replace-op!` is the live, intentional shadow; `unregister-op!` retracts only your shadow and restores the original. The shipped [kanban board spool](../../spools/kanban.md) is a complete example of this pattern: a board surface built from ops, queries, and attributes.
+Op handlers return data; the CLI prints it as JSON. The explicit-runtime registration is weaver-lifetime state, so keep a durable command in module source. To mask a spool op durably, put `(millstrand/defop {:override? true} ...)` in a workspace module; a local-root and a git-pinned spool follow the same registry rules. `replace-op!` is the live, intentional shadow; `unregister-op!` retracts only your shadow and restores the original. The shipped [kanban board spool](../../spools/kanban.md) is a complete example of this pattern: a board surface built from ops, queries, and attributes.
 
 Name an op by what it exposes. When your command fronts another spool's surface, keep that spool's
 verbs, nouns, and attribute keys — the op is your entry point to the primitive, not a new language
@@ -308,13 +308,13 @@ starts, advances, or lists an existing primitive speaks that primitive's terms.
 
 ## Terse daily driving
 
-Explicit-runtime code threads a `runtime` argument through every call. That is the right discipline for durable config and can be tedious at the REPL. If your workspace needs shorter calls, put the helper in your own namespace and make the trade explicit. This is workspace-owned userland sugar, not a fourth Skein registration tier: authoring forms still own durable declarations, and the explicit-runtime and `skein.repl` verbs remain the registration surface.
+Explicit-runtime code threads a `runtime` argument through every call. That is the right discipline for durable config and can be tedious at the REPL. If your workspace needs shorter calls, put the helper in your own namespace and make the trade explicit. This is workspace-owned userland sugar, not a fourth Millstrand registration tier: authoring forms still own durable declarations, and the explicit-runtime and `millstrand.repl` verbs remain the registration surface.
 
 ```clojure
 (ns my.helpers
-  (:require [skein.api.current.alpha :as current]
-            [skein.api.graph.alpha :as graph]
-            [skein.api.weaver.alpha :as weaver]))
+  (:require [millstrand.api.current.alpha :as current]
+            [millstrand.api.graph.alpha :as graph]
+            [millstrand.api.weaver.alpha :as weaver]))
 
 ;; Scoped binding only; keep actual state runtime-owned.
 (def ^:dynamic *runtime* nil)
@@ -325,7 +325,7 @@ Explicit-runtime code threads a `runtime` argument through every call. That is t
 (defmacro with-runtime [runtime & body]
   `(let [runtime# ~runtime]
      (when (nil? runtime#)
-       (throw (ex-info "Cannot scope a nil Skein runtime" {:runtime :nil})))
+       (throw (ex-info "Cannot scope a nil Millstrand runtime" {:runtime :nil})))
      (binding [*runtime* runtime#]
        (current/with-runtime runtime# ~@body))))
 

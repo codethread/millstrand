@@ -1,12 +1,12 @@
 # IDE REPL setup
 
-Skein exposes each running weaver as an nREPL server. Editor integrations can connect to that nREPL directly, which lets you evaluate Clojure forms against the live weaver runtime.
+Millstrand exposes each running weaver as an nREPL server. Editor integrations can connect to that nREPL directly, which lets you evaluate Clojure forms against the live weaver runtime.
 
-This guide covers VS Code with [Calva](https://calva.io/), a popular Clojure extension. Unlike the Neovim integration in `integrations/neovim`, this is just a manual connection workflow; there is no Skein-specific VS Code plugin.
+This guide covers VS Code with [Calva](https://calva.io/), a popular Clojure extension. Unlike the Neovim integration in `integrations/neovim`, this is just a manual connection workflow; there is no Millstrand-specific VS Code plugin.
 
 ## Prerequisites
 
-1. Install the Skein CLIs from the Skein checkout:
+1. Install the Millstrand CLIs from the Millstrand checkout:
 
    ```sh
    make install
@@ -23,7 +23,7 @@ Start mill in a durable terminal:
 mill start
 ```
 
-From the repository or Skein workspace you want to work with, start its weaver:
+From the repository or Millstrand workspace you want to work with, start its weaver:
 
 ```sh
 mill weaver start
@@ -70,19 +70,19 @@ mill weaver list | jq -r '.[] | select(.state == "running") | "\(.name)\t\(.conf
 4. Choose **Clojure CLI** or **Generic nREPL** when prompted for the REPL type.
 5. Enter the host and port from `mill weaver list`.
 
-After Calva connects, evaluate this form once to land in the neutral `user` session namespace with `skein.repl` aliased:
+After Calva connects, evaluate this form once to land in the neutral `user` session namespace with `millstrand.repl` aliased:
 
 ```clojure
-(do (in-ns 'user) (require '[skein.repl :as repl]))
+(do (in-ns 'user) (require '[millstrand.repl :as repl]))
 ```
 
 Put behavior that should survive a restart in a module source file first:
 
 ```clojure
 (ns my.workspace
-  (:require [skein.api.skein.alpha :as skein]))
+  (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(skein/defquery mine
+(millstrand/defquery mine
   "Return strands owned by me."
   {}
   [:= [:attr :owner] "me"])
@@ -100,7 +100,7 @@ For a live experiment, code and tests use the explicit-runtime registration func
 
 `replace-query!` records intent to shadow an existing owner. `unregister-query!` removes only your entry and restores the value below it; registry verbs do not remove or change the `mine` Var. For ops, patterns, and hooks, redefining a handler function is the live hot loop under a stable contract, but help metadata stays stale until the registration is replaced. Queries are values, so replace the registration itself. Event handlers capture their function value at registration and also need a replacement to pick up a new body.
 
-The connected nREPL used by Calva is an in-process session. A separate JVM connected through a client does not have an in-process runtime, so its registration wrappers fail with remediation; use the explicit `skein.core.client` bridge for that transport instead.
+The connected nREPL used by Calva is an in-process session. A separate JVM connected through a client does not have an in-process runtime, so its registration wrappers fail with remediation; use the explicit `millstrand.core.client` bridge for that transport instead.
 
 You can now iterate on the weaver's live registries:
 
@@ -110,11 +110,11 @@ You can now iterate on the weaver's live registries:
 (repl/unregister-query! 'mine)
 ```
 
-Reads and strand mutation stay on the `strand` CLI, or on the explicit-runtime `skein.api.*.alpha` verbs when you already hold a runtime:
+Reads and strand mutation stay on the `strand` CLI, or on the explicit-runtime `millstrand.api.*.alpha` verbs when you already hold a runtime:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.weaver.alpha :as weaver])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.weaver.alpha :as weaver])
 
 (weaver/ready (current/runtime))
 ```
@@ -124,7 +124,7 @@ Reads and strand mutation stay on the `strand` CLI, or on the explicit-runtime `
 When evaluating forms from a file, the file's namespace still matters. Name the alias there too:
 
 ```clojure
-(require '[skein.repl :as repl])
+(require '[millstrand.repl :as repl])
 
 (comment
   (repl/register-query! 'mine [:= [:attr :owner] "me"])

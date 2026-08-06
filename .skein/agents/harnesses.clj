@@ -57,10 +57,10 @@
   bench (codex currently wins on RAM/CPU under concurrent load); :flash is
   the benched exception for cheap recon sweeps, and the pi harness itself
   stays registered via its spool."
-  (:require [skein.api.current.alpha :as current]
-            [skein.api.format.alpha :as format-alpha]
-            [skein.api.lifecycle.alpha :as lifecycle]
-            [skein.api.runtime.alpha :as runtime]
+  (:require [millstrand.api.current.alpha :as current]
+            [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.api.lifecycle.alpha :as lifecycle]
+            [millstrand.api.runtime.alpha :as runtime]
             [ct.spools.delegation :as agents]
             [ct.spools.agent-run :as shuttle]))
 
@@ -285,7 +285,7 @@
            |acting, never route load-bearing deep dives here. thinking=high
            |benched more precise than low at identical cents cost. Scores:
            |explore bench 2026-07-13 (card vk5re), judged vs luna/haiku on
-           |skein-src recon; unbenched for authored code.")}
+           |millstrand-src recon; unbenched for authored code.")}
    :deepseek
    {:alias-of :pi
     :extra-args ["--agent" "main" "--model" "deepseek/deepseek-v4-pro:high"]

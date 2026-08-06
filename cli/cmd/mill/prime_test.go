@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"skein-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/config"
 )
 
-// writeSourceFixture lays out a minimal Skein checkout: deps.edn (so source
+// writeSourceFixture lays out a minimal Millstrand checkout: deps.edn (so source
 // resolution accepts it) plus a prime manifest and topic files.
 func writeSourceFixture(t *testing.T, manifest string, topics map[string]string) string {
 	t.Helper()

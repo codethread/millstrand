@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.api.runtime.help-transform.alpha">skein.api.runtime.help-transform.alpha</a>
+# <a name="millstrand.api.runtime.help-transform.alpha">millstrand.api.runtime.help-transform.alpha</a>
 
 
 Explicit-runtime at-most-one slot for the default help transform.
@@ -28,7 +28,7 @@ Explicit-runtime at-most-one slot for the default help transform.
 
 
 
-## <a name="skein.api.runtime.help-transform.alpha/default-help-transform">`default-help-transform`</a>
+## <a name="millstrand.api.runtime.help-transform.alpha/default-help-transform">`default-help-transform`</a>
 ``` clojure
 (default-help-transform runtime)
 ```
@@ -38,18 +38,18 @@ Return `runtime`'s registered default-help-transform registration map, or nil.
 
   The read/introspection projection: reports whether a transform is registered
   (`some?`) and its provenance (`:owner`), reading the runtime store explicitly.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/help_transform/alpha.clj#L89-L95">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L89-L95">Source</a></sub></p>
 
-## <a name="skein.api.runtime.help-transform.alpha/default-help-transform-registered?">`default-help-transform-registered?`</a>
+## <a name="millstrand.api.runtime.help-transform.alpha/default-help-transform-registered?">`default-help-transform-registered?`</a>
 ``` clojure
 (default-help-transform-registered? runtime)
 ```
 Function.
 
 True when `runtime`'s default-help-transform slot holds a transform.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/help_transform/alpha.clj#L101-L104">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L101-L104">Source</a></sub></p>
 
-## <a name="skein.api.runtime.help-transform.alpha/register-default-help-transform!">`register-default-help-transform!`</a>
+## <a name="millstrand.api.runtime.help-transform.alpha/register-default-help-transform!">`register-default-help-transform!`</a>
 ``` clojure
 (register-default-help-transform! runtime registration)
 ```
@@ -63,9 +63,9 @@ Register `registration` as `runtime`'s default help transform and return it.
   attempting owners; use `replace-default-help-transform!` for a deliberate
   override. The occupancy check runs inside the `swap!`, so two racing
   registrations cannot both clear a stale read.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/help_transform/alpha.clj#L37-L49">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L37-L49">Source</a></sub></p>
 
-## <a name="skein.api.runtime.help-transform.alpha/replace-default-help-transform!">`replace-default-help-transform!`</a>
+## <a name="millstrand.api.runtime.help-transform.alpha/replace-default-help-transform!">`replace-default-help-transform!`</a>
 ``` clojure
 (replace-default-help-transform! runtime registration)
 ```
@@ -77,9 +77,9 @@ Replace `runtime`'s registered default help transform, failing loudly when
   Same map shape as `register-default-help-transform!`. This is the deliberate
   override for an occupied slot; unlike the register path it requires a transform
   to already be registered.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/help_transform/alpha.clj#L55-L65">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L55-L65">Source</a></sub></p>
 
-## <a name="skein.api.runtime.help-transform.alpha/unregister-default-help-transform!">`unregister-default-help-transform!`</a>
+## <a name="millstrand.api.runtime.help-transform.alpha/unregister-default-help-transform!">`unregister-default-help-transform!`</a>
 ``` clojure
 (unregister-default-help-transform! runtime owner)
 ```
@@ -89,4 +89,4 @@ Remove `owner`'s registered default help transform and return it.
 
   The slot must be occupied by the same owner. An empty slot or another owner
   fails loudly, so lifecycle cleanup cannot remove a replacement registration.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/help_transform/alpha.clj#L71-L83">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L71-L83">Source</a></sub></p>

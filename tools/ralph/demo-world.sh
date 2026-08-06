@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# demo-world.sh — stand up a throwaway Skein world to try ralph against.
+# demo-world.sh — stand up a throwaway Millstrand world to try ralph against.
 #
 # Creates a workspace under $TMPDIR, starts a weaver for it, and fills its board
 # with an epic carrying the `ralph` label plus feature cards and tasks in every
@@ -57,14 +57,14 @@ else:
 PY
 )"
 cat > "$ws/spools.edn" <<EOF
-{:spools {skein.spools/batteries {:skein/source-root "spools/batteries"}
+{:spools {millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}
           $kanban_entry}}
 EOF
 
 cat >> "$ws/init.clj" <<'EOF'
 
 ;; Throwaway world for trying ralph: batteries plus the kanban board, nothing else.
-(runtime/module! runtime :skein/spools-kanban
+(runtime/module! runtime :millstrand/spools-kanban
                  {:ns 'ct.spools.kanban
                   :spools ['codethread/kanban]
                   :required? true})

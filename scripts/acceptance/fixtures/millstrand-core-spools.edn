@@ -1,0 +1,2 @@
+{:spools {millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}
+          millstrand.spools/workflow {:millstrand/source-root "spools/workflow"}}}

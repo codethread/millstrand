@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"skein-strand-cli/internal/client"
-	"skein-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/client"
+	"millstrand-strand-cli/internal/config"
 )
 
 func TestWeaverLifecycleWithFakeLauncher(t *testing.T) {
@@ -251,7 +251,7 @@ func TestValidateMetadataRejectsWhitespaceOnlyName(t *testing.T) {
 func TestResolveLaunchSourcePrecedence(t *testing.T) {
 	envSource := tempSource(t)
 	installedSource := tempSource(t)
-	cwdSource := tempSkeinCheckout(t)
+	cwdSource := tempMillstrandCheckout(t)
 	origInstalled := config.InstalledSource
 	config.InstalledSource = installedSource
 	t.Cleanup(func() { config.InstalledSource = origInstalled })
@@ -285,7 +285,7 @@ func TestResolveLaunchSourcePrecedence(t *testing.T) {
 	config.InstalledSource = ""
 	resolved, err = resolveLaunchSource(cwdSource)
 	if err != nil || resolved != cwdSource {
-		t.Fatalf("Skein checkout cwd should win, got source=%q err=%v", resolved, err)
+		t.Fatalf("Millstrand checkout cwd should win, got source=%q err=%v", resolved, err)
 	}
 }
 
@@ -689,7 +689,7 @@ func tempSource(t *testing.T) string {
 	return dir
 }
 
-func tempSkeinCheckout(t *testing.T) string {
+func tempMillstrandCheckout(t *testing.T) string {
 	t.Helper()
 	dir := tempSource(t)
 	cmd := exec.Command("git", "init")

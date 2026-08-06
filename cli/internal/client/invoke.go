@@ -12,7 +12,7 @@ import (
 	"os/signal"
 	"time"
 
-	"skein-strand-cli/internal/errfmt"
+	"millstrand-strand-cli/internal/errfmt"
 )
 
 // InvokeThroughMill sends an invoke envelope through the local mill routing path

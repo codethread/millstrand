@@ -1,6 +1,6 @@
-# Skein Workflow Spool — Cookbook
+# Millstrand Workflow Spool — Cookbook
 
-Composition recipes for `skein.spools.workflow`: how to shape real workflows out of the primitives, and *why* each shape is the right one.
+Composition recipes for `millstrand.spools.workflow`: how to shape real workflows out of the primitives, and *why* each shape is the right one.
 
 This is the **how/why** half of the workflow docs. The other two halves are:
 
@@ -19,7 +19,7 @@ Every recipe has the same four parts, so you can skim to the one that matches yo
 1. **Situation** — the shape of problem you're staring at.
 2. **Composition** — which primitives combine, and how.
 3. **Snippet** — a complete, runnable form (assume
-   `(require '[skein.spools.workflow :as workflow])`).
+   `(require '[millstrand.spools.workflow :as workflow])`).
 4. **Why this shape** — the reasoning: why these primitives, what the attribute
    conventions buy you, and what the alternative would cost.
 
@@ -38,7 +38,7 @@ Each recipe cites the honest source it was distilled from — a shipped spool, t
 ```clojure
 (require '[clojure.spec.alpha :as s]
          '[clojure.string :as str]
-         '[skein.spools.workflow :as workflow])
+         '[millstrand.spools.workflow :as workflow])
 
 (s/def ::feature (s/and string? (complement str/blank?)))
 (s/def ::revision boolean?)
@@ -129,7 +129,7 @@ Each stage is a `defworkflow` Var: a name, a doc, its declared entrypoints, and 
 ```clojure
 (require '[clojure.spec.alpha :as s]
          '[clojure.string :as str]
-         '[skein.spools.workflow :as workflow])
+         '[millstrand.spools.workflow :as workflow])
 
 (s/def ::feature (s/and string? (complement str/blank?)))
 (s/def ::revision boolean?)
@@ -206,7 +206,7 @@ Honest source: `ct.spools.devflow`'s `stage-workflows` and its `proposal` stage 
 ```clojure
 (require '[clojure.spec.alpha :as s]
          '[clojure.string :as str]
-         '[skein.spools.workflow :as workflow])
+         '[millstrand.spools.workflow :as workflow])
 
 (s/def ::artifact (s/and string? (complement str/blank?)))
 (s/def ::review-params (s/keys :req-un [::artifact]))
@@ -248,7 +248,7 @@ Honest source: `ct.spools.devflow`'s `stage-workflows` and its `proposal` stage 
   bookkeeping strand (contract [§4, "Procedure join auto-close"](./workflow.md#4-run-lifecycle)).
 - **One definition, many call sites.** The same `review` can be `call`-ed by a proposal stage and a spec stage with different `:artifact` params; a CI-round sub-flow can be recomposed by every stage that pushes commits. That is the point of `call` over duplication.
 
-Honest source: the `call` inlining test in `test/skein/spools/workflow_test.clj` (`workflow-spool-inlines-procedure-calls`), the toastie demo's `:quality` call, and `ct.spools.devflow`'s `:agent-review-proposal` call.
+Honest source: the `call` inlining test in `test/millstrand/spools/workflow_test.clj` (`workflow-spool-inlines-procedure-calls`), the toastie demo's `:quality` call, and `ct.spools.devflow`'s `:agent-review-proposal` call.
 
 ---
 
@@ -259,7 +259,7 @@ Honest source: the `call` inlining test in `test/skein/spools/workflow_test.clj`
 **Composition.** Put a `defer` between the preparation and record steps. User code that can see both spools binds the defer to registered targets. Each target declares `:call`, because it returns into the tracker's molecule.
 
 ```clojure
-(require '[skein.spools.workflow :as workflow])
+(require '[millstrand.spools.workflow :as workflow])
 
 (workflow/defworkflow spike
   "Run a bounded investigation."
@@ -298,7 +298,7 @@ The target receives only its defaults plus the explicit params passed to `defer!
 
 Use `call` instead when the author already knows the target. Use checkpoint `:next` when choosing a route should abandon the current stage rather than return to it.
 
-Honest source: `defer-returns-to-the-declaring-workflow` and `defer-isolates-the-target-from-caller-params` in `test/skein/spools/workflow_test.clj`.
+Honest source: `defer-returns-to-the-declaring-workflow` and `defer-isolates-the-target-from-caller-params` in `test/millstrand/spools/workflow_test.clj`.
 
 ---
 
@@ -329,7 +329,7 @@ The selected routine pours below the existing root. The defer join closes when t
 
 An empty or fully conditioned-out target closes the join in the fill transaction. If that was the last outstanding work, `defer!` returns `{:ready [] :done true}`.
 
-Honest source: `a-final-defer-returns-without-abandoning-parallel-siblings` and `defer-into-an-empty-target-does-not-stall-the-run` in `test/skein/spools/workflow_test.clj`.
+Honest source: `a-final-defer-returns-without-abandoning-parallel-siblings` and `defer-into-an-empty-target-does-not-stall-the-run` in `test/millstrand/spools/workflow_test.clj`.
 
 ---
 
@@ -342,7 +342,7 @@ Honest source: `a-final-defer-returns-without-abandoning-parallel-siblings` and 
 ```clojure
 (require '[clojure.spec.alpha :as s]
          '[clojure.string :as str]
-         '[skein.spools.workflow :as workflow])
+         '[millstrand.spools.workflow :as workflow])
 
 (s/def ::feature (s/and string? (complement str/blank?)))
 (s/def ::ci-round-params (s/keys :req-un [::feature]))
@@ -391,7 +391,7 @@ Honest source: `a-final-defer-returns-without-abandoning-parallel-siblings` and 
   verdict) into a route. Parallelism falls out of edge absence; branching lives
   in checkpoint choices.
 
-Honest source: the forge-agnostic PR flow in `test/skein/spools/workflow_test.clj` (`workflow-models-pull-request-flow-without-conditional-edges`) and the `:subagent` gate that `ct.spools.executors.subagent` fulfills.
+Honest source: the forge-agnostic PR flow in `test/millstrand/spools/workflow_test.clj` (`workflow-models-pull-request-flow-without-conditional-edges`) and the `:subagent` gate that `ct.spools.executors.subagent` fulfills.
 
 ---
 
@@ -403,7 +403,7 @@ Honest source: the forge-agnostic PR flow in `test/skein/spools/workflow_test.cl
 
 ```clojure
 (require '[clojure.spec.alpha :as s]
-         '[skein.spools.workflow :as workflow])
+         '[millstrand.spools.workflow :as workflow])
 
 ;; Reference bindings shipped as the default; a user rebinds any subset.
 (def github-pr-bindings
@@ -472,7 +472,7 @@ Honest source: the forge-agnostic PR flow in `test/skein/spools/workflow_test.cl
   (`"workflow/instruction"`) at build time keeps them faithful across the JSON
   layer (contract [§3, "Tool bindings"](./workflow.md#3-definition-layer)).
 
-Honest source: the `github-pr-bindings` / `bind-attrs` reference in `test/skein/spools/workflow_test.clj` (`workflow-pr-flow-rebinds-forge-without-spool-changes`), GitHub shipped as default, GitLab swapped in as a partial override.
+Honest source: the `github-pr-bindings` / `bind-attrs` reference in `test/millstrand/spools/workflow_test.clj` (`workflow-pr-flow-rebinds-forge-without-spool-changes`), GitHub shipped as default, GitLab swapped in as a partial override.
 
 ---
 
@@ -485,7 +485,7 @@ Honest source: the `github-pr-bindings` / `bind-attrs` reference in `test/skein/
 ```clojure
 (require '[clojure.spec.alpha :as s]
          '[clojure.string :as str]
-         '[skein.spools.workflow :as workflow])
+         '[millstrand.spools.workflow :as workflow])
 
 (s/def ::non-blank (s/and string? (complement str/blank?)))
 (s/def ::id ::non-blank)
@@ -553,5 +553,5 @@ Honest source: the `delegate-pipeline` weave pattern in this repo's [`.skein/wor
 - [`devflow.md`](./devflow.md) — the reference higher-level spool built on this
   namespace, and the most complete real example of named-stage routing and
   revise loops.
-- `(skein.spools.workflow/explain)` — machine-readable builder contracts, meant
+- `(millstrand.spools.workflow/explain)` — machine-readable builder contracts, meant
   to be called before constructing workflow data.

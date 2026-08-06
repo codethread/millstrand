@@ -15,7 +15,7 @@ func TestProtocolVersionMatchesJVM(t *testing.T) {
 	if !ok {
 		t.Fatal("locate client test source")
 	}
-	protocolFile := filepath.Join(filepath.Dir(testFile), "..", "..", "..", "src", "skein", "core", "weaver", "protocol.clj")
+	protocolFile := filepath.Join(filepath.Dir(testFile), "..", "..", "..", "src", "millstrand", "core", "weaver", "protocol.clj")
 	source, err := os.ReadFile(protocolFile)
 	if err != nil {
 		t.Fatalf("read JVM protocol version: %v", err)

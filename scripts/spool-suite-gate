@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run pinned external spool suites against the invoking skein-src checkout.
+# Run pinned external spool suites against the invoking millstrand-src checkout.
 set -euo pipefail
 
 if [ "$#" -ne 0 ]; then
@@ -30,7 +30,7 @@ check_pair agent-run "$aurl" "$asha"
 
 root="$(mktemp -d)"
 trap 'rm -rf "$root"' EXIT
-ln -s "$src" "$root/skein-src"
+ln -s "$src" "$root/millstrand-src"
 
 materialize() {
   local name="$1" url="$2" sha="$3" lib="$4"
@@ -54,16 +54,16 @@ materialize devflow.spool "$durl" "$dsha" io.github.codethread/devflow.spool
 materialize kanban.spool "$kurl" "$ksha" io.github.codethread/kanban.spool
 materialize agent-harness.spool "$aurl" "$asha" io.github.codethread/agent-run.agent-harness
 
-dcmd="clojure -Sdeps '{:deps {io.skein/workflow-spool {:local/root \"../skein-src/spools/workflow\"}}}' -M:test"
+dcmd="clojure -Sdeps '{:deps {io.millstrand/workflow-spool {:local/root \"../millstrand-src/spools/workflow\"}}}' -M:test"
 kcmd="clojure -M:test"
 acmd="clojure -M:test"
 run_suite() {
   local name="$1" sha="$2" command="$3"
   echo "==> spool-suite-gate: $name@$sha${4:-}"
   if ! (cd "$root/$name" && eval "$command"); then
-    printf '\n%s\n' "spool-suite-gate: $name@$sha FAILED against skein-src HEAD ($src)" >&2
+    printf '\n%s\n' "spool-suite-gate: $name@$sha FAILED against millstrand-src HEAD ($src)" >&2
     echo "  reproduce: make spool-suite-gate" >&2
-    echo "  or, in a sibling layout with ./skein-src beside ./$name, from $name/: $command" >&2
+    echo "  or, in a sibling layout with ./millstrand-src beside ./$name, from $name/: $command" >&2
     exit 1
   fi
 }
@@ -71,4 +71,4 @@ run_suite() {
 run_suite devflow.spool "$dsha" "$dcmd" " (with workflow-spool injection)"
 run_suite kanban.spool "$ksha" "$kcmd"
 run_suite agent-harness.spool "$asha" "$acmd"
-echo "spool-suite-gate: OK (devflow.spool@$dsha, kanban.spool@$ksha, agent-harness.spool@$asha) against skein-src HEAD"
+echo "spool-suite-gate: OK (devflow.spool@$dsha, kanban.spool@$ksha, agent-harness.spool@$asha) against millstrand-src HEAD"

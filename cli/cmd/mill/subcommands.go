@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"skein-strand-cli/internal/client"
+	"millstrand-strand-cli/internal/client"
 )
 
 // worldRequest builds the routing selector for a mill client subcommand: the
@@ -113,7 +113,7 @@ func runWeaverRepl(workspace string, stdin bool) error {
 	if err != nil {
 		return err
 	}
-	args := []string{"-M", "-m", "skein.repl"}
+	args := []string{"-M", "-m", "millstrand.repl"}
 	if stdin {
 		args = append(args, "--attach-stdin", host, port)
 	} else {
