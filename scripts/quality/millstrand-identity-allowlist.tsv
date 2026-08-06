@@ -1,2 +1,3 @@
 # scope	pattern	reason
+scripts/acceptance/millstrand-docs.sh	skein	The acceptance script names the forbidden legacy identity only in negative output and filesystem assertions.
 *	\.skein	The repository coordination workspace and the deliberate legacy application-marker rejection remain named .skein.

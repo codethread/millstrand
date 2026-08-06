@@ -1,4 +1,4 @@
-.PHONY: help build ralph kanban-tree install dash api-docs test-go docs-site docs-serve docs-check identity-check transition-check fmt fmt-check fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
+.PHONY: help build ralph kanban-tree install dash api-docs test-go docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
 
 help:
 	@printf '%s\n' \
@@ -9,6 +9,7 @@ help:
 		'  make lint               Run Clojure, convention, and Go linters' \
 		'  make reflect-check      Fail on reflected Java interop' \
 		'  make identity-check     Audit active files for stale product identity' \
+		'  make ci-config-check    Verify CI invokes identity and documentation gates' \
 		'  make transition-check   Validate the temporary external publisher boundary' \
 		'  make docs-check         Regenerate and verify documentation' \
 		'  make spool-suite-gate   Run or report the pinned external spool gate' \
@@ -135,6 +136,9 @@ reflect-check:
 
 identity-check:
 	bash scripts/quality/millstrand-active-identity.sh
+
+ci-config-check:
+	bash scripts/quality/millstrand-ci-config.sh
 
 transition-check:
 	clojure -M:transition-check

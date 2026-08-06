@@ -9,18 +9,25 @@ trap 'rm -f "$findings"' EXIT
 cd "$repo_root"
 
 scan_paths=(
-  src cli spools test dev tools scripts Makefile deps.edn README.md AGENTS.md
-  devflow/specs
+  src cli spools test dev tools scripts integrations docs .github
+  Makefile deps.edn README.md AGENTS.md devflow/specs
 )
 
 set +e
-rg -n -i --max-columns 100000 --hidden \
-  --glob '!.git/**' \
-  --glob '!target/**' \
-  --glob '!.skein/**' \
-  --glob '!scripts/quality/millstrand-active-identity.sh' \
-  --glob '!scripts/quality/millstrand-identity-allowlist.tsv' \
-  'skein' "${scan_paths[@]}" >"$findings"
+if command -v rg >/dev/null 2>&1; then
+  rg -n -i --max-columns 100000 --hidden \
+    --glob '!.git/**' \
+    --glob '!target/**' \
+    --glob '!.skein/**' \
+    --glob '!scripts/quality/millstrand-active-identity.sh' \
+    --glob '!scripts/quality/millstrand-identity-allowlist.tsv' \
+    'skein' "${scan_paths[@]}" >"$findings"
+else
+  git grep -n -i -- 'skein' -- \
+    "${scan_paths[@]}" \
+    ':(exclude)scripts/quality/millstrand-active-identity.sh' \
+    ':(exclude)scripts/quality/millstrand-identity-allowlist.tsv' >"$findings"
+fi
 scan_status=$?
 set -e
 
