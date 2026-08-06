@@ -40,7 +40,7 @@ anything.
 
 Keep the generated startup small. Put personal activation in `init.local.clj`, approvals in
 `spools.local.edn`, and substantive code in a local spool. If that code needs history, keep the
-spool in its own Git repository and approve its external root from `spools.local.edn`; `.skein`
+spool in its own Git repository and approve its external root from `spools.local.edn`; `.millstrand`
 then remains only the repo-local entry point.
 
 ## Startup files
@@ -186,7 +186,7 @@ For stronger isolation, create an agent-local namespace and call Skein helpers t
 Keep repository-specific policy in workspace `:file` modules. They are loaded from the exact path declared in `init.clj`, so their directories organize the workspace but do not make a classpath. Give every such namespace an owner-qualified root to avoid collisions in the shared weaver JVM:
 
 ```text
-.skein/
+.millstrand/
   init.clj
   workflows/
     ralph.clj
@@ -203,7 +203,7 @@ Keep repository-specific policy in workspace `:file` modules. They are loaded fr
   {:file "workflows/ralph.clj"})
 ```
 
-The directory and namespace use the same concern name for discovery, but the `:file` declaration selects the source. It does not add `.skein` to the classpath. If one workspace module requires another, declare the dependency with `:after` so its namespace has loaded first.
+The directory and namespace use the same concern name for discovery, but the `:file` declaration selects the source. It does not add `.millstrand` to the classpath. If one workspace module requires another, declare the dependency with `:after` so its namespace has loaded first.
 
 Use a local spool when the code needs a classpath root or is worth reusing independently of this workspace. Skein treats runtime extensions as trusted Clojure code, and the
 [reference spools](../../spools/README.md) — including the workflow engine and the external,

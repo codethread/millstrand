@@ -84,12 +84,12 @@ It was built against a few specific problems. If you recognize them, Skein is pr
 
 - **Orchestrating more than one harness.** Claude and GPT working the same board, seeing each other's strands, handing work to each other. Skein is the shared world they coordinate through; each harness stays small and focused, and the orchestration lives above them rather than inside any one of them.
 - **Agent behavior as code, not prose.** Skills and instruction files drive critical behavior, yet prose can't be tested or debugged. In Skein the load-bearing behavior is Clojure you read, test, and grow one function at a time.
-- **Conventions that survive a provider switch.** A repo's workflow lives in its `.skein`, shared ideas travel as spools, and none of it cares which harness runs against it — swapping providers doesn't mean rebuilding your process.
+- **Conventions that survive a provider switch.** A repo's workflow lives in its `.millstrand`, shared ideas travel as spools, and none of it cares which harness runs against it — swapping providers doesn't mean rebuilding your process.
 - **A foundation that holds still.** Agent tooling churns weekly. Skein's core is minimal and deliberately boring: the strand schema is meant to outlive whatever sits on top, so you can build your own workflow engine against it, or use the reference spools. Honest caveat: Skein is alpha today, so this is the destination rather than a guarantee — contracts can still change while the core settles.
 
 The bill: a local background JVM process, Go and a JVM on the machine, and Clojure for any behavior beyond the built-in commands. There is no hosted service, web UI, or accounts — if you want a shared team tracker, Skein is not that.
 
-A low-risk way in: one repo, one maintainer, the plain CLI. Follow the setup and keep the `.skein/` dir under `.gitignore` while you experiment.
+A low-risk way in: one repo, one maintainer, the plain CLI. Follow the setup and keep the `.millstrand/` dir under `.gitignore` while you experiment.
 
 ## Quick start
 

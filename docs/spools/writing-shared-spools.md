@@ -629,7 +629,7 @@ Include an **Activation** section with the complete trusted `init.clj` snippet.
 The consumer owns the runtime and declares modules explicitly. The option map is closed, and every key in it is activation data: exactly one source target (`:ns` namespace symbol or workspace-relative `:file` string), plus optional `:load :image`, `:spools` for every approved root prerequisite, `:after` when one module must follow another, and `:required?` for a loud missing-prerequisite refusal. It never carries `:contribute` or `:reconcile`; a declaration naming either withdrawn key is refused with guidance to use authoring forms.
 
 ```clojure
-;; .skein/init.clj — the consumer's trusted config
+;; .millstrand/init.clj — the consumer's trusted config
 (require '[skein.api.current.alpha :as current]
          '[skein.api.runtime.alpha :as runtime])
 
@@ -852,7 +852,7 @@ Lifecycle callables return data-first results. Put a live executor, scheduler, s
 A workspace-relative `:file` module can declare authoring forms in its one namespace:
 
 ```clojure
-;; .skein/acme_priority.clj
+;; .millstrand/acme_priority.clj
 (ns acme.priority.local
   (:require [skein.api.skein.alpha :as skein]))
 
@@ -862,10 +862,10 @@ A workspace-relative `:file` module can declare authoring forms in its one names
   [:= [:attr :owner] "priority"])
 ```
 
-The declaration is trusted config, running in `.skein/init.clj` after `rt` is bound as in the activation snippet above:
+The declaration is trusted config, running in `.millstrand/init.clj` after `rt` is bound as in the activation snippet above:
 
 ```clojure
-;; .skein/init.clj — the consumer's trusted config, with rt already bound
+;; .millstrand/init.clj — the consumer's trusted config, with rt already bound
 (runtime/module! rt :acme/priority
   {:file "acme_priority.clj"})
 ```
@@ -1025,7 +1025,7 @@ Workspace-owned helper namespaces sit below this list. They may provide terse er
 - External/shared spool source namespaces use the author's org prefix; codethread
   spools use `ct.spools.<name>`. The `skein.*` prefix is reserved for source
   shipped by the Skein checkout. A source namespace is separate from the
-  `.skein/spools.edn` coordinate symbol, such as `codethread/<name>`.
+  `.millstrand/spools.edn` coordinate symbol, such as `codethread/<name>`.
 
 ## Enforcement
 
