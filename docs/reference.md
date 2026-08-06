@@ -47,19 +47,13 @@ Different workspaces are different workspaces. Use `--workspace <dir>` when you 
 
 ## Workspace resolution
 
-The ordinary workspace is repository-scoped. Without `--workspace`, `mill` resolves the canonical
-repository root and uses that repo's `.millstrand` or `.ms` directory as the selected workspace. Linked worktrees
-for the same repository share this default workspace. Outside supported Git layouts, no-flag
-commands fail loudly. When no accepted marker exists, `mill init` creates `.millstrand`; when exactly one
-accepted marker exists, it completes that marker in place. It fails loudly outside supported Git layouts:
+The ordinary workspace is repository-scoped. Without `--workspace`, `mill` resolves the canonical repository root and uses that repo's `.millstrand` or `.ms` directory as the selected workspace. Linked worktrees for the same repository share this default workspace. Outside supported Git layouts, no-flag commands fail loudly. When no accepted marker exists, `mill init` creates `.millstrand`; when exactly one accepted marker exists, it completes that marker in place. It fails loudly outside supported Git layouts:
 
 ```sh
 mill init
 ```
 
-Mill resolves the Millstrand source checkout used to launch the weaver from `MILLSTRAND_SOURCE`, the
-install-time source recorded by `make install`, or a canonical Skein checkout cwd. `mill init` does
-not persist a source path in `.millstrand/config.json`.
+Mill resolves the Millstrand source checkout used to launch the weaver from `MILLSTRAND_SOURCE`, the install-time source recorded by `make install`, or a canonical Skein checkout cwd. `mill init` does not persist a source path in the selected workspace's `config.json`.
 
 A workspace can also be selected explicitly with:
 
@@ -86,29 +80,11 @@ From a Skein source checkout, `make install` installs the Go CLIs (`strand` and 
 the checkout as mill's default source for weaver launch and the thin nREPL attach client. After
 that, use the CLIs directly: `mill start`, `mill init`, and `mill weaver start`.
 
-`mill init` is the normal repo bootstrap path. It creates or completes the canonical repo `.millstrand` workspace, writes shareable `config.json` with the alpha format marker when absent, and leaves shared config files ready to commit. Generated `spools.edn` opts into the batteries command surface with `skein.spools/batteries {:skein/source-root "spools/batteries"}`; generated `init.clj` activates it through a module guarded by that root. The relative coordinate resolves against the mill-selected Millstrand checkout, so no absolute source path is persisted. Deleting the seeded entry is the supported opt-out. Init does not run `git init` or initialize database storage; weaver startup prepares storage.
+`mill init` is the normal repo bootstrap path. With no accepted marker, it creates the canonical repo `.millstrand` workspace; with one accepted marker, it completes that selected workspace. It writes shareable `config.json` with the alpha format marker when absent and leaves shared config files ready to commit. Generated `spools.edn` opts into the batteries command surface with `skein.spools/batteries {:skein/source-root "spools/batteries"}`; generated `init.clj` activates it through a module guarded by that root. The relative coordinate resolves against the mill-selected Millstrand checkout, so no absolute source path is persisted. Deleting the seeded entry is the supported opt-out. Init does not run `git init` or initialize database storage; weaver startup prepares storage.
 
-`mill init --stealth` provides the same repo-local workspace for personal use without tracked
-config. It refuses if `.millstrand` or `.ms` is already tracked, maintains a marker-owned block in
-`.git/info/exclude`, avoids shared agent guidance, and reports every action. An untracked
-`CLAUDE.local.md` receives the standard Skein guidance when safe; Codex guidance is printed for
-the user to place according to their own repository policy. See
-[customising your workspace](./spools/customisation.md#a-private-repo-local-workspace) for the
-recommended local-spool layout.
+`mill init --stealth` provides the same repo-local workspace for personal use without tracked config. It refuses if `.millstrand` or `.ms` is already tracked, maintains a marker-owned block in `.git/info/exclude`, avoids shared agent guidance, and reports every action. An untracked `CLAUDE.local.md` receives the standard Skein guidance when safe; Codex guidance is printed for the user to place according to their own repository policy. See [customising your workspace](./spools/customisation.md#a-private-repo-local-workspace) for the recommended local-spool layout.
 
-User-facing Millstrand documentation lives in the source checkout under `docs/`; the canonical user
-reference is this page, `docs/reference.md`. Two harness-agnostic orientation commands surface this
-to agents at runtime, with no running weaver required: `mill millstrand prime` resolves the Millstrand source
-and prints the paths to the docs, the spool index, and the repo coordination guidance, plus how to
-extend `.millstrand` config; `mill strand prime` prints the strand planning/tracking workflow. In a
-repo-world bootstrap, `mill init` also seeds a `## Skein / strand` section in the repository-root
-`AGENTS.md`/`CLAUDE.md` that points new agents at these two commands. Each shipped spool's per-fn
-API reference (`spools/*.api.md`) and each blessed `skein.api.*.alpha` namespace's per-fn reference
-(`docs/api/*.api.md`) is generated from source docstrings and regenerated with `make api-docs` —
-never hand-edited; see the [spool index](../spools/README.md#doc-triad) for the
-contract/cookbook/generated-API triad. The [alpha API index](./api/README.md) maps each
-`skein.api.*.alpha` namespace to the concern it owns; the generated pages are reference only, and
-the behavior contracts remain the root specs (see the [spec index](#spec-index)).
+User-facing Millstrand documentation lives in the source checkout under `docs/`; the canonical user reference is this page, `docs/reference.md`. Two harness-agnostic orientation commands surface this to agents at runtime, with no running weaver required: `mill millstrand prime` resolves the Millstrand source and prints the paths to the docs, the spool index, and the repo coordination guidance, plus how to extend `.millstrand` or `.ms` config; `mill strand prime` prints the strand planning/tracking workflow. In a repo-world bootstrap, `mill init` also seeds a `## Skein / strand` section in the repository-root `AGENTS.md`/`CLAUDE.md` that points new agents at these two commands. Each shipped spool's per-fn API reference (`spools/*.api.md`) and each blessed `skein.api.*.alpha` namespace's per-fn reference (`docs/api/*.api.md`) is generated from source docstrings and regenerated with `make api-docs` — never hand-edited; see the [spool index](../spools/README.md#doc-triad) for the contract/cookbook/generated-API triad. The [alpha API index](./api/README.md) maps each `skein.api.*.alpha` namespace to the concern it owns; the generated pages are reference only, and the behavior contracts remain the root specs (see the [spec index](#spec-index)).
 
 When working in this repository, also read the "Repo coordination workspace (.skein)" section of the
 root [`AGENTS.md`](../AGENTS.md): the `.skein` shared coordination world, its working discipline,

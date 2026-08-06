@@ -9,9 +9,7 @@ deliberately absent from this page: the generated [alpha API reference](../api/R
 
 ## The files mill init gives you
 
-`mill init` bootstraps missing workspace files without overwriting existing ones. It does not initialize
-database storage; weaver startup prepares storage for the selected workspace. The full layout of an ordinary
-repo-local `.millstrand` workspace:
+`mill init` bootstraps missing workspace files without overwriting existing ones. It does not initialize database storage; weaver startup prepares storage for the selected workspace. The full layout of an ordinary repo-local `.millstrand` workspace (or its `.ms` alias):
 
 ```text
 .millstrand/
@@ -28,21 +26,11 @@ When absent, `mill init` creates the shared half: `config.json` with the alpha f
 
 ## A private repo-local workspace
 
-Run `mill init --stealth` when you want Millstrand in a repository without committing its config. The
-workspace remains a physical `.millstrand` or `.ms` directory at the Git root, so agents, `rg`, Make,
-Clojure, and weaver calls see normal repo-local paths. With no existing marker, stealth creates
-`.millstrand`; with one accepted marker, it keeps that marker. Mill adds its paths to `.git/info/exclude`,
-which is private to that clone, and reports each file it created, updated, skipped, or left unchanged.
+Run `mill init --stealth` when you want Millstrand in a repository without committing its config. The workspace remains a physical `.millstrand` or `.ms` directory at the Git root, so agents, `rg`, Make, Clojure, and weaver calls see normal repo-local paths. With no existing marker, stealth creates `.millstrand`; with one accepted marker, it keeps that marker. Mill adds its paths to `.git/info/exclude`, which is private to that clone, and reports each file it created, updated, skipped, or left unchanged.
 
-Stealth init does not write shared `AGENTS.md` or `CLAUDE.md`. It creates or updates an untracked
-`CLAUDE.local.md` when safe and prints the instruction Codex users may add to their own guidance.
-If `.millstrand` or `.ms` is already tracked or a mill-owned marker block was edited, it refuses before changing
-anything.
+Stealth init does not write shared `AGENTS.md` or `CLAUDE.md`. It creates or updates an untracked `CLAUDE.local.md` when safe and prints the instruction Codex users may add to their own guidance. If `.millstrand` or `.ms` is already tracked or a mill-owned marker block was edited, it refuses before changing anything.
 
-Keep the generated startup small. Put personal activation in `init.local.clj`, approvals in
-`spools.local.edn`, and substantive code in a local spool. If that code needs history, keep the
-spool in its own Git repository and approve its external root from `spools.local.edn`; `.millstrand`
-then remains only the repo-local entry point.
+Keep the generated startup small. Put personal activation in `init.local.clj`, approvals in `spools.local.edn`, and substantive code in a local spool. If that code needs history, keep the spool in its own Git repository and approve its external root from `spools.local.edn`; `.millstrand` then remains only the repo-local entry point.
 
 ## Startup files
 

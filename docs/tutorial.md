@@ -22,9 +22,7 @@ Skein's own repository is written to be read by coding agents, and it ships agen
 `prime` orientation commands, and the specs behind every contract. If you already work with a coding
 agent, you can point it at a Skein checkout and ask questions as you go.
 
-- `mill millstrand prime` prints orientation for the Millstrand source, docs, and how to
-  extend a `.millstrand` config. `mill strand prime` explains the strand
-  planning-and-tracking workflow. Both run with no weaver.
+- `mill millstrand prime` prints orientation for the Millstrand source, docs, and how to extend a `.millstrand` or `.ms` config. `mill strand prime` explains the strand planning-and-tracking workflow. Both run with no weaver.
 - `docs/reference.md`, the `spools/` contracts, and `devflow/specs/` hold the real
   detail.
 
@@ -89,16 +87,13 @@ Leave it running for the rest of this guide.
 
 ## Choosing a workspace
 
-A workspace is one isolated Skein setup. By default `strand` is **repo-first**: when you do not pass
-`--workspace`, `mill` looks upward for the Git repository root (the "canonical" root that linked
-worktrees share) and uses that repo's `.millstrand` directory as your workspace. Two worktrees of the
-same repository talk to the same weaver and the same data.
+A workspace is one isolated Skein setup. By default `strand` is **repo-first**: when you do not pass `--workspace`, `mill` looks upward for the Git repository root (the "canonical" root that linked worktrees share) and uses that repo's `.millstrand` or `.ms` directory as your workspace. Two worktrees of the same repository talk to the same weaver and the same data.
 
 If you omit `--workspace` outside a Git repository, the command fails with a remediation message
 instead of guessing. It will not invent a workspace from your current directory or fall back to a
 global one.
 
-That `.millstrand` directory holds trusted config only. The runtime state (metadata, sockets, and the SQLite database) lives under Millstrand's own state directory, not in your repo.
+That selected `.millstrand` or `.ms` directory holds trusted config only. The runtime state (metadata, sockets, and the SQLite database) lives under Millstrand's own state directory, not in your repo.
 
 Create a workspace in the repo you want to use Skein in:
 
@@ -106,10 +101,7 @@ Create a workspace in the repo you want to use Skein in:
 mill init
 ```
 
-When no accepted marker exists, `mill init` creates `.millstrand` at the Git root; when exactly one
-accepted marker exists, it completes that marker in place. It writes shared, committable config files
-(covered later) and never overwrites ones you already have. It fails loudly outside Git, does not run
-`git init`, and does not create the database; the weaver prepares storage when it starts.
+When no accepted marker exists, `mill init` creates `.millstrand` at the Git root; when exactly one accepted marker exists, it completes that marker in place. It writes shared, committable config files (covered later) and never overwrites ones you already have. It fails loudly outside Git, does not run `git init`, and does not create the database; the weaver prepares storage when it starts.
 
 For personal use without tracked repository changes, use stealth bootstrap:
 
@@ -117,10 +109,7 @@ For personal use without tracked repository changes, use stealth bootstrap:
 mill init --stealth
 ```
 
-This keeps the repo-local workspace and `CLAUDE.local.md` out of the shared repository, adding
-both workspace marker names to Git's private exclude file. It prints every change and the
-Codex instruction you may add to your own agent guidance. Keep substantial personal config in a
-[local spool](./spools/customisation.md#a-private-repo-local-workspace).
+This keeps the selected repo-local workspace and `CLAUDE.local.md` out of the shared repository; its Git private exclude block covers both accepted workspace marker names. It prints every change and the Codex instruction you may add to your own agent guidance. Keep substantial personal config in a [local spool](./spools/customisation.md#a-private-repo-local-workspace).
 
 **Escape hatch — throwaway workspaces.** For experiments, tests, or agent work, use a disposable workspace so you never touch a real repo's config:
 
