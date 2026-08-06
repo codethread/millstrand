@@ -2,7 +2,7 @@
   "Validate the temporary Millstrand publisher transition contract.
 
   The contract is deliberately narrow: it names the exact external family pins
-  and the only workspace test namespace allowed to defer while those publishers
+  and the only workspace test namespaces allowed to defer while those publishers
   still require the old core identity."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]))
@@ -10,8 +10,20 @@
 (def ^:private contract-resource "quality/millstrand-transition-contract.edn")
 (def ^:private expected-scopes
   #{:workspace-config-integration :pinned-external-spool-suite})
-(def ^:private expected-families
-  #{'codethread/devflow 'codethread/kanban 'ct.spools/agent-run})
+(def ^:private expected-pins
+  {'codethread/devflow
+   {:git/url "https://github.com/codethread/devflow.spool.git"
+    :git/tag "v20"
+    :git/sha "b18b326fca39a513abdaa91a132c9c64fa4c4b2e"}
+   'codethread/kanban
+   {:git/url "https://github.com/codethread/kanban.spool.git"
+    :git/tag "v23"
+    :git/sha "2947590e7965feb95a239189af3bd55f008d1209"}
+   'ct.spools/agent-run
+   {:git/url "https://github.com/codethread/agent-harness.spool.git"
+    :git/tag "v25"
+    :git/sha "d28bfb35b5fc1891a7a318e06886aa446722241d"}})
+(def ^:private expected-families (set (keys expected-pins)))
 (def ^:private expected-test-namespaces
   #{'millstrand.ct.config-test 'millstrand.ct.config-ops-test})
 
@@ -60,6 +72,9 @@
                      (valid-sha? (:git/sha pin)))
                 "Transition contract contains a malformed family pin"
                 {:family family :pin pin}))
+    (require! (= expected-pins pins)
+              "Transition contract external pins drifted"
+              {:expected expected-pins :actual pins})
     (require! (vector? deferrals)
               "Transition contract deferrals must be a vector"
               {:deferrals deferrals})
@@ -113,10 +128,25 @@
   [scope]
   (boolean (some #(= scope (:scope %)) (:deferrals (validate-current!)))))
 
+(defn- parse-main-args
+  [args]
+  (case (count args)
+    0 nil
+    2 (let [[flag value] args
+            scope (keyword value)]
+        (require! (= "--scope" flag)
+                  "Transition check accepts only --scope <scope>"
+                  {:args args})
+        (require! (contains? expected-scopes scope)
+                  "Unknown transition deferral scope"
+                  {:scope scope :expected expected-scopes})
+        scope)
+    (fail! "Transition check expects no arguments or --scope <scope>"
+           {:args args})))
+
 (defn- -main*
   [args]
-  (let [scope (some->> (partition 2 args)
-                       (some (fn [[flag value]] (when (= flag "--scope") (keyword value)))))]
+  (let [scope (parse-main-args args)]
     (validate-current!)
     (if scope
       (println (if (deferred? scope) "DEFERRED" "ACTIVE"))

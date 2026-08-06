@@ -11,7 +11,7 @@ help:
 		'  make identity-check     Audit active files for stale product identity' \
 		'  make transition-check   Validate the temporary external publisher boundary' \
 		'  make docs-check         Regenerate and verify documentation' \
-		'  make spool-suite-gate   Run pinned external spool suites against this checkout' \
+		'  make spool-suite-gate   Run or report the pinned external spool gate' \
 		'  make install            Install globally stamped strand and mill binaries' \
 		'  make dash               Launch the kanban dashboard' \
 		'  make help               Show this command list'
