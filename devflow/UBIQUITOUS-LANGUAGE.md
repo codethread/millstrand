@@ -163,9 +163,9 @@ Registered by the modules under `.skein/workflows/` and `.skein/policy/config.cl
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **land** | The coordinator-only landing workflow: push and draft PR, green CI, roster sign-off, then a mechanical squash-merge with main CI watched to green. | Merge, deploy, release, ship, publish |
-| **Merge lock** | The exclusion held from sign-off approval through the mechanical merge, so only one coordinator lands a branch. | Branch protection, mutex, CI lock, freeze |
-| **Sign-off** | The coordinator checkpoint on a land run. Valid only on a pushed branch with an open draft PR and green CI at HEAD. | Approval, review, LGTM, merge |
+| **land** | The coordinator-only landing workflow: push and draft PR, local quality gates, roster sign-off, then a mechanical squash-merge with the canonical main quality contract checked after pull-main. | Merge, deploy, release, ship, publish |
+| **Merge lock** | The exclusion held from sign-off approval through the mechanical merge, so only one coordinator lands a branch. | Branch protection, mutex, freeze |
+| **Sign-off** | The coordinator checkpoint on a land run. Valid only on a pushed branch with an open draft PR and a passing local quality contract at HEAD. | Approval, review, LGTM, merge |
 | **explore** | The zero-ceremony exploration workflow: a card + worktree trail, note discipline while exploring, and a human checkpoint that decides the thread's fate — promote to a devflow brief, park, or abandon. | Spike, research task, investigation, poking around |
 | **fix** | The light bug-fix workflow: a card + worktree trail, a regression-locked implementation step, a docs-sync judgment backed by a `make docs-check` gate, then handoff to **land**. | Hotfix, patch, bugfix flow, quick fix |
 | **HITL** | Human-in-the-loop. The `hitl=true` attribute means stop and ask the user. Interactive work uses a tracking strand plus `agent delegate --interactive`. | Manual, human review, interactive, blocked |

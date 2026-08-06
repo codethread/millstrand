@@ -26,6 +26,10 @@
   "POSIX script for the feature CI shell gate."
   (script "feature-ci-watch.sh"))
 
+(def land-quality-gate-script
+  "POSIX script that validates and runs the target repository's quality contract."
+  (script "land-quality-gate.sh"))
+
 (def land-merge-script
   "Idempotently ready and squash-merge the feature PR."
   (script "land-merge.sh"))

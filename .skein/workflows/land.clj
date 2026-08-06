@@ -127,8 +127,8 @@
 (workflow/defworkflow land-merge
   "Run the mechanical merge continuation for an approved land run.
 
-  Machine gates squash-merge the PR, fast-forward canonical main, watch main CI,
-  and remove the landed branch and worktree. Final bookkeeping remains
+  Machine gates squash-merge the PR, fast-forward canonical main, run its local
+  quality contract, and remove the landed branch and worktree. Final bookkeeping remains
   coordinator-owned and releases the merge lock when completed."
   {:entrypoints #{:continue}
    :param-spec ::land-merge-params
@@ -150,8 +150,7 @@
                                (fn [{:keys [branch]}]
                                  (str "Machine gate: mark the PR for " branch
                                       " ready, then run `gh pr merge --squash` with the approved"
-                                      " subject and body. Branch protection refuses the merge unless"
-                                      " required checks are green on an up-to-date branch. A failure"
+                                      " subject and body. The PR must be open and up to date. A failure"
                                       " stamps `gate/error`: fix the cause, then remove the stamp"
                                       " (`strand update <gate-id> --attributes '{\"gate/error\":null}'`) to re-run. The"
                                       " script first checks PR state, so re-running after a successful"
@@ -172,34 +171,29 @@
                                  |a conflicting dirty file, or a canonical checkout on another branch
                                  |stamps `gate/error`: fix the checkout, then remove the stamp
                                  |(`strand update <gate-id> --attributes '{\"gate/error\":null}'`) to re-run.")})
-   (workflow/gate :main-ci-green
-                  "Watch main CI to green at the merged sha"
-                  :code
+   (workflow/gate :main-quality-green
+                  "Run local quality gates at canonical main HEAD"
+                  :shell
                   :depends-on [:pull-main]
-                  :attributes {"workflow/action-ref" "land.main.ci-green"
-                               ;; Shell would need jq + TSV to emulate the run-state tuple.
-                               ;; Code keeps that data as data. The worktree is poured because
-                               ;; code gates have no ambient cwd attribute.
-                               "code/fn" "ct.workflows.common/main-ci-watch"
-                               "code/params" (fn [{:keys [worktree]}]
-                                               {:worktree worktree})
-                               "code/timeout-secs" 5400
+                  :attributes {"workflow/action-ref" "land.main.quality-green"
+                               "shell/argv" (support/sh-gate support/land-quality-gate-script
+                                                             "land-quality-gate" "main")
+                               "shell/cwd" (fn [{:keys [worktree]}] worktree)
+                               "shell/timeout-secs" 5400
                                "workflow/instruction"
                                (format-alpha/reflow
-                                "|Machine gate: the code executor polls the full workflow-run set at
-                                 |the merged main sha (`gh run list --commit <sha>`) until it is
-                                 |non-empty, every run has completed, and the all-green state holds
-                                 |across two consecutive polls, so late-registering workflows are
-                                 |caught. Any conclusion besides success or skipped stamps
-                                 |`gate/error` with the run listing: re-run transient infra failures
-                                 |(`gh run rerun <run-id>`), then remove the stamp
+                                "|Machine gate locates the canonical checkout through the shared Git
+                                 |directory and runs the tracked executable `.skein/land-quality.sh`
+                                 |there. The wrapper requires canonical main to be clean and exactly at
+                                 |`origin/main`, then verifies that the contract leaves origin/main, HEAD,
+                                 |and the tree unchanged. It records combined command output on the gate.
+                                 |Fix the cause, then remove the stamp
                                  |(`strand update <gate-id> --attributes
-                                 |'{\"gate/error\":null}'`) to re-watch. The gate closing asserts green
-                                 |CI on the main sha; run output is recorded on the gate.")})
+                                 |'{\"gate/error\":null}'`) to retry; the shell executor records combined output on the gate.")})
    (workflow/gate :remove-branch-worktree
                   (fn [{:keys [branch]}] (str "Remove landed branch and worktree for " branch))
                   :shell
-                  :depends-on [:main-ci-green]
+                  :depends-on [:main-quality-green]
                   :attributes {"workflow/action-ref" "land.branch-worktree.cleanup"
                                "shell/argv" (fn [{:keys [branch worktree]}]
                                               (support/sh-gate support/land-cleanup-script
@@ -208,7 +202,7 @@
                                "shell/timeout-secs" 600
                                "workflow/instruction"
                                (format-alpha/reflow
-                                "|Machine gate: after merged-main CI is green, stop any recorded warm
+                                "|Machine gate: after canonical main quality checks pass, stop any recorded warm
                                  |test REPL by PID, fetch and prune origin, delete the remote feature
                                  |branch when it still exists, then run precise `git worktree remove
                                  |--force`, `git branch -D`, and `git worktree prune` commands. A final
@@ -255,8 +249,9 @@
   "Drive the coordinator LANDING workflow for a feature branch (family \"land\").
 
   COORDINATOR-ONLY: worker agents never land. This stage pushes the branch,
-  opens a draft PR, watches CI at HEAD, fans roster review into subagent gates,
-  rechecks CI at the reviewed HEAD, and ends at the sign-off checkpoint.
+  opens a draft PR, runs the tracked local quality contract at the pushed HEAD,
+  fans roster review into subagent gates, re-runs that contract at the reviewed
+  HEAD, and ends at the sign-off checkpoint.
   Approval requires the squash subject and body, acquires
   the singleton merge lock, and routes to the mechanical `:land-merge`
   continuation. Abort routes to `:land-abort`. Card-backed runs move the card
@@ -286,33 +281,32 @@
                                     |--body <summary>`. If an open PR for %s already exists, reuse it
                                     |instead (`gh pr view %s --json url,number,state`). Complete this step
                                     |with `land complete <run-id> --pr-number <number>`. Completing it
-                                    |starts the automated ci-green shell gate and, for card-backed runs,
+                                    |starts the automated local-quality gate and, for card-backed runs,
                                     |moves the kanban card to in_review."
                                    branch branch branch)))})
    (workflow/gate :ci-green
-                  (fn [{:keys [branch]}] (str "Watch CI to green at " branch " HEAD"))
+                  (fn [{:keys [branch]}] (str "Run local quality gates at " branch " HEAD"))
                   :shell
                   :depends-on [:push-draft-pr]
                   :attributes {"workflow/action-ref" "land.ci.green"
                                "shell/argv" (fn [{:keys [branch]}]
-                                              (support/sh-gate support/feature-ci-watch-script
-                                                               "land-ci-watch" branch "180" "5"))
+                                              (support/sh-gate support/land-quality-gate-script
+                                                               "land-quality-gate" branch))
                                "shell/cwd" (fn [{:keys [worktree]}] worktree)
                                "shell/timeout-secs" 5400
                                "workflow/instruction"
-                               (fn [{:keys [branch]}]
+                               (fn [_]
                                  (format-alpha/reflow
-                                  (format
-                                   "|Machine gate: the shell executor waits up to three minutes for
-                                    |GitHub to register checks at %s HEAD, then runs `gh pr checks %s
-                                    |--watch --fail-fast`. It closes this gate only when all checks are
-                                    |green; generic workflow completion refuses gates. A startup
-                                    |timeout, red check, or command failure stamps `gate/error`
-                                    |with captured output. Fix the cause, commit and push when
-                                    |needed, then remove the stamp (`strand update <gate-id>
-                                    |--attributes '{\"gate/error\":null}'`) to retry. The exit
-                                    |code and output tail are recorded on the gate."
-                                   branch branch)))})
+                                  "|Machine gate runs the target repository's tracked executable
+                                   |`.skein/land-quality.sh` from the feature worktree. The wrapper
+                                   |fails closed unless the named branch is checked out, the tree is
+                                   |clean, the contract is tracked and executable, and local HEAD
+                                   |matches its upstream. It also verifies that the contract leaves
+                                   |the pushed HEAD and tree unchanged. The shell executor records
+                                   |combined command output on the gate; generic workflow completion
+                                   |refuses this gate. Fix the cause, commit and push when needed,
+                                   |then remove the stamp (`strand update <gate-id> --attributes
+                                   '{\"gate/error\":null}'`) to retry."))})
    (workflow/gate :reviewer
                   (fn [{:keys [item]}] (str "Review land change: " (:name item)))
                   :subagent
@@ -365,23 +359,24 @@
                                 "|Read the synthesis note on the review target. Resolve every finding,
                                  |commit and push fixes, and use a targeted follow-up review when a fix
                                  |materially changes the reviewed surface. Complete this step only when
-                                 |the branch is ready for final CI; the next machine gate checks the
+                                 |the branch is ready for its final local quality gate; the next machine gate checks the
                                  |actual pushed HEAD.")})
    (workflow/gate :final-ci-green
-                  (fn [{:keys [branch]}] (str "Watch final CI to green at " branch " HEAD"))
+                  (fn [{:keys [branch]}] (str "Run final local quality gates at " branch " HEAD"))
                   :shell
                   :depends-on [:resolve-review]
                   :attributes {"workflow/action-ref" "land.ci.final-green"
                                "shell/argv" (fn [{:keys [branch]}]
-                                              (support/sh-gate support/feature-ci-watch-script
-                                                               "land-final-ci-watch" branch "180" "5"))
+                                              (support/sh-gate support/land-quality-gate-script
+                                                               "land-final-quality-gate" branch))
                                "shell/cwd" (fn [{:keys [worktree]}] worktree)
                                "shell/timeout-secs" 5400
                                "workflow/instruction"
                                (format-alpha/reflow
-                                "|Machine gate: re-run the feature CI watcher after review resolution.
-                                 |It closes only when checks are green at the branch's current pushed
-                                 |HEAD, so sign-off cannot rely on the pre-review CI result.")})
+                                "|Machine gate re-runs the target repository's local quality
+                                 |contract after review resolution. It closes only when every
+                                 |declared command passes at the current pushed HEAD, so sign-off
+                                 |cannot rely on the pre-review result.")})
    (workflow/checkpoint :signoff
                         (fn [{:keys [branch]}] (str "Sign off landing " branch))
                         :depends-on [:final-ci-green]
@@ -390,7 +385,7 @@
                                    :label "Approve"
                                    :description
                                    (format-alpha/reflow
-                                    "|Sign-off approved on a pushed branch with green CI; continue to the
+                                    "|Sign-off approved after the local quality contract passes on the pushed branch; continue to the
                                      |mechanical GitHub squash-merge. Supply the semantic squash subject
                                      |and Squashed commits body. The coordinator holds this delegated
                                      |sign-off authority.")
@@ -413,5 +408,3 @@
                                    :next :land-abort
                                    :input land-abort-reason-input}]
                         :attributes {"workflow/decision-point" "land-signed-off"})))
-
-;; ---------------------------------------------------------------------------
