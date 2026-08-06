@@ -62,27 +62,31 @@ func TestBootstrapStealthWorldCreatesAndReusesOwnedBlocks(t *testing.T) {
 	}
 }
 
-func TestBootstrapStealthWorldRejectsTrackedSkeinBeforeWrites(t *testing.T) {
-	repo := initGitRepo(t)
-	tracked := filepath.Join(repo, ".millstrand", "tracked.txt")
-	if err := os.MkdirAll(filepath.Dir(tracked), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(tracked, []byte("tracked\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	gitAdd(t, repo, ".millstrand/tracked.txt")
+func TestBootstrapStealthWorldRejectsTrackedWorkspaceBeforeWrites(t *testing.T) {
+	for _, workspace := range []string{DefaultWorkspace, WorkspaceAlias} {
+		t.Run(workspace, func(t *testing.T) {
+			repo := initGitRepo(t)
+			tracked := filepath.Join(repo, workspace, "tracked.txt")
+			if err := os.MkdirAll(filepath.Dir(tracked), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(tracked, []byte("tracked\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			gitAdd(t, repo, filepath.Join(workspace, "tracked.txt"))
 
-	_, _, err := BootstrapStealthWorld(repo)
-	var refusal *StealthRefusal
-	if !errors.As(err, &refusal) || refusal.Target != StealthTargetTrackedSkein || refusal.State != StealthStateTracked {
-		t.Fatalf("unexpected refusal: %#v err=%v", refusal, err)
-	}
-	if _, err := os.Stat(filepath.Join(repo, ".millstrand", "config.json")); !os.IsNotExist(err) {
-		t.Fatalf("tracked refusal wrote bootstrap config: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(repo, "CLAUDE.local.md")); !os.IsNotExist(err) {
-		t.Fatalf("tracked refusal wrote Claude guidance: %v", err)
+			_, _, err := BootstrapStealthWorld(repo)
+			var refusal *StealthRefusal
+			if !errors.As(err, &refusal) || refusal.Target != StealthTargetTrackedSkein || refusal.State != StealthStateTracked {
+				t.Fatalf("unexpected refusal: %#v err=%v", refusal, err)
+			}
+			if _, err := os.Stat(filepath.Join(repo, ".millstrand", "config.json")); !os.IsNotExist(err) {
+				t.Fatalf("tracked refusal wrote bootstrap config: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(repo, "CLAUDE.local.md")); !os.IsNotExist(err) {
+				t.Fatalf("tracked refusal wrote Claude guidance: %v", err)
+			}
+		})
 	}
 }
 

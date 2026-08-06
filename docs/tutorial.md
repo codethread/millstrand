@@ -116,8 +116,8 @@ For personal use without tracked repository changes, use stealth bootstrap:
 mill init --stealth
 ```
 
-This keeps `.skein` in the repository, where tools and agents see ordinary paths, but adds the
-workspace and `CLAUDE.local.md` to Git's private exclude file. It prints every change and the
+This keeps the repo-local workspace and `CLAUDE.local.md` out of the shared repository, adding
+both workspace marker names to Git's private exclude file. It prints every change and the
 Codex instruction you may add to your own agent guidance. Keep substantial personal config in a
 [local spool](./spools/customisation.md#a-private-repo-local-workspace).
 

@@ -89,7 +89,7 @@ that, use the CLIs directly: `mill start`, `mill init`, and `mill weaver start`.
 `mill init` is the normal repo bootstrap path. It creates or completes the canonical repo `.millstrand` workspace, writes shareable `config.json` with the alpha format marker when absent, and leaves shared config files ready to commit. Generated `spools.edn` opts into the batteries command surface with `skein.spools/batteries {:skein/source-root "spools/batteries"}`; generated `init.clj` activates it through a module guarded by that root. The relative coordinate resolves against the mill-selected Millstrand checkout, so no absolute source path is persisted. Deleting the seeded entry is the supported opt-out. Init does not run `git init` or initialize database storage; weaver startup prepares storage.
 
 `mill init --stealth` provides the same repo-local workspace for personal use without tracked
-config. It refuses if `.skein` is already tracked, maintains a marker-owned block in
+config. It refuses if `.millstrand` or `.ms` is already tracked, maintains a marker-owned block in
 `.git/info/exclude`, avoids shared agent guidance, and reports every action. An untracked
 `CLAUDE.local.md` receives the standard Skein guidance when safe; Codex guidance is printed for
 the user to place according to their own repository policy. See
