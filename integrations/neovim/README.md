@@ -1,6 +1,6 @@
-# skein.nvim
+# millstrand.nvim
 
-Small Neovim helper for connecting [Conjure](https://github.com/Olical/conjure) to a running Skein weaver nREPL.
+Small Neovim helper for connecting [Conjure](https://github.com/Olical/conjure) to a running Millstrand weaver nREPL.
 
 Requires Neovim with Lua support. On Neovim 0.10+ the plugin uses `vim.system`; on older versions it falls back to synchronous `vim.fn.system` for `mill weaver list`.
 
@@ -8,11 +8,11 @@ Requires Neovim with Lua support. On Neovim 0.10+ the plugin uses `vim.system`; 
 
 ```lua
 {
-  dir = "/Users/ct/dev/projects/skein-src__repl/integrations/neovim",
-  name = "skein.nvim",
+  dir = "/Users/ct/dev/projects/millstrand-src__repl/integrations/neovim",
+  name = "millstrand.nvim",
   dependencies = { "Olical/conjure" },
   ft = { "clojure" },
-  cmd = { "SkeinConnect" },
+  cmd = { "MillstrandConnect" },
 }
 ```
 
@@ -20,7 +20,7 @@ For a cloned/plugin-manager path, replace `dir` with the appropriate `url` or lo
 
 ## Minimal Conjure setup
 
-Conjure must be loaded for Clojure buffers before `:SkeinConnect` runs. A terse lazy.nvim setup:
+Conjure must be loaded for Clojure buffers before `:MillstrandConnect` runs. A terse lazy.nvim setup:
 
 ```lua
 {
@@ -38,16 +38,16 @@ Conjure must be loaded for Clojure buffers before `:SkeinConnect` runs. A terse 
 }
 ```
 
-If your config loads plugins from `FileType` autocommands, call `require("conjure.main")` for the `clojure` filetype and then bind `:SkeinConnect`, for example:
+If your config loads plugins from `FileType` autocommands, call `require("conjure.main")` for the `clojure` filetype and then bind `:MillstrandConnect`, for example:
 
 ```lua
 vim.api.nvim_create_autocmd("FileType", {
   pattern = "clojure",
   callback = function(event)
     require("conjure.main")
-    vim.keymap.set("n", "<localleader>sc", "<cmd>SkeinConnect<cr>", {
+    vim.keymap.set("n", "<localleader>sc", "<cmd>MillstrandConnect<cr>", {
       buffer = event.buf,
-      desc = "Connect to Skein weaver",
+      desc = "Connect to Millstrand weaver",
     })
   end,
 })
@@ -55,7 +55,7 @@ vim.api.nvim_create_autocmd("FileType", {
 
 ## clojure-lsp project root
 
-Every spool in this repo is its own directory with its own `deps.edn` — `spools/*/deps.edn`, plus `.skein/spools/*/deps.edn`. nvim-lspconfig's default `root_markers` for `clojure_lsp` list `deps.edn` and `.git` at equal priority, so the nearest marker wins: opening `spools/workflow/src/skein/spools/workflow.clj` roots the server at `spools/workflow`. That directory's `deps.edn` is only `{:paths ["src"]}`, so Skein core never reaches the classpath and go-to-definition into `skein.core.*` silently fails.
+Every spool in this repo is its own directory with its own `deps.edn` — `spools/*/deps.edn`, plus `.skein/spools/*/deps.edn`. nvim-lspconfig's default `root_markers` for `clojure_lsp` list `deps.edn` and `.git` at equal priority, so the nearest marker wins: opening `spools/workflow/src/millstrand/spools/workflow.clj` roots the server at `spools/workflow`. That directory's `deps.edn` is only `{:paths ["src"]}`, so Millstrand core never reaches the classpath and go-to-definition into `millstrand.core.*` silently fails.
 
 Give `.git` its own higher-priority tier so the repo root always wins:
 
@@ -86,7 +86,7 @@ The first open after that rebuilds the repo-root cache, which takes a while on a
    mill start
    ```
 
-2. Start a weaver in the target Skein workspace:
+2. Start a weaver in the target Millstrand workspace:
 
    ```sh
    mill weaver start
@@ -95,30 +95,30 @@ The first open after that rebuilds the repo-root cache, which takes a while on a
 3. In Neovim, open a Clojure buffer and run:
 
    ```vim
-   :SkeinConnect
+   :MillstrandConnect
    ```
 
 The command runs `mill weaver list`, decodes the JSON rows, shows running weavers with their friendly name, shortened config path, state, and nREPL endpoint, then runs:
 
 ```vim
 :ConjureConnect <host> <port>
-:ConjureEval (do (in-ns 'user) (require '[skein.repl :as repl]))
+:ConjureEval (do (in-ns 'user) (require '[millstrand.repl :as repl]))
 ```
 
 Errors are reported with `vim.notify` if `mill` is missing, the JSON is malformed, no weavers are running, the selected row lacks nREPL metadata, Conjure commands are unavailable, or Conjure connection/eval commands fail.
 
-## Evaluating Skein forms from buffers
+## Evaluating Millstrand forms from buffers
 
-`:SkeinConnect` connects Conjure and evaluates:
+`:MillstrandConnect` connects Conjure and evaluates:
 
 ```clojure
-(do (in-ns 'user) (require '[skein.repl :as repl]))
+(do (in-ns 'user) (require '[millstrand.repl :as repl]))
 ```
 
-That puts the prompt in the neutral `user` namespace with `skein.repl` aliased, so `(repl/register-query! ...)` works without a further require. When evaluating forms from a file such as `.skein/init.clj`, the file's namespace still matters, so name the alias there too:
+That puts the prompt in the neutral `user` namespace with `millstrand.repl` aliased, so `(repl/register-query! ...)` works without a further require. When evaluating forms from a file such as `.millstrand/init.clj`, the file's namespace still matters, so name the alias there too:
 
 ```clojure
-(require '[skein.repl :as repl])
+(require '[millstrand.repl :as repl])
 
 (repl/register-query! 'mine [:= [:attr :owner] "me"])  ; claim a live query
 (repl/unregister-query! 'mine)                          ; retract it
@@ -128,8 +128,8 @@ For scratch examples you want to keep in a config or source file, put them in a 
 
 ```clojure
 (comment
-  (require '[skein.api.current.alpha :as current]
-           '[skein.api.weaver.alpha :as weaver]
+  (require '[millstrand.api.current.alpha :as current]
+           '[millstrand.api.weaver.alpha :as weaver]
            '[clojure.pprint :refer [pprint]])
 
   (pprint (weaver/ready (current/runtime)))
@@ -142,7 +142,7 @@ For scratch examples you want to keep in a config or source file, put them in a 
 If you want unqualified registration verbs in a file, explicitly refer them:
 
 ```clojure
-(require '[skein.repl :refer [register-query! unregister-query!]])
+(require '[millstrand.repl :refer [register-query! unregister-query!]])
 
 (comment
   (register-query! 'mine [:= [:attr :owner] "me"])

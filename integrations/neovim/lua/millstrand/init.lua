@@ -1,9 +1,9 @@
 local M = {}
 
-local init_form = "(do (in-ns 'user) (require '[skein.repl :as repl]))"
+local init_form = "(do (in-ns 'user) (require '[millstrand.repl :as repl]))"
 
 local function notify_error(message)
-  vim.notify(message, vim.log.levels.ERROR, { title = "skein.nvim" })
+  vim.notify(message, vim.log.levels.ERROR, { title = "millstrand.nvim" })
 end
 
 local function has_command(name)
@@ -111,7 +111,7 @@ local function handle_weaver_list_result(result, on_success)
 
   local running = running_weavers(rows_or_err)
   if #running == 0 then
-    notify_error("no running Skein weavers found; start one with :!mill weaver start")
+    notify_error("no running Millstrand weavers found; start one with :!mill weaver start")
     return
   end
 
@@ -120,7 +120,7 @@ end
 
 local function list_weavers(on_success)
   if vim.fn.executable("mill") ~= 1 then
-    notify_error("mill executable not found on PATH; install Skein and start mill first")
+    notify_error("mill executable not found on PATH; install Millstrand and start mill first")
     return
   end
 
@@ -166,17 +166,17 @@ local function connect_row(row)
 
   local eval_ok, eval_err = pcall(vim.cmd, "ConjureEval " .. init_form)
   if not eval_ok then
-    notify_error("ConjureEval failed while initializing skein.repl: " .. tostring(eval_err))
+    notify_error("ConjureEval failed while initializing millstrand.repl: " .. tostring(eval_err))
     return
   end
 
-  vim.notify("Connected Conjure to Skein weaver " .. tostring(row.name or endpoint), vim.log.levels.INFO, { title = "skein.nvim" })
+  vim.notify("Connected Conjure to Millstrand weaver " .. tostring(row.name or endpoint), vim.log.levels.INFO, { title = "millstrand.nvim" })
 end
 
 function M.connect()
   list_weavers(function(rows)
     vim.ui.select(rows, {
-      prompt = "Skein weaver:",
+      prompt = "Millstrand weaver:",
       format_item = item_label,
     }, function(choice)
       if choice then
