@@ -125,7 +125,7 @@ For local sibling development, use the checkout beside the consumer:
 {:deps {io.millstrand/millstrand {:local/root "../millstrand"}}}
 ```
 
-The local form is for development only. `scripts/verify-published-core.sh` proves the published form from a clean temporary consumer.
+The local form is for development only. `scripts/verify-published-core.sh` has two release-proof modes: `pre-tag` checks a clean temporary consumer against the candidate checkout, while `published` checks the fetched Git tag and peeled commit without a local root.
 
 Add a few strands, wiring in dependencies and a `type` attribute as you go (`strand add` prints the new strand as JSON; `jq` pulls the id out):
 

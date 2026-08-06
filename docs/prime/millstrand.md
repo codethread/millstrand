@@ -44,7 +44,7 @@ Local sibling development resolves the checkout beside the consumer:
 {io.millstrand/millstrand {:local/root "../millstrand"}}
 ```
 
-Use the local form only while developing. Release proof must resolve the published form without a local root.
+Use the local form only while developing. Release proof has two stages: `pre-tag` checks a clean consumer against the candidate checkout, and `published` resolves the fetched Git tag and peeled commit without a local root.
 
 For a break, add a function name first, a sibling numbered root when the namespace model changes, or a new repository when the whole concept changes. Keep old contracts intact. The classification rule is: rejecting input the published contract accepted is breaking even when it improves validation; rejecting what the contract declared invalid is a fix.
 

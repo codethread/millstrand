@@ -19,6 +19,8 @@ For local sibling development only:
 {:deps {io.millstrand/millstrand {:local/root "../millstrand"}}}
 ```
 
+The pre-tag proof checks a clean temporary consumer against the landed candidate checkout. It does not prove the remote Git pin; the published proof below covers that after the tag is pushed.
+
 Verify a landed candidate before tagging:
 
 ```sh

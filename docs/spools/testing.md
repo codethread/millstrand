@@ -65,7 +65,7 @@ For a sibling checkout at `../millstrand`, use this local-development form:
 {:deps {io.millstrand/millstrand {:local/root "../millstrand"}}}
 ```
 
-Keep the local form out of published-consumer verification. Run `scripts/verify-published-core.sh` once in `pre-tag` mode and once in `published` mode; the release note has the two commands and their required inputs.
+Keep the local form out of published-consumer verification. Run `scripts/verify-published-core.sh` once in `pre-tag` mode against the candidate checkout, then once in `published` mode after the tag is pushed; only the latter proves the fetched Git pin without a local root. The release note has the two commands and their required inputs.
 
 ## Testing tiers
 
