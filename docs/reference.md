@@ -49,6 +49,8 @@ Different workspaces are different workspaces. Use `--workspace <dir>` when you 
 
 The ordinary workspace is repository-scoped. Without `--workspace`, `mill` resolves the canonical repository root and uses that repo's `.millstrand` or `.ms` directory as the selected workspace. Linked worktrees for the same repository share this default workspace. Outside supported Git layouts, no-flag commands fail loudly. When no accepted marker exists, `mill init` creates `.millstrand`; when exactly one accepted marker exists, it completes that marker in place. It fails loudly outside supported Git layouts:
 
+Only one accepted marker may exist, and it must be a directory. If both `.millstrand` and `.ms` exist, either marker is a non-directory, or the legacy `.skein` marker is selected, Mill fails with the paths and remediation; remove or repair the marker before retrying.
+
 ```sh
 mill init
 ```
@@ -154,6 +156,8 @@ Check it:
 ```sh
 mill weaver status --workspace "$workspace"
 ```
+
+`mill weaver status` is read-only and is safe before storage initialization; use it to inspect the selected workspace and see that the weaver is stopped before running `mill weaver start`.
 
 The weaver exposes two local transports:
 

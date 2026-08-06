@@ -95,6 +95,8 @@ global one.
 
 That selected `.millstrand` or `.ms` directory holds trusted config only. The runtime state (metadata, sockets, and the SQLite database) lives under Millstrand's own state directory, not in your repo.
 
+Only one accepted marker may exist, and it must be a directory. If both `.millstrand` and `.ms` exist, either marker is a non-directory, or the legacy `.skein` marker is selected, Mill fails with the paths and remediation; remove or repair the marker before retrying.
+
 Create a workspace in the repo you want to use Skein in:
 
 ```sh
@@ -109,7 +111,7 @@ For personal use without tracked repository changes, use stealth bootstrap:
 mill init --stealth
 ```
 
-This keeps the selected repo-local workspace and `CLAUDE.local.md` out of the shared repository; its Git private exclude block covers both accepted workspace marker names. It prints every change and the Codex instruction you may add to your own agent guidance. Keep substantial personal config in a [local spool](./spools/customisation.md#a-private-repo-local-workspace).
+This keeps the selected repo-local workspace and `CLAUDE.local.md` out of the shared repository; its marker-owned Git private exclude block keeps the workspace private. It prints every change and the Codex instruction you may add to your own agent guidance. Keep substantial personal config in a [local spool](./spools/customisation.md#a-private-repo-local-workspace).
 
 **Escape hatch — throwaway workspaces.** For experiments, tests, or agent work, use a disposable workspace so you never touch a real repo's config:
 
