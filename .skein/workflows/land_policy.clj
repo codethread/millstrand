@@ -38,12 +38,11 @@
   Awaiting the lock is a declaration of intent to merge, so `land await` enqueues
   rather than polling a free/busy flag. Entries are ordered by `queue/sequence`
   and only the head may acquire the lock, which turns the old race — where every
-  losing coordinator rebased and re-ran the ten required checks, then raced again
-  — into a train each run rebases exactly once at the front of.
+  losing coordinator rebased and re-ran the local quality contract, then raced
+  again — into a train each run rebases exactly once at the front of.
 
-  Main's ruleset sets `strict_required_status_checks_policy`, so a queued run
-  still rebases onto the commits that landed ahead of it; the queue removes the
-  repetition, not the rebase."
+  A queued run still rebases onto the commits that landed ahead of it; the queue
+  removes the repetition, not the rebase."
   "merge-queue-entry")
 
 (def ^:private default-await-timeout-secs
@@ -517,7 +516,8 @@
               |after you joined; it is not an up-to-date check. Before approval, run
               |`git fetch origin && git rev-list --count HEAD..origin/main`. If the
               |count is nonzero, rebase onto origin/main — never merge main into the
-              |branch — and re-establish green CI at the new HEAD; then
+              |branch — and re-run the tracked local quality contract at the new
+              |pushed HEAD; then
               |`land choose <run-id> approved`.")})
 
 (defn- waiting-result
@@ -695,7 +695,7 @@
                        "|A granted turn still requires a deterministic freshness check:
                         |run `git fetch origin && git rev-list --count
                         |HEAD..origin/main` regardless of `landed-since`. A nonzero
-                        |count means rebase and re-run CI; the train removes the
+                        |count means rebase and re-run the local quality contract; the train removes the
                         |repetition, not the rebase.")
                       (format-alpha/reflow
                        "|Branches come current by rebase, never by merging main in:
@@ -739,7 +739,9 @@
             |`workflow choose` for approval), joining the merge train
             |(`await`), and clearing a stalled train head (`break-lock`).
             |Terminal `complete` releases the lock and closes queue
-            |bookkeeping after merge or abort.")
+            |bookkeeping after merge or abort. Old runs retain their poured gate
+            |commands: a pre-sign-off stall cannot use `revise`, be hand-closed,
+            |or be followed by a second merge run.")
    :prime (format-alpha/reflow
            "|Coordinator landing discipline. Start with
             |`strand workflow start <run-id> --workflow land --params
@@ -756,6 +758,13 @@
             |and synthesizes their notes. Resolve the synthesis, commit and
             |push fixes, and complete resolve-review; final-ci-green runs the
             |same contract against the current pushed HEAD before sign-off.
+            |Old land runs retain the commands poured into their gates. Do not
+            |hand-close or declare an old remote-CI gate green. A pre-sign-off run
+            |stalled in that gate cannot reach `revise`; leave it active and resolve
+            |the already-merged PR under this policy. Do not close the gate to force
+            |migration or start a second merge run. If an old gate has `gate/error`,
+            |fix its cause, push the exact branch HEAD, then clear only that gate's
+            |error to retry.
             |On a gate failure, fix the cause and clear `gate/error` to retry.
             |Approve only with `strand land choose <run-id> approved
             |--input '{\"subject\":\"…\",\"body\":\"…\"}'` after

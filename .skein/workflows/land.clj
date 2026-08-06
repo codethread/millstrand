@@ -150,8 +150,7 @@
                                (fn [{:keys [branch]}]
                                  (str "Machine gate: mark the PR for " branch
                                       " ready, then run `gh pr merge --squash` with the approved"
-                                      " subject and body. Branch protection refuses the merge unless"
-                                      " required checks are green on an up-to-date branch. A failure"
+                                      " subject and body. The PR must be open and up to date. A failure"
                                       " stamps `gate/error`: fix the cause, then remove the stamp"
                                       " (`strand update <gate-id> --attributes '{\"gate/error\":null}'`) to re-run. The"
                                       " script first checks PR state, so re-running after a successful"
@@ -250,8 +249,9 @@
   "Drive the coordinator LANDING workflow for a feature branch (family \"land\").
 
   COORDINATOR-ONLY: worker agents never land. This stage pushes the branch,
-  opens a draft PR, watches CI at HEAD, fans roster review into subagent gates,
-  rechecks CI at the reviewed HEAD, and ends at the sign-off checkpoint.
+  opens a draft PR, runs the tracked local quality contract at the pushed HEAD,
+  fans roster review into subagent gates, re-runs that contract at the reviewed
+  HEAD, and ends at the sign-off checkpoint.
   Approval requires the squash subject and body, acquires
   the singleton merge lock, and routes to the mechanical `:land-merge`
   continuation. Abort routes to `:land-abort`. Card-backed runs move the card
@@ -281,7 +281,7 @@
                                     |--body <summary>`. If an open PR for %s already exists, reuse it
                                     |instead (`gh pr view %s --json url,number,state`). Complete this step
                                     |with `land complete <run-id> --pr-number <number>`. Completing it
-                                    |starts the automated ci-green shell gate and, for card-backed runs,
+                                    |starts the automated local-quality gate and, for card-backed runs,
                                     |moves the kanban card to in_review."
                                    branch branch branch)))})
    (workflow/gate :ci-green
@@ -359,7 +359,7 @@
                                 "|Read the synthesis note on the review target. Resolve every finding,
                                  |commit and push fixes, and use a targeted follow-up review when a fix
                                  |materially changes the reviewed surface. Complete this step only when
-                                 |the branch is ready for final CI; the next machine gate checks the
+                                 |the branch is ready for its final local quality gate; the next machine gate checks the
                                  |actual pushed HEAD.")})
    (workflow/gate :final-ci-green
                   (fn [{:keys [branch]}] (str "Run final local quality gates at " branch " HEAD"))
@@ -385,7 +385,7 @@
                                    :label "Approve"
                                    :description
                                    (format-alpha/reflow
-                                    "|Sign-off approved on a pushed branch with green CI; continue to the
+                                    "|Sign-off approved after the local quality contract passes on the pushed branch; continue to the
                                      |mechanical GitHub squash-merge. Supply the semantic squash subject
                                      |and Squashed commits body. The coordinator holds this delegated
                                      |sign-off authority.")
