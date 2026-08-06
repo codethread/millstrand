@@ -234,7 +234,7 @@
        (is (= :sqlite-memory (:storage ctx)))
        (is (nil? (:db-path ctx)))
        (is (nil? (get-in ctx [:metadata :canonical-db-path])))
-       (is (false? (.exists (io/file (:data-dir ctx) "skein.sqlite"))))
+       (is (false? (.exists (io/file (:data-dir ctx) "millstrand.sqlite"))))
        (is (= [] (t/repl! ctx
                           '(do
                              (require '[skein.api.current.alpha :as current]

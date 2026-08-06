@@ -13,7 +13,7 @@ import (
 )
 
 // worldRequest builds the routing selector for a mill client subcommand: the
-// process cwd feeds repo-local .skein discovery and --workspace pins an explicit
+// process cwd feeds repo-local .millstrand/.ms discovery and --workspace pins an explicit
 // selection (same precedence as the strand dispatcher, SPEC-002-D004.C9).
 func worldRequest(workspace, name string) (client.MillWorldRequest, error) {
 	cwd, err := os.Getwd()
@@ -46,7 +46,7 @@ func emitJSON(v any) error {
 
 func runInit(workspace string, stealth bool) error {
 	if stealth && workspace != "" {
-		return errors.New("--stealth cannot be combined with --workspace; stealth init creates the repo-local .skein workspace")
+		return errors.New("--stealth cannot be combined with --workspace; stealth init creates the repo-local .millstrand workspace")
 	}
 	world, err := worldRequest(workspace, "")
 	if err != nil {

@@ -59,7 +59,7 @@ relevant files, and validation expectations.
 
 ## Workspaces
 
-Without a flag, `strand` targets the repo's `.skein` world. Select another explicitly for
+Without a flag, `strand` targets the repo's `.millstrand` or `.ms` world. Select another explicitly for
 disposable or non-default worlds:
 
 ```sh
@@ -79,5 +79,5 @@ Before reporting success:
 
 Branching, delegation, review, and landing discipline are repo policy, not strand core: take
 them from repo conventions and from the `about`/`prime` surfaces of the ops the repo
-registers. Building on `.skein` itself — config, spools, the source docs — is covered by
-`mill skein prime`; day-to-day tracking does not need it.
+registers. Building on `.millstrand` itself — config, spools, the source docs — is covered by
+`mill millstrand prime`; day-to-day tracking does not need it.

@@ -11,7 +11,7 @@ import (
 const (
 	stealthExcludeStart = "# mill:skein-stealth"
 	stealthExcludeEnd   = "# /mill:skein-stealth"
-	stealthExcludeBlock = stealthExcludeStart + "\n/.skein\n/CLAUDE.local.md\n" + stealthExcludeEnd + "\n"
+	stealthExcludeBlock = stealthExcludeStart + "\n/.millstrand\n/.ms\n/CLAUDE.local.md\n" + stealthExcludeEnd + "\n"
 
 	StealthStatusCreated        = "created"
 	StealthStatusUpdated        = "updated"
@@ -31,7 +31,7 @@ const (
 	StealthCodexManualRequired  = "manual-required"
 )
 
-const stealthCodexSuggestedText = "This repository uses a local, gitignored .skein workspace. Run `mill skein prime` and `mill strand prime` before working."
+const stealthCodexSuggestedText = "This repository uses a local, gitignored .millstrand workspace. Run `mill millstrand prime` and `mill strand prime` before working."
 
 type StealthFileAction struct {
 	Path   string `json:"path"`
@@ -163,13 +163,12 @@ func BootstrapStealthWorld(cwd string) (World, StealthReport, error) {
 }
 
 func preflightStealth(repoRoot string) (stealthPlan, error) {
-	tracked, err := gitTracked(repoRoot, ".skein")
+	trackedPath, err := trackedWorkspacePath(repoRoot)
 	if err != nil {
 		return stealthPlan{}, err
 	}
-	if tracked {
-		path := filepath.Join(repoRoot, ".skein")
-		return stealthPlan{}, refuse(path, StealthTargetTrackedSkein, StealthStateTracked, "remove .skein from the Git index or run mill init without --stealth")
+	if trackedPath != "" {
+		return stealthPlan{}, refuse(trackedPath, StealthTargetTrackedSkein, StealthStateTracked, "remove .millstrand or .ms from the Git index or run mill init without --stealth")
 	}
 	excludePath, err := gitPrivateExcludePath(repoRoot)
 	if err != nil {
@@ -180,7 +179,7 @@ func preflightStealth(repoRoot string) (stealthPlan, error) {
 		return stealthPlan{}, err
 	}
 	claudePath := filepath.Join(repoRoot, "CLAUDE.local.md")
-	tracked, err = gitTracked(repoRoot, "CLAUDE.local.md")
+	tracked, err := gitTracked(repoRoot, "CLAUDE.local.md")
 	if err != nil {
 		return stealthPlan{}, err
 	}
@@ -192,6 +191,19 @@ func preflightStealth(repoRoot string) (stealthPlan, error) {
 		return stealthPlan{}, err
 	}
 	return stealthPlan{exclude: exclude, claude: claude}, nil
+}
+
+func trackedWorkspacePath(repoRoot string) (string, error) {
+	for _, workspace := range []string{DefaultWorkspace, WorkspaceAlias} {
+		tracked, err := gitTracked(repoRoot, workspace)
+		if err != nil {
+			return "", err
+		}
+		if tracked {
+			return filepath.Join(repoRoot, workspace), nil
+		}
+	}
+	return "", nil
 }
 
 func gitPrivateExcludePath(repoRoot string) (string, error) {

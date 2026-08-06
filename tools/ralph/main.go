@@ -71,7 +71,7 @@ func run() (int, error) {
 			"Drive a kanban epic through repeated headless agent runs.\n\nflags:\n")
 		fs.PrintDefaults()
 		_, _ = fmt.Fprint(out, "\nenvironment: RALPH_HARNESS, RALPH_MODEL, RALPH_EFFORT, RALPH_MAX_ITERATIONS,\n"+
-			"             RALPH_SKIP_PERMISSIONS, RALPH_LOG_DIR, SKEIN_WORKSPACE\n"+
+			"             RALPH_SKIP_PERMISSIONS, RALPH_LOG_DIR, MILLSTRAND_WORKSPACE\n"+
 			"\nkeys: tab panes · enter expand · e run info · s soft stop · x hard stop · ? help · q stop/quit\n"+
 			"\nexit codes: 0 clean stop, 1 failure, 2 usage, 3 agent brake, 130 hard stop\n")
 	}
@@ -82,7 +82,7 @@ func run() (int, error) {
 	fs.IntVar(&opts.maxIterations, "max-iterations", maxIterations, "safety cap; 0 means unlimited")
 	fs.IntVar(&opts.failureLimit, "failure-limit", 3, "stop after this many consecutive failed runs")
 	fs.StringVar(&opts.logDir, "log-dir", os.Getenv("RALPH_LOG_DIR"), "transcript dir (default $TMPDIR/ralph/<epic>-<timestamp>)")
-	fs.StringVar(&opts.workspace, "workspace", os.Getenv("SKEIN_WORKSPACE"), "strand workspace dir (default: the repo's own)")
+	fs.StringVar(&opts.workspace, "workspace", os.Getenv("MILLSTRAND_WORKSPACE"), "strand workspace dir (default: the repo's own)")
 	fs.StringVar(&opts.strandBin, "strand", "", "strand binary (default: ./bin/strand beside this binary, else PATH)")
 	fs.BoolVar(&opts.skipPermissions, "skip-permissions", skipPermissions,
 		"bypass the harness's permission prompts (a headless run cannot answer them)")

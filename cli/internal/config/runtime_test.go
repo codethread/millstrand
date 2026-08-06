@@ -14,7 +14,7 @@ func TestStateRootUsesXDGStateHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(xdg, "skein")
+	want := filepath.Join(xdg, "millstrand")
 	if root != want {
 		t.Fatalf("StateRoot() = %q, want %q", root, want)
 	}
@@ -28,7 +28,7 @@ func TestStateRootUsesHomeFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(home, ".local", "state", "skein")
+	want := filepath.Join(home, ".local", "state", "millstrand")
 	if root != want {
 		t.Fatalf("StateRoot() = %q, want %q", root, want)
 	}
@@ -37,12 +37,12 @@ func TestStateRootUsesHomeFallback(t *testing.T) {
 func TestRuntimeWorldUsesSafeHashedDirectory(t *testing.T) {
 	xdg := filepath.Join(t.TempDir(), "state")
 	t.Setenv("XDG_STATE_HOME", xdg)
-	configDir := filepath.Join(t.TempDir(), "repo", ".skein")
+	configDir := filepath.Join(t.TempDir(), "repo", ".ms")
 	w, err := RuntimeWorld(configDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(w.StateDir, filepath.Join(xdg, "skein", "weavers")+string(filepath.Separator)) {
+	if !strings.HasPrefix(w.StateDir, filepath.Join(xdg, "millstrand", "weavers")+string(filepath.Separator)) {
 		t.Fatalf("unexpected state dir %q", w.StateDir)
 	}
 	hash := filepath.Base(w.StateDir)

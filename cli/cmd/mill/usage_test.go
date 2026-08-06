@@ -54,7 +54,7 @@ func TestMillUnknownCommandRendersOnceAndPointsAtHelp(t *testing.T) {
 }
 
 func TestMillUnknownCommandPointerFollowsTheChosenRendering(t *testing.T) {
-	t.Setenv("SKEIN_ERROR_FORMAT", "pretty")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "pretty")
 	t.Setenv("NO_COLOR", "1")
 	got := runMillFailure(t, "nosuchcmd")
 	want := "  x unknown command \"nosuchcmd\" for \"mill\"\n\n    try: mill --help\n"

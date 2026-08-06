@@ -36,7 +36,7 @@ Both harnesses bypass their permission prompts by default because a headless run
 
 Two flags take Go durations: `--poll` is the board refresh interval (default `10s`) and `--pause` is the breather between iterations (default `3s`), which keeps a crash-looping harness from hot-looping. `--strand` overrides which strand binary ralph reads the board through; by default it takes the one sitting beside itself in `./bin`, falling back to `PATH`.
 
-`RALPH_HARNESS`, `RALPH_MODEL`, `RALPH_EFFORT`, `RALPH_MAX_ITERATIONS`, `RALPH_SKIP_PERMISSIONS`, `RALPH_LOG_DIR` and `SKEIN_WORKSPACE` supply defaults for the matching flags. An unparseable value is an error rather than a silent fallback.
+`RALPH_HARNESS`, `RALPH_MODEL`, `RALPH_EFFORT`, `RALPH_MAX_ITERATIONS`, `RALPH_SKIP_PERMISSIONS`, `RALPH_LOG_DIR` and `MILLSTRAND_WORKSPACE` supply defaults for the matching flags. An unparseable value is an error rather than a silent fallback.
 
 Every iteration's raw stream lands in `<log-dir>/iter-<n>.jsonl` and its stderr in `<log-dir>/iter-<n>.stderr`, whatever the dashboard chose to render.
 

@@ -13,7 +13,7 @@ const (
 	MillSocketFileName   = "mill.sock"
 )
 
-// StateRoot returns Skein's XDG state root. When XDG_STATE_HOME is unset,
+// StateRoot returns Millstrand's XDG state root. When XDG_STATE_HOME is unset,
 // it uses the XDG fallback under the current user's home directory.
 func StateRoot() (string, error) {
 	base := os.Getenv("XDG_STATE_HOME")
@@ -27,7 +27,7 @@ func StateRoot() (string, error) {
 	if !filepath.IsAbs(base) {
 		return "", fmt.Errorf("XDG_STATE_HOME must be an absolute path: %s", base)
 	}
-	return filepath.Join(filepath.Clean(base), "skein"), nil
+	return filepath.Join(filepath.Clean(base), "millstrand"), nil
 }
 
 func CanonicalConfigIdentity(configDir string) (string, error) {
@@ -50,16 +50,25 @@ func WorldHash(canonicalConfigIdentity string) string {
 }
 
 func RuntimeWorld(configDir string) (World, error) {
-	identity, err := CanonicalConfigIdentity(configDir)
+	canonicalConfigDir, err := CanonicalConfigIdentity(configDir)
 	if err != nil {
 		return World{}, err
 	}
+	identity := markerNeutralIdentity(canonicalConfigDir)
 	root, err := StateRoot()
 	if err != nil {
 		return World{}, err
 	}
 	runtimeDir := filepath.Join(root, "weavers", WorldHash(identity))
-	return world(identity, runtimeDir, filepath.Join(runtimeDir, "data")), nil
+	return world(canonicalConfigDir, runtimeDir, filepath.Join(runtimeDir, "data")), nil
+}
+
+func markerNeutralIdentity(identity string) string {
+	base := filepath.Base(identity)
+	if base == WorkspaceAlias || base == DefaultWorkspace {
+		return filepath.Join(filepath.Dir(identity), DefaultWorkspace)
+	}
+	return identity
 }
 
 func MillMetadataPath() (string, error) {

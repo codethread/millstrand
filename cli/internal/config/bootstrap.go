@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	DefaultInitCLJ        = "(require '[skein.api.current.alpha :as current]\n         '[skein.api.runtime.alpha :as runtime])\n\n(def runtime (current/runtime))\n\n;; batteries is approved as a shipped source-root spool by default. The module\n;; guard keeps source loading behind that visible approval. The declaration\n;; carries a source target and world policy only: the module's contribution is\n;; the declaration data the authoring forms in `skein.spools.batteries` collect\n;; as its source loads — the strand ops and the glossary seed their documented\n;; failure modes reference.\n(runtime/module! runtime :skein/spools-batteries\n                 {:ns 'skein.spools.batteries\n                  :spools ['skein.spools/batteries]})\n"
-	DefaultSkeinGitignore = "config.local.json\ninit.local.clj\nspools.local.edn\nstate/\ndata/\nweaver.*\n*.sqlite\n*.sqlite-*\n"
+	DefaultInitCLJ             = "(require '[skein.api.current.alpha :as current]\n         '[skein.api.runtime.alpha :as runtime])\n\n(def runtime (current/runtime))\n\n;; batteries is approved as a shipped source-root spool by default. The module\n;; guard keeps source loading behind that visible approval. The declaration\n;; carries a source target and world policy only: the module's contribution is\n;; the declaration data the authoring forms in `skein.spools.batteries` collect\n;; as its source loads — the strand ops and the glossary seed their documented\n;; failure modes reference.\n(runtime/module! runtime :skein/spools-batteries\n                 {:ns 'skein.spools.batteries\n                  :spools ['skein.spools/batteries]})\n"
+	DefaultMillstrandGitignore = "config.local.json\ninit.local.clj\nspools.local.edn\nstate/\ndata/\nweaver.*\n*.sqlite\n*.sqlite-*\n"
 )
 
 func BootstrapWorld(cwd, configDir, source string) (World, error) {
@@ -46,7 +46,7 @@ func bootstrapWorld(cwd, configDir, source string, injectGuidance bool) (World, 
 	if err := writeMissing(filepath.Join(world.ConfigDir, "init.clj"), DefaultInitCLJ); err != nil {
 		return World{}, err
 	}
-	if err := writeMissing(filepath.Join(world.ConfigDir, ".gitignore"), DefaultSkeinGitignore); err != nil {
+	if err := writeMissing(filepath.Join(world.ConfigDir, ".gitignore"), DefaultMillstrandGitignore); err != nil {
 		return World{}, err
 	}
 	if _, _, err := Load(world.ConfigDir); err != nil {
@@ -64,21 +64,21 @@ func bootstrapWorld(cwd, configDir, source string, injectGuidance bool) (World, 
 // when the marker is absent, so repeated `mill init` runs never duplicate it.
 // agentGuidanceEndMarker bounds the block so tooling can locate and replace it.
 const (
-	agentGuidanceMarker    = "<!-- mill:skein-prime -->"
-	agentGuidanceEndMarker = "<!-- /mill:skein-prime -->"
+	agentGuidanceMarker    = "<!-- mill:millstrand-prime -->"
+	agentGuidanceEndMarker = "<!-- /mill:millstrand-prime -->"
 )
 
 const agentGuidanceSection = agentGuidanceMarker + `
-## Skein / strand
+## Millstrand / strand
 
-This repo uses Skein strands to track work. Orientation ships in the ` + "`mill`" + ` CLI:
+This repo uses Millstrand strands to track work. Orientation ships in the ` + "`mill`" + ` CLI:
 
 - ` + "`mill strand prime`" + ` — the day-to-day strand workflow; run it before multi-step work.
-- ` + "`mill skein prime`" + ` — read on demand, only when building on this repo's ` + "`.skein/`" + ` config or spools.
+- ` + "`mill millstrand prime`" + ` — read on demand, only when building on this repo's ` + "`.millstrand/`" + ` config or spools.
 ` + agentGuidanceEndMarker + `
 `
 
-// ensureAgentGuidance appends the Skein/strand pointer section to the repo-root
+// ensureAgentGuidance appends the Millstrand/strand pointer section to the repo-root
 // agent guidance file so a fresh agent is routed at the `mill *prime` commands.
 // It is idempotent (marker-guarded), appends to whichever of AGENTS.md/CLAUDE.md
 // exist, and creates AGENTS.md when neither does. CLAUDE.md commonly symlinks to
@@ -134,13 +134,52 @@ func BootstrapTargetWorld(cwd, configDir string) (World, error) {
 			}
 			configDir = filepath.Join(cwd, configDir)
 		}
+		if filepath.Base(filepath.Clean(configDir)) == LegacyWorkspace {
+			return World{}, legacyWorkspaceError(configDir)
+		}
 		return isolatedWorld(configDir)
 	}
 	root, err := GitRoot(cwd)
 	if err != nil {
 		return World{}, err
 	}
-	return isolatedWorld(filepath.Join(root, ".skein"))
+	configDir, err = repoWorkspace(root)
+	if err != nil {
+		return World{}, err
+	}
+	return isolatedWorld(configDir)
+}
+
+func repoWorkspace(root string) (string, error) {
+	var found []string
+	for _, name := range []string{DefaultWorkspace, WorkspaceAlias, LegacyWorkspace} {
+		path := filepath.Join(root, name)
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if name == LegacyWorkspace {
+			return "", legacyWorkspaceError(path)
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("invalid Millstrand workspace marker %s: it must be a directory; replace it with a directory or pass --workspace <path>", path)
+		}
+		found = append(found, path)
+	}
+	if len(found) > 1 {
+		return "", fmt.Errorf("conflicting Millstrand workspaces: both %s and %s exist; remove or rename one marker before selecting this repository", found[0], found[1])
+	}
+	if len(found) == 1 {
+		return found[0], nil
+	}
+	return filepath.Join(root, DefaultWorkspace), nil
+}
+
+func legacyWorkspaceError(path string) error {
+	return fmt.Errorf("legacy Skein workspace marker %s is no longer supported; rename it to %s or run mill init to create the default %s workspace", path, WorkspaceAlias, DefaultWorkspace)
 }
 
 func GitRoot(cwd string) (string, error) {
@@ -169,7 +208,7 @@ func GitRoot(cwd string) (string, error) {
 
 // DeriveGitContext resolves the worktree root and git common dir for the
 // dispatcher envelope from an effective cwd. Unlike GitRoot (which locates the
-// repo root that hosts .skein), this returns the actual worktree toplevel and
+// repo root that hosts .millstrand/.ms), this returns the actual worktree toplevel and
 // common dir so linked worktrees report their own root while still sharing a
 // workspace identity through the common dir (RFC-019.D2).
 func DeriveGitContext(cwd string) (worktreeRoot, gitCommonDir string, err error) {

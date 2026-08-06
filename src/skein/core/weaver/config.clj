@@ -10,7 +10,7 @@
    :state-dir state-dir
    :data-dir data-dir
    :config-file (str config-dir "/config.json")
-   :db-path (str data-dir "/skein.sqlite")})
+   :db-path (str data-dir "/millstrand.sqlite")})
 
 (defn- require-dir! [value label]
   (when-not (seq (str value))

@@ -86,7 +86,7 @@
             :state-dir state-dir
             :data-dir data-dir
             :config-file (str workspace "/config.json")
-            :db-path (str data-dir "/skein.sqlite")}
+            :db-path (str data-dir "/millstrand.sqlite")}
            (weaver-config/world workspace state-dir data-dir)))))
 
 (deftest startup-uses-independent-xdg-world-dirs-and-initializes-storage
@@ -101,7 +101,7 @@
         (is (.isFile (io/file (:state-dir world) "weaver.edn")))
         (is (.isFile (io/file (:state-dir world) "weaver.json")))
         (is (.exists (io/file (:state-dir world) "weaver.sock")))
-        (is (.isFile (io/file (:data-dir world) "skein.sqlite")))
+        (is (.isFile (io/file (:data-dir world) "millstrand.sqlite")))
         (is (= ["depends-on" "notes" "parent-of" "serves" "supersedes"] (weaver/acyclic-relations rt)))
         (is (seq (db/execute! (:datasource rt) ["SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'strands'"]))))
       (finally
@@ -128,7 +128,7 @@
     (try
       (is (= :sqlite-memory (get-in rt [:storage :storage-kind])))
       (is (nil? (get-in rt [:storage :canonical-db-path])))
-      (is (false? (.exists (io/file (:data-dir world) "skein.sqlite"))))
+      (is (false? (.exists (io/file (:data-dir world) "millstrand.sqlite"))))
       (testing "metadata and status report memory storage without a fake path"
         (is (= :sqlite-memory (get-in rt [:metadata :storage-kind])))
         (is (nil? (get-in rt [:metadata :canonical-db-path])))

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 300" role="img"
-     aria-label="mill, the supervisor, routes to one weaver per workspace; a worktree of repo-a uses the same repo-a weaver; each weaver owns its own skein.sqlite of strands.">
+     aria-label="mill, the supervisor, routes to one weaver per workspace; a worktree of repo-a uses the same repo-a weaver; each weaver owns its own millstrand.sqlite of strands.">
   <style>
     svg { --line: #6e7781; --title: #1f2328; --muted: #57606a; }
     @media (prefers-color-scheme: dark) {
@@ -51,10 +51,10 @@
   <rect class="stack" x="42" y="224" width="204" height="52" rx="9"/>
   <rect class="box" x="32" y="232" width="204" height="52" rx="9"/>
   <text class="title" x="134" y="254">strands</text>
-  <text class="sub" x="134" y="272">repo-a's own skein.sqlite</text>
+  <text class="sub" x="134" y="272">repo-a's own millstrand.sqlite</text>
 
   <rect class="stack" x="326" y="224" width="204" height="52" rx="9"/>
   <rect class="box" x="316" y="232" width="204" height="52" rx="9"/>
   <text class="title" x="418" y="254">strands</text>
-  <text class="sub" x="418" y="272">repo-b's own skein.sqlite</text>
+  <text class="sub" x="418" y="272">repo-b's own millstrand.sqlite</text>
 </svg>

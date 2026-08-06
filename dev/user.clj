@@ -19,7 +19,7 @@
         world {:config-dir (.getCanonicalPath config-dir)
                :state-dir (.getCanonicalPath (java.io.File. config-dir "state"))
                :data-dir (.getCanonicalPath (java.io.File. config-dir "data"))
-               :db-path (.getCanonicalPath (java.io.File. config-dir "data/skein.sqlite"))}]
+               :db-path (.getCanonicalPath (java.io.File. config-dir "data/millstrand.sqlite"))}]
     (spit (java.io.File. config-dir "config.json")
           (format "{\"configFormat\":\"alpha\",\"source\":%s}\n" (pr-str (checkout-root))))
     world))

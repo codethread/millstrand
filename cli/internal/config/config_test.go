@@ -207,7 +207,7 @@ func TestResolveSourceRejectsRelativePath(t *testing.T) {
 
 func TestBootstrapTargetWorldResolvesRelativeConfigDirAgainstCallerCWD(t *testing.T) {
 	cwd := t.TempDir()
-	world, err := BootstrapTargetWorld(cwd, ".skein")
+	world, err := BootstrapTargetWorld(cwd, "custom-workspace")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestBootstrapTargetWorldResolvesRelativeConfigDirAgainstCallerCWD(t *testin
 	if err != nil {
 		want = filepath.Clean(cwd)
 	}
-	want = filepath.Join(want, ".skein")
+	want = filepath.Join(want, "custom-workspace")
 	if world.ConfigDir != want {
 		t.Fatalf("relative config dir resolved against wrong cwd: got %q want %q", world.ConfigDir, want)
 	}
@@ -247,12 +247,74 @@ func TestDefaultRepoWorldCanonicalAcrossLinkedWorktrees(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(realRepo, ".skein")
+	want := filepath.Join(realRepo, ".millstrand")
 	if mainWorld.ConfigDir != want || linkedWorld.ConfigDir != want {
-		t.Fatalf("default worlds did not use canonical repo .skein: main=%q linked=%q want=%q", mainWorld.ConfigDir, linkedWorld.ConfigDir, want)
+		t.Fatalf("default worlds did not use canonical repo .millstrand: main=%q linked=%q want=%q", mainWorld.ConfigDir, linkedWorld.ConfigDir, want)
 	}
 	if mainWorld.StateDir != linkedWorld.StateDir || mainWorld.DataDir != linkedWorld.DataDir || mainWorld.DBPath != linkedWorld.DBPath {
 		t.Fatalf("linked worktree did not share runtime identity: main=%#v linked=%#v", mainWorld, linkedWorld)
+	}
+}
+
+func TestRepoWorkspaceAcceptsMsAndKeepsRuntimeIdentityAcrossRename(t *testing.T) {
+	repo := t.TempDir()
+	runGit(t, repo, "init")
+	if err := os.Mkdir(filepath.Join(repo, ".ms"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alias, err := BootstrapTargetWorld(repo, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	realRepo, err := filepath.EvalSymlinks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alias.ConfigDir != filepath.Join(realRepo, ".ms") {
+		t.Fatalf("selected workspace = %q, want .ms", alias.ConfigDir)
+	}
+	if err := os.Rename(filepath.Join(repo, ".ms"), filepath.Join(repo, ".millstrand")); err != nil {
+		t.Fatal(err)
+	}
+	full, err := BootstrapTargetWorld(repo, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alias.StateDir != full.StateDir || alias.DataDir != full.DataDir || alias.DBPath != full.DBPath {
+		t.Fatalf("marker rename changed runtime identity: alias=%#v full=%#v", alias, full)
+	}
+}
+
+func TestRepoWorkspaceRejectsConflictingLegacyAndInvalidMarkers(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(string) error
+		want  string
+	}{
+		{"both accepted markers", func(repo string) error {
+			if err := os.Mkdir(filepath.Join(repo, ".millstrand"), 0o755); err != nil {
+				return err
+			}
+			return os.Mkdir(filepath.Join(repo, ".ms"), 0o755)
+		}, "conflicting Millstrand workspaces"},
+		{"legacy marker", func(repo string) error {
+			return os.Mkdir(filepath.Join(repo, ".skein"), 0o755)
+		}, "legacy Skein workspace marker"},
+		{"file marker", func(repo string) error {
+			return os.WriteFile(filepath.Join(repo, ".millstrand"), []byte("not a directory"), 0o644)
+		}, "it must be a directory"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := t.TempDir()
+			runGit(t, repo, "init")
+			if err := tc.setup(repo); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := BootstrapTargetWorld(repo, ""); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q error, got %v", tc.want, err)
+			}
+		})
 	}
 }
 

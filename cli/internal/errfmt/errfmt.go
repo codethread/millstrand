@@ -5,7 +5,7 @@
 // Three renderings ship. Plain is the machine-facing single line pinned by
 // SPEC-002.C4 and is the default whenever the error writer is not a terminal.
 // Pretty is the expanded terminal layout. JSON is the error envelope as one
-// decodable line, for a caller composing over the CLI. SKEIN_ERROR_FORMAT
+// decodable line, for a caller composing over the CLI. MILLSTRAND_ERROR_FORMAT
 // overrides the detection, and is the only way to reach JSON.
 package errfmt
 
@@ -32,7 +32,7 @@ const (
 )
 
 // FormatEnv overrides terminal detection, and is the only route to JSON.
-const FormatEnv = "SKEIN_ERROR_FORMAT"
+const FormatEnv = "MILLSTRAND_ERROR_FORMAT"
 
 // TypeLocal marks an error the bin raised about its own invocation. It is the
 // fourth value of the client-side taxonomy and never appears on the wire, where
@@ -52,7 +52,7 @@ const (
 	// CodeInvalidInvocation is the catch-all bad command line: an unknown flag,
 	// a flag missing its value, an unparseable --timeout.
 	CodeInvalidInvocation = "cli/invalid-invocation"
-	// CodeInvalidErrorFormat is a SKEIN_ERROR_FORMAT this bin does not accept.
+	// CodeInvalidErrorFormat is a MILLSTRAND_ERROR_FORMAT this bin does not accept.
 	CodeInvalidErrorFormat = "cli/invalid-error-format"
 	// CodePayloadUnreadable is a --payload or --stdin slot that would not load.
 	CodePayloadUnreadable = "cli/payload-unreadable"
@@ -151,7 +151,7 @@ func RenderRemedy(w io.Writer, remedy string, mode Mode) {
 	_, _ = fmt.Fprintln(w, "try:", remedy)
 }
 
-// Resolve picks the rendering for w. SKEIN_ERROR_FORMAT wins when set;
+// Resolve picks the rendering for w. MILLSTRAND_ERROR_FORMAT wins when set;
 // otherwise pretty for a character device and plain for everything else —
 // resolved against the writer in use, never process stderr, so a buffer-backed
 // caller never sees a terminal. A malformed override comes back alongside the
@@ -166,7 +166,7 @@ func Resolve(w io.Writer) (Mode, error) {
 	return detect(w), nil
 }
 
-// ValidateFormat reports a malformed SKEIN_ERROR_FORMAT. Binaries call it once
+// ValidateFormat reports a malformed MILLSTRAND_ERROR_FORMAT. Binaries call it once
 // at entry, after the local-only paths that must keep working with no weaver
 // (SPEC-002.C34). An unset or empty variable is no override.
 func ValidateFormat() error {
@@ -187,7 +187,7 @@ func ValidateFormat() error {
 }
 
 // ModeFor resolves the rendering for w and ignores a malformed
-// SKEIN_ERROR_FORMAT, because both binaries reject one at entry: by the time an
+// MILLSTRAND_ERROR_FORMAT, because both binaries reject one at entry: by the time an
 // error is on its way to stderr, the variable is either valid or is itself the
 // complaint being rendered.
 func ModeFor(w io.Writer) Mode {

@@ -42,7 +42,7 @@ func (h harness) startMill(t *testing.T) {
 		if strings.Contains(out.String(), "error:") {
 			t.Fatalf("mill failed: %s", out.String())
 		}
-		root := filepath.Join(os.Getenv("XDG_STATE_HOME"), "skein")
+		root := filepath.Join(os.Getenv("XDG_STATE_HOME"), "millstrand")
 		if _, err := os.Stat(filepath.Join(root, "mill.json")); err == nil {
 			return
 		}
@@ -157,7 +157,7 @@ func TestInitRequiresRunningMill(t *testing.T) {
 func TestGoWeaverLifecycleCommands(t *testing.T) {
 	dir := shortTempDir(t)
 	writeClientConfig(t, dir)
-	t.Setenv("SKEIN_SOURCE", sourceRoot(t))
+	t.Setenv("MILLSTRAND_SOURCE", sourceRoot(t))
 	h := newHarness(t)
 	runDir := shortTempDir(t)
 	if out, err := h.millCmd(dir, runDir, "", "weaver", "start"); err != nil {
@@ -188,7 +188,7 @@ func TestGoWeaverLifecycleCommands(t *testing.T) {
 func TestWeaverReplStdinAttachesThroughMillMetadata(t *testing.T) {
 	dir := shortTempDir(t)
 	writeClientConfig(t, dir)
-	t.Setenv("SKEIN_SOURCE", sourceRoot(t))
+	t.Setenv("MILLSTRAND_SOURCE", sourceRoot(t))
 	h := newHarness(t)
 	runDir := shortTempDir(t)
 	if out, err := h.millCmd(dir, runDir, "", "weaver", "start"); err != nil {
@@ -224,12 +224,12 @@ func TestRepoLocalDiscoveryAndInitLocalOverlay(t *testing.T) {
 	if out, err := h.millCmd("", subdir, "", "init"); err != nil {
 		t.Fatalf("init failed: %v\n%s", err, out)
 	}
-	configDir := filepath.Join(repo, ".skein")
+	configDir := filepath.Join(repo, ".millstrand")
 	if _, err := os.Stat(filepath.Join(configDir, "config.json")); err != nil {
-		t.Fatalf("expected repo .skein config.json: %v", err)
+		t.Fatalf("expected repo .millstrand config.json: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(subdir, ".skein")); !os.IsNotExist(err) {
-		t.Fatalf("did not expect nested .skein, stat err=%v", err)
+	if _, err := os.Stat(filepath.Join(subdir, ".millstrand")); !os.IsNotExist(err) {
+		t.Fatalf("did not expect nested .millstrand, stat err=%v", err)
 	}
 }
 
@@ -243,7 +243,7 @@ func TestStealthInitIsIdempotentAndLeavesNoTrackedChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantConfig := filepath.Join(realRepo, ".skein")
+	wantConfig := filepath.Join(realRepo, ".millstrand")
 	var first map[string]any
 	for attempt := 0; attempt < 2; attempt++ {
 		out, err := h.millCmd("", repo, "", "init", "--stealth")
@@ -297,14 +297,14 @@ func TestMillRoutedStrandOpsAddListHelpAndStream(t *testing.T) {
 	if err := exec.Command("git", "init", repo).Run(); err != nil {
 		t.Fatalf("git init repo: %v", err)
 	}
-	t.Setenv("SKEIN_SOURCE", sourceRoot(t))
+	t.Setenv("MILLSTRAND_SOURCE", sourceRoot(t))
 	h := newHarness(t)
 	if out, err := h.millCmd("", repo, "", "init"); err != nil {
 		t.Fatalf("init failed: %v\n%s", err, out)
 	}
 	// Load the pinned streaming-op fixture from the workspace init.clj so the
 	// weaver registers `test-stream` alongside the batteries ops.
-	appendFixtureLoad(t, filepath.Join(repo, ".skein", "init.clj"))
+	appendFixtureLoad(t, filepath.Join(repo, ".millstrand", "init.clj"))
 	if out, err := h.millCmd("", repo, "", "weaver", "start"); err != nil {
 		t.Fatalf("weaver start failed: %v\n%s", err, out)
 	}
@@ -357,7 +357,7 @@ func TestMillRoutedStrandOpsAddListHelpAndStream(t *testing.T) {
 	// The same failure in JSON mode, over the whole strand -> mill -> weaver
 	// chain: the envelope the weaver built reaches a CLI-over-CLI consumer as
 	// structure, affordance and all (SPEC-002.C4e).
-	t.Setenv("SKEIN_ERROR_FORMAT", "json")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "json")
 	out, err = h.strandCmd("", repo, "", "no-such-op")
 	if err == nil {
 		t.Fatalf("expected unknown-op failure, out=%q", out)
@@ -377,7 +377,7 @@ func TestMillRoutedStrandOpsAddListHelpAndStream(t *testing.T) {
 	if len(envelope.Details["available"].([]any)) == 0 {
 		t.Fatalf("the available affordance must arrive structured: %#v", envelope.Details)
 	}
-	t.Setenv("SKEIN_ERROR_FORMAT", "")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "")
 
 	if out, err := h.millCmd("", repo, "", "weaver", "stop"); err != nil {
 		t.Fatalf("weaver stop failed: %v\n%s", err, out)
@@ -397,7 +397,7 @@ func TestLinkedGitWorktreesShareDefaultWorldAndExplicitConfigDirIsolated(t *test
 	linked := filepath.Join(shortTempDir(t), "linked")
 	runGit(t, repo, "worktree", "add", linked)
 
-	t.Setenv("SKEIN_SOURCE", sourceRoot(t))
+	t.Setenv("MILLSTRAND_SOURCE", sourceRoot(t))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(shortTempDir(t), "config"))
 	h := newHarness(t)
 	if out, err := h.millCmd("", repo, "", "init"); err != nil {
@@ -415,7 +415,7 @@ func TestLinkedGitWorktreesShareDefaultWorldAndExplicitConfigDirIsolated(t *test
 			t.Fatalf("linked worktree default status mismatch for %s: main=%#v linked=%#v", key, mainStatus, linkedStatus)
 		}
 	}
-	wantConfig, err := filepath.EvalSymlinks(filepath.Join(repo, ".skein"))
+	wantConfig, err := filepath.EvalSymlinks(filepath.Join(repo, ".millstrand"))
 	if err != nil {
 		t.Fatal(err)
 	}

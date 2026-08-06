@@ -13,10 +13,10 @@ import (
 )
 
 // Every test here writes to a buffer, which resolves to plain mode on its own.
-// A SKEIN_ERROR_FORMAT inherited from the developer's shell would override that
+// A MILLSTRAND_ERROR_FORMAT inherited from the developer's shell would override that
 // for this process and every binary it spawns, so it is cleared once up front.
 func TestMain(m *testing.M) {
-	_ = os.Unsetenv("SKEIN_ERROR_FORMAT")
+	_ = os.Unsetenv("MILLSTRAND_ERROR_FORMAT")
 	os.Exit(m.Run())
 }
 
@@ -59,12 +59,12 @@ func TestDispatchRendersEachErrorExactlyOnce(t *testing.T) {
 func TestDispatchRejectsAnInvalidErrorFormat(t *testing.T) {
 	var captured capture
 	harness(t, &captured)
-	t.Setenv("SKEIN_ERROR_FORMAT", "colour")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "colour")
 	_, er, code := runDispatch("", "kanban", "card")
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
 	}
-	if !strings.Contains(er, "SKEIN_ERROR_FORMAT") || !strings.Contains(er, "json, plain, pretty") {
+	if !strings.Contains(er, "MILLSTRAND_ERROR_FORMAT") || !strings.Contains(er, "json, plain, pretty") {
 		t.Fatalf("stderr must name the variable and the accepted set: %q", er)
 	}
 	if captured.called {
@@ -77,7 +77,7 @@ func TestDispatchRejectsAnInvalidErrorFormat(t *testing.T) {
 func TestLocalOnlyFlagsSurviveAnInvalidErrorFormat(t *testing.T) {
 	var captured capture
 	harness(t, &captured)
-	t.Setenv("SKEIN_ERROR_FORMAT", "colour")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "colour")
 	for _, arg := range []string{"--version", "--help"} {
 		out, er, code := runDispatch("", arg)
 		if code != 0 || out == "" {
@@ -131,7 +131,7 @@ func TestDispatchRendersJSONForBothLocalOrigins(t *testing.T) {
 		sendInvoke = func(world client.MillWorldRequest, env map[string]any, stdout, stderr io.Writer) (int, error) {
 			return 1, failure
 		}
-		t.Setenv("SKEIN_ERROR_FORMAT", "json")
+		t.Setenv("MILLSTRAND_ERROR_FORMAT", "json")
 		_, er, code := runDispatch("", c.args...)
 		if code != 1 {
 			t.Fatalf("%s: exit = %d, want 1", c.name, code)
@@ -146,7 +146,7 @@ func TestDispatchRendersJSONForBothLocalOrigins(t *testing.T) {
 
 		// The plain surface SPEC-002.C4 pins is untouched by the taxonomy: still
 		// the bare line, with no type noun, code, or details= tail.
-		t.Setenv("SKEIN_ERROR_FORMAT", "plain")
+		t.Setenv("MILLSTRAND_ERROR_FORMAT", "plain")
 		_, plain, _ := runDispatch("", c.args...)
 		if want := "error: " + decoded["message"].(string) + "\n"; plain != want {
 			t.Fatalf("%s: plain line = %q, want %q", c.name, plain, want)
@@ -175,7 +175,7 @@ func TestDispatchRendersOneJSONLineForARelayedEnvelope(t *testing.T) {
 		}, errfmt.ModeFor(stderr))
 		return 1, envelope
 	}
-	t.Setenv("SKEIN_ERROR_FORMAT", "json")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "json")
 	_, er, code := runDispatch("", "no-such-op")
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
@@ -193,7 +193,7 @@ func TestDispatchRendersOneJSONLineForARelayedEnvelope(t *testing.T) {
 func TestDispatchRendersPrettyWhenTheFormatIsForced(t *testing.T) {
 	var captured capture
 	harness(t, &captured)
-	t.Setenv("SKEIN_ERROR_FORMAT", "pretty")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "pretty")
 	t.Setenv("NO_COLOR", "1")
 	_, er, code := runDispatch("", "--payload", "malformed", "kanban")
 	if code != 1 {

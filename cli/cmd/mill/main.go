@@ -78,12 +78,12 @@ func millCommandPath(cmd *cobra.Command) []string {
 func newMillCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "mill",
-		Short: "Skein local router",
-		Long: `mill is the Skein local router: it supervises weavers and forwards
+		Short: "Millstrand local router",
+		Long: `mill is the Millstrand local router: it supervises weavers and forwards
 strand invocations to the one selected for a workspace.
 
 Environment:
-  SKEIN_ERROR_FORMAT   error rendering: plain|pretty|json (default: pretty at a
+  MILLSTRAND_ERROR_FORMAT error rendering: plain|pretty|json (default: pretty at a
                        terminal, plain everywhere else). json writes the error
                        envelope {type, code, message, details} as one line on
                        stderr, and nothing else, for a caller composing over
@@ -114,8 +114,8 @@ Environment:
 		stealth, _ := cmd.Flags().GetBool("stealth")
 		return runInit(workspace, stealth)
 	}}
-	initCmd.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .skein)")
-	initCmd.Flags().Bool("stealth", false, "keep repo-local .skein and Claude guidance untracked through .git/info/exclude")
+	initCmd.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
+	initCmd.Flags().Bool("stealth", false, "keep repo-local .millstrand/.ms and Claude guidance untracked through .git/info/exclude")
 	root.AddCommand(initCmd)
 
 	weaver := &cobra.Command{Use: "weaver", Short: "Manage supervised weavers"}
@@ -135,7 +135,7 @@ Environment:
 		}
 		return runWeaverLifecycleWithReadyTimeout("weaver-start", workspace, name, readyTimeout)
 	}}
-	start.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .skein)")
+	start.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	start.Flags().String("name", "", "friendly name for this weaver (defaults to workspace basename)")
 	start.Flags().String("ready-timeout", "", "ready metadata wait budget (Go duration, default 5m)")
 	weaver.AddCommand(start)
@@ -143,29 +143,29 @@ Environment:
 		workspace, _ := cmd.Flags().GetString("workspace")
 		return runWeaverLifecycle("weaver-status", workspace, "")
 	}}
-	status.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .skein)")
+	status.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	weaver.AddCommand(status)
 	stop := &cobra.Command{Use: "stop", Short: "Stop the selected workspace's weaver through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
 		return runWeaverLifecycle("weaver-stop", workspace, "")
 	}}
-	stop.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .skein)")
+	stop.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	weaver.AddCommand(stop)
 	repl := &cobra.Command{Use: "repl", Short: "Attach directly to the selected workspace's live weaver nREPL", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
 		stdin, _ := cmd.Flags().GetBool("stdin")
 		return runWeaverRepl(workspace, stdin)
 	}}
-	repl.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .skein)")
+	repl.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 	repl.Flags().Bool("stdin", false, "send stdin Clojure forms to the running weaver, print one result per top-level form, then exit")
 	weaver.AddCommand(repl)
 	root.AddCommand(weaver)
 
-	skein := &cobra.Command{Use: "skein", Short: "Skein orientation for agents"}
-	skein.AddCommand(&cobra.Command{Use: "prime", Short: "Print orientation for building on .skein: resolved source path and the docs to read", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		return runPrime("skein")
+	millstrand := &cobra.Command{Use: "millstrand", Short: "Millstrand orientation for agents"}
+	millstrand.AddCommand(&cobra.Command{Use: "prime", Short: "Print orientation for building on .millstrand: resolved source path and the docs to read", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		return runPrime("millstrand")
 	}})
-	root.AddCommand(skein)
+	root.AddCommand(millstrand)
 
 	strandCmd := &cobra.Command{Use: "strand", Short: "Strand workflow guidance for agents"}
 	strandCmd.AddCommand(&cobra.Command{Use: "prime", Short: "Print the strand planning/tracking workflow", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {

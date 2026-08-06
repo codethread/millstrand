@@ -629,7 +629,7 @@ Include an **Activation** section with the complete trusted `init.clj` snippet.
 The consumer owns the runtime and declares modules explicitly. The option map is closed, and every key in it is activation data: exactly one source target (`:ns` namespace symbol or workspace-relative `:file` string), plus optional `:load :image`, `:spools` for every approved root prerequisite, `:after` when one module must follow another, and `:required?` for a loud missing-prerequisite refusal. It never carries `:contribute` or `:reconcile`; a declaration naming either withdrawn key is refused with guidance to use authoring forms.
 
 ```clojure
-;; .skein/init.clj — the consumer's trusted config
+;; .millstrand/init.clj — the consumer's trusted config
 (require '[skein.api.current.alpha :as current]
          '[skein.api.runtime.alpha :as runtime])
 
@@ -721,17 +721,17 @@ A custom kind's entry values are whatever its owner's `:entry-spec` accepts, so 
 
 Use `:family` for a file beside the family's public roots and `:root` for a file inside one root. The path is resolved when `bins plan` runs. An anchor gives the base for resolution; it is not a sandbox and does not require the file to stay beneath that base. A string executable is the right choice for a workspace-owned wrapper or a program already on the consumer's `PATH`. A build recipe is an argv vector, never a shell string, and runs at the executable's base. Do not put shell interpolation or toolchain installation policy in the declaration.
 
-Bins run in the caller's process, not inside the weaver. Mill adds `SKEIN_WORKSPACE` to the child environment, with the selected workspace path. A wrapper that needs to call a registered op should use that value explicitly and pass its own arguments unchanged:
+Bins run in the caller's process, not inside the weaver. Mill adds `MILLSTRAND_WORKSPACE` to the child environment, with the selected workspace path. A wrapper that needs to call a registered op should use that value explicitly and pass its own arguments unchanged:
 
 ```sh
 #!/bin/sh
 set -eu
 
-workspace=${SKEIN_WORKSPACE:?mill bin run did not provide SKEIN_WORKSPACE}
+workspace=${MILLSTRAND_WORKSPACE:?mill bin run did not provide MILLSTRAND_WORKSPACE}
 exec strand --workspace "$workspace" dashboard render "$@"
 ```
 
-Keep the wrapper's cwd assumptions explicit. `mill bin run` preserves the directory from which the operator invoked it; `SKEIN_WORKSPACE` identifies the selected world and is the stable path for `strand` calls. The wrapper should not dial `weaver.sock`, infer a workspace from its cwd, or require the consumer to add the spool checkout to `PATH`. Use `mill bin list` to inspect the declaration, `mill bin build <name>` to run its recipe, and `mill bin run <name> [args...]` to execute it. The `strand` CLI remains a dispatcher and does not execute bins.
+Keep the wrapper's cwd assumptions explicit. `mill bin run` preserves the directory from which the operator invoked it; `MILLSTRAND_WORKSPACE` identifies the selected world and is the stable path for `strand` calls. The wrapper should not dial `weaver.sock`, infer a workspace from its cwd, or require the consumer to add the spool checkout to `PATH`. Use `mill bin list` to inspect the declaration, `mill bin build <name>` to run its recipe, and `mill bin run <name> [args...]` to execute it. The `strand` CLI remains a dispatcher and does not execute bins.
 
 A kind provider declares its open kind through a kind declaration form before dependent entries stage. `skein.spools.cron` is the shipped example. A module contributing to another spool's kind names that spool's module in `:after`.
 
@@ -852,7 +852,7 @@ Lifecycle callables return data-first results. Put a live executor, scheduler, s
 A workspace-relative `:file` module can declare authoring forms in its one namespace:
 
 ```clojure
-;; .skein/acme_priority.clj
+;; .millstrand/acme_priority.clj
 (ns acme.priority.local
   (:require [skein.api.skein.alpha :as skein]))
 
@@ -862,10 +862,10 @@ A workspace-relative `:file` module can declare authoring forms in its one names
   [:= [:attr :owner] "priority"])
 ```
 
-The declaration is trusted config, running in `.skein/init.clj` after `rt` is bound as in the activation snippet above:
+The declaration is trusted config, running in `.millstrand/init.clj` after `rt` is bound as in the activation snippet above:
 
 ```clojure
-;; .skein/init.clj — the consumer's trusted config, with rt already bound
+;; .millstrand/init.clj — the consumer's trusted config, with rt already bound
 (runtime/module! rt :acme/priority
   {:file "acme_priority.clj"})
 ```
@@ -1025,7 +1025,7 @@ Workspace-owned helper namespaces sit below this list. They may provide terse er
 - External/shared spool source namespaces use the author's org prefix; codethread
   spools use `ct.spools.<name>`. The `skein.*` prefix is reserved for source
   shipped by the Skein checkout. A source namespace is separate from the
-  `.skein/spools.edn` coordinate symbol, such as `codethread/<name>`.
+  `.millstrand/spools.edn` coordinate symbol, such as `codethread/<name>`.
 
 ## Enforcement
 

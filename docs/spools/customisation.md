@@ -9,12 +9,10 @@ deliberately absent from this page: the generated [alpha API reference](../api/R
 
 ## The files mill init gives you
 
-`mill init` bootstraps missing workspace files without overwriting existing ones. It does not initialize
-database storage; weaver startup prepares storage for the selected workspace. The full layout of an ordinary
-repo-local `.skein` workspace:
+`mill init` bootstraps missing workspace files without overwriting existing ones. It does not initialize database storage; weaver startup prepares storage for the selected workspace. The full layout of an ordinary repo-local `.millstrand` workspace (or its `.ms` alias):
 
 ```text
-.skein/
+.millstrand/
   config.json        -> shared alpha workspace config (the low-privilege format marker)
   config.local.json  -> personal config overlay
   init.clj           -> shared trusted startup code loaded by the weaver
@@ -28,20 +26,11 @@ When absent, `mill init` creates the shared half: `config.json` with the alpha f
 
 ## A private repo-local workspace
 
-Run `mill init --stealth` when you want Skein in a repository without committing its config. The
-workspace remains a physical `.skein` directory at the Git root, so agents, `rg`, Make, Clojure,
-and weaver calls see normal repo-local paths. Mill adds its paths to `.git/info/exclude`, which is
-private to that clone, and reports each file it created, updated, skipped, or left unchanged.
+Run `mill init --stealth` when you want Millstrand in a repository without committing its config. The workspace remains a physical `.millstrand` or `.ms` directory at the Git root, so agents, `rg`, Make, Clojure, and weaver calls see normal repo-local paths. With no existing marker, stealth creates `.millstrand`; with one accepted marker, it keeps that marker. Mill adds its paths to `.git/info/exclude`, which is private to that clone, and reports each file it created, updated, skipped, or left unchanged.
 
-Stealth init does not write shared `AGENTS.md` or `CLAUDE.md`. It creates or updates an untracked
-`CLAUDE.local.md` when safe and prints the instruction Codex users may add to their own guidance.
-If `.skein` is already tracked or a mill-owned marker block was edited, it refuses before changing
-anything.
+Stealth init does not write shared `AGENTS.md` or `CLAUDE.md`. It creates or updates an untracked `CLAUDE.local.md` when safe and prints the instruction Codex users may add to their own guidance. If `.millstrand` or `.ms` is already tracked or a mill-owned marker block was edited, it refuses before changing anything.
 
-Keep the generated startup small. Put personal activation in `init.local.clj`, approvals in
-`spools.local.edn`, and substantive code in a local spool. If that code needs history, keep the
-spool in its own Git repository and approve its external root from `spools.local.edn`; `.skein`
-then remains only the repo-local entry point.
+Keep the generated startup small. Put personal activation in `init.local.clj`, approvals in `spools.local.edn`, and substantive code in a local spool. If that code needs history, keep the spool in its own Git repository and approve its external root from `spools.local.edn`; `.millstrand` then remains only the repo-local entry point.
 
 ## Startup files
 
@@ -186,7 +175,7 @@ For stronger isolation, create an agent-local namespace and call Skein helpers t
 Keep repository-specific policy in workspace `:file` modules. They are loaded from the exact path declared in `init.clj`, so their directories organize the workspace but do not make a classpath. Give every such namespace an owner-qualified root to avoid collisions in the shared weaver JVM:
 
 ```text
-.skein/
+.millstrand/
   init.clj
   workflows/
     ralph.clj
@@ -203,7 +192,7 @@ Keep repository-specific policy in workspace `:file` modules. They are loaded fr
   {:file "workflows/ralph.clj"})
 ```
 
-The directory and namespace use the same concern name for discovery, but the `:file` declaration selects the source. It does not add `.skein` to the classpath. If one workspace module requires another, declare the dependency with `:after` so its namespace has loaded first.
+The directory and namespace use the same concern name for discovery, but the `:file` declaration selects the source. It does not add `.millstrand` to the classpath. If one workspace module requires another, declare the dependency with `:after` so its namespace has loaded first.
 
 Use a local spool when the code needs a classpath root or is worth reusing independently of this workspace. Skein treats runtime extensions as trusted Clojure code, and the
 [reference spools](../../spools/README.md) — including the workflow engine and the external,

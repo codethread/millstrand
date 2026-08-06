@@ -254,7 +254,7 @@ func decodeExecString(values map[string]json.RawMessage, key string) (string, bo
 
 func newBinCommand() *cobra.Command {
 	bin := &cobra.Command{Use: "bin", Short: "List and run spool-shipped executables"}
-	bin.PersistentFlags().String("workspace", "", "explicit workspace selection (defaults to repo-local .skein)")
+	bin.PersistentFlags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
 
 	list := &cobra.Command{Use: "list", Short: "List declared bins", Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 0 {
