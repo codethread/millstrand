@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"skein-strand-cli/internal/client"
+	"millstrand-strand-cli/internal/client"
 )
 
 func TestValidateInitRequestRejectsStealthExplicitWorkspace(t *testing.T) {

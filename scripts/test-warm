@@ -3,7 +3,7 @@
 #
 # Probe-or-boot: reuse the worktree's live warm REPL if its socket answers,
 # otherwise reap a dead one by recorded PID and boot a fresh one, then run the
-# NS-named namespaces through skein.test.alpha/run-focused! over the socket and
+# NS-named namespaces through millstrand.test.alpha/run-focused! over the socket and
 # print the summary. The socket probe -- not the port file -- is the liveness
 # truth (PLAN-Ttv-001.R2/TC3). All kills are by recorded PID, never `pkill -f`
 # (PLAN-Ttv-001.R1). A warm run is for iteration only and never a Done-when
@@ -21,7 +21,7 @@ pid_file=".test-repl.pid"
 # native-access opt (PLAN-Ttv-001.DN4); never `-M:test-repl` alone.
 boot_cmd=(clojure -M:test:test-repl)
 
-: "${NS:?NS is required, e.g. make test-warm NS=\"skein.test.alpha-test\"}"
+: "${NS:?NS is required, e.g. make test-warm NS=\"millstrand.test.alpha-test\"}"
 
 # Socket probe: succeed only when a TCP connection to the recorded port is
 # accepted. This is the single source of truth for liveness.
@@ -81,12 +81,12 @@ ensure_warm() {
 # still prints.
 run_focused() {
   local port="$1" out="$2"
-  # `requiring-resolve` loads skein.test.alpha and resolves run-focused! at
+  # `requiring-resolve` loads millstrand.test.alpha and resolves run-focused! at
   # runtime; a bare `(require ...)` + qualified call in one form would fail at
   # compile time (the symbol resolves before the require runs). The try/catch
   # keeps a validation failure from aborting before the sentinel prints.
   local form
-  form="(do (try ((requiring-resolve 'skein.test.alpha/run-focused!) '[${NS}]) (catch Throwable t (println \"TEST-WARM-ERROR:\" (.getMessage t) (pr-str (ex-data t))))) (println) (println \"TEST-WARM-DONE\"))"
+  form="(do (try ((requiring-resolve 'millstrand.test.alpha/run-focused!) '[${NS}]) (catch Throwable t (println \"TEST-WARM-ERROR:\" (.getMessage t) (pr-str (ex-data t))))) (println) (println \"TEST-WARM-DONE\"))"
   exec 3<>"/dev/tcp/127.0.0.1/$port"
   printf '%s\n' "$form" >&3
   local status=0 done=0 line

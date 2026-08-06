@@ -3,9 +3,9 @@
 
   Developers bind how they are notified in gitignored init.local.clj with
   (chime/set-notifier! {:argv [...]})."
-  (:require [skein.api.current.alpha :as current]
-            [skein.api.runtime.alpha :as runtime]
-            [skein.spools.chime :refer [defrule]]
+  (:require [millstrand.api.current.alpha :as current]
+            [millstrand.api.runtime.alpha :as runtime]
+            [millstrand.spools.chime :refer [defrule]]
             [ct.spools.agent-run :as shuttle]))
 
 (defn- config-attr

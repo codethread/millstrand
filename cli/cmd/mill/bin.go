@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"skein-strand-cli/internal/client"
-	"skein-strand-cli/internal/config"
-	"skein-strand-cli/internal/errfmt"
+	"millstrand-strand-cli/internal/client"
+	"millstrand-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/errfmt"
 )
 
 // binInvoke is deliberately the existing selected-world invoke path. The

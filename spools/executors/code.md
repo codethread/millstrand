@@ -1,10 +1,10 @@
-# Skein code executor spool
+# Millstrand code executor spool
 
 > This is the contract for `code/*` gate attributes, execution authority, outcomes, concurrency, timeout, recovery, and coordinator attention. The generated function reference is [`code.api.md`](./code.api.md).
 
 ## Overview
 
-`skein.spools.executors.code` fulfils ready workflow gates whose waiter is `:code`. It resolves the gate's qualified `code/fn` symbol through the runtime spool classloader and calls that Var with the poured `code/params` map. A normal return closes the gate. An exception or timeout stamps `gate/error` and leaves the gate ready for deliberate recovery.
+`millstrand.spools.executors.code` fulfils ready workflow gates whose waiter is `:code`. It resolves the gate's qualified `code/fn` symbol through the runtime spool classloader and calls that Var with the poured `code/params` map. A normal return closes the gate. An exception or timeout stamps `gate/error` and leaves the gate ready for deliberate recovery.
 
 A code gate runs arbitrary Clojure inside the weaver process with ambient runtime authority. There is no process isolation. The function owns every subprocess it starts.
 
@@ -15,13 +15,13 @@ Collected authoring forms publish the executor and stalled-gate query. A module-
 Declare the workflow module first, then order the code executor after every module that defines a function it may resolve:
 
 ```clojure
-(runtime/module! runtime :skein/spools-workflow
-  {:ns 'skein.spools.workflow})
+(runtime/module! runtime :millstrand/spools-workflow
+  {:ns 'millstrand.spools.workflow})
 (runtime/module! runtime :my/code-functions
   {:ns 'my.code-functions
-   :after [:skein/spools-workflow]})
-(runtime/module! runtime :skein/spools-code
-  {:ns 'skein.spools.executors.code
+   :after [:millstrand/spools-workflow]})
+(runtime/module! runtime :millstrand/spools-code
+  {:ns 'millstrand.spools.executors.code
    :after [:my/code-functions]})
 ```
 
@@ -36,7 +36,7 @@ Reconciliation scans durable ready gates immediately.
 | `code/params` | yes | JSON object poured with the gate. Missing or non-object values fail loudly. |
 | `code/timeout-secs` | no | Positive-integer wall-clock bound. Invalid values fail loudly. |
 
-The executor consults the named specs `:code/fn`, `:code/params`, and `:code/timeout-secs` — registered under the attribute names themselves — before invocation. Their combined request contract is `:skein.spools.executors.code/request`, declared on the executor's registry entry, so `strand workflow executors` projects the contract, a copyable attribute template, and the printed form graph without reading this spool's source. Successful return values must satisfy `:skein.spools.executors.code/result`.
+The executor consults the named specs `:code/fn`, `:code/params`, and `:code/timeout-secs` — registered under the attribute names themselves — before invocation. Their combined request contract is `:millstrand.spools.executors.code/request`, declared on the executor's registry entry, so `strand workflow executors` projects the contract, a copyable attribute template, and the printed form graph without reading this spool's source. Successful return values must satisfy `:millstrand.spools.executors.code/result`.
 
 Request attributes are snapshots. Function resolution happens when the gate executes, so a Var redefinition can repair an already-poured stalled gate after `gate/error` is cleared. The poured params do not change.
 
@@ -72,5 +72,5 @@ The module registers the `:code` workflow executor and the `stalled-code-gates` 
 
 ## See also
 
-- [`skein.spools.workflow`](../workflow.md) for gate authoring and executor registration.
-- [`skein.spools.executors.shell`](./shell.md) for process-isolated command execution.
+- [`millstrand.spools.workflow`](../workflow.md) for gate authoring and executor registration.
+- [`millstrand.spools.executors.shell`](./shell.md) for process-isolated command execution.

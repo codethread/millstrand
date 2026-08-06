@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.api.return-shape.alpha">skein.api.return-shape.alpha</a>
+# <a name="millstrand.api.return-shape.alpha">millstrand.api.return-shape.alpha</a>
 
 
 Pure declarations and checks for weaver operation return values.
@@ -14,13 +14,13 @@ Pure declarations and checks for weaver operation return values.
   node is `{:subcommands {<name> <node> ...}}` and a leaf return node is a
   return case (DELTA-Lhc-001.CC4). This namespace has no registry or runtime
   state. Failures are `ex-info` whose data carries the published marker
-  `:skein.api.return-shape.alpha/error`, a `:reason` keyword, and shape-local
+  `:millstrand.api.return-shape.alpha/error`, a `:reason` keyword, and shape-local
   context such as `:path`.
 
 
 
 
-## <a name="skein.api.return-shape.alpha/check!">`check!`</a>
+## <a name="millstrand.api.return-shape.alpha/check!">`check!`</a>
 ``` clojure
 (check! shape value)
 ```
@@ -31,9 +31,9 @@ Check `value` against one concrete return shape and return it unchanged.
   Throws structured `ex-info` on mismatch with `:path`, `:expected`, and
   `:actual`. Routing declarations must be selected by the caller first
   (see `select-case`).
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/return_shape/alpha.clj#L105-L117">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/return_shape/alpha.clj#L105-L117">Source</a></sub></p>
 
-## <a name="skein.api.return-shape.alpha/explain">`explain`</a>
+## <a name="millstrand.api.return-shape.alpha/explain">`explain`</a>
 ``` clojure
 (explain declaration)
 ```
@@ -45,9 +45,9 @@ Render a return declaration as JSON-safe data.
   recursively for nested `:subcommands` — so callers can render flat,
   subcommand, and stream declarations uniformly. Validates first: only
   well-formed declarations render.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/return_shape/alpha.clj#L52-L60">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/return_shape/alpha.clj#L52-L60">Source</a></sub></p>
 
-## <a name="skein.api.return-shape.alpha/select-case">`select-case`</a>
+## <a name="millstrand.api.return-shape.alpha/select-case">`select-case`</a>
 ``` clojure
 (select-case declaration path)
 ```
@@ -62,9 +62,9 @@ Select the return case a subcommand path names from a routed declaration.
   canonical `:path`/`:token`/`:available` context when the path stops at an
   interior node, continues past a concrete case, or names an undeclared
   subcommand.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/return_shape/alpha.clj#L62-L103">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/return_shape/alpha.clj#L62-L103">Source</a></sub></p>
 
-## <a name="skein.api.return-shape.alpha/validate!">`validate!`</a>
+## <a name="millstrand.api.return-shape.alpha/validate!">`validate!`</a>
 ``` clojure
 (validate! declaration)
 ```
@@ -76,4 +76,4 @@ Validate a return declaration and return it unchanged.
   `{:subcommands ...}` routed declaration whose tree recurses to any depth
   (DELTA-Lhc-001.CC4). Throws structured `ex-info` for malformed or
   unsupported declarations.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/return_shape/alpha.clj#L34-L50">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/return_shape/alpha.clj#L34-L50">Source</a></sub></p>

@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.api.peers.alpha">skein.api.peers.alpha</a>
+# <a name="millstrand.api.peers.alpha">millstrand.api.peers.alpha</a>
 
 
 Discover and call local sibling weavers from mill-published runtime metadata.
@@ -8,7 +8,7 @@ Discover and call local sibling weavers from mill-published runtime metadata.
 
 
 
-## <a name="skein.api.peers.alpha/call!">`call!`</a>
+## <a name="millstrand.api.peers.alpha/call!">`call!`</a>
 ``` clojure
 (call! peerish op)
 (call! peerish op args)
@@ -28,9 +28,9 @@ Invoke a named op on a resolved peer over the `invoke` envelope, or `status`.
   loudly with `:code :peer/stream-unsupported` (streams are out of scope for
   `call!`). Transport failures are loud and include peer identity. No retries or
   peer lifecycle management are attempted.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/peers/alpha.clj#L30-L56">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/peers/alpha.clj#L30-L56">Source</a></sub></p>
 
-## <a name="skein.api.peers.alpha/peers">`peers`</a>
+## <a name="millstrand.api.peers.alpha/peers">`peers`</a>
 ``` clojure
 (peers)
 ```
@@ -40,4 +40,4 @@ Return data-first rows for weaver metadata under the mill state root.
 
   Stale rows are included with `:running? false`. Present malformed metadata
   throws with `:code :peer/malformed-metadata` rather than being skipped.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/peers/alpha.clj#L19-L28">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/peers/alpha.clj#L19-L28">Source</a></sub></p>

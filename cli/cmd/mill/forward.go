@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	"skein-strand-cli/internal/client"
+	"millstrand-strand-cli/internal/client"
 )
 
 // handleInvoke resolves the selected workspace weaver and relays its NDJSON

@@ -1,4 +1,4 @@
-# Skein Batteries Spool
+# Millstrand Batteries Spool
 
 > This is the **contract** doc: the per-op behavior guarantees for the shipped `strand
 > <op>` surface. Its two companions are
@@ -10,13 +10,13 @@
 
 ## 1. Overview
 
-`skein.spools.batteries` is the shipped *core strand command surface*. It declares the everyday strand operations — `add`, `update`, `show`, `supersede`, `burn`, `note`, `list`, `ready`, `notes`, `subgraph`, the create-only `weave` op, and the read-only registry-introspection ops `query`, `pattern`, and `vocab` — through `skein.api.skein.alpha/defop`. Each declaration carries an `:arg-spec` parsed by the blessed argv parser `skein.api.cli.alpha` (see [cli.md](../devflow/specs/cli.md) and [repl-api.md](../devflow/specs/repl-api.md)).
+`millstrand.spools.batteries` is the shipped *core strand command surface*. It declares the everyday strand operations — `add`, `update`, `show`, `supersede`, `burn`, `note`, `list`, `ready`, `notes`, `subgraph`, the create-only `weave` op, and the read-only registry-introspection ops `query`, `pattern`, and `vocab` — through `millstrand.api.millstrand.alpha/defop`. Each declaration carries an `:arg-spec` parsed by the blessed argv parser `millstrand.api.cli.alpha` (see [cli.md](../devflow/specs/cli.md) and [repl-api.md](../devflow/specs/repl-api.md)).
 
-These `defop` declarations are the durable, owner-complete source for the command surface. A module source evaluation outside collection defines its Vars but publishes no op. Dynamic spool code and tests may use `skein.api.weaver.alpha/register-op!` with an explicit runtime for a live registration; an in-process `skein.repl` session uses the same verb with the runtime implied. A workspace that needs to mask a spool op durably uses `defop` with `{:override? true}` in a workspace module. The coordinate that acquired the spool does not change those registry rules.
+These `defop` declarations are the durable, owner-complete source for the command surface. A module source evaluation outside collection defines its Vars but publishes no op. Dynamic spool code and tests may use `millstrand.api.weaver.alpha/register-op!` with an explicit runtime for a live registration; an in-process `millstrand.repl` session uses the same verb with the runtime implied. A workspace that needs to mask a spool op durably uses `defop` with `{:override? true}` in a workspace module. The coordinate that acquired the spool does not change those registry rules.
 
-Each op delegates to exactly the `skein.api.*.alpha` call the old JSON socket dispatch used — strand
-lifecycle in `skein.api.weaver.alpha`, queries and traversal in `skein.api.graph.alpha`, weave in
-`skein.api.patterns.alpha` — and returns the same JSON-safe shape, so the ops are drop-in reachable
+Each op delegates to exactly the `millstrand.api.*.alpha` call the old JSON socket dispatch used — strand
+lifecycle in `millstrand.api.weaver.alpha`, queries and traversal in `millstrand.api.graph.alpha`, weave in
+`millstrand.api.patterns.alpha` — and returns the same JSON-safe shape, so the ops are drop-in reachable
 through `strand <op> …` (RFC-019). The namespace owns no module-level state: handlers read the
 runtime from their invocation context (`:op/runtime`) and never touch the published ambient
 singleton.
@@ -30,25 +30,25 @@ prefix.
 
 ```clojure
 {:spools
- {skein.spools/batteries {:skein/source-root "spools/batteries"}}}
+ {millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}}}
 ```
 
 Its generated `init.clj` activates the approved root through the ordinary guarded module path:
 
 ```clojure
-(runtime/module! runtime :skein/spools-batteries
-  {:ns 'skein.spools.batteries
-   :spools ['skein.spools/batteries]})
+(runtime/module! runtime :millstrand/spools-batteries
+  {:ns 'millstrand.spools.batteries
+   :spools ['millstrand.spools/batteries]})
 ```
 
-The relative coordinate resolves against the mill-selected Skein checkout and persists no absolute checkout path. Delete the seeded `spools.edn` entry to opt out; a workspace without it has no batteries ops.
+The relative coordinate resolves against the mill-selected Millstrand checkout and persists no absolute checkout path. Delete the seeded `spools.edn` entry to opt out; a workspace without it has no batteries ops.
 
 The contribution owns every op below plus its glossary outcomes. Each op carries `{:doc … :arg-spec … :returns …}` metadata; its invocable `:arg-spec` leaves carry `:hook-class` and `:deadline-class`. Owner-complete refresh replaces the whole batteries partition atomically.
 
 ## 2. Invocation and payloads
 
 - **BAT-C1:** Every op is invoked as `strand <op> [args…]`; argv after the op
-  name is parsed by the op's declared `:arg-spec` (`skein.api.cli.alpha`).
+  name is parsed by the op's declared `:arg-spec` (`millstrand.api.cli.alpha`).
   Missing required flags/positionals, unknown flags, and type violations fail
   loudly in the parser before any handler runs.
 - **BAT-C2 (payload references):** Wherever an argument value is a *payload
@@ -104,7 +104,7 @@ strand update <id> [--title t] [--state active|closed] [--attr key=value]… \
 Patches title, lifecycle state, attributes, and outgoing edges of one
 existing strand. Attributes **merge** into the existing map — they never
 replace it. The weaver applies the patch with SQLite `json_patch`
-(`skein.core.db/update-strand!`), so keys you pass are added or overwritten
+(`millstrand.core.db/update-strand!`), so keys you pass are added or overwritten
 and keys you omit are left untouched. Precedence matches `add`: `--attr`
 (highest, repeatable string map) over `--attributes` (lowest, a JSON object
 of typed values). Passing no attribute flag leaves the attribute map
@@ -115,7 +115,7 @@ The JSON Merge Patch surface is how you *remove* a key: a JSON `null` in
 `--attr key=` likewise stores `""` — blank is data, never a clearing
 convention. `--attr` values are always strings, so `--attr key=null` stores
 the literal `"null"`; a JSON `null` in the `--attributes` object deletes
-instead. The trusted-path equivalent is `skein.api.weaver.alpha/update!`
+instead. The trusted-path equivalent is `millstrand.api.weaver.alpha/update!`
 with `{:attributes {"key" nil}}`.
 
 Duplicate keys within one `--attr` set fail loudly, as on `add`; a blank `--attributes` key fails
@@ -196,10 +196,10 @@ repeatable string-valued `--param key=value`; `--state` overlays the query as an
 `[:= :state …]` clause. `--param` without `--query`, a blank `--query`, and unknown query params all fail
 loudly. Returns a JSON array of normalized strands. The result uses the lean read tier by default:
 any attribute value whose JSON-encoded UTF-8 length is above the fixed 1 KiB floor is replaced with
-`{"skein/omitted": true, "bytes": N}`; values at or below the floor pass through unchanged.
+`{"millstrand/omitted": true, "bytes": N}`; values at or below the floor pass through unchanged.
 
 `list` is result-capped before attribute assembly. The default cap is 500 rows; trusted workspace
-config may set another cap with `skein.spools.batteries/set-read-limit!`, and one call may override
+config may set another cap with `millstrand.spools.batteries/set-read-limit!`, and one call may override
 it with `--limit N`. If more rows match, `list` fails with `read-limit-exceeded`, naming the total,
 the cap, and the remedies: narrow with `--query`/`--param`/`--state`, or pass explicit `--limit N`.
 Set `--limit` above the reported total for an intentional full read. Successful results are never
@@ -305,7 +305,7 @@ strand vocab [--kind attr-namespace|edge]
 
 Read-only introspection of the runtime vocabulary registry. `--kind` is optional; when present it must
 be `attr-namespace` or `edge`. Any other value fails loudly before an empty result can hide a typo.
-The handler delegates to `skein.api.vocab.alpha/declarations`, passing `{:kind :attr-namespace}` or
+The handler delegates to `millstrand.api.vocab.alpha/declarations`, passing `{:kind :attr-namespace}` or
 `{:kind :edge}` when the flag is present.
 
 The result is one JSON array ordered like `declarations`: by declaration kind and then by declaration
@@ -324,7 +324,7 @@ strand spool status
 
 `spool about` returns each verb's behavior and the helper's conventions as data; the invocation forms above come from `strand help spool`. `spool add` and `spool bump` are mutating leaves, while the offline `spool status` projection is a read leaf. Per-leaf hook classes keep status free of mutation gating.
 
-The public boundary specs are `::spool-op-context`, `::spool-about-result`, `::spool-add-result`, `::spool-bump-result`, `::spool-status-result`, and `::advisory-manifest` in `skein.spools.batteries`. Closed result and manifest maps also use the named `exact-keys?` predicate because `clojure.spec.alpha/keys` accepts extra keys.
+The public boundary specs are `::spool-op-context`, `::spool-about-result`, `::spool-add-result`, `::spool-bump-result`, `::spool-status-result`, and `::advisory-manifest` in `millstrand.spools.batteries`. Closed result and manifest maps also use the named `exact-keys?` predicate because `clojure.spec.alpha/keys` accepts extra keys.
 
 Add lists the remote tags and accepts annotated `vN` tags only, where `N` is a positive integer.
 It resolves the peeled `refs/tags/vN^{}` commit and records that 40-character commit sha, never the
@@ -332,7 +332,7 @@ tag-object sha. `--tag` chooses one release; without it, add chooses the highest
 Lightweight tags, `v0`, missing releases, and untagged repositories fail loudly.
 
 At the peeled commit, add reads the optional producer `spool.edn` as an advisory manifest. A present
-manifest supplies the roots, Skein floor, and root requirements written into the consumer family
+manifest supplies the roots, Millstrand floor, and root requirements written into the consumer family
 entry. When `--lib` is also present, it must match one of the manifest's root symbols; a conflict
 fails before any write and names the requested and declared symbols. Without a manifest, add creates
 one root at `.`. Its symbol defaults to the Git URL basename, while `--lib` confirms or overrides

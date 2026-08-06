@@ -1,20 +1,20 @@
 (ns quality.spool-tiers
   "The spool-tier slice of quality.conventions-check: shipped spool
-  sources build on `skein.api.*.alpha`, never `skein.core.*`, and the
+  sources build on `millstrand.api.*.alpha`, never `millstrand.core.*`, and the
   designed exception is nominal — the unsafe-namespace convention of
   'Unsafe spools' in docs/spools/writing-shared-spools.md.
 
   A namespace is unsafe iff some segment of its name is `unsafe` or
   `unsafe-*`. Four rules, all held at zero findings over `spools/*/src`:
-  `skein.core.*` is used only from unsafe-named namespaces; an
-  unsafe-named namespace that touches no `skein.core.*` is stale and
+  `millstrand.core.*` is used only from unsafe-named namespaces; an
+  unsafe-named namespace that touches no `millstrand.core.*` is stale and
   loses the name; a safe namespace never requires another spool's
   unsafe namespace (no cross-repo lockstep, so the breakage contract
   cannot be encapsulated away); and the ns docstring leads with
   `UNSAFE:` exactly when the name is unsafe. Local workspace spools
   under `.skein/spools/` are trusted config accepting the compatibility
   cost (SPEC-004.C40) and are out of scope. The sibling fences owned
-  elsewhere are `skein.api.*.internal` by `quality.api-form`. The
+  elsewhere are `millstrand.api.*.internal` by `quality.api-form`. The
   findings logic loads on the test classpath; the caller supplies
   kondo's analysis data."
   (:require [clojure.java.io :as io]
@@ -37,9 +37,9 @@
   (second (re-find #"(?:^|/)spools/([^/]+)/src/" (str filename))))
 
 (defn- core-ns?
-  "True for `skein.core` and every namespace beneath it."
+  "True for `millstrand.core` and every namespace beneath it."
   [ns-sym]
-  (boolean (re-matches #"skein\.core(?:\..+)?" (str ns-sym))))
+  (boolean (re-matches #"millstrand\.core(?:\..+)?" (str ns-sym))))
 
 (defn unsafe-ns?
   "True when some segment of `ns-sym` is `unsafe` or `unsafe-*` — the
@@ -84,7 +84,7 @@
      (for [{:keys [from to filename row]} usages
            :when (and (core-ns? to) (not (unsafe-ns? from)))]
        (str filename ":" row ": `" from "` uses the internal namespace `" to
-            "`; spools build on `skein.api.*.alpha` (SPEC-005.C5), or carry"
+            "`; spools build on `millstrand.api.*.alpha` (SPEC-005.C5), or carry"
             " an unsafe-named namespace per docs/spools/writing-shared-spools.md"))
      (for [{:keys [from to filename row spool]} usages
            :when (and (unsafe-ns? to)
@@ -96,7 +96,7 @@
      (for [{:keys [name filename row]} ns-defs
            :when (and (unsafe-ns? name) (not (core-using name)))]
        (str filename ":" row ": `" name "` is unsafe-named but uses no"
-            " `skein.core.*`; drop the unsafe marker"))
+            " `millstrand.core.*`; drop the unsafe marker"))
      (for [{:keys [name doc filename row]} ns-defs
            :let [marked? (str/starts-with? (str doc) "UNSAFE:")]
            :when (not= marked? (unsafe-ns? name))]

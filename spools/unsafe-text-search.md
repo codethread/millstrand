@@ -1,4 +1,4 @@
-# Skein Text-Search Spool (UNSAFE)
+# Millstrand Text-Search Spool (UNSAFE)
 
 > This is the **contract** doc: what `search` returns, its flags, and the
 > failure modes. Its companions are
@@ -9,7 +9,7 @@
 
 **This spool breaks the namespace-tier rules on purpose.** It is a maintained example of rule-breaking done in the open — the Clojure equivalent of a Rust `unsafe` block — not a path you should copy without understanding the cost. Read this section before you activate it.
 
-**Internal namespaces it requires.** `skein.spools.unsafe-text-search` requires `skein.core.db` directly and runs SQL against the physical `strands` and `attributes` tables, and it reads the runtime's raw SQLite datasource (`(:datasource runtime)`). Both are `skein.core.*` internals with no compatibility promise. A blessed spool builds only on `skein.api.*.alpha`; this one reaches past that boundary.
+**Internal namespaces it requires.** `millstrand.spools.unsafe-text-search` requires `millstrand.core.db` directly and runs SQL against the physical `strands` and `attributes` tables, and it reads the runtime's raw SQLite datasource (`(:datasource runtime)`). Both are `millstrand.core.*` internals with no compatibility promise. A blessed spool builds only on `millstrand.api.*.alpha`; this one reaches past that boundary.
 
 **Why the blessed surface cannot serve this.** Two deliberate design choices close the door:
 
@@ -24,13 +24,13 @@
 
 Neither is a gap waiting to be filled. Both are load-bearing invariants (TEN-004 keeps the query surface small; TEN-007 keeps attribute storage the core's private burden). Adding text search or archived visibility to `api.*` would weaken them for everyone. So the capability lives here instead, clearly marked, where only a workspace that opts in pays for it.
 
-**The breakage contract.** `skein.core.*` changes freely and owes this spool nothing (TEN-000@1). The physical table names, the `archived` column, the datasource handle — any of them can change in an upgrade, and when they do, this spool breaks. It is maintained in-repo, in lockstep with the storage it reads, so that a storage change and this spool's fix land together. **An external spool that copies this pattern gets no such guarantee.** It pins itself to internals that will move, and it owns the fallout alone. If you are tempted to vendor this into your own distributed spool, don't: fork the storage assumptions knowingly or petition for a blessed capability instead.
+**The breakage contract.** `millstrand.core.*` changes freely and owes this spool nothing (TEN-000@1). The physical table names, the `archived` column, the datasource handle — any of them can change in an upgrade, and when they do, this spool breaks. It is maintained in-repo, in lockstep with the storage it reads, so that a storage change and this spool's fix land together. **An external spool that copies this pattern gets no such guarantee.** It pins itself to internals that will move, and it owns the fallout alone. If you are tempted to vendor this into your own distributed spool, don't: fork the storage assumptions knowingly or petition for a blessed capability instead.
 
-**Design rationale.** Why is text search over history worth a rule-break at all, rather than a core feature? Because it is not core work. Skein's strands are working memory beside the code, not the project's source of truth (`devflow/PHILOSOPHY.md`, "The work record is not the source of truth"). Old strands and archived attributes are memory and teaching material, not authority. Grepping them — "which feature discussed the retry backoff?", "what did that archived transcript say?" — is a reader reconstructing context, which is exactly the userland concern a spool should own. The core owes no history search; a spool that wants one accepts the coupling and says so. This one does.
+**Design rationale.** Why is text search over history worth a rule-break at all, rather than a core feature? Because it is not core work. Millstrand's strands are working memory beside the code, not the project's source of truth (`devflow/PHILOSOPHY.md`, "The work record is not the source of truth"). Old strands and archived attributes are memory and teaching material, not authority. Grepping them — "which feature discussed the retry backoff?", "what did that archived transcript say?" — is a reader reconstructing context, which is exactly the userland concern a spool should own. The core owes no history search; a spool that wants one accepts the coupling and says so. This one does.
 
 ## 1. Overview
 
-`skein.spools.unsafe-text-search` registers one op, `search`: a `LIKE`-based substring search over strand titles and attribute values. Hot rows only by default; `--archived` opts the cold rows in. It mutates nothing.
+`millstrand.spools.unsafe-text-search` registers one op, `search`: a `LIKE`-based substring search over strand titles and attribute values. Hot rows only by default; `--archived` opts the cold rows in. It mutates nothing.
 
 Every search substring is a bound parameter — user input is escaped for `LIKE` metacharacters and never spliced into SQL. Because it reads the raw datasource, it requires an **in-process weaver runtime**: trusted startup config, the weaver's own REPL, or an in-process test runtime.
 
@@ -44,8 +44,8 @@ strand search "widget" --limit 200            # raise the row cap
 ```
 
 ```clojure
-(require '[skein.spools.unsafe-text-search :as unsafe-text-search]
-         '[skein.api.current.alpha :as current])
+(require '[millstrand.spools.unsafe-text-search :as unsafe-text-search]
+         '[millstrand.api.current.alpha :as current])
 
 (def rt (current/runtime))
 
@@ -61,7 +61,7 @@ strand search "widget" --limit 200            # raise the row cap
 | `strand search <substring> [--archived] [--attr-key <k>] [--limit <n>]` | Substring search; JSON rows `{id, title, attr-key, snippet}`. |
 | `(search rt opts)` | Explicit-runtime core; `opts` is `{:substring :archived? :attr-key :limit}`. |
 
-The namespace declares the operation with `skein.api.skein.alpha/defop`. Activate it with `(runtime/module! rt :key {:ns 'skein.spools.unsafe-text-search :spools ['skein.spools/unsafe-text-search]})`.
+The namespace declares the operation with `millstrand.api.millstrand.alpha/defop`. Activate it with `(runtime/module! rt :key {:ns 'millstrand.spools.unsafe-text-search :spools ['millstrand.spools/unsafe-text-search]})`.
 
 Flags:
 
@@ -85,7 +85,7 @@ attribute key:
 - A strand that matches on its title and on two attribute values returns three
   rows, one per hit.
 
-The runtime validates `search` options against `:skein.spools.unsafe-text-search/search-opts` and each returned row against `:skein.spools.unsafe-text-search/result-row`.
+The runtime validates `search` options against `:millstrand.spools.unsafe-text-search/search-opts` and each returned row against `:millstrand.spools.unsafe-text-search/result-row`.
 
 ## 4. Failure modes (TEN-003)
 
@@ -104,5 +104,5 @@ The runtime validates `search` options against `:skein.spools.unsafe-text-search
 - [unsafe-text-search.cookbook.md](./unsafe-text-search.cookbook.md) — worked recipes.
 - [Writing shared spools](../docs/spools/writing-shared-spools.md#unsafe-spools) — the
   unsafe-spool convention this spool is the reference for.
-- `test/skein/spools/unsafe_text_search_test.clj` — executable contract examples
+- `test/millstrand/spools/unsafe_text_search_test.clj` — executable contract examples
   against a real weaver runtime.

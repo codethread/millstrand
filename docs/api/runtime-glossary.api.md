@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.api.runtime.glossary.alpha">skein.api.runtime.glossary.alpha</a>
+# <a name="millstrand.api.runtime.glossary.alpha">millstrand.api.runtime.glossary.alpha</a>
 
 
 Explicit-runtime glossary of named failure outcomes for the discovery surface.
@@ -26,7 +26,7 @@ Explicit-runtime glossary of named failure outcomes for the discovery surface.
 
 
 
-## <a name="skein.api.runtime.glossary.alpha/glossary-outcomes">`glossary-outcomes`</a>
+## <a name="millstrand.api.runtime.glossary.alpha/glossary-outcomes">`glossary-outcomes`</a>
 ``` clojure
 (glossary-outcomes runtime)
 ```
@@ -36,9 +36,9 @@ Return `runtime`'s registered glossary outcomes as full maps, sorted by name.
 
   The read/introspection projection: reads the runtime store explicitly, never
   the published ambient singleton.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/glossary/alpha.clj#L80-L89">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/glossary/alpha.clj#L80-L89">Source</a></sub></p>
 
-## <a name="skein.api.runtime.glossary.alpha/outcome-registered?">`outcome-registered?`</a>
+## <a name="millstrand.api.runtime.glossary.alpha/outcome-registered?">`outcome-registered?`</a>
 ``` clojure
 (outcome-registered? runtime name)
 ```
@@ -48,9 +48,9 @@ True when `runtime`'s glossary carries an outcome named `name`.
 
   The existence predicate the op-registration glossary-ref check
   (DELTA-Dtf-003.CC2) consults for every `failure-modes` reference.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/glossary/alpha.clj#L95-L101">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/glossary/alpha.clj#L95-L101">Source</a></sub></p>
 
-## <a name="skein.api.runtime.glossary.alpha/register-glossary-outcome!">`register-glossary-outcome!`</a>
+## <a name="millstrand.api.runtime.glossary.alpha/register-glossary-outcome!">`register-glossary-outcome!`</a>
 ``` clojure
 (register-glossary-outcome! runtime outcome)
 ```
@@ -64,9 +64,9 @@ Register `outcome` in `runtime`'s glossary and return it.
   the existing and attempting owners; use `replace-glossary-outcome!` for a
   deliberate override. The collision check runs inside the `swap!`, so two racing
   registrations of the same name cannot both clear a stale read.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/glossary/alpha.clj#L46-L58">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/glossary/alpha.clj#L46-L58">Source</a></sub></p>
 
-## <a name="skein.api.runtime.glossary.alpha/replace-glossary-outcome!">`replace-glossary-outcome!`</a>
+## <a name="millstrand.api.runtime.glossary.alpha/replace-glossary-outcome!">`replace-glossary-outcome!`</a>
 ``` clojure
 (replace-glossary-outcome! runtime outcome)
 ```
@@ -78,4 +78,4 @@ Replace an already-registered glossary `outcome`, failing loudly when absent.
   for a name that already exists; unlike the register path it requires the name
   to be present. A changed-semantics redefinition still deserves a new name — this
   path exists for trusted config to re-seat an outcome it owns.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/runtime/glossary/alpha.clj#L64-L74">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/glossary/alpha.clj#L64-L74">Source</a></sub></p>

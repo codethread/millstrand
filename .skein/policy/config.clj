@@ -1,9 +1,9 @@
 (ns ct.policy.config
-  "Repo-local Skein runtime configuration for skein-src: named queries and the
+  "Repo-local Millstrand runtime configuration for millstrand-src: named queries and the
   validation helpers used by workspace policy.
 
   Thin glue only: `ct.spools.devflow` owns the feature lifecycle,
-  `skein.spools.workflow` is its generic CLI, `ct.spools.delegation` owns the
+  `millstrand.spools.workflow` is its generic CLI, `ct.spools.delegation` owns the
   `strand agent` surface plus the `agent-plan` pattern (all activated from
   init.clj). This file registers named queries. Sibling init.clj modules hold
   the rest of the repo policy: hand-authored modules under workflows/,
@@ -12,13 +12,13 @@
   in agents/reviewers.clj."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
-            [skein.api.skein.alpha :as skein]))
+            [millstrand.api.millstrand.alpha :as millstrand]))
 
 ;; ---------------------------------------------------------------------------
 ;; Named queries
 ;; ---------------------------------------------------------------------------
 
-(skein/defquery run-active
+(millstrand/defquery run-active
   "Parameterized query for the active strands of one workflow run."
   {:usage "strand list --query run-active --param run-id=<run-id>"}
   {:params [:run-id]
@@ -26,7 +26,7 @@
            [:= :state "active"]
            [:= [:attr "workflow/run-id"] [:param :run-id]]]})
 
-(skein/defquery kanban-feature-work
+(millstrand/defquery kanban-feature-work
   "Parameterized query for active direct task children of one feature card."
   {:usage "strand ready --query kanban-feature-work --param feature=<feature-id>"}
   {:params [:feature]
@@ -35,28 +35,28 @@
            [:= [:attr "kanban/task"] "true"]
            [:edge/in "parent-of" [:= :id [:param :feature]]]]})
 
-(skein/defquery workflow-runs
+(millstrand/defquery workflow-runs
   "Query for active workflow roots (any family)."
   {:usage "strand list --query workflow-runs --limit 500"}
   [:and
    [:= :state "active"]
    [:= [:attr "workflow/role"] "root"]])
 
-(skein/defquery merge-lock
+(millstrand/defquery merge-lock
   "Query for the active singleton landing lock."
   {:usage "strand list --query merge-lock"}
   [:and
    [:= :state "active"]
    [:= [:attr "kind"] "merge-lock"]])
 
-(skein/defquery merge-queue
+(millstrand/defquery merge-queue
   "Query for the runs queued to merge, including the one holding the lock."
   {:usage "strand list --query merge-queue"}
   [:and
    [:= :state "active"]
    [:= [:attr "kind"] "merge-queue-entry"]])
 
-(skein/defquery work
+(millstrand/defquery work
   "Query for active actionable work, excluding workflow plumbing, agent run records, and inert kanban refinement cards."
   {:usage "strand ready --query work"}
   [:and
@@ -94,7 +94,7 @@
                       {:input raw})))
     value))
 
-;; The blessed arg-spec parser (skein.api.cli.alpha) binds positionals strictly
+;; The blessed arg-spec parser (millstrand.api.cli.alpha) binds positionals strictly
 ;; by order, so it cannot express the position-independent `step=<id>` selector
 ;; these ops accept, nor disambiguate the optional json-input/notes slots it can
 ;; sit among (docs/reference.md "Discovery tiers"). We therefore declare the fixed

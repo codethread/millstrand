@@ -1,8 +1,8 @@
-# Skein Chime Spool
+# Millstrand Chime Spool
 
 ## Overview
 
-`skein.spools.chime` is a local notification engine for Skein graph events. It watches strand mutations, evaluates small user-registered rules, and sends matching notices through a user-bound local notifier command.
+`millstrand.spools.chime` is a local notification engine for Millstrand graph events. It watches strand mutations, evaluates small user-registered rules, and sends matching notices through a user-bound local notifier command.
 
 Chime knows nothing about any particular workflow or attribute vocabulary: it ships **no rules and no notifier**. A workspace's trusted config decides what deserves attention (rules) and each developer decides how to be told (notifier). It owns only runtime-local weaver-lifetime state: the notifier binding, rules, deduplication memory, batch scan memory, and recent failures are kept on the active runtime and isolated from other runtimes in the same JVM.
 
@@ -15,19 +15,19 @@ For composition recipes — binding a notifier, writing rules that fire on an at
 Approve the shipped root from the selected workspace's `spools.edn`:
 
 ```clojure
-{:spools {skein.spools/chime {:skein/source-root "spools/chime"}}}
+{:spools {millstrand.spools/chime {:millstrand/source-root "spools/chime"}}}
 ```
 
 Activate it from trusted startup config after syncing approved roots:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.runtime.alpha :as runtime])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
 
 (def runtime (current/runtime))
 (runtime/module! runtime :chime
-  {:ns 'skein.spools.chime
-   :spools ['skein.spools/chime]
+  {:ns 'millstrand.spools.chime
+   :spools ['millstrand.spools/chime]
    :required? true})
 ```
 
@@ -41,7 +41,7 @@ The module's `defresource` maintains the graph-event handler, registration barri
 Bind the notifier with plain data:
 
 ```clojure
-(require '[skein.spools.chime :as chime])
+(require '[millstrand.spools.chime :as chime])
 
 (chime/set-notifier! {:argv ["my-notify"]})
 (chime/notifier)
@@ -73,9 +73,9 @@ Worked example — notify when a strand that parents other work is closed:
 ```clojure
 (ns my.rules
   "Workspace notification rules."
-  (:require [skein.api.current.alpha :as current]
-            [skein.api.weaver.alpha :as weaver]
-            [skein.spools.chime :as chime]))
+  (:require [millstrand.api.current.alpha :as current]
+            [millstrand.api.weaver.alpha :as weaver]
+            [millstrand.spools.chime :as chime]))
 
 (chime/defrule parent-completed
   "Notify when a strand with parent-of children reaches closed."
@@ -97,7 +97,7 @@ missing or failing notifier does not swallow the alert, and the mark clears when
 the rule stops matching so a recurrence notifies again. Use
 `(chime/reset-seen!)` from tests or config to clear that memory.
 
-Rule, notifier, and process failures are recorded by `(chime/recent-failures)` and event handler failures remain visible through the Skein event failure surface.
+Rule, notifier, and process failures are recorded by `(chime/recent-failures)` and event handler failures remain visible through the Millstrand event failure surface.
 
 ## See also
 

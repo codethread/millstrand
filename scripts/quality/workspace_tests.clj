@@ -10,8 +10,8 @@
             [clojure.string :as str]
             [quality.source-forms :as source-forms]))
 
-(def ^:private workspace-test-directory "test/skein/ct/")
-(def ^:private workspace-test-namespace-prefix "skein.ct.")
+(def ^:private workspace-test-directory "test/millstrand/ct/")
+(def ^:private workspace-test-namespace-prefix "millstrand.ct.")
 
 (s/def ::filename string?)
 (s/def ::name symbol?)
@@ -63,8 +63,8 @@
       (mapcat #(reference-sites % line) (seq form)))))
 
 (defn- namespace-findings
-  "Return findings when the `skein.ct.*` namespace family and
-  `test/skein/ct/` directory do not map to each other."
+  "Return findings when the `millstrand.ct.*` namespace family and
+  `test/millstrand/ct/` directory do not map to each other."
   [{:keys [namespace-definitions]}]
   (mapcat
    (fn [{:keys [filename name row]}]

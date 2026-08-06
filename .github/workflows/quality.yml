@@ -63,7 +63,7 @@ jobs:
       # of editing call sites; a solo local run leaves it unset (scale 1.0).
       - run: clojure -M:test
         env:
-          SKEIN_TEST_AWAIT_SCALE: '3'
+          MILLSTRAND_TEST_AWAIT_SCALE: '3'
 
   # The job id and name are what the main ruleset requires as a status check;
   # renaming either makes every PR unmergeable until the ruleset is updated to
@@ -121,7 +121,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Pinned sibling suites prove their tested Skein checkout descends
+          # Pinned sibling suites prove their tested Millstrand checkout descends
           # from the Phase A floor, so this job needs the commit graph.
           fetch-depth: 0
       - uses: actions/setup-java@v4

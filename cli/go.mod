@@ -1,4 +1,4 @@
-module skein-strand-cli
+module millstrand-strand-cli
 
 go 1.26.4
 

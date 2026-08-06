@@ -4,8 +4,8 @@
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [skein.api.skein.alpha :as skein]
-            [skein.spools.workflow :as workflow]))
+            [millstrand.api.millstrand.alpha :as millstrand]
+            [millstrand.spools.workflow :as workflow]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."
@@ -23,7 +23,7 @@
 (s/def ::macros-demo-input
   (s/keys :req-un [::title] :opt-un [::owner]))
 
-(skein/defpattern macros-demo
+(millstrand/defpattern macros-demo
   "Create a tiny two-step dependency chain as a workspace authoring example."
   {:spec ::macros-demo-input}
   [{:keys [input]}]
@@ -95,7 +95,7 @@
                 (seq edge-specs) (assoc :edges edge-specs))))
           strands)))
 
-(skein/defpattern delegate-pipeline
+(millstrand/defpattern delegate-pipeline
   "Create a sequential chain-loop workflow of subagent gates. Input:
   {run_id,tasks:[{id,title,body?,harness?,cwd?,max-attempts?}],harness?,cwd?,accept?}."
   {:spec ::delegate-pipeline-input}

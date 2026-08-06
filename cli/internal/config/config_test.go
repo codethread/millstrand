@@ -170,7 +170,7 @@ func TestLoadRejectsInvalidLocalOverlay(t *testing.T) {
 
 func TestResolveSourceSupportsLeadingHomeExpansion(t *testing.T) {
 	home := t.TempDir()
-	homeSource := filepath.Join(home, "skein")
+	homeSource := filepath.Join(home, "millstrand")
 	if err := os.MkdirAll(homeSource, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestResolveSourceSupportsLeadingHomeExpansion(t *testing.T) {
 		t.Fatalf("unexpected resolved source: %q", resolved)
 	}
 
-	resolved, err = ResolveSource("~/skein")
+	resolved, err = ResolveSource("~/millstrand")
 	if err != nil {
 		t.Fatalf("expected leading ~/ to resolve, got %v", err)
 	}
@@ -299,7 +299,7 @@ func TestRepoWorkspaceRejectsConflictingLegacyAndInvalidMarkers(t *testing.T) {
 		}, "conflicting Millstrand workspaces"},
 		{"legacy marker", func(repo string) error {
 			return os.Mkdir(filepath.Join(repo, ".skein"), 0o755)
-		}, "legacy Skein workspace marker"},
+		}, "legacy Millstrand workspace marker"},
 		{"file marker", func(repo string) error {
 			return os.WriteFile(filepath.Join(repo, ".millstrand"), []byte("not a directory"), 0o644)
 		}, "it must be a directory"},

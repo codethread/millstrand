@@ -1,25 +1,25 @@
 # Spools
 
-Spools are trusted, authorable Clojure loaded into the weaver. The `skein.spools.*` namespace family
+Spools are trusted, authorable Clojure loaded into the weaver. The `millstrand.spools.*` namespace family
 is reserved for exactly this kind of code (see the [REPL API spec](../devflow/specs/repl-api.md)).
 The agent family (`agent-run`, `executors.subagent`, `delegation`, `bench`) lives in
 [`codethread/agent-harness.spool`](https://github.com/codethread/agent-harness.spool) under
 `ct.spools.*`, the author-prefix convention used by external spools such as `ct.spools.kanban`.
-The spools in this directory ship with Skein as working references. Use them directly, copy them
+The spools in this directory ship with Millstrand as working references. Use them directly, copy them
 as starting points, or study them to author your own.
 
 Every spool loads through one convention: an approved coordinate in `.skein/spools.edn` and a stable `runtime/module!` declaration guarded by its `:spools` roots. Full refresh resolves those roots, collects the module's authoring forms, publishes its owner-complete contribution, and runs its lifecycle declarations. Authoring forms are the durable path and are collected from module source; explicit-runtime registration functions are the live code/test seam, and the in-process REPL supplies the same live verbs with the runtime implied. Evaluating an authoring form at a REPL defines its Var but publishes nothing. [Customising your workspace](../docs/spools/customisation.md) is the operational walkthrough.
 
-Blessed alpha helpers such as `skein.api.peers.alpha` are also explicit-require userland APIs for trusted config and REPL workflows. Use that namespace's `peers` and `call!` helpers when a spool or repo config needs to discover and invoke same-machine sibling weavers.
+Blessed alpha helpers such as `millstrand.api.peers.alpha` are also explicit-require userland APIs for trusted config and REPL workflows. Use that namespace's `peers` and `call!` helpers when a spool or repo config needs to discover and invoke same-machine sibling weavers.
 
 ## Approved family coordinates
 
-Each `.skein/spools.edn` key names a family. A workspace-local family uses `:local/root`. A Git family pins `:git/url` and `:git/sha`, then maps its public root libs to checkout paths with `:roots`. A spool shipped in the Skein checkout uses the non-acquiring `:skein/source-root` coordinate:
+Each `.skein/spools.edn` key names a family. A workspace-local family uses `:local/root`. A Git family pins `:git/url` and `:git/sha`, then maps its public root libs to checkout paths with `:roots`. A spool shipped in the Millstrand checkout uses the non-acquiring `:millstrand/source-root` coordinate:
 
 ```clojure
 {:spools
- {skein.spools/batteries
-  {:skein/source-root "spools/batteries"}
+ {millstrand.spools/batteries
+  {:millstrand/source-root "spools/batteries"}
 
   ct.spools/agent-run
   {:git/url "https://github.com/codethread/agent-harness.spool.git"
@@ -29,12 +29,12 @@ Each `.skein/spools.edn` key names a family. A workspace-local family uses `:loc
            ct.spools/delegation "delegation"
            ct.spools/bench "bench"}
    :requires {codethread/devflow "v2"}
-   :skein/min "v3"}}}
+   :millstrand/min "v3"}}}
 ```
 
 Without `:roots`, a family supplies one root named by the family symbol at `"."`. Every root lib
 has one owner. Release markers are positive `vN` strings. `:requires` sets minimum release markers
-for other approved roots; `:skein/min` sets the minimum running Skein marker. A local development
+for other approved roots; `:millstrand/min` sets the minimum running Millstrand marker. A local development
 override names the family once with `:local/root` and an explicit `:claims "vN"`; it inherits the
 shared root map and compatibility floors.
 
@@ -56,7 +56,7 @@ Signatures live only in the generated API doc; contracts and cookbooks link to t
 
 ## Index
 
-Each spool shipped in this checkout lives in its own root under `spools/<name>/src`, off the production weaver classpath. Its `{:skein/source-root "spools/<name>"}` coordinate resolves against the mill-selected Skein checkout without fetching source or persisting an absolute checkout path. A `:spools`-guarded `runtime/module!` declaration then lets the refresh coordinator load, publish, and reconcile it.
+Each spool shipped in this checkout lives in its own root under `spools/<name>/src`, off the production weaver classpath. Its `{:millstrand/source-root "spools/<name>"}` coordinate resolves against the mill-selected Millstrand checkout without fetching source or persisting an absolute checkout path. A `:spools`-guarded `runtime/module!` declaration then lets the refresh coordinator load, publish, and reconcile it.
 The repo-local spools also serve as the worked example of authoring your own ([customising your
 workspace](../docs/spools/customisation.md#workspace-modules-and-local-spools)); for publishing a
 spool for others by git coordinate, SHA-pinned approval, README dependency/activation snippets,
@@ -65,21 +65,21 @@ spools](../docs/spools/writing-shared-spools.md#publishing-a-shared-spool-with-g
 
 | Spool | Coordinate (`.skein/spools.edn`) | Contract doc | API reference | Purpose |
 |---|---|---|---|---|
-| `skein.spools.workflow` | `:skein/source-root "spools/workflow"` | [workflow.md](./workflow.md) | [workflow.api.md](./workflow.api.md) · [cookbook](./workflow.cookbook.md) | Workflow engine: plain-data definitions compiled to strand batches, with loops, gates, checkpoints, routing, and rebindable tool bindings. Registers no ops. |
-| `skein.spools.workflow.cli` | `:skein/source-root "spools/workflow"` (folded into the workflow root) | [workflow.md §5b](./workflow.md#5b-registry-discovery), [§5c](./workflow.md#5c-driving-a-run) | — | Opt-in worker CLI over the workflow engine: registers the `workflow` op (`list`, `show`, `start`, `ready`, `complete`, `choose`, `defer`, `await`). A second module, declared beside the engine and never implied by it. |
-| `skein.spools.executors.shell` | `:skein/source-root "spools/workflow"` (folded into the workflow root) | [executors/shell.md](./executors/shell.md) | [executors/shell.api.md](./executors/shell.api.md) · [cookbook](./executors/shell.cookbook.md) | Workflow `:shell` gate executor: runs a ready gate's `shell/argv` command directly on a spool-owned worker pool, closes it with `complete!` on a zero exit, and stamps a loud `shell/error` (with exit code and bounded output) on failure. Registers the `:shell` executor and the `stalled-shell-gates` query. |
-| `skein.spools.executors.code` | `:skein/source-root "spools/workflow"` (folded into the workflow root) | [executors/code.md](./executors/code.md) | [executors/code.api.md](./executors/code.api.md) | Workflow `:code` gate executor: resolves a qualified Var through the spool classloader, invokes it with poured JSON params on a bounded worker pool, and records a result or loud `gate/error`. Registers the `:code` executor and the `stalled-code-gates` query. |
-| `skein.spools.unsafe-text-search` **(UNSAFE)** | `:skein/source-root "spools/unsafe-text-search"` | [unsafe-text-search.md](./unsafe-text-search.md) | [unsafe-text-search.api.md](./unsafe-text-search.api.md) · [cookbook](./unsafe-text-search.cookbook.md) | **UNSAFE reference spool** — requires `skein.core.db` and runs SQL against the physical tables to `LIKE`-search titles and attribute values, including archived rows the query language cannot see. Registers the `search` op. A maintained example of breaking the namespace-tier rules in the open, not a blessed path; read its [Unsafe declaration](./unsafe-text-search.md#unsafe-declaration) before activating. |
-| `skein.spools.guild` | *(none approved in this repo)* | [guild.md](./guild.md) | [guild.api.md](./guild.api.md) · [cookbook](./guild.cookbook.md) | Versioned public weaver op API declarations, `guild.describe` introspection, and loud structured deprecation for local peer coordination. |
+| `millstrand.spools.workflow` | `:millstrand/source-root "spools/workflow"` | [workflow.md](./workflow.md) | [workflow.api.md](./workflow.api.md) · [cookbook](./workflow.cookbook.md) | Workflow engine: plain-data definitions compiled to strand batches, with loops, gates, checkpoints, routing, and rebindable tool bindings. Registers no ops. |
+| `millstrand.spools.workflow.cli` | `:millstrand/source-root "spools/workflow"` (folded into the workflow root) | [workflow.md §5b](./workflow.md#5b-registry-discovery), [§5c](./workflow.md#5c-driving-a-run) | — | Opt-in worker CLI over the workflow engine: registers the `workflow` op (`list`, `show`, `start`, `ready`, `complete`, `choose`, `defer`, `await`). A second module, declared beside the engine and never implied by it. |
+| `millstrand.spools.executors.shell` | `:millstrand/source-root "spools/workflow"` (folded into the workflow root) | [executors/shell.md](./executors/shell.md) | [executors/shell.api.md](./executors/shell.api.md) · [cookbook](./executors/shell.cookbook.md) | Workflow `:shell` gate executor: runs a ready gate's `shell/argv` command directly on a spool-owned worker pool, closes it with `complete!` on a zero exit, and stamps a loud `shell/error` (with exit code and bounded output) on failure. Registers the `:shell` executor and the `stalled-shell-gates` query. |
+| `millstrand.spools.executors.code` | `:millstrand/source-root "spools/workflow"` (folded into the workflow root) | [executors/code.md](./executors/code.md) | [executors/code.api.md](./executors/code.api.md) | Workflow `:code` gate executor: resolves a qualified Var through the spool classloader, invokes it with poured JSON params on a bounded worker pool, and records a result or loud `gate/error`. Registers the `:code` executor and the `stalled-code-gates` query. |
+| `millstrand.spools.unsafe-text-search` **(UNSAFE)** | `:millstrand/source-root "spools/unsafe-text-search"` | [unsafe-text-search.md](./unsafe-text-search.md) | [unsafe-text-search.api.md](./unsafe-text-search.api.md) · [cookbook](./unsafe-text-search.cookbook.md) | **UNSAFE reference spool** — requires `millstrand.core.db` and runs SQL against the physical tables to `LIKE`-search titles and attribute values, including archived rows the query language cannot see. Registers the `search` op. A maintained example of breaking the namespace-tier rules in the open, not a blessed path; read its [Unsafe declaration](./unsafe-text-search.md#unsafe-declaration) before activating. |
+| `millstrand.spools.guild` | *(none approved in this repo)* | [guild.md](./guild.md) | [guild.api.md](./guild.api.md) · [cookbook](./guild.cookbook.md) | Versioned public weaver op API declarations, `guild.describe` introspection, and loud structured deprecation for local peer coordination. |
 | `ct.spools.agent-run` | git, sha-pinned (see below) | [agent-run/README.md][agent-run-contract] | [agent-run.api.md][agent-run-api] · [cookbook][agent-run-cookbook] | Agent-run **engine**: readiness-driven headless coding-agent runs plus interactive multiplexer sessions (backend registry, claims-model reaping), harness aliases, crash reconciliation, storage-enforced write-once run memory, and the preamble seam. Registers no ops. |
 | `ct.spools.delegation` | git, sha-pinned (see below) | [delegation/README.md][delegation-contract] | [delegation.api.md][delegation-api] · [cookbook][delegation-cookbook] | Cross-harness subagent surface over agent-run: the `strand agent` verbs, the `agent-plan` weave pattern, delegation/retry/status, and the worker + coordinator guidance. |
 | `ct.spools.executors.subagent` | git, sha-pinned `agent-run` root (see below) | [agent-run/subagent.md][subagent-contract] | [subagent.api.md][subagent-api] · [cookbook][subagent-cookbook] | Workflow gate bridge: fulfills ready `:subagent` gates by spawning agent-run runs and delivering successful results through `workflow/complete!`. |
-| `skein.spools.chime` | `:skein/source-root "spools/chime"` | [chime/README.md](./chime/README.md) | [chime.api.md](./chime.api.md) · [cookbook](./chime.cookbook.md) | Notification engine: watches graph mutations, evaluates user-registered rules, and sends matches through a user-bound local notifier command. |
+| `millstrand.spools.chime` | `:millstrand/source-root "spools/chime"` | [chime/README.md](./chime/README.md) | [chime.api.md](./chime.api.md) · [cookbook](./chime.cookbook.md) | Notification engine: watches graph mutations, evaluates user-registered rules, and sends matches through a user-bound local notifier command. |
 | `ct.spools.kanban` | git, sha-pinned (see below) | [kanban.md](https://github.com/codethread/kanban.spool/blob/2947590e7965feb95a239189af3bd55f008d1209/kanban.md) | — | User-facing kanban board: feature/epic cards, refinement/pending/claimed/in_review lanes, notes and handovers via `strand kanban`; epics have a reversible finish lifecycle (`finish` completes or abandon-cascades, `reopen` inverts an abandon). |
-| `skein.spools.cron` | `:skein/source-root "spools/cron"` | [cron/README.md](./cron/README.md) | [cron.api.md](./cron.api.md) · [cookbook](./cron.cookbook.md) | Userland recurrence layer over durable scheduler wakes: registers named interval+jitter jobs, records last-outcome/failure status, and leaves next-fire timing to scheduler introspection. Ships no jobs. |
+| `millstrand.spools.cron` | `:millstrand/source-root "spools/cron"` | [cron/README.md](./cron/README.md) | [cron.api.md](./cron.api.md) · [cookbook](./cron.cookbook.md) | Userland recurrence layer over durable scheduler wakes: registers named interval+jitter jobs, records last-outcome/failure status, and leaves next-fire timing to scheduler introspection. Ships no jobs. |
 | `ct.spools.bench` | git, sha-pinned (see below) | [bench/README.md][bench-contract] | [bench.api.md][bench-api] | Deterministic, containerized benchmarking of coding-agent harnesses: pinned repo/prompt/memory overlays, bench-owned entry execution, normalized metrics, and an agent-run served judge. |
 | `ct.spools.devflow` | git, sha-pinned (see below) | [devflow.md](https://github.com/codethread/devflow.spool/blob/b18b326fca39a513abdaa91a132c9c64fa4c4b2e/devflow.md) | — | Reference devflow lifecycle built on the workflow engine: intake → proposal → spec/plan → tasks/implementation stages with HITL checkpoints. |
-| `skein.spools.dresser` | *(none approved in this repo)* | [dresser.md](https://github.com/codethread/dresser.loom/blob/fea1d340be3591d008cf0ddeb72b0091d95a380d/dresser.md) | — | Brings a repo onto shared working conventions and surfaces convention upgrades later. Two flavours: scaffold a new shared-spool repo, or install a self-contained `.skein/` workspace into any host repo. Applied versions are recorded in the target at `.skein/conventions.edn`. |
+| `millstrand.spools.dresser` | *(none approved in this repo)* | [dresser.md](https://github.com/codethread/dresser.loom/blob/fea1d340be3591d008cf0ddeb72b0091d95a380d/dresser.md) | — | Brings a repo onto shared working conventions and surfaces convention upgrades later. Two flavours: scaffold a new shared-spool repo, or install a self-contained `.skein/` workspace into any host repo. Applied versions are recorded in the target at `.skein/conventions.edn`. |
 
 [agent-run-contract]: https://github.com/codethread/agent-harness.spool/blob/d28bfb35b5fc1891a7a318e06886aa446722241d/agent-run/README.md
 [agent-run-api]: https://github.com/codethread/agent-harness.spool/blob/d28bfb35b5fc1891a7a318e06886aa446722241d/agent-run/agent-run.api.md
@@ -97,9 +97,9 @@ spools](../docs/spools/writing-shared-spools.md#publishing-a-shared-spool-with-g
 kanban.spool's peering layer depends on it, but adds no `.skein/spools.edn` coordinate. A downstream
 user opts in by adding one.
 
-`skein.spools.workflow` is deliberately a spool, and deliberately an in-repo one (decided
+`millstrand.spools.workflow` is deliberately a spool, and deliberately an in-repo one (decided
 2026-07-11). It is replaceable library code: use it, rebuild it, or find
-something better. Promotion to `skein.api.*` was rejected because that tier promises more stability
+something better. Promotion to `millstrand.api.*` was rejected because that tier promises more stability
 than a deliberately swappable engine should; extraction to its own repo was rejected because
 workflow is a hub (devflow.spool, `executors.subagent` in agent-harness.spool, and this repo's
 `.skein` config all require it), so an external pin would put bump ceremony on the hottest path of
@@ -108,10 +108,10 @@ sha-pinned family and map its root within the checkout — an entry in the consu
 `.skein/spools.edn`:
 
 ```clojure
-{skein.spools/workflow
- {:git/url "https://github.com/codethread/skein.git"
+{millstrand.spools/workflow
+ {:git/url "https://github.com/codethread/millstrand.git"
   :git/sha "<40-lowercase-hex>"
-  :roots {skein.spools/workflow "spools/workflow"}}}
+  :roots {millstrand.spools/workflow "spools/workflow"}}}
 ```
 
 ## External spool consumption
@@ -148,21 +148,21 @@ from one checkout with one gitignored `spools.local.edn` entry:
    :claims "v1"}}}
 ```
 
-The override inherits the shared family's `:roots`, `:requires`, and `:skein/min` declarations.
+The override inherits the shared family's `:roots`, `:requires`, and `:millstrand/min` declarations.
 
-`skein.spools.dresser` ([`codethread/dresser.loom`](https://github.com/codethread/dresser.loom)) is also external, but this repo approves no coordinate for it. Dresser is activated in whichever workspace drives a setup run, and the repo being set up needs no weaver or spool approvals of its own, so consumption is a per-operator choice. Its README carries the dependency and activation recipe.
+`millstrand.spools.dresser` ([`codethread/dresser.loom`](https://github.com/codethread/dresser.loom)) is also external, but this repo approves no coordinate for it. Dresser is activated in whichever workspace drives a setup run, and the repo being set up needs no weaver or spool approvals of its own, so consumption is a per-operator choice. Its README carries the dependency and activation recipe.
 
 ## Shipped source-root: batteries
 
 | Spool | Coordinate (`.skein/spools.edn`) | Contract doc | API reference | Purpose |
 |---|---|---|---|---|
-| `skein.spools.batteries` | `:skein/source-root "spools/batteries"` | [batteries.md](./batteries.md) | [batteries.api.md](./batteries.api.md) · [cookbook](./batteries.cookbook.md) | Shipped core strand command surface as registered ops: add/update/show/supersede/burn/list/ready/subgraph plus `weave`, the `query`/`pattern`/`vocab` registry reads, and `spool` verbs including the folded `spool status` read. Invocable arg-spec leaves declare their own hook and deadline classes. |
+| `millstrand.spools.batteries` | `:millstrand/source-root "spools/batteries"` | [batteries.md](./batteries.md) | [batteries.api.md](./batteries.api.md) · [cookbook](./batteries.cookbook.md) | Shipped core strand command surface as registered ops: add/update/show/supersede/burn/list/ready/subgraph plus `weave`, the `query`/`pattern`/`vocab` registry reads, and `spool` verbs including the folded `spool status` read. Invocable arg-spec leaves declare their own hook and deadline classes. |
 
-`mill init` opts a workspace into batteries by seeding `skein.spools/batteries {:skein/source-root "spools/batteries"}` and a module guarded by `:spools ['skein.spools/batteries]`. The relative coordinate is machine-independent: the running weaver resolves it against the mill-selected Skein checkout and persists no absolute source path. Deleting the seeded entry is the supported visible opt-out; a hand-written `{:spools {}}` world has no batteries ops. Batteries is not on the production weaver classpath, so it follows the same approval and activation path as every other spool.
+`mill init` opts a workspace into batteries by seeding `millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}` and a module guarded by `:spools ['millstrand.spools/batteries]`. The relative coordinate is machine-independent: the running weaver resolves it against the mill-selected Millstrand checkout and persists no absolute source path. Deleting the seeded entry is the supported visible opt-out; a hand-written `{:spools {}}` world has no batteries ops. Batteries is not on the production weaver classpath, so it follows the same approval and activation path as every other spool.
 
 ## `util` and `format` left the spool family
 
-`skein.spools.util` and `skein.spools.format` were never activatable spools — they registered no ops and no world declared modules for them; they were authoring libraries other spools built on. Both have left `skein.spools.*` for base-classpath `src/`: `format` is deleted in favor of the already-blessed `skein.api.format.alpha` (`fill`/`reflow`), and `util` is promoted to the blessed `skein.api.spool.alpha` (`fail!`, `reject-unknown-keys!`, `require-valid!`, `attr-key->str`, `attr-get`, `poll-until!`, and `entity-projection` — which fails loudly unless its strand-shaped input carries `:id`/`:title`/`:state`/`:attributes` and returns exactly those keys) — the accretion-compatible home for the spool-authoring helpers every reference spool leans on. `poll-until!` takes the runtime's Clock and a relative timeout, so manual time works without changing spool code. After this move, `skein.spools.*` is exactly "activatable spools" and nothing else.
+`millstrand.spools.util` and `millstrand.spools.format` were never activatable spools — they registered no ops and no world declared modules for them; they were authoring libraries other spools built on. Both have left `millstrand.spools.*` for base-classpath `src/`: `format` is deleted in favor of the already-blessed `millstrand.api.format.alpha` (`fill`/`reflow`), and `util` is promoted to the blessed `millstrand.api.spool.alpha` (`fail!`, `reject-unknown-keys!`, `require-valid!`, `attr-key->str`, `attr-get`, `poll-until!`, and `entity-projection` — which fails loudly unless its strand-shaped input carries `:id`/`:title`/`:state`/`:attributes` and returns exactly those keys) — the accretion-compatible home for the spool-authoring helpers every reference spool leans on. `poll-until!` takes the runtime's Clock and a relative timeout, so manual time works without changing spool code. After this move, `millstrand.spools.*` is exactly "activatable spools" and nothing else.
 
 ## Reference examples
 
@@ -171,7 +171,7 @@ The override inherits the shared family's `:roots`, `:requires`, and `:skein/min
   [devflow.md](./devflow.md) contract).
 - The test suites drive every documented behavior against a real weaver
   runtime and double as executable examples:
-  [`test/skein/spools/workflow_test.clj`](../test/skein/spools/workflow_test.clj),
+  [`test/millstrand/spools/workflow_test.clj`](../test/millstrand/spools/workflow_test.clj),
   and the standalone devflow.spool test suite.
 
 ## Using and extending

@@ -1,4 +1,4 @@
-# Skein Devflow Spool
+# Millstrand Devflow Spool
 
 `ct.spools.devflow` has moved to the external git-distributed spool repo:
 [`codethread/devflow.spool`](https://github.com/codethread/devflow.spool).

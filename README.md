@@ -1,8 +1,8 @@
-# Skein 🧶 Give your agents a Lisp
+# Millstrand 🧶 Give your agents a Lisp
 
-Skein (pronounced skayne) is a runtime for programming the constraints and loops around your coding agents. Instruction files such as AGENTS.md and Skills still provide context, but load-bearing behavior can be Clojure code that you read, diff, **test**, and **compose**.
+Millstrand (pronounced skayne) is a runtime for programming the constraints and loops around your coding agents. Instruction files such as AGENTS.md and Skills still provide context, but load-bearing behavior can be Clojure code that you read, diff, **test**, and **compose**.
 
-## Why Skein
+## Why Millstrand
 
 Here is a small workflow:
 
@@ -24,7 +24,7 @@ Here is a small workflow:
                  :depends-on [:signoff]))
 ```
 
-This is Skein code, modelled on this repository's [landing workflow](./.skein/workflows/land.clj). It compiles to a graph that any agent can consume one ready step at a time, regardless of whether the agent runs through Codex, Claude, or another harness.
+This is Millstrand code, modelled on this repository's [landing workflow](./.skein/workflows/land.clj). It compiles to a graph that any agent can consume one ready step at a time, regardless of whether the agent runs through Codex, Claude, or another harness.
 
 A `workflow/gate` marks a hand-off point; the gate itself does not perform the work. An executor plugin supplies that behavior and registers its liveness checks with the workflow engine. With the reference subagent executor enabled, the ready `:subagent` gate above is handed to a dedicated agent, which may use a different harness from the coordinator driving the workflow.
 
@@ -43,15 +43,15 @@ You could describe the same process in an instruction file:
 
 That can work, but the prose quickly accumulates caveats. Does every agent read the Skill? Does every teammate have Codex? What happens when someone renames `verification` to `checks`? Put the rules in the main instruction file and every agent must read them, even when the rules are irrelevant to its task.
 
-The workflow engine is not part of Skein's core. Skein provides the graph primitives; the reference workflow engine and subagent executor are userland plugins built on them. Use the shipped versions, change them, or replace them. The workflow does not know what `:subagent` means. The executor plugin gives that value its behavior.
+The workflow engine is not part of Millstrand's core. Millstrand provides the graph primitives; the reference workflow engine and subagent executor are userland plugins built on them. Use the shipped versions, change them, or replace them. The workflow does not know what `:subagent` means. The executor plugin gives that value its behavior.
 
-These are composable pieces with full introspection, built on a small core you can keep or reinvent. That is Skein.
+These are composable pieces with full introspection, built on a small core you can keep or reinvent. That is Millstrand.
 
 ## A live, shared image
 
 Those workflow steps compile to strands in a graph: a delegated agent can complete the review gate, and the merge step cannot become ready until CI is green and sign-off is decided.
 
-The tagline is literal. Skein is written in Clojure, a Lisp that runs on the JVM, and the process that owns your data is a live image. You and your agents can attach REPLs to it at the same time, and every session shares that one image: define a var in one and the others see it. Redefine a function or reload your config while it keeps running, without losing a strand. The workflow is not fixed by a schema someone else chose; you build the parts you want.
+The tagline is literal. Millstrand is written in Clojure, a Lisp that runs on the JVM, and the process that owns your data is a live image. You and your agents can attach REPLs to it at the same time, and every session shares that one image: define a var in one and the others see it. Redefine a function or reload your config while it keeps running, without losing a strand. The workflow is not fixed by a schema someone else chose; you build the parts you want.
 
 A few terms up front, since the rest of this page uses them:
 
@@ -62,13 +62,13 @@ A few terms up front, since the rest of this page uses them:
 - The **`strand` CLI** is a thin, JSON-only command surface. **mill** is the
   local supervisor: you start it once, and it routes each command to the right
   weaver.
-- A **workspace** is one isolated Skein setup, picked by directory: a repo's
+- A **workspace** is one isolated Millstrand setup, picked by directory: a repo's
   `.millstrand` or `.ms`, or an explicit `--workspace` you pass.
 
 <img src="./docs/assets/mill-weaver-strands.svg" width="560"
      alt="mill, the supervisor, routes to one weaver per workspace; a worktree of repo-a uses the same repo-a weaver; each weaver owns its own millstrand.sqlite of strands.">
 
-Full documentation lives at **[codethread.github.io/skein](https://codethread.github.io/skein/)**.
+Full documentation lives at **[codethread.github.io/millstrand](https://codethread.github.io/millstrand/)**.
 
 > [!NOTE]
 > **Why a live image?**
@@ -76,31 +76,31 @@ Full documentation lives at **[codethread.github.io/skein](https://codethread.gi
 >
 > Not every agent needs that power. Giving coordinator agents runtime inspection and control lets them adapt without requiring every recovery path to be declared up front.
 
-## Is Skein for you?
+## Is Millstrand for you?
 
-The short version: Skein wants to be Emacs for agents — a small core held stable, a live programmable runtime, and everything else built in userland.
+The short version: Millstrand wants to be Emacs for agents — a small core held stable, a live programmable runtime, and everything else built in userland.
 
-It was built against a few specific problems. If you recognize them, Skein is probably for you:
+It was built against a few specific problems. If you recognize them, Millstrand is probably for you:
 
-- **Orchestrating more than one harness.** Claude and GPT working the same board, seeing each other's strands, handing work to each other. Skein is the shared world they coordinate through; each harness stays small and focused, and the orchestration lives above them rather than inside any one of them.
-- **Agent behavior as code, not prose.** Skills and instruction files drive critical behavior, yet prose can't be tested or debugged. In Skein the load-bearing behavior is Clojure you read, test, and grow one function at a time.
+- **Orchestrating more than one harness.** Claude and GPT working the same board, seeing each other's strands, handing work to each other. Millstrand is the shared world they coordinate through; each harness stays small and focused, and the orchestration lives above them rather than inside any one of them.
+- **Agent behavior as code, not prose.** Skills and instruction files drive critical behavior, yet prose can't be tested or debugged. In Millstrand the load-bearing behavior is Clojure you read, test, and grow one function at a time.
 - **Conventions that survive a provider switch.** A repo's workflow lives in its `.millstrand`, shared ideas travel as spools, and none of it cares which harness runs against it — swapping providers doesn't mean rebuilding your process.
-- **A foundation that holds still.** Agent tooling churns weekly. Skein's core is minimal and deliberately boring: the strand schema is meant to outlive whatever sits on top, so you can build your own workflow engine against it, or use the reference spools. Honest caveat: Skein is alpha today, so this is the destination rather than a guarantee — contracts can still change while the core settles.
+- **A foundation that holds still.** Agent tooling churns weekly. Millstrand's core is minimal and deliberately boring: the strand schema is meant to outlive whatever sits on top, so you can build your own workflow engine against it, or use the reference spools. Honest caveat: Millstrand is alpha today, so this is the destination rather than a guarantee — contracts can still change while the core settles.
 
-The bill: a local background JVM process, Go and a JVM on the machine, and Clojure for any behavior beyond the built-in commands. There is no hosted service, web UI, or accounts — if you want a shared team tracker, Skein is not that.
+The bill: a local background JVM process, Go and a JVM on the machine, and Clojure for any behavior beyond the built-in commands. There is no hosted service, web UI, or accounts — if you want a shared team tracker, Millstrand is not that.
 
 A low-risk way in: one repo, one maintainer, the plain CLI. Follow the setup and keep the `.millstrand/` dir under `.gitignore` while you experiment.
 
 ## Quick start
 
-Skein installs from a cloned checkout of this repository.
+Millstrand installs from a cloned checkout of this repository.
 
 ```sh
 make install   # builds and installs the `strand` and `mill` CLIs from this checkout
 mill start     # start the supervisor once, in a terminal you can leave open
 ```
 
-Go to a Git repo you want to track work in, create its Skein workspace, and start the weaver for it:
+Go to a Git repo you want to track work in, create its Millstrand workspace, and start the weaver for it:
 
 ```sh
 cd ~/some/git/repo
@@ -122,7 +122,7 @@ strand add "Announce the release" \
 ```
 
 > [!NOTE]
-> `type` is not a Skein concept. Attributes are arbitrary key/values — this example invented `type=docs|code` on the spot, and inventing your own conventions is the point. See [attributes are the extension point](./docs/reference.md#attributes-are-the-extension-point).
+> `type` is not a Millstrand concept. Attributes are arbitrary key/values — this example invented `type=docs|code` on the spot, and inventing your own conventions is the point. See [attributes are the extension point](./docs/reference.md#attributes-are-the-extension-point).
 
 Four commands, and you have a graph — each strand is a node carrying its attributes, and each edge points at the work it waits on:
 
@@ -135,8 +135,8 @@ Four commands, and you have a graph — each strand is a node carrying its attri
 From the weaver's REPL (covered below), the whole graph is one transactional weave. `:ref` names are temporary handles, so edges can point at siblings created in the same call:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.batch.alpha :as batch])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.batch.alpha :as batch])
 
 (batch/apply! (current/runtime)
   {:strands [{:ref :model    :title "Sketch the data model" :attributes {:type "docs"}}
@@ -218,9 +218,9 @@ Millstrand is built for agents, and its own repository is written for them to re
 
 ## Where to go next
 
-- [Docs site](https://codethread.github.io/skein/) — everything below, rendered.
+- [Docs site](https://codethread.github.io/millstrand/) — everything below, rendered.
 - [Tutorial](./docs/tutorial.md) — install to your first named query, top to bottom.
-- [Skein user reference](./docs/reference.md) — the data model, CLI, weaver, REPL,
+- [Millstrand user reference](./docs/reference.md) — the data model, CLI, weaver, REPL,
   and workspace conventions.
 - [Reference spools](./spools/README.md) — the workflow extensions. A workflow
   engine, its shell gate executor, and a notification engine ship in this repo;
@@ -235,7 +235,7 @@ Millstrand is built for agents, and its own repository is written for them to re
 
 ## Beyond the primitives
 
-Everything on this page is a few small primitives — `add`, `weave`, `pattern` — over one graph. Around them Skein ships shared libraries called [spools](./spools/README.md), the durable workspace config you saw `mill init` create, an event and hooks system inside the weaver, and a testing library (`skein.test.alpha`) that spins up disposable weaver worlds. They go a long way: this repository coordinates its own development (a kanban board, a feature lifecycle, delegated agent runs, and a landing workflow) entirely in userland code built from those parts.
+Everything on this page is a few small primitives — `add`, `weave`, `pattern` — over one graph. Around them Millstrand ships shared libraries called [spools](./spools/README.md), the durable workspace config you saw `mill init` create, an event and hooks system inside the weaver, and a testing library (`millstrand.test.alpha`) that spins up disposable weaver worlds. They go a long way: this repository coordinates its own development (a kanban board, a feature lifecycle, delegated agent runs, and a landing workflow) entirely in userland code built from those parts.
 
 Workflows are plain data, so they compose. A `workflow/call` inlines a reusable procedure chosen while the workflow is authored; a dependency on the call waits for the whole procedure to finish. A `workflow/defer` does the same returning composition when a worker must choose the routine at run time. Checkpoint `:next` is the separate root-routing construct.
 

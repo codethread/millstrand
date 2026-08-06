@@ -1,0 +1,2 @@
+# scope	pattern	reason
+*	\.skein	The repository coordination workspace and the deliberate legacy application-marker rejection remain named .skein.

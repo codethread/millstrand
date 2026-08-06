@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	stealthExcludeStart = "# mill:skein-stealth"
-	stealthExcludeEnd   = "# /mill:skein-stealth"
+	stealthExcludeStart = "# mill:millstrand-stealth"
+	stealthExcludeEnd   = "# /mill:millstrand-stealth"
 	stealthExcludeBlock = stealthExcludeStart + "\n/.millstrand\n/.ms\n/CLAUDE.local.md\n" + stealthExcludeEnd + "\n"
 
 	StealthStatusCreated        = "created"
@@ -18,17 +18,17 @@ const (
 	StealthStatusUnchanged      = "unchanged"
 	StealthStatusSkippedTracked = "skipped-tracked"
 
-	StealthTargetTrackedSkein   = "tracked-skein"
-	StealthTargetGitExclude     = "git-exclude"
-	StealthTargetClaudeGuidance = "claude-guidance"
-	StealthStateTracked         = "tracked"
-	StealthStateStartOnly       = "start-only"
-	StealthStateEndOnly         = "end-only"
-	StealthStateDuplicateStart  = "duplicate-start"
-	StealthStateDuplicateEnd    = "duplicate-end"
-	StealthStateReversed        = "reversed"
-	StealthStateEdited          = "edited"
-	StealthCodexManualRequired  = "manual-required"
+	StealthTargetTrackedMillstrand = "tracked-millstrand"
+	StealthTargetGitExclude        = "git-exclude"
+	StealthTargetClaudeGuidance    = "claude-guidance"
+	StealthStateTracked            = "tracked"
+	StealthStateStartOnly          = "start-only"
+	StealthStateEndOnly            = "end-only"
+	StealthStateDuplicateStart     = "duplicate-start"
+	StealthStateDuplicateEnd       = "duplicate-end"
+	StealthStateReversed           = "reversed"
+	StealthStateEdited             = "edited"
+	StealthCodexManualRequired     = "manual-required"
 )
 
 const stealthCodexSuggestedText = "This repository uses a local, gitignored .millstrand workspace. Run `mill millstrand prime` and `mill strand prime` before working."
@@ -93,7 +93,7 @@ func (d StealthRefusalDetails) Validate() error {
 	if strings.TrimSpace(d.Path) == "" || strings.TrimSpace(d.Remediation) == "" {
 		return fmt.Errorf("invalid stealth refusal details: %#v", d)
 	}
-	if !oneOf(d.Target, StealthTargetTrackedSkein, StealthTargetGitExclude, StealthTargetClaudeGuidance) {
+	if !oneOf(d.Target, StealthTargetTrackedMillstrand, StealthTargetGitExclude, StealthTargetClaudeGuidance) {
 		return fmt.Errorf("invalid stealth refusal target: %q", d.Target)
 	}
 	if !oneOf(d.State, StealthStateTracked, StealthStateStartOnly, StealthStateEndOnly, StealthStateDuplicateStart, StealthStateDuplicateEnd, StealthStateReversed, StealthStateEdited) {
@@ -168,7 +168,7 @@ func preflightStealth(repoRoot string) (stealthPlan, error) {
 		return stealthPlan{}, err
 	}
 	if trackedPath != "" {
-		return stealthPlan{}, refuse(trackedPath, StealthTargetTrackedSkein, StealthStateTracked, "remove .millstrand or .ms from the Git index or run mill init without --stealth")
+		return stealthPlan{}, refuse(trackedPath, StealthTargetTrackedMillstrand, StealthStateTracked, "remove .millstrand or .ms from the Git index or run mill init without --stealth")
 	}
 	excludePath, err := gitPrivateExcludePath(repoRoot)
 	if err != nil {

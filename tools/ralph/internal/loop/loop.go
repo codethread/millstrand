@@ -21,8 +21,8 @@ import (
 	"syscall"
 	"time"
 
-	"skein-ralph/internal/board"
-	"skein-ralph/internal/harness"
+	"millstrand-ralph/internal/board"
+	"millstrand-ralph/internal/harness"
 )
 
 // Process exit codes. They are the loop's contract with whoever runs it.

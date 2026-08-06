@@ -518,7 +518,7 @@
                     {}))))
 
 (def ^:private cli-options
-  [["-d" "--db PATH" "Explicit path to the target skein.sqlite"]
+  [["-d" "--db PATH" "Explicit path to the target millstrand.sqlite"]
    ["-w" "--workspace DIR" "Workspace whose live db is resolved via `mill weaver status`"]
    ["-h" "--help"]])
 

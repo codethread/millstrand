@@ -11,7 +11,7 @@ The Millstrand source checkout for this world is `{{.Source}}`, resolved from `M
 | `docs/tutorial.md` | the start-to-finish learning path, from install to the live REPL |
 | `docs/reference.md` | the user reference: workspaces, the weaver, the CLI surface, strands, edges, attributes, queries, and the REPL |
 | `docs/spools/customisation.md` | workspace config: `init.clj`, spool approval and activation, authoring a local spool, and REPL hygiene for shared weavers |
-| `docs/spools/testing.md` | testing spools and libraries: the testing tiers and `skein.test.alpha` weaver worlds |
+| `docs/spools/testing.md` | testing spools and libraries: the testing tiers and `millstrand.test.alpha` weaver worlds |
 | `docs/spools/writing-shared-spools.md` | the discipline for spools other people run |
 | `docs/api/` | the generated Alpha API reference |
 | `spools/README.md` | the index of shipped spools, each row linking its contract doc |
@@ -23,7 +23,7 @@ One spool repository is one release unit and one `spools.edn` entry. The entry p
 
 WIP is untagged and sha-pin only. Floors cannot target it. Human labels such as `alpha-3` are mechanically inert, and `v0` is reserved. `v1` is the smallest promise: from here, breaks take new names. It has no SemVer 1.0 meaning.
 
-A [floor](../spools/writing-shared-spools.md#publishing-a-shared-spool-with-git-distribution) is the minimum `v<int>` marker accepted for a required root (`:requires`) or Skein (`:skein/min`). A [floor raise](../spools/writing-shared-spools.md#accretion-under-a-name) increases that minimum. The [previous marker](../spools/writing-shared-spools.md#compatibility-alarm) is the greatest published marker below the release being cut.
+A [floor](../spools/writing-shared-spools.md#publishing-a-shared-spool-with-git-distribution) is the minimum `v<int>` marker accepted for a required root (`:requires`) or Millstrand (`:millstrand/min`). A [floor raise](../spools/writing-shared-spools.md#accretion-under-a-name) increases that minimum. The [previous marker](../spools/writing-shared-spools.md#compatibility-alarm) is the greatest published marker below the release being cut.
 
 For `v1`, keep published names accretion-only and run current tests; there is no previous marker. From `v2`, also run `bin/compat-alarm` against the previous marker. Create the next annotated `v<int>` tag, then publish its peeled sha. A floor raise is not a break; raise its floor and test pin in one commit.
 

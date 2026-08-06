@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/spf13/cobra"
-	"skein-strand-cli/internal/errfmt"
+	"millstrand-strand-cli/internal/errfmt"
 )
 
 // usageError marks a failure Cobra raised about the invocation itself — a flag

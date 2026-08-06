@@ -8,7 +8,7 @@
 // under each blocker and is expanded once below, under the blocker set.
 //
 // This binary is repo-local development tooling. It is a separate Go module on
-// purpose: it ships with no Skein release and belongs to no spool.
+// purpose: it ships with no Millstrand release and belongs to no spool.
 package main
 
 import (

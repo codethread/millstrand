@@ -11,9 +11,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"skein-ralph/internal/board"
-	"skein-ralph/internal/harness"
-	"skein-ralph/internal/loop"
+	"millstrand-ralph/internal/board"
+	"millstrand-ralph/internal/harness"
+	"millstrand-ralph/internal/loop"
 )
 
 // logLimit caps each iteration's log. Everything ever streamed stays in the raw

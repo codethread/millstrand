@@ -11,7 +11,7 @@ import (
 // right about: long flat name families, hyphenated names, and qualified
 // `ns/term` names.
 var (
-	// src/skein/api/weaver/alpha.clj:518 (unknown op) and :448 (missing
+	// src/millstrand/api/weaver/alpha.clj:518 (unknown op) and :448 (missing
 	// replacement op) both send the registered op names.
 	opNames = []string{
 		"about", "add", "agent", "bench", "bins", "burn", "guide", "harness", "help",
@@ -19,30 +19,30 @@ var (
 		"query", "ready", "search", "show", "spool", "subgraph", "supersede", "update",
 		"vocab", "weave", "workflow",
 	}
-	// src/skein/api/cli/alpha.clj:179,183 (missing/unknown subcommand) and
-	// src/skein/core/weaver/help.clj:388 (unknown help verb) both walk the same
+	// src/millstrand/api/cli/alpha.clj:179,183 (missing/unknown subcommand) and
+	// src/millstrand/core/weaver/help.clj:388 (unknown help verb) both walk the same
 	// subcommand tree.
 	kanbanSubcommands = []string{
 		"about", "add", "board", "card", "claim", "finish", "label", "next", "note",
 		"prime", "priority", "promote", "reopen", "review", "rework", "task",
 	}
-	// src/skein/core/query.clj:311 (unknown query).
+	// src/millstrand/core/query.clj:311 (unknown query).
 	queryNames = []string{
 		"agent-failures", "bench-runs", "blocked-deliveries", "devflow-runs",
 		"kanban-cards", "kanban-epic-pending", "kanban-feature-work", "kanban-pending",
 		"merge-lock", "merge-queue", "run-active", "stalled-code-gates",
 		"stalled-shell-gates", "stalled-subagent-gates", "work", "workflow-runs",
 	}
-	// src/skein/api/patterns/alpha.clj:55 (unknown pattern).
+	// src/millstrand/api/patterns/alpha.clj:55 (unknown pattern).
 	patternNames = []string{"agent-plan", "delegate-pipeline", "kanban-batch", "macros-demo"}
-	// src/skein/api/runtime/glossary/alpha.clj:142 (missing replacement
+	// src/millstrand/api/runtime/glossary/alpha.clj:142 (missing replacement
 	// outcome). Outcome names are qualified by contract, so a typo has a slash
 	// in it and the distance is measured over the whole name.
 	outcomeNames = []string{"lifecycle/abort", "lifecycle/timeout", "land/merge-conflict"}
-	// src/skein/api/cli/internal/parsing.clj:219 (missing payload): payload
+	// src/millstrand/api/cli/internal/parsing.clj:219 (missing payload): payload
 	// names are per-invocation, so this is one caller's set.
 	payloadNames = []string{"attributes", "body", "note"}
-	// src/skein/api/return_shape/alpha.clj:86,95 (return subcommand selection).
+	// src/millstrand/api/return_shape/alpha.clj:86,95 (return subcommand selection).
 	returnSubcommands = []string{"board", "card", "task"}
 )
 

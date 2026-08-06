@@ -8,9 +8,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"skein-ralph/internal/board"
-	"skein-ralph/internal/harness"
-	"skein-ralph/internal/loop"
+	"millstrand-ralph/internal/board"
+	"millstrand-ralph/internal/harness"
+	"millstrand-ralph/internal/loop"
 )
 
 func testModel(t *testing.T, width, height int) model {

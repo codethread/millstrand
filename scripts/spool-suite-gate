@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run pinned external spool suites against the invoking skein-src checkout.
+# Run pinned external spool suites against the invoking millstrand-src checkout.
 set -euo pipefail
 
 if [ "$#" -ne 0 ]; then
@@ -11,6 +11,20 @@ fi
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 src="$root"
 cd "$root"
+
+transition_status="$(clojure -M:transition-check --scope pinned-external-spool-suite)"
+case "$transition_status" in
+  DEFERRED)
+    echo "spool-suite-gate: deferred by PROP-Msr-001.S6 transition contract (exact codethread/devflow, codethread/kanban, and ct.spools/agent-run pins)"
+    exit 0
+    ;;
+  ACTIVE) ;;
+  *)
+    echo "spool-suite-gate: transition contract returned unexpected status: $transition_status" >&2
+    exit 1
+    ;;
+esac
+
 coords="$(clojure -M -e '(let [spools (:spools (clojure.edn/read-string (slurp ".skein/spools.edn"))) g (fn [family] (let [m (get spools family) sha (:git/sha m) url (:git/url m)] (when-not (and (string? sha) (string? url)) (binding [*out* *err*] (println (str "spool-suite-gate: .skein/spools.edn is missing :git/url or :git/sha for family " family "; refusing to run against HEAD/an empty sha"))) (System/exit 1)) [url sha]))] (let [[du ds] (g (quote codethread/devflow)) [ku ks] (g (quote codethread/kanban)) [au as] (g (quote ct.spools/agent-run))] (println du ds ku ks au as) (flush) (System/exit 0)))')"
 if [ -z "$coords" ]; then
   echo "spool-suite-gate: coordinate extraction printed nothing for families codethread/devflow, codethread/kanban, ct.spools/agent-run in .skein/spools.edn; refusing to run against HEAD/an empty sha" >&2
@@ -30,7 +44,7 @@ check_pair agent-run "$aurl" "$asha"
 
 root="$(mktemp -d)"
 trap 'rm -rf "$root"' EXIT
-ln -s "$src" "$root/skein-src"
+ln -s "$src" "$root/millstrand-src"
 
 materialize() {
   local name="$1" url="$2" sha="$3" lib="$4"
@@ -54,16 +68,16 @@ materialize devflow.spool "$durl" "$dsha" io.github.codethread/devflow.spool
 materialize kanban.spool "$kurl" "$ksha" io.github.codethread/kanban.spool
 materialize agent-harness.spool "$aurl" "$asha" io.github.codethread/agent-run.agent-harness
 
-dcmd="clojure -Sdeps '{:deps {io.skein/workflow-spool {:local/root \"../skein-src/spools/workflow\"}}}' -M:test"
+dcmd="clojure -Sdeps '{:deps {io.millstrand/workflow-spool {:local/root \"../millstrand-src/spools/workflow\"}}}' -M:test"
 kcmd="clojure -M:test"
 acmd="clojure -M:test"
 run_suite() {
   local name="$1" sha="$2" command="$3"
   echo "==> spool-suite-gate: $name@$sha${4:-}"
   if ! (cd "$root/$name" && eval "$command"); then
-    printf '\n%s\n' "spool-suite-gate: $name@$sha FAILED against skein-src HEAD ($src)" >&2
+    printf '\n%s\n' "spool-suite-gate: $name@$sha FAILED against millstrand-src HEAD ($src)" >&2
     echo "  reproduce: make spool-suite-gate" >&2
-    echo "  or, in a sibling layout with ./skein-src beside ./$name, from $name/: $command" >&2
+    echo "  or, in a sibling layout with ./millstrand-src beside ./$name, from $name/: $command" >&2
     exit 1
   fi
 }
@@ -71,4 +85,4 @@ run_suite() {
 run_suite devflow.spool "$dsha" "$dcmd" " (with workflow-spool injection)"
 run_suite kanban.spool "$ksha" "$kcmd"
 run_suite agent-harness.spool "$asha" "$acmd"
-echo "spool-suite-gate: OK (devflow.spool@$dsha, kanban.spool@$ksha, agent-harness.spool@$asha) against skein-src HEAD"
+echo "spool-suite-gate: OK (devflow.spool@$dsha, kanban.spool@$ksha, agent-harness.spool@$asha) against millstrand-src HEAD"

@@ -1,5 +1,5 @@
 (ns quality.reflect-check
-  "Compile Skein namespaces with reflection warnings promoted to failure."
+  "Compile Millstrand namespaces with reflection warnings promoted to failure."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 
@@ -26,17 +26,17 @@
          (map #(clj-file->ns root %)))))
 
 (defn -main [& _]
-  (let [roots {"src" "skein"
-               "spools/batteries/src" "skein/spools"
-               "spools/chime/src" "skein/spools"
-               "spools/cron/src" "skein/spools"
-               "spools/workflow/src" "skein/spools"
-               "spools/unsafe-text-search/src" "skein/spools"
-               "spools/guild/src" "skein/spools"}
+  (let [roots {"src" "millstrand"
+               "spools/batteries/src" "millstrand/spools"
+               "spools/chime/src" "millstrand/spools"
+               "spools/cron/src" "millstrand/spools"
+               "spools/workflow/src" "millstrand/spools"
+               "spools/unsafe-text-search/src" "millstrand/spools"
+               "spools/guild/src" "millstrand/spools"}
         namespaces (sort (mapcat (fn [[root subdir]]
                                    (namespaces-under root subdir))
                                  roots))
-        compile-dir (.toFile (java.nio.file.Files/createTempDirectory "skein-reflect-check" (make-array java.nio.file.attribute.FileAttribute 0)))
+        compile-dir (.toFile (java.nio.file.Files/createTempDirectory "millstrand-reflect-check" (make-array java.nio.file.attribute.FileAttribute 0)))
         warnings (atom [])
         original-err *err*
         warning-err (proxy [java.io.Writer] []

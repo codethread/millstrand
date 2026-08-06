@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"skein-strand-cli/internal/client"
-	"skein-strand-cli/internal/config"
-	"skein-strand-cli/internal/errfmt"
+	"millstrand-strand-cli/internal/client"
+	"millstrand-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/errfmt"
 )
 
 // Version is the strand bin version reported by --version and carried in the

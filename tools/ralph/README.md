@@ -2,7 +2,7 @@
 
 Drives a kanban epic through repeated headless agent runs, with a full-screen dashboard over the top. `scripts/README.md` documents how to run it; this file is for changing it.
 
-Ralph is a separate Go module (`skein-ralph`) inside the workspace listed in `go.work`. That is deliberate: it is repo-local development tooling, and keeping it out of `cli/` keeps it out of the published `skein-strand-cli` module. It is not a spool and has no weaver-side component. Build it with `make ralph`, which writes `./bin/ralph`; `make build` does that too, so the binary stays in step with `./bin/strand` beside it. The repo's Go quality targets (`make fmt-check-go`, `make lint-go`, `make test-go`) iterate every module in `GO_MODULES`, so this one is covered by the same gates as the CLI.
+Ralph is a separate Go module (`millstrand-ralph`) inside the workspace listed in `go.work`. That is deliberate: it is repo-local development tooling, and keeping it out of `cli/` keeps it out of the published `millstrand-strand-cli` module. It is not a spool and has no weaver-side component. Build it with `make ralph`, which writes `./bin/ralph`; `make build` does that too, so the binary stays in step with `./bin/strand` beside it. The repo's Go quality targets (`make fmt-check-go`, `make lint-go`, `make test-go`) iterate every module in `GO_MODULES`, so this one is covered by the same gates as the CLI.
 
 ## Layout
 

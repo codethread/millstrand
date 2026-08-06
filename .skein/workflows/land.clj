@@ -3,11 +3,11 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [ct.spools.delegation :as agents]
-            [skein.api.current.alpha :as current]
-            [skein.api.format.alpha :as format-alpha]
-            [skein.api.spool.alpha :refer [attr-get fail!]]
-            [skein.api.weaver.alpha :as weaver]
-            [skein.spools.workflow :as workflow]
+            [millstrand.api.current.alpha :as current]
+            [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.api.spool.alpha :refer [attr-get fail!]]
+            [millstrand.api.weaver.alpha :as weaver]
+            [millstrand.spools.workflow :as workflow]
             [ct.workflows.support :as support]))
 
 (defn- non-blank-string?

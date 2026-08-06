@@ -1,4 +1,4 @@
-# Skein Workflow Spool
+# Millstrand Workflow Spool
 
 > This is the **contract** doc: guarantees, run lifecycle, routing semantics, and
 > the `workflow/*` attribute vocabulary. Its two companions are
@@ -10,9 +10,9 @@
 
 ## 1. Overview
 
-`skein.spools.workflow` is a Clojure-native workflow layer built on ordinary Skein strands, edges, and batch mutations. It lets spool authors define small workflow molecules that agents can execute one step at a time without needing to understand the underlying graph engine.
+`millstrand.spools.workflow` is a Clojure-native workflow layer built on ordinary Millstrand strands, edges, and batch mutations. It lets spool authors define small workflow molecules that agents can execute one step at a time without needing to understand the underlying graph engine.
 
-This is userland spool code, not a separate scheduler or persistence system. Workflows compile into normal strand graphs, and runtime state remains inspectable through the usual Skein REPL/graph helpers. The spool owns no privileged runtime state.
+This is userland spool code, not a separate scheduler or persistence system. Workflows compile into normal strand graphs, and runtime state remains inspectable through the usual Millstrand REPL/graph helpers. The spool owns no privileged runtime state.
 
 Core primitives: `workflow`, `defworkflow`, `step`, `gate`, `checkpoint`, `call`, `defer`, `bind-defers`, `compile`, `pour!`, `wisp!`, and `explain`.
 
@@ -26,7 +26,7 @@ The returning-defer change is a cold cutover with no old-strand interpreter. Bef
 
 Terminology — molecule, wisp, pour, bond, squash, burn, and the proto-like workflow-definition-as-data pattern — borrows heavily from [beads](https://github.com/steveyegge/beads) by Steve Yegge (see `docs/MOLECULES.md` in that repo).
 
-What skein does differently: workflow definitions are Clojure-native data instead of TOML formulas, and `compile` turns that data into ordinary skein strands and edges rather than a separate issue-tracker schema. There is no proto/template storage layer — a workflow definition *is* the reusable template, expressed as a Clojure map.
+What millstrand does differently: workflow definitions are Clojure-native data instead of TOML formulas, and `compile` turns that data into ordinary millstrand strands and edges rather than a separate issue-tracker schema. There is no proto/template storage layer — a workflow definition *is* the reusable template, expressed as a Clojure map.
 
 ## 3. Definition layer
 
@@ -81,7 +81,7 @@ Use `defworkflow` in module source for a workflow that should survive refresh an
 
 A `call` target reached by registered name is judged the same way, at the same boundary that requires its `:call` entrypoint: its defaults merge under the merged parent and call-site params, and its `:param-spec` validates the result before the procedure expands. A target written as a raw value, Var, or symbol is trusted past the entrypoint check, though whatever contract its definition map declares still applies. Params that round-trip through `workflow/context` come back JSON-shaped — a keyword value was stringified on the way in — so a spec a run starts with must also accept what a later `:revise` or `:next` reads back.
 
-Whole-map is the whole point. A required-key list cannot say that one key's value constrains another's, and deriving per-key rules out of a spec would be a second schema interpreter that eventually disagrees with the first. `(workflow/spec-forms ::build-params)` returns the ordered form graph documenting one of these specs: the root first, then every registered spec its printed forms name, in qualified-name order and emitted once; an entry whose form is a resolvable predicate symbol carries the var's docstring first line and private flag (`skein.api.spec.alpha`). The discovery surfaces pair that graph with the shared projection's nested `contract` tree and copyable JSON `template`, whose node grammar `skein.api.spec.alpha` owns. A root that is not currently registered fails as `:workflow/spec-missing` rather than returning an empty graph, so a stale identity is never read as a spec with nothing to say. `s/keys` names its key specs rather than inlining them, so a single form is never the whole contract. The walk reads form data and the spec registry and runs no predicate, and a `keyword-reference` relation says only that a qualified keyword in a form also names a registered spec — a set member that happens to be one is reported the same way as a real key reference.
+Whole-map is the whole point. A required-key list cannot say that one key's value constrains another's, and deriving per-key rules out of a spec would be a second schema interpreter that eventually disagrees with the first. `(workflow/spec-forms ::build-params)` returns the ordered form graph documenting one of these specs: the root first, then every registered spec its printed forms name, in qualified-name order and emitted once; an entry whose form is a resolvable predicate symbol carries the var's docstring first line and private flag (`millstrand.api.spec.alpha`). The discovery surfaces pair that graph with the shared projection's nested `contract` tree and copyable JSON `template`, whose node grammar `millstrand.api.spec.alpha` owns. A root that is not currently registered fails as `:workflow/spec-missing` rather than returning an empty graph, so a stale identity is never read as a spec with nothing to say. `s/keys` names its key specs rather than inlining them, so a single form is never the whole contract. The walk reads form data and the spec registry and runs no predicate, and a `keyword-reference` relation says only that a qualified keyword in a form also names a registered spec — a set member that happens to be one is reported the same way as a real key reference.
 
 A worker that arrives over JSON crosses the boundary first: `(workflow/json->params obj)` keywordizes object keys recursively, so `"feature"` satisfies an `s/keys :req-un` entry and `"acme.workflows/feature"` addresses a `:req` key, arrays become vectors, and scalars keep their ordinary Clojure values. A non-object top level or a blank key fails loudly. The conversion is total, so a spec that requires string-keyed or mixed-keyed maps is reachable only from trusted Clojure in v1. Rejections carry the same named projection fields discovery shows — the spec identity, enriched `spec-forms`, `contract`, and `template` — plus `s/explain-str` as plain text; raw `s/explain-data` stays in Clojure, where a caller can read Clojure values without a wire normalizer inventing a JSON shape for them.
 
@@ -169,7 +169,7 @@ The runtime is pull-based and *every* strand is already a durable wait point: an
   `:subagent` gates by spawning agent-run runs, registers the `:subagent`
   executor, and closes each gate with the run's result. See
   [its contract][subagent-contract].
-- A shipped classpath executor, `skein.spools.executors.shell`, fulfills ready `:shell`
+- A shipped classpath executor, `millstrand.spools.executors.shell`, fulfills ready `:shell`
   gates by running the gate's `shell/argv` command directly, registers the
   `:shell` executor, and closes each gate with `complete!` on a zero exit
   (stamping a loud `gate/error` otherwise). See `executors/shell.md`.
@@ -192,13 +192,13 @@ The engine never executes; the driving agent interprets ready-step data. So a wo
   keys (TEN-003); the engine anticipates nothing.
 - **Round-trip note:** bindings ride `workflow/context` across routed loop
   rounds. The JSON layer keywordizes map keys on read and writes keyword
-  keys with their full `ns/name` form (`skein.core.db/json-key`), so keyword keys
+  keys with their full `ns/name` form (`millstrand.core.db/json-key`), so keyword keys
   round-trip faithfully. Binding keys conventionally stay simple
   (`:pr.ci.wait`, `:instruction`), and the definition maps them onto the
   canonical string attribute vocabulary (`"workflow/instruction"`) when
   building step attributes.
 
-The pull-request model in `test/skein/spools/workflow_test.clj` (`workflow-pr-flow-rebinds-forge-without-spool-changes`) is the reference for this pattern: GitHub bindings shipped as defaults, GitLab swapped in as a partial user override, identical definitions. A weaver-side action registry (resolving action-ref names over the socket for CLI-grade drivers) is a possible future layer; it is intentionally not built yet.
+The pull-request model in `test/millstrand/spools/workflow_test.clj` (`workflow-pr-flow-rebinds-forge-without-spool-changes`) is the reference for this pattern: GitHub bindings shipped as defaults, GitLab swapped in as a partial user override, identical definitions. A weaver-side action registry (resolving action-ref names over the socket for CLI-grade drivers) is a possible future layer; it is intentionally not built yet.
 
 ## 4. Run lifecycle
 
@@ -264,13 +264,13 @@ Executor registration is keyed by gate `waiter` name via `register-executor!` (a
 
 ```clojure
 (workflow/register-executor! :subagent gate-stalled?)   ; pred: ready gate view -> truthy detail | nil
-(workflow/register-executor! :shell {:stalled? 'skein.spools.executors.shell/gate-stalled?
-                                     :request-spec :skein.spools.executors.shell/request})
+(workflow/register-executor! :shell {:stalled? 'millstrand.spools.executors.shell/gate-stalled?
+                                     :request-spec :millstrand.spools.executors.shell/request})
 (workflow/executors)                          ; => {:subagent gate-stalled? ...}
 (workflow/executor-catalog)                   ; discovery view: waiter, predicate, projected request contract
 ```
 
-A declared `:request-spec` is what makes the executor's gate attributes discoverable: `executor-catalog` (and the CLI `workflow executors`, [§5b](#5b-registry-discovery)) projects it through the shared `skein.api.spec.alpha` documentation projection, resolved live, and fails loudly when the name no longer resolves.
+A declared `:request-spec` is what makes the executor's gate attributes discoverable: `executor-catalog` (and the CLI `workflow executors`, [§5b](#5b-registry-discovery)) projects it through the shared `millstrand.api.spec.alpha` documentation projection, resolved live, and fails loudly when the name no longer resolves.
 
 This keeps the workflow namespace free of any executor's vocabulary: a waiter with no registered
 executor always surfaces as `:gate` immediately, and adapters such as the
@@ -489,13 +489,13 @@ Neither read runs anything a definition carries. Rendered names, titles, descrip
 
 ### The `workflow` op is opted into
 
-The CLI over these reads is a module of its own. Activating `skein.spools.workflow` gives you the engine, its registries, and its Clojure API — and no CLI verbs. The `workflow` op appears only when startup config also declares the CLI module:
+The CLI over these reads is a module of its own. Activating `millstrand.spools.workflow` gives you the engine, its registries, and its Clojure API — and no CLI verbs. The `workflow` op appears only when startup config also declares the CLI module:
 
 ```clojure
-(runtime/module! runtime :skein/spools-workflow-cli
-                 {:ns 'skein.spools.workflow.cli
-                  :spools ['skein.spools/workflow]
-                  :after [:skein/spools-workflow]})
+(runtime/module! runtime :millstrand/spools-workflow-cli
+                 {:ns 'millstrand.spools.workflow.cli
+                  :spools ['millstrand.spools/workflow]
+                  :after [:millstrand/spools-workflow]})
 ```
 
 A spool that pours workflows for its own domain surface should not thereby hand every worker a generic way to drive those runs, so the engine never publishes the verbs by itself. Dropping the module from startup config removes the op again: the module owns that op partition, and publication replaces it whole.
@@ -516,7 +516,7 @@ The default lists definitions declaring the `:start` entrypoint, which is the qu
 
 | Field | Contents |
 |---|---|
-| `params` | `{"kind":"spec"}` with the `:param-spec` identity, its live `spec-forms` graph, the shared projection's nested `contract` tree and copyable JSON `template` (`skein.api.spec.alpha`), and `defaults` — plus `example`, the authored construction-validated params map, when the definition ships one, with authored `:param-docs` merged over the hoisted predicate docs in `contract` and `template`; or `{"kind":"none"}` with `defaults` alone, when the definition constrains nothing. |
+| `params` | `{"kind":"spec"}` with the `:param-spec` identity, its live `spec-forms` graph, the shared projection's nested `contract` tree and copyable JSON `template` (`millstrand.api.spec.alpha`), and `defaults` — plus `example`, the authored construction-validated params map, when the definition ships one, with authored `:param-docs` merged over the hoisted predicate docs in `contract` and `template`; or `{"kind":"none"}` with `defaults` alone, when the definition constrains nothing. |
 | `declared` | `entry` (items waiting for nothing), `loops`, `gates`, `checkpoints` with their choice keys, `calls` with their target and how it is named, `defers` with their bound targets and `"call"` entrypoint, and `routes` — the registered names checkpoint choices route to. |
 
 The declared summary is exactly that: a summary of what the definition declares. Loops, calls, and continuations are never expanded, because an expansion depends on params that do not exist yet and a deferred exit cannot be described before a worker fills it. Use `describe` ([§6a](#6a-describing-and-archiving)) when you have params and want the shape they would pour.
@@ -533,12 +533,12 @@ The gate-authoring read: one item per registered gate waiter, in waiter order.
 $ strand workflow executors
 {"operation":"workflow executors",
  "executors":[{"waiter":"shell",
-               "stall-predicate":"skein.spools.executors.shell/gate-stalled?",
-               "request":{"spec":"skein.spools.executors.shell/request",
+               "stall-predicate":"millstrand.spools.executors.shell/gate-stalled?",
+               "request":{"spec":"millstrand.spools.executors.shell/request",
                           "spec-forms":[...],"contract":{...},"template":{"shell/argv":["<...>"],...}}}]}
 ```
 
-Each item names the waiter and its stall-predicate symbol (`null` for a raw function value, which carries no declaration). An executor that declares a `:request-spec` also carries `request` — the shared `skein.api.spec.alpha` projection of its gate-request contract, whose `contract` and `template` are keyed by the exact attribute spellings a gate author writes. The projection resolves against the live spec registry at read time, and a declared spec that no longer resolves fails loudly as `workflow/spec-missing` rather than reading as an executor with no contract. An executor with no declared request spec lists without `request`; its gate attributes are documented by its own spool.
+Each item names the waiter and its stall-predicate symbol (`null` for a raw function value, which carries no declaration). An executor that declares a `:request-spec` also carries `request` — the shared `millstrand.api.spec.alpha` projection of its gate-request contract, whose `contract` and `template` are keyed by the exact attribute spellings a gate author writes. The projection resolves against the live spec registry at read time, and a declared spec that no longer resolves fails loudly as `workflow/spec-missing` rather than reading as an executor with no contract. An executor with no declared request spec lists without `request`; its gate attributes are documented by its own spool.
 
 ## 5c. Driving a run
 
@@ -723,7 +723,7 @@ Each event is a **closed** `step` or `checkpoint` strand. Procedure joins, fille
 
 ## 7. Attribute vocabulary
 
-This table is the extension API: spools built on top of `skein.spools.workflow` (like `ct.spools.devflow`) read and write these `workflow/*` attributes directly on strands. Unless noted, attributes are plain string-keyed `TEXT`/JSON values on the strand's `:attributes` map.
+This table is the extension API: spools built on top of `millstrand.spools.workflow` (like `ct.spools.devflow`) read and write these `workflow/*` attributes directly on strands. Unless noted, attributes are plain string-keyed `TEXT`/JSON values on the strand's `:attributes` map.
 
 | Attribute | Meaning | Set by |
 |---|---|---|
@@ -779,7 +779,7 @@ Worked, runnable compositions live in the companion [`workflow.cookbook.md`](./w
 - forge-agnostic tool bindings;
 - fan-out over a collection with a chained `:loop`.
 
-The test suite in [`test/skein/spools/workflow_test.clj`](../test/skein/spools/workflow_test.clj) drives every documented behavior against a real weaver and doubles as an executable reference.
+The test suite in [`test/millstrand/spools/workflow_test.clj`](../test/millstrand/spools/workflow_test.clj) drives every documented behavior against a real weaver and doubles as an executable reference.
 
 ## 9. See also
 
@@ -789,14 +789,14 @@ The test suite in [`test/skein/spools/workflow_test.clj`](../test/skein/spools/w
   instead of a raw run-id. It registers its stages under stable names and uses
   `:revise` choices for its revision loops ([§5](#5-checkpoints-and-routing))
   rather than dead-ending the run or hand-writing revision wrappers. See `devflow.md`.
-- `(skein.spools.workflow/explain)` / `(explain topic)` — machine-readable
+- `(millstrand.spools.workflow/explain)` / `(explain topic)` — machine-readable
   contracts for `:workflow`, `:definition`, `:step`, `:gate`, `:checkpoint`, and `:call`,
   intended for agents to call before constructing workflow data instead of
   relying on this document alone.
 - [README.md](./README.md) — shipped spools index and loading notes.
 - [`ct.spools.executors.subagent`][subagent-contract] — external adapter that binds workflow
   `:subagent` gates to agent-run runs.
-- [`skein.spools.executors.shell`](./executors/shell.md) — shipped classpath executor that fulfills
+- [`millstrand.spools.executors.shell`](./executors/shell.md) — shipped classpath executor that fulfills
   workflow `:shell` gates by running their command.
 
 [subagent-contract]: https://github.com/codethread/agent-harness.spool/blob/d28bfb35b5fc1891a7a318e06886aa446722241d/agent-run/subagent.md

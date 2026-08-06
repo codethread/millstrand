@@ -1,6 +1,6 @@
 (ns quality.api-form
   "The api-form slice of quality.conventions-check: SPEC-003.C19a over
-  converted `skein.api.*` modules.
+  converted `millstrand.api.*` modules.
 
   A converted module's `alpha.clj` leads with its public promised vars,
   each carrying a docstring; private helpers below them are welcome when
@@ -23,7 +23,7 @@
 
 (def ^:private width-limit 96)
 
-(def ^:private api-root "src/skein/api")
+(def ^:private api-root "src/millstrand/api")
 
 (defn module-dirs
   "Return {module-name module-dir} for every directory under `api-root`,
@@ -59,10 +59,10 @@
        (str/blank? (:doc var-def))))
 
 (defn- api-ns-module
-  "Return [module tier] for a `skein.api.<module>.alpha` or
-  `skein.api.<module>.internal[.<concern>]` symbol, nil for anything else."
+  "Return [module tier] for a `millstrand.api.<module>.alpha` or
+  `millstrand.api.<module>.internal[.<concern>]` symbol, nil for anything else."
   [ns-sym]
-  (rest (re-matches #"skein\.api\.([^.]+)\.(alpha|internal)(?:\..+)?" (str ns-sym))))
+  (rest (re-matches #"millstrand\.api\.([^.]+)\.(alpha|internal)(?:\..+)?" (str ns-sym))))
 
 (defn- dependency-findings
   "Enforce the internal-namespace dependency rules over kondo

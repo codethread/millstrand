@@ -2,8 +2,8 @@
   "The third-party spool bump workflow (family `spool-bump`)."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [skein.api.format.alpha :as format-alpha]
-            [skein.spools.workflow :as workflow]
+            [millstrand.api.format.alpha :as format-alpha]
+            [millstrand.spools.workflow :as workflow]
             [ct.workflows.support :as support]))
 
 (defn- non-blank-string?
@@ -59,7 +59,7 @@
    :example {:bumps [{:family "codethread/kanban" :version "latest"}
                      {:family "codethread/devflow" :version "v12"}]
              :branch "bump-kanban-devflow"
-             :worktree "/abs/path/to/skein-src__bump-kanban-devflow"
+             :worktree "/abs/path/to/millstrand-src__bump-kanban-devflow"
              :direct-user-request false}
    :param-docs {:bumps
                 (format-alpha/reflow

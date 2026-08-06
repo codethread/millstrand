@@ -1,10 +1,10 @@
 # Alpha API index
 
-`skein.api.*.alpha` is the blessed spool-facing API tier: the namespaces trusted config, spools, and REPL workflows build on. Each subnamespace evolves by accretion, so code written against it keeps working within the alpha line. The behavior contracts live in the root specs — [REPL API](../../devflow/specs/repl-api.md), [Weaver Runtime](../../devflow/specs/daemon-runtime.md), and the [alpha surface index](../../devflow/specs/alpha-surface.md) that draws the in-contract line — while the per-namespace pages beside this index are generated per-fn reference from source docstrings (`make api-docs`, never hand-edited).
+`millstrand.api.*.alpha` is the blessed spool-facing API tier: the namespaces trusted config, spools, and REPL workflows build on. Each subnamespace evolves by accretion, so code written against it keeps working within the alpha line. The behavior contracts live in the root specs — [REPL API](../../devflow/specs/repl-api.md), [Weaver Runtime](../../devflow/specs/daemon-runtime.md), and the [alpha surface index](../../devflow/specs/alpha-surface.md) that draws the in-contract line — while the per-namespace pages beside this index are generated per-fn reference from source docstrings (`make api-docs`, never hand-edited).
 
 Two conventions hold across the tier:
 
-- **The runtime is explicit.** Every operational function takes the target weaver runtime as its first argument. Capture it once at a trusted entry point with `skein.api.current.alpha/runtime` and thread it through; nothing else reads ambient state.
+- **The runtime is explicit.** Every operational function takes the target weaver runtime as its first argument. Capture it once at a trusted entry point with `millstrand.api.current.alpha/runtime` and thread it through; nothing else reads ambient state.
 - **Registries are weaver-lifetime.** Queries, patterns, events, and hooks registered at a REPL vanish on restart. Register from startup-loaded code (`init.clj` or an installed spool) when they should survive.
 
 ## Which namespace owns your concern
@@ -40,7 +40,7 @@ Two conventions hold across the tier:
 | Namespace | Reach for it when |
 | --- | --- |
 | [`patterns`](./patterns.api.md) | Agents should submit intent and your config decides the graph shape: spec-checked, create-only weave patterns invokable from the CLI. |
-| [`skein`](./skein.api.md) | Authoring core registry entries with `defop`, `defquery`, `defpattern`, `defhook`, and `defhandler`. |
+| [`millstrand`](./millstrand.api.md) | Authoring core registry entries with `defop`, `defquery`, `defpattern`, `defhook`, and `defhandler`. |
 | [`registry`](./registry.api.md) | Your domain owns a family of replaceable declarations and needs a registry kind of its own for other modules to contribute to. |
 | [`cli`](./cli.api.md) | Declaring an op's argv shape as data — the parser and help renderer behind every registered op; never hand-write usage strings. |
 | [`return-shape`](./return-shape.api.md) | Declaring and checking the JSON-compatible values returned by registered ops. |
@@ -62,4 +62,4 @@ Two conventions hold across the tier:
 | --- | --- |
 | [`peers`](./peers.api.md) | Discovering and calling local sibling weavers from mill-published runtime metadata. |
 
-Two blessed namespaces live outside `skein.api.*` but inside the same contract tier: [`skein.test.alpha`](./test.api.md), which provides weaver-world fixtures, lane settling, and clock control, and `skein.repl`, the human-facing connection-aware helper surface. See [SPEC-005.C2](../../devflow/specs/alpha-surface.md) for the full tier membership.
+Two blessed namespaces live outside `millstrand.api.*` but inside the same contract tier: [`millstrand.test.alpha`](./test.api.md), which provides weaver-world fixtures, lane settling, and clock control, and `millstrand.repl`, the human-facing connection-aware helper surface. See [SPEC-005.C2](../../devflow/specs/alpha-surface.md) for the full tier membership.

@@ -27,7 +27,7 @@
 ;; the note family (shuttle/note -> note/text) never collides with the run family
 ;; (shuttle/note-for is its own row under note/*).
 (def exact-renames
-  {;; Run attributes (skein.spools.agent-run): shuttle/... -> agent-run/...
+  {;; Run attributes (millstrand.spools.agent-run): shuttle/... -> agent-run/...
    "shuttle/phase" "agent-run/phase"
    "shuttle/harness" "agent-run/harness"
    "shuttle/prompt" "agent-run/prompt"
@@ -59,7 +59,7 @@
    ;; Boolean markers renamed in F1 (dropped/reworked in F2, not here).
    "shuttle/run" "agent-run/run"
    "shuttle/serves" "agent-run/serves"
-   ;; Review attributes (skein.spools.delegation): shuttle/review-... -> review/...
+   ;; Review attributes (millstrand.spools.delegation): shuttle/review-... -> review/...
    "shuttle/review-target" "review/target"
    "shuttle/review-pass" "review/pass"
    "shuttle/review-roster" "review/roster"
@@ -76,7 +76,7 @@
    "shuttle/note-by" "note/by"
    "shuttle/round" "note/round"
    "shuttle/at" "note/at"
-   ;; Gate attributes (skein.spools.executors.subagent): treadle/... -> gate/...
+   ;; Gate attributes (millstrand.spools.executors.subagent): treadle/... -> gate/...
    "treadle/error" "gate/error"
    "treadle/delivered" "gate/delivered"
    "treadle/delivery-blocked" "gate/delivery-blocked"
@@ -165,7 +165,7 @@
     (throw (ex-info "Refusing to run without an explicit db target: pass --db <path> or --workspace <dir>" {}))))
 
 (def ^:private cli-options
-  [["-d" "--db PATH" "Explicit path to the target skein.sqlite"]
+  [["-d" "--db PATH" "Explicit path to the target millstrand.sqlite"]
    ["-w" "--workspace DIR" "Workspace whose live db is resolved via `mill weaver status`"]
    ["-h" "--help"]])
 

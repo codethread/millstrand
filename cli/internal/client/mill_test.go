@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"skein-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/config"
 )
 
 func TestReadMillMetadataRejectsMissingMalformedAndMismatched(t *testing.T) {

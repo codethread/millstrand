@@ -12,9 +12,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"skein-ralph/internal/board"
-	"skein-ralph/internal/harness"
-	"skein-ralph/internal/loop"
+	"millstrand-ralph/internal/board"
+	"millstrand-ralph/internal/harness"
+	"millstrand-ralph/internal/loop"
 )
 
 // Session is everything a renderer needs to describe the run it is showing.

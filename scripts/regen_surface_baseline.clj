@@ -1,5 +1,5 @@
 (ns regen-surface-baseline
-  "One-shot regenerator for test/skein/surface_baseline.edn.
+  "One-shot regenerator for test/millstrand/surface_baseline.edn.
 
   Runs the (private) config-test capture against the live .skein/policy/config.clj and
   pretty-prints the resulting surface to the frozen baseline. Kept out of the
@@ -8,11 +8,11 @@
   so runtime add-libs sees the parent deps basis exactly as shard C does (`-X`
   also bypasses the :test alias's test-runner :main-opts)."
   (:require [clojure.pprint :as pprint]
-            [skein.ct.config-test]))
+            [millstrand.ct.config-test]))
 
 (defn run [_]
-  (let [capture @(requiring-resolve 'skein.ct.config-test/capture-config-surface)
+  (let [capture @(requiring-resolve 'millstrand.ct.config-test/capture-config-surface)
         surface (capture ".skein/policy/config.clj")]
-    (spit "test/skein/surface_baseline.edn"
+    (spit "test/millstrand/surface_baseline.edn"
           (with-out-str (pprint/pprint surface)))
-    (println "wrote test/skein/surface_baseline.edn")))
+    (println "wrote test/millstrand/surface_baseline.edn")))

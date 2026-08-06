@@ -1,6 +1,6 @@
-# Skein Text-Search Spool — Cookbook (UNSAFE)
+# Millstrand Text-Search Spool — Cookbook (UNSAFE)
 
-Worked recipes for `skein.spools.unsafe-text-search`: how to grep your working memory when the query language can't. This is the **how** half of the docs. The others:
+Worked recipes for `millstrand.spools.unsafe-text-search`: how to grep your working memory when the query language can't. This is the **how** half of the docs. The others:
 
 - [`unsafe-text-search.md`](./unsafe-text-search.md) — the **contract**, and the **Unsafe
   declaration** you should read first. It explains why this spool reaches past
@@ -8,7 +8,7 @@ Worked recipes for `skein.spools.unsafe-text-search`: how to grep your working m
 - [`unsafe-text-search.api.md`](./unsafe-text-search.api.md) — the **generated reference**:
   every public fn's signature and docstring.
 
-These recipes assume the op is active (`.skein/init.clj` activates it in this repo) so `strand search ...` works from the shell, and that a REPL example holds a runtime via `(require '[skein.spools.unsafe-text-search :as unsafe-text-search] '[skein.api.current.alpha :as current])` and `(def rt (current/runtime))`.
+These recipes assume the op is active (`.skein/init.clj` activates it in this repo) so `strand search ...` works from the shell, and that a REPL example holds a runtime via `(require '[millstrand.spools.unsafe-text-search :as unsafe-text-search] '[millstrand.api.current.alpha :as current])` and `(def rt (current/runtime))`.
 
 ## Recipe 1: find the feature that discussed a topic
 
@@ -54,4 +54,4 @@ strand search "the phrase you remember" --archived
 
 ## A note on trust
 
-Every recipe here runs SQL against the physical attribute table. That is the unsafe bargain this spool documents: you get history search the blessed surface won't give you, and in return you accept that a `skein.core.*` storage change can break these commands until the in-repo spool is fixed to match. Read [`unsafe-text-search.md`](./unsafe-text-search.md#unsafe-declaration) before you lean on it in your own workflow.
+Every recipe here runs SQL against the physical attribute table. That is the unsafe bargain this spool documents: you get history search the blessed surface won't give you, and in return you accept that a `millstrand.core.*` storage change can break these commands until the in-repo spool is fixed to match. Read [`unsafe-text-search.md`](./unsafe-text-search.md#unsafe-declaration) before you lean on it in your own workflow.

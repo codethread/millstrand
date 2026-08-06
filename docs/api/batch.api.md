@@ -1,6 +1,6 @@
 
 -----
-# <a name="skein.api.batch.alpha">skein.api.batch.alpha</a>
+# <a name="millstrand.api.batch.alpha">millstrand.api.batch.alpha</a>
 
 
 Explicit-runtime API for applying batch graph mutations.
@@ -9,13 +9,13 @@ Explicit-runtime API for applying batch graph mutations.
   argument. This namespace owns transactional batch persistence, attribute
   normalization through transform hooks, the pre-commit validation gate, and the
   batch plus per-strand event fanout. The SQL batch engine lives in
-  `skein.core.db`; the shared lifecycle and dispatch plumbing in
-  `skein.core.weaver.*`.
+  `millstrand.core.db`; the shared lifecycle and dispatch plumbing in
+  `millstrand.core.weaver.*`.
 
 
 
 
-## <a name="skein.api.batch.alpha/apply!">`apply!`</a>
+## <a name="millstrand.api.batch.alpha/apply!">`apply!`</a>
 ``` clojure
 (apply! runtime payload)
 (apply! runtime payload req-ctx)
@@ -27,7 +27,7 @@ Apply one transactional batch graph mutation payload to `runtime`.
   The payload is a map of `:refs` (unqualified non-blank keyword -> existing
   strand id), `:strands`
   (patches keyed by `:ref`), `:edges` (ordered edge ops between refs), and
-  `:burn` (refs to burn); `skein.core.db/normalize-batch-payload!` is the
+  `:burn` (refs to burn); `millstrand.core.db/normalize-batch-payload!` is the
   grammar authority and rejects malformed payloads loudly.
 
   An `:edges` entry is one of two closed ops. `{:op :upsert ...}` carries
@@ -68,12 +68,12 @@ Apply one transactional batch graph mutation payload to `runtime`.
   `::edge-transition`s over `::edge-row`s). Every published map boundary is
   closed: an unexpected key at the payload or result top level, on an edge row,
   or on a lifecycle entry fails loudly at the seam.
-  `skein.core.db/normalize-batch-payload!` stays the grammar authority for
+  `millstrand.core.db/normalize-batch-payload!` stays the grammar authority for
   malformed public input, rejecting it with detailed errors; apply! then
   consults `::normalized-payload` on that authority's output, and `::result` on
   the transactional engine's output before the pre-commit hook, events, and
   return. Those two seam checks only catch impossible drift and never weaken the
   authority's rejections. A caller-supplied `req-ctx` conforms to
-  `::skein.core.specs/request-context`; the pre-commit hook context conforms to
-  `::skein.core.specs/batch-hook-context`.
-<p><sub><a href="https://github.com/codethread/skein/blob/main/src/skein/api/batch/alpha.clj#L25-L102">Source</a></sub></p>
+  `::millstrand.core.specs/request-context`; the pre-commit hook context conforms to
+  `::millstrand.core.specs/batch-hook-context`.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/batch/alpha.clj#L25-L102">Source</a></sub></p>

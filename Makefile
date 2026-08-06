@@ -1,15 +1,17 @@
-.PHONY: help build ralph kanban-tree install dash api-docs test-go docs-site docs-serve docs-check fmt fmt-check fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
+.PHONY: help build ralph kanban-tree install dash api-docs test-go docs-site docs-serve docs-check identity-check transition-check fmt fmt-check fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
 
 help:
 	@printf '%s\n' \
-		'Skein development commands:' \
+		'Millstrand development commands:' \
 		'  make build              Build repo-local strand, mill, ralph, and kanban-tree binaries' \
 		'  make test-go            Run Go tests in every Go module' \
 		'  make fmt-check          Check Clojure and Go formatting' \
 		'  make lint               Run Clojure, convention, and Go linters' \
 		'  make reflect-check      Fail on reflected Java interop' \
+		'  make identity-check     Audit active files for stale product identity' \
+		'  make transition-check   Validate the temporary external publisher boundary' \
 		'  make docs-check         Regenerate and verify documentation' \
-		'  make spool-suite-gate   Run pinned external spool suites against this checkout' \
+		'  make spool-suite-gate   Run or report the pinned external spool gate' \
 		'  make install            Install globally stamped strand and mill binaries' \
 		'  make dash               Launch the kanban dashboard' \
 		'  make help               Show this command list'
@@ -17,14 +19,14 @@ help:
 GO_CLI := ./cli/cmd/strand
 MILL_CLI := ./cli/cmd/mill
 # ralph is repo-local development tooling in its own module: it ships with no
-# Skein release, so it stays out of the published skein-strand-cli module.
+# Millstrand release, so it stays out of the published millstrand-strand-cli module.
 RALPH_CLI := ./tools/ralph
 # kanban-tree is repo-local development tooling too, on the same terms.
 KANBAN_TREE_CLI := ./tools/kanban-tree
 # BuildID falls back to the compiled-in "dev" when git is unavailable; it is
 # informational (skew attribution), so unlike InstalledSource it may degrade.
 BUILD_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
-SOURCE_LDFLAGS := -X skein-strand-cli/internal/config.InstalledSource=$(CURDIR) -X skein-strand-cli/internal/config.BuildID=$(BUILD_ID)
+SOURCE_LDFLAGS := -X millstrand-strand-cli/internal/config.InstalledSource=$(CURDIR) -X millstrand-strand-cli/internal/config.BuildID=$(BUILD_ID)
 QUICKDOC_DEPS := '{:deps {io.github.borkdude/quickdoc {:git/tag "v0.2.6" :git/sha "ce86780"}}}'
 QUICKDOC_SCRIPT := scripts/generate_api_docs.clj
 
@@ -113,10 +115,10 @@ lint-splint:
 # repo conventions that prose alone cannot hold: versioned tenet references,
 # ns docstrings everywhere, no local bindings named after clojure.core macros,
 # requires embedded in quoted forms resolving to real namespaces, shipped
-# spool sources touching skein.core.* only from unsafe-named namespaces
+# spool sources touching millstrand.core.* only from unsafe-named namespaces
 # (quality.spool-tiers), and JSON authored as Clojure data rather than
 # hand-escaped string literals (quality.json-literals). Workspace-config tests
-# use skein.ct.* exactly under test/skein/ct/, and direct checked-in .skein
+# use millstrand.ct.* exactly under test/millstrand/ct/, and direct checked-in .skein
 # paths cannot appear in tests outside that directory (quality.workspace-tests).
 lint-conventions:
 	@if git grep -n -E 'TEN-''000([^@]|$$)' -- . ':!devflow/TENETS.md'; then \
@@ -130,6 +132,12 @@ lint-go:
 
 reflect-check:
 	clojure -M:reflect-check
+
+identity-check:
+	bash scripts/quality/millstrand-active-identity.sh
+
+transition-check:
+	clojure -M:transition-check
 
 deps-report:
 	-clojure -M:deps/antq

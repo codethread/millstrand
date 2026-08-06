@@ -6,7 +6,7 @@
 // when the iteration cap is hit, or when the operator stops it.
 //
 // This binary is repo-local development tooling. It is a separate Go module on
-// purpose: it ships with no Skein release and belongs to no spool.
+// purpose: it ships with no Millstrand release and belongs to no spool.
 package main
 
 import (
@@ -21,10 +21,10 @@ import (
 	"strings"
 	"time"
 
-	"skein-ralph/internal/board"
-	"skein-ralph/internal/harness"
-	"skein-ralph/internal/loop"
-	"skein-ralph/internal/ui"
+	"millstrand-ralph/internal/board"
+	"millstrand-ralph/internal/harness"
+	"millstrand-ralph/internal/loop"
+	"millstrand-ralph/internal/ui"
 )
 
 func main() {

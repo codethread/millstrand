@@ -1,5 +1,5 @@
 (ns quality.api-tests
-  "Enforce the ownership boundary for tests under test/skein/api."
+  "Enforce the ownership boundary for tests under test/millstrand/api."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -7,20 +7,20 @@
 
 (def ^:private allowed-core-namespaces
   "Core namespaces whose published specs may be used as contract oracles."
-  #{'skein.core.specs})
+  #{'millstrand.core.specs})
 
 (def ^:private test-megasuites
   "Integration suites that must not become API-test dependencies."
-  #{'skein.spools-test
-    'skein.weaver-test
-    'skein.alpha-test
-    'skein.core.db-test
-    'skein.core.weaver.hooks-events-test})
+  #{'millstrand.spools-test
+    'millstrand.weaver-test
+    'millstrand.alpha-test
+    'millstrand.core.db-test
+    'millstrand.core.weaver.hooks-events-test})
 
 (defn- core-namespace?
   [ns-sym]
   (and (symbol? ns-sym)
-       (str/starts-with? (str ns-sym) "skein.core.")))
+       (str/starts-with? (str ns-sym) "millstrand.core.")))
 
 (defn- symbol-namespace
   [sym]
@@ -74,7 +74,7 @@
                        (case kind
                          :core-redefs "quality.api-tests: core collaborator redefinition"
                          :private-var-resolution "quality.api-tests: private core Var resolution"
-                         "quality.api-tests: direct skein.core implementation use")
+                         "quality.api-tests: direct millstrand.core implementation use")
                        ": " sym))))
             (walk [node]
               (let [special (special-call node aliases)

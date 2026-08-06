@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// primeManifestPath is the one frozen path in the prime contract: every Skein
+// primeManifestPath is the one frozen path in the prime contract: every Millstrand
 // checkout ships a manifest here naming its prime topics, so an already
 // installed mill renders current orientation text from a newer checkout
 // instead of shipping stale embedded prose. The path itself must never move;
@@ -25,7 +25,7 @@ type primeManifest struct {
 	Topics  map[string]string `json:"topics"`
 }
 
-// renderPrime resolves the Skein source, looks the topic up in the checkout's
+// renderPrime resolves the Millstrand source, looks the topic up in the checkout's
 // prime manifest, and renders the file the manifest names. The rendering
 // contract is a single token: every {{.Source}} occurrence becomes the
 // resolved checkout path, and no other template construct is interpreted, so
@@ -33,11 +33,11 @@ type primeManifest struct {
 func renderPrime(topic string) (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("mill %s prime cannot determine the cwd used to resolve the Skein source: %w", topic, err)
+		return "", fmt.Errorf("mill %s prime cannot determine the cwd used to resolve the Millstrand source: %w", topic, err)
 	}
 	source, err := resolveLaunchSource(cwd)
 	if err != nil {
-		return "", fmt.Errorf("mill %s prime cannot resolve the Skein source that hosts the docs from cwd %s: %w", topic, cwd, err)
+		return "", fmt.Errorf("mill %s prime cannot resolve the Millstrand source that hosts the docs from cwd %s: %w", topic, cwd, err)
 	}
 	manifestPath := filepath.Join(source, filepath.FromSlash(primeManifestPath))
 	raw, err := os.ReadFile(manifestPath)

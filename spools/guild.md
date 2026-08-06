@@ -1,4 +1,4 @@
-# Skein Guild Spool
+# Millstrand Guild Spool
 
 > This is the **contract** doc: the declaration surface, naming and versioning
 > conventions, and the worked two-repo example. Its two companions are
@@ -10,7 +10,7 @@
 
 ## Overview
 
-`skein.spools.guild` is a small reference spool for publishing a weaver's trusted operation API to sibling weavers. It does not add a new protocol, server operation, package manager, or permission system. Guild ops are ordinary weaver `op` registry entries with a documented naming/versioning convention and a built-in `guild list` operation for discovery.
+`millstrand.spools.guild` is a small reference spool for publishing a weaver's trusted operation API to sibling weavers. It does not add a new protocol, server operation, package manager, or permission system. Guild ops are ordinary weaver `op` registry entries with a documented naming/versioning convention and a built-in `guild list` operation for discovery.
 
 Use it when a repo wants other local weavers to call stable, intentional entry points such as `gate.status.v1` or `release.request.v1` instead of reaching into repo-private REPL helpers. The agreement surface is userland: a repo opts in by registering ops from trusted config, usually its checked-in `.skein/init.clj`. For a peering repo, that checked-in `init.clj` is effectively a published API file. Treat its guild declarations like public contract code.
 
@@ -19,20 +19,20 @@ Use it when a repo wants other local weavers to call stable, intentional entry p
 Approve the Guild root in `.skein/spools.edn`:
 
 ```clojure
-{:spools {skein.spools/guild {:local/root "../spools/guild"}}}
+{:spools {millstrand.spools/guild {:local/root "../spools/guild"}}}
 ```
 
 Then declare it from trusted config:
 
 ```clojure
-(require '[skein.api.current.alpha :as current]
-         '[skein.api.runtime.alpha :as runtime])
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
 
 (def runtime (current/runtime))
 
-(runtime/module! runtime :skein/spools-guild
-  {:ns 'skein.spools.guild
-   :spools ['skein.spools/guild]})
+(runtime/module! runtime :millstrand/spools-guild
+  {:ns 'millstrand.spools.guild
+   :spools ['millstrand.spools/guild]})
 ```
 
 Every Guild fn takes the runtime as its first argument and never reads the
@@ -70,7 +70,7 @@ Guild op invocation accepts zero arguments or one JSON input argument. The spool
 A declared `:input-spec` is discoverable before invocation: it rides the generic arg `:spec` convention (SPEC-003.C70), so `strand help <op>` projects the registered spec's nested contract and a copyable JSON template on the `input` positional. Invalid input fails with the same projection fields (`spec`, `spec-forms`, `contract`, `template`) plus `explain` text, so a worker gets the contract and the violation in one payload.
 
 `:returns` uses the shared registry return declaration from
-[`skein.api.return-shape.alpha`](../docs/api/return-shape.api.md). It describes
+[`millstrand.api.return-shape.alpha`](../docs/api/return-shape.api.md). It describes
 JSON scalar, closed-map, and homogeneous-collection output; routed and streaming
 wrappers are also shared with ordinary registered ops. The canonical language
 contract is [SPEC-003.C60a/C60b](../devflow/specs/repl-api.md). Run
@@ -89,9 +89,9 @@ contract is [SPEC-003.C60a/C60b](../devflow/specs/repl-api.md). Run
 ### Activation
 
 ```clojure
-(runtime/module! runtime :skein/spools-guild
-  {:ns 'skein.spools.guild
-   :spools ['skein.spools/guild]})
+(runtime/module! runtime :millstrand/spools-guild
+  {:ns 'millstrand.spools.guild
+   :spools ['millstrand.spools/guild]})
 (guild/set-fallback-guild-name! runtime "frontend")
 ```
 
@@ -140,17 +140,17 @@ With the Guild root approved in the backend repo's `.skein/spools.edn` and activ
 ```clojure
 (ns user
   (:require [clojure.spec.alpha :as s]
-            [skein.api.current.alpha :as current]
-            [skein.api.runtime.alpha :as runtime]))
+            [millstrand.api.current.alpha :as current]
+            [millstrand.api.runtime.alpha :as runtime]))
 
 (def runtime (current/runtime))
 
-(runtime/module! runtime :skein/spools-guild
-  {:ns 'skein.spools.guild
-   :spools ['skein.spools/guild]})
+(runtime/module! runtime :millstrand/spools-guild
+  {:ns 'millstrand.spools.guild
+   :spools ['millstrand.spools/guild]})
 
 ;; Required here for the declarations below.
-(require '[skein.spools.guild :as guild])
+(require '[millstrand.spools.guild :as guild])
 
 (s/def ::gate-name string?)
 (s/def ::gate-status-input (s/keys :req-un [::gate-name]))
@@ -173,7 +173,7 @@ From the frontend weaver (or a manager weaver), discover the backend by its port
 
 ```clojure
 (require '[clojure.data.json :as json]
-         '[skein.api.peers.alpha :as peers])
+         '[millstrand.api.peers.alpha :as peers])
 
 (peers/call! "backend" "guild" {:argv ["list"]})
 ;; => {"guild" "backend", "operation" "guild list", "active" [...], "deprecated" [...]}
@@ -183,16 +183,16 @@ From the frontend weaver (or a manager weaver), discover the backend by its port
 ;; => {"gate" "api-ready", "satisfied" false}
 ```
 
-`skein.api.peers.alpha` is explicit-require userland API: `(peers/peers)` enumerates running sibling weavers from mill metadata, and `(peers/call! peerish op args)` invokes one named op on a metadata row, peer name, or workspace path over the invoke envelope (optional `:argv`/`:payloads` in `args`); unknown ops and the peer's payload hooks reject receiving-side, and stream-class ops fail loudly as unsupported. It does not auto-start peers or add retries; unavailable peers fail loudly.
+`millstrand.api.peers.alpha` is explicit-require userland API: `(peers/peers)` enumerates running sibling weavers from mill metadata, and `(peers/call! peerish op args)` invokes one named op on a metadata row, peer name, or workspace path over the invoke envelope (optional `:argv`/`:payloads` in `args`); unknown ops and the peer's payload hooks reject receiving-side, and stream-class ops fail loudly as unsupported. It does not auto-start peers or add retries; unavailable peers fail loudly.
 
 ## See also
 
 - [`guild.cookbook.md`](./guild.cookbook.md) — worked composition recipes for this spool.
 - [`spools/README.md`](./README.md) — shipped spools index and loading notes.
-- [`skein.spools.workflow`](./workflow.md) — workflow gates are the durable wait points guild ops often inspect or complete.
+- [`millstrand.spools.workflow`](./workflow.md) — workflow gates are the durable wait points guild ops often inspect or complete.
 - [`ct.spools.executors.subagent`][subagent-contract] — external gate adapter shape that
   guild-backed adapters can mirror.
 - [Weaver Runtime spec](../devflow/specs/daemon-runtime.md) — local weaver peering contract (SPEC-004.P10c).
-- [REPL API spec](../devflow/specs/repl-api.md) — blessed `skein.api.peers.alpha` helper listing.
+- [REPL API spec](../devflow/specs/repl-api.md) — blessed `millstrand.api.peers.alpha` helper listing.
 
 [subagent-contract]: https://github.com/codethread/agent-harness.spool/blob/d28bfb35b5fc1891a7a318e06886aa446722241d/agent-run/subagent.md

@@ -1,17 +1,17 @@
 (require '[quickdoc.api :as quickdoc])
 
-(def github-repo "https://github.com/codethread/skein")
+(def github-repo "https://github.com/codethread/millstrand")
 (def git-branch "main")
 
 (def spool-docs
-  [{:name "batteries" :source "spools/batteries/src/skein/spools/batteries.clj" :outfile "spools/batteries.api.md"}
-   {:name "workflow" :source "spools/workflow/src/skein/spools/workflow.clj" :outfile "spools/workflow.api.md"}
-   {:name "guild" :source "spools/guild/src/skein/spools/guild.clj" :outfile "spools/guild.api.md"}
-   {:name "unsafe-text-search" :source "spools/unsafe-text-search/src/skein/spools/unsafe_text_search.clj" :outfile "spools/unsafe-text-search.api.md"}
-   {:name "shell" :source "spools/workflow/src/skein/spools/executors/shell.clj" :outfile "spools/executors/shell.api.md"}
-   {:name "code" :source "spools/workflow/src/skein/spools/executors/code.clj" :outfile "spools/executors/code.api.md"}
-   {:name "chime" :source "spools/chime/src/skein/spools/chime.clj" :outfile "spools/chime.api.md"}
-   {:name "cron" :source "spools/cron/src/skein/spools/cron.clj" :outfile "spools/cron.api.md"}])
+  [{:name "batteries" :source "spools/batteries/src/millstrand/spools/batteries.clj" :outfile "spools/batteries.api.md"}
+   {:name "workflow" :source "spools/workflow/src/millstrand/spools/workflow.clj" :outfile "spools/workflow.api.md"}
+   {:name "guild" :source "spools/guild/src/millstrand/spools/guild.clj" :outfile "spools/guild.api.md"}
+   {:name "unsafe-text-search" :source "spools/unsafe-text-search/src/millstrand/spools/unsafe_text_search.clj" :outfile "spools/unsafe-text-search.api.md"}
+   {:name "shell" :source "spools/workflow/src/millstrand/spools/executors/shell.clj" :outfile "spools/executors/shell.api.md"}
+   {:name "code" :source "spools/workflow/src/millstrand/spools/executors/code.clj" :outfile "spools/executors/code.api.md"}
+   {:name "chime" :source "spools/chime/src/millstrand/spools/chime.clj" :outfile "spools/chime.api.md"}
+   {:name "cron" :source "spools/cron/src/millstrand/spools/cron.clj" :outfile "spools/cron.api.md"}])
 
 ;; The blessed spool-facing API tier (SPEC-005.C2). Generated reference only —
 ;; the behavior contracts stay in the root specs.
@@ -19,18 +19,18 @@
   (concat
    (for [nm ["batch" "cli" "clock" "current" "errors" "events" "format" "graph" "hooks"
              "lifecycle" "notes" "patterns" "peers" "registry" "relations" "return-shape"
-             "runtime" "scheduler" "skein" "spec" "spool" "vocab" "weaver"]]
+             "runtime" "scheduler" "millstrand" "spec" "spool" "vocab" "weaver"]]
      {:name nm
-      :source (str "src/skein/api/" (if (= nm "return-shape") "return_shape" nm) "/alpha.clj")
+      :source (str "src/millstrand/api/" (if (= nm "return-shape") "return_shape" nm) "/alpha.clj")
       :outfile (str "docs/api/" nm ".api.md")})
    [{:name "runtime-glossary"
-     :source "src/skein/api/runtime/glossary/alpha.clj"
+     :source "src/millstrand/api/runtime/glossary/alpha.clj"
      :outfile "docs/api/runtime-glossary.api.md"}
     {:name "runtime-help-transform"
-     :source "src/skein/api/runtime/help_transform/alpha.clj"
+     :source "src/millstrand/api/runtime/help_transform/alpha.clj"
      :outfile "docs/api/runtime-help-transform.api.md"}
     {:name "test"
-     :source "src/skein/test/alpha.clj"
+     :source "src/millstrand/test/alpha.clj"
      :outfile "docs/api/test.api.md"}]))
 
 (doseq [{:keys [source outfile]} (concat spool-docs alpha-api-docs)]

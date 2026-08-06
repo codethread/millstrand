@@ -6,7 +6,7 @@
 # set to "GitHub Actions" (it defaults to "Deploy from a branch"). Until a
 # repo admin flips that setting, the deploy job will fail even though this
 # workflow runs. Once enabled, the site is served from
-# https://codethread.github.io/skein/.
+# https://codethread.github.io/millstrand/.
 name: Deploy Docs
 
 on:

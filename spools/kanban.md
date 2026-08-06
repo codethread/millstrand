@@ -1,4 +1,4 @@
-# Skein Kanban Spool
+# Millstrand Kanban Spool
 
 `ct.spools.kanban` has moved to the external git-distributed spool repo:
 [`codethread/kanban.spool`](https://github.com/codethread/kanban.spool).
