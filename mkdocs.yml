@@ -4,8 +4,8 @@ site_url: ""
 docs_dir: .mkdocs
 site_dir: site
 
-repo_url: https://github.com/codethread/skein
-repo_name: codethread/skein
+repo_url: https://github.com/codethread/millstrand
+repo_name: codethread/millstrand
 
 # Rewrites repo-relative links that leave the docs collection (source files,
 # RFC/archive material) to GitHub blob URLs, so builds can run --strict and
@@ -62,36 +62,36 @@ nav:
       - Weaver Runtime: devflow/specs/daemon-runtime.md
       - REPL API: devflow/specs/repl-api.md
       - Strand Model: devflow/specs/strand-model.md
-  # Generated per-fn reference for the blessed skein.api.*.alpha tier; the
+  # Generated per-fn reference for the blessed millstrand.api.*.alpha tier; the
   # behavior contracts remain the specs above (SPEC-005.C2).
   - Alpha API:
       - Index: docs/api/README.md
-      - skein.api.batch.alpha: docs/api/batch.api.md
-      - skein.api.cli.alpha: docs/api/cli.api.md
-      - skein.api.clock.alpha: docs/api/clock.api.md
-      - skein.api.current.alpha: docs/api/current.api.md
-      - skein.api.errors.alpha: docs/api/errors.api.md
-      - skein.api.events.alpha: docs/api/events.api.md
-      - skein.api.format.alpha: docs/api/format.api.md
-      - skein.api.graph.alpha: docs/api/graph.api.md
-      - skein.api.hooks.alpha: docs/api/hooks.api.md
-      - skein.api.lifecycle.alpha: docs/api/lifecycle.api.md
-      - skein.api.notes.alpha: docs/api/notes.api.md
-      - skein.api.patterns.alpha: docs/api/patterns.api.md
-      - skein.api.peers.alpha: docs/api/peers.api.md
-      - skein.api.registry.alpha: docs/api/registry.api.md
-      - skein.api.relations.alpha: docs/api/relations.api.md
-      - skein.api.return-shape.alpha: docs/api/return-shape.api.md
-      - skein.api.runtime.alpha: docs/api/runtime.api.md
-      - skein.api.runtime.glossary.alpha: docs/api/runtime-glossary.api.md
-      - skein.api.runtime.help-transform.alpha: docs/api/runtime-help-transform.api.md
-      - skein.api.scheduler.alpha: docs/api/scheduler.api.md
-      - skein.api.skein.alpha: docs/api/skein.api.md
-      - skein.api.spec.alpha: docs/api/spec.api.md
-      - skein.api.spool.alpha: docs/api/spool.api.md
-      - skein.api.vocab.alpha: docs/api/vocab.api.md
-      - skein.api.weaver.alpha: docs/api/weaver.api.md
-      - skein.test.alpha: docs/api/test.api.md
+      - millstrand.api.batch.alpha: docs/api/batch.api.md
+      - millstrand.api.cli.alpha: docs/api/cli.api.md
+      - millstrand.api.clock.alpha: docs/api/clock.api.md
+      - millstrand.api.current.alpha: docs/api/current.api.md
+      - millstrand.api.errors.alpha: docs/api/errors.api.md
+      - millstrand.api.events.alpha: docs/api/events.api.md
+      - millstrand.api.format.alpha: docs/api/format.api.md
+      - millstrand.api.graph.alpha: docs/api/graph.api.md
+      - millstrand.api.hooks.alpha: docs/api/hooks.api.md
+      - millstrand.api.lifecycle.alpha: docs/api/lifecycle.api.md
+      - millstrand.api.notes.alpha: docs/api/notes.api.md
+      - millstrand.api.patterns.alpha: docs/api/patterns.api.md
+      - millstrand.api.peers.alpha: docs/api/peers.api.md
+      - millstrand.api.registry.alpha: docs/api/registry.api.md
+      - millstrand.api.relations.alpha: docs/api/relations.api.md
+      - millstrand.api.return-shape.alpha: docs/api/return-shape.api.md
+      - millstrand.api.runtime.alpha: docs/api/runtime.api.md
+      - millstrand.api.runtime.glossary.alpha: docs/api/runtime-glossary.api.md
+      - millstrand.api.runtime.help-transform.alpha: docs/api/runtime-help-transform.api.md
+      - millstrand.api.scheduler.alpha: docs/api/scheduler.api.md
+      - millstrand.api.millstrand.alpha: docs/api/millstrand.api.md
+      - millstrand.api.spec.alpha: docs/api/spec.api.md
+      - millstrand.api.spool.alpha: docs/api/spool.api.md
+      - millstrand.api.vocab.alpha: docs/api/vocab.api.md
+      - millstrand.api.weaver.alpha: docs/api/weaver.api.md
+      - millstrand.test.alpha: docs/api/test.api.md
   - Bundled Spools:
       - Index: spools/README.md
       - Batteries:
