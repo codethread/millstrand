@@ -165,10 +165,10 @@ EOF
 fi
 
 deps_value=$(tr '\n' ' ' <"$deps_file")
-if ! classpath=$(clojure -Spath -Sdeps "$deps_value" 2>&1); then
+if ! classpath=$(cd "$consumer_root" && clojure -Spath -Sdeps "$deps_value" 2>&1); then
   die "Clojure dependency resolution failed for $coordinate: $classpath"
 fi
-if ! resource_output=$(clojure -Sdeps "$deps_value" -M -e '
+if ! resource_output=$(cd "$consumer_root" && clojure -Sdeps "$deps_value" -M -e '
   (require (quote millstrand.api.current.alpha)
            (quote millstrand.api.weaver.alpha))
   (let [resource (clojure.java.io/resource "millstrand/api/current/alpha.clj")]
@@ -181,11 +181,9 @@ fi
 printf '%s\n' "$resource_output" >"$resource_file"
 
 if [[ "$mode" == "published" ]]; then
-  if grep -F "$source_marker" "$resource_file" >/dev/null; then
-    die "published consumer resolved the release through an unexpected source path: $resource_output"
-  fi
-  if ! grep -Eiq '/(\.gitlibs|\.m2|\.cpcache)/' "$resource_file"; then
-    die "published consumer did not resolve a fetched dependency resource: $resource_output"
+  expected_resource_path="/.gitlibs/libs/io.millstrand/millstrand/$source_marker/"
+  if ! grep -F "$expected_resource_path" "$resource_file" >/dev/null; then
+    die "published consumer did not resolve $coordinate at peeled SHA $source_marker from Git cache: $resource_output"
   fi
 else
   if ! grep -F "$source_root" "$resource_file" >/dev/null; then
