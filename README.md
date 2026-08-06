@@ -9,11 +9,11 @@ Here is a small workflow:
 ```clojure
 (workflow/workflow "Land a feature branch"
   (workflow/step :push-draft-pr "Push the branch and open a draft PR" :self)
-  (workflow/step :ci-green "Watch CI to green at HEAD" :self
+  (workflow/step :ci-green "Run local quality gates at HEAD" :self
                  :depends-on [:push-draft-pr])
   (workflow/gate :review "Roster code review" :subagent
                  :depends-on [:ci-green])
-  (workflow/step :address-review "Address review findings and restore green CI" :self
+  (workflow/step :address-review "Address review findings and restore quality" :self
                  :depends-on [:review])
   (workflow/checkpoint :signoff "Sign off the landing"
                        :depends-on [:address-review]
@@ -296,11 +296,11 @@ The example at the top of this page shows the shape. Here is the workflow from t
                               "Push to origin, open a draft PR against main, record its url…"})
 
   ;; A :shell gate the shell executor fulfils mechanically: it runs the recorded
-  ;; `gh pr checks --watch`, and only its green exit opens the next step. A red
-  ;; watch stamps gate/error for a fix-push-clear retry — no agent judgement.
-  (workflow/gate :ci-green "Watch CI to green at HEAD" :shell
+  ;; local quality contract, and only its successful exit opens the next step.
+  ;; A failure stamps gate/error for a fix-push-clear retry.
+  (workflow/gate :ci-green "Run local quality gates at HEAD" :shell
                  :depends-on [:push-draft-pr]
-                 :attributes {"shell/argv" ["sh" "-c" feature-ci-watch-script branch …]})
+                 :attributes {"shell/argv" ["sh" "-c" land-quality-gate-script branch …]})
 
   ;; One gate per roster seat. The loop fans out after params resolve, and the
   ;; synthesis dependency on the base id waits for every reviewer.

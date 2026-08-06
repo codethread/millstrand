@@ -127,8 +127,8 @@
 (workflow/defworkflow land-merge
   "Run the mechanical merge continuation for an approved land run.
 
-  Machine gates squash-merge the PR, fast-forward canonical main, watch main CI,
-  and remove the landed branch and worktree. Final bookkeeping remains
+  Machine gates squash-merge the PR, fast-forward canonical main, run its local
+  quality contract, and remove the landed branch and worktree. Final bookkeeping remains
   coordinator-owned and releases the merge lock when completed."
   {:entrypoints #{:continue}
    :param-spec ::land-merge-params
@@ -172,34 +172,29 @@
                                  |a conflicting dirty file, or a canonical checkout on another branch
                                  |stamps `gate/error`: fix the checkout, then remove the stamp
                                  |(`strand update <gate-id> --attributes '{\"gate/error\":null}'`) to re-run.")})
-   (workflow/gate :main-ci-green
-                  "Watch main CI to green at the merged sha"
-                  :code
+   (workflow/gate :main-quality-green
+                  "Run local quality gates at canonical main HEAD"
+                  :shell
                   :depends-on [:pull-main]
-                  :attributes {"workflow/action-ref" "land.main.ci-green"
-                               ;; Shell would need jq + TSV to emulate the run-state tuple.
-                               ;; Code keeps that data as data. The worktree is poured because
-                               ;; code gates have no ambient cwd attribute.
-                               "code/fn" "ct.workflows.common/main-ci-watch"
-                               "code/params" (fn [{:keys [worktree]}]
-                                               {:worktree worktree})
-                               "code/timeout-secs" 5400
+                  :attributes {"workflow/action-ref" "land.main.quality-green"
+                               "shell/argv" (support/sh-gate support/land-quality-gate-script
+                                                             "land-quality-gate" "main")
+                               "shell/cwd" (fn [{:keys [worktree]}] worktree)
+                               "shell/timeout-secs" 5400
                                "workflow/instruction"
                                (format-alpha/reflow
-                                "|Machine gate: the code executor polls the full workflow-run set at
-                                 |the merged main sha (`gh run list --commit <sha>`) until it is
-                                 |non-empty, every run has completed, and the all-green state holds
-                                 |across two consecutive polls, so late-registering workflows are
-                                 |caught. Any conclusion besides success or skipped stamps
-                                 |`gate/error` with the run listing: re-run transient infra failures
-                                 |(`gh run rerun <run-id>`), then remove the stamp
+                                "|Machine gate locates the canonical checkout through the shared Git
+                                 |directory and runs the tracked executable `.skein/land-quality.sh`
+                                 |there. The wrapper requires canonical main to be clean and exactly at
+                                 |`origin/main`, then verifies that the contract leaves origin/main, HEAD,
+                                 |and the tree unchanged. It records combined command output on the gate.
+                                 |Fix the cause, then remove the stamp
                                  |(`strand update <gate-id> --attributes
-                                 |'{\"gate/error\":null}'`) to re-watch. The gate closing asserts green
-                                 |CI on the main sha; run output is recorded on the gate.")})
+                                 |'{\"gate/error\":null}'`) to retry; the shell executor records combined output on the gate.")})
    (workflow/gate :remove-branch-worktree
                   (fn [{:keys [branch]}] (str "Remove landed branch and worktree for " branch))
                   :shell
-                  :depends-on [:main-ci-green]
+                  :depends-on [:main-quality-green]
                   :attributes {"workflow/action-ref" "land.branch-worktree.cleanup"
                                "shell/argv" (fn [{:keys [branch worktree]}]
                                               (support/sh-gate support/land-cleanup-script
@@ -208,7 +203,7 @@
                                "shell/timeout-secs" 600
                                "workflow/instruction"
                                (format-alpha/reflow
-                                "|Machine gate: after merged-main CI is green, stop any recorded warm
+                                "|Machine gate: after canonical main quality checks pass, stop any recorded warm
                                  |test REPL by PID, fetch and prune origin, delete the remote feature
                                  |branch when it still exists, then run precise `git worktree remove
                                  |--force`, `git branch -D`, and `git worktree prune` commands. A final
@@ -413,5 +408,3 @@
                                    :next :land-abort
                                    :input land-abort-reason-input}]
                         :attributes {"workflow/decision-point" "land-signed-off"})))
-
-;; ---------------------------------------------------------------------------
