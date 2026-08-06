@@ -20,6 +20,24 @@ fi
 
 pages_workflow="$repo_root/.github/workflows/pages.yml"
 if ! awk '
+  /^  deploy:$/ {
+    deploy_jobs++
+    state = 1
+    next
+  }
+  state == 1 && /^    if: \$\{\{ false \}\}$/ {
+    disabled_jobs++
+    state = 0
+    next
+  }
+  state == 1 && $0 !~ /^[[:space:]]*(#.*)?$/ { state = 0 }
+  END { exit !(deploy_jobs == 1 && disabled_jobs == 1) }
+' "$pages_workflow"; then
+  echo "millstrand CI config: expected the single Pages deploy job to carry if=false" >&2
+  exit 1
+fi
+
+if ! awk '
   /^        uses: actions\/deploy-pages@v4$/ {
     actions++
     state = 1
