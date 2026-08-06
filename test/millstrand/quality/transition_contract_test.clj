@@ -1,7 +1,6 @@
 (ns millstrand.quality.transition-contract-test
   "Pin the narrow, fail-loud external publisher transition contract."
-  (:require [clojure.edn :as edn]
-            [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing]]
             [quality.millstrand-transition :as transition]))
 
 (deftest checked-in-transition-contract-is-current
@@ -37,7 +36,7 @@
 
 (deftest approved-pin-drift-invalidates-the-transition
   (let [file (java.io.File/createTempFile "millstrand-transition-spools-" ".edn")
-        approvals (edn/read-string (slurp ".skein/spools.edn"))]
+        approvals {:spools (:pins (transition/contract))}]
     (try
       (spit file (pr-str (assoc-in approvals
                                    [:spools 'codethread/devflow :git/sha]
