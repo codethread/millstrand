@@ -29,9 +29,10 @@ When absent, `mill init` creates the shared half: `config.json` with the alpha f
 ## A private repo-local workspace
 
 Run `mill init --stealth` when you want Millstrand in a repository without committing its config. The
-workspace remains a physical `.millstrand` directory at the Git root, so agents, `rg`, Make, Clojure,
-and weaver calls see normal repo-local paths. Mill adds its paths to `.git/info/exclude`, which is
-private to that clone, and reports each file it created, updated, skipped, or left unchanged.
+workspace remains a physical `.millstrand` or `.ms` directory at the Git root, so agents, `rg`, Make,
+Clojure, and weaver calls see normal repo-local paths. With no existing marker, stealth creates
+`.millstrand`; with one accepted marker, it keeps that marker. Mill adds its paths to `.git/info/exclude`,
+which is private to that clone, and reports each file it created, updated, skipped, or left unchanged.
 
 Stealth init does not write shared `AGENTS.md` or `CLAUDE.md`. It creates or updates an untracked
 `CLAUDE.local.md` when safe and prints the instruction Codex users may add to their own guidance.

@@ -50,8 +50,8 @@ Different workspaces are different workspaces. Use `--workspace <dir>` when you 
 The ordinary workspace is repository-scoped. Without `--workspace`, `mill` resolves the canonical
 repository root and uses that repo's `.millstrand` or `.ms` directory as the selected workspace. Linked worktrees
 for the same repository share this default workspace. Outside supported Git layouts, no-flag
-commands fail loudly. `mill init` creates or completes `.millstrand` at the canonical Git root and fails
-loudly outside supported Git layouts:
+commands fail loudly. When no accepted marker exists, `mill init` creates `.millstrand`; when exactly one
+accepted marker exists, it completes that marker in place. It fails loudly outside supported Git layouts:
 
 ```sh
 mill init

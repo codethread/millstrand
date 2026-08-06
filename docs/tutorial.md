@@ -106,9 +106,10 @@ Create a workspace in the repo you want to use Skein in:
 mill init
 ```
 
-`mill init` creates or completes `.millstrand` at the Git root. It writes shared, committable config
-files (covered later) and never overwrites ones you already have. It fails loudly outside Git, does
-not run `git init`, and does not create the database; the weaver prepares storage when it starts.
+When no accepted marker exists, `mill init` creates `.millstrand` at the Git root; when exactly one
+accepted marker exists, it completes that marker in place. It writes shared, committable config files
+(covered later) and never overwrites ones you already have. It fails loudly outside Git, does not run
+`git init`, and does not create the database; the weaver prepares storage when it starts.
 
 For personal use without tracked repository changes, use stealth bootstrap:
 

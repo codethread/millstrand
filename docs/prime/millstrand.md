@@ -34,6 +34,6 @@ For a break, add a function name first, a sibling numbered root when the namespa
 The full contract, family-entry shape, test tiers, and worked examples are in
 [Writing shared spools](../spools/writing-shared-spools.md).
 
-For personal config in a repository that does not commit Millstrand config, run `mill init --stealth`. It keeps a physical repo-local `.millstrand`, hides local files through Git's private exclude file, and prints the Codex instruction you may add yourself. The customisation guide above explains the local-spool convention for substantive personal config.
+For personal config in a repository that does not commit Millstrand config, run `mill init --stealth`. It keeps the selected physical repo-local `.millstrand` or `.ms` marker, creates `.millstrand` when no marker exists, hides local files through Git's private exclude file, and prints the Codex instruction you may add yourself. The customisation guide above explains the local-spool convention for substantive personal config.
 
-When the `.millstrand` you are touching is a shared coordination world — a live weaver, other agents' runs — repo conventions for that world take precedence, and smoke config experiments in a disposable `--workspace` world as `docs/spools/customisation.md` describes.
+When the `.millstrand` or `.ms` you are touching is a shared coordination world — a live weaver, other agents' runs — repo conventions for that world take precedence, and smoke config experiments in a disposable `--workspace` world as `docs/spools/customisation.md` describes.
