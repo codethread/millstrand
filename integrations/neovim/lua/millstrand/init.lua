@@ -52,6 +52,13 @@ local function item_label(row)
 end
 
 local function decode_weavers(output)
+  local known_states = {
+    none = true,
+    starting = true,
+    running = true,
+    stopped = true,
+    stale = true,
+  }
   local ok, decoded = pcall(vim.fn.json_decode, output)
   if not ok or type(decoded) ~= "table" then
     error("mill weaver list returned malformed JSON")
@@ -63,6 +70,9 @@ local function decode_weavers(output)
     local row = decoded[index]
     if type(row) ~= "table" or type(row.state) ~= "string" or row.state == "" then
       error("mill weaver list returned malformed row at index " .. tostring(index))
+    end
+    if not known_states[row.state] then
+      error("mill weaver list returned unknown state at index " .. tostring(index) .. ": " .. row.state)
     end
   end
   return decoded
