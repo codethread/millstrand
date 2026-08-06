@@ -108,6 +108,25 @@ mill init            # writes this repo's .millstrand config directory
 mill weaver start    # boot the weaver for this workspace
 ```
 
+### Use Millstrand from another Clojure project
+
+Published consumers pin the repository, marker, and peeled commit together:
+
+```clojure
+{:deps {io.millstrand/millstrand
+        {:git/url "https://github.com/codethread/millstrand.git"
+         :git/tag "vN"
+         :git/sha "<peeled-commit-sha>"}}}
+```
+
+For local sibling development, use the checkout beside the consumer:
+
+```clojure
+{:deps {io.millstrand/millstrand {:local/root "../millstrand"}}}
+```
+
+The local form is for development only. `scripts/verify-published-core.sh` proves the published form from a clean temporary consumer.
+
 Add a few strands, wiring in dependencies and a `type` attribute as you go (`strand add` prints the new strand as JSON; `jq` pulls the id out):
 
 ```sh
