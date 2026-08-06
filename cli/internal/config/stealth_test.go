@@ -25,7 +25,7 @@ func TestBootstrapStealthWorldCreatesAndReusesOwnedBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantConfig, err := filepath.EvalSymlinks(filepath.Join(repo, ".skein"))
+	wantConfig, err := filepath.EvalSymlinks(filepath.Join(repo, ".millstrand"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,21 +64,21 @@ func TestBootstrapStealthWorldCreatesAndReusesOwnedBlocks(t *testing.T) {
 
 func TestBootstrapStealthWorldRejectsTrackedSkeinBeforeWrites(t *testing.T) {
 	repo := initGitRepo(t)
-	tracked := filepath.Join(repo, ".skein", "tracked.txt")
+	tracked := filepath.Join(repo, ".millstrand", "tracked.txt")
 	if err := os.MkdirAll(filepath.Dir(tracked), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(tracked, []byte("tracked\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	gitAdd(t, repo, ".skein/tracked.txt")
+	gitAdd(t, repo, ".millstrand/tracked.txt")
 
 	_, _, err := BootstrapStealthWorld(repo)
 	var refusal *StealthRefusal
 	if !errors.As(err, &refusal) || refusal.Target != StealthTargetTrackedSkein || refusal.State != StealthStateTracked {
 		t.Fatalf("unexpected refusal: %#v err=%v", refusal, err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, ".skein", "config.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(repo, ".millstrand", "config.json")); !os.IsNotExist(err) {
 		t.Fatalf("tracked refusal wrote bootstrap config: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(repo, "CLAUDE.local.md")); !os.IsNotExist(err) {
@@ -102,8 +102,8 @@ func TestBootstrapStealthWorldRejectsMalformedMarkerBeforeWrites(t *testing.T) {
 	if got := mustRead(t, exclude); string(got) != string(original) {
 		t.Fatalf("preflight changed malformed exclude: %q", got)
 	}
-	if _, err := os.Stat(filepath.Join(repo, ".skein")); !os.IsNotExist(err) {
-		t.Fatalf("malformed preflight created .skein: %v", err)
+	if _, err := os.Stat(filepath.Join(repo, ".millstrand")); !os.IsNotExist(err) {
+		t.Fatalf("malformed preflight created .millstrand: %v", err)
 	}
 }
 
@@ -142,8 +142,8 @@ func TestBootstrapStealthWorldFromLinkedWorktreeUsesGitPrivateExclude(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if world.ConfigDir != filepath.Join(wantRoot, ".skein") {
-		t.Fatalf("linked worktree selected %q, want canonical %q", world.ConfigDir, filepath.Join(wantRoot, ".skein"))
+	if world.ConfigDir != filepath.Join(wantRoot, ".millstrand") {
+		t.Fatalf("linked worktree selected %q, want canonical %q", world.ConfigDir, filepath.Join(wantRoot, ".millstrand"))
 	}
 	wantExclude, err := gitPrivateExcludePath(repo)
 	if err != nil {
@@ -188,7 +188,7 @@ func TestPreflightMarkedFileRejectsEveryAmbiguousState(t *testing.T) {
 }
 
 func TestStealthRefusalDetailsRejectInvalidEnums(t *testing.T) {
-	refusal := &StealthRefusal{Path: "/repo/.skein", Target: "unknown", State: StealthStateTracked, Remediation: "repair it"}
+	refusal := &StealthRefusal{Path: "/repo/.millstrand", Target: "unknown", State: StealthStateTracked, Remediation: "repair it"}
 	if _, err := refusal.Details(); err == nil {
 		t.Fatal("invalid refusal target was accepted")
 	}

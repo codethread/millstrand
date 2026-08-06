@@ -73,7 +73,7 @@ func TestBinPlanRejectsMalformedExecShapes(t *testing.T) {
 }
 
 func TestBinPlanDecodesPathAndCommandForms(t *testing.T) {
-	pathPlan := `{"operation":"bins plan","bin":"x","runnable":false,"exec":{"path":"/tmp/x","env":{"SKEIN_WORKSPACE":"/tmp/ws"}},"build":{"argv":["bun","install"],"cwd":"/tmp"}}`
+	pathPlan := `{"operation":"bins plan","bin":"x","runnable":false,"exec":{"path":"/tmp/x","env":{"MILLSTRAND_WORKSPACE":"/tmp/ws"}},"build":{"argv":["bun","install"],"cwd":"/tmp"}}`
 	var path BinPlan
 	if err := json.Unmarshal([]byte(pathPlan), &path); err != nil {
 		t.Fatal(err)
@@ -118,8 +118,8 @@ func TestParseBinInvocationHelpBeforeBinAndFlagErrors(t *testing.T) {
 }
 
 func TestOverlayEnvironmentReplacesAndPreservesCallerValues(t *testing.T) {
-	got := overlayEnvironment([]string{"PATH=/bin", "SKEIN_WORKSPACE=old", "KEEP=yes"}, map[string]string{"SKEIN_WORKSPACE": "/ws", "NEW": "value"})
-	want := []string{"PATH=/bin", "SKEIN_WORKSPACE=/ws", "KEEP=yes", "NEW=value"}
+	got := overlayEnvironment([]string{"PATH=/bin", "MILLSTRAND_WORKSPACE=old", "KEEP=yes"}, map[string]string{"MILLSTRAND_WORKSPACE": "/ws", "NEW": "value"})
+	want := []string{"PATH=/bin", "MILLSTRAND_WORKSPACE=/ws", "KEEP=yes", "NEW=value"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("environment = %#v, want %#v", got, want)
 	}
@@ -152,7 +152,7 @@ func TestInvokeBinUsesSelectedWorldAndReturnsRelayedJSON(t *testing.T) {
 func TestRunBinExecAppendsOpaqueArgumentsAndUsesOverlay(t *testing.T) {
 	originalInvoke, originalExec := binInvoke, execBin
 	t.Cleanup(func() { binInvoke, execBin = originalInvoke, originalExec })
-	binInvoke = fakePlanInvoker(`{"operation":"bins plan","bin":"dashboard","runnable":true,"exec":{"path":"/tmp/dashboard","env":{"SKEIN_WORKSPACE":"/selected"}}}`)
+	binInvoke = fakePlanInvoker(`{"operation":"bins plan","bin":"dashboard","runnable":true,"exec":{"path":"/tmp/dashboard","env":{"MILLSTRAND_WORKSPACE":"/selected"}}}`)
 	var gotPath string
 	var gotArgv []string
 	var gotEnv []string
@@ -172,7 +172,7 @@ func TestRunBinExecAppendsOpaqueArgumentsAndUsesOverlay(t *testing.T) {
 	if gotPath != "/tmp/dashboard" || !reflect.DeepEqual(gotArgv, []string{"/tmp/dashboard", "--help", "--workspace", "child"}) {
 		t.Fatalf("exec path/argv = %q %#v", gotPath, gotArgv)
 	}
-	if got, ok := envValue(gotEnv, "SKEIN_WORKSPACE"); !ok || got != "/selected" {
+	if got, ok := envValue(gotEnv, "MILLSTRAND_WORKSPACE"); !ok || got != "/selected" {
 		t.Fatalf("missing workspace overlay: %#v", gotEnv)
 	}
 	current, err := os.Getwd()
@@ -288,13 +288,13 @@ func TestMillBinListRelayFailureUsesTypedResponseError(t *testing.T) {
 			Type:    "domain",
 			Code:    "mill/no-selected-weaver",
 			Message: "no running weaver for selected workspace",
-			Details: map[string]any{"config_dir": "/selected/.skein"},
+			Details: map[string]any{"config_dir": "/selected/.millstrand"},
 		}
 	}
 	var stderr bytes.Buffer
 	millErrorOut = &stderr
 	cmd := newMillCommand()
-	cmd.SetArgs([]string{"bin", "list", "--workspace", "/selected/.skein"})
+	cmd.SetArgs([]string{"bin", "list", "--workspace", "/selected/.millstrand"})
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected list relay failure")
 	} else {
@@ -307,7 +307,7 @@ func TestMillBinListRelayFailureUsesTypedResponseError(t *testing.T) {
 	if envelope["operation"] != "bin list" || envelope["error"] != "mill/no-selected-weaver" {
 		t.Fatalf("unexpected list failure envelope: %#v", envelope)
 	}
-	if envelope["config_dir"] != "/selected/.skein" {
+	if envelope["config_dir"] != "/selected/.millstrand" {
 		t.Fatalf("typed weaver details were not relayed: %#v", envelope)
 	}
 	if _, present := envelope["bin"]; present {
@@ -335,7 +335,7 @@ func TestMillBinPlanFailuresPreserveTypedCodeAndDetails(t *testing.T) {
 			var stderr bytes.Buffer
 			millErrorOut = &stderr
 			cmd := newMillCommand()
-			cmd.SetArgs([]string{"bin", "run", "--workspace", "/selected/.skein", "dashboard"})
+			cmd.SetArgs([]string{"bin", "run", "--workspace", "/selected/.millstrand", "dashboard"})
 			if err := cmd.Execute(); err == nil {
 				t.Fatal("expected plan failure")
 			} else {
@@ -370,7 +370,7 @@ func TestMillBinMalformedPlanFailureDoesNotInventOutcomeCode(t *testing.T) {
 	var stderr bytes.Buffer
 	millErrorOut = &stderr
 	cmd := newMillCommand()
-	cmd.SetArgs([]string{"bin", "run", "--workspace", "/selected/.skein", "dashboard"})
+	cmd.SetArgs([]string{"bin", "run", "--workspace", "/selected/.millstrand", "dashboard"})
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("expected malformed plan failure")
 	} else {
@@ -528,7 +528,7 @@ func TestRunBinBuildUsesPlanCWDAndEnvironmentOverlay(t *testing.T) {
 	binStdout = &out
 	marker := filepath.Join(t.TempDir(), "build-result")
 	buildCWD := t.TempDir()
-	binInvoke = fakePlanInvoker(fmt.Sprintf(`{"operation":"bins plan","bin":"x","runnable":true,"exec":{"path":"/tmp/x","env":{"SKEIN_WORKSPACE":"/selected","BIN_RESULT":%q}},"build":{"argv":["/bin/sh","-c","printf '%%s|%%s' \"$PWD\" \"$SKEIN_WORKSPACE\" > \"$BIN_RESULT\""],"cwd":%q}}`, marker, buildCWD))
+	binInvoke = fakePlanInvoker(fmt.Sprintf(`{"operation":"bins plan","bin":"x","runnable":true,"exec":{"path":"/tmp/x","env":{"MILLSTRAND_WORKSPACE":"/selected","BIN_RESULT":%q}},"build":{"argv":["/bin/sh","-c","printf '%%s|%%s' \"$PWD\" \"$MILLSTRAND_WORKSPACE\" > \"$BIN_RESULT\""],"cwd":%q}}`, marker, buildCWD))
 	if err := runBinBuild("/ws", "x"); err != nil {
 		t.Fatal(err)
 	}
@@ -544,7 +544,7 @@ func TestRunBinBuildUsesPlanCWDAndEnvironmentOverlay(t *testing.T) {
 		t.Fatalf("build child did not use plan cwd: %q", result)
 	}
 	if !strings.HasSuffix(string(result), "|/selected") {
-		t.Fatalf("build child did not receive SKEIN_WORKSPACE overlay: %q", result)
+		t.Fatalf("build child did not receive MILLSTRAND_WORKSPACE overlay: %q", result)
 	}
 }
 

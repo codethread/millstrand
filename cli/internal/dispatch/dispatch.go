@@ -73,7 +73,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	}
 	// Selection is validated once the local-only flags above are out of the way,
-	// so a typo'd SKEIN_ERROR_FORMAT never breaks the paths SPEC-002.C34 promises
+	// so a typo'd MILLSTRAND_ERROR_FORMAT never breaks the paths SPEC-002.C34 promises
 	// work with no weaver.
 	if err := errfmt.ValidateFormat(); err != nil {
 		return fail(stderr, errfmt.CodeInvalidErrorFormat, err)
@@ -346,7 +346,7 @@ Bin-only:
   --help                   print this help (bare "strand" prints it too)
 
 Environment:
-  SKEIN_ERROR_FORMAT       error rendering: plain|pretty|json (default: pretty at
+  MILLSTRAND_ERROR_FORMAT  error rendering: plain|pretty|json (default: pretty at
                            a terminal, plain everywhere else). json writes the
                            error envelope {type, code, message, details} as one
                            line on stderr, for a caller composing over this CLI

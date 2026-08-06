@@ -37,7 +37,7 @@ ws="$(mktemp -d "${TMPDIR:-/tmp}/ralph-demo.XXXXXX")"
 # so this script cannot drift from the release the repo actually runs.
 mkdir -p "$ws/spools"
 ln -sfn "$repo/spools/batteries" "$ws/spools/batteries"
-kanban_entry="$(python3 - "$repo/.skein/spools.edn" <<'PY'
+kanban_entry="$(python3 - "$repo/.millstrand/spools.edn" <<'PY'
 import sys
 
 text = open(sys.argv[1]).read()
@@ -53,7 +53,7 @@ for i in range(open_brace, len(text)):
             print(text[start:i + 1])
             break
 else:
-    sys.exit("demo-world: could not read the kanban entry from .skein/spools.edn")
+    sys.exit("demo-world: could not read the kanban entry from .millstrand/spools.edn")
 PY
 )"
 cat > "$ws/spools.edn" <<EOF

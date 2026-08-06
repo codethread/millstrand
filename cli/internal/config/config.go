@@ -11,7 +11,10 @@ import (
 const (
 	ConfigFileName      = "config.json"
 	LocalConfigFileName = "config.local.json"
-	DefaultDBFileName   = "skein.sqlite"
+	DefaultDBFileName   = "millstrand.sqlite"
+	DefaultWorkspace    = ".millstrand"
+	WorkspaceAlias      = ".ms"
+	LegacyWorkspace     = ".skein"
 )
 
 var allowedKeys = map[string]bool{"configFormat": true, "name": true}
@@ -42,7 +45,11 @@ func RepoWorld() (World, error) {
 	if err != nil {
 		return World{}, err
 	}
-	return isolatedWorld(filepath.Join(root, ".skein"))
+	configDir, err := repoWorkspace(root)
+	if err != nil {
+		return World{}, err
+	}
+	return isolatedWorld(configDir)
 }
 
 func SelectedWorld(configDir string) (World, error) {

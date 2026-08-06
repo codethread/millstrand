@@ -11,7 +11,7 @@ import (
 const (
 	stealthExcludeStart = "# mill:skein-stealth"
 	stealthExcludeEnd   = "# /mill:skein-stealth"
-	stealthExcludeBlock = stealthExcludeStart + "\n/.skein\n/CLAUDE.local.md\n" + stealthExcludeEnd + "\n"
+	stealthExcludeBlock = stealthExcludeStart + "\n/.millstrand\n/.ms\n/CLAUDE.local.md\n" + stealthExcludeEnd + "\n"
 
 	StealthStatusCreated        = "created"
 	StealthStatusUpdated        = "updated"
@@ -31,7 +31,7 @@ const (
 	StealthCodexManualRequired  = "manual-required"
 )
 
-const stealthCodexSuggestedText = "This repository uses a local, gitignored .skein workspace. Run `mill skein prime` and `mill strand prime` before working."
+const stealthCodexSuggestedText = "This repository uses a local, gitignored .millstrand workspace. Run `mill millstrand prime` and `mill strand prime` before working."
 
 type StealthFileAction struct {
 	Path   string `json:"path"`
@@ -163,13 +163,13 @@ func BootstrapStealthWorld(cwd string) (World, StealthReport, error) {
 }
 
 func preflightStealth(repoRoot string) (stealthPlan, error) {
-	tracked, err := gitTracked(repoRoot, ".skein")
+	tracked, err := gitTracked(repoRoot, DefaultWorkspace)
 	if err != nil {
 		return stealthPlan{}, err
 	}
 	if tracked {
-		path := filepath.Join(repoRoot, ".skein")
-		return stealthPlan{}, refuse(path, StealthTargetTrackedSkein, StealthStateTracked, "remove .skein from the Git index or run mill init without --stealth")
+		path := filepath.Join(repoRoot, DefaultWorkspace)
+		return stealthPlan{}, refuse(path, StealthTargetTrackedSkein, StealthStateTracked, "remove .millstrand from the Git index or run mill init without --stealth")
 	}
 	excludePath, err := gitPrivateExcludePath(repoRoot)
 	if err != nil {

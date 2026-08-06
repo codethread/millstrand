@@ -239,7 +239,7 @@ func TestValidateMetadataRejectsWhitespaceOnlyName(t *testing.T) {
 	world := config.World{ConfigDir: filepath.Join(t.TempDir(), "cfg")}
 	world.StateDir = filepath.Join(t.TempDir(), "state")
 	world.DataDir = filepath.Join(t.TempDir(), "data")
-	world.DBPath = filepath.Join(world.DataDir, "skein.sqlite")
+	world.DBPath = filepath.Join(world.DataDir, "millstrand.sqlite")
 	m := client.Metadata{ProtocolVersion: 1, PID: os.Getpid(), DatabaseKind: "sqlite-file", DatabaseLabel: world.DBPath, DatabasePath: &world.DBPath, DaemonID: "weaver", ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir, Name: "   ", SocketPath: filepath.Join(world.StateDir, "weaver.sock"), StartedAt: "now"}
 	m.NREPL.Host = "127.0.0.1"
 	m.NREPL.Port = 5555
@@ -255,12 +255,12 @@ func TestResolveLaunchSourcePrecedence(t *testing.T) {
 	origInstalled := config.InstalledSource
 	config.InstalledSource = installedSource
 	t.Cleanup(func() { config.InstalledSource = origInstalled })
-	t.Setenv("SKEIN_SOURCE", envSource)
+	t.Setenv("MILLSTRAND_SOURCE", envSource)
 	resolved, err := resolveLaunchSource(cwdSource)
 	if err != nil || resolved != envSource {
-		t.Fatalf("SKEIN_SOURCE should win, got source=%q err=%v", resolved, err)
+		t.Fatalf("MILLSTRAND_SOURCE should win, got source=%q err=%v", resolved, err)
 	}
-	t.Setenv("SKEIN_SOURCE", "")
+	t.Setenv("MILLSTRAND_SOURCE", "")
 	resolved, err = resolveLaunchSource(cwdSource)
 	if err != nil || resolved != installedSource {
 		t.Fatalf("installed source should win, got source=%q err=%v", resolved, err)
@@ -293,18 +293,18 @@ func TestResolveLaunchSourceUnusableInstalledAndNoCheckoutFailsLoud(t *testing.T
 	origInstalled := config.InstalledSource
 	config.InstalledSource = filepath.Join(t.TempDir(), "missing-install")
 	t.Cleanup(func() { config.InstalledSource = origInstalled })
-	t.Setenv("SKEIN_SOURCE", "")
-	// A cwd that is not a Skein checkout: neither source resolves, so the loud
+	t.Setenv("MILLSTRAND_SOURCE", "")
+	// A cwd that is not a Millstrand checkout: neither source resolves, so the loud
 	// combined error must still cite the dropped installed-source failure.
 	_, err := resolveLaunchSource(t.TempDir())
-	if err == nil || !strings.Contains(err.Error(), "installed source is unusable") || !strings.Contains(err.Error(), "not a canonical Skein checkout") {
+	if err == nil || !strings.Contains(err.Error(), "installed source is unusable") || !strings.Contains(err.Error(), "not a canonical Millstrand checkout") {
 		t.Fatalf("expected combined failure preserving installed-source error, got %v", err)
 	}
 }
 
 func TestStartFailsBeforeLaunchWhenSourceCannotResolve(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
-	t.Setenv("SKEIN_SOURCE", "")
+	t.Setenv("MILLSTRAND_SOURCE", "")
 	origInstalled := config.InstalledSource
 	config.InstalledSource = ""
 	t.Cleanup(func() { config.InstalledSource = origInstalled })
@@ -318,7 +318,7 @@ func TestStartFailsBeforeLaunchWhenSourceCannotResolve(t *testing.T) {
 	t.Cleanup(func() { launchWeaver = orig })
 	s := server{children: map[string]*weaverChild{}}
 	_, err := s.startWeaver(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg})
-	if err == nil || !strings.Contains(err.Error(), "SKEIN_SOURCE") || !strings.Contains(err.Error(), "install-time source") || !strings.Contains(err.Error(), "canonical Skein checkout cwd") {
+	if err == nil || !strings.Contains(err.Error(), "MILLSTRAND_SOURCE") || !strings.Contains(err.Error(), "install-time source") || !strings.Contains(err.Error(), "canonical Millstrand checkout cwd") {
 		t.Fatalf("expected actionable source failure, got %v", err)
 	}
 	if launched {
@@ -706,7 +706,7 @@ func tempSkeinCheckout(t *testing.T) string {
 
 func tempConfig(t *testing.T, source string) string {
 	t.Helper()
-	t.Setenv("SKEIN_SOURCE", source)
+	t.Setenv("MILLSTRAND_SOURCE", source)
 	return tempConfigWithoutSource(t)
 }
 

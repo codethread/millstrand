@@ -31,7 +31,7 @@ func TestMillStartPublishesMetadataAndStatus(t *testing.T) {
 		t.Fatalf("start mill: %v", err)
 	}
 	t.Cleanup(func() { _ = cmd.Process.Signal(os.Interrupt); _, _ = cmd.Process.Wait() })
-	metadataPath := filepath.Join(xdg, "skein", "mill.json")
+	metadataPath := filepath.Join(xdg, "millstrand", "mill.json")
 	var meta map[string]any
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -41,10 +41,10 @@ func TestMillStartPublishesMetadataAndStatus(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if meta["mill_id"] == "" || meta["socket_path"] != filepath.Join(xdg, "skein", "mill.sock") || meta["state_root"] != filepath.Join(xdg, "skein") {
+	if meta["mill_id"] == "" || meta["socket_path"] != filepath.Join(xdg, "millstrand", "mill.sock") || meta["state_root"] != filepath.Join(xdg, "millstrand") {
 		t.Fatalf("unexpected metadata: %#v\nserver output: %s", meta, serverOut.String())
 	}
-	for _, want := range []string{"mill listening", "state_root=" + filepath.Join(xdg, "skein"), "socket=" + filepath.Join(xdg, "skein", "mill.sock"), "pid="} {
+	for _, want := range []string{"mill listening", "state_root=" + filepath.Join(xdg, "millstrand"), "socket=" + filepath.Join(xdg, "millstrand", "mill.sock"), "pid="} {
 		if !strings.Contains(serverOut.String(), want) {
 			t.Fatalf("missing mill start log %q in: %s", want, serverOut.String())
 		}

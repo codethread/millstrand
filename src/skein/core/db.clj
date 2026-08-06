@@ -15,7 +15,7 @@
             [skein.core.query :as query]
             [skein.core.specs :as specs]))
 
-(def ^:private default-db-file "skein.sqlite")
+(def ^:private default-db-file "millstrand.sqlite")
 
 (def ^:private sqlite-mmap-size-bytes 268435456)
 (def ^:private sqlite-cache-size-kib -20000)

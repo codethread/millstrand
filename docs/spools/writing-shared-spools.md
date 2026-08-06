@@ -721,17 +721,17 @@ A custom kind's entry values are whatever its owner's `:entry-spec` accepts, so 
 
 Use `:family` for a file beside the family's public roots and `:root` for a file inside one root. The path is resolved when `bins plan` runs. An anchor gives the base for resolution; it is not a sandbox and does not require the file to stay beneath that base. A string executable is the right choice for a workspace-owned wrapper or a program already on the consumer's `PATH`. A build recipe is an argv vector, never a shell string, and runs at the executable's base. Do not put shell interpolation or toolchain installation policy in the declaration.
 
-Bins run in the caller's process, not inside the weaver. Mill adds `SKEIN_WORKSPACE` to the child environment, with the selected workspace path. A wrapper that needs to call a registered op should use that value explicitly and pass its own arguments unchanged:
+Bins run in the caller's process, not inside the weaver. Mill adds `MILLSTRAND_WORKSPACE` to the child environment, with the selected workspace path. A wrapper that needs to call a registered op should use that value explicitly and pass its own arguments unchanged:
 
 ```sh
 #!/bin/sh
 set -eu
 
-workspace=${SKEIN_WORKSPACE:?mill bin run did not provide SKEIN_WORKSPACE}
+workspace=${MILLSTRAND_WORKSPACE:?mill bin run did not provide MILLSTRAND_WORKSPACE}
 exec strand --workspace "$workspace" dashboard render "$@"
 ```
 
-Keep the wrapper's cwd assumptions explicit. `mill bin run` preserves the directory from which the operator invoked it; `SKEIN_WORKSPACE` identifies the selected world and is the stable path for `strand` calls. The wrapper should not dial `weaver.sock`, infer a workspace from its cwd, or require the consumer to add the spool checkout to `PATH`. Use `mill bin list` to inspect the declaration, `mill bin build <name>` to run its recipe, and `mill bin run <name> [args...]` to execute it. The `strand` CLI remains a dispatcher and does not execute bins.
+Keep the wrapper's cwd assumptions explicit. `mill bin run` preserves the directory from which the operator invoked it; `MILLSTRAND_WORKSPACE` identifies the selected world and is the stable path for `strand` calls. The wrapper should not dial `weaver.sock`, infer a workspace from its cwd, or require the consumer to add the spool checkout to `PATH`. Use `mill bin list` to inspect the declaration, `mill bin build <name>` to run its recipe, and `mill bin run <name> [args...]` to execute it. The `strand` CLI remains a dispatcher and does not execute bins.
 
 A kind provider declares its open kind through a kind declaration form before dependent entries stage. `skein.spools.cron` is the shipped example. A module contributing to another spool's kind names that spool's module in `:after`.
 

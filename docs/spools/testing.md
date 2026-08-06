@@ -192,7 +192,7 @@ Two runtime-local constraints matter:
 `:storage` is explicit:
 
 - `:sqlite-file` (default) — the canonical user path: a real
-  `data/skein.sqlite` in the generated workspace. Use this when the test
+  `data/millstrand.sqlite` in the generated workspace. Use this when the test
   should match normal weaver-world layout, metadata, and persistence.
 - `:sqlite-memory` — real Xerial SQLite held in memory for the weaver
   lifetime. Nothing is written under `data/`; stopping the world destroys the

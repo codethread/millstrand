@@ -22,7 +22,7 @@ Skein is daemon-core-first behind a small router. You start `mill` once, ask it 
 for a selected workspace, then clients send requests through `mill` to that weaver.
 
 ```text
-selected workspace (normally canonical repo .skein)
+selected workspace (normally canonical repo .millstrand)
   config.json        -> shared alpha workspace config
   config.local.json  -> personal config overlay
   init.clj           -> shared trusted startup code loaded by the weaver
@@ -48,18 +48,18 @@ Different workspaces are different workspaces. Use `--workspace <dir>` when you 
 ## Workspace resolution
 
 The ordinary workspace is repository-scoped. Without `--workspace`, `mill` resolves the canonical
-repository root and uses that repo's `.skein` directory as the selected workspace. Linked worktrees
+repository root and uses that repo's `.millstrand` or `.ms` directory as the selected workspace. Linked worktrees
 for the same repository share this default workspace. Outside supported Git layouts, no-flag
-commands fail loudly. `mill init` creates or completes `.skein` at the canonical Git root and fails
+commands fail loudly. `mill init` creates or completes `.millstrand` at the canonical Git root and fails
 loudly outside supported Git layouts:
 
 ```sh
 mill init
 ```
 
-Mill resolves the Skein source checkout used to launch the weaver from `SKEIN_SOURCE`, the
+Mill resolves the Millstrand source checkout used to launch the weaver from `MILLSTRAND_SOURCE`, the
 install-time source recorded by `make install`, or a canonical Skein checkout cwd. `mill init` does
-not persist a source path in `.skein/config.json`.
+not persist a source path in `.millstrand/config.json`.
 
 A workspace can also be selected explicitly with:
 
@@ -86,7 +86,7 @@ From a Skein source checkout, `make install` installs the Go CLIs (`strand` and 
 the checkout as mill's default source for weaver launch and the thin nREPL attach client. After
 that, use the CLIs directly: `mill start`, `mill init`, and `mill weaver start`.
 
-`mill init` is the normal repo bootstrap path. It creates or completes the canonical repo `.skein` workspace, writes shareable `config.json` with the alpha format marker when absent, and leaves shared config files ready to commit. Generated `spools.edn` opts into the batteries command surface with `skein.spools/batteries {:skein/source-root "spools/batteries"}`; generated `init.clj` activates it through a module guarded by that root. The relative coordinate resolves against the mill-selected Skein checkout, so no absolute source path is persisted. Deleting the seeded entry is the supported opt-out. Init does not run `git init` or initialize database storage; weaver startup prepares storage.
+`mill init` is the normal repo bootstrap path. It creates or completes the canonical repo `.millstrand` workspace, writes shareable `config.json` with the alpha format marker when absent, and leaves shared config files ready to commit. Generated `spools.edn` opts into the batteries command surface with `skein.spools/batteries {:skein/source-root "spools/batteries"}`; generated `init.clj` activates it through a module guarded by that root. The relative coordinate resolves against the mill-selected Millstrand checkout, so no absolute source path is persisted. Deleting the seeded entry is the supported opt-out. Init does not run `git init` or initialize database storage; weaver startup prepares storage.
 
 `mill init --stealth` provides the same repo-local workspace for personal use without tracked
 config. It refuses if `.skein` is already tracked, maintains a marker-owned block in
@@ -96,11 +96,11 @@ the user to place according to their own repository policy. See
 [customising your workspace](./spools/customisation.md#a-private-repo-local-workspace) for the
 recommended local-spool layout.
 
-User-facing Skein documentation lives in the source checkout under `docs/`; the canonical user
+User-facing Millstrand documentation lives in the source checkout under `docs/`; the canonical user
 reference is this page, `docs/reference.md`. Two harness-agnostic orientation commands surface this
-to agents at runtime, with no running weaver required: `mill skein prime` resolves the Skein source
+to agents at runtime, with no running weaver required: `mill millstrand prime` resolves the Millstrand source
 and prints the paths to the docs, the spool index, and the repo coordination guidance, plus how to
-extend `.skein` config; `mill strand prime` prints the strand planning/tracking workflow. In a
+extend `.millstrand` config; `mill strand prime` prints the strand planning/tracking workflow. In a
 repo-world bootstrap, `mill init` also seeds a `## Skein / strand` section in the repository-root
 `AGENTS.md`/`CLAUDE.md` that points new agents at these two commands. Each shipped spool's per-fn
 API reference (`spools/*.api.md`) and each blessed `skein.api.*.alpha` namespace's per-fn reference
@@ -281,7 +281,7 @@ truth:
 | --- | --- | --- | --- |
 | `help` | **Generated** from registered arg-spec data | "What can I type?" — verbs, flags, positionals, types | `strand help`, `strand help <op>`, `strand help <op> <verb>` |
 | `about` | **Authored** per-op prose | "What does this op mean?" — runbook context: purpose, who drives it, contracts the live surface cannot state | `strand about agent` |
-| `prime` | **Authored** prose orientation | "How do we work here?" — run **before** starting work | `mill skein prime`, `mill strand prime`, `strand prime agent` |
+| `prime` | **Authored** prose orientation | "How do we work here?" — run **before** starting work | `mill millstrand prime`, `mill strand prime`, `strand prime agent` |
 
 The meta-verb goes first. The old `<op> help` / `<op> about` / `<op> prime` sole-token sugar is retired: a bare `help`, `about`, or `prime` in verb position now fails with a loud redirect to `strand help <op>`, unless the op declares a real subcommand by that name (several spool ops do, noted below). A trailing `--help` or `-h` flag still works on any op, so `strand agent --help` rewrites to `strand help agent`.
 
@@ -292,7 +292,7 @@ A detail response is a canonical envelope, `{schema-version, operation, source, 
 
 **`prime` is run-first context priming for agents.** A `prime` command prints the working discipline
 for an area: the conventions an agent must load *before* acting, with pointers to deeper docs. `mill
-strand prime` (the day-to-day strand workflow) and `mill skein prime` (building on `.skein` and the
+strand prime` (the day-to-day strand workflow) and `mill millstrand prime` (building on `.millstrand` and the
 source docs, read on demand) need no running weaver: `mill` resolves the Skein source checkout and
 renders the topic file the manifest at `docs/prime/index.json` names, so an already-installed `mill`
 prints current orientation text from a newer checkout. Op-level primes are spool-authored prose
@@ -654,7 +654,7 @@ Collection only happens under a module contribution. Evaluating a form at the RE
 
 Domain spools own forms for their own kinds the same way — `skein.spools.workflow/defworkflow` and `defexecutor`, `skein.spools.cron/defjob`, `skein.spools.chime/defrule`. Module lifecycle effects are declared with `skein.api.lifecycle.alpha`: `defresource`, `defseed`, and `defreconcile`.
 
-`defbin` contributes a module-owned executable declaration rather than a weaver-lifetime runtime registration. `mill bin plan` discovers the effective `:bins` entries, and `mill bin run` executes the selected command in the caller's process with the selected workspace in `SKEIN_WORKSPACE`; the declaration may name a string executable or an anchored family/root path and an argv build recipe.
+`defbin` contributes a module-owned executable declaration rather than a weaver-lifetime runtime registration. `mill bin plan` discovers the effective `:bins` entries, and `mill bin run` executes the selected command in the caller's process with the selected workspace in `MILLSTRAND_WORKSPACE`; the declaration may name a string executable or an anchored family/root path and an argv build recipe.
 
 The direct registration functions still exist and still work: `graph/register-query!`, `patterns/register-pattern!`, `events/register-handler!`, `hooks/register-hook!`, and `weaver/register-op!`. Each writes one entry under the direct-registration owner for the weaver lifetime, which makes them a good REPL tool for trying something out. Anything a module owns belongs in a form. A direct write is also not serialized against an in-flight `refresh!`, so one that lands mid-publication can be overwritten silently ([SPEC-003.C23](../devflow/specs/repl-api.md) constraint F20, explained in [customising your workspace](./spools/customisation.md#reloading-a-live-weaver)).
 

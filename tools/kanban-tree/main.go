@@ -52,7 +52,7 @@ type options struct {
 func run() (int, error) {
 	var opts options
 	flags := flag.NewFlagSet("kanban-tree", flag.ContinueOnError)
-	flags.StringVar(&opts.workspace, "workspace", os.Getenv("SKEIN_WORKSPACE"), "strand workspace directory")
+	flags.StringVar(&opts.workspace, "workspace", os.Getenv("MILLSTRAND_WORKSPACE"), "strand workspace directory")
 	flags.StringVar(&opts.strandBin, "strand", "", "strand binary (default: the one beside this one, else PATH)")
 	flags.StringVar(&opts.from, "json", "", "read a kanban-export payload from this file instead of calling strand (- for stdin)")
 	flags.BoolVar(&opts.tasks, "tasks", false, "under an epic, show each feature's tasks too (a feature already shows its tasks)")

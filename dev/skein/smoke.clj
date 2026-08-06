@@ -1,5 +1,5 @@
 (ns skein.smoke
-  "Run end-to-end smoke coverage for disposable Skein CLI and REPL worlds."
+  "Run end-to-end smoke coverage for disposable Millstrand CLI and REPL worlds."
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
             [clojure.string]
@@ -39,14 +39,14 @@
   (.resolve (.toPath smoke-run-root) (str db-file ".workspace")))
 
 (defn smoke-world-db [db-file]
-  (str (.resolve (smoke-workspace db-file) "data/skein.sqlite")))
+  (str (.resolve (smoke-workspace db-file) "data/millstrand.sqlite")))
 
 (defn smoke-world [db-file]
   (let [workspace (.getCanonicalPath (.toFile (smoke-workspace db-file)))]
     {:config-dir workspace
      :state-dir (str workspace "/state")
      :data-dir (str workspace "/data")
-     :db-path (str workspace "/data/skein.sqlite")}))
+     :db-path (str workspace "/data/millstrand.sqlite")}))
 
 (defn delete-runtime-metadata! [db-file]
   (metadata/delete! (smoke-world db-file)))
@@ -80,7 +80,7 @@
                    (.redirectErrorStream true))
          _ (doto (.environment builder)
              (.put "XDG_STATE_HOME" smoke-xdg-state-home)
-             (.put "SKEIN_SOURCE" checkout-root))
+             (.put "MILLSTRAND_SOURCE" checkout-root))
          _ (when cwd (.directory builder cwd))
          process (.start builder)]
      (when stdin
@@ -98,7 +98,7 @@
                   (.redirectErrorStream true))
         _ (doto (.environment builder)
             (.put "XDG_STATE_HOME" smoke-xdg-state-home)
-            (.put "SKEIN_SOURCE" checkout-root))
+            (.put "MILLSTRAND_SOURCE" checkout-root))
         _ (when cwd (.directory builder cwd))
         process (.start builder)
         output (slurp (.getInputStream process))
@@ -143,9 +143,9 @@
                   (.redirectErrorStream true))
         _ (doto (.environment builder)
             (.put "XDG_STATE_HOME" smoke-xdg-state-home)
-            (.put "SKEIN_SOURCE" checkout-root))
+            (.put "MILLSTRAND_SOURCE" checkout-root))
         process (.start builder)
-        metadata (java.io.File. smoke-run-root "xdg-state/skein/mill.json")]
+        metadata (java.io.File. smoke-run-root "xdg-state/millstrand/mill.json")]
     (let [failure (atom nil)]
       (try
         (loop [attempts 100]
@@ -254,7 +254,7 @@
                   (.redirectErrorStream true))]
     (doto (.environment builder)
       (.put "XDG_STATE_HOME" smoke-xdg-state-home)
-      (.put "SKEIN_SOURCE" checkout-root))
+      (.put "MILLSTRAND_SOURCE" checkout-root))
     (.directory builder (outside-repo-dir))
     builder))
 
@@ -298,10 +298,10 @@
         bare (run-process! "Bare strand prints help" [strand-bin])
         version (run-process! "Go CLI version succeeds" [strand-bin "--version"])
         mill-root (run-process! "Go mill root help succeeds" [mill-bin "--help"])
-        ;; Run from outside the checkout so only SKEIN_SOURCE can resolve the
+        ;; Run from outside the checkout so only MILLSTRAND_SOURCE can resolve the
         ;; manifest the prime text is rendered from.
-        skein-prime (run-process! "mill skein prime succeeds" (outside-repo-dir) nil
-                                  [mill-bin "skein" "prime"])
+        millstrand-prime (run-process! "mill millstrand prime succeeds" (outside-repo-dir) nil
+                                       [mill-bin "millstrand" "prime"])
         strand-prime (run-process! "mill strand prime succeeds" (outside-repo-dir) nil
                                    [mill-bin "strand" "prime"])
         dry-run (run-process! "Go CLI dry-run assembles an envelope"
@@ -313,10 +313,10 @@
     (assert= root bare "bare strand prints the same static help as --help")
     (assert-contains version "bin_version" "Go CLI --version reports the bin version")
     (assert-contains version "protocol_version" "Go CLI --version reports the protocol version")
-    (doseq [needle ["init" "weaver" "start" "skein" "strand"]]
+    (doseq [needle ["init" "weaver" "start" "millstrand" "strand"]]
       (assert-contains mill-root needle "Go mill root help shows the lifecycle and orientation subcommands"))
-    (assert-contains skein-prime checkout-root
-                     "mill skein prime renders the manifest topic with the resolved source substituted")
+    (assert-contains millstrand-prime checkout-root
+                     "mill millstrand prime renders the manifest topic with the resolved source substituted")
     (assert (clojure.string/includes? strand-prime "strand")
             (str "mill strand prime renders its manifest topic\n" strand-prime))
     (doseq [needle ["\"operation\":\"invoke\"" "\"name\":\"add\""]]
@@ -971,20 +971,20 @@
     (delete-tree! (.toPath repo))
     (.mkdirs repo)
     (run-process! "smoke repo git init succeeds" repo nil ["git" "init"])
-    (run-process! "repo bootstrap initializes .skein through mill" repo nil [mill-bin "init"])
+    (run-process! "repo bootstrap initializes .millstrand through mill" repo nil [mill-bin "init"])
     ;; The repo-local form of `mill init` is the only one that seeds agent
     ;; guidance, and it creates AGENTS.md when the repo has none. Re-running it
     ;; must not duplicate the marker-guarded block.
     (run-process! "repo bootstrap is idempotent" repo nil [mill-bin "init"])
-    (assert-file-contents (java.io.File. repo ".skein/.gitignore")
+    (assert-file-contents (java.io.File. repo ".millstrand/.gitignore")
                           "config.local.json\ninit.local.clj\nspools.local.edn\nstate/\ndata/\nweaver.*\n*.sqlite\n*.sqlite-*\n"
-                          "repo bootstrap seeds the .skein gitignore so runtime artifacts stay untracked")
+                          "repo bootstrap seeds the .millstrand gitignore so runtime artifacts stay untracked")
     (let [guidance (slurp (java.io.File. repo "AGENTS.md"))]
-      (assert-contains guidance "<!-- mill:skein-prime -->"
+      (assert-contains guidance "<!-- mill:millstrand-prime -->"
                        "repo bootstrap injects the marker-guarded orientation block")
-      (doseq [needle ["mill strand prime" "mill skein prime" "<!-- /mill:skein-prime -->"]]
+      (doseq [needle ["mill strand prime" "mill millstrand prime" "<!-- /mill:millstrand-prime -->"]]
         (assert-contains guidance needle "repo bootstrap routes a cold agent at the prime commands"))
-      (assert= 1 (count (re-seq #"<!-- mill:skein-prime -->" guidance))
+      (assert= 1 (count (re-seq #"<!-- mill:millstrand-prime -->" guidance))
                "repeated repo bootstrap does not duplicate the orientation block"))
     (run-process! "repo weaver start succeeds" repo nil [mill-bin "weaver" "start"])
     (wait-for-repo-weaver! repo)
@@ -994,7 +994,7 @@
             runtime-out (run-process! "repo stdin repl succeeds" repo "@skein.core.weaver.runtime/current-runtime\n" [mill-bin "weaver" "repl" "--stdin"])]
         (assert= ["Repo smoke strand"] (titles listed) "repo world list sees CLI-created strand")
         (assert (clojure.string/includes? runtime-out ":metadata") "repo world stdin REPL evaluates in the live weaver JVM")
-        (assert (clojure.string/includes? runtime-out (str (.getCanonicalPath repo) "/.skein")) "repo world stdin REPL uses the selected running weaver"))
+        (assert (clojure.string/includes? runtime-out (str (.getCanonicalPath repo) "/.millstrand")) "repo world stdin REPL uses the selected running weaver"))
       (finally
         (run-process! "repo weaver stop succeeds" repo nil [mill-bin "weaver" "stop"])
         (delete-tree! (.toPath repo))))))

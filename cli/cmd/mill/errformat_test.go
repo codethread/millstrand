@@ -13,10 +13,10 @@ import (
 )
 
 // Every test here writes to a buffer, which resolves to plain mode on its own.
-// A SKEIN_ERROR_FORMAT inherited from the developer's shell would override that
+// A MILLSTRAND_ERROR_FORMAT inherited from the developer's shell would override that
 // for this process and every binary it spawns, so it is cleared once up front.
 func TestMain(m *testing.M) {
-	_ = os.Unsetenv("SKEIN_ERROR_FORMAT")
+	_ = os.Unsetenv("MILLSTRAND_ERROR_FORMAT")
 	os.Exit(m.Run())
 }
 
@@ -38,7 +38,7 @@ func TestMillCommandErrorFallthroughIsTodaysPlainLine(t *testing.T) {
 }
 
 func TestMillCommandErrorFallthroughRendersPrettyWhenForced(t *testing.T) {
-	t.Setenv("SKEIN_ERROR_FORMAT", "pretty")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "pretty")
 	t.Setenv("NO_COLOR", "1")
 	got := captureMillError(t, errors.New("no weaver is running"), []string{"weaver", "repl"})
 	if got != "  x weaver repl: no weaver is running\n" {
@@ -49,7 +49,7 @@ func TestMillCommandErrorFallthroughRendersPrettyWhenForced(t *testing.T) {
 // Mill renders through the same shared renderer, so its own failures reach a
 // JSON-mode consumer as the same four-field envelope strand's do.
 func TestMillCommandErrorFallthroughRendersJSONWhenForced(t *testing.T) {
-	t.Setenv("SKEIN_ERROR_FORMAT", "json")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "json")
 	got := captureMillError(t, &client.TransportError{
 		Err:  errors.New("mill socket unreachable; start one with: mill start"),
 		Code: errfmt.CodeMillUnreachable,
@@ -69,7 +69,7 @@ func TestMillCommandErrorFallthroughRendersJSONWhenForced(t *testing.T) {
 // SPEC-002.C15a's guidance is prose for a human. A consumer that asked for JSON
 // gets the envelope line and nothing after it.
 func TestMillFailureGuidanceIsSilentInJSONMode(t *testing.T) {
-	t.Setenv("SKEIN_ERROR_FORMAT", "json")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "json")
 	original := millErrorOut
 	t.Cleanup(func() { millErrorOut = original })
 
@@ -95,14 +95,14 @@ func TestMillFailureGuidanceIsSilentInJSONMode(t *testing.T) {
 }
 
 func TestMillRejectsAnInvalidErrorFormatBeforeRunningACommand(t *testing.T) {
-	t.Setenv("SKEIN_ERROR_FORMAT", "colour")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "colour")
 	cmd := newMillCommand()
 	cmd.SetArgs([]string{"status"})
 	err := cmd.Execute()
 	if err == nil {
 		t.Fatal("expected a loud rejection before mill status touched the socket")
 	}
-	if !strings.Contains(err.Error(), "SKEIN_ERROR_FORMAT") || !strings.Contains(err.Error(), "json, plain, pretty") {
+	if !strings.Contains(err.Error(), "MILLSTRAND_ERROR_FORMAT") || !strings.Contains(err.Error(), "json, plain, pretty") {
 		t.Fatalf("error must name the variable and the accepted set: %v", err)
 	}
 }
@@ -110,7 +110,7 @@ func TestMillRejectsAnInvalidErrorFormatBeforeRunningACommand(t *testing.T) {
 // Cobra serves --help without reaching a command's pre-run, which is what keeps
 // a typo'd format from taking down the paths that need no weaver.
 func TestMillHelpSurvivesAnInvalidErrorFormat(t *testing.T) {
-	t.Setenv("SKEIN_ERROR_FORMAT", "colour")
+	t.Setenv("MILLSTRAND_ERROR_FORMAT", "colour")
 	cmd := newMillCommand()
 	cmd.SetArgs([]string{"--help"})
 	cmd.SetOut(&bytes.Buffer{})

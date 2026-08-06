@@ -11,10 +11,10 @@ deliberately absent from this page: the generated [alpha API reference](../api/R
 
 `mill init` bootstraps missing workspace files without overwriting existing ones. It does not initialize
 database storage; weaver startup prepares storage for the selected workspace. The full layout of an ordinary
-repo-local `.skein` workspace:
+repo-local `.millstrand` workspace:
 
 ```text
-.skein/
+.millstrand/
   config.json        -> shared alpha workspace config (the low-privilege format marker)
   config.local.json  -> personal config overlay
   init.clj           -> shared trusted startup code loaded by the weaver
@@ -28,14 +28,14 @@ When absent, `mill init` creates the shared half: `config.json` with the alpha f
 
 ## A private repo-local workspace
 
-Run `mill init --stealth` when you want Skein in a repository without committing its config. The
-workspace remains a physical `.skein` directory at the Git root, so agents, `rg`, Make, Clojure,
+Run `mill init --stealth` when you want Millstrand in a repository without committing its config. The
+workspace remains a physical `.millstrand` directory at the Git root, so agents, `rg`, Make, Clojure,
 and weaver calls see normal repo-local paths. Mill adds its paths to `.git/info/exclude`, which is
 private to that clone, and reports each file it created, updated, skipped, or left unchanged.
 
 Stealth init does not write shared `AGENTS.md` or `CLAUDE.md`. It creates or updates an untracked
 `CLAUDE.local.md` when safe and prints the instruction Codex users may add to their own guidance.
-If `.skein` is already tracked or a mill-owned marker block was edited, it refuses before changing
+If `.millstrand` or `.ms` is already tracked or a mill-owned marker block was edited, it refuses before changing
 anything.
 
 Keep the generated startup small. Put personal activation in `init.local.clj`, approvals in

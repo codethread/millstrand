@@ -181,7 +181,7 @@
         result (cond-> {:operation "bins plan"
                         :bin bin
                         :runnable (runnable? exec)
-                        :exec (assoc exec :env {"SKEIN_WORKSPACE" (access/config-dir runtime)})}
+                        :exec (assoc exec :env {"MILLSTRAND_WORKSPACE" (access/config-dir runtime)})}
                  (:build entry) (assoc :build {:argv (:build entry)
                                                :cwd (.getPath ^java.io.File (canonical-file base))}))]
     (require-valid! ::plan-result result "bins plan result is invalid")))

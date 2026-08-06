@@ -42,14 +42,14 @@ func writeSourceFixture(t *testing.T, manifest string, topics map[string]string)
 
 func TestRenderPrimeReadsManifestTopicsAndInterpolatesSource(t *testing.T) {
 	src := writeSourceFixture(t,
-		`{"version": 1, "topics": {"skein": "docs/prime/skein.md", "strand": "docs/prime/strand.md"}}`,
+		`{"version": 1, "topics": {"millstrand": "docs/prime/millstrand.md", "strand": "docs/prime/strand.md"}}`,
 		map[string]string{
-			"docs/prime/skein.md":  "Source lives at {{.Source}} and again {{.Source}}.\n",
-			"docs/prime/strand.md": "No token here.\n",
+			"docs/prime/millstrand.md": "Source lives at {{.Source}} and again {{.Source}}.\n",
+			"docs/prime/strand.md":     "No token here.\n",
 		})
-	t.Setenv("SKEIN_SOURCE", src)
+	t.Setenv("MILLSTRAND_SOURCE", src)
 
-	out, err := renderPrime("skein")
+	out, err := renderPrime("millstrand")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestRenderPrimeReadsManifestTopicsAndInterpolatesSource(t *testing.T) {
 		t.Fatalf("expected both {{.Source}} tokens replaced with %q:\n%s", src, out)
 	}
 	if strings.Contains(out, "{{") {
-		t.Fatalf("skein prime left an unrendered token:\n%s", out)
+		t.Fatalf("millstrand prime left an unrendered token:\n%s", out)
 	}
 
 	out, err = renderPrime("strand")
@@ -71,40 +71,40 @@ func TestRenderPrimeReadsManifestTopicsAndInterpolatesSource(t *testing.T) {
 
 func TestRenderPrimeFailsWhenSourceUnresolvable(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
-	t.Setenv("SKEIN_SOURCE", missing)
-	if _, err := renderPrime("skein"); err == nil || !strings.Contains(err.Error(), missing) {
+	t.Setenv("MILLSTRAND_SOURCE", missing)
+	if _, err := renderPrime("millstrand"); err == nil || !strings.Contains(err.Error(), missing) {
 		t.Fatalf("expected source error naming missing path %q, got: %v", missing, err)
 	}
 }
 
 func TestRenderPrimeSourceFallbackFailureNamesCWD(t *testing.T) {
-	t.Setenv("SKEIN_SOURCE", "")
+	t.Setenv("MILLSTRAND_SOURCE", "")
 	origInstalled := config.InstalledSource
 	config.InstalledSource = ""
 	t.Cleanup(func() { config.InstalledSource = origInstalled })
 	cwd := t.TempDir()
 	t.Chdir(cwd)
 
-	if _, err := renderPrime("skein"); err == nil || !strings.Contains(err.Error(), cwd) {
+	if _, err := renderPrime("millstrand"); err == nil || !strings.Contains(err.Error(), cwd) {
 		t.Fatalf("expected source-resolution error naming cwd %q, got: %v", cwd, err)
 	}
 }
 
 func TestRenderPrimeFailsWithoutManifest(t *testing.T) {
 	src := writeSourceFixture(t, "", nil)
-	t.Setenv("SKEIN_SOURCE", src)
+	t.Setenv("MILLSTRAND_SOURCE", src)
 	manifestPath := filepath.Join(src, filepath.FromSlash(primeManifestPath))
-	if _, err := renderPrime("skein"); err == nil || !strings.Contains(err.Error(), manifestPath) {
+	if _, err := renderPrime("millstrand"); err == nil || !strings.Contains(err.Error(), manifestPath) {
 		t.Fatalf("expected missing-manifest error naming %q, got: %v", manifestPath, err)
 	}
 }
 
 func TestRenderPrimeRejectsUnsupportedManifestVersion(t *testing.T) {
 	src := writeSourceFixture(t,
-		`{"version": 2, "topics": {"skein": "docs/prime/skein.md"}}`,
-		map[string]string{"docs/prime/skein.md": "future format\n"})
-	t.Setenv("SKEIN_SOURCE", src)
-	_, err := renderPrime("skein")
+		`{"version": 2, "topics": {"millstrand": "docs/prime/millstrand.md"}}`,
+		map[string]string{"docs/prime/millstrand.md": "future format\n"})
+	t.Setenv("MILLSTRAND_SOURCE", src)
+	_, err := renderPrime("millstrand")
 	if err == nil || !strings.Contains(err.Error(), "upgrade mill") {
 		t.Fatalf("expected loud version-mismatch error instructing an upgrade, got: %v", err)
 	}
@@ -112,9 +112,9 @@ func TestRenderPrimeRejectsUnsupportedManifestVersion(t *testing.T) {
 
 func TestRenderPrimeFailsOnUnknownTopic(t *testing.T) {
 	src := writeSourceFixture(t,
-		`{"version": 1, "topics": {"skein": "docs/prime/skein.md"}}`,
-		map[string]string{"docs/prime/skein.md": "ok\n"})
-	t.Setenv("SKEIN_SOURCE", src)
+		`{"version": 1, "topics": {"millstrand": "docs/prime/millstrand.md"}}`,
+		map[string]string{"docs/prime/millstrand.md": "ok\n"})
+	t.Setenv("MILLSTRAND_SOURCE", src)
 	manifestPath := filepath.Join(src, filepath.FromSlash(primeManifestPath))
 	if _, err := renderPrime("nope"); err == nil || !strings.Contains(err.Error(), manifestPath) || !strings.Contains(err.Error(), `"nope"`) {
 		t.Fatalf("expected unknown-topic error naming manifest %q and topic, got: %v", manifestPath, err)
@@ -133,13 +133,13 @@ func TestRenderPrimeRejectsInvalidManifestTopicPaths(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manifest := fmt.Sprintf(`{"version": 1, "topics": {"skein": %q}}`, tt.path)
+			manifest := fmt.Sprintf(`{"version": 1, "topics": {"millstrand": %q}}`, tt.path)
 			src := writeSourceFixture(t, manifest, nil)
-			t.Setenv("SKEIN_SOURCE", src)
+			t.Setenv("MILLSTRAND_SOURCE", src)
 			manifestPath := filepath.Join(src, filepath.FromSlash(primeManifestPath))
 
-			_, err := renderPrime("skein")
-			if err == nil || !strings.Contains(err.Error(), manifestPath) || !strings.Contains(err.Error(), `topic "skein"`) || !strings.Contains(err.Error(), fmt.Sprintf("%q", tt.path)) {
+			_, err := renderPrime("millstrand")
+			if err == nil || !strings.Contains(err.Error(), manifestPath) || !strings.Contains(err.Error(), `topic "millstrand"`) || !strings.Contains(err.Error(), fmt.Sprintf("%q", tt.path)) {
 				t.Fatalf("expected invalid-path error naming manifest %q, topic, and path %q; got: %v", manifestPath, tt.path, err)
 			}
 		})
@@ -149,10 +149,10 @@ func TestRenderPrimeRejectsInvalidManifestTopicPaths(t *testing.T) {
 func TestRenderPrimeUnreadableTopicNamesPath(t *testing.T) {
 	const rel = "docs/prime/missing.md"
 	src := writeSourceFixture(t,
-		`{"version": 1, "topics": {"skein": "docs/prime/missing.md"}}`, nil)
-	t.Setenv("SKEIN_SOURCE", src)
+		`{"version": 1, "topics": {"millstrand": "docs/prime/missing.md"}}`, nil)
+	t.Setenv("MILLSTRAND_SOURCE", src)
 
-	if _, err := renderPrime("skein"); err == nil || !strings.Contains(err.Error(), rel) {
+	if _, err := renderPrime("millstrand"); err == nil || !strings.Contains(err.Error(), rel) {
 		t.Fatalf("expected unreadable-topic error naming %q, got: %v", rel, err)
 	}
 }
@@ -166,7 +166,7 @@ func TestRepoPrimeManifestPointsAtRealFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SKEIN_SOURCE", repoRoot)
+	t.Setenv("MILLSTRAND_SOURCE", repoRoot)
 
 	raw, err := os.ReadFile(filepath.Join(repoRoot, primeManifestPath))
 	if err != nil {
@@ -182,7 +182,7 @@ func TestRepoPrimeManifestPointsAtRealFiles(t *testing.T) {
 	if len(manifest.Topics) == 0 {
 		t.Fatal("repo prime manifest declares no topics")
 	}
-	for _, topic := range []string{"skein", "strand"} {
+	for _, topic := range []string{"millstrand", "strand"} {
 		if _, ok := manifest.Topics[topic]; !ok {
 			t.Fatalf("repo prime manifest does not declare required topic %q", topic)
 		}
