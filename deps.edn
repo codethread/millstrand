@@ -23,6 +23,8 @@
   ;; Per-worktree warm test REPL: compose with :test to inherit its classpath and
   ;; native-access opt — `clojure -M:test:test-repl` boots millstrand.test.warm.
   :test-repl {:main-opts ["-m" "millstrand.test.warm"]}
+  :transition-check {:extra-paths ["scripts"]
+                     :main-opts ["-m" "quality.millstrand-transition"]}
   ;; Deliberately self-contained (not composed with :test like :test-repl): the bench
   ;; must run standalone as `clojure -M:large-attr-bench`, and :test's :main-opts
   ;; (millstrand.test-runner) would swallow the -m entrypoint under composition.

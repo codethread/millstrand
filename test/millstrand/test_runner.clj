@@ -5,7 +5,8 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.test :as test])
+            [clojure.test :as test]
+            [quality.millstrand-transition :as transition])
   (:import (java.io StringWriter)
            (java.util.concurrent Callable Executors ExecutorService TimeUnit)))
 
@@ -22,7 +23,7 @@
    'millstrand.guild-test 'millstrand.test.alpha-test 'millstrand.warm-test 'millstrand.api.cli.alpha-test
    'millstrand.source-file-test
    ;; pure findings logic over its own temp-dir fixtures — no shared state.
-   'millstrand.quality.conventions-check-test
+   'millstrand.quality.conventions-check-test 'millstrand.quality.transition-contract-test
    'millstrand.api.return-shape.alpha-test
    'millstrand.api.spec.alpha-test
    'millstrand.api.clock.alpha-test
@@ -48,7 +49,7 @@
    'millstrand.spools.test-support-test
    ;; each test drives its own disposable runtime and registry — no shared state.
    'millstrand.spools.workflow-cli-test 'millstrand.spools.workflow-run-cli-test
-   'millstrand.spools.batteries-test 'millstrand.api.spool-test 'millstrand.ct.config-ops-test
+   'millstrand.spools.batteries-test 'millstrand.api.spool-test
    ;; large-attr load harness structural smoke: boots its own :publish? false
    ;; world and hand-SQL fixtures in temp dirs — no JVM-global or shared state.
    'millstrand.large-attr-benchmark-test
@@ -104,6 +105,11 @@
    'millstrand.core.weaver.registry-snapshots-test
    'millstrand.core.weaver.modules-test])
 
+(def ^:private deferred-transition-namespaces
+  (do
+    (transition/validate-current!)
+    (transition/deferred-test-namespaces :workspace-config-integration)))
+
 (def add-libs-shards
   "Subprocess JVM shard groups for tests that mutate JVM-global tools.deps state."
   {;; Largest add-libs suite stands alone to balance wall time against parent work.
@@ -111,9 +117,9 @@
    ;; runtime-deps intentionally mutates JVM-global tools.deps state.
    "B" ['millstrand.runtime-deps-test]
    ;; Medium add-libs suites share one JVM to amortize boot without exceeding shard A.
-   ;; Both workspace-config suites load .skein files whose spool roots arrive
-   ;; through add-libs, so they share this shard's boot.
-   "C" ['millstrand.ct.config-test 'millstrand.ct.nvd-scan-test]})
+   ;; The workspace-config integration namespace is deferred by the explicit
+   ;; Millstrand publisher transition contract until its external pins move.
+   "C" ['millstrand.ct.nvd-scan-test]})
 
 (def shard-timeout-minutes 5)
 
@@ -252,6 +258,7 @@
              error (assoc :error error))))
 
 (defn- run-parent []
+  (println "Transition-deferred test namespaces:" (sort deferred-transition-namespaces))
   (concat (run-serial :parent/serial serial-namespaces) (run-parallel)))
 
 (defn- run-shard [shard-id summary-file]
@@ -289,6 +296,9 @@
       (throw (ex-info (str "Duplicate test namespace arguments: " (str/join " " duplicates))
                       {:duplicates (vec duplicates)})))
     (doseq [ns-sym namespaces]
+      (when (contains? deferred-transition-namespaces ns-sym)
+        (throw (ex-info (str ns-sym " is deferred by the exact Millstrand transition contract; run it after the named external pins move")
+                        {:ns ns-sym :scope :workspace-config-integration})))
       (when-let [shard-id (shard-for-ns ns-sym)]
         (throw (ex-info (str ns-sym " is an add-libs shard namespace (shard " shard-id
                              "); shard namespaces require the full suite in v1")

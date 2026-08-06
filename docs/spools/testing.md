@@ -211,6 +211,19 @@ creation fail.
 
 ## CI
 
+### Millstrand publisher transition
+
+During the core identity cutover, the in-tree core and shipped spool tests remain
+part of the required suite. The only temporary deferrals are the workspace-config
+integration namespaces `millstrand.ct.config-test` and
+`millstrand.ct.config-ops-test`, plus the pinned external spool suites.
+`make transition-check` verifies the exact Devflow v20, Kanban v23, and
+Agent Harness v25 family pins before either deferral is accepted. A pin change or
+an added deferred namespace fails the check; update this boundary when the
+publishers move to Millstrand rather than widening the deferral.
+
+Run `clojure -M:test` for the complete core and in-tree suite. It reports the named workspace-config namespaces as transition-deferred. Run `make spool-suite-gate` for the pinned external suites; it reports the same explicit transition status.
+
 Check out both repos and pin Millstrand to a commit or tag:
 
 ```yaml

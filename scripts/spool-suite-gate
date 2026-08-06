@@ -8,6 +8,19 @@ if [ "$#" -ne 0 ]; then
   exit 2
 fi
 
+transition_status="$(clojure -M:transition-check --scope pinned-external-spool-suite)"
+case "$transition_status" in
+  DEFERRED)
+    echo "spool-suite-gate: deferred by PROP-Msr-001.S6 transition contract (exact codethread/devflow, codethread/kanban, and ct.spools/agent-run pins)"
+    exit 0
+    ;;
+  ACTIVE) ;;
+  *)
+    echo "spool-suite-gate: transition contract returned unexpected status: $transition_status" >&2
+    exit 1
+    ;;
+esac
+
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 src="$root"
 cd "$root"
