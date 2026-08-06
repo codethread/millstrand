@@ -136,6 +136,7 @@ reflect-check:
 
 identity-check:
 	bash scripts/quality/millstrand-active-identity.sh
+	bash scripts/quality/millstrand-active-identity-regression.sh
 
 ci-config-check:
 	bash scripts/quality/millstrand-ci-config.sh
