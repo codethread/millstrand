@@ -89,6 +89,16 @@ require_command() {
 require_command clojure
 require_command git
 require_command jq
+require_command realpath
+
+edn_string() {
+  local value=$1
+  [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || \
+    die "value cannot contain a newline: $value"
+  value=${value//\\/\\\\}
+  value=${value//\"/\\\"}
+  printf '%s' "$value"
+}
 
 if [[ "$mode" == "pre-tag" ]]; then
   [[ -n "$source_root" && -d "$source_root" ]] || die "--source-root must name a directory"
@@ -105,7 +115,10 @@ else
     die "--source-root and --candidate-tag are pre-tag options"
   [[ "$tag" =~ ^v[1-9][0-9]*$ ]] || die "tag must be v<int>, not $tag"
   [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "sha must be a lowercase peeled 40-hex commit"
-  remote_sha=$(git ls-remote "$repository" "refs/tags/${tag}^{}" | awk 'NR == 1 {print $1}')
+  if ! remote_output=$(git ls-remote "$repository" "refs/tags/${tag}^{}" 2>&1); then
+    die "cannot query $repository for peeled tag $tag: $remote_output"
+  fi
+  remote_sha=$(printf '%s\n' "$remote_output" | awk 'NR == 1 {print $1}')
   [[ -n "$remote_sha" ]] || die "remote has no peeled annotated tag $tag"
   [[ "$remote_sha" == "$sha" ]] || \
     die "remote peeled SHA for $tag is $remote_sha, expected $sha"
@@ -141,33 +154,43 @@ git -C "$consumer_root" init -q
 
 deps_file="$consumer_root/deps.edn"
 if [[ "$mode" == "pre-tag" ]]; then
-  sed "s|SOURCE_ROOT|$source_root|g" >"$deps_file" <<'EOF'
-{:deps {io.millstrand/millstrand {:local/root "SOURCE_ROOT"}}}
+  source_root_edn=$(edn_string "$source_root")
+  cat >"$deps_file" <<EOF
+{:deps {io.millstrand/millstrand {:local/root "$source_root_edn"}}}
 EOF
 else
-  sed -e "s|REPOSITORY|$repository|g" -e "s|TAG|$tag|g" -e "s|SHA|$sha|g" >"$deps_file" <<'EOF'
-{:deps {io.millstrand/millstrand {:git/url "REPOSITORY" :git/tag "TAG" :git/sha "SHA"}}}
+  cat >"$deps_file" <<EOF
+{:deps {io.millstrand/millstrand {:git/url "$repository" :git/tag "$tag" :git/sha "$sha"}}}
 EOF
 fi
 
-clojure -Spath -Sdeps "$(sed -n '1,3p' "$deps_file")" >/dev/null
-clojure -Sdeps "$(sed -n '1,3p' "$deps_file")" -M -e '
+deps_value=$(tr '\n' ' ' <"$deps_file")
+if ! classpath=$(clojure -Spath -Sdeps "$deps_value" 2>&1); then
+  die "Clojure dependency resolution failed for $coordinate: $classpath"
+fi
+if ! resource_output=$(clojure -Sdeps "$deps_value" -M -e '
   (require (quote millstrand.api.current.alpha)
            (quote millstrand.api.weaver.alpha))
   (let [resource (clojure.java.io/resource "millstrand/api/current/alpha.clj")]
     (when-not resource
       (throw (ex-info "Millstrand API resource was not resolved" {})))
     (println resource))
-' >"$resource_file"
+' 2>&1); then
+  die "Clojure consumer load failed for $coordinate: $resource_output"
+fi
+printf '%s\n' "$resource_output" >"$resource_file"
 
 if [[ "$mode" == "published" ]]; then
-  grep -F "$source_marker" "$resource_file" >/dev/null && \
-    die "published consumer resolved the release through an unexpected source path"
-  grep -Eiq '/(\.gitlibs|\.m2|\.cpcache)/' "$resource_file" || \
-    die "published consumer did not resolve a fetched dependency resource"
+  if grep -F "$source_marker" "$resource_file" >/dev/null; then
+    die "published consumer resolved the release through an unexpected source path: $resource_output"
+  fi
+  if ! grep -Eiq '/(\.gitlibs|\.m2|\.cpcache)/' "$resource_file"; then
+    die "published consumer did not resolve a fetched dependency resource: $resource_output"
+  fi
 else
-  grep -F "$source_root" "$resource_file" >/dev/null || \
-    die "pre-tag consumer did not resolve the supplied source root"
+  if ! grep -F "$source_root" "$resource_file" >/dev/null; then
+    die "pre-tag consumer did not resolve supplied source root $source_root: $resource_output"
+  fi
 fi
 
 if [[ "$mode" == "published" ]]; then
@@ -181,28 +204,58 @@ XDG_STATE_HOME="$state_root" "$mill_bin" start >"$mill_log" 2>&1 &
 mill_pid=$!
 
 metadata_path="$state_root/millstrand/mill.json"
-deadline=$((SECONDS + 10))
+verify_timeout_seconds=${MILLSTRAND_VERIFY_TIMEOUT_SECONDS:-30}
+[[ "$verify_timeout_seconds" =~ ^[1-9][0-9]*$ ]] || \
+  die "MILLSTRAND_VERIFY_TIMEOUT_SECONDS must be a positive integer, got $verify_timeout_seconds"
+((verify_timeout_seconds <= 600)) || \
+  die "MILLSTRAND_VERIFY_TIMEOUT_SECONDS must be no more than 600, got $verify_timeout_seconds"
+deadline=$((SECONDS + verify_timeout_seconds))
 until [[ -f "$metadata_path" ]]; do
-  kill -0 "$mill_pid" 2>/dev/null || die "mill exited before publishing runtime metadata"
-  ((SECONDS < deadline)) || die "mill did not publish runtime metadata within 10 seconds"
+  if ! kill -0 "$mill_pid" 2>/dev/null; then
+    die "mill exited before publishing runtime metadata; log: $(sed -n '1,80p' "$mill_log")"
+  fi
+  ((SECONDS < deadline)) || \
+    die "mill did not publish runtime metadata within ${verify_timeout_seconds}s; set MILLSTRAND_VERIFY_TIMEOUT_SECONDS to adjust"
   sleep 0.05
 done
 
 XDG_STATE_HOME="$state_root" "$mill_bin" init --workspace "$config_dir" >/dev/null
 [[ -d "$config_dir" && ! -e "$alias_dir" ]] || die "mill init did not create .millstrand"
-XDG_STATE_HOME="$state_root" "$mill_bin" weaver start --workspace "$config_dir" >/dev/null
-status_before=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver status --workspace "$config_dir")
-echo "$status_before" | jq -e '.state == "running" and (.database_path | type) == "string"' >/dev/null
-database_path=$(echo "$status_before" | jq -er '.database_path')
+if ! weaver_output=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver start --workspace "$config_dir" 2>&1); then
+  die "weaver start failed for .millstrand: $weaver_output"
+fi
+if ! status_before=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver status --workspace "$config_dir" 2>&1); then
+  die "weaver status failed for .millstrand: $status_before"
+fi
+if ! echo "$status_before" | jq -e '.state == "running" and (.database_path | type) == "string"' >/dev/null 2>&1; then
+  die "unexpected .millstrand status; expected running with database_path: $status_before"
+fi
+if ! database_path=$(echo "$status_before" | jq -er '.database_path' 2>&1); then
+  die "missing database_path in .millstrand status: $status_before"
+fi
 
 XDG_STATE_HOME="$state_root" "$mill_bin" weaver stop --workspace "$config_dir" >/dev/null
 mv "$config_dir" "$alias_dir"
-XDG_STATE_HOME="$state_root" "$mill_bin" weaver start --workspace "$alias_dir" >/dev/null
-status_after=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver status --workspace "$alias_dir")
-echo "$status_after" | jq -e '.state == "running"' >/dev/null
-alias_database_path=$(echo "$status_after" | jq -er '.database_path')
-[[ "$(realpath "$database_path")" == "$(realpath "$alias_database_path")" ]] || \
-  die ".millstrand and .ms did not reopen the same database"
+if ! weaver_output=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver start --workspace "$alias_dir" 2>&1); then
+  die "weaver start failed for .ms: $weaver_output"
+fi
+if ! status_after=$(XDG_STATE_HOME="$state_root" "$mill_bin" weaver status --workspace "$alias_dir" 2>&1); then
+  die "weaver status failed for .ms: $status_after"
+fi
+if ! echo "$status_after" | jq -e '.state == "running"' >/dev/null 2>&1; then
+  die "unexpected .ms status; expected running: $status_after"
+fi
+if ! alias_database_path=$(echo "$status_after" | jq -er '.database_path' 2>&1); then
+  die "missing database_path in .ms status: $status_after"
+fi
+if ! database_realpath=$(realpath "$database_path" 2>&1); then
+  die "cannot resolve .millstrand database path '$database_path': $database_realpath"
+fi
+if ! alias_database_realpath=$(realpath "$alias_database_path" 2>&1); then
+  die "cannot resolve .ms database path '$alias_database_path': $alias_database_realpath"
+fi
+[[ "$database_realpath" == "$alias_database_realpath" ]] || \
+  die ".millstrand and .ms opened different databases: $database_realpath vs $alias_database_realpath"
 XDG_STATE_HOME="$state_root" "$mill_bin" weaver stop --workspace "$alias_dir" >/dev/null
 
 echo "millstrand published core verification: clean"

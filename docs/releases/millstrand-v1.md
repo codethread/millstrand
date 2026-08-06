@@ -38,4 +38,6 @@ scripts/verify-published-core.sh --mode published \
   --tag v1 --sha <peeled-commit-sha>
 ```
 
+The verifier waits up to 30 seconds for the supervisor readiness marker. Set `MILLSTRAND_VERIFY_TIMEOUT_SECONDS` to a larger positive value on a slow host, up to 600 seconds.
+
 This release does not promise compatibility with the former product identity. Rollback means returning a consumer to its previous sha-pinned family entry; it does not restore an alias in this repository.
