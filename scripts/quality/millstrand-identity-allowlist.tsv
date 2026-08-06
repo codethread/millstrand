@@ -1,3 +1,4 @@
 # scope	pattern	reason
+docs/operations/millstrand-midpoint-evidence.json	skein	The midpoint manifest preserves immutable historical evidence from pre-cutover repository and workspace identities.
 scripts/acceptance/millstrand-docs.sh	skein	The acceptance script names the forbidden legacy identity only in negative output and filesystem assertions.
 *	\.skein	The repository coordination workspace and the deliberate legacy application-marker rejection remain named .skein.
