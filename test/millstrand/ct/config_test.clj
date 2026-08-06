@@ -167,7 +167,7 @@
       (io/copy (io/file ".skein" name) destination)))
   (let [scripts-target (io/file target "workflows" "scripts")]
     (.mkdirs scripts-target)
-    (doseq [name ["feature-ci-watch.sh" "land-cleanup.sh" "land-merge.sh"]]
+    (doseq [name ["feature-ci-watch.sh" "land-quality-gate.sh" "land-cleanup.sh" "land-merge.sh"]]
       (io/copy (io/file ".skein/workflows/scripts" name) (io/file scripts-target name))))
   ;; The copied config dir would reinterpret repo-relative local roots. Git
   ;; families remain byte-for-byte sourced from the checked-in approvals.
@@ -1052,56 +1052,63 @@
                       {:feature feature :ready final-ci}))))
   (shell-gate-complete! feature "final checks green"))
 
-(defn- write-fake-gh!
-  "Write a deterministic `gh` executable for feature-CI watch script tests."
+(defn- write-fake-land-git!
+  "Write a deterministic `git` executable for local land-quality gate tests."
   [dir]
-  (let [file (io/file dir "gh")]
+  (let [file (io/file dir "git")]
     (spit file
           (str "#!/bin/sh\n"
                "set -eu\n"
-               "case \"$1 $2\" in\n"
-               "  'pr view')\n"
-               "    case \"$FAKE_GH_MODE\" in\n"
-               "      delayed)\n"
+               "case \"$1\" in\n"
+               "  branch) printf '%s\\n' \"$FAKE_LAND_BRANCH\" ;;\n"
+               "  rev-parse)\n"
+               "    case \"$2\" in\n"
+               "      HEAD)\n"
                "        n=0\n"
-               "        if [ -f \"$FAKE_GH_COUNTER\" ]; then n=$(cat \"$FAKE_GH_COUNTER\"); fi\n"
+               "        if [ -f \"$FAKE_LAND_COUNTER\" ]; then n=$(cat \"$FAKE_LAND_COUNTER\"); fi\n"
                "        n=$((n + 1))\n"
-               "        printf '%s\\n' \"$n\" > \"$FAKE_GH_COUNTER\"\n"
-               "        case \"$n\" in\n"
-               "          1) printf '%s\\t0\\n' \"$FAKE_GH_STALE_SHA\" ;;\n"
-               "          2) printf '%s\\t0\\n' \"$FAKE_GH_EXPECTED_SHA\" ;;\n"
-               "          *) printf '%s\\t3\\n' \"$FAKE_GH_EXPECTED_SHA\" ;;\n"
-               "        esac ;;\n"
-               "      absent) printf '%s\\t0\\n' \"$FAKE_GH_EXPECTED_SHA\" ;;\n"
-               "      stale-absent) printf '%s\\t0\\n' \"$FAKE_GH_STALE_SHA\" ;;\n"
-               "      malformed-shape) printf 'not-a-pair\\n' ;;\n"
-               "      malformed-head) printf 'not-a-sha\\t3\\n' ;;\n"
-               "      short-head) printf 'deadbeef\\t3\\n' ;;\n"
-               "      malformed-count) printf '%s\\tnot-a-count\\n' \"$FAKE_GH_EXPECTED_SHA\" ;;\n"
-               "      lookup-fail) echo 'lookup failed' >&2; exit 42 ;;\n"
-               "      watch-fail) printf '%s\\t3\\n' \"$FAKE_GH_EXPECTED_SHA\" ;;\n"
+               "        printf '%s\\n' \"$n\" > \"$FAKE_LAND_COUNTER\"\n"
+               "        if [ \"$FAKE_LAND_MODE\" = head-changed ] && [ \"$n\" -gt 1 ]; then\n"
+               "          printf '%s\\n' \"$FAKE_LAND_HEAD_AFTER\"\n"
+               "        else\n"
+               "          printf '%s\\n' \"$FAKE_LAND_HEAD\"\n"
+               "        fi ;;\n"
+               "      *)\n"
+               "        if [ \"$4\" = '@{upstream}' ]; then\n"
+               "          printf '%s\\n' \"$FAKE_LAND_UPSTREAM\"\n"
+               "        else\n"
+               "          printf '%s\\n' \"$FAKE_LAND_UPSTREAM_HEAD\"\n"
+               "        fi ;;\n"
                "    esac ;;\n"
-               "  'pr checks')\n"
-               "    printf 'watch:%s\\n' \"$*\"\n"
-               "    if [ \"$FAKE_GH_MODE\" = watch-fail ]; then exit 17; fi ;;\n"
-               "  *) echo \"unexpected gh argv: $*\" >&2; exit 64 ;;\n"
+               "  status)\n"
+               "    if [ \"$FAKE_LAND_MODE\" = dirty ]; then printf ' M file\\n'; fi ;;\n"
+               "  diff)\n"
+               "    if [ \"$FAKE_LAND_MODE\" = diff-dirty ]; then exit 1; fi ;;\n"
+               "  cat-file)\n"
+               "    if [ \"$FAKE_LAND_MODE\" = missing-contract ]; then exit 1; fi\n"
+               "    exit 0 ;;\n"
+               "  *) echo \"unexpected git argv: $*\" >&2; exit 64 ;;\n"
                "esac\n"))
     (is (.setExecutable file true))
     file))
 
-(defn- run-feature-ci-watch
-  "Run executable against fake-gh-dir with mode and startup timeout, without sleeping."
-  [executable fake-gh-dir mode expected-sha timeout]
-  (let [env (merge (into {} (System/getenv))
-                   {"PATH" (str (.getAbsolutePath fake-gh-dir)
+(defn- run-land-quality-gate
+  "Run the local quality wrapper against a deterministic feature worktree."
+  [executable worktree fake-git-dir mode]
+  (let [head (str/join (repeat 40 "a"))
+        env (merge (into {} (System/getenv))
+                   {"PATH" (str (.getAbsolutePath fake-git-dir)
                                 java.io.File/pathSeparator
                                 (System/getenv "PATH"))
-                    "FAKE_GH_MODE" mode
-                    "FAKE_GH_COUNTER" (str (io/file fake-gh-dir (str "counter-" mode)))
-                    "FAKE_GH_EXPECTED_SHA" expected-sha
-                    "FAKE_GH_STALE_SHA" (str/join (repeat 40 "0"))})]
-    (sh/sh (.getAbsolutePath executable) "land-x" (str timeout) "0"
-           :dir (System/getProperty "user.dir")
+                    "FAKE_LAND_BRANCH" "land-x"
+                    "FAKE_LAND_HEAD" head
+                    "FAKE_LAND_HEAD_AFTER" (str/join (repeat 40 "b"))
+                    "FAKE_LAND_UPSTREAM" "origin/land-x"
+                    "FAKE_LAND_UPSTREAM_HEAD" head
+                    "FAKE_LAND_COUNTER" (.getAbsolutePath (io/file fake-git-dir "counter"))
+                    "FAKE_LAND_MODE" mode})]
+    (sh/sh (.getAbsolutePath executable) "land-x"
+           :dir worktree
            :env env)))
 
 (defn- write-fake-merge-gh!
@@ -1335,60 +1342,48 @@
             (.close watcher)
             (test-support/delete-tree! worktree)))))))
 
-(deftest land-feature-ci-watch-waits-for-check-registration-and-preserves-failures
+(deftest land-quality-gate-runs-the-trusted-contract-at-a-stable-pushed-head
   (with-config-runtime
     (fn [rt]
-      (let [_ (start-land! "land-ci-script" "land-x" (System/getProperty "user.dir"))
-            completed (op! "land" ["complete" "land-ci-script" "--pr-number" "411"])
+      (let [_ (start-land! "land-quality-script" "land-x" (System/getProperty "user.dir"))
+            completed (op! "land" ["complete" "land-quality-script" "--pr-number" "411"])
             gate-attrs (:attributes (weaver/show rt (get-in completed [:ready 0 :id])))
-            [shell-command shell-flag script script-name branch startup-timeout poll-interval]
-            (:shell/argv gate-attrs)
-            executable (io/file ".skein/workflows/scripts/feature-ci-watch.sh")
-            expected-sha (str/trim (:out (sh/sh "git" "rev-parse" "HEAD")))
-            fake-gh-dir (.toFile
-                         (java.nio.file.Files/createTempDirectory
-                          "millstrand-land-fake-gh"
-                          (make-array java.nio.file.attribute.FileAttribute 0)))]
+            executable (io/file ".skein/workflows/scripts/land-quality-gate.sh")
+            worktree (.toFile (java.nio.file.Files/createTempDirectory
+                               "millstrand-land-quality-worktree"
+                               (make-array java.nio.file.attribute.FileAttribute 0)))
+            fake-git-dir (.toFile
+                          (java.nio.file.Files/createTempDirectory
+                           "millstrand-land-fake-git"
+                           (make-array java.nio.file.attribute.FileAttribute 0)))]
         (try
-          (write-fake-gh! fake-gh-dir)
+          (.mkdirs (io/file worktree ".skein"))
+          (let [contract (io/file worktree ".skein" "land-quality.sh")]
+            (spit contract "#!/bin/sh\nprintf 'contract:%s:%s\\n' \"$LAND_EXPECTED_BRANCH\" \"$LAND_EXPECTED_HEAD\"\n")
+            (is (.setExecutable contract true)))
+          (write-fake-land-git! fake-git-dir)
           (is (.canExecute executable))
-          (is (= script (slurp executable)))
-          (is (= ["sh" "-c" "land-ci-watch" "land-x" "180" "5"]
-                 [shell-command shell-flag script-name branch startup-timeout poll-interval]))
-          (let [{:keys [exit out err]} (run-feature-ci-watch executable fake-gh-dir "delayed" expected-sha 10)]
+          (is (= (slurp executable) (get-in gate-attrs [:shell/argv 2])))
+          (is (= ["sh" "-c" "land-quality-gate" "land-x"]
+                 (let [[command flag _script & args] (:shell/argv gate-attrs)]
+                   (into [command flag] args))))
+          (let [{:keys [exit out err]} (run-land-quality-gate executable worktree fake-git-dir "ok")]
             (is (zero? exit))
-            (is (= "watch:pr checks land-x --watch --fail-fast\n" out))
+            (is (str/includes? out "contract:land-x:"))
+            (is (str/includes? out "passed at unchanged pushed HEAD"))
             (is (= "" err))
-            (is (= "3" (str/trim (slurp (io/file fake-gh-dir "counter-delayed"))))))
-          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "absent" expected-sha 0)]
-            (is (= 1 exit))
-            (is (str/includes? err "timed out after 0s waiting for CI checks on land-x"))
-            (is (str/includes? err (str "expected HEAD: " expected-sha)))
-            (is (str/includes? err (str "last PR HEAD: " expected-sha "; checks: 0"))))
-          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "stale-absent" expected-sha 0)]
-            (is (= 1 exit))
-            (is (str/includes? err (str "expected HEAD: " expected-sha)))
-            (is (str/includes? err (str "last PR HEAD: " (str/join (repeat 40 "0"))))))
-          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "malformed-shape" expected-sha 10)]
-            (is (= 1 exit))
-            (is (str/includes? err "malformed PR check metadata")))
-          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "malformed-head" expected-sha 10)]
-            (is (= 1 exit))
-            (is (str/includes? err "malformed PR head")))
-          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "short-head" expected-sha 10)]
-            (is (= 1 exit))
-            (is (str/includes? err "malformed PR head for land-x: deadbeef")))
-          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "malformed-count" expected-sha 10)]
-            (is (= 1 exit))
-            (is (str/includes? err "malformed PR check count")))
-          (let [{:keys [exit err]} (run-feature-ci-watch executable fake-gh-dir "lookup-fail" expected-sha 10)]
-            (is (= 42 exit))
-            (is (str/includes? err "lookup failed")))
-          (let [{:keys [exit out]} (run-feature-ci-watch executable fake-gh-dir "watch-fail" expected-sha 10)]
-            (is (= 17 exit))
-            (is (= "watch:pr checks land-x --watch --fail-fast\n" out)))
+            (doseq [[mode expected]
+                    [["dirty" "feature worktree is dirty"]
+                     ["diff-dirty" "unstaged changes are present"]
+                     ["missing-contract" "trusted quality contract .skein/land-quality.sh is not present at HEAD"]
+                     ["head-changed" "HEAD changed during quality checks"]]]
+              (io/delete-file (io/file fake-git-dir "counter") true)
+              (let [{:keys [exit err]} (run-land-quality-gate executable worktree fake-git-dir mode)]
+                (is (= 1 exit) mode)
+                (is (str/includes? err expected) mode))))
           (finally
-            (test-support/delete-tree! fake-gh-dir)))))))
+            (test-support/delete-tree! fake-git-dir)
+            (test-support/delete-tree! worktree)))))))
 
 (deftest land-merge-script-runs-standalone-with-argv-values
   (let [executable (io/file ".skein/workflows/scripts/land-merge.sh")
@@ -1449,7 +1444,7 @@
         (is (= "land.ci.green" (:action-ref gate)))
         (is (= "shell" (:gate gate)))
         (is (not (contains? gate :choice-details)))
-        (is (= ["sh" "-c" "land-ci-watch" "land-x" "180" "5"]
+        (is (= ["sh" "-c" "land-quality-gate" "land-x"]
                (let [[command flag _script & args] (:shell/argv gate-attrs)]
                  (into [command flag] args))))
         (is (= "/tmp/land-x" (:shell/cwd gate-attrs))))
@@ -1490,7 +1485,7 @@
             attrs (:attributes (weaver/show rt (:id final-ci)))]
         (is (= "land.ci.final-green" (:action-ref final-ci)))
         (is (= "shell" (:gate final-ci)))
-        (is (= ["land-final-ci-watch" "land-x" "180" "5"]
+        (is (= ["land-final-quality-gate" "land-x"]
                (drop 3 (:shell/argv attrs)))))
       (shell-gate-complete! "land-x" "final checks green")
       (let [checkpoint (first (:ready (op! "workflow" ["ready" "land-x"])))

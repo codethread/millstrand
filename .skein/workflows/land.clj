@@ -290,29 +290,28 @@
                                     |moves the kanban card to in_review."
                                    branch branch branch)))})
    (workflow/gate :ci-green
-                  (fn [{:keys [branch]}] (str "Watch CI to green at " branch " HEAD"))
+                  (fn [{:keys [branch]}] (str "Run local quality gates at " branch " HEAD"))
                   :shell
                   :depends-on [:push-draft-pr]
                   :attributes {"workflow/action-ref" "land.ci.green"
                                "shell/argv" (fn [{:keys [branch]}]
-                                              (support/sh-gate support/feature-ci-watch-script
-                                                               "land-ci-watch" branch "180" "5"))
+                                              (support/sh-gate support/land-quality-gate-script
+                                                               "land-quality-gate" branch))
                                "shell/cwd" (fn [{:keys [worktree]}] worktree)
                                "shell/timeout-secs" 5400
                                "workflow/instruction"
-                               (fn [{:keys [branch]}]
+                               (fn [_]
                                  (format-alpha/reflow
-                                  (format
-                                   "|Machine gate: the shell executor waits up to three minutes for
-                                    |GitHub to register checks at %s HEAD, then runs `gh pr checks %s
-                                    |--watch --fail-fast`. It closes this gate only when all checks are
-                                    |green; generic workflow completion refuses gates. A startup
-                                    |timeout, red check, or command failure stamps `gate/error`
-                                    |with captured output. Fix the cause, commit and push when
-                                    |needed, then remove the stamp (`strand update <gate-id>
-                                    |--attributes '{\"gate/error\":null}'`) to retry. The exit
-                                    |code and output tail are recorded on the gate."
-                                   branch branch)))})
+                                  "|Machine gate runs the target repository's tracked executable
+                                   |`.skein/land-quality.sh` from the feature worktree. The wrapper
+                                   |fails closed unless the named branch is checked out, the tree is
+                                   |clean, the contract is tracked and executable, and local HEAD
+                                   |matches its upstream. It also verifies that the contract leaves
+                                   |the pushed HEAD and tree unchanged. The shell executor records
+                                   |combined command output on the gate; generic workflow completion
+                                   |refuses this gate. Fix the cause, commit and push when needed,
+                                   |then remove the stamp (`strand update <gate-id> --attributes
+                                   '{\"gate/error\":null}'`) to retry."))})
    (workflow/gate :reviewer
                   (fn [{:keys [item]}] (str "Review land change: " (:name item)))
                   :subagent
@@ -368,20 +367,21 @@
                                  |the branch is ready for final CI; the next machine gate checks the
                                  |actual pushed HEAD.")})
    (workflow/gate :final-ci-green
-                  (fn [{:keys [branch]}] (str "Watch final CI to green at " branch " HEAD"))
+                  (fn [{:keys [branch]}] (str "Run final local quality gates at " branch " HEAD"))
                   :shell
                   :depends-on [:resolve-review]
                   :attributes {"workflow/action-ref" "land.ci.final-green"
                                "shell/argv" (fn [{:keys [branch]}]
-                                              (support/sh-gate support/feature-ci-watch-script
-                                                               "land-final-ci-watch" branch "180" "5"))
+                                              (support/sh-gate support/land-quality-gate-script
+                                                               "land-final-quality-gate" branch))
                                "shell/cwd" (fn [{:keys [worktree]}] worktree)
                                "shell/timeout-secs" 5400
                                "workflow/instruction"
                                (format-alpha/reflow
-                                "|Machine gate: re-run the feature CI watcher after review resolution.
-                                 |It closes only when checks are green at the branch's current pushed
-                                 |HEAD, so sign-off cannot rely on the pre-review CI result.")})
+                                "|Machine gate re-runs the target repository's local quality
+                                 |contract after review resolution. It closes only when every
+                                 |declared command passes at the current pushed HEAD, so sign-off
+                                 |cannot rely on the pre-review result.")})
    (workflow/checkpoint :signoff
                         (fn [{:keys [branch]}] (str "Sign off landing " branch))
                         :depends-on [:final-ci-green]

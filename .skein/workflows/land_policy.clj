@@ -750,12 +750,13 @@
             |`<base-sha>..<head-sha>` commit range and its changed-file vector.
             |At push-draft-pr: push, open or reuse a draft PR, then `strand
             |land complete <run-id> --pr-number <n>` (not bare workflow
-            |complete). The first ci-green shell gate watches checks. The
+            |complete). The first ci-green shell gate runs the tracked
+            |`.skein/land-quality.sh` contract from the feature worktree. The
             |workflow then fans the change-review roster into subagent gates
             |and synthesizes their notes. Resolve the synthesis, commit and
-            |push fixes, and complete resolve-review; final-ci-green checks the
-            |current pushed HEAD before sign-off. On a gate failure, fix the
-            |cause and clear `gate/error` to retry.
+            |push fixes, and complete resolve-review; final-ci-green runs the
+            |same contract against the current pushed HEAD before sign-off.
+            |On a gate failure, fix the cause and clear `gate/error` to retry.
             |Approve only with `strand land choose <run-id> approved
             |--input '{\"subject\":\"…\",\"body\":\"…\"}'` after
             |`git fetch origin && git rev-list --count HEAD..origin/main` is
