@@ -110,13 +110,12 @@ mill weaver start    # boot the weaver for this workspace
 
 ### Use Millstrand from another Clojure project
 
-Published consumers pin the repository, marker, and peeled commit together:
+Published alpha consumers pin the repository and full commit SHA. The core currently publishes no release marker:
 
 ```clojure
 {:deps {io.millstrand/millstrand
         {:git/url "https://github.com/codethread/millstrand.git"
-         :git/tag "vN"
-         :git/sha "<peeled-commit-sha>"}}}
+         :git/sha "<40-hex-commit-sha>"}}}
 ```
 
 For local sibling development, use the checkout beside the consumer:
@@ -125,7 +124,7 @@ For local sibling development, use the checkout beside the consumer:
 {:deps {io.millstrand/millstrand {:local/root "../millstrand"}}}
 ```
 
-The local form is for development only. `scripts/verify-published-core.sh` has two release-proof modes: `pre-tag` checks a clean temporary consumer against the candidate checkout, while `published` checks the fetched Git tag and peeled commit without a local root.
+The local form is for development only. `scripts/verify-published-core.sh` has two proof modes: `candidate` checks a clean temporary consumer against the candidate checkout, while `published` checks the fetched Git commit without a local root.
 
 Add a few strands, wiring in dependencies and a `type` attribute as you go (`strand add` prints the new strand as JSON; `jq` pulls the id out):
 

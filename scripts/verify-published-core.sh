@@ -4,14 +4,13 @@ set -euo pipefail
 usage() {
   cat >&2 <<'EOF'
 usage:
-  scripts/verify-published-core.sh --mode pre-tag --source-root DIR \
+  scripts/verify-published-core.sh --mode candidate --source-root DIR \
     --coordinate io.millstrand/millstrand \
-    --repository https://github.com/codethread/millstrand.git \
-    --candidate-tag vN
+    --repository https://github.com/codethread/millstrand.git
   scripts/verify-published-core.sh --mode published \
     --coordinate io.millstrand/millstrand \
     --repository https://github.com/codethread/millstrand.git \
-    --tag vN --sha PEELED-SHA
+    --sha 40-HEX-COMMIT
 EOF
   exit 2
 }
@@ -20,8 +19,6 @@ mode=""
 source_root=""
 coordinate=""
 repository=""
-candidate_tag=""
-tag=""
 sha=""
 
 while (($# > 0)); do
@@ -44,16 +41,6 @@ while (($# > 0)); do
     --repository)
       [[ $# -ge 2 ]] || usage
       repository=$2
-      shift 2
-      ;;
-    --candidate-tag)
-      [[ $# -ge 2 ]] || usage
-      candidate_tag=$2
-      shift 2
-      ;;
-    --tag)
-      [[ $# -ge 2 ]] || usage
-      tag=$2
       shift 2
       ;;
     --sha)
@@ -80,7 +67,7 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "missing command $1"
 }
 
-[[ "$mode" == "pre-tag" || "$mode" == "published" ]] || usage
+[[ "$mode" == "candidate" || "$mode" == "published" ]] || usage
 [[ "$coordinate" == "io.millstrand/millstrand" ]] || \
   die "coordinate must be io.millstrand/millstrand"
 [[ "$repository" == "https://github.com/codethread/millstrand.git" ]] || \
@@ -100,33 +87,23 @@ edn_string() {
   printf '%s' "$value"
 }
 
-if [[ "$mode" == "pre-tag" ]]; then
+if [[ "$mode" == "candidate" ]]; then
   [[ -n "$source_root" && -d "$source_root" ]] || die "--source-root must name a directory"
-  [[ -n "$candidate_tag" ]] || die "--candidate-tag is required in pre-tag mode"
-  [[ "$candidate_tag" =~ ^v[1-9][0-9]*$ ]] || die "candidate tag must be v<int>, not $candidate_tag"
-  [[ -z "$tag" && -z "$sha" ]] || die "--tag and --sha are published-mode options"
+  [[ -z "$sha" ]] || die "--sha is a published-mode option"
   source_root=$(cd "$source_root" && pwd -P)
   [[ -d "$source_root/.git" || -f "$source_root/.git" ]] || \
     die "source root is not a Git checkout: $source_root"
   [[ -x "$source_root/bin/mill" ]] || die "missing $source_root/bin/mill; run make build"
   source_marker=$(git -C "$source_root" rev-parse HEAD)
 else
-  [[ -z "$source_root" && -z "$candidate_tag" ]] || \
-    die "--source-root and --candidate-tag are pre-tag options"
-  [[ "$tag" =~ ^v[1-9][0-9]*$ ]] || die "tag must be v<int>, not $tag"
-  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "sha must be a lowercase peeled 40-hex commit"
-  if ! remote_output=$(git ls-remote "$repository" "refs/tags/${tag}^{}" 2>&1); then
-    die "cannot query $repository for peeled tag $tag: $remote_output"
-  fi
-  remote_sha=$(printf '%s\n' "$remote_output" | awk 'NR == 1 {print $1}')
-  [[ -n "$remote_sha" ]] || die "remote has no peeled annotated tag $tag"
-  [[ "$remote_sha" == "$sha" ]] || \
-    die "remote peeled SHA for $tag is $remote_sha, expected $sha"
+  [[ -z "$source_root" ]] || die "--source-root is a candidate-mode option"
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "sha must be a lowercase 40-hex commit"
   source_marker="$sha"
 fi
 
 tmp_root=$(mktemp -d /tmp/ms-core.XXXXXX)
 consumer_root="$tmp_root/consumer"
+gitlibs_root="$tmp_root/.gitlibs"
 state_root="$tmp_root/state"
 config_dir="$consumer_root/.millstrand"
 alias_dir="$consumer_root/.ms"
@@ -153,22 +130,22 @@ mkdir -p "$consumer_root"
 git -C "$consumer_root" init -q
 
 deps_file="$consumer_root/deps.edn"
-if [[ "$mode" == "pre-tag" ]]; then
+if [[ "$mode" == "candidate" ]]; then
   source_root_edn=$(edn_string "$source_root")
   cat >"$deps_file" <<EOF
 {:deps {io.millstrand/millstrand {:local/root "$source_root_edn"}}}
 EOF
 else
   cat >"$deps_file" <<EOF
-{:deps {io.millstrand/millstrand {:git/url "$repository" :git/tag "$tag" :git/sha "$sha"}}}
+{:deps {io.millstrand/millstrand {:git/url "$repository" :git/sha "$sha"}}}
 EOF
 fi
 
 deps_value=$(tr '\n' ' ' <"$deps_file")
-if ! classpath=$(cd "$consumer_root" && clojure -Spath -Sdeps "$deps_value" 2>&1); then
+if ! classpath=$(cd "$consumer_root" && GITLIBS="$gitlibs_root" clojure -Spath -Sdeps "$deps_value" 2>&1); then
   die "Clojure dependency resolution failed for $coordinate: $classpath"
 fi
-if ! resource_output=$(cd "$consumer_root" && clojure -Sdeps "$deps_value" -M -e '
+if ! resource_output=$(cd "$consumer_root" && GITLIBS="$gitlibs_root" clojure -Sdeps "$deps_value" -M -e '
   (require (quote millstrand.api.current.alpha)
            (quote millstrand.api.weaver.alpha))
   (let [resource (clojure.java.io/resource "millstrand/api/current/alpha.clj")]
@@ -183,11 +160,11 @@ printf '%s\n' "$resource_output" >"$resource_file"
 if [[ "$mode" == "published" ]]; then
   expected_resource_path="/.gitlibs/libs/io.millstrand/millstrand/$source_marker/"
   if ! grep -F "$expected_resource_path" "$resource_file" >/dev/null; then
-    die "published consumer did not resolve $coordinate at peeled SHA $source_marker from Git cache: $resource_output"
+    die "published consumer did not resolve $coordinate at commit $source_marker from Git cache: $resource_output"
   fi
 else
   if ! grep -F "$source_root" "$resource_file" >/dev/null; then
-    die "pre-tag consumer did not resolve supplied source root $source_root: $resource_output"
+    die "candidate consumer did not resolve supplied source root $source_root: $resource_output"
   fi
 fi
 
@@ -260,5 +237,4 @@ echo "millstrand published core verification: clean"
 echo "  mode: $mode"
 echo "  coordinate: $coordinate"
 echo "  repository: $repository"
-echo "  marker: ${tag:-$candidate_tag}"
 echo "  commit: $source_marker"
