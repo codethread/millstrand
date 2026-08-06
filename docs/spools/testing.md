@@ -50,6 +50,23 @@ clojure -M:test -m my.test-runner
 The dependency name is arbitrary; `:local/root` is what matters. Keep the checkout path out of `src`
 paths — Millstrand is a dev/test dependency for your library code, and a runtime host for your spool.
 
+The published form is a Git pin, not a local override:
+
+```clojure
+{:deps {io.millstrand/millstrand
+        {:git/url "https://github.com/codethread/millstrand.git"
+         :git/tag "vN"
+         :git/sha "<peeled-commit-sha>"}}}
+```
+
+For a sibling checkout at `../millstrand`, use this local-development form:
+
+```clojure
+{:deps {io.millstrand/millstrand {:local/root "../millstrand"}}}
+```
+
+Keep the local form out of published-consumer verification. Run `scripts/verify-published-core.sh` once in `pre-tag` mode against the candidate checkout, then once in `published` mode after the tag is pushed; only the latter proves the fetched Git pin without a local root. The release note has the two commands and their required inputs.
+
 ## Testing tiers
 
 Three tiers, cheapest first. Do not start a weaver for code that does not need one.
