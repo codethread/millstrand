@@ -76,7 +76,7 @@ run_capture() {
 }
 
 assert_no_old_identity() {
-  if rg -n -i 'skein|io\.skein|:skein/min' "$transcript"; then
+  if grep -Eiq 'skein|io\.skein|:skein/min' "$transcript"; then
     echo "millstrand docs acceptance: old identity appeared in command output" >&2
     exit 1
   fi
