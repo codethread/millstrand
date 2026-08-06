@@ -56,6 +56,15 @@ local function decode_weavers(output)
   if not ok or type(decoded) ~= "table" then
     error("mill weaver list returned malformed JSON")
   end
+  if #decoded == 0 and next(decoded) ~= nil then
+    error("mill weaver list returned a JSON object; expected an array")
+  end
+  for index = 1, #decoded do
+    local row = decoded[index]
+    if type(row) ~= "table" or type(row.state) ~= "string" or row.state == "" then
+      error("mill weaver list returned malformed row at index " .. tostring(index))
+    end
+  end
   return decoded
 end
 

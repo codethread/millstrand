@@ -278,10 +278,12 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
+      - run: sudo apt-get update && sudo apt-get install -y neovim
       - run: make ci-config-check
       - run: make identity-check
       - run: make build
       - run: scripts/acceptance/millstrand-docs.sh
+      - run: scripts/acceptance/millstrand-neovim.sh
       - run: make docs-check
 
   clojure-security-report:
