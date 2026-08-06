@@ -268,20 +268,17 @@
        ['(require '[millstrand.api.runtime.alpha]
                   '[millstrand.core.weaver.runtime :as weaver-runtime])
         (list 'let ['thread-prefix thread-prefix]
-              '(let [worker (doto (Thread. (reify Runnable
-                                             (run [_]
-                                               (try
-                                                 (while true
-                                                   (Thread/sleep 100))
-                                                 (catch Throwable _ nil))))
+              '(let [stop-worker (promise)
+                     worker (doto (Thread. (reify Runnable
+                                             (run [_] @stop-worker))
                                            (str thread-prefix "-worker"))
                               (.setDaemon true))
                      rt weaver-runtime/*runtime*]
                  (.start worker)
                  (millstrand.api.runtime.alpha/spool-state rt :test/executor
                                                            (fn [] {:close-fn (fn []
-                                                                               (.interrupt worker)
-                                                                               (.join worker 1000))}))
+                                                                               (deliver stop-worker true)
+                                                                               (.join worker))}))
                  (millstrand.api.runtime.alpha/spool-state rt :test/bad-close
                                                            (fn [] {:close-fn (fn []
                                                                                (throw (ex-info "close boom" {:source :spool-close})))}))

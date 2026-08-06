@@ -53,7 +53,6 @@
          choice-name choice-details-attr reject-unknown-choice-keys!
          require-valid-choices!
          reject-next-and-revise! require-unique-choice-keys!
-         pour-with-rt! wisp-with-rt! burn-with-rt!
          attention timeout-secs-opt poll-ms-opt)
 
 (defn explain
@@ -339,6 +338,21 @@
          [rendered _ _ steps] (cmp/resolve-and-normalize (:workflow plan) (:params plan) {})]
      {:name (:name rendered)
       :steps (mapv cmp/describe-step steps)})))
+
+(defn- pour-with-rt!
+  [rt workflow params opts]
+  (batch/apply! rt (compile workflow params (merge opts {:form :molecule}))))
+
+(defn- wisp-with-rt!
+  [rt workflow params opts]
+  (batch/apply! rt (compile workflow params (merge opts {:form :wisp}))))
+
+(defn- burn-with-rt!
+  [rt root-id]
+  (let [ids (mapv :id (:strands (graph/subgraph rt [root-id])))]
+    (if (seq ids)
+      (graph/burn-by-ids! rt ids)
+      {:burned [] :count 0})))
 
 (defn pour!
   "Materialize `workflow` as a persistent molecule strand graph."
@@ -2334,23 +2348,6 @@
       (fail! "Workflow checkpoint choice keys must be unique"
              {:choice duplicate :choices names})))
   choices)
-
-;; --- runtime wrappers -----------------------------------------------------
-
-(defn- pour-with-rt!
-  [rt workflow params opts]
-  (batch/apply! rt (compile workflow params (merge opts {:form :molecule}))))
-
-(defn- wisp-with-rt!
-  [rt workflow params opts]
-  (batch/apply! rt (compile workflow params (merge opts {:form :wisp}))))
-
-(defn- burn-with-rt!
-  [rt root-id]
-  (let [ids (mapv :id (:strands (graph/subgraph rt [root-id])))]
-    (if (seq ids)
-      (graph/burn-by-ids! rt ids)
-      {:burned [] :count 0})))
 
 ;; --- attention & await polling --------------------------------------------
 

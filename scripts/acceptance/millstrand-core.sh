@@ -18,6 +18,27 @@ list_before="$tmp_root/list-before.json"
 list_after="$tmp_root/list-after.json"
 
 mill_pid=""
+metadata_path="$state_root/millstrand/mill.json"
+
+await_mill_metadata() {
+  local timeout_seconds=5
+  local deadline=$((SECONDS + timeout_seconds))
+
+  until [[ -f "$metadata_path" ]]; do
+    if ! kill -0 "$mill_pid" 2>/dev/null; then
+      sed -n '1,120p' "$mill_log" >&2
+      echo "millstrand core acceptance: mill exited before publishing $metadata_path" >&2
+      return 1
+    fi
+    if ((SECONDS >= deadline)); then
+      sed -n '1,120p' "$mill_log" >&2
+      echo "millstrand core acceptance: mill did not publish $metadata_path within ${timeout_seconds}s" >&2
+      return 1
+    fi
+    sleep 0.05
+  done
+}
+
 cleanup() {
   if [[ -n "$mill_pid" ]] && kill -0 "$mill_pid" 2>/dev/null; then
     kill "$mill_pid" 2>/dev/null || true
@@ -31,15 +52,7 @@ mkdir -p "$workspace_root"
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" start >"$mill_log" 2>&1 &
 mill_pid=$!
-for _ in $(seq 1 100); do
-  [[ -f "$state_root/millstrand/mill.json" ]] && break
-  sleep 0.05
-done
-if [[ ! -f "$state_root/millstrand/mill.json" ]]; then
-  sed -n '1,120p' "$mill_log" >&2
-  echo "millstrand core acceptance: mill did not publish metadata" >&2
-  exit 1
-fi
+await_mill_metadata
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" init --workspace "$config_dir" >"$tmp_root/init.json"
 cp "$repo_root/scripts/acceptance/fixtures/millstrand-core-spools.edn" "$config_dir/spools.edn"
