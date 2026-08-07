@@ -1,0 +1,20 @@
+{
+  "schema": "devflow/core-fragment-fixtures-v1",
+  "source": "source.sql",
+  "expected-wake": "expected-scheduler-wake.json",
+  "history": {
+    "strands": 2,
+    "attributes": 4,
+    "burn_history": 1,
+    "scheduler_history": 1,
+    "spend_rows": 4
+  },
+  "cases": [
+    {"name": "success-dry-run", "result": "pass"},
+    {"name": "running-source", "result": "fail"},
+    {"name": "target-collision", "result": "fail"},
+    {"name": "hash-mismatch", "result": "fail"},
+    {"name": "integrity-failure", "result": "fail"},
+    {"name": "unexpected-wake", "result": "fail"}
+  ]
+}
