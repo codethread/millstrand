@@ -41,14 +41,25 @@
             [quality.workspace-tests :as workspace-tests]))
 
 (defn- resource-source-root [resource-path]
-  (when-let [url (io/resource resource-path)]
-    (when (= "file" (.getProtocol url))
-      (some (fn [^java.io.File candidate]
-              (when (= "src" (.getName candidate))
-                (.getPath candidate)))
-            (take-while some?
-                        (iterate #(.getParentFile ^java.io.File %)
-                                 (.getParentFile (io/file (.toURI url)))))))))
+  (let [url (or (io/resource resource-path)
+                (throw (ex-info "Required Millhouse source resource is missing"
+                                {:resource resource-path
+                                 :allowed-source-root "ancestor directory named src"})))]
+    (when-not (= "file" (.getProtocol url))
+      (throw (ex-info "Required Millhouse source resource is not directory-backed"
+                      {:resource resource-path
+                       :url (str url)
+                       :allowed-source-root "file URL beneath an ancestor directory named src"})))
+    (or (some (fn [^java.io.File candidate]
+                (when (= "src" (.getName candidate))
+                  (.getPath candidate)))
+              (take-while some?
+                          (iterate #(.getParentFile ^java.io.File %)
+                                   (.getParentFile (io/file (.toURI url))))))
+        (throw (ex-info "Required Millhouse source resource has no source-root ancestor"
+                        {:resource resource-path
+                         :url (str url)
+                         :allowed-source-root "ancestor directory named src"})))))
 
 (def ^:private source-roots
   ;; Everything lintable: engine, batteries, local-root spools, trusted
@@ -65,12 +76,12 @@
      "spools/cron/src"
      ".millstrand"
      "test"]
-    (keep resource-source-root
-          ["millhouse/spools/workflow.clj"
-           "millhouse/spools/chime.clj"
-           "millhouse/spools/cron.clj"
-           "millhouse/spools/executors/code.clj"
-           "millhouse/spools/executors/shell.clj"]))))
+    (map resource-source-root
+         ["millhouse/spools/workflow.clj"
+          "millhouse/spools/chime.clj"
+          "millhouse/spools/cron.clj"
+          "millhouse/spools/executors/code.clj"
+          "millhouse/spools/executors/shell.clj"]))))
 
 (def ^:private core-macro-names
   (->> (ns-publics 'clojure.core)
