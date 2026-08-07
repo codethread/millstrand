@@ -2,12 +2,16 @@
 set -euo pipefail
 
 usage() {
+  local status=${1:-2}
   cat >&2 <<'EOF'
 usage: scripts/cutover/verify-core-fragment.sh \
   --fragment docs/operations/millstrand-cutover.core.json \
   --fixtures test/fixtures/millstrand-cutover/core-fragment
+
+Relative paths are resolved from the repository root. Absolute paths are accepted.
+The verifier writes target/millstrand-cutover/core-fragment-verification.json.
 EOF
-  exit 2
+  exit "$status"
 }
 
 fragment_arg=""
@@ -16,7 +20,7 @@ while (($# > 0)); do
   case "$1" in
     --fragment) [[ $# -ge 2 ]] || usage; fragment_arg=$2; shift 2 ;;
     --fixtures) [[ $# -ge 2 ]] || usage; fixtures_arg=$2; shift 2 ;;
-    -h|--help) usage ;;
+    -h|--help) usage 0 ;;
     *) echo "verify-core-fragment: unknown argument: $1" >&2; usage ;;
   esac
 done
@@ -58,10 +62,33 @@ jq -e '
 jq -e '
   type == "object" and .schema == "devflow/consumer-preparation-v1" and
   .card == "MSR-14A" and .consumer == "core" and .disposition == "ready" and
+  (.provenance | type == "object") and
   (.release | type == "object") and (.source | type == "object") and
   (.target | type == "object") and (.copy | type == "object") and
   (.execution | type == "object") and (.probes | type == "object")
 ' "$fragment" >/dev/null || die "fragment has an incomplete top-level contract"
+
+jq -e '
+  .provenance["override-record"] == "yvv5n" and
+  .provenance.statement == "The MSR-04 dependency/release input remains SHA-only at 5790c459e9bb692b5e975f9715df7d5b403feff2. The live MSR-14A runtime checkout advances to canonical origin/main at 8219eb80fafa21e26185806307c749d5b8eecea4 before land and carries the policy and midpoint commits." and
+  .provenance["dependency-input"] == {
+    "card": "MSR-04",
+    "role": "consumer dependency/release input",
+    "ref-kind": "sha-only",
+    "sha": "5790c459e9bb692b5e975f9715df7d5b403feff2"
+  } and
+  .provenance["runtime-input"] == {
+    "card": "MSR-14A",
+    "role": "live runtime source checkout",
+    "ref": "origin/main",
+    "sha": "8219eb80fafa21e26185806307c749d5b8eecea4",
+    "landed-commit": "MSR-14 landed canonical main commit; record its squash SHA at cutover"
+  } and
+  .provenance["required-commits"] == [
+    "9ec1aa2c8055ba97e887dac574a054fc53e695c3",
+    "8219eb80fafa21e26185806307c749d5b8eecea4"
+  ]
+' "$fragment" >/dev/null || die "fragment does not record the yvv5n dependency/runtime override"
 
 jq -e '
   (.release | keys_unsorted | sort == ["card","coordinate","land-run","landed-main-commit","ref-kind","repository","sha","verification"]) and
@@ -135,6 +162,8 @@ jq -e --arg dependency "$sha" --arg marker "$source_marker" --arg target "$targe
   --arg artifact "$(jq -er '.contract.expected_wake_artifact' "$fixtures_json")" \
   --arg runtime "$prepared" --arg runtime_sha "$prepared_sha" \
   '.contract.dependency_sha == $dependency and
+   .contract.override_record == "yvv5n" and
+   .contract.override_statement == "The MSR-04 dependency/release input remains SHA-only at 5790c459e9bb692b5e975f9715df7d5b403feff2. The live MSR-14A runtime checkout advances to canonical origin/main at 8219eb80fafa21e26185806307c749d5b8eecea4 before land and carries the policy and midpoint commits." and
    .contract.source_marker == $marker and
    .contract.runtime_marker == $target and
    .contract.runtime_checkout == $runtime and
@@ -206,6 +235,7 @@ simulate_copy() {
   local backup="$tmp_root/$case_name/backup.sqlite"
   local target="$parent/target.sqlite"
   local running=0
+  failure() { printf '%s\t%s\n' "$1" "$2"; exit 1; }
   mkdir -p "$parent"
   chmod 0755 "$parent"
   case "$case_name" in
@@ -214,8 +244,8 @@ simulate_copy() {
     hash-mismatch|integrity-failure) : ;;
     unexpected-wake) : ;;
   esac
-  [[ "$running" == 0 ]] || return 1
-  [[ ! -e "$target" ]] || return 1
+  [[ "$running" == 0 ]] || failure "running-source" "source_lifecycle=running"
+  [[ ! -e "$target" ]] || failure "target-collision" "target_exists=true"
   cp "$fixture_db" "$backup"
   cp "$backup" "$target"
   case "$case_name" in
@@ -223,22 +253,24 @@ simulate_copy() {
     integrity-failure) printf 'not a sqlite database\n' >"$target" ;;
     unexpected-wake) printf '{"key":"unexpected-wake"}\n' >"$tmp_root/wake.json" ;;
   esac
-  [[ "$(mode_value "$parent")" == "755" ]] || return 1
-  [[ "$(sqlite3 "$target" 'PRAGMA integrity_check;' 2>/dev/null)" == "ok" ]] || return 1
-  [[ "$(wc -c <"$backup")" -eq "$(wc -c <"$target")" ]] || return 1
-  cmp -s "$backup" "$target" || return 1
-  [[ "$(sha256sum "$backup" | awk '{print $1}')" == "$(sha256sum "$target" | awk '{print $1}')" ]] || return 1
+  [[ "$(mode_value "$parent")" == "755" ]] || failure "copy-contract" "target_parent_mode=unexpected"
+  [[ "$(sqlite3 "$target" 'PRAGMA integrity_check;' 2>/dev/null)" == "ok" ]] || failure "integrity-failure" "sqlite_integrity=not-ok"
+  [[ "$(wc -c <"$backup")" -eq "$(wc -c <"$target")" ]] || failure "hash-mismatch" "byte_count_equal=false"
+  cmp -s "$backup" "$target" || failure "hash-mismatch" "bytewise_equal=false"
+  [[ "$(sha256sum "$backup" | awk '{print $1}')" == "$(sha256sum "$target" | awk '{print $1}')" ]] || failure "hash-mismatch" "sha256_equal=false"
   if [[ "$case_name" == unexpected-wake ]]; then
-    [[ "$(sha256sum "$tmp_root/wake.json" | awk '{print $1}')" == "$actual_wake_sha" ]] || return 1
+    [[ "$(sha256sum "$tmp_root/wake.json" | awk '{print $1}')" == "$actual_wake_sha" ]] || \
+      failure "unexpected-wake" "wake_artifact_sha256=unexpected"
   fi
-  [[ "$(query_count 'SELECT COUNT(*) FROM strands;')" == "$history_strands" ]] || return 1
-  [[ "$(query_count 'SELECT COUNT(*) FROM attributes;')" == "$history_attributes" ]] || return 1
-  [[ "$(query_count 'SELECT COUNT(*) FROM burn_history;')" == "$history_burn" ]] || return 1
-  [[ "$(query_count 'SELECT COUNT(*) FROM scheduler_history;')" == "$history_scheduler" ]] || return 1
-  [[ "$(query_count "SELECT COUNT(*) FROM attributes WHERE key IN ('agent-run/cost-usd', 'agent-run/tokens', 'agent-run/tokens-total');")" == "$history_spend" ]] || return 1
+  [[ "$(query_count 'SELECT COUNT(*) FROM strands;')" == "$history_strands" ]] || failure "copy-contract" "strands_count=unexpected"
+  [[ "$(query_count 'SELECT COUNT(*) FROM attributes;')" == "$history_attributes" ]] || failure "copy-contract" "attributes_count=unexpected"
+  [[ "$(query_count 'SELECT COUNT(*) FROM burn_history;')" == "$history_burn" ]] || failure "copy-contract" "burn_history_count=unexpected"
+  [[ "$(query_count 'SELECT COUNT(*) FROM scheduler_history;')" == "$history_scheduler" ]] || failure "copy-contract" "scheduler_history_count=unexpected"
+  [[ "$(query_count "SELECT COUNT(*) FROM attributes WHERE key IN ('agent-run/cost-usd', 'agent-run/tokens', 'agent-run/tokens-total');")" == "$history_spend" ]] || failure "copy-contract" "spend_rows_count=unexpected"
+  printf '%s\t%s\n' "none" "copy-and-wake-contract-ok"
 }
 
-jq -e '.cases | type == "array" and length == 6 and all(.[]; (.name | type == "string") and (.result == "pass" or .result == "fail"))' "$fixtures_json" >/dev/null || \
+jq -e '.cases | type == "array" and length == 6 and all(.[]; (.name | type == "string") and (.result == "pass" or .result == "fail") and (.failure | type == "object") and (.failure.reason | type == "string" and length > 0) and (.failure.diagnostic | type == "string" and length > 0))' "$fixtures_json" >/dev/null || \
   die "fixture cases are incomplete"
 declare -a checks=()
 checks+=("fragment-schema")
@@ -256,8 +288,13 @@ checks+=("fixture-schema")
 while IFS= read -r case_json; do
   case_name=$(jq -er '.name' <<<"$case_json")
   expected_result=$(jq -er '.result' <<<"$case_json")
-  if simulate_copy "$case_name"; then actual_result=pass; else actual_result=fail; fi
+  expected_reason=$(jq -er '.failure.reason' <<<"$case_json")
+  expected_diagnostic=$(jq -er '.failure.diagnostic' <<<"$case_json")
+  if outcome=$(simulate_copy "$case_name"); then actual_result=pass; else actual_result=fail; fi
+  IFS=$'\t' read -r actual_reason actual_diagnostic <<<"$outcome"
   [[ "$actual_result" == "$expected_result" ]] || die "fixture case $case_name expected $expected_result, got $actual_result"
+  [[ "$actual_reason" == "$expected_reason" ]] || die "fixture case $case_name expected reason $expected_reason, got $actual_reason"
+  [[ "$actual_diagnostic" == "$expected_diagnostic" ]] || die "fixture case $case_name expected diagnostic $expected_diagnostic, got $actual_diagnostic"
 done < <(jq -c '.cases[]' "$fixtures_json")
 
 output="$repo_root/target/millstrand-cutover/core-fragment-verification.json"
@@ -271,7 +308,7 @@ jq -S -n \
   --arg prepared "$prepared" \
   --arg sha "$sha" \
   --argjson cases "$(jq -c '.cases' "$fixtures_json")" \
-  '{schema:$schema,fragment:$fragment,fragment_sha256:$fragment_sha,release_sha:$sha,prepared_checkout:$prepared,source_database:$source,target_database:$target,checks:["fragment-schema","sha-only-release","canonical-target-and-world-hash","source-marker","runtime-release-separation","policy-and-midpoint-ancestry","prepared-checkout","msr-15-landed-commit-invariant","whole-copy-paths","stable-expected-wake-artifact","fixture-schema","success-dry-run","running-source","target-collision","hash-mismatch","integrity-failure","unexpected-wake"],cases:$cases}' \
+  '{schema:$schema,fragment:$fragment,fragment_sha256:$fragment_sha,release_sha:$sha,prepared_checkout:$prepared,source_database:$source,target_database:$target,checks:["fragment-schema","override-provenance","sha-only-release","canonical-target-and-world-hash","source-marker","runtime-release-separation","policy-and-midpoint-ancestry","prepared-checkout","msr-15-landed-commit-invariant","whole-copy-paths","stable-expected-wake-artifact","fixture-schema","success-dry-run","running-source","target-collision","hash-mismatch","integrity-failure","unexpected-wake"],cases:$cases}' \
   >"$output"
 
 echo "core fragment verification: PASS"

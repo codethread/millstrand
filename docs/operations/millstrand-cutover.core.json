@@ -3,6 +3,27 @@
   "card": "MSR-14A",
   "consumer": "core",
   "disposition": "ready",
+  "provenance": {
+    "override-record": "yvv5n",
+    "statement": "The MSR-04 dependency/release input remains SHA-only at 5790c459e9bb692b5e975f9715df7d5b403feff2. The live MSR-14A runtime checkout advances to canonical origin/main at 8219eb80fafa21e26185806307c749d5b8eecea4 before land and carries the policy and midpoint commits.",
+    "dependency-input": {
+      "card": "MSR-04",
+      "role": "consumer dependency/release input",
+      "ref-kind": "sha-only",
+      "sha": "5790c459e9bb692b5e975f9715df7d5b403feff2"
+    },
+    "runtime-input": {
+      "card": "MSR-14A",
+      "role": "live runtime source checkout",
+      "ref": "origin/main",
+      "sha": "8219eb80fafa21e26185806307c749d5b8eecea4",
+      "landed-commit": "MSR-14 landed canonical main commit; record its squash SHA at cutover"
+    },
+    "required-commits": [
+      "9ec1aa2c8055ba97e887dac574a054fc53e695c3",
+      "8219eb80fafa21e26185806307c749d5b8eecea4"
+    ]
+  },
   "consumer-config": {
     "coordinate": "io.millstrand/millstrand",
     "repository": "https://github.com/codethread/millstrand.git",
@@ -82,7 +103,9 @@
   },
   "artifacts": [
     "docs/operations/millstrand-cutover.core.json",
+    "docs/operations/millstrand-cutover-verifier.md",
     "scripts/cutover/verify-core-fragment.sh",
+    "scripts/cutover/verify-core-fragment-contract.sh",
     "test/fixtures/millstrand-cutover/core-fragment/fixtures.json",
     "test/fixtures/millstrand-cutover/core-fragment/source.sql",
     "test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake.json"
