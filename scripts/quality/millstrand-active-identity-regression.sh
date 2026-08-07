@@ -12,6 +12,12 @@ cp "$repo_root/scripts/quality/millstrand-identity-allowlist.tsv" \
   "$tmp_root/scripts/quality/millstrand-identity-allowlist.tsv"
 cp "$repo_root/quality-inventory.md" "$tmp_root/quality-inventory.md"
 cp "$repo_root/mkdocs.yml" "$tmp_root/mkdocs.yml"
+cp -R "$repo_root/examples" "$tmp_root/examples"
+cp "$repo_root/test/millstrand/guild_test.clj" "$tmp_root/test/millstrand/guild_test.clj"
+cp "$repo_root/scripts/generate_api_docs.clj" "$tmp_root/scripts/generate_api_docs.clj"
+cp "$repo_root/scripts/quality/reflect_check.clj" "$tmp_root/scripts/quality/reflect_check.clj"
+cp "$repo_root/devflow/README.md" "$tmp_root/devflow/README.md"
+cp "$repo_root/devflow/specs/daemon-runtime.md" "$tmp_root/devflow/specs/daemon-runtime.md"
 
 # The audit falls back to git grep when ripgrep is unavailable, so keep the
 # extracted fixture a usable git tree.

@@ -9,7 +9,7 @@ trap 'rm -f "$findings"' EXIT
 cd "$repo_root"
 
 scan_paths=(
-  src cli spools test dev tools scripts integrations docs .github
+  src cli spools examples test dev tools scripts integrations docs .github
   Makefile deps.edn README.md AGENTS.md CONTRIBUTING.md quality-inventory.md
   mkdocs.yml
   devflow/specs devflow/PHILOSOPHY.md devflow/TENETS.md

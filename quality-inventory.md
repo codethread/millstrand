@@ -20,7 +20,7 @@ Baseline generated on 2026-07-05 from the `quality-gates` worktree before any fi
 
 ### Formatting
 
-- `cljfmt` (baseline; now clean): 66 files would be changed. This includes the explicitly requested roots `src`, `spools/batteries/src`, `spools/workflow/src`, `spools/unsafe-text-search/src`, `spools/guild/src`, `test`, `dev`, and `scripts`, plus only practical top-level repo config files under `.millstrand` (`init.clj`, `config.clj`, `reviewers.clj`), not nested `.millstrand/spools` material.
+- `cljfmt` (baseline; now clean): 66 files would be changed. This includes the explicitly requested roots `src`, `spools/batteries/src`, `spools/workflow/src`, `spools/unsafe-text-search/src`, `examples/guild/src`, `test`, `dev`, and `scripts`, plus only practical top-level repo config files under `.millstrand` (`init.clj`, `config.clj`, `reviewers.clj`), not nested `.millstrand/spools` material.
 - `gofumpt` (baseline; now clean): 6 Go files in `cli/` would be changed: `cmd/mill/lifecycle_test.go`, `integration_test.go`, `internal/config/bootstrap.go`, `internal/config/config.go`, `internal/config/config_test.go`, and `internal/config/runtime.go`.
 
 ### clj-kondo
@@ -59,7 +59,7 @@ Top categories:
 
 ### Reflection
 
-Totals: 0 reflection warnings. Every warning is fixed with a type hint at the definition site, so the gate is a blocking CI check that fails on any reflected interop. The gate compiles all of `src` (every `millstrand.*` namespace) plus the maintained spool roots `spools/batteries/src`, `spools/workflow/src`, `spools/unsafe-text-search/src`, `spools/guild/src`, `spools/chime/src`, and `spools/cron/src`. Repeated compile/reload warnings are preserved rather than deduplicated so the gate stays compiler-faithful.
+Totals: 0 reflection warnings. Every warning is fixed with a type hint at the definition site, so the gate is a blocking CI check that fails on any reflected interop. The gate compiles all of `src` (every `millstrand.*` namespace) plus the maintained spool roots `spools/batteries/src`, `spools/workflow/src`, `spools/unsafe-text-search/src`, `examples/guild/src`, `spools/chime/src`, and `spools/cron/src`. Repeated compile/reload warnings are preserved rather than deduplicated so the gate stays compiler-faithful.
 
 The clusters hinted to reach zero:
 

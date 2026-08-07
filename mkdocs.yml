@@ -103,10 +103,6 @@ nav:
           - Cookbook: spools/workflow.cookbook.md
           - API: spools/workflow.api.md
       - Devflow Lifecycle: spools/devflow.md
-      - Weaver Guild:
-          - Contract: spools/guild.md
-          - Cookbook: spools/guild.cookbook.md
-          - API: spools/guild.api.md
       - Text Search (UNSAFE):
           - Contract: spools/unsafe-text-search.md
           - Cookbook: spools/unsafe-text-search.cookbook.md
@@ -124,6 +120,11 @@ nav:
           - Contract: spools/cron/README.md
           - Cookbook: spools/cron.cookbook.md
           - API: spools/cron.api.md
+  - Examples:
+      - Weaver Guild:
+          - Contract: examples/guild/README.md
+          - Cookbook: examples/guild.cookbook.md
+          - API: examples/guild.api.md
   - External Spools:
       - Agent Runs:
           - Contract: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/README.md

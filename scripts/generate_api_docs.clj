@@ -6,7 +6,7 @@
 (def spool-docs
   [{:name "batteries" :source "spools/batteries/src/millstrand/spools/batteries.clj" :outfile "spools/batteries.api.md"}
    {:name "workflow" :source "spools/workflow/src/millstrand/spools/workflow.clj" :outfile "spools/workflow.api.md"}
-   {:name "guild" :source "spools/guild/src/millstrand/spools/guild.clj" :outfile "spools/guild.api.md"}
+   {:name "guild" :source "examples/guild/src/skein/examples/guild.clj" :outfile "examples/guild.api.md"}
    {:name "unsafe-text-search" :source "spools/unsafe-text-search/src/millstrand/spools/unsafe_text_search.clj" :outfile "spools/unsafe-text-search.api.md"}
    {:name "shell" :source "spools/workflow/src/millstrand/spools/executors/shell.clj" :outfile "spools/executors/shell.api.md"}
    {:name "code" :source "spools/workflow/src/millstrand/spools/executors/code.clj" :outfile "spools/executors/code.api.md"}

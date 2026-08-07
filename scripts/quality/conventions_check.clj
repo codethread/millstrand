@@ -48,7 +48,7 @@
    "spools/batteries/src"
    "spools/workflow/src"
    "spools/unsafe-text-search/src"
-   "spools/guild/src"
+   "examples/guild/src"
    "spools/chime/src"
    "spools/cron/src"
    ".millstrand"

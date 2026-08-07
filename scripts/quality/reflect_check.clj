@@ -32,7 +32,7 @@
                "spools/cron/src" "millstrand/spools"
                "spools/workflow/src" "millstrand/spools"
                "spools/unsafe-text-search/src" "millstrand/spools"
-               "spools/guild/src" "millstrand/spools"}
+               "examples/guild/src" "skein/examples"}
         namespaces (sort (mapcat (fn [[root subdir]]
                                    (namespaces-under root subdir))
                                  roots))
