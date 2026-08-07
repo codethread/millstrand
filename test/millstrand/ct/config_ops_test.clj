@@ -115,8 +115,8 @@
      (publish-authoring! runtime :config ".millstrand/policy/config.clj")
      ;; materialize the workflow spool's registry handle so its constructor kind
      ;; is a declared publication backend before workflows/common.clj contributes to it
-     (test-support/activate-spool! runtime :millstrand/spools-workflow
-                                   'millstrand.spools.workflow)
+     (test-support/activate-spool! runtime :millhouse/spools-workflow
+                                   'millhouse.spools.workflow)
      (publish-authoring! runtime :workflows ".millstrand/workflows/common.clj")
      ;; the land op lives beside the definitions it drives, in its own module
      (publish-authoring! runtime :workflows.land-policy ".millstrand/workflows/land_policy.clj")

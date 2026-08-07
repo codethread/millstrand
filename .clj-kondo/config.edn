@@ -8,7 +8,8 @@
            millstrand.test.alpha/with-weaver-world clojure.core/let
            ;; defworkflow defines a Var from (name doc opts definition); def's
            ;; shape resolves the name without kondo expanding the macro.
-           millstrand.spools.workflow/defworkflow clojure.core/def}
+           millstrand.spools.workflow/defworkflow clojure.core/def
+           millhouse.spools.workflow/defworkflow clojure.core/def}
  :hooks {:analyze-call {clojure.core/ns hooks.project-rules/ns-docstring
                         ns hooks.project-rules/ns-docstring
                         clojure.core/def hooks.project-rules/no-spool-module-atom
@@ -24,6 +25,7 @@
                         millstrand.api.millstrand.alpha/defop hooks.project-rules/defop
                         millstrand.api.millstrand.alpha/defquery hooks.project-rules/defquery
                         millstrand.spools.workflow/defexecutor hooks.project-rules/defexecutor
+                        millhouse.spools.workflow/defexecutor hooks.project-rules/defexecutor
                         millstrand.macros.queries/defquery hooks.project-rules/defquery
                         millstrand.macros.ops/defop hooks.project-rules/defop
                         millstrand.macros.rules/defrule hooks.project-rules/defrule}}

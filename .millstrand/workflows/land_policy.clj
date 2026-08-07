@@ -15,7 +15,7 @@
             [millstrand.api.runtime.alpha :as runtime]
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.api.spool.alpha :refer [attr-get entity-projection poll-until!]]
-            [millstrand.spools.workflow :as workflow]))
+            [millhouse.spools.workflow :as workflow]))
 
 ;; The op's own boundary contracts. The land workflow definitions own their
 ;; run-param specs; these govern what arrives on the CLI.

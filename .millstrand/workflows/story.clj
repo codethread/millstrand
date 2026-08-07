@@ -3,7 +3,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [millstrand.api.format.alpha :as format-alpha]
-            [millstrand.spools.workflow :as workflow]
+            [millhouse.spools.workflow :as workflow]
             [ct.workflows.support :as support]))
 
 (defn- non-blank-string?

@@ -3,7 +3,7 @@
   validation helpers used by workspace policy.
 
   Thin glue only: `ct.spools.devflow` owns the feature lifecycle,
-  `millstrand.spools.workflow` is its generic CLI, `ct.spools.delegation` owns the
+  `millhouse.spools.workflow` is its generic CLI, `ct.spools.delegation` owns the
   `strand agent` surface plus the `agent-plan` pattern (all activated from
   init.clj). This file registers named queries. Sibling init.clj modules hold
   the rest of the repo policy: hand-authored modules under workflows/,

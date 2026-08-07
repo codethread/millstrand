@@ -9,7 +9,7 @@
   self-owned steps are the smallest shape that makes a worker round trip
   observable: the opening frontier holds only `:first`, and `:second` becomes
   ready only once `:first` closes."
-  (:require [millstrand.spools.workflow :as workflow]))
+  (:require [millhouse.spools.workflow :as workflow]))
 
 (workflow/defworkflow smoke-round
   "Two dependent self-owned steps, enough to drive a full worker round trip."

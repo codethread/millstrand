@@ -53,7 +53,7 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
 - Human decisions come back as HITL checkpoints, which agents may not answer for you. After the one-time copy above, bind how you are notified in the active workspace's gitignored overlay, `$workspace/init.local.clj`:
 
   ```clojure
-  (require '[millstrand.spools.chime :as chime])
+  (require '[millhouse.spools.chime :as chime])
   (chime/set-notifier! {:argv ["cc-notify"]})   ; anything with the `cmd <title>` + body-on-stdin shape
   ```
 

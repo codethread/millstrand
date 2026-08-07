@@ -891,15 +891,21 @@
         (delete-tree! (smoke-workspace (str db-file ".authoring")))))))
 
 ;; --- Workflow worker CLI ----------------------------------------------------
-;; The workflow engine and its root `workflow` op ship from this checkout, so
-;; the round trip below is the only coverage that crosses the full
-;; strand -> mill -> weaver boundary the in-JVM engine tests never reach.
+;; The workflow engine and its root `workflow` op come from the pinned
+;; Millhouse family, so the round trip below crosses the full strand -> mill ->
+;; weaver boundary against the same external root used by local config.
 
 (defn workflow-spools-edn
-  "Return spools.edn approving batteries, the workflow spool, and the fixture."
+  "Return spools.edn approving batteries, Millhouse roots, and the fixture."
   []
   (str "{:spools {millstrand.spools/batteries {:millstrand/source-root \"spools/batteries\"}\n"
-       "          millstrand.spools/workflow {:millstrand/source-root \"spools/workflow\"}\n"
+       "          millhouse/spools {:git/url \"https://github.com/codethread/millhouse.spool.git\"\n"
+       "                          :git/sha \"8f386b09fb8e8506a3c38105dce8e8552142dbf8\"\n"
+       "                          :roots {millhouse.spools/workflow \"spools/workflow\"\n"
+       "                                  millhouse.spools/chime \"spools/chime\"\n"
+       "                                  millhouse.spools/cron \"spools/cron\"\n"
+       "                                  millhouse.spools.executors/code \"spools/code-executor\"\n"
+       "                                  millhouse.spools.executors/shell \"spools/shell-executor\"}}\n"
        "          smoke/authoring {:local/root " (pr-str authoring-spool-root) "}}}\n"))
 
 (defn workflow-init-forms
@@ -911,19 +917,19 @@
    '(runtime/module! runtime :millstrand/spools-batteries
                      {:ns 'millstrand.spools.batteries
                       :spools ['millstrand.spools/batteries]})
-   '(runtime/module! runtime :millstrand/spools-workflow
-                     {:ns 'millstrand.spools.workflow
-                      :spools ['millstrand.spools/workflow]})
+   '(runtime/module! runtime :millhouse/spools-workflow
+                     {:ns 'millhouse.spools.workflow
+                      :spools ['millhouse.spools/workflow]})
    ;; The engine ships no verbs; this second module is what puts the root
    ;; `workflow` op on the CLI.
-   '(runtime/module! runtime :millstrand/spools-workflow-cli
-                     {:ns 'millstrand.spools.workflow.cli
-                      :spools ['millstrand.spools/workflow]
-                      :after [:millstrand/spools-workflow]})
+   '(runtime/module! runtime :millhouse/spools-workflow-cli
+                     {:ns 'millhouse.spools.workflow.cli
+                      :spools ['millhouse.spools/workflow]
+                      :after [:millhouse/spools-workflow]})
    '(runtime/module! runtime :smoke/flow
                      {:ns 'millstrand.smoke.fixtures.flow
-                      :spools ['smoke/authoring 'millstrand.spools/workflow]
-                      :after [:millstrand/spools-workflow]})])
+                      :spools ['smoke/authoring 'millhouse.spools/workflow]
+                      :after [:millhouse/spools-workflow]})])
 
 (defn smoke-workflow-cli! [db-file]
   (let [workspace (bootstrap-workspace db-file "workflow-cli")

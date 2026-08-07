@@ -6,10 +6,14 @@
 (deftest checked-in-transition-contract-is-current
   (let [contract (transition/validate-current!)]
     (is (= "PROP-Msr-001.S6" (:contract contract)))
+    (is (= :external-publishers-compatible (:phase contract)))
     (is (= #{'codethread/devflow 'codethread/kanban 'ct.spools/agent-run}
            (set (keys (:pins contract)))))
-    (is (= #{'millstrand.ct.config-test 'millstrand.ct.config-ops-test}
-           (transition/deferred-test-namespaces :workspace-config-integration)))
+    (is (= [{:scope :pinned-external-spool-suite
+             :families #{'codethread/kanban}
+             :test-namespaces #{}}]
+           (:deferrals contract)))
+    (is (not (transition/deferred? :workspace-config-integration)))
     (is (transition/deferred? :pinned-external-spool-suite))))
 
 (deftest transition-contract-rejects-scope-widening
@@ -20,19 +24,22 @@
            #"external pins drifted"
            (transition/validate-contract!
             (assoc-in contract [:pins 'codethread/devflow :git/tag] "v22")))))
-    (testing "an extra family cannot hide in a deferred scope"
+    (testing "workspace config cannot regain a deferred scope"
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
-           #"exact incompatible family pin"
+           #"one entry for each scope"
            (transition/validate-contract!
-            (update-in contract [:deferrals 0 :families] conj 'someone/else)))))
-    (testing "an extra workspace namespace cannot hide in a deferred scope"
+            (update contract :deferrals conj
+                    {:scope :workspace-config-integration
+                     :families #{'codethread/devflow}
+                     :test-namespaces #{'millstrand.ct.config-test}})))))
+    (testing "the Kanban-only suite deferral cannot widen to another family"
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
-           #"unexpected test namespace"
+           #"only the exact incompatible family pin"
            (transition/validate-contract!
-            (update-in contract [:deferrals 0 :test-namespaces]
-                       conj 'millstrand.ct.external-config-test)))))))
+            (update-in contract [:deferrals 0 :families]
+                       conj 'codethread/devflow)))))))
 
 (deftest approved-pin-drift-invalidates-the-transition
   (let [file (java.io.File/createTempFile "millstrand-transition-spools-" ".edn")

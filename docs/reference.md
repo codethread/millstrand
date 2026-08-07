@@ -634,7 +634,7 @@ The module's coordinate does not affect these registry rules. A workspace module
 
 Collection only happens under a module contribution. Evaluating a form at the REPL, or reloading source with `runtime/reload-code!`, defines the Var and publishes nothing. The same rule explains removal: a refresh replaces an owner's whole partition for a kind, so dropping a form from the source drops its entry at the next refresh. There is no unregister call to remember.
 
-Domain spools own forms for their own kinds the same way — `millstrand.spools.workflow/defworkflow` and `defexecutor`, `millstrand.spools.cron/defjob`, `millstrand.spools.chime/defrule`. Module lifecycle effects are declared with `millstrand.api.lifecycle.alpha`: `defresource`, `defseed`, and `defreconcile`.
+Domain spools own forms for their own kinds the same way — the Millhouse family provides `millhouse.spools.workflow/defworkflow` and `defexecutor`, `millhouse.spools.cron/defjob`, and `millhouse.spools.chime/defrule`. This repository consumes those roots from the untagged Millhouse pin `8f386b09fb8e8506a3c38105dce8e8552142dbf8`. Module lifecycle effects are declared with `millstrand.api.lifecycle.alpha`: `defresource`, `defseed`, and `defreconcile`.
 
 `defbin` contributes a module-owned executable declaration rather than a weaver-lifetime runtime registration. `mill bin plan` discovers the effective `:bins` entries, and `mill bin run` executes the selected command in the caller's process with the selected workspace in `MILLSTRAND_WORKSPACE`; the declaration may name a string executable or an anchored family/root path and an argv build recipe.
 

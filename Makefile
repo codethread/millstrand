@@ -28,7 +28,7 @@ KANBAN_TREE_CLI := ./tools/kanban-tree
 # informational (skew attribution), so unlike InstalledSource it may degrade.
 BUILD_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 SOURCE_LDFLAGS := -X millstrand-strand-cli/internal/config.InstalledSource=$(CURDIR) -X millstrand-strand-cli/internal/config.BuildID=$(BUILD_ID)
-QUICKDOC_DEPS := '{:deps {io.github.borkdude/quickdoc {:git/tag "v0.2.6" :git/sha "ce86780"}}}'
+QUICKDOC_DEPS := '{:deps {io.github.borkdude/quickdoc {:git/tag "v0.2.6" :git/sha "ce86780"} millhouse.spools/workflow {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8" :deps/root "spools/workflow"} millhouse.spools/chime {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8" :deps/root "spools/chime"} millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8" :deps/root "spools/cron"} millhouse.spools.executors/code {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8" :deps/root "spools/code-executor"} millhouse.spools.executors/shell {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8" :deps/root "spools/shell-executor"}}}'
 QUICKDOC_SCRIPT := scripts/generate_api_docs.clj
 
 # repo-local build for agents/worktrees validating CLI changes without touching

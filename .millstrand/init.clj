@@ -42,26 +42,27 @@
 ;; --- workflow engine + shell executor -------------------------------------
 ;; The engine's collected open-kind and lifecycle declarations own Workflow
 ;; definition/executor publication and its process-lifetime vocabulary seed.
-(runtime/module! runtime :millstrand/spools-workflow
-                 {:ns 'millstrand.spools.workflow
-                  :spools ['millstrand.spools/workflow]})
+(runtime/module! runtime :millhouse/spools-workflow
+                 {:ns 'millhouse.spools.workflow
+                  :spools ['millhouse.spools/workflow]})
 ;; The generic worker CLI is a separate, opt-in module of the same spool: the
 ;; engine ships no verbs, and this declaration is what puts the root `workflow`
 ;; op (list/show/start/ready/complete/choose/defer/await) on the surface for
 ;; every registered definition. Its collected lifecycle declaration seeds the
 ;; failure glossary. Dropping it and refreshing removes the verb.
-(runtime/module! runtime :millstrand/spools-workflow-cli
-                 {:ns 'millstrand.spools.workflow.cli
-                  :spools ['millstrand.spools/workflow]
-                  :after [:millstrand/spools-workflow]})
-;; The shell executor ships in the workflow spool root and fulfils :shell gates
+(runtime/module! runtime :millhouse/spools-workflow-cli
+                 {:ns 'millhouse.spools.workflow.cli
+                  :spools ['millhouse.spools/workflow]
+                  :after [:millhouse/spools-workflow]})
+;; The shell executor has its own approved root and fulfils :shell gates
 ;; by running the gate command directly. Collected forms publish the :shell executor
 ;; symbol and its query. Lifecycle resources own the worker pool and initial scan;
 ;; ordered after workflow, which owns the executor registry it contributes into.
-(runtime/module! runtime :millstrand/spools-shell
-                 {:ns 'millstrand.spools.executors.shell
-                  :spools ['millstrand.spools/workflow]
-                  :after [:millstrand/spools-workflow]})
+(runtime/module! runtime :millhouse/spools-shell
+                 {:ns 'millhouse.spools.executors.shell
+                  :spools ['millhouse.spools.executors/shell
+                           'millhouse.spools/workflow]
+                  :after [:millhouse/spools-workflow]})
 ;; UNSAFE spool: unsafe-text-search reaches past the blessed api.* contract into
 ;; millstrand.core.db to LIKE-search titles and attribute values, including archived
 ;; rows the query language cannot see. It is a maintained, in-the-open example of
@@ -78,7 +79,7 @@
 (runtime/module! runtime :millstrand/spools-devflow
                  {:ns 'ct.spools.devflow
                   :spools ['codethread/devflow]
-                  :after [:millstrand/spools-workflow]
+                  :after [:millhouse/spools-workflow]
                   :required? true})
 
 ;; --- peer coordination spools -----------------------------------------------
@@ -148,14 +149,14 @@
 ;; gitignored init.local.clj. Chime's defresource owns its handler, mutation
 ;; barrier, and visible rule view as one atomic boundary. Unbound chime records
 ;; loud notifier-missing errors.
-(runtime/module! runtime :millstrand/spools-chime
-                 {:ns 'millstrand.spools.chime
-                  :spools ['millstrand.spools/chime]
+(runtime/module! runtime :millhouse/spools-chime
+                 {:ns 'millhouse.spools.chime
+                  :spools ['millhouse.spools/chime]
                   :required? true})
 (runtime/module! runtime :attention
                  {:file "notifications/attention.clj"
-                  :spools ['millstrand.spools/chime 'ct.spools/agent-run]
-                  :after [:millstrand/spools-chime :millstrand/spools-shuttle]
+                  :spools ['millhouse.spools/chime 'ct.spools/agent-run]
+                  :after [:millhouse/spools-chime :millstrand/spools-shuttle]
                   :required? true})
 
 ;; --- kanban board + devflow adapter -----------------------------------------
@@ -175,16 +176,16 @@
 ;; Cron is a generic weaver timer engine. Its collected open-kind and lifecycle
 ;; declarations own job publication and scheduling; jobs/nvd_scan.clj contributes a
 ;; job through `defjob`, so it is ordered after cron.
-(runtime/module! runtime :millstrand/spools-cron
-                 {:ns 'millstrand.spools.cron
-                  :spools ['millstrand.spools/cron]
+(runtime/module! runtime :millhouse/spools-cron
+                 {:ns 'millhouse.spools.cron
+                  :spools ['millhouse.spools/cron]
                   :required? true})
 ;; The NVD scan job is its own module (not part of policy/config.clj) so config_test's
 ;; direct policy/config.clj load never registers the job or seeds against real gh.
 (runtime/module! runtime :nvd-scan
                  {:file "jobs/nvd_scan.clj"
-                  :spools ['millstrand.spools/cron]
-                  :after [:millstrand/spools-cron :millstrand/spools-kanban]
+                  :spools ['millhouse.spools/cron]
+                  :after [:millhouse/spools-cron :millstrand/spools-kanban]
                   :required? true})
 
 ;; --- config queries/helpers and hand-authored workflows ---------------------
@@ -200,8 +201,8 @@
 ;; workflows/common.clj owns the shared authoring patterns.
 (runtime/module! runtime :workflows
                  {:file "workflows/common.clj"
-                  :spools ['millstrand.spools/workflow 'ct.spools/delegation]
-                  :after [:millstrand/spools-workflow :millstrand/spools-delegation
+                  :spools ['millhouse.spools/workflow 'ct.spools/delegation]
+                  :after [:millhouse/spools-workflow :millstrand/spools-delegation
                           :config :workflows.support]
                   :required? true})
 ;; Each concrete workflow definition owns one focused source module. Keeping
@@ -209,53 +210,54 @@
 ;; contribution without growing a broad definitions file.
 (runtime/module! runtime :workflows.land
                  {:file "workflows/land.clj"
-                  :spools ['millstrand.spools/workflow 'ct.spools/delegation]
-                  :after [:millstrand/spools-workflow :millstrand/spools-delegation
+                  :spools ['millhouse.spools/workflow 'ct.spools/delegation]
+                  :after [:millhouse/spools-workflow :millstrand/spools-delegation
                           :reviewers :workflows.support]
                   :required? true})
 (runtime/module! runtime :workflows.spool-bump
                  {:file "workflows/spool_bump.clj"
-                  :spools ['millstrand.spools/workflow]
-                  :after [:millstrand/spools-workflow :workflows.support]
+                  :spools ['millhouse.spools/workflow]
+                  :after [:millhouse/spools-workflow :workflows.support]
                   :required? true})
 (runtime/module! runtime :workflows.story
                  {:file "workflows/story.clj"
-                  :spools ['millstrand.spools/workflow 'ct.spools/delegation]
-                  :after [:millstrand/spools-workflow :millstrand/spools-delegation
+                  :spools ['millhouse.spools/workflow 'ct.spools/delegation]
+                  :after [:millhouse/spools-workflow :millstrand/spools-delegation
                           :workflows.support]
                   :required? true})
 (runtime/module! runtime :workflows.explore
                  {:file "workflows/explore.clj"
-                  :spools ['millstrand.spools/workflow]
-                  :after [:millstrand/spools-workflow :workflows.support]
+                  :spools ['millhouse.spools/workflow]
+                  :after [:millhouse/spools-workflow :workflows.support]
                   :required? true})
 (runtime/module! runtime :workflows.fix
                  {:file "workflows/fix.clj"
-                  :spools ['millstrand.spools/workflow]
-                  :after [:millstrand/spools-workflow :workflows.support]
+                  :spools ['millhouse.spools/workflow]
+                  :after [:millhouse/spools-workflow :workflows.support]
                   :required? true})
 ;; workflows/land_policy.clj owns the narrow land policy op: merge lock, merge queue,
 ;; and kanban lane moves. It loads after the land definitions it drives.
 (runtime/module! runtime :workflows.land-policy
                  {:file "workflows/land_policy.clj"
-                  :spools ['millstrand.spools/workflow]
-                  :after [:millstrand/spools-workflow :workflows
+                  :spools ['millhouse.spools/workflow]
+                  :after [:millhouse/spools-workflow :workflows
                           :workflows.land]
                   :required? true})
 ;; Ralph remains an independent one-card-per-iteration workflow.
 (runtime/module! runtime :workflows.ralph
                  {:file "workflows/ralph.clj"
-                  :spools ['millstrand.spools/workflow]
-                  :after [:millstrand/spools-workflow :workflows
+                  :spools ['millhouse.spools/workflow]
+                  :after [:millhouse/spools-workflow :workflows
                           :workflows.land]
                   :required? true})
 
 ;; The code executor's lifecycle resource scans ready gates when opened. It must load after
 ;; every workflow definition so persisted code/fn symbols resolve on the initial scan.
-(runtime/module! runtime :millstrand/spools-code
-                 {:ns 'millstrand.spools.executors.code
-                  :spools ['millstrand.spools/workflow]
-                  :after [:millstrand/spools-workflow :workflows
+(runtime/module! runtime :millhouse/spools-code
+                 {:ns 'millhouse.spools.executors.code
+                  :spools ['millhouse.spools.executors/code
+                           'millhouse.spools/workflow]
+                  :after [:millhouse/spools-workflow :workflows
                           :workflows.land :workflows.spool-bump
                           :workflows.story :workflows.explore :workflows.fix
                           :workflows.ralph]
@@ -267,7 +269,7 @@
 (runtime/module! runtime :millstrand/spools-treadle
                  {:ns 'ct.spools.executors.subagent
                   :spools ['ct.spools/agent-run]
-                  :after [:millstrand/spools-shuttle :millstrand/spools-workflow
+                  :after [:millstrand/spools-shuttle :millhouse/spools-workflow
                           :harnesses :reviewers :workflows :workflows.land
                           :workflows.story :workflows.ralph]
                   :required? true})

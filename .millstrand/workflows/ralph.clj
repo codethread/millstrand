@@ -10,7 +10,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [millstrand.api.format.alpha :as format-alpha]
-            [millstrand.spools.workflow :as workflow]))
+            [millhouse.spools.workflow :as workflow]))
 
 (defn- non-blank-string?
   "Return true when value is a non-blank string."

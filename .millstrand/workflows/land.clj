@@ -7,7 +7,7 @@
             [millstrand.api.format.alpha :as format-alpha]
             [millstrand.api.spool.alpha :refer [attr-get fail!]]
             [millstrand.api.weaver.alpha :as weaver]
-            [millstrand.spools.workflow :as workflow]
+            [millhouse.spools.workflow :as workflow]
             [ct.workflows.support :as support]))
 
 (defn- non-blank-string?
