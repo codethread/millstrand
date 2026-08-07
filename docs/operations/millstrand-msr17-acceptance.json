@@ -1,0 +1,134 @@
+{
+  "schema": "millstrand/msr17-ecosystem-acceptance-v1",
+  "operation": "MSR-17",
+  "source": {
+    "repository": "codethread/spool-consumer.example",
+    "pull_request": "https://github.com/codethread/spool-consumer.example/pull/1",
+    "canonical_main_commit": "53557bb08504503e674009ccd697831345dfc6eb",
+    "land_run": "land-msr17-acceptance-20260807",
+    "release_index": "millstrand-release-index.json",
+    "review_correction": {
+      "short_commit": "5bf1da2",
+      "commit": "5bf1da2cb919098937bdb2aa46f8e0ac2c78e403",
+      "title": "fix: enforce clean-room acceptance boundaries"
+    }
+  },
+  "gate": {
+    "id": "a57om",
+    "command": ".skein/land-quality.sh",
+    "branch": "main",
+    "head": "53557bb08504503e674009ccd697831345dfc6eb",
+    "exit_code": 0,
+    "shell_output": [
+      "land quality gate: running .skein/land-quality.sh at 53557bb08504503e674009ccd697831345dfc6eb on main",
+      "acceptance regressions: clean",
+      "published Millstrand acceptance: clean",
+      "acceptance-local-override: resolving canonical sibling roots",
+      "local Millstrand acceptance: clean",
+      "land quality gate: passed at unchanged main HEAD 53557bb08504503e674009ccd697831345dfc6eb"
+    ]
+  },
+  "published": {
+    "result": "clean",
+    "core": {
+      "repository": "codethread/millstrand",
+      "coordinate": "io.millstrand/millstrand",
+      "sha": "5790c459e9bb692b5e975f9715df7d5b403feff2",
+      "ref_kind": "sha",
+      "canonical_main_ancestor": true,
+      "forbidden_v1_tag_published": false
+    },
+    "sibling_release_refs": [
+      {
+        "card": "MSR-05",
+        "repository": "codethread/kanban.spool",
+        "coordinate": "codethread/kanban",
+        "tag": "v24",
+        "peeled_sha": "87f61bc2750e7026f3650235907db25f19b1536e"
+      },
+      {
+        "card": "MSR-06",
+        "repository": "codethread/agent-harness.spool",
+        "coordinate": "ct.spools/agent-run",
+        "tag": "v26",
+        "peeled_sha": "82f8df466e6caea74a93d994604d94ab6bf78b72"
+      },
+      {
+        "card": "MSR-07",
+        "repository": "codethread/devflow.spool",
+        "coordinate": "codethread/devflow",
+        "tag": "v21",
+        "peeled_sha": "7cb75a66e6bf46b6685496cd95ee6e54eb6ca933"
+      },
+      {
+        "card": "MSR-09",
+        "repository": "codethread/dresser.spool",
+        "coordinate": "ct.spools/dresser",
+        "tag": "v4",
+        "peeled_sha": "673a688b304bd829fa9027b6e9b390e9e89102b2"
+      },
+      {
+        "card": "MSR-10",
+        "repository": "codethread/notebook.spool",
+        "coordinate": "ct.spools/notebook-spool",
+        "tag": "v6",
+        "peeled_sha": "ec65ef76b35aa411dbcdd6c9bf4056d878400abc"
+      },
+      {
+        "card": "MSR-11",
+        "repository": "codethread/standup.spool",
+        "coordinate": "avh.spools/standup",
+        "tag": "v3",
+        "peeled_sha": "d5a2ce448cc434f9f4368a95fb5d576be9703c2e"
+      },
+      {
+        "card": "MSR-12",
+        "repository": "codethread/tidy.spool",
+        "coordinate": "mira.spools/tidy",
+        "tag": "v4",
+        "peeled_sha": "8e366069225dc6ce9b225cf932de42e5400f2bc6"
+      }
+    ],
+    "marker_database_continuity": {
+      "markers": [
+        ".millstrand",
+        ".ms"
+      ],
+      "same_database": true,
+      "persisted_entry": "published notebook coordination entry"
+    },
+    "legacy_negatives": {
+      "legacy_marker": {
+        "marker": ".skein",
+        "result": "rejected"
+      },
+      "legacy_manifest_key": {
+        "key": ":skein/min",
+        "result": "rejected"
+      }
+    },
+    "exercised": [
+      "Kanban coordination",
+      "Notebook",
+      "Standup",
+      "Tidy",
+      "transitive floors"
+    ]
+  },
+  "local_override": {
+    "result": "clean",
+    "roots": [
+      "/Users/ct/dev/projects/notebook.spool",
+      "/Users/ct/dev/projects/standup.spool",
+      "/Users/ct/dev/projects/tidy.spool"
+    ],
+    "overlay": "resolved and removed",
+    "immutable_pins_restored": true,
+    "exercised": [
+      "Notebook",
+      "Standup",
+      "Tidy",
+      "transitive floors"
+    ]
+  }
+}
