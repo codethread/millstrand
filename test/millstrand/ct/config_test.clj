@@ -22,7 +22,7 @@
             [millstrand.core.weaver.module-publication :as publication]
             [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.core.weaver.spool-sync :as spool-sync]
-            [millstrand.spools.workflow :as workflow]
+            [millhouse.spools.workflow :as workflow]
             [millstrand.spools.test-support :as test-support]
             [millstrand.test.alpha :as test-alpha])
   (:import [java.time Instant]))
@@ -123,11 +123,11 @@
             (test-support/activate-spool! rt :millstrand/spools-delegation
                                           'ct.spools.delegation
                                           :after [:millstrand/spools-shuttle])
-            (test-support/activate-spool! rt :millstrand/spools-workflow
-                                          'millstrand.spools.workflow)
-            (test-support/activate-spool! rt :millstrand/spools-workflow-cli
-                                          'millstrand.spools.workflow.cli
-                                          :after [:millstrand/spools-workflow])
+            (test-support/activate-spool! rt :millhouse/spools-workflow
+                                          'millhouse.spools.workflow)
+            (test-support/activate-spool! rt :millhouse/spools-workflow-cli
+                                          'millhouse.spools.workflow.cli
+                                          :after [:millhouse/spools-workflow])
             (load-module-namespace! rt :millstrand/spools-devflow 'ct.spools.devflow)
             (load-module-source! rt :config ".millstrand/policy/config.clj")
             (load-module-source! rt :harnesses ".millstrand/agents/harnesses.clj")
@@ -178,7 +178,7 @@
   ;; exercises the overlay path, a developer's real init.local.clj is never
   ;; read, and test-created HITL checkpoints record no notifier-missing noise.
   (spit (io/file target "init.local.clj")
-        (pr-str '(do (require '[millstrand.spools.chime :as chime])
+        (pr-str '(do (require '[millhouse.spools.chime :as chime])
                      (chime/set-notifier! {:argv ["true"]})))))
 
 (defn- with-startup-config-runtime
@@ -208,7 +208,7 @@
              "  \"F16 regression probe: contributes an alias and a workflow definition.\"\n"
              "  (:require [ct.spools.agent-run :as shuttle]\n"
              "            [millstrand.api.runtime.alpha :as runtime]\n"
-             "            [millstrand.spools.workflow :as workflow]))\n"
+             "            [millhouse.spools.workflow :as workflow]))\n"
              (when present?
                (str "(runtime/collect-entry! shuttle/alias-kind "
                     ":f16-probe-seat {:alias-of :codex})\n"
@@ -230,12 +230,12 @@
     (spit (io/file config-dir "init.local.clj")
           (pr-str '(do (require '[millstrand.api.current.alpha :as current]
                                 '[millstrand.api.runtime.alpha :as runtime]
-                                '[millstrand.spools.chime :as chime])
+                                '[millhouse.spools.chime :as chime])
                        (chime/set-notifier! {:argv ["true"]})
                        (runtime/module! (current/runtime) :f16-probe
                                         {:file "f16_probe.clj"
-                                         :spools ['ct.spools/agent-run 'millstrand.spools/workflow]
-                                         :after [:millstrand/spools-shuttle :millstrand/spools-workflow]}))))
+                                         :spools ['ct.spools/agent-run 'millhouse.spools/workflow]
+                                         :after [:millstrand/spools-shuttle :millhouse/spools-workflow]}))))
     (write-f16-probe! config-dir true)
     (let [rt (weaver-runtime/start! db-file {:world (test-world config-dir)
                                              :publish? false})]
@@ -244,7 +244,7 @@
           rt
           (fn []
             (let [resolve-harness (requiring-resolve 'ct.spools.agent-run/resolve-harness)
-                  workflow-definition (requiring-resolve 'millstrand.spools.workflow/workflow-definition)]
+                  workflow-definition (requiring-resolve 'millhouse.spools.workflow/workflow-definition)]
               (is (= :codex (:name (resolve-harness :f16-probe-seat)))
                   "the probe seat resolves through its :alias-of tool after startup")
               (is (= 'ct.workflows.story/story (workflow-definition :f16-probe-flow))
@@ -410,7 +410,7 @@
          ((requiring-resolve 'ct.spools.agent-run/default-task-contract-text))))
   ;; the repo owns chime's attention rules; the chime engine ships none
   (is (= [:hitl-checkpoint-ready :kanban-completed :parked-run]
-         (mapv :key ((requiring-resolve 'millstrand.spools.chime/rules)))))
+         (mapv :key ((requiring-resolve 'millhouse.spools.chime/rules)))))
   ;; the declarative reviewer rosters register from .millstrand/agents/reviewers.clj
   (let [rosters ((requiring-resolve 'ct.spools.delegation/rosters))]
     (is (= [:change-review :complex-patch-review :docs-review] (mapv :name rosters)))
@@ -509,7 +509,7 @@
     (fn [_rt]
       (let [description (op! "workflow" ["show" "spool-bump"])
             definition (var-get (requiring-resolve 'ct.workflows.spool-bump/spool-bump))
-            compile-workflow (requiring-resolve 'millstrand.spools.workflow/compile)
+            compile-workflow (requiring-resolve 'millhouse.spools.workflow/compile)
             params (fn [direct?]
                      (json/write-str
                       {:bumps [{:family "codethread/kanban"
@@ -860,7 +860,7 @@
   ;; not just key, deep.
   (with-startup-config-runtime
     (fn [_rt]
-      (let [rules ((requiring-resolve 'millstrand.spools.chime/rules))
+      (let [rules ((requiring-resolve 'millhouse.spools.chime/rules))
             by-key (into {} (map (juxt :key identity)) rules)
             fire (fn [rule-key strand ready-ids]
                    (@(requiring-resolve (:fn (get by-key rule-key)))
@@ -1015,7 +1015,7 @@
   outcome attributes. The config fixture loads workflow definitions without
   installing the shell executor, so tests stand in for its pass path."
   [feature output]
-  ((requiring-resolve 'millstrand.spools.workflow/complete!)
+  ((requiring-resolve 'millhouse.spools.workflow/complete!)
    feature {:by "shell" :attributes {"shell/exit-code" 0 "shell/output" output}}))
 
 (defn- complete-subagent-gates!
@@ -1026,7 +1026,7 @@
       (when-not (= "subagent" gate)
         (throw (ex-info "Expected only ready subagent gates"
                         {:feature feature :ready ready})))
-      ((requiring-resolve 'millstrand.spools.workflow/complete!)
+      ((requiring-resolve 'millhouse.spools.workflow/complete!)
        feature {:step id :by "subagent"
                 :attributes {"agent-run/status" "succeeded"}}))))
 
@@ -1274,7 +1274,7 @@
       (let [completed (op! "land" ["complete" "land-x" "--pr-number" "412"])
             gate (first (:ready completed))
             gate-attrs (:attributes (weaver/show rt (:id gate)))
-            context (get-in ((requiring-resolve 'millstrand.spools.workflow/current-root) "land-x")
+            context (get-in ((requiring-resolve 'millhouse.spools.workflow/current-root) "land-x")
                             [:attributes :workflow/context])]
         (is (= "land complete" (:operation completed)))
         (is (= 412 (or (:pr-number context) (get context "pr-number"))))
@@ -1289,7 +1289,7 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"No ready workflow step"
                             (op! "workflow" ["complete" "land-x"])))
       (shell-gate-complete! "land-x" "checks green")
-      (let [context (get-in ((requiring-resolve 'millstrand.spools.workflow/current-root) "land-x")
+      (let [context (get-in ((requiring-resolve 'millhouse.spools.workflow/current-root) "land-x")
                             [:attributes :workflow/context])
             target (or (:review-target context) (get context "review-target"))
             review-id (or (:review-id context) (get context "review-id"))
@@ -1335,7 +1335,7 @@
         (is (not (contains? checkpoint :choice-details))))
       ;; approved and abort each name one whole-map input spec; revise takes no
       ;; input and re-pours the current definition from saved context
-      (let [choices ((requiring-resolve 'millstrand.spools.workflow/choice-details) "land-x")
+      (let [choices ((requiring-resolve 'millhouse.spools.workflow/choice-details) "land-x")
             approved-input (get-in choices ["approved" "input-spec"])
             abort-input (get-in choices ["abort" "input-spec"])]
         (is (= #{"approved" "revise" "abort"} (set (keys choices))))
@@ -1620,7 +1620,7 @@
                                                        :kanban/type "feature"}}))
             _ (start-land! "land-pr-context" "land-pr-context"
                            "/tmp/land-pr-context" card-id)
-            root-before ((requiring-resolve 'millstrand.spools.workflow/current-root)
+            root-before ((requiring-resolve 'millhouse.spools.workflow/current-root)
                          "land-pr-context")
             context-before (get-in root-before [:attributes :workflow/context])]
         (doseq [[argv message] [[["complete" "land-pr-context"]
@@ -1632,7 +1632,7 @@
                                 (op! "land" argv)))
           (is (= "active" (:state (weaver/show rt (:id root-before)))))
           (is (= context-before
-                 (get-in ((requiring-resolve 'millstrand.spools.workflow/current-root)
+                 (get-in ((requiring-resolve 'millhouse.spools.workflow/current-root)
                           "land-pr-context")
                          [:attributes :workflow/context])))
           (is (= "claimed"
@@ -1650,10 +1650,10 @@
       (start-land! "land-invalid-pr" "land-invalid-pr" "/tmp/land-invalid-pr")
       ;; Bypass the land wrapper to model a pre-feature run whose draft-PR step
       ;; closed without producing :pr-number.
-      ((requiring-resolve 'millstrand.spools.workflow/complete!) "land-invalid-pr")
+      ((requiring-resolve 'millhouse.spools.workflow/complete!) "land-invalid-pr")
       (shell-gate-complete! "land-invalid-pr" "checks green")
       (complete-land-review! "land-invalid-pr")
-      (let [old-root ((requiring-resolve 'millstrand.spools.workflow/current-root)
+      (let [old-root ((requiring-resolve 'millhouse.spools.workflow/current-root)
                       "land-invalid-pr")]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"Value does not satisfy the named spec"
@@ -1849,7 +1849,7 @@
       (op! "land" ["await" "land-gone" "--timeout-secs" "0"])
       (op! "land" ["await" "land-waiter" "--timeout-secs" "0"])
       (weaver/update! rt
-                      (:id ((requiring-resolve 'millstrand.spools.workflow/current-root) "land-gone"))
+                      (:id ((requiring-resolve 'millhouse.spools.workflow/current-root) "land-gone"))
                       {:state "closed"})
       (let [waiting (op! "land" ["await" "land-waiter" "--timeout-secs" "0"])
             head (first (:ahead waiting))]
@@ -1929,7 +1929,7 @@
       (op! "land" ["complete" "land-reused-lock" "--pr-number" "421"])
       (shell-gate-complete! "land-reused-lock" "checks green")
       (complete-land-review! "land-reused-lock")
-      (let [root ((requiring-resolve 'millstrand.spools.workflow/current-root)
+      (let [root ((requiring-resolve 'millhouse.spools.workflow/current-root)
                   "land-reused-lock")
             lock (weaver/add! rt {:title "Merge lock: land-reused-lock"
                                   :attributes {:kind "merge-lock"
@@ -1959,10 +1959,10 @@
       (op! "land" ["complete" "land-revise" "--pr-number" "419"])
       (shell-gate-complete! "land-revise" "checks green")
       (complete-land-review! "land-revise")
-      (let [old-root ((requiring-resolve 'millstrand.spools.workflow/current-root) "land-revise")
+      (let [old-root ((requiring-resolve 'millhouse.spools.workflow/current-root) "land-revise")
             old-context (get-in old-root [:attributes :workflow/context])
             revised (op! "workflow" ["choose" "land-revise" "revise"])
-            new-root ((requiring-resolve 'millstrand.spools.workflow/current-root) "land-revise")]
+            new-root ((requiring-resolve 'millhouse.spools.workflow/current-root) "land-revise")]
         (is (= "land.pr.open" (:action-ref (first (:ready revised)))))
         (is (not= (:id old-root) (:id new-root)))
         (is (= "closed" (:state (weaver/show rt (:id old-root)))))
@@ -1981,7 +1981,7 @@
       ;; completing push-draft-pr starts the automated CI watch and review
       ;; pipeline, so it is the completion that moves the card to in_review
       (op! "land" ["complete" "land-y" "--pr-number" "414"]) ; push-draft-pr
-      (let [root ((requiring-resolve 'millstrand.spools.workflow/current-root) "land-y")
+      (let [root ((requiring-resolve 'millhouse.spools.workflow/current-root) "land-y")
             context (get-in root [:attributes :workflow/context])
             card-id (or (:card context) (get context "card"))]
         (is (= "in_review" (get-in (weaver/show rt card-id) [:attributes :kanban/lane]))))
@@ -1992,7 +1992,7 @@
         (is (= "land choose" (:operation aborted)))
         ;; routing is a hard cutover to the reason-recording continuation
         (is (= "land.abort.record" (:action-ref (first (:ready aborted))))))
-      (let [root ((requiring-resolve 'millstrand.spools.workflow/current-root) "land-y")
+      (let [root ((requiring-resolve 'millhouse.spools.workflow/current-root) "land-y")
             context (get-in root [:attributes :workflow/context])
             card-id (or (:card context) (get context "card"))]
         (is (= "claimed" (get-in (weaver/show rt card-id) [:attributes :kanban/lane]))))
@@ -2137,24 +2137,24 @@
   "Assert repo startup guards every module that relies on the workflow coordinate."
   [rt]
   (let [modules (:modules (runtime/status rt))]
-    (doseq [id [:millstrand/spools-workflow :millstrand/spools-workflow-cli
-                :millstrand/spools-shell :millstrand/spools-code]]
-      (is (= ['millstrand.spools/workflow] (:spools (get modules id)))
-          (str id " must opt into millstrand.spools/workflow")))
-    (is (= [:millstrand/spools-workflow] (:after (get modules :millstrand/spools-workflow-cli)))
+    (doseq [id [:millhouse/spools-workflow :millhouse/spools-workflow-cli
+                :millhouse/spools-shell :millhouse/spools-code]]
+      (is (= ['millhouse.spools/workflow] (:spools (get modules id)))
+          (str id " must opt into millhouse.spools/workflow")))
+    (is (= [:millhouse/spools-workflow] (:after (get modules :millhouse/spools-workflow-cli)))
         "the opt-in worker CLI orders after the engine module it contributes beside")
     (is (= [] (:spools (get modules :config)))
         ":config's shipped contribution form needs no spool coordinate guard")
     (is (true? (:required? (get modules :config)))
         ":config must remain required or its query surface can disappear")
-    (is (= ['millstrand.spools/workflow 'ct.spools/delegation]
+    (is (= ['millhouse.spools/workflow 'ct.spools/delegation]
            (:spools (get modules :workflows)))
-        ":workflows must opt into millstrand.spools/workflow and ct.spools/delegation")
-    (is (= [:millstrand/spools-workflow :workflows
+        ":workflows must opt into millhouse.spools/workflow and ct.spools/delegation")
+    (is (= [:millhouse/spools-workflow :workflows
             :workflows.land :workflows.spool-bump
             :workflows.story :workflows.explore :workflows.fix
             :workflows.ralph]
-           (:after (get modules :millstrand/spools-code)))
+           (:after (get modules :millhouse/spools-code)))
         "the code executor scans only after every code-gate workflow is loaded")))
 
 (deftest repo-local-startup-and-refresh-preserve-registrations
@@ -2234,10 +2234,11 @@
        (map #(if (sequential? %) (first %) %))))
 
 (defn- spool-ns?
-  "True when sym names a millstrand.spools.* namespace."
+  "True when sym names a shipped domain-spool namespace."
   [sym]
   (let [n (name sym)]
-    (str/starts-with? n "millstrand.spools.")))
+    (or (str/starts-with? n "millstrand.spools.")
+        (str/starts-with? n "millhouse.spools."))))
 
 (defn- coordinate-source-roots
   "Map each loaded/available synced coordinate to its deps.edn :paths source dirs.
@@ -2273,13 +2274,13 @@
   ;; A synced root resolves through the spool classloader whether or not a
   ;; module! declares :spools, so a green world load never proves consent is
   ;; wired. This asserts it directly: every init.clj module! that pulls a
-  ;; millstrand.spools.* namespace onto the classpath — a :ns module
+  ;; a domain-spool namespace onto the classpath — a :ns module
   ;; (its own coordinate) or a :file module's ns :require (each required
   ;; coordinate) — must declare that coordinate in :spools. Coordinates resolve
   ;; through the synced root manifests, never a name heuristic: batteries and
   ;; workflow are source-root spools, ct.spools.devflow lives in the
-  ;; codethread/devflow root, and millstrand.spools.executors.shell lives in the
-  ;; millstrand.spools/workflow root, so a prefix rule would false-pass real misses.
+  ;; codethread/devflow root, and millhouse.spools.executors.shell lives in the
+  ;; millhouse.spools.executors/shell root, so a prefix rule would false-pass real misses.
   (with-startup-config-runtime
     (fn [rt]
       (let [coordinate-roots (coordinate-source-roots rt)
@@ -2301,9 +2302,9 @@
 
 (def ^:private forms-only-ns-modules
   "The init.clj `:ns` modules whose declarations are collected from forms."
-  #{:millstrand/spools-batteries :millstrand/spools-workflow :millstrand/spools-workflow-cli
-    :millstrand/spools-shell :millstrand/spools-code
-    :millstrand/spools-unsafe-text-search :millstrand/spools-chime :millstrand/spools-cron
+  #{:millstrand/spools-batteries :millhouse/spools-workflow :millhouse/spools-workflow-cli
+    :millhouse/spools-shell :millhouse/spools-code
+    :millstrand/spools-unsafe-text-search :millhouse/spools-chime :millhouse/spools-cron
     :millstrand/spools-devflow :millstrand/spools-devflow-kanban-adapter
     :millstrand/spools-kanban :millstrand/spools-shuttle :millstrand/spools-delegation
     :millstrand/spools-harness-core :millstrand/spools-codex-harness :millstrand/spools-agent-cli

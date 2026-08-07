@@ -40,19 +40,37 @@
             [quality.spool-var :as spool-var]
             [quality.workspace-tests :as workspace-tests]))
 
+(defn- resource-source-root [resource-path]
+  (when-let [url (io/resource resource-path)]
+    (when (= "file" (.getProtocol url))
+      (some (fn [^java.io.File candidate]
+              (when (= "src" (.getName candidate))
+                (.getPath candidate)))
+            (take-while some?
+                        (iterate #(.getParentFile ^java.io.File %)
+                                 (.getParentFile (io/file (.toURI url)))))))))
+
 (def ^:private source-roots
   ;; Everything lintable: engine, batteries, local-root spools, trusted
   ;; workspace config, and tests. A missing root must fail the gate, not
   ;; silently shrink the scanned set.
-  ["src"
-   "spools/batteries/src"
-   "spools/workflow/src"
-   "spools/unsafe-text-search/src"
-   "examples/guild/src"
-   "spools/chime/src"
-   "spools/cron/src"
-   ".millstrand"
-   "test"])
+  (vec
+   (concat
+    ["src"
+     "spools/batteries/src"
+     "spools/workflow/src"
+     "spools/unsafe-text-search/src"
+     "examples/guild/src"
+     "spools/chime/src"
+     "spools/cron/src"
+     ".millstrand"
+     "test"]
+    (keep resource-source-root
+          ["millhouse/spools/workflow.clj"
+           "millhouse/spools/chime.clj"
+           "millhouse/spools/cron.clj"
+           "millhouse/spools/executors/code.clj"
+           "millhouse/spools/executors/shell.clj"]))))
 
 (def ^:private core-macro-names
   (->> (ns-publics 'clojure.core)

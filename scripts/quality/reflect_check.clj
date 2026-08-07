@@ -25,6 +25,24 @@
          (filter #(and (.isFile %) (str/ends-with? (.getName %) ".clj")))
          (map #(clj-file->ns root %)))))
 
+(defn- resource-source-root [resource-path]
+  (when-let [url (io/resource resource-path)]
+    (when (= "file" (.getProtocol url))
+      (some (fn [^java.io.File candidate]
+              (when (= "src" (.getName candidate))
+                candidate))
+            (take-while some?
+                        (iterate #(.getParentFile ^java.io.File %)
+                                 (.getParentFile (io/file (.toURI url)))))))))
+
+(defn- millhouse-source-roots []
+  (keep resource-source-root
+        ["millhouse/spools/workflow.clj"
+         "millhouse/spools/chime.clj"
+         "millhouse/spools/cron.clj"
+         "millhouse/spools/executors/code.clj"
+         "millhouse/spools/executors/shell.clj"]))
+
 (defn -main [& _]
   (let [roots {"src" "millstrand"
                "spools/batteries/src" "millstrand/spools"
@@ -33,9 +51,12 @@
                "spools/workflow/src" "millstrand/spools"
                "spools/unsafe-text-search/src" "millstrand/spools"
                "examples/guild/src" "skein/examples"}
-        namespaces (sort (mapcat (fn [[root subdir]]
-                                   (namespaces-under root subdir))
-                                 roots))
+        namespaces (sort (concat
+                          (mapcat (fn [[root subdir]]
+                                    (namespaces-under root subdir))
+                                  roots)
+                          (mapcat #(namespaces-under % "")
+                                  (distinct (millhouse-source-roots)))))
         compile-dir (.toFile (java.nio.file.Files/createTempDirectory "millstrand-reflect-check" (make-array java.nio.file.attribute.FileAttribute 0)))
         warnings (atom [])
         original-err *err*

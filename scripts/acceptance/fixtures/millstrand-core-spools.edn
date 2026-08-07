@@ -1,2 +1,5 @@
 {:spools {millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}
-          millstrand.spools/workflow {:millstrand/source-root "spools/workflow"}}}
+          millhouse/spools
+          {:git/url "https://github.com/codethread/millhouse.spool.git"
+           :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
+           :roots {millhouse.spools/workflow "spools/workflow"}}}}

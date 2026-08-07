@@ -9,7 +9,7 @@ Blessed spool-authoring helpers: the accretion-compatible home for the shared
   The public helper set is `entity-projection`, `fail!`,
   `reject-unknown-keys!`, `require-valid!`, `attr-key->str`, `attr-get`, and
   `poll-until!`, so no blessed namespace has to reach down into a
-  `millstrand.spools.*` peer to reuse it.
+  `millhouse.spools.*` peer to reuse it.
 
   Reference spools all need the same tiny fail-loud and validation seams: throw
   an `ex-info` with a contextual data map (TEN-003), reject unknown option keys,
@@ -18,7 +18,7 @@ Blessed spool-authoring helpers: the accretion-compatible home for the shared
   attribute back regardless of whether its key arrived keyword- or
   string-keyed, and poll a check fn against a Clock. Those were copy-pasted -
   and had begun to drift - across most shipped spools, and now share this one
-  source instead of re-deriving them per file. `millstrand.spools.workflow` is a
+  source instead of re-deriving them per file. `millhouse.spools.workflow` is a
   deliberate exception: it keeps its own branded `reject-unknown-keys!` rather
   than adopting this one.
 
@@ -95,8 +95,8 @@ Throw an `ex-info` carrying `message` and a contextual `data` map (TEN-003).
 ```
 Function.
 
-The shared spool-tier long-poll skeleton behind `millstrand.spools.workflow/await!`
-  and `millstrand.spools.cron/await-quiescent!`: call `check` (a zero-arg fn) once, test
+The shared spool-tier long-poll skeleton behind `millhouse.spools.workflow/await!`
+  and `millhouse.spools.cron/await-quiescent!`: call `check` (a zero-arg fn) once, test
   its value with `pred->result`, and repeat on `installed-clock` every `poll-ms`
   until either `pred->result` returns a non-nil result or `timeout-ms` has
   elapsed on that Clock.
