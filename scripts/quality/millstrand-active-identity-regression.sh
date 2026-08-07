@@ -36,6 +36,19 @@ if PATH="$tool_dir" command -v rg >/dev/null 2>&1; then
   exit 1
 fi
 
+cp "$repo_root/AGENTS.md" "$tmp_root/AGENTS.md"
+sed -i.bak '1s/^/\n/' "$tmp_root/AGENTS.md"
+rm -f "$tmp_root/AGENTS.md.bak"
+relocated_output="$tmp_root/relocated-allowlist.out"
+if ! PATH="$tool_dir" "$bash_path" \
+    "$tmp_root/scripts/quality/millstrand-active-identity.sh" >"$relocated_output" 2>&1; then
+  cat "$relocated_output" >&2
+  echo "millstrand identity regression: allowlisted identity failed after line relocation" >&2
+  exit 1
+fi
+
+echo "millstrand identity regression: allowlisted identity survived line relocation"
+
 manifest="$tmp_root/docs/operations/millstrand-midpoint-evidence.json"
 unrelated_token=$(printf 's%s' kein)
 jq --arg path "docs/$unrelated_token.md" '.proposal.path = $path' "$manifest" >"$manifest.tmp"
