@@ -20,20 +20,42 @@ fi
 
 pages_workflow="$repo_root/.github/workflows/pages.yml"
 if ! awk '
+  function finish_deploy() {
+    if (in_deploy && disabled) {
+      disabled_jobs++
+    }
+    in_deploy = 0
+  }
+
   /^  deploy:$/ {
+    finish_deploy()
     deploy_jobs++
-    state = 1
+    in_deploy = 1
+    disabled = 0
     next
   }
-  state == 1 && /^    if: \$\{\{ false \}\}$/ {
-    disabled_jobs++
-    state = 0
+
+  in_deploy && /^  [^[:space:]][^:]*:/ {
+    finish_deploy()
     next
   }
-  state == 1 && $0 !~ /^[[:space:]]*(#.*)?$/ { state = 0 }
-  END { exit !(deploy_jobs == 1 && disabled_jobs == 1) }
+
+  in_deploy && /^    if:/ {
+    condition = $0
+    sub(/^    if:[[:space:]]*/, "", condition)
+    sub(/[[:space:]]+#.*$/, "", condition)
+    gsub(/[[:space:]]/, "", condition)
+    if (condition == "false" || condition == "${{false}}") {
+      disabled = 1
+    }
+  }
+
+  END {
+    finish_deploy()
+    exit !(deploy_jobs == 1 && disabled_jobs == 0)
+  }
 ' "$pages_workflow"; then
-  echo "millstrand CI config: expected the single Pages deploy job to carry if=false" >&2
+  echo "millstrand CI config: expected exactly one enabled Pages deploy job" >&2
   exit 1
 fi
 
