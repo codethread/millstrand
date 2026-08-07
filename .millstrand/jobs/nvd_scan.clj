@@ -1,5 +1,5 @@
 (ns ct.jobs.nvd-scan
-  "The scheduled NVD deep scan (millstrand.spools.cron job :nvd-scan).
+  "The scheduled NVD deep scan (millhouse.spools.cron job :nvd-scan).
 
   `make deps-report` runs the clj-watson NVD deep scan + govulncheck locally
   (the fast github-advisory gate stays in CI). This job runs that scan on every
@@ -15,7 +15,7 @@
   see test/millstrand/nvd_scan_test.clj. This is its own init.clj module (not part of
   policy/config.clj) so config_test's direct policy/config.clj load never registers the job."
   (:require [clojure.data.json :as json]
-            [millstrand.spools.cron :as cron]))
+            [millhouse.spools.cron :as cron]))
 
 (def ^:private nvd-scan-interval-ms
   "Base cadence: 6 days between NVD deep scans."

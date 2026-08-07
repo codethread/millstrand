@@ -3,7 +3,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [millstrand.api.millstrand.alpha :as millstrand]
-            [millstrand.spools.workflow :as workflow]))
+            [millhouse.spools.workflow :as workflow]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."

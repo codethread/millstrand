@@ -5,7 +5,7 @@
   (chime/set-notifier! {:argv [...]})."
   (:require [millstrand.api.current.alpha :as current]
             [millstrand.api.runtime.alpha :as runtime]
-            [millstrand.spools.chime :refer [defrule]]
+            [millhouse.spools.chime :refer [defrule]]
             [ct.spools.agent-run :as shuttle]))
 
 (defn- config-attr
