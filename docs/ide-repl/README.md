@@ -23,19 +23,21 @@ For an explicit workspace, assign its directory once. Use the existing `.millstr
 workspace="/absolute/path/to/my-repo/.millstrand"
 ```
 
-Start mill in a durable terminal:
+If the workspace has not been bootstrapped, run this once. `mill init` creates missing files and preserves existing ones:
+
+```sh
+mill init --workspace "$workspace"
+```
+
+Keep the generated `$workspace/init.clj` in place. It activates the Batteries spool. Put this guide's extra activation in the additive `$workspace/init.local.clj` file so the Batteries declaration remains intact.
+
+Start mill in a durable terminal. The supervisor command has no workspace selector:
 
 ```sh
 mill start
 ```
 
-From the repository or Millstrand workspace you want to work with, start its weaver:
-
-```sh
-mill weaver start
-```
-
-If you are using an explicit workspace, pass the same workspace you use for all other commands:
+From the repository or Millstrand workspace you want to work with, start its weaver with the same workspace on every workspace-aware command:
 
 ```sh
 mill weaver start --workspace "$workspace"
@@ -43,10 +45,10 @@ mill weaver start --workspace "$workspace"
 
 ## Find the nREPL port
 
-List running weavers through mill:
+List the selected workspace's running weaver through mill:
 
 ```sh
-mill weaver list
+mill weaver list --workspace "$workspace"
 ```
 
 The output is JSON. Find the row for your workspace and use its `nrepl.host` and `nrepl.port` fields, for example:
@@ -65,7 +67,7 @@ The output is JSON. Find the row for your workspace and use its `nrepl.host` and
 With `jq`, you can print just the endpoints:
 
 ```sh
-mill weaver list | jq -r '.[] | select(.state == "running") | "\(.name)\t\(.config_dir)\t\(.nrepl.host):\(.nrepl.port)"'
+mill weaver list --workspace "$workspace" | jq -r '.[] | select(.state == "running") | "\(.name)\t\(.config_dir)\t\(.nrepl.host):\(.nrepl.port)"'
 ```
 
 ## Connect from VS Code / Calva
@@ -94,9 +96,10 @@ Put behavior that should survive a restart in a module source file first:
   [:= [:attr :owner] "me"])
 ```
 
-Save the file as `$workspace/my-workspace.clj`. A workspace file module is loaded from the exact path relative to the selected workspace; the directory is not added to the classpath. Save this activation form as `$workspace/init.clj` (or `$workspace/init.local.clj` for machine-local activation):
+Save the file as `$workspace/my-workspace.clj`. A workspace file module is loaded from the exact path relative to the selected workspace; the directory is not added to the classpath. Append this activation form to `$workspace/init.local.clj`; leave the generated `$workspace/init.clj` and its Batteries activation unchanged:
 
 ```clojure
+;; init.local.clj — additive machine-local activation
 (require '[millstrand.api.current.alpha :as current]
          '[millstrand.api.runtime.alpha :as runtime])
 
@@ -104,7 +107,7 @@ Save the file as `$workspace/my-workspace.clj`. A workspace file module is loade
   {:file "my-workspace.clj"})
 ```
 
-After changing `my-workspace.clj` or either startup file, evaluate this in the connected REPL:
+The weaver loads `init.clj` and then `init.local.clj` at startup, so both Batteries and this module are active. After creating or changing `my-workspace.clj` or either startup file, evaluate this in the connected REPL to apply the complete module graph:
 
 ```clojure
 (runtime/refresh! (current/runtime))
@@ -115,22 +118,14 @@ Evaluating an authoring form in the REPL defines its Var, but publishes nothing 
 For a live experiment, code and tests use the explicit-runtime registration functions. In this guide the nREPL is inside the weaver JVM, so the runtime-implied wrappers are convenient:
 
 ```clojure
-(repl/register-query! 'mine [:= [:attr :owner] "me"])
-(repl/replace-query! 'mine [:= [:attr :owner] "someone-else"])
-(repl/unregister-query! 'mine)
+(repl/register-query! 'scratch-query [:= [:attr :owner] "me"])
+(repl/replace-query! 'scratch-query [:= [:attr :owner] "someone-else"])
+(repl/unregister-query! 'scratch-query)
 ```
 
-`replace-query!` records intent to shadow an existing owner. `unregister-query!` removes only your entry and restores the value below it; registry verbs do not remove or change the `mine` Var. For ops, patterns, and hooks, redefining a handler function is the live hot loop under a stable contract, but help metadata stays stale until the registration is replaced. Queries are values, so replace the registration itself. Event handlers capture their function value at registration and also need a replacement to pick up a new body.
+The example uses `scratch-query` because `mine` is already owned by the module above. `replace-query!` records intent to shadow an existing owner. `unregister-query!` removes only your entry and restores the value below it; registry verbs do not remove or change the `mine` Var. For ops, patterns, and hooks, redefining a handler function is the live hot loop under a stable contract, but help metadata stays stale until the registration is replaced. Queries are values, so replace the registration itself. Event handlers capture their function value at registration and also need a replacement to pick up a new body.
 
 The connected nREPL used by Calva is an in-process session. A separate JVM connected through a client does not have an in-process runtime, so its registration wrappers fail with remediation; use the explicit `millstrand.core.client` bridge for that transport instead.
-
-You can now iterate on the weaver's live registries:
-
-```clojure
-(repl/register-query! 'mine [:= [:attr :owner] "me"])
-(repl/replace-query! 'mine [:= [:attr :owner] "someone-else"])
-(repl/unregister-query! 'mine)
-```
 
 Reads and strand mutation stay on the `strand` CLI, or on the explicit-runtime `millstrand.api.*.alpha` verbs when you already hold a runtime:
 
@@ -149,12 +144,12 @@ When evaluating forms from a file, the file's namespace still matters. Name the 
 (require '[millstrand.repl :as repl])
 
 (comment
-  (repl/register-query! 'mine [:= [:attr :owner] "me"])
-  (repl/unregister-query! 'mine))
+  (repl/register-query! 'scratch-query [:= [:attr :owner] "me"])
+  (repl/unregister-query! 'scratch-query))
 ```
 
 Stop the weaver when you are finished:
 
 ```sh
-mill weaver stop
+mill weaver stop --workspace "$workspace"
 ```
