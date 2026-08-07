@@ -7,7 +7,7 @@
             [clojure.data.json :as json]
             [millstrand.api.registry.alpha :as registry]
             [millstrand.api.weaver.alpha :as weaver]
-            [millstrand.spools.guild :as guild]
+            [skein.examples.guild :as guild]
             [millstrand.spools.test-support :as test-support :refer [assert-state-shape with-runtime]]
             [millstrand.test.alpha :as t]))
 
@@ -35,11 +35,11 @@
   (with-runtime
     (fn [rt _]
       (let [source (test-support/activate-spool!
-                    rt :millstrand/spools-guild 'millstrand.spools.guild)]
-        (is (= :applied (get-in source [:modules :millstrand/spools-guild :status])))
+                    rt :skein/examples-guild 'skein.examples.guild)]
+        (is (= :applied (get-in source [:modules :skein/examples-guild :status])))
         (is (= :applied
                (get-in source
-                       [:modules :millstrand/spools-guild :lifecycle/outcomes
+                       [:modules :skein/examples-guild :lifecycle/outcomes
                         :guild-state :status]))))
       (guild/set-fallback-guild-name! rt "preserved-guild")
       (guild/register-op! rt 'gate.close.v1 {:doc "Close" :returns close-return
@@ -47,17 +47,17 @@
                                              :deadline-class :standard}
                           'millstrand.guild-test/close-handler)
       (let [image (test-support/activate-spool!
-                   rt :millstrand/spools-guild 'millstrand.spools.guild :load :image)]
+                   rt :skein/examples-guild 'skein.examples.guild :load :image)]
         (is (= :unchanged
-               (get-in image [:modules :millstrand/spools-guild :status])))
+               (get-in image [:modules :skein/examples-guild :status])))
         (is (= :image
-               (get-in image [:modules :millstrand/spools-guild :source/status])))
+               (get-in image [:modules :skein/examples-guild :source/status])))
         (is (= :applied
                (get-in image
-                       [:modules :millstrand/spools-guild :lifecycle/status])))
+                       [:modules :skein/examples-guild :lifecycle/status])))
         (is (= [:guild-state]
                (get-in image
-                       [:modules :millstrand/spools-guild :lifecycle/plan
+                       [:modules :skein/examples-guild :lifecycle/plan
                         :preserve])))
         (is (= "preserved-guild"
                (:guild (guild/guild-op {:op/runtime rt}))))
@@ -67,13 +67,13 @@
 (deftest declarations-are-owned-and-delete-by-omission
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millstrand/spools-guild 'millstrand.spools.guild)
+      (test-support/activate-spool! rt :skein/examples-guild 'skein.examples.guild)
       (guild/register-op! rt 'gate.close.v1 {:doc "Close" :returns close-return
                                              :hook-class :mutating :deadline-class :standard}
                           'millstrand.guild-test/close-handler)
       (let [handle (#'guild/declarations-handle rt)
-            kind :millstrand.spools.guild/declarations
-            owner :millstrand.spools.guild/defaults]
+            kind :skein.examples.guild/declarations
+            owner :skein.examples.guild/defaults]
         (is (= #{"gate.close.v1"}
                (set (keys (registry/effective handle kind)))))
         (registry/remove-owner! handle kind owner)
@@ -98,12 +98,12 @@
 (deftest production-return-coverage-is-derived-from-guild-provenance
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millstrand/spools-guild 'millstrand.spools.guild)
+      (test-support/activate-spool! rt :skein/examples-guild 'skein.examples.guild)
       (guild/set-fallback-guild-name! rt "coverage-guild")
       (guild/register-op! rt 'gate.close.v1 {:doc "Close" :returns close-return
                                              :hook-class :mutating :deadline-class :standard}
                           'millstrand.guild-test/close-handler)
-      (let [entries (filterv #(= 'millstrand.spools.guild (:provenance %)) (weaver/ops rt))
+      (let [entries (filterv #(= 'skein.examples.guild (:provenance %)) (weaver/ops rt))
             missing (mapv :name (filter #(not (contains? % :returns)) entries))
             required (set (map (juxt :name (constantly {})) entries))
             listing (weaver/op! rt 'guild ["list"])
@@ -117,7 +117,7 @@
 (deftest register-op-registers-and-invokes-through-op-registry
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millstrand/spools-guild 'millstrand.spools.guild)
+      (test-support/activate-spool! rt :skein/examples-guild 'skein.examples.guild)
       (guild/register-op! rt 'gate.close.v1
                           {:doc "Close a peer gate" :input-spec ::close-input :returns close-return
                            :hook-class :mutating :deadline-class :standard}
@@ -133,10 +133,23 @@
       (is (= {:op "ping.v1" :input {}}
              (weaver/op! rt 'ping.v1 []))))))
 
+(deftest register-op-propagates-unexpected-registry-errors
+  (with-runtime
+    (fn [rt _]
+      (with-redefs [weaver/resolve-op
+                    (fn [& _]
+                      (throw (ex-info "Unexpected registry failure" {:reason :unexpected})))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unexpected registry failure"
+                              (guild/register-op! rt 'gate.close.v1
+                                                  {:doc "Close"
+                                                   :hook-class :read
+                                                   :deadline-class :standard}
+                                                  'millstrand.guild-test/close-handler)))))))
+
 (deftest input-spec-invalid-input-fails-loudly-with-structured-data
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millstrand/spools-guild 'millstrand.spools.guild)
+      (test-support/activate-spool! rt :skein/examples-guild 'skein.examples.guild)
       (guild/register-op! rt 'gate.close.v1
                           {:doc "Close a peer gate" :input-spec ::close-input :returns close-return
                            :hook-class :mutating :deadline-class :standard}
@@ -160,7 +173,7 @@
 (deftest input-spec-projects-through-help
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millstrand/spools-guild 'millstrand.spools.guild)
+      (test-support/activate-spool! rt :skein/examples-guild 'skein.examples.guild)
       (guild/register-op! rt 'gate.close.v1
                           {:doc "Close a peer gate" :input-spec ::close-input :returns close-return
                            :hook-class :mutating :deadline-class :standard}
@@ -183,7 +196,7 @@
 (deftest guild-list-reports-active-and-deprecated-ops
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millstrand/spools-guild 'millstrand.spools.guild)
+      (test-support/activate-spool! rt :skein/examples-guild 'skein.examples.guild)
       (guild/set-fallback-guild-name! rt "fallback-guild")
       (is (= "fallback-guild" (:guild (guild/guild-op {:op/runtime rt}))))
       (guild/register-op! rt 'gate.close.v1
@@ -211,7 +224,7 @@
 (deftest deprecated-op-throws-structured-error-and-never-succeeds
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millstrand/spools-guild 'millstrand.spools.guild)
+      (test-support/activate-spool! rt :skein/examples-guild 'skein.examples.guild)
       (guild/register-op! rt 'gate.close.v1 {:doc "Close v1" :returns close-return
                                              :hook-class :mutating :deadline-class :standard}
                           'millstrand.guild-test/close-handler)
@@ -228,7 +241,7 @@
 (deftest guild-error-codes-reach-the-socket-namespace-intact
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millstrand/spools-guild 'millstrand.spools.guild)
+      (test-support/activate-spool! rt :skein/examples-guild 'skein.examples.guild)
       (guild/register-op! rt 'gate.close.v1 {:doc "Close v1" :returns close-return
                                              :hook-class :mutating :deadline-class :standard}
                           'millstrand.guild-test/close-handler)
@@ -251,7 +264,7 @@
 (deftest malformed-guild-declarations-fail-loudly
   (with-runtime
     (fn [rt _]
-      (test-support/activate-spool! rt :millstrand/spools-guild 'millstrand.spools.guild)
+      (test-support/activate-spool! rt :skein/examples-guild 'skein.examples.guild)
       (testing "unknown register-op! opts"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"guild/register-op! received unknown keys"
                               (guild/register-op! rt 'gate.close.v1 {:doc "x" :extra true
@@ -261,7 +274,7 @@
         (let [err (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts failed spec validation"
                                         (guild/register-op! rt 'missing.hook.v1 {:doc "x" :deadline-class :standard}
                                                             'millstrand.guild-test/close-handler)))]
-          (is (= "millstrand.spools.guild/register-op-opts" (:spec (ex-data err))))
+          (is (= "skein.examples.guild/register-op-opts" (:spec (ex-data err))))
           (is (str/includes? (:explain (ex-data err)) ":hook-class")))
         (let [err (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts failed spec validation"
                                         (guild/register-op! rt 'missing.deadline.v1 {:doc "x" :hook-class :read}
@@ -291,14 +304,14 @@
   (testing "Guild contributes its static op and owns reset as one resource"
     (is (fn? guild/guild-op))
     (is (= {:kind :resource
-            :open 'millstrand.spools.guild/reset-guild!
-            :close 'millstrand.spools.guild/reset-guild!
+            :open 'skein.examples.guild/reset-guild!
+            :close 'skein.examples.guild/reset-guild!
             :after #{}
             :scope :module}
            guild/guild-state)))
-  (is (nil? (ns-resolve 'millstrand.spools.guild 'spool)))
-  (is (nil? (ns-resolve 'millstrand.spools.guild 'contribute)))
-  (is (nil? (ns-resolve 'millstrand.spools.guild 'reconcile))))
+  (is (nil? (ns-resolve 'skein.examples.guild 'spool)))
+  (is (nil? (ns-resolve 'skein.examples.guild 'contribute)))
+  (is (nil? (ns-resolve 'skein.examples.guild 'reconcile))))
 
 (deftest lifecycle-reset-rejects-an-invalid-context
   (try

@@ -12,7 +12,7 @@
  ;; "scripts" is on the test path so the one-shot cutover scripts under
  ;; scripts/cutover can be exercised by a registered test namespace rather than
  ;; only standalone; the runner's registry, not the classpath, decides what runs.
- {:test {:extra-paths ["test" "scripts" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "spools/chime/src" "spools/cron/src"]
+ {:test {:extra-paths ["test" "scripts" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/chime/src" "spools/cron/src" "examples/guild/src"]
          :extra-deps {;; Test-only ergonomics: readable nested-map/JSON assertions
                       ;; (match?) and spec-driven property tests (defspec). Kept
                       ;; off the main src/weaver classpath.
@@ -38,7 +38,7 @@
   :smoke {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]
           :main-opts ["-m" "millstrand.smoke"]}
   :format {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
-           :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "test" "dev" "scripts"
+           :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "examples/guild/src" "test" "dev" "scripts"
                        ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
                        ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
                        ".millstrand/workflows/spool_bump.clj" ".millstrand/workflows/story.clj"
@@ -48,7 +48,7 @@
                        ".millstrand/agents/reviewers.clj" ".millstrand/notifications/attention.clj"
                        ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/module.clj"]}
   :format/fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
-               :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "test" "dev" "scripts"
+               :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "examples/guild/src" "test" "dev" "scripts"
                            ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
                            ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
                            ".millstrand/workflows/spool_bump.clj" ".millstrand/workflows/story.clj"
@@ -58,13 +58,13 @@
                            ".millstrand/agents/reviewers.clj" ".millstrand/notifications/attention.clj"
                            ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/module.clj"]}
   :lint/clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
-                   :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "test"]}
+                   :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "examples/guild/src" "test"]}
   :lint/conventions {:extra-paths ["scripts"]
                      :extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                      :main-opts ["-m" "quality.conventions-check"]}
   :lint/splint {:extra-deps {io.github.noahtheduke/splint {:mvn/version "1.21.0"}}
-                :main-opts ["-m" "noahtheduke.splint" "--output" "clj-kondo" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "test"]}
-  :reflect-check {:extra-paths ["scripts" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "spools/chime/src" "spools/cron/src"]
+                :main-opts ["-m" "noahtheduke.splint" "--output" "clj-kondo" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "examples/guild/src" "test"]}
+  :reflect-check {:extra-paths ["scripts" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/chime/src" "spools/cron/src" "examples/guild/src"]
                   :jvm-opts ["--enable-native-access=ALL-UNNAMED" "-Dclojure.compiler.direct-linking=true"]
                   :main-opts ["-m" "quality.reflect-check"]}
   :deps/antq {:extra-deps {com.github.liquidz/antq {:mvn/version "2.11.1276"}}

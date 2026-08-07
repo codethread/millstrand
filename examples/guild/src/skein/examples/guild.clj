@@ -1,5 +1,5 @@
-(ns millstrand.spools.guild
-  "Reference spool for declaring a versioned public weaver operation API.
+(ns skein.examples.guild
+  "Example for declaring a versioned public weaver operation API.
 
   Guild ops are ordinary CLI operations registered in the weaver op registry.
   Names are documented as dotted, version-suffixed handles such as
@@ -34,8 +34,8 @@
 (defn- deprecated-ops [runtime] (:deprecated-ops (state runtime)))
 (defn- fallback-guild-name [runtime] (:fallback-guild-name (state runtime)))
 
-(def ^:private declaration-kind :millstrand.spools.guild/declarations)
-(def ^:private declaration-owner :millstrand.spools.guild/defaults)
+(def ^:private declaration-kind :skein.examples.guild/declarations)
+(def ^:private declaration-owner :skein.examples.guild/defaults)
 
 (s/def ::declaration
   (s/and map?
@@ -137,8 +137,10 @@
   (try
     (weaver/resolve-op runtime name)
     true
-    (catch clojure.lang.ExceptionInfo _
-      false)))
+    (catch clojure.lang.ExceptionInfo error
+      (if (contains? (ex-data error) :canonical-operation)
+        false
+        (throw error)))))
 
 (defn- op-arg-spec
   "Return a parser arg-spec for a guild op.
@@ -248,7 +250,7 @@
   (when-let [input-spec (:input-spec opts)]
     (require-spec-name! input-spec))
   (let [registered (register-or-replace-op! runtime name (:doc opts)
-                                            'millstrand.spools.guild/dispatch-op (:returns opts)
+                                            'skein.examples.guild/dispatch-op (:returns opts)
                                             (:hook-class opts) (:deadline-class opts)
                                             (:input-spec opts))
         entry (cond-> {:name (:name registered)
@@ -285,7 +287,7 @@
                   (fail! "Guild op is not registered" {:operation name}))
         deprecated (select-keys opts [:replacement :since])]
     (register-or-replace-op! runtime name (:doc entry)
-                             'millstrand.spools.guild/deprecated-op (:returns entry)
+                             'skein.examples.guild/deprecated-op (:returns entry)
                              (:hook-class entry) (:deadline-class entry)
                              ;; a deprecation stub never validates input, so it
                              ;; stops projecting the retired input contract
@@ -346,5 +348,5 @@
 
 (lifecycle/defresource guild-state
   "Own Guild's reset and publication boundary for the module lifetime."
-  {:open 'millstrand.spools.guild/reset-guild!
-   :close 'millstrand.spools.guild/reset-guild!})
+  {:open 'skein.examples.guild/reset-guild!
+   :close 'skein.examples.guild/reset-guild!})

@@ -1,46 +1,20 @@
-# Millstrand Guild Spool
+# Guild example
 
 > This is the **contract** doc: the declaration surface, naming and versioning
 > conventions, and the worked two-repo example. Its two companions are
-> [`guild.cookbook.md`](./guild.cookbook.md) — worked composition recipes
+> [`guild.cookbook.md`](../guild.cookbook.md) — worked composition recipes
 > (how/why you publish, discover, and evolve a peer op API) — and
-> [`guild.api.md`](./guild.api.md) — generated fn signatures and docstrings.
+> [`guild.api.md`](../guild.api.md) — generated fn signatures and docstrings.
 > Reach for the cookbook when you want a runnable pattern, the API doc when you
 > want an exact arity, and this doc for what the spool promises.
 
 ## Overview
 
-`millstrand.spools.guild` is a small reference spool for publishing a weaver's trusted operation API to sibling weavers. It does not add a new protocol, server operation, package manager, or permission system. Guild ops are ordinary weaver `op` registry entries with a documented naming/versioning convention and a built-in `guild list` operation for discovery.
+`skein.examples.guild` is a small example for publishing a weaver's trusted operation API to sibling weavers. It does not add a new protocol, server operation, package manager, or permission system. Guild ops are ordinary weaver `op` registry entries with a documented naming/versioning convention and a built-in `guild list` operation for discovery.
 
-Use it when a repo wants other local weavers to call stable, intentional entry points such as `gate.status.v1` or `release.request.v1` instead of reaching into repo-private REPL helpers. The agreement surface is userland: a repo opts in by registering ops from trusted config, usually its checked-in `.millstrand/init.clj`. For a peering repo, that checked-in `init.clj` is effectively a published API file. Treat its guild declarations like public contract code.
+This repository does not support Guild as an approved or activated spool. The quality-gated source is here to study. A repo that adopts this shape should own its configuration and public contract.
 
-## Loading
-
-Approve the Guild root in `.millstrand/spools.edn`:
-
-```clojure
-{:spools {millstrand.spools/guild {:local/root "../spools/guild"}}}
-```
-
-Then declare it from trusted config:
-
-```clojure
-(require '[millstrand.api.current.alpha :as current]
-         '[millstrand.api.runtime.alpha :as runtime])
-
-(def runtime (current/runtime))
-
-(runtime/module! runtime :millstrand/spools-guild
-  {:ns 'millstrand.spools.guild
-   :spools ['millstrand.spools/guild]})
-```
-
-Every Guild fn takes the runtime as its first argument and never reads the
-published singleton, so Guild works in unpublished and side-by-side runtimes.
-The module publishes the built-in operation and reconciles its runtime-local
-declaration state.
-
-At invocation time, `guild list` prefers the runtime metadata name published by the running weaver.
+Every Guild fn takes the runtime as its first argument and never reads the published singleton, so Guild works in unpublished and side-by-side runtimes. At invocation time, `guild list` prefers the runtime metadata name published by the running weaver.
 
 ## Operation declaration surface
 
@@ -49,6 +23,8 @@ At invocation time, `guild list` prefers the runtime metadata name published by 
 ```clojure
 (guild/register-op! runtime 'gate.status.v1
   {:doc "Return whether the named gate is satisfied."
+   :hook-class :read
+   :deadline-class :standard
    :input-spec ::gate-status-input
    :returns {:type :map
              :required {:gate :string
@@ -70,10 +46,10 @@ Guild op invocation accepts zero arguments or one JSON input argument. The spool
 A declared `:input-spec` is discoverable before invocation: it rides the generic arg `:spec` convention (SPEC-003.C70), so `strand help <op>` projects the registered spec's nested contract and a copyable JSON template on the `input` positional. Invalid input fails with the same projection fields (`spec`, `spec-forms`, `contract`, `template`) plus `explain` text, so a worker gets the contract and the violation in one payload.
 
 `:returns` uses the shared registry return declaration from
-[`millstrand.api.return-shape.alpha`](../docs/api/return-shape.api.md). It describes
+  [`millstrand.api.return-shape.alpha`](../../docs/api/return-shape.api.md). It describes
 JSON scalar, closed-map, and homogeneous-collection output; routed and streaming
 wrappers are also shared with ordinary registered ops. The canonical language
-contract is [SPEC-003.C60a/C60b](../devflow/specs/repl-api.md). Run
+contract is [SPEC-003.C60a/C60b](../../devflow/specs/repl-api.md). Run
 `strand help <op>` to inspect its JSON-safe explanation.
 
 ### `deprecate!`
@@ -85,17 +61,6 @@ contract is [SPEC-003.C60a/C60b](../devflow/specs/repl-api.md). Run
 ```
 
 `deprecate!` replaces a registered guild op with a stub that always fails loudly. A deprecated stub may explain, redirect, or refuse — it must never pretend to succeed. The thrown data includes `{:code :operation/deprecated}` plus the op name and replacement guidance.
-
-### Activation
-
-```clojure
-(runtime/module! runtime :millstrand/spools-guild
-  {:ns 'millstrand.spools.guild
-   :spools ['millstrand.spools/guild]})
-(guild/set-fallback-guild-name! runtime "frontend")
-```
-
-Guild activates through the module lifecycle. The declaration names only the source target; Guild's authoring forms publish the `guild` op and its lifecycle resource resets previous guild declarations in that runtime. The guild name is read from runtime metadata when available; `set-fallback-guild-name!` records a fallback for contexts without it. Call it after activation.
 
 ### `guild list`
 
@@ -135,7 +100,7 @@ Assume two repos, `frontend` and `backend`, each with a checked-in portable weav
 
 A machine with two clones can disambiguate locally with `.millstrand/config.local.json` when needed; the local overlay is not committed.
 
-With the Guild root approved in the backend repo's `.millstrand/spools.edn` and activated as shown in [Loading](#loading) (`runtime/refresh!` + `runtime/module!`), the backend's checked-in `.millstrand/init.clj` publishes a guild API:
+In an adopted setup, the backend's checked-in `.millstrand/init.clj` could publish a guild API:
 
 ```clojure
 (ns user
@@ -145,12 +110,12 @@ With the Guild root approved in the backend repo's `.millstrand/spools.edn` and 
 
 (def runtime (current/runtime))
 
-(runtime/module! runtime :millstrand/spools-guild
-  {:ns 'millstrand.spools.guild
-   :spools ['millstrand.spools/guild]})
+(runtime/module! runtime :skein/examples-guild
+  {:ns 'skein.examples.guild
+   :spools ['skein.examples/guild]})
 
 ;; Required here for the declarations below.
-(require '[millstrand.spools.guild :as guild])
+(require '[skein.examples.guild :as guild])
 
 (s/def ::gate-name string?)
 (s/def ::gate-status-input (s/keys :req-un [::gate-name]))
@@ -162,6 +127,8 @@ With the Guild root approved in the backend repo's `.millstrand/spools.edn` and 
 
 (guild/register-op! runtime 'gate.status.v1
   {:doc "Return whether a backend gate is satisfied."
+   :hook-class :read
+   :deadline-class :standard
    :input-spec ::gate-status-input
    :returns {:type :map
              :required {:gate :string
@@ -187,12 +154,12 @@ From the frontend weaver (or a manager weaver), discover the backend by its port
 
 ## See also
 
-- [`guild.cookbook.md`](./guild.cookbook.md) — worked composition recipes for this spool.
-- [`spools/README.md`](./README.md) — shipped spools index and loading notes.
-- [`millstrand.spools.workflow`](./workflow.md) — workflow gates are the durable wait points guild ops often inspect or complete.
+- [`guild.cookbook.md`](../guild.cookbook.md) — worked composition recipes for this example.
+- [`spools/README.md`](../../spools/README.md) — shipped spools index and loading notes.
+- [`millstrand.spools.workflow`](../../spools/workflow.md) — workflow gates are the durable wait points guild ops often inspect or complete.
 - [`ct.spools.executors.subagent`][subagent-contract] — external gate adapter shape that
   guild-backed adapters can mirror.
-- [Weaver Runtime spec](../devflow/specs/daemon-runtime.md) — local weaver peering contract (SPEC-004.P10c).
-- [REPL API spec](../devflow/specs/repl-api.md) — blessed `millstrand.api.peers.alpha` helper listing.
+- [Weaver Runtime spec](../../devflow/specs/daemon-runtime.md) — local weaver peering contract (SPEC-004.P10c).
+- [REPL API spec](../../devflow/specs/repl-api.md) — blessed `millstrand.api.peers.alpha` helper listing.
 
 [subagent-contract]: https://github.com/codethread/agent-harness.spool/blob/d28bfb35b5fc1891a7a318e06886aa446722241d/agent-run/subagent.md
