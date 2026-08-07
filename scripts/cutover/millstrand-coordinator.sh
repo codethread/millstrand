@@ -207,16 +207,15 @@ def validate_inventory(inventory, runtime_commit):
                 f"{consumer.get('card')} source weaver id is invalid")
         require(source.get("marker") != target.get("marker") and source.get("database") != target.get("database"),
                 f"{consumer.get('card')} source and target are not distinct")
-    require(target.get("marker") and target.get("database") and target.get("parent"),
-            f"{consumer.get('card')} target paths are incomplete")
-    if consumer.get("card") == "MSR-14C":
-        pins = {(pin.get("card"), pin.get("tag"), pin.get("sha"), pin.get("ref_kind"))
-                for pin in inventory.get("agent_harness_release_pins", [])}
-        require(pins == {
-            ("MSR-06", "v26", "82f8df466e6caea74a93d994604d94ab6bf78b72", None),
-            ("MSR-05", "v24", "87f61bc2750e7026f3650235907db25f19b1536e", None),
-            ("MSR-04", None, "5790c459e9bb692b5e975f9715df7d5b403feff2", "sha")},
-            "Agent Harness release pins are not exact")
+        require(target.get("marker") and target.get("database") and target.get("parent"),
+                f"{consumer.get('card')} target paths are incomplete")
+    pins = {(pin.get("card"), pin.get("tag"), pin.get("sha"), pin.get("ref_kind"))
+            for pin in inventory.get("agent_harness_release_pins", [])}
+    require(len(pins) == len(inventory.get("agent_harness_release_pins", [])) and pins == {
+        ("MSR-06", "v26", "82f8df466e6caea74a93d994604d94ab6bf78b72", None),
+        ("MSR-05", "v24", "87f61bc2750e7026f3650235907db25f19b1536e", None),
+        ("MSR-04", None, "5790c459e9bb692b5e975f9715df7d5b403feff2", "sha")},
+        "Agent Harness release pins are not exact")
     authority = inventory.get("standing_authority", {})
     require(authority == {"reference": "Epic ke3rd", "routine_approval_required": False,
                           "unexpected_wake": "abort"}, "standing authority is incomplete")
@@ -253,6 +252,7 @@ def run_core_case(consumer, fixture, source_sql, wake_path, temporary, case_name
     case_root.mkdir(parents=True)
     source = case_root / "source.sqlite"
     backup = case_root / "skein.sqlite.millstrand-cutover-backup"
+    target_marker = case_root / "target-world" / ".millstrand"
     target_parent = case_root / "millstrand-world" / "data"
     target = target_parent / "millstrand.sqlite"
     connection = sqlite3.connect(source)
@@ -317,7 +317,9 @@ def run_core_case(consumer, fixture, source_sql, wake_path, temporary, case_name
                                           "key": wake["key"], "classification": "allowlisted",
                                           "allowlisted": True},
                        "rollback": {"original": str(source), "backup": str(backup), "retained": True,
-                                    "command": f"remove {target}; restore {source} from {backup}"},
+                                    "target_paths": [str(target_marker), str(target), str(target_parent)],
+                                    "source_database_untouched": True,
+                                    "command": f"rm -rf -- {target_marker} {target_parent}; XDG_STATE_HOME=/Users/ct/.local/state /Users/ct/go/bin/mill weaver start --workspace {consumer['source']['marker']}"},
                        "start_phase": {"separate": True, "executed": False,
                                         "command": "mill weaver start --workspace <target-marker>",
                                         "requires_validation": True, "weaver": "stopped"}})
@@ -325,7 +327,9 @@ def run_core_case(consumer, fixture, source_sql, wake_path, temporary, case_name
         actual["result"] = "fail"
         actual["failure"] = str(error)
         actual["rollback"] = {"original": str(source), "backup": str(backup),
-                               "retained": backup.exists(), "target_stopped": True}
+                               "retained": backup.exists(), "target_stopped": True,
+                               "source_database_untouched": True,
+                               "target_paths": [str(target_marker), str(target), str(target_parent)]}
         actual["start_phase"] = {"separate": True, "executed": False, "weaver": "stopped"}
     require(source.stat().st_ino == source_inode and
             {**file_stats(source), "path_identity": "same-source-file"} == before_identity,
@@ -341,6 +345,7 @@ def run_agent_harness_case(consumer, fixture, source_sql, temporary, case_name):
     connection.executescript(source_sql.read_text(encoding="utf-8"))
     connection.close()
     source_before = sqlite_snapshot(source)
+    target_marker = case_root / "target-world" / ".millstrand"
     actual = {"name": case_name, "result": "pass", "failure": None,
               "strategy": "fresh-world", "new_weaver": "stopped"}
     try:
@@ -369,7 +374,9 @@ def run_agent_harness_case(consumer, fixture, source_sql, temporary, case_name):
     except ContractError as error:
         actual["result"] = "fail"
         actual["failure"] = str(error)
-        actual["rollback"] = {"source_retained": True, "target_stopped": True}
+        actual["rollback"] = {"source_retained": True, "target_stopped": True,
+                               "target_paths": [str(target_marker), str(target)],
+                               "command": f"rm -rf -- {target_marker} {target}"}
         actual["start_phase"] = {"separate": True, "executed": False, "weaver": "stopped"}
     return actual
 

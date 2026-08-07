@@ -114,4 +114,30 @@ jq -e '
     .result == "fail" and (.failure | contains("source-weaver-id-mismatch")))
 ' "$tmp_root/evidence.json" >/dev/null
 
+for drift_card in MSR-14A MSR-14C; do
+  drift_inventory="$tmp_root/${drift_card}-target-drift.json"
+  python3 - "$inventory" "$drift_inventory" "$drift_card" <<'PY'
+import json
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1])
+destination = pathlib.Path(sys.argv[2])
+card = sys.argv[3]
+inventory = json.loads(source.read_text())
+consumers = inventory["consumers"]
+for consumer in consumers:
+    if consumer["card"] == card:
+        consumer["target"]["marker"] = ""
+        consumer["target"]["database"] = ""
+        consumer["target"]["parent"] = ""
+inventory["consumers"] = sorted(consumers, key=lambda item: item["card"] != card)
+destination.write_text(json.dumps(inventory, indent=2) + "\n")
+PY
+  expect_status 1 "$coordinator" --dry-run --inventory "$drift_inventory" \
+    --preparation-index "$index" --preparation-index-sha256 "$index_sha" \
+    --workspace-root "$fixtures" --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
+  grep -Fq "$drift_card target paths are incomplete" "$tmp_root/err"
+done
+
 echo 'Millstrand coordinator contract: PASS'

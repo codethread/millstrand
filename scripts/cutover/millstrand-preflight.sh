@@ -253,6 +253,7 @@ def sqlite_counts(database):
             "SELECT COUNT(*) FROM attributes WHERE key IN ('agent-run/cost-usd', 'agent-run/tokens', 'agent-run/tokens-total')"
         ).fetchone()[0]
         connection.close()
+        counts["integrity"] = integrity
         return counts
     except sqlite3.Error as exc:
         fail(f"SQLite probe failed for {database}: {exc}")
@@ -267,18 +268,15 @@ def sqlite_evidence(database):
             "SELECT name FROM sqlite_master WHERE type = 'table'"
         )}
         if "agent_runs" in tables:
+            representative_query = "SELECT run_id, status, cost_usd, tokens FROM agent_runs ORDER BY run_id LIMIT 10"
             representative_runs = [
                 {"run_id": row[0], "status": row[1], "cost_usd": row[2], "tokens": row[3]}
                 for row in connection.execute(
-                    "SELECT run_id, status, cost_usd, tokens FROM agent_runs ORDER BY run_id LIMIT 10"
+                    representative_query
                 )
             ]
         else:
-            representative_runs = [
-                {"strand_id": row[0], "run_id": row[1], "state": row[2],
-                 "status": row[3], "cost_usd": row[4], "tokens": row[5]}
-                for row in connection.execute(
-                    """SELECT s.id,
+            representative_query = """SELECT s.id,
                        (SELECT value FROM attributes WHERE strand_id = s.id AND key = 'agent-run/run' AND archived = 0),
                        s.state,
                        (SELECT value FROM attributes WHERE strand_id = s.id AND key = 'agent-run/completion' AND archived = 0),
@@ -287,13 +285,19 @@ def sqlite_evidence(database):
                        FROM strands s
                        WHERE EXISTS (SELECT 1 FROM attributes WHERE strand_id = s.id AND key = 'agent-run/run' AND archived = 0)
                        ORDER BY s.id LIMIT 10"""
+            representative_runs = [
+                {"strand_id": row[0], "run_id": row[1], "state": row[2],
+                 "status": row[3], "cost_usd": row[4], "tokens": row[5]}
+                for row in connection.execute(
+                    representative_query
                 )
             ]
         connection.close()
     except sqlite3.Error as exc:
         fail(f"representative agent-run probe failed for {database}: {exc}")
     return {"sqlite": counts, "bytes": database.stat().st_size,
-            "sha256": sha256(database), "representative_agent_runs": representative_runs}
+            "sha256": sha256(database), "representative_agent_runs": representative_runs,
+            "representative_query": representative_query}
 
 def source_snapshot(marker, database):
     marker = pathlib.Path(marker)
@@ -351,6 +355,8 @@ def check_consumer_shape(consumer):
             f"{consumer['card']} source start identity is invalid")
     require(source["start_identity"] == f"pid={source['pid']}:start={source['started_at']}",
             f"{consumer['card']} source start identity does not match started_at")
+    require(isinstance(source.get("weaver_id"), str) and source["weaver_id"],
+            f"{consumer['card']} source weaver id is invalid")
     require(source["marker"] in ("/Users/ct/dev/projects/skein-src/.skein",
                                   "/Users/ct/dev/projects/agent-harness.spool/.skein"),
             f"{consumer['card']} source marker is not canonical")
@@ -417,6 +423,8 @@ def operator_plan(consumer, status, before):
     target_db = q(target["database"])
     mill_cwd = q(str(runtime_root))
     mill = "./bin/mill"
+    old_mill = q("/Users/ct/go/bin/mill")
+    pid = str(source["pid"])
     init = f"cd {mill_cwd} && {state} {mill} init --workspace {target_marker}"
     copy_config = (
         f"cp -- {source_marker}/config.json {target_marker}/config.json && "
@@ -428,12 +436,59 @@ def operator_plan(consumer, status, before):
     else:
         copy_config += f" && cp -- {source_marker}/spools.edn {target_marker}/spools.edn"
     start = f"cd {mill_cwd} && {state} {mill} weaver start --workspace {target_marker}"
+    wait_for_stopped = (
+        f"while test \"$(ps -p {pid} -o pid= | tr -d ' ')\" = \"{pid}\"; "
+        "do sleep 1; done"
+    )
+    sqlite_counts = before["sqlite"]
+    count_checks = " && ".join(
+        f"test \"$(sqlite3 -readonly {db} 'SELECT COUNT(*) FROM {table};')\" = \"{sqlite_counts[table]}\""
+        for db in (source_db, backup_db, target_db)
+        for table in ("strands", "attributes", "burn_history", "scheduler_history")
+    )
+    spend_query = "SELECT COUNT(*) FROM attributes WHERE key IN ('agent-run/cost-usd', 'agent-run/tokens', 'agent-run/tokens-total');"
+    spend_checks = " && ".join(
+        f"test \"$(sqlite3 -readonly {db} {q(spend_query)})\" = \"{sqlite_counts['spend_rows']}\""
+        for db in (source_db, backup_db, target_db)
+    )
+    integrity_checks = " && ".join(
+        f"test \"$(sqlite3 -readonly {db} 'PRAGMA integrity_check;')\" = ok"
+        for db in (source_db, backup_db, target_db)
+    )
+    representative_query = q(before["representative_query"])
+    representative_checks = " && ".join(
+        f"cmp <(sqlite3 -readonly {source_db} {representative_query}) <(sqlite3 -readonly {db} {representative_query})"
+        for db in (backup_db, target_db)
+    )
+    equality_checks = (
+        f"test \"$(wc -c < {backup_db} | tr -d ' ')\" = \"$(wc -c < {target_db} | tr -d ' ')\" && "
+        f"test \"$(shasum -a 256 {backup_db} | cut -d ' ' -f 1)\" = \"$(shasum -a 256 {target_db} | cut -d ' ' -f 1)\""
+    )
     if consumer["card"] == "MSR-14A":
+        validate_install = " && ".join((integrity_checks, count_checks, spend_checks,
+                                         representative_checks, equality_checks))
         install = f"install -d -m 0755 -- {target_parent} && cp -- {backup_db} {target_db}"
-        rollback = f"rm -f -- {target_db} && sqlite3 {source_db} \".restore '{consumer['backup']}'\""
+        rollback = (
+            f"rm -rf -- {target_marker} {target_parent} && "
+            f"{state} {old_mill} weaver start --workspace {source_marker}"
+        )
+        backup_command = f"sqlite3 {source_db} \".backup '{consumer['backup']}'\""
     else:
+        validate_install = (
+            f"test \"$(sqlite3 -readonly {source_db} 'PRAGMA integrity_check;')\" = ok && "
+            f"test \"$(wc -c < {source_db} | tr -d ' ')\" = \"{before['bytes']}\" && "
+            f"test \"$(shasum -a 256 {source_db} | cut -d ' ' -f 1)\" = \"{before['sha256']}\" && "
+            f"test ! -e {target_db}"
+        )
         install = f"install -d -m 0755 -- {target_parent}"
         rollback = f"rm -rf -- {target_marker} {target_parent}"
+        backup_command = f"test -r {source_db}"
+    status_filter = (f".config_dir == {json.dumps(target['marker'])} and "
+                     f".database_path == {json.dumps(target['database'])} and "
+                     ".pid != null and .started_at != null and .weaver_id != null")
+    status_after_start = (
+        f"cd {mill_cwd} && {state} {mill} weaver status --workspace {target_marker} | jq -e {q(status_filter)}"
+    )
     return {
         "card": consumer["card"],
         "source_identity": {"pid": source["pid"], "started_at": source["started_at"],
@@ -441,11 +496,14 @@ def operator_plan(consumer, status, before):
         "before": before,
         "commands": {
             "stop": f"kill -TERM -- {source['pid']}",
-            "backup": f"sqlite3 {source_db} \".backup '{consumer['backup']}'\"",
+            "wait_for_exact_pid_stopped": wait_for_stopped,
+            "backup": backup_command,
             "install": install,
+            "validate_stopped_source_backup_install": validate_install,
             "marker_init": init,
             "config_install": copy_config,
             "start": start,
+            "status_after_start": status_after_start,
             "rollback": rollback,
         },
         "target": {"marker": target["marker"], "database": target["database"],
@@ -605,7 +663,7 @@ else:
         counts = before_evidence["sqlite"]
         for key in ("strands", "attributes", "spend_rows"):
             require(counts[key] > 0, f"{consumer['card']} source lacks non-empty {key} evidence")
-        status_bin = os.environ.get("MILL_BIN") or str(pathlib.Path(runtime["checkout"]) / "bin/mill")
+        status_bin = os.environ.get("MILL_BIN") or "/Users/ct/go/bin/mill"
         require(os.path.isfile(status_bin) and os.access(status_bin, os.X_OK),
                 f"{consumer['card']} status command is unavailable: {status_bin}")
         status = run([status_bin, "weaver", "status", "--workspace", source["marker"]],

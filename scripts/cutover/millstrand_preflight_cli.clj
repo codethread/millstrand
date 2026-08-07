@@ -29,7 +29,7 @@
 
 (def ^:private value-flags
   #{"--validate-inventory" "--inventory" "--workspace-root"
-    "--runtime-commit" "--fragment" "--plan" "--output" "--payload"})
+    "--runtime-commit" "--fragment" "--output" "--payload"})
 
 (defn- non-blank-string?
   "Return true when `value` is a non-blank path or payload reference."

@@ -54,7 +54,16 @@ if [[ "$plan_shape_status" == 0 ]]; then
   jq -e '.schema == "millstrand/live-cutover-plan-v1" and
     .operator.worker_lifecycle_authority == false and
     ([.operator.plans[].commands] | all(has("stop") and has("backup") and
-      has("install") and has("marker_init") and has("start") and has("rollback")))' \
+      has("install") and has("marker_init") and has("start") and has("rollback") and
+      has("wait_for_exact_pid_stopped") and has("validate_stopped_source_backup_install") and
+      has("status_after_start"))) and
+    ([.operator.plans[] | select(.card == "MSR-14A")][0].commands |
+      (.rollback | contains(".restore") | not) and
+      (.validate_stopped_source_backup_install | contains("PRAGMA integrity_check") and
+       contains("agent-run/cost-usd") and contains("agent-run/run")) and
+      (.status_after_start | contains("started_at") and contains("weaver_id"))) and
+    ([.operator.plans[] | select(.card == "MSR-14C")][0].commands.rollback |
+      contains("source.sqlite") | not)' \
     "$tmp_root/live-plan.json" >/dev/null
 else
   [[ "$plan_shape_status" == 1 ]] || {
@@ -67,6 +76,13 @@ fi
 
 printf '%s' "$inventory" >"$tmp_root/inventory.ref"
 printf '%s' "$fixtures" >"$tmp_root/workspace.ref"
+printf '%s' "$tmp_root/live-plan-payload.json" >"$tmp_root/output.ref"
+clojure -Sdeps '{:paths ["src" "dev" "scripts"]}' -M -m cutover.millstrand-preflight-cli \
+  --plan --payload inventory="$tmp_root/inventory.ref" --payload output="$tmp_root/output.ref" \
+  --inventory :payload/inventory --output :payload/output >"$tmp_root/plan-payload.json"
+jq -e '.plan == true and .inventory == $inventory and .output == $output' \
+  --arg inventory "$inventory" --arg output "$tmp_root/live-plan-payload.json" \
+  "$tmp_root/plan-payload.json" >/dev/null
 named_validate_status=0
 "$preflight" --payload inventory="$tmp_root/inventory.ref" \
   --validate-inventory :payload/inventory >"$tmp_root/named-validate.out" \
