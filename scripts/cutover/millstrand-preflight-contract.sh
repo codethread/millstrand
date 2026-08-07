@@ -62,8 +62,20 @@ if [[ "$plan_shape_status" == 0 ]]; then
       (.validate_stopped_source_backup_install | contains("PRAGMA integrity_check") and
        contains("agent-run/cost-usd") and contains("agent-run/run")) and
       (.status_after_start | contains("started_at") and contains("weaver_id"))) and
-    ([.operator.plans[] | select(.card == "MSR-14C")][0].commands.rollback |
-      contains("source.sqlite") | not)' \
+    ([.operator.plans[] as $plan |
+      ($plan.commands.backup | contains("sqlite3") and contains(".backup") and contains($plan.backup))] | all) and
+    ([.operator.plans[] | .commands.config_install |
+      contains("config.json") and contains("init.clj") and contains("spools.edn") and
+      contains("if test -d") and contains("then cp -R") and contains("fi")] | all) and
+    ([.operator.plans[] | .commands.validate_stopped_source_backup_install |
+      contains("wc -c") and contains(".dump") and contains("shasum")] | all) and
+    ([.operator.plans[] | select(.card == "MSR-14C")][0].commands |
+      (.install | contains("cp") | not) and
+      (.rollback | contains("source.sqlite") | not) and
+      (.validate_stopped_source_backup_install |
+       contains("PRAGMA integrity_check") and contains("burn_history") and
+       contains("agent-run/cost-usd") and contains("wc -c") and contains(".dump") and
+       contains("shasum")))' \
     "$tmp_root/live-plan.json" >/dev/null
 else
   [[ "$plan_shape_status" == 1 ]] || {
@@ -73,6 +85,67 @@ else
   ! grep -Fq 'kill -TERM' "$tmp_root/plan.err"
   ! grep -Fq 'created target' "$tmp_root/plan.err"
 fi
+
+config_contract() {
+  local source=$1
+  local target=$2
+  mkdir -p "$source" "$target"
+  if test -d "$source/config"; then
+    cp -R -- "$source/config" "$target/config"
+  fi
+}
+
+config_contract "$tmp_root/config-absent-source" "$tmp_root/config-absent-target"
+[[ ! -e "$tmp_root/config-absent-target/config" ]] || {
+  echo 'preflight contract: absent config directory was copied' >&2
+  exit 1
+}
+mkdir -p "$tmp_root/config-present-source/config"
+printf '%s' present >"$tmp_root/config-present-source/config/workflow.clj"
+config_contract "$tmp_root/config-present-source" "$tmp_root/config-present-target"
+cmp -s "$tmp_root/config-present-source/config/workflow.clj" \
+  "$tmp_root/config-present-target/config/workflow.clj" || {
+  echo 'preflight contract: present config directory was not copied' >&2
+  exit 1
+}
+
+backup_source="$tmp_root/backup-source.sqlite"
+backup_target="$tmp_root/backup-exact.sqlite"
+sqlite3 "$backup_source" <"$fixtures/source.sql"
+source_bytes=$(wc -c <"$backup_source" | tr -d ' ')
+source_sha=$(shasum -a 256 "$backup_source" | cut -d ' ' -f 1)
+sqlite3 "$backup_source" ".backup '$backup_target'"
+[[ "$(wc -c <"$backup_target" | tr -d ' ')" == "$source_bytes" ]] || {
+  echo 'preflight contract: SQLite backup byte count differs from source' >&2
+  exit 1
+}
+[[ "$(shasum -a 256 "$backup_source" | cut -d ' ' -f 1)" == "$source_sha" ]] || {
+  echo 'preflight contract: SQLite backup changed source SHA' >&2
+  exit 1
+}
+for database in "$backup_source" "$backup_target"; do
+  [[ "$(sqlite3 -readonly "$database" 'PRAGMA integrity_check;')" == ok ]] || {
+    echo "preflight contract: SQLite backup integrity failed for $database" >&2
+    exit 1
+  }
+  [[ "$(sqlite3 -readonly "$database" '.dump' | shasum -a 256 | cut -d ' ' -f 1)" == \
+     "$(sqlite3 -readonly "$backup_source" '.dump' | shasum -a 256 | cut -d ' ' -f 1)" ]] || {
+    echo "preflight contract: SQLite backup content SHA differs for $database" >&2
+    exit 1
+  }
+  for table in strands attributes burn_history scheduler_history; do
+    [[ "$(sqlite3 -readonly "$database" "SELECT COUNT(*) FROM $table;")" == \
+       "$(sqlite3 -readonly "$backup_source" "SELECT COUNT(*) FROM $table;")" ]] || {
+      echo "preflight contract: SQLite backup $table history differs" >&2
+      exit 1
+    }
+  done
+  [[ "$(sqlite3 -readonly "$database" "SELECT COUNT(*) FROM attributes WHERE key IN ('agent-run/cost-usd', 'agent-run/tokens', 'agent-run/tokens-total');")" == \
+     "$(sqlite3 -readonly "$backup_source" "SELECT COUNT(*) FROM attributes WHERE key IN ('agent-run/cost-usd', 'agent-run/tokens', 'agent-run/tokens-total');")" ]] || {
+    echo "preflight contract: SQLite backup spend differs" >&2
+    exit 1
+  }
+done
 
 printf '%s' "$inventory" >"$tmp_root/inventory.ref"
 printf '%s' "$fixtures" >"$tmp_root/workspace.ref"
