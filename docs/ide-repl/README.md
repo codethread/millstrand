@@ -49,7 +49,7 @@ The output is JSON. Find the row for your workspace and use its `nrepl.host` and
 [
   {
     "name": "my-repo",
-    "config_dir": "/path/to/my-repo/.skein",
+    "config_dir": "/path/to/my-repo/.millstrand",
     "state": "running",
     "nrepl": {"host": "127.0.0.1", "port": 51234}
   }
