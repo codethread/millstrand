@@ -17,6 +17,12 @@ This guide covers VS Code with [Calva](https://calva.io/), a popular Clojure ext
 
 ## Start a weaver
 
+For an explicit workspace, assign its directory once. Use the existing `.millstrand` or `.ms` marker, or another directory selected with `--workspace`:
+
+```sh
+workspace="/absolute/path/to/my-repo/.millstrand"
+```
+
 Start mill in a durable terminal:
 
 ```sh
@@ -88,7 +94,23 @@ Put behavior that should survive a restart in a module source file first:
   [:= [:attr :owner] "me"])
 ```
 
-Activate that namespace through `runtime/module!` in trusted startup code and use `runtime/refresh!` after changing the file. Evaluating an authoring form in the REPL defines its Var, but publishes nothing until the module collects it. That rule keeps the file's owner-complete declaration as the durable source.
+Save the file as `$workspace/my-workspace.clj`. A workspace file module is loaded from the exact path relative to the selected workspace; the directory is not added to the classpath. Save this activation form as `$workspace/init.clj` (or `$workspace/init.local.clj` for machine-local activation):
+
+```clojure
+(require '[millstrand.api.current.alpha :as current]
+         '[millstrand.api.runtime.alpha :as runtime])
+
+(runtime/module! (current/runtime) :my/workspace
+  {:file "my-workspace.clj"})
+```
+
+After changing `my-workspace.clj` or either startup file, evaluate this in the connected REPL:
+
+```clojure
+(runtime/refresh! (current/runtime))
+```
+
+Evaluating an authoring form in the REPL defines its Var, but publishes nothing until the module collects it. That rule keeps the file's owner-complete declaration as the durable source. See [workspace modules and local spools](../spools/customisation.md#workspace-modules-and-local-spools) for the fuller layout and approval model.
 
 For a live experiment, code and tests use the explicit-runtime registration functions. In this guide the nREPL is inside the weaver JVM, so the runtime-implied wrappers are convenient:
 

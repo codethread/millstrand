@@ -1,10 +1,10 @@
 # Ubiquitous Language
 
-This file owns the *word*; the contract it names owns the *behavior*. Other documents use these terms without re-explaining them, and where a definition disagrees with the code, the code wins and this file is the bug.
+This glossary defines the terms used by Millstrand and this repository. The contracts and code define behavior. When this file disagrees with the code, this file needs fixing.
 
-For anything enumerable the live surface stays authoritative: `strand vocab` for registered attribute namespaces and relations, `strand help` for registered ops, `strand about <op>` for an op's manual.
+The live surfaces are authoritative for anything enumerable: `strand vocab` lists registered attribute namespaces and relations, `strand help` lists registered ops, and `strand about <op>` gives an op's manual.
 
-Scope is Millstrand and this repository. Vocabulary owned by external spools — kanban, devflow, delegation — belongs in their own repositories, so terms from them appear here only where this repository's own discipline depends on them.
+This glossary covers Millstrand and this repository. Terms owned by external spools, such as kanban, devflow, and delegation, belong in their own repositories. They appear here only when this repository's discipline depends on them.
 
 ## Runtime and topology
 
@@ -13,7 +13,7 @@ Scope is Millstrand and this repository. Vocabulary owned by external spools —
 | **mill** | The Go router and supervisor. Owns everything that must work without a running weaver: workspace resolution, bootstrap, weaver lifecycle, and the trusted nREPL attach. | Daemon, weaver, launcher, the CLI |
 | **`strand` CLI** | The Go client. A pure dispatcher with zero builtin subcommands: it resolves selection context, assembles one invoke envelope per call, and relays NDJSON back. | Strand (the graph node), client if the REPL is also meant, tool |
 | **Weaver** | The application core. A long-lived local Clojure process owning the SQLite connection, the query and pattern registries, event handlers, approved-root acquisition state, and module activation state. | Daemon, server, backend, mill |
-| **Workspace** | The directory holding config, spool approvals, and startup code. Without a flag, commands target the canonical repository root's `.millstrand`. | Worktree, repo, project, database |
+| **Workspace** | A directory holding Millstrand config, spool approvals, and startup code. `--workspace <dir>` selects an explicit directory. Without that flag, commands target the canonical repository root's `.millstrand` or `.ms`; `mill init` creates `.millstrand` when neither marker exists and completes the existing marker. | Worktree, repo, project, database |
 | **Selected workspace** | The workspace a given command actually targets, after `--workspace` resolution. | Default workspace, current workspace |
 | **World** | Informal synonym for a workspace plus the weaver and data behind it. "Disposable world" is a `mktemp -d` workspace for tests and config experiments. | Workspace in specs, environment, instance |
 | **Client** | Anything talking to a weaver: the `strand` CLI over the Unix socket, or the weaver REPL over nREPL. | Consumer, user, agent |
@@ -56,7 +56,7 @@ How code gets into a weaver.
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
 | **Spool** | Trusted, authorable Clojure loaded into the weaver. Spools are how every capability above the core arrives. | Plugin, extension, package, module, library |
-| **Family** | One key in `.millstrand/spools.edn`. One repository is one release unit and one family entry. | Spool, package, repo, dependency |
+| **Family** | One key in `spools.edn` inside the selected workspace. It approves one repository as one release unit and one family entry; its `:roots` map names that repository's public libraries. | Spool, package, repo, dependency |
 | **Coordinate** | The value under a family key, naming where its source comes from: `:local/root`, `:git/url` plus `:git/sha`, or `:millstrand/source-root`. | Dependency, source, path, URL, version |
 | **Root** | A public library within a family, mapped to a checkout path by `:roots`. Every root has exactly one owner. | Spool, namespace, directory, family |
 | **Module** | A `runtime/module!` declaration naming one source target and its world policy, guarded by the `:spools` roots it needs. The activation unit. | Spool, namespace, plugin, component |
