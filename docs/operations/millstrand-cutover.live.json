@@ -176,7 +176,7 @@
   "delivery": {
     "msr_14a": {"pr": "PR #354", "land_run": "land-msr14a-20260807", "landed_main_commit": "e8f3a8d00d1dc4b3e361b12b4403bf7cefd27c59"},
     "msr_14c": {"pr": "PR #20", "land_run": "land-msr14c-20260807", "landed_main_commit": "761515bc6515673ca9517fe1e780b1937090af9b"},
-    "msr_15_cutover": {"pr": null, "land_run": null, "landed_main_commit": "605be1b63059263283d1899728e2f49b96a95268", "note": "The retained evidence has no PR or land-run identifier for the already-landed cutover commit."}
+    "msr_15_cutover": {"pr": "PR #356", "land_run": "land-msr15-20260807", "landed_main_commit": "605be1b63059263283d1899728e2f49b96a95268", "note": "The coordinator verified the landed cutover against the registered land workflow."}
   },
   "cli_cutover": {
     "binary": "/Users/ct/dev/projects/millstrand/bin/mill",
