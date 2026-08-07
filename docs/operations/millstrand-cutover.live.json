@@ -23,7 +23,7 @@
   },
   "preparation_index": {
     "artifact": "docs/operations/millstrand-cutover-preparation-index.json",
-    "resolved_path": "/Users/ct/dev/projects/skein-src__coord--ke3rd-msr16-health/docs/operations/millstrand-cutover-preparation-index.json",
+    "resolved_path": "/Users/ct/dev/projects/skein-src/docs/operations/millstrand-cutover-preparation-index.json",
     "sha256": "8f28eaccddcac171df74e16b050ae2e486353b6475dd4d279efdc5b0dc4a09df",
     "inventory_recorded_sha256": "339e4611aefbf5430d5bfa50c9610df4203546d39925ecdb048d905e40a000b4",
     "hash_interpretation": "The resolved MSR-16 artifact is authoritative; the inventory and retained plan contain the stale historical hash."
@@ -38,7 +38,7 @@
   },
   "scheduler_wake": {
     "artifact": "test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake.json",
-    "resolved_path": "/Users/ct/dev/projects/skein-src__coord--ke3rd-msr16-health/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake.json",
+    "resolved_path": "/Users/ct/dev/projects/skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake.json",
     "sha256": "51e3a6204ff7372abeb9db4bf4f0333b6a6f1a69bb8ff2c9baae3e4a5be0ddcf",
     "payload": {"key": "expected-wake", "status": "completed", "acknowledged": true},
     "classification": "allowlisted expected wake",
