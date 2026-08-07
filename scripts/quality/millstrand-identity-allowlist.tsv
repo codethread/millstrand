@@ -1,3 +1,12 @@
 # scope	pattern	reason
+docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:47:.*"ref": "https://github\.com/codethread/skein/pull/345"	The immutable MSR-02 pull-request evidence.
+docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:48:.*"ref": "https://github\.com/codethread/skein/actions/runs/31094076775"	The immutable MSR-02 quality-run evidence.
+docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:51:.*"command": "flock -w 3600 /tmp/skein-test\.lock clojure -M:test"	The immutable MSR-02 test command evidence.
+docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:59:.*"artifact": "https://github\.com/codethread/skein/actions/runs/31094076775"	The immutable MSR-02 docs-run evidence.
+docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:148:.*MILL_BIN=/Users/ct/dev/projects/skein-src/bin/mill	The immutable MSR-05 pre-tag verifier evidence.
+docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:149:.*MILL_BIN=/Users/ct/dev/projects/skein-src/bin/mill	The immutable MSR-05 published verifier evidence.
+docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:168:.*MILL_BIN=/Users/ct/dev/projects/skein-src/bin/mill	The immutable MSR-05 release verification evidence.
+docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:169:.*MILL_BIN=/Users/ct/dev/projects/skein-src/bin/mill	The immutable MSR-05 published verification evidence.
+docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:207:.*MILL_BIN=/Users/ct/dev/projects/skein-src/bin/mill.*STRAND_BIN=/Users/ct/dev/projects/skein-src/bin/strand	The immutable MSR-06 published verifier evidence.
 scripts/acceptance/millstrand-docs.sh	skein	The acceptance script names the forbidden legacy identity only in negative output and filesystem assertions.
 *	\.skein	The repository coordination workspace and the deliberate legacy application-marker rejection remain named .skein.
