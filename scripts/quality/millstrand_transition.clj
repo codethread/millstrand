@@ -1,31 +1,26 @@
 (ns quality.millstrand-transition
-  "Validate the temporary Millstrand publisher transition contract.
+  "Validate the narrowed Millstrand publisher transition contract.
 
-  The contract is deliberately narrow: it names the exact external family pins
-  and the only workspace test namespaces allowed to defer while those publishers
-  still require the old core identity."
+  Workspace config is active against the moved publishers. The external suite
+  remains deferred only for Kanban's historical in-tree Guild fixture."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]))
 
 (def ^:private contract-resource "quality/millstrand-transition-contract.edn")
-(def ^:private expected-scopes
-  #{:workspace-config-integration :pinned-external-spool-suite})
+(def ^:private expected-scopes #{:pinned-external-spool-suite})
 (def ^:private expected-pins
   {'codethread/devflow
    {:git/url "https://github.com/codethread/devflow.spool.git"
-    :git/tag "v21"
-    :git/sha "7cb75a66e6bf46b6685496cd95ee6e54eb6ca933"}
+    :git/sha "528e0ba636e28032985f7f9706c8350e9f785d97"}
    'codethread/kanban
    {:git/url "https://github.com/codethread/kanban.spool.git"
     :git/tag "v24"
     :git/sha "87f61bc2750e7026f3650235907db25f19b1536e"}
    'ct.spools/agent-run
    {:git/url "https://github.com/codethread/agent-harness.spool.git"
-    :git/tag "v26"
-    :git/sha "82f8df466e6caea74a93d994604d94ab6bf78b72"}})
+    :git/sha "911bc4cb3364ce23516963761820ca0a55d01a39"}})
 (def ^:private expected-families (set (keys expected-pins)))
-(def ^:private expected-test-namespaces
-  #{'millstrand.ct.config-test 'millstrand.ct.config-ops-test})
+(def ^:private expected-deferred-families #{'codethread/kanban})
 
 (defn- fail!
   [message data]
@@ -57,7 +52,7 @@
   (require! (= "PROP-Msr-001.S6" (:contract value))
             "Transition contract has the wrong feature clause"
             {:contract (:contract value)})
-  (require! (= :core-and-in-tree-first (:phase value))
+  (require! (= :external-publishers-compatible (:phase value))
             "Transition contract has the wrong phase"
             {:phase (:phase value)})
   (let [pins (:pins value)
@@ -68,8 +63,9 @@
     (doseq [[family pin] pins]
       (require! (and (map? pin)
                      (string? (:git/url pin))
-                     (string? (:git/tag pin))
-                     (valid-sha? (:git/sha pin)))
+                     (valid-sha? (:git/sha pin))
+                     (or (nil? (:git/tag pin))
+                         (string? (:git/tag pin))))
                 "Transition contract contains a malformed family pin"
                 {:family family :pin pin}))
     (require! (= expected-pins pins)
@@ -85,14 +81,11 @@
               "Transition contract scopes drifted"
               {:expected expected-scopes :actual (set (map :scope deferrals))})
     (doseq [{:keys [scope families test-namespaces]} deferrals]
-      (require! (= families expected-families)
-                "Every deferred scope must name every exact incompatible family pin"
+      (require! (= expected-deferred-families families)
+                "Deferred scope must name only the exact incompatible family pin"
                 {:scope scope :families families})
-      (require! (= test-namespaces
-                   (if (= :workspace-config-integration scope)
-                     expected-test-namespaces
-                     #{}))
-                "Transition deferral has an unexpected test namespace"
+      (require! (empty? test-namespaces)
+                "External-suite deferral cannot hide test namespaces"
                 {:scope scope :test-namespaces test-namespaces}))
     value))
 

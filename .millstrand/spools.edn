@@ -7,8 +7,7 @@
  {:millstrand/source-root "spools/unsafe-text-search"},
  codethread/devflow
  {:git/url "https://github.com/codethread/devflow.spool.git",
-  :git/sha "7cb75a66e6bf46b6685496cd95ee6e54eb6ca933",
-  :git/tag "v21",
+  :git/sha "528e0ba636e28032985f7f9706c8350e9f785d97",
   :roots
   {codethread/devflow ".",
    codethread/devflow-kanban-adapter "kanban-adapter"},
@@ -25,8 +24,7 @@
    millhouse.spools.executors/shell "spools/shell-executor"}},
  ct.spools/agent-run
  {:git/url "https://github.com/codethread/agent-harness.spool.git",
-  :git/sha "82f8df466e6caea74a93d994604d94ab6bf78b72",
-  :git/tag "v26",
+  :git/sha "911bc4cb3364ce23516963761820ca0a55d01a39",
   :roots
   {ct.spools/harness-core "harness-core",
    ct.spools/codex-harness "codex-harness",

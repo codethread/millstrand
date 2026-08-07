@@ -14,7 +14,7 @@ At preflight time the inactive runtime checkout was `/Users/ct/dev/projects/mill
 
 The target world hashes are marker-neutral. Core uses `e9b67c7b8c3d5dce4f2784bb32c0d041`; Agent Harness uses `92ad6dd941f0840553fd7f0fdef15752`. A target marker, target database, or target parent that already exists fails the preflight.
 
-The active consumer pins are Agent Harness `v26` (`82f8df466e6caea74a93d994604d94ab6bf78b72`), Kanban `v24` (`87f61bc2750e7026f3650235907db25f19b1536e`), and Devflow `v21` (`7cb75a66e6bf46b6685496cd95ee6e54eb6ca933`). The core consumer resolves by repository and SHA only.
+At preflight time, the consumer pins were Agent Harness `v26` (`82f8df466e6caea74a93d994604d94ab6bf78b72`), Kanban `v24` (`87f61bc2750e7026f3650235907db25f19b1536e`), and Devflow `v21` (`7cb75a66e6bf46b6685496cd95ee6e54eb6ca933`). The core consumer resolved by repository and SHA only.
 
 ## Run the preflight
 

@@ -22,7 +22,7 @@ Fulfil workflow `:code` gates by invoking trusted Clojure functions.
 Function.
 
 Close code executor resources and unregister its event handler.
-<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/main//Users/ct/.gitlibs/libs/millhouse.spools.executors/code/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L121-L128">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L121-L128">Source</a></sub></p>
 
 ## <a name="millhouse.spools.executors.code/code-engine">`code-engine`</a>
 
@@ -30,7 +30,7 @@ Close code executor resources and unregister its event handler.
 
 
 Own the code executor handler and worker resources.
-<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/main//Users/ct/.gitlibs/libs/millhouse.spools.executors/code/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L130-L133">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L130-L133">Source</a></sub></p>
 
 ## <a name="millhouse.spools.executors.code/code-stalled?">`code-stalled?`</a>
 ``` clojure
@@ -39,7 +39,7 @@ Own the code executor handler and worker resources.
 Function.
 
 Return durable stall detail for a ready `:code` gate view, or nil.
-<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/main//Users/ct/.gitlibs/libs/millhouse.spools.executors/code/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L81-L89">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L81-L89">Source</a></sub></p>
 
 ## <a name="millhouse.spools.executors.code/on-event">`on-event`</a>
 ``` clojure
@@ -48,7 +48,7 @@ Return durable stall detail for a ready `:code` gate view, or nil.
 Function.
 
 Scan for newly ready code gates after a graph mutation.
-<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/main//Users/ct/.gitlibs/libs/millhouse.spools.executors/code/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L76-L79">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L76-L79">Source</a></sub></p>
 
 ## <a name="millhouse.spools.executors.code/open-code-engine!">`open-code-engine!`</a>
 ``` clojure
@@ -57,7 +57,7 @@ Scan for newly ready code gates after a graph mutation.
 Function.
 
 Open the code executor handler and worker resources.
-<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/main//Users/ct/.gitlibs/libs/millhouse.spools.executors/code/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L107-L119">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L107-L119">Source</a></sub></p>
 
 ## <a name="millhouse.spools.executors.code/stalled-code-gates">`stalled-code-gates`</a>
 
@@ -65,4 +65,4 @@ Open the code executor handler and worker resources.
 
 
 Return active code gates carrying a durable error stamp.
-<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/main//Users/ct/.gitlibs/libs/millhouse.spools.executors/code/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L91-L96">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millhouse.spool/blob/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor/src/millhouse/spools/executors/code.clj#L91-L96">Source</a></sub></p>

@@ -1056,7 +1056,7 @@
                "case \"$1\" in\n"
                "  branch) printf '%s\\n' \"$FAKE_LAND_BRANCH\" ;;\n"
                "  rev-parse)\n"
-               "    if [ \"$3\" = \"--git-common-dir\" ]; then\n"
+               "    if [ \"${3-}\" = \"--git-common-dir\" ]; then\n"
                "      printf '%s\\n' \"$FAKE_LAND_CANONICAL/.git\"\n"
                "      exit 0\n"
                "    fi\n"
@@ -1079,7 +1079,7 @@
                "          printf '%s\\n' \"$FAKE_LAND_HEAD\"\n"
                "        fi ;;\n"
                "      *)\n"
-               "        if [ \"$4\" = '@{upstream}' ]; then\n"
+               "        if [ \"${4-}\" = '@{upstream}' ]; then\n"
                "          printf '%s\\n' \"$FAKE_LAND_UPSTREAM\"\n"
                "        else\n"
                "          printf '%s\\n' \"$FAKE_LAND_UPSTREAM_HEAD\"\n"
@@ -2137,10 +2137,15 @@
   "Assert repo startup guards every module that relies on the workflow coordinate."
   [rt]
   (let [modules (:modules (runtime/status rt))]
-    (doseq [id [:millhouse/spools-workflow :millhouse/spools-workflow-cli
-                :millhouse/spools-shell :millhouse/spools-code]]
-      (is (= ['millhouse.spools/workflow] (:spools (get modules id)))
-          (str id " must opt into millhouse.spools/workflow")))
+    (doseq [[id spools]
+            [[:millhouse/spools-workflow ['millhouse.spools/workflow]]
+             [:millhouse/spools-workflow-cli ['millhouse.spools/workflow]]
+             [:millhouse/spools-shell ['millhouse.spools.executors/shell
+                                       'millhouse.spools/workflow]]
+             [:millhouse/spools-code ['millhouse.spools.executors/code
+                                      'millhouse.spools/workflow]]]]
+      (is (= spools (:spools (get modules id)))
+          (str id " must opt into its Millhouse root and workflow dependency")))
     (is (= [:millhouse/spools-workflow] (:after (get modules :millhouse/spools-workflow-cli)))
         "the opt-in worker CLI orders after the engine module it contributes beside")
     (is (= [] (:spools (get modules :config)))

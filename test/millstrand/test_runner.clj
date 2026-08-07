@@ -5,8 +5,7 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.test :as test]
-            [quality.millstrand-transition :as transition])
+            [clojure.test :as test])
   (:import (java.io StringWriter)
            (java.util.concurrent Callable Executors ExecutorService TimeUnit)))
 
@@ -70,7 +69,6 @@
    'millstrand.lifecycle-spike-test
    ;; production lifecycle transition engine is pure over injected callables.
    'millstrand.core.weaver.lifecycle-effects-test
-   'millstrand.spools.executors.shell-test 'millstrand.spools.executors.code-test
    'millstrand.chime-test
    ;; Behavior-owned slices of the former weaver megasuite. Each owns its
    ;; disposable world and namespace-local callback state.
@@ -103,12 +101,11 @@
    ;; DynamicClassLoader and retained registry snapshots stay serial until
    ;; concurrent execution has an explicit proof.
    'millstrand.core.weaver.registry-snapshots-test
-   'millstrand.core.weaver.modules-test])
-
-(def ^:private deferred-transition-namespaces
-  (do
-    (transition/validate-current!)
-    (transition/deferred-test-namespaces :workspace-config-integration)))
+   'millstrand.core.weaver.modules-test
+   ;; Both executor suites activate the shared Workflow namespace through
+   ;; module refresh; concurrent compilation can race on defexecutor forms.
+   'millstrand.spools.executors.shell-test
+   'millstrand.spools.executors.code-test])
 
 (def add-libs-shards
   "Subprocess JVM shard groups for tests that mutate JVM-global tools.deps state."
@@ -117,9 +114,11 @@
    ;; runtime-deps intentionally mutates JVM-global tools.deps state.
    "B" ['millstrand.runtime-deps-test]
    ;; Medium add-libs suites share one JVM to amortize boot without exceeding shard A.
-   ;; The workspace-config integration namespace is deferred by the explicit
-   ;; Millstrand publisher transition contract until its external pins move.
-   "C" ['millstrand.ct.nvd-scan-test]})
+   ;; Workspace config joins this isolated shard because approved Git roots mutate
+   ;; tools.deps state while the fixture starts disposable runtimes.
+   "C" ['millstrand.ct.nvd-scan-test
+        'millstrand.ct.config-test
+        'millstrand.ct.config-ops-test]})
 
 (def shard-timeout-minutes 5)
 
@@ -258,7 +257,6 @@
              error (assoc :error error))))
 
 (defn- run-parent []
-  (println "Transition-deferred test namespaces:" (sort deferred-transition-namespaces))
   (concat (run-serial :parent/serial serial-namespaces) (run-parallel)))
 
 (defn- run-shard [shard-id summary-file]
@@ -296,9 +294,6 @@
       (throw (ex-info (str "Duplicate test namespace arguments: " (str/join " " duplicates))
                       {:duplicates (vec duplicates)})))
     (doseq [ns-sym namespaces]
-      (when (contains? deferred-transition-namespaces ns-sym)
-        (throw (ex-info (str ns-sym " is deferred by the exact Millstrand transition contract; run it after the named external pins move")
-                        {:ns ns-sym :scope :workspace-config-integration})))
       (when-let [shard-id (shard-for-ns ns-sym)]
         (throw (ex-info (str ns-sym " is an add-libs shard namespace (shard " shard-id
                              "); shard namespaces require the full suite in v1")

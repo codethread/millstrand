@@ -1,22 +1,17 @@
 {:contract "PROP-Msr-001.S6"
- :phase :core-and-in-tree-first
+ :phase :external-publishers-compatible
  :pins
  {codethread/devflow
   {:git/url "https://github.com/codethread/devflow.spool.git"
-   :git/tag "v21"
-   :git/sha "7cb75a66e6bf46b6685496cd95ee6e54eb6ca933"}
+   :git/sha "528e0ba636e28032985f7f9706c8350e9f785d97"}
   codethread/kanban
   {:git/url "https://github.com/codethread/kanban.spool.git"
    :git/tag "v24"
    :git/sha "87f61bc2750e7026f3650235907db25f19b1536e"}
   ct.spools/agent-run
   {:git/url "https://github.com/codethread/agent-harness.spool.git"
-   :git/tag "v26"
-   :git/sha "82f8df466e6caea74a93d994604d94ab6bf78b72"}}
+   :git/sha "911bc4cb3364ce23516963761820ca0a55d01a39"}}
  :deferrals
- [{:scope :workspace-config-integration
-   :families #{codethread/devflow codethread/kanban ct.spools/agent-run}
-   :test-namespaces #{millstrand.ct.config-test millstrand.ct.config-ops-test}}
-  {:scope :pinned-external-spool-suite
-   :families #{codethread/devflow codethread/kanban ct.spools/agent-run}
+ [{:scope :pinned-external-spool-suite
+   :families #{codethread/kanban}
    :test-namespaces #{}}]}

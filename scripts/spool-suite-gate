@@ -15,7 +15,7 @@ cd "$root"
 transition_status="$(clojure -M:transition-check --scope pinned-external-spool-suite)"
 case "$transition_status" in
   DEFERRED)
-    echo "spool-suite-gate: deferred by PROP-Msr-001.S6 transition contract (exact codethread/devflow, codethread/kanban, and ct.spools/agent-run pins)"
+    echo "spool-suite-gate: deferred by PROP-Msr-001.S6 for Kanban v24's historical in-tree Guild fixture"
     exit 0
     ;;
   ACTIVE) ;;
@@ -46,9 +46,8 @@ check_pair millhouse "$murl" "$msha"
 root="$(mktemp -d)"
 trap 'rm -rf "$root"' EXIT
 ln -s "$src" "$root/millstrand-src"
-# Millhouse's pinned test alias still names the consumer checkout
-# `../skein-src`; keep that historical fixture name pointed at this checkout
-# while injecting the current Millstrand root explicitly below.
+# Published suites use both historical sibling names for the consumer checkout.
+ln -s "$src" "$root/millstrand"
 ln -s "$src" "$root/skein-src"
 
 materialize() {
@@ -74,8 +73,8 @@ materialize kanban.spool "$kurl" "$ksha" io.github.codethread/kanban.spool
 materialize agent-harness.spool "$aurl" "$asha" io.github.codethread/agent-run.agent-harness
 materialize millhouse.spool "$murl" "$msha" io.github.codethread/millhouse.spool
 
-dcmd="clojure -Sdeps '{:deps {io.millstrand/workflow-spool {:local/root \"../millstrand-src/spools/workflow\"}}}' -M:test"
-kcmd="clojure -M:test"
+dcmd="clojure -M:test"
+kcmd="clojure -Sdeps '{:aliases {:millstrand-suite {:extra-paths [\"../millstrand-src/examples/guild/src\"]}}}' -M:test:millstrand-suite"
 acmd="clojure -M:test"
 mcmd="clojure -Sdeps '{:deps {io.millstrand/millstrand {:local/root \"../millstrand-src\"}}}' -M:test"
 run_suite() {
@@ -89,7 +88,7 @@ run_suite() {
   fi
 }
 
-run_suite devflow.spool "$dsha" "$dcmd" " (with workflow-spool injection)"
+run_suite devflow.spool "$dsha" "$dcmd"
 run_suite kanban.spool "$ksha" "$kcmd"
 run_suite agent-harness.spool "$asha" "$acmd"
 run_suite millhouse.spool "$msha" "$mcmd" " (with millstrand source injection)"
