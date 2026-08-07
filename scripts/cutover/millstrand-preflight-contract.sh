@@ -88,6 +88,44 @@ malformed_status=0
 [[ "$malformed_status" == 1 ]] || { echo "preflight contract: malformed SHA status was $malformed_status" >&2; exit 1; }
 grep -Fq 'runtime commit must be 40 lowercase hexadecimal characters' "$tmp_root/malformed.err"
 
+real_git=$(command -v git)
+mkdir "$tmp_root/failing-git"
+cat >"$tmp_root/failing-git/git" <<EOF
+#!/bin/sh
+if [ "\${1:-}" = "ls-remote" ]; then
+  echo 'deterministic ls-remote failure' >&2
+  exit 42
+fi
+exec "$real_git" "\$@"
+EOF
+chmod +x "$tmp_root/failing-git/git"
+remote_probe_status=0
+PATH="$tmp_root/failing-git:$PATH" "$preflight" --inventory "$inventory" \
+  >"$tmp_root/remote-probe.out" 2>"$tmp_root/remote-probe.err" || remote_probe_status=$?
+[[ "$remote_probe_status" == 1 ]] || { echo "preflight contract: remote probe failure status was $remote_probe_status" >&2; exit 1; }
+grep -Fq 'cannot inspect core v1 tag prohibition' "$tmp_root/remote-probe.err"
+grep -Fq 'remote_url=git@github.com:codethread/millstrand.git' "$tmp_root/remote-probe.err"
+grep -Fq 'exit_status=42' "$tmp_root/remote-probe.err"
+grep -Fq 'stderr=deterministic ls-remote failure' "$tmp_root/remote-probe.err"
+! grep -Fq 'forbidden core v1 tag exists' "$tmp_root/remote-probe.err"
+
+mkdir "$tmp_root/tagged-git"
+cat >"$tmp_root/tagged-git/git" <<EOF
+#!/bin/sh
+if [ "\${1:-}" = "ls-remote" ]; then
+  printf '%s\\n' '0000000000000000000000000000000000000000 refs/tags/v1'
+  exit 0
+fi
+exec "$real_git" "\$@"
+EOF
+chmod +x "$tmp_root/tagged-git/git"
+tag_probe_status=0
+PATH="$tmp_root/tagged-git:$PATH" "$preflight" --inventory "$inventory" \
+  >"$tmp_root/tag-probe.out" 2>"$tmp_root/tag-probe.err" || tag_probe_status=$?
+[[ "$tag_probe_status" == 1 ]] || { echo "preflight contract: tagged remote probe status was $tag_probe_status" >&2; exit 1; }
+grep -Fq 'forbidden core v1 tag exists at git@github.com:codethread/millstrand.git' "$tmp_root/tag-probe.err"
+! grep -Fq 'cannot inspect core v1 tag prohibition' "$tmp_root/tag-probe.err"
+
 runtime_head=$(git -C /Users/ct/dev/projects/millstrand rev-parse HEAD)
 landed_inventory="$tmp_root/landed-inventory.json"
 awk -v sha="$runtime_head" '

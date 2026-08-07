@@ -238,6 +238,14 @@ def source_snapshot(marker, database):
     return {"marker_identity": marker.stat().st_ino, "database_identity": database.stat().st_ino,
             "marker_sha256": marker_digest(marker), "database_sha256": sha256(database)}
 
+def check_core_v1_tag(remote):
+    v1 = run(["git", "ls-remote", remote, "refs/tags/v1", "refs/tags/v1^{}"])
+    if v1.returncode != 0:
+        stderr = v1.stderr.strip() or "<empty>"
+        fail("cannot inspect core v1 tag prohibition",
+             f"remote_url={remote} exit_status={v1.returncode} stderr={stderr}")
+    require(not v1.stdout.strip(), f"forbidden core v1 tag exists at {remote}")
+
 def check_git_runtime(check_remote_policy=False):
     checkout = pathlib.Path(runtime["checkout"])
     require((checkout / ".git").exists(), f"runtime checkout is not a Git checkout: {checkout}")
@@ -255,8 +263,7 @@ def check_git_runtime(check_remote_policy=False):
         "https://github.com/codethread/millstrand.git",
     }, "runtime checkout origin is not codethread/millstrand")
     if check_remote_policy:
-        v1 = run(["git", "ls-remote", remote.stdout.strip(), "refs/tags/v1", "refs/tags/v1^{}"])
-        require(v1.returncode == 0 and not v1.stdout.strip(), "forbidden core v1 tag exists")
+        check_core_v1_tag(remote.stdout.strip())
     for commit, label in ((ancestry["policy_commit"], "policy"), (ancestry["midpoint_commit"], "midpoint")):
         ancestor = run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", commit, "HEAD"])
         require(ancestor.returncode == 0, f"runtime checkout omits {label} ancestry commit {commit}")
