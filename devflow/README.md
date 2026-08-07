@@ -30,6 +30,32 @@ Root specs are canonical for shipped behavior:
 Archived feature folders preserve historical planning context. Current shipped contracts are the root specs above, even if older archive notes describe pre-spec documentation locations.
 Default `rg` searches skip `archive/`; use `rg --no-ignore devflow/archive` when you need those records.
 
+- `26-08-07__9j332` — shipped land-run context, recorded PR numbers, and the sign-off revise route.
+- `26-08-07__9snqu-siblings-rollout` — shipped the sibling-spool installer-removal rollout.
+- `26-08-07__aqw10-main-ci-code-gate` — shipped the main-CI code gate.
+- `26-08-07__authoring-forms` — preserved the authoring-forms design record.
+- `26-08-07__conditional-review-rosters` — preserved the conditional-review-rosters design record.
+- `26-08-07__defer-return` — shipped returning `defer` composition and its cold-cutover record.
+- `26-08-07__fbqbc` — shipped the workflow `:code` executor.
+- `26-08-07__fbr4m-core-reconcile-image` — shipped image-module activation and reconcile-status branching.
+- `26-08-07__ifenn-chime-engine-parity` — shipped chime engine registration through module reconciliation.
+- `26-08-07__kanban-dash-bin` — preserved the kanban-dashboard bin design record.
+- `26-08-07__lrzeh` — shipped atomic workflow-context writes on completion.
+- `26-08-07__millstrand-rename` — preserved the Millstrand rename proposal.
+- `26-08-07__ms7eg-remove-kanban-tree` — shipped the removal of the repo-local kanban-tree projection.
+- `26-08-07__rdrw9-adr-activation-lifecycle` — recorded the spool activation lifecycle decision.
+- `26-08-07__reduce-land-op` — preserved the reduced-land-op plan.
+- `26-08-07__registration-surfaces` — preserved the registration-surfaces proposal.
+- `26-08-07__repo-query-catalogue` — preserved the repository query-catalogue plan.
+- `26-08-07__rrvnn-intree-installer-removal` — shipped removal of in-tree spool installers.
+- `26-08-07__rtnfv-consumer-cutover` — shipped the consumer cutover for installer-free spools.
+- `26-08-07__s9i26-flow-cli` — preserved the superseded generic workflow-CLI design.
+- `26-08-07__spec-projection` — shipped shared spec projection for workflow and pattern consumers.
+- `26-08-07__spool-bins` — preserved the spool-bins proposal.
+- `26-08-07__spool-lifecycle-docs` — preserved the spool-lifecycle documentation proposal.
+- `26-08-07__strand-await` — preserved the strand-await proposal.
+- `26-08-07__uwnzl-def-spool-convention` — preserved the superseded `def spool` convention record.
+- `26-08-07__wnwi9-shell-gate-scripts` — shipped extracted shell-gate scripts.
 - `26-07-27__feature-cost-report` — removed the repo-local `feature-costs` op and preserved its report as a checked-in `jq` reducer over the generic `subgraph` payload.
 - `26-06-24__agent-tool-interface` — shipped agent-operable CLI/REPL interface for the todo graph MVP.
 - `26-06-24__db-owned-task-ids` — shipped generated task ids and creation-time `--link` edges.

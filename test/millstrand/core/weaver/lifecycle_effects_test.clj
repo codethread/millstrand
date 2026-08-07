@@ -2,7 +2,7 @@
   "Executable evidence for the bounded lifecycle authoring feasibility spike."
   (:require [clojure.test :refer [deftest is testing]]))
 
-(load-file "devflow/feat/authoring-forms/lifecycle-spike/engine.clj")
+(load-file "devflow/archive/26-08-07__authoring-forms/lifecycle-spike/engine.clj")
 (require '[millstrand.core.weaver.lifecycle-effects :as engine])
 
 (defn- recording-resolver
