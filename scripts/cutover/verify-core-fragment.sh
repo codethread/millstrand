@@ -43,6 +43,19 @@ expected_wake="$fixtures/$(jq -er '.["expected-wake"]' "$fixtures_json")"
 [[ -f "$source_sql" && -f "$expected_wake" ]] || die "fixture manifest names missing files"
 
 jq -e '
+  .contract | type == "object" and
+  .dependency_sha == "5790c459e9bb692b5e975f9715df7d5b403feff2" and
+  .runtime_checkout == "/Users/ct/dev/projects/millstrand" and
+  .runtime_world_hash == "e9b67c7b8c3d5dce4f2784bb32c0d041" and
+  .runtime_marker == "/Users/ct/dev/projects/millstrand/.millstrand" and
+  .runtime_origin_main == "8219eb80fafa21e26185806307c749d5b8eecea4" and
+  .source_marker == "/Users/ct/dev/projects/skein-src/.skein" and
+  .expected_wake_artifact == "/Users/ct/dev/projects/skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake.json" and
+  .policy_commit == "9ec1aa2c8055ba97e887dac574a054fc53e695c3" and
+  .midpoint_commit == "8219eb80fafa21e26185806307c749d5b8eecea4"
+' "$fixtures_json" >/dev/null || die "fixture canonical cutover contract is invalid"
+
+jq -e '
   type == "object" and .schema == "devflow/consumer-preparation-v1" and
   .card == "MSR-14A" and .consumer == "core" and .disposition == "ready" and
   (.release | type == "object") and (.source | type == "object") and
@@ -72,10 +85,33 @@ jq -e '
 sha=$(jq -er '.release.sha' "$fragment")
 prepared=$(jq -er '.["prepared-checkout"].path' "$fragment")
 prepared_sha=$(jq -er '.["prepared-checkout"].sha' "$fragment")
-[[ "$prepared_sha" == "$sha" ]] || die "prepared checkout SHA does not match release SHA"
+prepared_origin_main=$(jq -er '.["prepared-checkout"]["origin-main-sha"]' "$fragment")
+prepared_advance_from=$(jq -er '.["prepared-checkout"]["advance-from"]' "$fragment")
+prepared_advance_to=$(jq -er '.["prepared-checkout"]["advance-to"]' "$fragment")
+prepared_landed=$(jq -er '.["prepared-checkout"]["msr-14-landed-main-commit"]' "$fragment")
+prepared_msr15=$(jq -er '.["prepared-checkout"]["msr-15-invariant"]' "$fragment")
+[[ "$prepared" == "/Users/ct/dev/projects/millstrand" ]] || die "prepared checkout is not the canonical runtime checkout"
+[[ "$prepared_sha" != "$sha" ]] || die "prepared checkout must not start at dependency release SHA"
+[[ "$prepared_sha" == "$prepared_origin_main" ]] || die "prepared checkout SHA does not match recorded origin/main"
+[[ "$prepared_advance_from" == "$sha" && "$prepared_advance_to" == "origin/main" ]] || \
+  die "prepared checkout does not record advancement from dependency SHA to origin/main"
+[[ "$prepared_landed" == "PRE-LAND: record the canonical origin/main squash commit at cutover" ]] || \
+  die "prepared checkout must use the pre-land landed-commit placeholder"
+[[ "$prepared_msr15" == "checkout HEAD must equal the recorded MSR-14 landed main commit" ]] || \
+  die "prepared checkout is missing the MSR-15 landed-commit invariant"
 [[ "$prepared" = /* ]] || die "prepared checkout path must be absolute"
 [[ -d "$prepared/.git" || -f "$prepared/.git" ]] || die "prepared checkout is not a Git checkout"
-[[ "$(git -C "$prepared" rev-parse HEAD)" == "$sha" ]] || die "prepared checkout is not at release SHA"
+[[ "$(git -C "$prepared" rev-parse HEAD)" == "$prepared_sha" ]] || die "prepared checkout is not at recorded origin/main"
+[[ "$(git -C "$prepared" rev-parse origin/main)" == "$prepared_origin_main" ]] || \
+  die "prepared checkout origin/main does not match its recorded canonical head"
+if [[ "$prepared_landed" =~ ^[0-9a-f]{40}$ ]]; then
+  [[ "$(git -C "$prepared" rev-parse HEAD)" == "$prepared_landed" ]] || \
+    die "MSR-15 requires prepared checkout HEAD to equal the recorded MSR-14 landed main commit"
+fi
+git -C "$prepared" merge-base --is-ancestor 9ec1aa2c8055ba97e887dac574a054fc53e695c3 HEAD || \
+  die "prepared checkout omits the local-quality policy commit"
+git -C "$prepared" merge-base --is-ancestor 8219eb80fafa21e26185806307c749d5b8eecea4 HEAD || \
+  die "prepared checkout omits the midpoint evidence commit"
 [[ -z "$(git -C "$prepared" status --porcelain)" ]] || die "prepared checkout is not clean"
 prepared_remote=$(git -C "$prepared" remote get-url origin)
 case "$prepared_remote" in
@@ -88,6 +124,23 @@ source_marker=$(jq -er '.source.marker' "$fragment")
 backup_db=$(jq -er '.source.backup' "$fragment")
 target_db=$(jq -er '.target.database' "$fragment")
 target_parent=$(jq -er '.target.parent' "$fragment")
+target_marker=$(jq -er '.target.marker' "$fragment")
+[[ "$source_marker" == "/Users/ct/dev/projects/skein-src/.skein" ]] || die "source marker is not the canonical .skein workspace"
+[[ "$target_marker" == "/Users/ct/dev/projects/millstrand/.millstrand" ]] || die "target marker is not the canonical .millstrand workspace"
+[[ "$target_db" == "/Users/ct/.local/state/millstrand/weavers/e9b67c7b8c3d5dce4f2784bb32c0d041/data/millstrand.sqlite" ]] || \
+  die "target database does not use the marker-neutral canonical world hash"
+[[ "$target_parent" == "/Users/ct/.local/state/millstrand/weavers/e9b67c7b8c3d5dce4f2784bb32c0d041/data" ]] || \
+  die "target parent does not use the marker-neutral canonical world hash"
+jq -e --arg dependency "$sha" --arg marker "$source_marker" --arg target "$target_marker" \
+  --arg artifact "$(jq -er '.contract.expected_wake_artifact' "$fixtures_json")" \
+  --arg runtime "$prepared" --arg runtime_sha "$prepared_sha" \
+  '.contract.dependency_sha == $dependency and
+   .contract.source_marker == $marker and
+   .contract.runtime_marker == $target and
+   .contract.runtime_checkout == $runtime and
+   .contract.runtime_origin_main == $runtime_sha and
+   .contract.expected_wake_artifact == $artifact' "$fixtures_json" >/dev/null || \
+  die "fragment and fixture canonical cutover contracts disagree"
 for path_value in "$source_marker" "$source_db" "$backup_db" "$target_db" "$target_parent"; do
   [[ "$path_value" = /* ]] || die "cutover path is not absolute: $path_value"
 done
@@ -121,7 +174,8 @@ fragment_sha=$(sha256sum "$fragment" | awk '{print $1}')
 expected_sha=$(jq -er '.execution["expected-wake-sha256"]' "$fragment")
 actual_wake_sha=$(sha256sum "$expected_wake" | awk '{print $1}')
 wake_artifact=$(jq -er '.execution["expected-wake-artifact"]' "$fragment")
-[[ "$wake_artifact" == "$expected_wake" ]] || die "expected scheduler-wake artifact path does not resolve to fixture"
+[[ "$wake_artifact" == "/Users/ct/dev/projects/skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake.json" ]] || \
+  die "expected scheduler-wake artifact must use the stable canonical post-land path"
 [[ "$actual_wake_sha" == "$expected_sha" ]] || die "expected scheduler-wake artifact hash does not match fragment"
 
 fixture_schema=$(jq -er '.schema' "$fixtures_json")
@@ -189,9 +243,14 @@ jq -e '.cases | type == "array" and length == 6 and all(.[]; (.name | type == "s
 declare -a checks=()
 checks+=("fragment-schema")
 checks+=("sha-only-release")
+checks+=("canonical-target-and-world-hash")
+checks+=("source-marker")
+checks+=("runtime-release-separation")
+checks+=("policy-and-midpoint-ancestry")
 checks+=("prepared-checkout")
+checks+=("msr-15-landed-commit-invariant")
 checks+=("whole-copy-paths")
-checks+=("expected-wake-hash")
+checks+=("stable-expected-wake-artifact")
 checks+=("fixture-schema")
 
 while IFS= read -r case_json; do
@@ -212,7 +271,7 @@ jq -S -n \
   --arg prepared "$prepared" \
   --arg sha "$sha" \
   --argjson cases "$(jq -c '.cases' "$fixtures_json")" \
-  '{schema:$schema,fragment:$fragment,fragment_sha256:$fragment_sha,release_sha:$sha,prepared_checkout:$prepared,source_database:$source,target_database:$target,checks:["fragment-schema","sha-only-release","prepared-checkout","whole-copy-paths","expected-wake-hash","fixture-schema","success-dry-run","running-source","target-collision","hash-mismatch","integrity-failure","unexpected-wake"],cases:$cases}' \
+  '{schema:$schema,fragment:$fragment,fragment_sha256:$fragment_sha,release_sha:$sha,prepared_checkout:$prepared,source_database:$source,target_database:$target,checks:["fragment-schema","sha-only-release","canonical-target-and-world-hash","source-marker","runtime-release-separation","policy-and-midpoint-ancestry","prepared-checkout","msr-15-landed-commit-invariant","whole-copy-paths","stable-expected-wake-artifact","fixture-schema","success-dry-run","running-source","target-collision","hash-mismatch","integrity-failure","unexpected-wake"],cases:$cases}' \
   >"$output"
 
 echo "core fragment verification: PASS"

@@ -10,3 +10,6 @@ docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-mi
 docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:207:.*MILL_BIN=/Users/ct/dev/projects/skein-src/bin/mill.*STRAND_BIN=/Users/ct/dev/projects/skein-src/bin/strand	The immutable MSR-06 published verifier evidence.
 scripts/acceptance/millstrand-docs.sh	skein	The acceptance script names the forbidden legacy identity only in negative output and filesystem assertions.
 *	\.skein	The repository coordination workspace and the deliberate legacy application-marker rejection remain named .skein.
+docs/operations/millstrand-cutover.core.json	.*skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json	The MSR-14A expected-wake evidence is recorded at the stable canonical post-land fixture path.
+test/fixtures/millstrand-cutover/core-fragment/fixtures.json	.*skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json	The MSR-14A fixture contract names the stable canonical post-land evidence path.
+scripts/cutover/verify-core-fragment.sh	.*skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json	The MSR-14A verifier enforces the stable canonical post-land evidence path.

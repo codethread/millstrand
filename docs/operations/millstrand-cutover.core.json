@@ -28,7 +28,7 @@
   "source": {
     "checkout": "/Users/ct/dev/projects/\u0073kein-src",
     "workspace": "/Users/ct/dev/projects/\u0073kein-src/.skein",
-    "marker": "/Users/ct/dev/projects/\u0073kein-src",
+    "marker": "/Users/ct/dev/projects/\u0073kein-src/.skein",
     "database": "/Users/ct/.local/state/\u0073kein/weavers/068e8753b69bb0125cbf220b1733cf11/data/\u0073kein.sqlite",
     "weaver-id": "8f751c75-deb1-48f8-be62-99065f85d276",
     "observed-pid": 58024,
@@ -37,18 +37,23 @@
   "prepared-checkout": {
     "path": "/Users/ct/dev/projects/millstrand",
     "repository": "codethread/millstrand",
-    "sha": "5790c459e9bb692b5e975f9715df7d5b403feff2",
-    "active": false
+    "sha": "8219eb80fafa21e26185806307c749d5b8eecea4",
+    "origin-main-sha": "8219eb80fafa21e26185806307c749d5b8eecea4",
+    "advance-from": "5790c459e9bb692b5e975f9715df7d5b403feff2",
+    "advance-to": "origin/main",
+    "active": false,
+    "msr-14-landed-main-commit": "PRE-LAND: record the canonical origin/main squash commit at cutover",
+    "msr-15-invariant": "checkout HEAD must equal the recorded MSR-14 landed main commit"
   },
   "target": {
-    "marker": "/Users/ct/dev/projects/\u0073kein-src/.millstrand",
-    "database": "/Users/ct/.local/state/millstrand/weavers/068e8753b69bb0125cbf220b1733cf11/data/millstrand.sqlite",
-    "parent": "/Users/ct/.local/state/millstrand/weavers/068e8753b69bb0125cbf220b1733cf11/data"
+    "marker": "/Users/ct/dev/projects/millstrand/.millstrand",
+    "database": "/Users/ct/.local/state/millstrand/weavers/e9b67c7b8c3d5dce4f2784bb32c0d041/data/millstrand.sqlite",
+    "parent": "/Users/ct/.local/state/millstrand/weavers/e9b67c7b8c3d5dce4f2784bb32c0d041/data"
   },
   "execution": {
     "status-command": "XDG_STATE_HOME=/Users/ct/.local/state mill weaver status --workspace /Users/ct/dev/projects/\u0073kein-src/.skein",
     "pid-command": "ps -p \"$(XDG_STATE_HOME=/Users/ct/.local/state mill weaver status --workspace /Users/ct/dev/projects/\u0073kein-src/.skein | jq -er .pid)\" -o pid=,stat=,command=",
-    "expected-wake-artifact": "/Users/ct/dev/projects/\u0073kein-src__luna--ke3rd-msr14a/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake.json",
+    "expected-wake-artifact": "/Users/ct/dev/projects/skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake.json",
     "expected-wake-sha256": "51e3a6204ff7372abeb9db4bf4f0333b6a6f1a69bb8ff2c9baae3e4a5be0ddcf",
     "no-live-lifecycle": true
   },
@@ -56,7 +61,7 @@
     "mode": "whole-copy",
     "source": "/Users/ct/.local/state/\u0073kein/weavers/068e8753b69bb0125cbf220b1733cf11/data/\u0073kein.sqlite",
     "backup": "/Users/ct/.local/state/\u0073kein/weavers/068e8753b69bb0125cbf220b1733cf11/data/\u0073kein.sqlite.millstrand-cutover-backup",
-    "target": "/Users/ct/.local/state/millstrand/weavers/068e8753b69bb0125cbf220b1733cf11/data/millstrand.sqlite",
+    "target": "/Users/ct/.local/state/millstrand/weavers/e9b67c7b8c3d5dce4f2784bb32c0d041/data/millstrand.sqlite",
     "rollback": "remove target millstrand.sqlite and restore \u0073kein.sqlite from \u0073kein.sqlite.millstrand-cutover-backup",
     "requires": [
       "source-stopped-after-expected-wake",
