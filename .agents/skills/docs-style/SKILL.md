@@ -62,9 +62,9 @@ No single tell proves anything — one em dash is fine. Flag prose when tells cl
 
 The rule is two-sided. Markdown prose is not hard-wrapped: each paragraph or bullet is one source line, and the reader's IDE wraps it — that is what markdown editors are set up for. Older files in this repo are hard-wrapped; do not rewrap one in a drive-by edit, but write new markdown full-length and let a diff that already owns a file convert it.
 
-Prose inside Clojure source is the opposite: hard-wrapped in the file so it reads without soft-wrap — 96 columns in `skein.api.*` modules (SPEC-003.C19a), matching the namespace elsewhere, and never past column 180 anywhere.
+Prose inside Clojure source is the opposite: hard-wrapped in the file so it reads without soft-wrap — 96 columns in `millstrand.api.*` modules (SPEC-003.C19a), matching the namespace elsewhere, and never past column 180 anywhere.
 
-Prose that ships as data inside Clojure source (op payloads, `about` surfaces, rule descriptions) is still human-facing and gets this skill's sweep, but its authoring format is the `|`-margin block reflowed through `skein.api.format.alpha` — never one long string literal or `(str ...)` fragments. See `docs/spools/writing-shared-spools.md` for the block contract.
+Prose that ships as data inside Clojure source (op payloads, `about` surfaces, rule descriptions) is still human-facing and gets this skill's sweep, but its authoring format is the `|`-margin block reflowed through `millstrand.api.format.alpha` — never one long string literal or `(str ...)` fragments. See `docs/spools/writing-shared-spools.md` for the block contract.
 
 ## Procedures
 
