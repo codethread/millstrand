@@ -9,6 +9,8 @@ docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-mi
 docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:169:.*MILL_BIN=/Users/ct/dev/projects/skein-src/bin/mill	The immutable MSR-05 published verification evidence.
 docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:207:.*MILL_BIN=/Users/ct/dev/projects/skein-src/bin/mill.*STRAND_BIN=/Users/ct/dev/projects/skein-src/bin/strand	The immutable MSR-06 published verifier evidence.
 scripts/acceptance/millstrand-docs.sh	skein	The acceptance script names the forbidden legacy identity only in negative output and filesystem assertions.
+docs/operations/millstrand-msr17-acceptance.json	^docs/operations/millstrand-msr17-acceptance\.json:102:.*"marker": "\.skein"	The immutable MSR-17 acceptance evidence records rejection of the legacy marker.
+docs/operations/millstrand-msr17-acceptance.json	^docs/operations/millstrand-msr17-acceptance\.json:106:.*"key": ":skein/min"	The immutable MSR-17 acceptance evidence records rejection of the legacy manifest key.
 *	\.skein	The repository coordination workspace and the deliberate legacy application-marker rejection remain named .skein.
 docs/operations/millstrand-cutover.core.json	.*skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json	The MSR-14A expected-wake evidence is recorded at the stable canonical post-land fixture path.
 test/fixtures/millstrand-cutover/core-fragment/fixtures.json	.*skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json	The MSR-14A fixture contract names the stable canonical post-land evidence path.

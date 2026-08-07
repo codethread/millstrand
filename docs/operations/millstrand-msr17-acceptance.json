@@ -98,11 +98,11 @@
       "persisted_entry": "published notebook coordination entry"
     },
     "legacy_negatives": {
-      "skein_marker": {
+      "legacy_marker": {
         "marker": ".skein",
         "result": "rejected"
       },
-      "skein_manifest_key": {
+      "legacy_manifest_key": {
         "key": ":skein/min",
         "result": "rejected"
       }
