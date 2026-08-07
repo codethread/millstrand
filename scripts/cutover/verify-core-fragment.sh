@@ -35,10 +35,10 @@ command -v jq >/dev/null 2>&1 || {
 cd "$repo_root"
 parsed_args=""
 if ! parsed_args=$(clojure -Sdeps '{:paths ["src" "dev" "scripts"]}' -M -m cutover.millstrand-preflight-cli "$@"); then
-  usage
+  exit 2
 fi
 fragment_arg=$(jq -er '.fragment' <<<"$parsed_args") || usage
-workspace_root_arg=$(jq -er '."workspace-root" // .fixtures' <<<"$parsed_args") || usage
+workspace_root_arg=$(jq -er '."workspace-root"' <<<"$parsed_args") || usage
 
 resolve_input() {
   local value=$1

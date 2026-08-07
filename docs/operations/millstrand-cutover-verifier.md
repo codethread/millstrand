@@ -26,7 +26,7 @@ scripts/cutover/verify-core-fragment.sh \
   --workspace-root test/fixtures/millstrand-cutover/core-fragment
 ```
 
-Each option accepts an absolute path or a repository-relative path. Relative paths resolve from the repository root found beside the verifier, so the command also works from another current directory. `--help` prints the usage contract and exits zero. A missing option value or unknown argument prints usage and exits two.
+Each option accepts an absolute path or a repository-relative path. Relative paths resolve from the repository root found beside the verifier, so the command also works from another current directory. `--help` prints the usage contract and exits zero. A missing option value or unknown argument prints the concrete parser diagnostic and exits two.
 
 The verifier prints three lines on success:
 

@@ -45,6 +45,32 @@ The preflight requires the core whole-copy contract: a stopped-world backup befo
 
 The command writes `target/millstrand-cutover/preflight-verification.json`. That file is generated evidence and is not a live target marker or database.
 
+The command accepts the standard whole-value payload references. `:stdin` reads
+one value from standard input, and `:payload/name` reads the contents of the
+file named by `--payload name=path`:
+
+```sh
+printf '%s' docs/operations/millstrand-cutover.inventory.json |
+  scripts/cutover/millstrand-preflight.sh --stdin --validate-inventory :stdin
+
+scripts/cutover/millstrand-preflight.sh \
+  --payload inventory=/tmp/millstrand-inventory.path \
+  --validate-inventory :payload/inventory
+```
+
+For a dry run, attach one payload file for the inventory path and one for the
+disposable workspace path, then reference them by name:
+
+```sh
+printf '%s' docs/operations/millstrand-cutover.inventory.json > /tmp/inventory.path
+printf '%s' test/fixtures/millstrand-cutover/preflight > /tmp/workspace.path
+scripts/cutover/millstrand-preflight.sh --dry-run \
+  --payload inventory=/tmp/inventory.path \
+  --payload workspace=/tmp/workspace.path \
+  --inventory :payload/inventory \
+  --workspace-root :payload/workspace
+```
+
 ## Disposable fixture checks
 
 Run the same contract without touching a live workspace:

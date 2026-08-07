@@ -16,8 +16,8 @@
     {"name": "target-collision", "result": "fail", "failure": {"reason": "target-collision", "diagnostic": "target_exists=true"}},
     {"name": "hash-mismatch", "result": "fail", "failure": {"reason": "hash-mismatch", "diagnostic": "sha256_equal=false"}},
     {"name": "integrity-failure", "result": "fail", "failure": {"reason": "integrity-failure", "diagnostic": "sqlite_integrity=not-ok"}},
-    {"name": "history-mismatch", "result": "fail", "failure": {"reason": "history-mismatch", "diagnostic": "history_strands=unexpected"}},
-    {"name": "spend-mismatch", "result": "fail", "failure": {"reason": "spend-mismatch", "diagnostic": "spend_rows=unexpected"}},
+    {"name": "history-mismatch", "result": "fail", "failure": {"reason": "history-mismatch", "diagnostic": "history_strands=3"}},
+    {"name": "spend-mismatch", "result": "fail", "failure": {"reason": "spend-mismatch", "diagnostic": "spend_rows=4"}},
     {"name": "unexpected-wake", "result": "fail", "failure": {"reason": "unexpected-wake", "diagnostic": "wake_artifact_sha256=unexpected"}}
   ]
 }

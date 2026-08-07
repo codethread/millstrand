@@ -36,7 +36,7 @@ command -v clojure >/dev/null 2>&1 || {
 cd "$repo_root"
 parsed_args=""
 if ! parsed_args=$(clojure -Sdeps '{:paths ["src" "dev" "scripts"]}' -M -m cutover.millstrand-preflight-cli "$@"); then
-  usage
+  exit 2
 fi
 
 command -v python3 >/dev/null 2>&1 || { echo "millstrand-preflight: missing command python3" >&2; exit 1; }
@@ -56,10 +56,9 @@ import tempfile
 repo_root = pathlib.Path(sys.argv[1]).resolve()
 parsed_args = json.loads(sys.argv[2])
 inventory_arg = parsed_args.get("inventory") or parsed_args.get("validate-inventory")
-fixtures_arg = parsed_args.get("fixtures")
 workspace_root_arg = parsed_args.get("workspace-root")
 validate_only = "validate-inventory" in parsed_args
-dry_run = bool(parsed_args.get("dry-run") or fixtures_arg)
+dry_run = bool(parsed_args.get("dry-run"))
 runtime_commit = parsed_args.get("runtime-commit") or None
 
 def resolve_input(value):
@@ -67,7 +66,6 @@ def resolve_input(value):
     return path.resolve() if path.is_absolute() else (repo_root / path).resolve()
 
 inventory_path = resolve_input(inventory_arg)
-fixtures_path = resolve_input(fixtures_arg) if fixtures_arg else None
 workspace_root = resolve_input(workspace_root_arg) if workspace_root_arg else None
 output_path = repo_root / "target/millstrand-cutover/preflight-verification.json"
 
@@ -118,8 +116,6 @@ def read_json(path):
         fail(f"cannot read JSON {path}: {exc}")
 
 require(inventory_path.is_file(), f"inventory does not exist: {inventory_arg}")
-if fixtures_path:
-    require(fixtures_path.is_dir(), f"fixtures do not exist: {fixtures_arg}")
 if workspace_root:
     require(workspace_root.is_dir(), f"workspace root does not exist: {workspace_root_arg}")
 
@@ -333,7 +329,7 @@ require({item["card"] for item in consumers} == {"MSR-14A", "MSR-14C"}, "core an
 for consumer in consumers:
     check_consumer_shape(consumer)
 
-fixture_root = workspace_root if dry_run and workspace_root else fixtures_path
+fixture_root = workspace_root if dry_run else None
 fixture = read_json(fixture_root / "fixtures.json") if fixture_root else None
 fixture_source = None
 fixture_source_counts = None
@@ -395,13 +391,26 @@ if fixture:
                     require(sha256(nominal_wake) == expected_wake_sha,
                             "expected-wake-sha256=unexpected")
                 if name == "history-mismatch":
+                    connection = sqlite3.connect(target)
+                    connection.execute("INSERT INTO strands (title) VALUES (?)",
+                                       ("injected history mismatch",))
+                    connection.commit()
+                    connection.close()
                     counts = sqlite_counts(target)
-                    if counts["strands"] != fixture_source_counts["strands"] + 1:
-                        fail("history-mismatch", "history_strands=unexpected")
+                    require(counts["strands"] == fixture_source_counts["strands"] + 1,
+                            "history mutation was not observed")
+                    fail("history-mismatch", f"history_strands={counts['strands']}")
                 elif name == "spend-mismatch":
+                    connection = sqlite3.connect(target)
+                    connection.execute(
+                        "INSERT INTO attributes (strand_id, key, value) VALUES (?, ?, ?)",
+                        (1, "agent-run/cost-usd", "injected"))
+                    connection.commit()
+                    connection.close()
                     counts = sqlite_counts(target)
-                    if counts["spend_rows"] != fixture_source_counts["spend_rows"] + 1:
-                        fail("spend-mismatch", "spend_rows=unexpected")
+                    require(counts["spend_rows"] == fixture_source_counts["spend_rows"] + 1,
+                            "spend mutation was not observed")
+                    fail("spend-mismatch", f"spend_rows={counts['spend_rows']}")
                 else:
                     counts = sqlite_counts(target)
                     for key in ("strands", "attributes", "burn_history", "scheduler_history", "spend_rows"):

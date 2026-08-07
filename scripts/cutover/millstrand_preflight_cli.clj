@@ -7,6 +7,7 @@
   behave like every other repository CLI surface."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [millstrand.api.cli.alpha :as cli]))
 
@@ -17,9 +18,6 @@
            :fragment {:type :string}
            :workspace-root {:type :string}
            :runtime-commit {:type :string}
-           ;; Kept as an unadvertised compatibility spelling. New callers use
-           ;; --dry-run --workspace-root.
-           :fixtures {:type :string}
            :dry-run {:type :boolean}
            :stdin {:type :boolean}
            :payload {:type :map}}
@@ -29,7 +27,58 @@
 
 (def ^:private value-flags
   #{"--validate-inventory" "--inventory" "--workspace-root"
-    "--runtime-commit" "--fixtures" "--payload"})
+    "--runtime-commit" "--fragment" "--payload"})
+
+(defn- non-blank-string?
+  "Return true when `value` is a non-blank path or payload reference."
+  [value]
+  (and (string? value) (not (str/blank? value))))
+
+(s/def ::path non-blank-string?)
+(s/def ::validate-inventory ::path)
+(s/def ::inventory ::path)
+(s/def ::fragment ::path)
+(s/def ::workspace-root ::path)
+(s/def ::runtime-commit string?)
+(s/def ::dry-run #(true? %))
+(s/def ::stdin boolean?)
+(s/def ::payload map?)
+
+(defn- excludes-keys?
+  "Return true when `value` has none of the keys in `forbidden`."
+  [forbidden value]
+  (not-any? #(contains? value %) forbidden))
+
+(s/def ::validate-mode
+  (s/and
+   (s/keys :req-un [::validate-inventory]
+           :opt-un [::stdin ::payload])
+   #(excludes-keys? #{:inventory :fragment :workspace-root :runtime-commit :dry-run}
+                    %)))
+
+(s/def ::dry-run-mode
+  (s/and
+   (s/keys :req-un [::dry-run ::inventory ::workspace-root]
+           :opt-un [::runtime-commit ::stdin ::payload])
+   #(excludes-keys? #{:validate-inventory :fragment} %)))
+
+(s/def ::fragment-mode
+  (s/and
+   (s/keys :req-un [::fragment ::workspace-root]
+           :opt-un [::stdin ::payload])
+   #(excludes-keys? #{:validate-inventory :inventory :runtime-commit :dry-run} %)))
+
+(s/def ::live-mode
+  (s/and
+   (s/keys :req-un [::inventory]
+           :opt-un [::runtime-commit ::stdin ::payload])
+   #(excludes-keys? #{:validate-inventory :fragment :workspace-root :dry-run} %)))
+
+(s/def ::preflight-arguments
+  (s/or :validate-inventory ::validate-mode
+        :dry-run ::dry-run-mode
+        :fragment ::fragment-mode
+        :live ::live-mode))
 
 (defn- fail!
   "Raise a parser-front-end error with the supplied message."
@@ -87,38 +136,36 @@
         (recur (next tokens) payloads seen-stdin?))
       payloads)))
 
+(defn- invalid-shape!
+  "Raise a shape error that includes the failing value and allowed spec form."
+  [parsed]
+  (let [explanation (s/explain-data ::preflight-arguments parsed)
+        problem (first (::s/problems explanation))
+        allowed (s/form ::preflight-arguments)]
+    (throw (ex-info
+            (str "Invalid preflight argument shape; value "
+                 (pr-str (:val problem))
+                 "; allowed shape "
+                 (pr-str allowed))
+            {:reason :invalid-preflight-shape
+             :value (:val problem)
+             :allowed allowed
+             :problems (::s/problems explanation)}))))
+
 (defn- validate-shape!
-  "Validate the standalone command shapes that arg-spec cannot express."
-  [{:keys [validate-inventory inventory fragment fixtures workspace-root
-           runtime-commit dry-run]}]
-  (let [has-inventory? (some? inventory)
-        has-validation? (some? validate-inventory)
-        has-fragment? (some? fragment)
-        legacy-fixture? (some? fixtures)]
-    (cond
-      has-fragment?
-      (when-not (and (not has-validation?) (not has-inventory?)
-                     (nil? runtime-commit) (not dry-run)
-                     (or (some? workspace-root) legacy-fixture?))
-        (fail! "--fragment requires --workspace-root"))
-
-      has-validation?
-      (when-not (and (not has-inventory?) (not legacy-fixture?)
-                     (nil? workspace-root) (nil? runtime-commit) (not dry-run))
-        (fail! "--validate-inventory cannot be combined with other modes"))
-
-      dry-run
-      (when-not (and has-inventory? (some? workspace-root) (not legacy-fixture?))
-        (fail! "--dry-run requires --inventory and --workspace-root"))
-
-      legacy-fixture?
-      (when-not has-inventory?
-        (fail! "--fixtures requires --inventory"))
-
-      :else
-      (when-not (and has-inventory? (nil? workspace-root))
-        (fail! "live mode requires --inventory and no --workspace-root"))))
+  "Validate the standalone command shape through its clojure.spec."
+  [parsed]
+  (when-not (s/valid? ::preflight-arguments parsed)
+    (invalid-shape! parsed))
   true)
+
+(defn- parser-error-message
+  "Return a parser diagnostic with known flags when that context is available."
+  [error]
+  (let [data (ex-data error)]
+    (if-let [known-flags (seq (:known-flags data))]
+      (str (ex-message error) "; allowed flags: " (str/join ", " known-flags))
+      (ex-message error))))
 
 (defn- json-safe
   "Convert parsed keyword keys to JSON object member names."
@@ -136,5 +183,5 @@
       (println (json/write-str (json-safe parsed))))
     (catch clojure.lang.ExceptionInfo error
       (binding [*out* *err*]
-        (println (ex-message error)))
+        (println (parser-error-message error)))
       (System/exit 2))))

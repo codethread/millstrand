@@ -20,12 +20,19 @@ grep -Fq 'Relative paths are resolved from the repository root.' <<<"$help_outpu
 missing_status=0
 "$verifier" --fragment 2>"$tmp_root/missing.err" || missing_status=$?
 [[ "$missing_status" == 2 ]] || { echo "verifier contract: missing value exited $missing_status" >&2; exit 1; }
-grep -Fq 'usage:' "$tmp_root/missing.err"
+grep -Fq 'Missing value after --fragment' "$tmp_root/missing.err"
 
 unknown_status=0
 "$verifier" --unknown 2>"$tmp_root/unknown.err" || unknown_status=$?
 [[ "$unknown_status" == 2 ]] || { echo "verifier contract: unknown argument exited $unknown_status" >&2; exit 1; }
 grep -Fq 'Unknown flag --unknown' "$tmp_root/unknown.err"
+grep -Fq 'allowed flags:' "$tmp_root/unknown.err"
+grep -Fq -- '--workspace-root' "$tmp_root/unknown.err"
+
+fixtures_status=0
+"$verifier" --fragment "$fragment" --fixtures "$fixtures" 2>"$tmp_root/fixtures.err" || fixtures_status=$?
+[[ "$fixtures_status" == 2 ]] || { echo "verifier contract: removed --fixtures exited $fixtures_status" >&2; exit 1; }
+grep -Fq 'Unknown flag --fixtures' "$tmp_root/fixtures.err"
 
 (cd "$tmp_root" && "$verifier" --fragment "$fragment" --workspace-root "$fixtures" >absolute.out)
 cp "$artifact" "$tmp_root/absolute-artifact.json"

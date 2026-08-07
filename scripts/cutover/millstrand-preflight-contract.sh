@@ -17,19 +17,26 @@ grep -Fq -- '--stdin' <<<"$help_output"
 grep -Fq -- '--payload' <<<"$help_output"
 ! grep -Fq -- '--fixtures' <<<"$help_output"
 
-expect_usage_error() {
+expect_parser_error() {
   local output=$1
+  local expected=$2
   local actual=0
+  shift
   shift
   "$@" >"$tmp_root/out" 2>"$output" || actual=$?
   [[ "$actual" == 2 ]] || { echo "preflight contract: expected usage status 2, got $actual" >&2; exit 1; }
-  grep -Fq 'usage:' "$output"
+  grep -Fq "$expected" "$output"
 }
 
-expect_usage_error "$tmp_root/missing-inventory.err" "$preflight" --inventory
-expect_usage_error "$tmp_root/unknown.err" "$preflight" --unknown
-expect_usage_error "$tmp_root/missing-workspace.err" "$preflight" --dry-run --inventory "$inventory"
-expect_usage_error "$tmp_root/missing-runtime.err" "$preflight" --inventory "$inventory" --runtime-commit
+expect_parser_error "$tmp_root/missing-inventory.err" 'Missing value after --inventory' "$preflight" --inventory
+expect_parser_error "$tmp_root/unknown.err" 'Unknown flag --unknown' "$preflight" --unknown
+grep -Fq 'allowed flags:' "$tmp_root/unknown.err"
+grep -Fq -- '--workspace-root' "$tmp_root/unknown.err"
+expect_parser_error "$tmp_root/missing-workspace.err" 'Invalid preflight argument shape' "$preflight" --dry-run --inventory "$inventory"
+grep -Fq 'value' "$tmp_root/missing-workspace.err"
+grep -Fq 'allowed shape' "$tmp_root/missing-workspace.err"
+expect_parser_error "$tmp_root/missing-runtime.err" 'Missing value after --runtime-commit' "$preflight" --inventory "$inventory" --runtime-commit
+expect_parser_error "$tmp_root/fixtures.err" 'Unknown flag --fixtures' "$preflight" --fixtures "$fixtures"
 
 "$preflight" --validate-inventory "$inventory" >"$tmp_root/validate.out"
 grep -Fq 'Millstrand inventory validation: PASS' "$tmp_root/validate.out"
@@ -54,6 +61,14 @@ named_status=0
   --workspace-root :payload/workspace >"$tmp_root/named.out" 2>"$tmp_root/named.err" || named_status=$?
 [[ "$named_status" == 0 ]] || { echo "preflight contract: named payload status was $named_status" >&2; cat "$tmp_root/named.err" >&2; exit 1; }
 grep -Fq 'mode: dry-run' "$tmp_root/named.out"
+jq -e '
+  ([.cases[] | select(.name == "history-mismatch")][0] |
+    .result == "fail" and .failure.reason == "history-mismatch" and
+    .failure.diagnostic == "history_strands=3") and
+  ([.cases[] | select(.name == "spend-mismatch")][0] |
+    .result == "fail" and .failure.reason == "spend-mismatch" and
+    .failure.diagnostic == "spend_rows=4")
+' "$repo_root/target/millstrand-cutover/preflight-verification.json" >/dev/null
 
 printf '%s' 'not-a-sha' >"$tmp_root/runtime.ref"
 runtime_payload_status=0
