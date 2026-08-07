@@ -84,6 +84,33 @@ def require_list(value, path):
     return value
 
 
+COORDINATOR_CASE_NAMES = {
+    "success", "pid-mismatch", "start-identity-mismatch", "weaver-id-mismatch",
+    "target-collision", "unexpected-wake", "hash-mismatch", "fresh-world-import",
+}
+
+
+def validate_case_names(cases, path, allowlisted):
+    """Return fixture cases after enforcing one exact allowlisted name set."""
+    cases = require_list(cases, path)
+    names = []
+    for index, case in enumerate(cases):
+        label = f"{path}[{index}]"
+        require_object(case, label)
+        name = require_field(case, "name", label)
+        require(isinstance(name, str) and name,
+                f"{label}.name must be a non-blank string")
+        require(name not in names,
+                f"{label}.name duplicates fixture case {name!r}")
+        require(name in allowlisted,
+                f"{label}.name {name!r} is not allowlisted")
+        names.append(name)
+    missing = sorted(allowlisted.difference(names))
+    require(not missing,
+            f"{path} is missing allowlisted fixture cases: {', '.join(missing)}")
+    return cases
+
+
 def resolve_path(value):
     path = pathlib.Path(value)
     return path.resolve() if path.is_absolute() else (repo_root / path).resolve()
@@ -224,13 +251,19 @@ def validate_inventory(inventory, runtime_commit):
             "core v1 prohibition is missing")
     consumers = require_list(require_field(inventory, "consumers", "inventory"),
                              "inventory.consumers")
-    require({c.get("card") for c in consumers} == {"MSR-14A", "MSR-14C"},
-            "core and Agent Harness consumers are incomplete")
-    for consumer in consumers:
-        require_object(consumer, "inventory.consumers entry")
+    require(len(consumers) == 2,
+            f"inventory.consumers must contain exactly 2 entries, got {len(consumers)}")
+    cards = []
+    for index, consumer in enumerate(consumers):
+        label = f"inventory.consumers[{index}]"
+        require_object(consumer, label)
+        card = require_field(consumer, "card", label)
+        require(isinstance(card, str) and card,
+                f"{label}.card must be a non-blank string")
+        cards.append(card)
         source, target = consumer.get("source", {}), consumer.get("target", {})
-        source = require_object(source, f"inventory.consumers[{consumer.get('card')}].source")
-        target = require_object(target, f"inventory.consumers[{consumer.get('card')}].target")
+        source = require_object(source, f"{label}.source")
+        target = require_object(target, f"{label}.target")
         for field in ("pid", "started_at", "start_identity", "marker", "database", "weaver_id"):
             require(field in source,
                     f"inventory.consumers[{consumer.get('card')}].source.{field} is missing")
@@ -253,6 +286,10 @@ def validate_inventory(inventory, runtime_commit):
                 f"{consumer.get('card')} source and target are not distinct")
         require(target.get("marker") and target.get("database") and target.get("parent"),
                 f"{consumer.get('card')} target paths are incomplete")
+    require(len(set(cards)) == len(cards),
+            f"inventory.consumers contains duplicate cards: {cards}")
+    require(set(cards) == {"MSR-14A", "MSR-14C"},
+            f"inventory.consumers cards are not exactly MSR-14A and MSR-14C: {cards}")
     release_pins = require_list(
         require_field(inventory, "agent_harness_release_pins", "inventory"),
         "inventory.agent_harness_release_pins")
@@ -478,10 +515,12 @@ def main():
     require(sha256_file(wake_path) == fixture["expected_wake_sha256"],
             "expected scheduler wake artifact hash does not match fixture")
     expected_cases = {}
-    for case in require_list(require_field(fixture, "cases", "fixture"), "fixture.cases"):
+    cases = validate_case_names(require_field(fixture, "cases", "fixture"),
+                                "fixture.cases", COORDINATOR_CASE_NAMES)
+    for case in cases:
         require_object(case, "fixture.cases entry")
         require("name" in case, "fixture.cases entry.name is missing")
-        require("result" in case, f"fixture.cases[{case['name']}] .result is missing")
+        require("result" in case, f"fixture.cases[{case['name']}].result is missing")
         expected_cases[case["name"]] = case
     consumers = {consumer["card"]: consumer for consumer in inventory["consumers"]}
     with tempfile.TemporaryDirectory(prefix="millstrand-coordinator-") as temporary_dir:

@@ -59,6 +59,9 @@ if [[ "$plan_shape_status" == 0 ]]; then
       has("status_after_start"))) and
     ([.operator.plans[] | select(.card == "MSR-14A")][0].commands |
       (.rollback | contains(".restore") | not) and
+      (.wait_for_exact_pid_stopped |
+       contains("for attempt in $(seq 1 30)") and contains("sleep 1") and
+       contains("exit 1") and (contains("while test") | not)) and
       (.validate_stopped_source_backup_install | contains("PRAGMA integrity_check") and
        contains("agent-run/cost-usd") and contains("agent-run/run")) and
       (.status_after_start | contains("started_at") and contains("weaver_id"))) and
@@ -200,6 +203,46 @@ malformed_fixture_status=0
   exit 1
 }
 grep -Fq 'fixture.source_counts is missing' "$tmp_root/malformed-fixture.err"
+
+duplicate_cases="$tmp_root/duplicate-cases"
+cp -R "$fixtures" "$duplicate_cases"
+python3 - "$duplicate_cases/fixtures.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+value["cases"].append(dict(value["cases"][0]))
+path.write_text(json.dumps(value, indent=2) + "\n")
+PY
+duplicate_cases_status=0
+"$preflight" --dry-run --inventory "$inventory" --workspace-root "$duplicate_cases" \
+  >"$tmp_root/duplicate-cases.out" 2>"$tmp_root/duplicate-cases.err" || duplicate_cases_status=$?
+[[ "$duplicate_cases_status" == 1 ]] || {
+  echo "preflight contract: duplicate case status was $duplicate_cases_status" >&2
+  exit 1
+}
+grep -Fq "fixture.cases[8].name duplicates fixture case 'success'" "$tmp_root/duplicate-cases.err"
+
+unknown_cases="$tmp_root/unknown-cases"
+cp -R "$fixtures" "$unknown_cases"
+python3 - "$unknown_cases/fixtures.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+value["cases"][0]["name"] = "unknown-case"
+path.write_text(json.dumps(value, indent=2) + "\n")
+PY
+unknown_cases_status=0
+"$preflight" --dry-run --inventory "$inventory" --workspace-root "$unknown_cases" \
+  >"$tmp_root/unknown-cases.out" 2>"$tmp_root/unknown-cases.err" || unknown_cases_status=$?
+[[ "$unknown_cases_status" == 1 ]] || {
+  echo "preflight contract: unknown case status was $unknown_cases_status" >&2
+  exit 1
+}
+grep -Fq "fixture.cases[0].name 'unknown-case' is not allowlisted" "$tmp_root/unknown-cases.err"
 
 named_status=0
 "$preflight" --dry-run \

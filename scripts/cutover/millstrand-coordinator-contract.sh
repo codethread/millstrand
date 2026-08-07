@@ -128,6 +128,52 @@ expect_status 1 "$coordinator" --dry-run --inventory "$inventory" \
   --workspace-root "$malformed_fixture" --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
 grep -Fq 'fixture.source_identity.weaver_id is missing' "$tmp_root/err"
 
+duplicate_cases="$tmp_root/duplicate-cases"
+cp -R "$fixtures" "$duplicate_cases"
+python3 - "$duplicate_cases/fixtures.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+value["cases"].append(dict(value["cases"][0]))
+path.write_text(json.dumps(value, indent=2) + "\n")
+PY
+expect_status 1 "$coordinator" --dry-run --inventory "$inventory" \
+  --preparation-index "$index" --preparation-index-sha256 "$index_sha" \
+  --workspace-root "$duplicate_cases" --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
+grep -Fq "fixture.cases[8].name duplicates fixture case 'success'" "$tmp_root/err"
+
+unknown_cases="$tmp_root/unknown-cases"
+cp -R "$fixtures" "$unknown_cases"
+python3 - "$unknown_cases/fixtures.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+value["cases"][0]["name"] = "unknown-case"
+path.write_text(json.dumps(value, indent=2) + "\n")
+PY
+expect_status 1 "$coordinator" --dry-run --inventory "$inventory" \
+  --preparation-index "$index" --preparation-index-sha256 "$index_sha" \
+  --workspace-root "$unknown_cases" --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
+grep -Fq "fixture.cases[0].name 'unknown-case' is not allowlisted" "$tmp_root/err"
+
+duplicate_consumers="$tmp_root/duplicate-consumers.json"
+python3 - "$inventory" "$duplicate_consumers" <<'PY'
+import json
+import pathlib
+import sys
+value = json.loads(pathlib.Path(sys.argv[1]).read_text())
+value["consumers"][0]["card"] = value["consumers"][1]["card"]
+pathlib.Path(sys.argv[2]).write_text(json.dumps(value, indent=2) + "\n")
+PY
+expect_status 1 "$coordinator" --dry-run --inventory "$duplicate_consumers" \
+  --preparation-index "$index" --preparation-index-sha256 "$index_sha" \
+  --workspace-root "$fixtures" --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
+grep -Fq 'inventory.consumers contains duplicate cards' "$tmp_root/err"
+
 for drift_field in pid started_at weaver_id; do
   drift_inventory="$tmp_root/inventory-${drift_field}-drift.json"
   python3 - "$inventory" "$drift_inventory" "$drift_field" <<'PY'

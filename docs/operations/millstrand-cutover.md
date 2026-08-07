@@ -55,7 +55,7 @@ scripts/cutover/millstrand-preflight.sh --plan \
   --output target/millstrand-cutover/live-cutover-plan.json
 ```
 
-The plan records the real before SQLite/hash/spend/representative-run evidence and resolved commands for both consumers: exact-PID stop, SQLite backup, target-parent/install, explicit `.millstrand` `mill init`, configuration and pin installation, start, and rollback. Configuration installation copies `config.json`, `init.clj`, and `spools.edn`; it copies `config/` only when the source directory exists. It always uses the built `/Users/ct/dev/projects/millstrand/bin/mill` with `XDG_STATE_HOME=/Users/ct/.local/state`. The plan recorder has no lifecycle authority: it does not signal, create a target marker, copy a live database, or start a weaver.
+The plan records the real before SQLite/hash/spend/representative-run evidence and resolved commands for both consumers: exact-PID stop with a bounded 30-attempt, one-second wait, SQLite backup, target-parent/install, explicit `.millstrand` `mill init`, configuration and pin installation, start, and rollback. Configuration installation copies `config.json`, `init.clj`, and `spools.edn`; it copies `config/` only when the source directory exists. It always uses the built `/Users/ct/dev/projects/millstrand/bin/mill` with `XDG_STATE_HOME=/Users/ct/.local/state`. The plan recorder has no lifecycle authority: it does not signal, create a target marker, copy a live database, or start a weaver.
 
 The command accepts the standard whole-value payload references. `:stdin` reads one value from standard input, and `:payload/name` reads the contents of the file named by `--payload name=path`:
 
@@ -129,7 +129,7 @@ scripts/cutover/millstrand-coordinator.sh \
 
 The disposable evidence schema is `millstrand/cutover-evidence-v1`. It records the preparation-index hash, fixture PID and start identity, before/after SQLite counts and integrity, byte and SHA-256 values, spend and representative agent-run records, the retained SQLite `.backup` and rollback path, stopped scheduler-wake classification, target absence/distinctness and mode `0755`, core whole-copy equality, Agent Harness fresh-world results, and a separate deferred start phase. Every failed fixture leaves the simulated new weaver stopped. It is not live evidence.
 
-The coordinator contract only validates disposable fixtures and emits an operator plan. A separately authorized MSR-15 executor must review the live status and evidence, execute the plan, and write the final live `millstrand/cutover-evidence-v1` at the cutover destination. The disposable preflight and plan artifacts are not that record. After status confirms the recorded identity, the stop command is `kill -TERM -- <recorded-pid>`; never use `pkill` or a pattern kill. Each consumer gets a stopped SQLite backup at its inventory path. The core backup command is `sqlite3 <source-db> ".backup '<backup-db>'"`, and the core target is a whole copy of that backup. Agent Harness is a fresh world: its backup is retained for rollback but never installed into the target, and the executor installs the exact Agent Harness `v26`, Kanban `v24`, and core SHA pins into the new marker before start. Install only after the stopped wake artifact is allowlisted, the target parent is absent and mode `0755`, and backup integrity, byte count, canonical-content SHA-256, history, spend, and representative records compare with the source. Marker creation is exactly `./bin/mill init --workspace <target>/.millstrand`; it does not create `.ms` or `.skein`. Start is a separate phase: `./bin/mill weaver start --workspace <target-marker>`. A failed validation leaves the new weaver stopped and retains the original plus backup for rollback.
+The coordinator contract only validates disposable fixtures and emits disposable cutover evidence. It does not emit an operator plan. A separately authorized MSR-15 executor must review the live status and evidence, execute the plan from preflight `--plan`, and write the final live `millstrand/cutover-evidence-v1` at the cutover destination. The disposable preflight and coordinator artifacts are not that record. After status confirms the recorded identity, the stop command is `kill -TERM -- <recorded-pid>`; never use `pkill` or a pattern kill. Each consumer gets a stopped SQLite backup at its inventory path. The core backup command is `sqlite3 <source-db> ".backup '<backup-db>'"`, and the core target is a whole copy of that backup. Agent Harness is a fresh world: its backup is retained for rollback but never installed into the target, and the executor installs the exact Agent Harness `v26`, Kanban `v24`, and core SHA pins into the new marker before start. Install only after the stopped wake artifact is allowlisted, the target parent is absent and mode `0755`, and backup integrity, byte count, canonical-content SHA-256, history, spend, and representative records compare with the source. Marker creation is exactly `./bin/mill init --workspace <target>/.millstrand`; it does not create `.ms` or `.skein`. Start is a separate phase: `./bin/mill weaver start --workspace <target-marker>`. A failed validation leaves the new weaver stopped and retains the original plus backup for rollback.
 
 Whole-value text arguments use the declared parser semantics. For example:
 
@@ -148,6 +148,18 @@ scripts/cutover/millstrand-coordinator.sh --dry-run \
   --preparation-index-sha256 :payload/hash \
   --workspace-root :payload/workspace \
   --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
+```
+
+The coordinator also accepts standard input as one whole-value payload. Pass `--stdin` and reference it with `:stdin`, for example:
+
+```sh
+cat docs/operations/millstrand-cutover.inventory.json |
+  scripts/cutover/millstrand-coordinator.sh --stdin --dry-run \
+    --inventory :stdin \
+    --preparation-index docs/operations/millstrand-cutover-preparation-index.json \
+    --preparation-index-sha256 339e4611aefbf5430d5bfa50c9610df4203546d39925ecdb048d905e40a000b4 \
+    --workspace-root test/fixtures/millstrand-cutover/coordinator \
+    --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
 ```
 
 ## MSR-15 handoff

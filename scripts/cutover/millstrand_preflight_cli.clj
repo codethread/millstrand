@@ -9,20 +9,21 @@
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [cutover.cli-contracts :as contracts]
             [millstrand.api.cli.alpha :as cli]))
 
 (def ^:private preflight-arg-spec
   {:op "millstrand-preflight"
-   :flags {:validate-inventory {:type :string}
-           :inventory {:type :string}
-           :fragment {:type :string}
-           :workspace-root {:type :string}
-           :runtime-commit {:type :string}
+   :flags {:validate-inventory {:type :string :spec ::contracts/path-or-ref}
+           :inventory {:type :string :spec ::contracts/path-or-ref}
+           :fragment {:type :string :spec ::contracts/path-or-ref}
+           :workspace-root {:type :string :spec ::contracts/path-or-ref}
+           :runtime-commit {:type :string :spec ::contracts/path-or-ref}
            :plan {:type :boolean}
-           :output {:type :string}
+           :output {:type :string :spec ::contracts/path-or-ref}
            :dry-run {:type :boolean}
            :stdin {:type :boolean}
-           :payload {:type :map}}
+           :payload {:type :map :spec ::contracts/payload-map}}
    :positionals []
    :hook-class :read
    :deadline-class :standard})
@@ -31,23 +32,17 @@
   #{"--validate-inventory" "--inventory" "--workspace-root"
     "--runtime-commit" "--fragment" "--output" "--payload"})
 
-(defn- non-blank-string?
-  "Return true when `value` is a non-blank path or payload reference."
-  [value]
-  (and (string? value) (not (str/blank? value))))
-
-(s/def ::path non-blank-string?)
-(s/def ::validate-inventory ::path)
-(s/def ::inventory ::path)
-(s/def ::fragment ::path)
-(s/def ::workspace-root ::path)
+(s/def ::validate-inventory ::contracts/path-or-ref)
+(s/def ::inventory ::contracts/path-or-ref)
+(s/def ::fragment ::contracts/path-or-ref)
+(s/def ::workspace-root ::contracts/path-or-ref)
 (s/def ::runtime-commit #(and (string? %)
                               (boolean (re-matches #"[0-9a-f]{40}" %))))
 (s/def ::plan #(true? %))
-(s/def ::output ::path)
+(s/def ::output ::contracts/path-or-ref)
 (s/def ::dry-run #(true? %))
 (s/def ::stdin boolean?)
-(s/def ::payload map?)
+(s/def ::payload ::contracts/payload-map)
 
 (defn- excludes-keys?
   "Return true when `value` has none of the keys in `forbidden`."
@@ -104,7 +99,11 @@
     (when (or (nil? separator) (zero? separator))
       (fail! (str "Malformed --payload value " (pr-str token)
                   "; expected name=path")))
-    [(subs token 0 separator) (subs token (inc separator))]))
+    (let [entry [(subs token 0 separator) (subs token (inc separator))]]
+      (when-not (s/valid? ::contracts/payload-entry entry)
+        (fail! (str "Malformed --payload value " (pr-str token)
+                    "; expected a non-blank name and path")))
+      entry)))
 
 (defn- payload-arguments
   "Read dispatcher payload slots needed by the shared argv parser.
@@ -130,6 +129,8 @@
           (let [[name path] (payload-name-and-path spec)]
             (when (contains? payloads name)
               (fail! (str "Duplicate payload slot " name)))
+            (when (= name "stdin")
+              (fail! "Payload slot stdin is reserved for --stdin"))
             (let [content (try
                             (slurp (io/file path))
                             (catch java.io.IOException error
@@ -146,7 +147,10 @@
 
         :else
         (recur (next tokens) payloads seen-stdin?))
-      payloads)))
+      (do
+        (when-not (s/valid? ::contracts/payload-map payloads)
+          (fail! "Payload slots do not match the cutover payload map contract"))
+        payloads))))
 
 (defn- invalid-shape!
   "Raise a shape error that includes the failing value and allowed spec form."

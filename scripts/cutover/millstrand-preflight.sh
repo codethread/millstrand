@@ -109,6 +109,34 @@ def require_list(value, path):
     require(isinstance(value, list), f"{path} must be an array")
     return value
 
+
+PREFLIGHT_CASE_NAMES = {
+    "success", "running-source", "target-collision", "hash-mismatch",
+    "integrity-failure", "history-mismatch", "spend-mismatch", "unexpected-wake",
+}
+
+
+def validate_case_names(cases, path, allowlisted):
+    """Return fixture cases after enforcing one exact allowlisted name set."""
+    cases = require_list(cases, path)
+    names = []
+    for index, case in enumerate(cases):
+        label = f"{path}[{index}]"
+        require_object(case, label)
+        name = require_field(case, "name", label)
+        require(isinstance(name, str) and name,
+                f"{label}.name must be a non-blank string")
+        require(name not in names,
+                f"{label}.name duplicates fixture case {name!r}")
+        require(name in allowlisted,
+                f"{label}.name {name!r} is not allowlisted")
+        names.append(name)
+    missing = sorted(allowlisted.difference(names))
+    require(not missing,
+            f"{path} is missing allowlisted fixture cases: {', '.join(missing)}")
+    return cases
+
+
 def validate_inventory_shape(value):
     """Validate every nested shape that the preflight reads directly."""
     inventory = require_object(value, "inventory")
@@ -185,7 +213,8 @@ def validate_fixture_shape(value):
     source_counts = require_object(fixture["source_counts"], "fixture.source_counts")
     for key in ("strands", "attributes", "burn_history", "scheduler_history", "spend_rows"):
         require(key in source_counts, f"fixture.source_counts.{key} is missing")
-    for index, case in enumerate(require_list(fixture["cases"], "fixture.cases")):
+    cases = validate_case_names(fixture["cases"], "fixture.cases", PREFLIGHT_CASE_NAMES)
+    for index, case in enumerate(cases):
         case = require_object(case, f"fixture.cases[{index}]")
         for key in ("name", "result"):
             require(key in case, f"fixture.cases[{index}].{key} is missing")
@@ -550,9 +579,16 @@ def operator_plan(consumer, status, before):
         f"{spools} && {config_copy}"
     )
     start = f"cd {mill_cwd} && {state} {mill} weaver start --workspace {target_marker}"
+    stop_wait_attempts = 30
+    stop_wait_seconds = 1
     wait_for_stopped = (
-        f"while test \"$(ps -p {pid} -o pid= | tr -d ' ')\" = \"{pid}\"; "
-        "do sleep 1; done"
+        f"for attempt in $(seq 1 {stop_wait_attempts}); do "
+        f"observed_pid=\"$(ps -p {pid} -o pid= | tr -d ' ')\"; "
+        f"if test \"$observed_pid\" != \"{pid}\"; then exit 0; fi; "
+        f"sleep {stop_wait_seconds}; "
+        "done; "
+        f"echo 'timed out waiting for exact PID {pid} to stop after "
+        f"{stop_wait_attempts} attempts' >&2; exit 1"
     )
     sqlite_counts = before["sqlite"]
     spend_query = "SELECT COUNT(*) FROM attributes WHERE key IN ('agent-run/cost-usd', 'agent-run/tokens', 'agent-run/tokens-total');"
@@ -647,6 +683,8 @@ def operator_plan(consumer, status, before):
             "status_after_start": status_after_start,
             "rollback": rollback,
         },
+        "stop_wait": {"strategy": "bounded-exact-pid", "attempts": stop_wait_attempts,
+                       "poll_seconds": stop_wait_seconds},
         "target": {"marker": target["marker"], "database": target["database"],
                    "parent": target["parent"], "marker_name": ".millstrand",
                    "init_semantics": "explicit --workspace creates .millstrand; never .ms or .skein",

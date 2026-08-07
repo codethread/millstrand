@@ -9,18 +9,27 @@
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [cutover.cli-contracts :as contracts]
             [millstrand.api.cli.alpha :as cli]))
 
 (def ^:private coordinator-arg-spec
   {:op "millstrand-coordinator"
    :flags {:dry-run {:type :boolean :doc "Run only against disposable fixture state."}
-           :inventory {:type :string :required? true :doc "Typed MSR-14 inventory JSON."}
-           :preparation-index {:type :string :required? true :doc "Typed preparation-index JSON."}
-           :preparation-index-sha256 {:type :string :required? true :doc "Expected canonical index hash."}
-           :workspace-root {:type :string :required? true :doc "Disposable fixture root."}
-           :runtime-commit {:type :string :doc "Expected landed runtime SHA."}
-           :output {:type :string :doc "Evidence JSON output path."}
-           :payload {:type :map :doc "Named whole-value payload files."}
+           :inventory {:type :string :required? true :spec ::contracts/path-or-ref
+                       :doc "Typed MSR-14 inventory JSON."}
+           :preparation-index {:type :string :required? true :spec ::contracts/path-or-ref
+                               :doc "Typed preparation-index JSON."}
+           :preparation-index-sha256 {:type :string :required? true
+                                      :spec ::contracts/path-or-ref
+                                      :doc "Expected canonical index hash."}
+           :workspace-root {:type :string :required? true :spec ::contracts/path-or-ref
+                            :doc "Disposable fixture root."}
+           :runtime-commit {:type :string :spec ::contracts/path-or-ref
+                            :doc "Expected landed runtime SHA."}
+           :output {:type :string :spec ::contracts/path-or-ref
+                    :doc "Evidence JSON output path."}
+           :payload {:type :map :spec ::contracts/payload-map
+                     :doc "Named whole-value payload files."}
            :stdin {:type :boolean :doc "Attach stdin as the stdin payload."}}
    :positionals []
    :hook-class :read
@@ -30,28 +39,17 @@
   #{"--inventory" "--preparation-index" "--preparation-index-sha256"
     "--workspace-root" "--runtime-commit" "--output" "--payload"})
 
-(defn- non-blank-string?
-  "Return true when `value` is a non-blank public text argument."
-  [value]
-  (and (string? value) (not (str/blank? value))))
-
-(defn- sha256-string?
-  "Return true when `value` is a lowercase SHA-256 digest."
-  [value]
-  (and (string? value) (boolean (re-matches #"[0-9a-f]{64}" value))))
-
-(s/def ::path non-blank-string?)
-(s/def ::inventory ::path)
-(s/def ::preparation-index ::path)
-(s/def ::preparation-index-sha256 sha256-string?)
-(s/def ::workspace-root ::path)
+(s/def ::inventory ::contracts/path-or-ref)
+(s/def ::preparation-index ::contracts/path-or-ref)
+(s/def ::preparation-index-sha256 ::contracts/path-or-ref)
+(s/def ::workspace-root ::contracts/path-or-ref)
 (s/def ::runtime-commit #(or (nil? %)
                              (and (string? %)
                                   (boolean (re-matches #"[0-9a-f]{40}" %)))))
-(s/def ::output ::path)
+(s/def ::output ::contracts/path-or-ref)
 (s/def ::dry-run true?)
 (s/def ::stdin boolean?)
-(s/def ::payload map?)
+(s/def ::payload ::contracts/payload-map)
 
 (defn- excludes-keys?
   "Return true when `value` has none of `forbidden` keys."
@@ -77,7 +75,11 @@
     (when (or (nil? separator) (zero? separator) (= separator (dec (count token))))
       (fail! (str "Malformed --payload value " (pr-str token)
                   "; expected name=path")))
-    [(subs token 0 separator) (subs token (inc separator))]))
+    (let [entry [(subs token 0 separator) (subs token (inc separator))]]
+      (when-not (s/valid? ::contracts/payload-entry entry)
+        (fail! (str "Malformed --payload value " (pr-str token)
+                    "; expected a non-blank name and path")))
+      entry)))
 
 (defn- payload-arguments
   "Read transport payload slots for the shared whole-value parser."
@@ -98,6 +100,8 @@
           (let [[name path] (payload-name-and-path spec)]
             (when (contains? payloads name)
               (fail! (str "Duplicate payload slot " name)))
+            (when (= name "stdin")
+              (fail! "Payload slot stdin is reserved for --stdin"))
             (let [content (try
                             (slurp (io/file path))
                             (catch java.io.IOException error
@@ -113,7 +117,10 @@
 
         :else
         (recur (next tokens) payloads seen-stdin?))
-      payloads)))
+      (do
+        (when-not (s/valid? ::contracts/payload-map payloads)
+          (fail! "Payload slots do not match the cutover payload map contract"))
+        payloads))))
 
 (defn- parser-error-message
   "Return a parser diagnostic with known flags when available."
