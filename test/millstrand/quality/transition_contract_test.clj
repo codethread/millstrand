@@ -19,7 +19,7 @@
            clojure.lang.ExceptionInfo
            #"external pins drifted"
            (transition/validate-contract!
-            (assoc-in contract [:pins 'codethread/devflow :git/tag] "v21")))))
+            (assoc-in contract [:pins 'codethread/devflow :git/tag] "v22")))))
     (testing "an extra family cannot hide in a deferred scope"
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
