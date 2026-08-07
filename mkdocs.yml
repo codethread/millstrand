@@ -1,5 +1,5 @@
 site_name: Millstrand Docs
-site_description: Source documentation projection for Millstrand
+site_description: Generated documentation for Millstrand
 site_url: ""
 docs_dir: .mkdocs
 site_dir: site

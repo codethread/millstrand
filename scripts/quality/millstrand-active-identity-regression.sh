@@ -11,6 +11,7 @@ cp "$repo_root/scripts/quality/millstrand-active-identity.sh" \
 cp "$repo_root/scripts/quality/millstrand-identity-allowlist.tsv" \
   "$tmp_root/scripts/quality/millstrand-identity-allowlist.tsv"
 cp "$repo_root/quality-inventory.md" "$tmp_root/quality-inventory.md"
+cp "$repo_root/mkdocs.yml" "$tmp_root/mkdocs.yml"
 
 # The audit falls back to git grep when ripgrep is unavailable, so keep the
 # extracted fixture a usable git tree.
@@ -22,7 +23,7 @@ git -C "$tmp_root" add --all
 # where ripgrep is installed, without depending on a particular system PATH.
 tool_dir="$tmp_root/no-rg-bin"
 mkdir "$tool_dir"
-for command_name in dirname git grep mktemp pwd rm; do
+for command_name in dirname git grep mktemp pwd rm sed; do
   command_path=$(command -v "$command_name") || {
     echo "millstrand identity regression: required command is unavailable: $command_name" >&2
     exit 1
@@ -57,11 +58,14 @@ grep -Fq "unclassified active identity" "$output" || {
 echo "millstrand identity regression: unrelated midpoint value rejected"
 
 stale_namespace=$(printf 's%s' kein).api.regression
+legacy_marker=$(printf '.s%s' kein)
+pages_identity=$(printf 'S%s' kein)
 assert_unclassified() {
   local label=$1
   local path=$2
+  local payload=${3:-"legacy namespace: $stale_namespace"}
   cp "$repo_root/$path" "$tmp_root/$path"
-  printf '\nlegacy namespace: %s\n' "$stale_namespace" >>"$tmp_root/$path"
+  printf '\n%s\n' "$payload" >>"$tmp_root/$path"
 
   local case_output="$tmp_root/$label.out"
   if PATH="$tool_dir" "$bash_path" \
@@ -82,5 +86,28 @@ assert_unclassified root-doc CONTRIBUTING.md
 assert_unclassified quality-inventory quality-inventory.md
 assert_unclassified devflow-guidance devflow/PHILOSOPHY.md
 assert_unclassified agent-skill .agents/skills/testing/SKILL.md
+assert_unclassified pages-metadata mkdocs.yml "site_name: $pages_identity Docs"
+
+cp "$repo_root/AGENTS.md" "$tmp_root/AGENTS.md"
+sed -i.bak "1,/${legacy_marker}/s/${legacy_marker}/${legacy_marker} legacy.${stale_namespace}/" \
+  "$tmp_root/AGENTS.md"
+rm -f "$tmp_root/AGENTS.md.bak"
+same_line_output="$tmp_root/same-line.out"
+if PATH="$tool_dir" "$bash_path" \
+    "$tmp_root/scripts/quality/millstrand-active-identity.sh" >"$same_line_output" 2>&1; then
+  cat "$same_line_output" >&2
+  echo "millstrand identity regression: same-line stale identity was accepted" >&2
+  exit 1
+fi
+
+grep -Fq "unclassified active identity: AGENTS.md:" "$same_line_output" || {
+  cat "$same_line_output" >&2
+  echo "millstrand identity regression: same-line bypass failed for the wrong reason" >&2
+  exit 1
+}
+
+echo "millstrand identity regression: same-line stale identity rejected"
+assert_unclassified false-application-workspace README.md \
+  "The ${legacy_marker} application workspace remains active."
 
 echo "millstrand identity regression: newly covered stale identities rejected"
