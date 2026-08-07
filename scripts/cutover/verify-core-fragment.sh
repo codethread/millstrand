@@ -65,7 +65,7 @@ jq -e '
   .runtime_checkout == "/Users/ct/dev/projects/millstrand" and
   .runtime_world_hash == "e9b67c7b8c3d5dce4f2784bb32c0d041" and
   .runtime_marker == "/Users/ct/dev/projects/millstrand/.millstrand" and
-  .runtime_origin_main == "8219eb80fafa21e26185806307c749d5b8eecea4" and
+  .runtime_origin_main == "144f0481a6d231c32a5bed658525ae0675ac9add" and
   .source_marker == "/Users/ct/dev/projects/skein-src/.skein" and
   .expected_wake_artifact == "/Users/ct/dev/projects/skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake.json" and
   .policy_commit == "9ec1aa2c8055ba97e887dac574a054fc53e695c3" and
@@ -83,7 +83,7 @@ jq -e '
 
 jq -e '
   .provenance["override-record"] == "yvv5n" and
-  .provenance.statement == "The MSR-04 dependency/release input remains SHA-only at 5790c459e9bb692b5e975f9715df7d5b403feff2. The live MSR-14A runtime checkout advances to canonical origin/main at 8219eb80fafa21e26185806307c749d5b8eecea4 before land and carries the policy and midpoint commits." and
+  .provenance.statement == "The MSR-04 dependency/release input remains SHA-only at 5790c459e9bb692b5e975f9715df7d5b403feff2. The MSR-14A runtime checkout landed at canonical main commit 144f0481a6d231c32a5bed658525ae0675ac9add after carrying the policy and midpoint commits." and
   .provenance["dependency-input"] == {
     "card": "MSR-04",
     "role": "consumer dependency/release input",
@@ -94,8 +94,8 @@ jq -e '
     "card": "MSR-14A",
     "role": "live runtime source checkout",
     "ref": "origin/main",
-    "sha": "8219eb80fafa21e26185806307c749d5b8eecea4",
-    "landed-commit": "MSR-14 landed canonical main commit; record its squash SHA at cutover"
+    "sha": "144f0481a6d231c32a5bed658525ae0675ac9add",
+    "landed-commit": "144f0481a6d231c32a5bed658525ae0675ac9add"
   } and
   .provenance["required-commits"] == [
     "9ec1aa2c8055ba97e887dac574a054fc53e695c3",
@@ -135,8 +135,7 @@ prepared_msr15=$(jq -er '.["prepared-checkout"]["msr-15-invariant"]' "$fragment"
 [[ "$prepared_sha" == "$prepared_origin_main" ]] || die "prepared checkout SHA does not match recorded origin/main"
 [[ "$prepared_advance_from" == "$sha" && "$prepared_advance_to" == "origin/main" ]] || \
   die "prepared checkout does not record advancement from dependency SHA to origin/main"
-[[ "$prepared_landed" == "PRE-LAND: record the canonical origin/main squash commit at cutover" ]] || \
-  die "prepared checkout must use the pre-land landed-commit placeholder"
+[[ "$prepared_landed" =~ ^[0-9a-f]{40}$ ]] || die "prepared checkout must record the landed commit"
 [[ "$prepared_msr15" == "checkout HEAD must equal the recorded MSR-14 landed main commit" ]] || \
   die "prepared checkout is missing the MSR-15 landed-commit invariant"
 [[ "$prepared" = /* ]] || die "prepared checkout path must be absolute"
@@ -176,7 +175,7 @@ jq -e --arg dependency "$sha" --arg marker "$source_marker" --arg target "$targe
   --arg runtime "$prepared" --arg runtime_sha "$prepared_sha" \
   '.contract.dependency_sha == $dependency and
    .contract.override_record == "yvv5n" and
-   .contract.override_statement == "The MSR-04 dependency/release input remains SHA-only at 5790c459e9bb692b5e975f9715df7d5b403feff2. The live MSR-14A runtime checkout advances to canonical origin/main at 8219eb80fafa21e26185806307c749d5b8eecea4 before land and carries the policy and midpoint commits." and
+   .contract.override_statement == "The MSR-04 dependency/release input remains SHA-only at 5790c459e9bb692b5e975f9715df7d5b403feff2. The MSR-14A runtime checkout landed at canonical main commit 144f0481a6d231c32a5bed658525ae0675ac9add after carrying the policy and midpoint commits." and
    .contract.source_marker == $marker and
    .contract.runtime_marker == $target and
    .contract.runtime_checkout == $runtime and

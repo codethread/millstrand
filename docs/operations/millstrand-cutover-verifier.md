@@ -1,6 +1,6 @@
 # Core fragment verifier
 
-Run `scripts/cutover/verify-core-fragment.sh` from this repository when reviewing the MSR-14A core cutover fragment. The verifier reads the checked-in fragment and fixture database, checks the inactive runtime checkout and source database, simulates the copy contract, and writes a machine-readable result.
+Run `scripts/cutover/verify-core-fragment.sh` from this repository when reviewing the historical MSR-14A core cutover fragment. The verifier reads the checked-in fragment and fixture database, checks the checkout state recorded before MSR-15 and the source database, simulates the copy contract, and writes a machine-readable result. MSR-15 completed on 2026-08-07; [millstrand-cutover.live.json](./millstrand-cutover.live.json) is the authoritative live outcome, so the verifier's target-absence assertion is intentionally not valid against the completed live target.
 
 ## Prerequisites
 
@@ -42,4 +42,4 @@ The fixture cases cover the successful dry run and the five rejection paths: run
 
 ## Release/runtime provenance
 
-The fragment records an explicit override from `yvv5n`. MSR-04 remains the SHA-only dependency and release input at `5790c459e9bb692b5e975f9715df7d5b403feff2`. The live MSR-14A runtime checkout is a separate input: it advances to canonical `origin/main` at `8219eb80fafa21e26185806307c749d5b8eecea4` before land and includes policy `9ec1aa2c8055ba97e887dac574a054fc53e695c3` plus midpoint `8219eb80fafa21e26185806307c749d5b8eecea4`. Do not reset the runtime checkout to the MSR-04 dependency SHA.
+The fragment records an explicit override from `yvv5n`. MSR-04 remains the SHA-only dependency and release input at `5790c459e9bb692b5e975f9715df7d5b403feff2`. The live MSR-14A runtime checkout landed at canonical main commit `144f0481a6d231c32a5bed658525ae0675ac9add` after carrying policy `9ec1aa2c8055ba97e887dac574a054fc53e695c3` and midpoint `8219eb80fafa21e26185806307c749d5b8eecea4`. Do not reset the runtime checkout to the MSR-04 dependency SHA.

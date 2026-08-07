@@ -16,3 +16,6 @@ scripts/cutover/verify-core-fragment.sh	.*skein-src/test/fixtures/millstrand-cut
 docs/operations/millstrand-cutover.md	.*Skein world.*	The cutover runbook names the source world being replaced.
 docs/operations/millstrand-cutover.inventory.json	.*skein/weavers/.*	The typed cutover inventory records exact legacy source database paths.
 scripts/cutover/millstrand-preflight.sh	.*skein/weavers/.*	The preflight validates exact recorded source database paths.
+scripts/cutover/millstrand-coordinator.sh	.*skein\.sqlite\.millstrand-cutover-backup.*	The non-live coordinator records the retained legacy core backup name.
+docs/operations/millstrand-cutover.live.json	.*skein/weavers/.*	The immutable MSR-15 live outcome records the exact legacy source and backup database paths.
+docs/operations/millstrand-cutover.live.json	.*skein\.\* personal notifier overlay.*	The immutable MSR-15 live outcome records the removed legacy namespace pattern.

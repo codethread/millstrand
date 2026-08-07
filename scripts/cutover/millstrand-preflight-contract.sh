@@ -13,6 +13,8 @@ grep -Fq -- '--validate-inventory' <<<"$help_output"
 grep -Fq -- '--dry-run' <<<"$help_output"
 grep -Fq -- '--inventory' <<<"$help_output"
 grep -Fq -- '--runtime-commit' <<<"$help_output"
+grep -Fq -- '--plan' <<<"$help_output"
+grep -Fq -- '--output' <<<"$help_output"
 grep -Fq -- '--stdin' <<<"$help_output"
 grep -Fq -- '--payload' <<<"$help_output"
 ! grep -Fq -- '--fixtures' <<<"$help_output"
@@ -44,14 +46,203 @@ grep -Fq 'Millstrand inventory validation: PASS' "$tmp_root/validate.out"
 printf '%s' "$inventory" | "$preflight" --stdin --validate-inventory :stdin >"$tmp_root/stdin-validate.out"
 grep -Fq 'Millstrand inventory validation: PASS' "$tmp_root/stdin-validate.out"
 
+plan_shape_status=0
+"$preflight" --plan --inventory "$inventory" --output "$tmp_root/live-plan.json" \
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add \
+  >"$tmp_root/plan.out" 2>"$tmp_root/plan.err" || plan_shape_status=$?
+if [[ "$plan_shape_status" == 0 ]]; then
+  jq -e '.schema == "millstrand/live-cutover-plan-v1" and
+    .operator.worker_lifecycle_authority == false and
+    ([.operator.plans[].commands] | all(has("stop") and has("backup") and
+      has("install") and has("marker_init") and has("start") and has("rollback") and
+      has("wait_for_exact_pid_stopped") and has("validate_stopped_source_backup_install") and
+      has("status_after_start"))) and
+    ([.operator.plans[] | select(.card == "MSR-14A")][0].commands |
+      (.rollback | contains(".restore") | not) and
+      (.wait_for_exact_pid_stopped |
+       contains("for attempt in $(seq 1 30)") and contains("sleep 1") and
+       contains("exit 1") and (contains("while test") | not)) and
+      (.validate_stopped_source_backup_install | contains("PRAGMA integrity_check") and
+       contains("agent-run/cost-usd") and contains("agent-run/run")) and
+      (.status_after_start | contains("started_at") and contains("weaver_id"))) and
+    ([.operator.plans[] as $plan |
+      ($plan.commands.backup | contains("sqlite3") and contains(".backup") and contains($plan.backup))] | all) and
+    ([.operator.plans[] | .commands.config_install |
+      contains("config.json") and contains("init.clj") and contains("spools.edn") and
+      contains("if test -d") and contains("then cp -R") and contains("fi")] | all) and
+    ([.operator.plans[] | .commands.validate_stopped_source_backup_install |
+      contains("wc -c") and contains(".dump") and contains("shasum")] | all) and
+    ([.operator.plans[] | select(.card == "MSR-14C")][0].commands |
+      (.install | contains("cp") | not) and
+      (.rollback | contains("source.sqlite") | not) and
+      (.validate_stopped_source_backup_install |
+       contains("PRAGMA integrity_check") and contains("burn_history") and
+       contains("agent-run/cost-usd") and contains("wc -c") and contains(".dump") and
+       contains("shasum")))' \
+    "$tmp_root/live-plan.json" >/dev/null
+else
+  [[ "$plan_shape_status" == 1 ]] || {
+    echo "preflight contract: unexpected plan mode status $plan_shape_status" >&2
+    exit 1
+  }
+  ! grep -Fq 'kill -TERM' "$tmp_root/plan.err"
+  ! grep -Fq 'created target' "$tmp_root/plan.err"
+fi
+
+config_contract() {
+  local source=$1
+  local target=$2
+  mkdir -p "$source" "$target"
+  if test -d "$source/config"; then
+    cp -R -- "$source/config" "$target/config"
+  fi
+}
+
+config_contract "$tmp_root/config-absent-source" "$tmp_root/config-absent-target"
+[[ ! -e "$tmp_root/config-absent-target/config" ]] || {
+  echo 'preflight contract: absent config directory was copied' >&2
+  exit 1
+}
+mkdir -p "$tmp_root/config-present-source/config"
+printf '%s' present >"$tmp_root/config-present-source/config/workflow.clj"
+config_contract "$tmp_root/config-present-source" "$tmp_root/config-present-target"
+cmp -s "$tmp_root/config-present-source/config/workflow.clj" \
+  "$tmp_root/config-present-target/config/workflow.clj" || {
+  echo 'preflight contract: present config directory was not copied' >&2
+  exit 1
+}
+
+backup_source="$tmp_root/backup-source.sqlite"
+backup_target="$tmp_root/backup-exact.sqlite"
+sqlite3 "$backup_source" <"$fixtures/source.sql"
+source_bytes=$(wc -c <"$backup_source" | tr -d ' ')
+source_sha=$(shasum -a 256 "$backup_source" | cut -d ' ' -f 1)
+sqlite3 "$backup_source" ".backup '$backup_target'"
+[[ "$(wc -c <"$backup_target" | tr -d ' ')" == "$source_bytes" ]] || {
+  echo 'preflight contract: SQLite backup byte count differs from source' >&2
+  exit 1
+}
+[[ "$(shasum -a 256 "$backup_source" | cut -d ' ' -f 1)" == "$source_sha" ]] || {
+  echo 'preflight contract: SQLite backup changed source SHA' >&2
+  exit 1
+}
+for database in "$backup_source" "$backup_target"; do
+  [[ "$(sqlite3 -readonly "$database" 'PRAGMA integrity_check;')" == ok ]] || {
+    echo "preflight contract: SQLite backup integrity failed for $database" >&2
+    exit 1
+  }
+  [[ "$(sqlite3 -readonly "$database" '.dump' | shasum -a 256 | cut -d ' ' -f 1)" == \
+     "$(sqlite3 -readonly "$backup_source" '.dump' | shasum -a 256 | cut -d ' ' -f 1)" ]] || {
+    echo "preflight contract: SQLite backup content SHA differs for $database" >&2
+    exit 1
+  }
+  for table in strands attributes burn_history scheduler_history; do
+    [[ "$(sqlite3 -readonly "$database" "SELECT COUNT(*) FROM $table;")" == \
+       "$(sqlite3 -readonly "$backup_source" "SELECT COUNT(*) FROM $table;")" ]] || {
+      echo "preflight contract: SQLite backup $table history differs" >&2
+      exit 1
+    }
+  done
+  [[ "$(sqlite3 -readonly "$database" "SELECT COUNT(*) FROM attributes WHERE key IN ('agent-run/cost-usd', 'agent-run/tokens', 'agent-run/tokens-total');")" == \
+     "$(sqlite3 -readonly "$backup_source" "SELECT COUNT(*) FROM attributes WHERE key IN ('agent-run/cost-usd', 'agent-run/tokens', 'agent-run/tokens-total');")" ]] || {
+    echo "preflight contract: SQLite backup spend differs" >&2
+    exit 1
+  }
+done
+
 printf '%s' "$inventory" >"$tmp_root/inventory.ref"
 printf '%s' "$fixtures" >"$tmp_root/workspace.ref"
+printf '%s' "$tmp_root/live-plan-payload.json" >"$tmp_root/output.ref"
+clojure -Sdeps '{:paths ["src" "dev" "scripts"]}' -M -m cutover.millstrand-preflight-cli \
+  --plan --payload inventory="$tmp_root/inventory.ref" --payload output="$tmp_root/output.ref" \
+  --inventory :payload/inventory --output :payload/output >"$tmp_root/plan-payload.json"
+jq -e '.plan == true and .inventory == $inventory and .output == $output' \
+  --arg inventory "$inventory" --arg output "$tmp_root/live-plan-payload.json" \
+  "$tmp_root/plan-payload.json" >/dev/null
 named_validate_status=0
 "$preflight" --payload inventory="$tmp_root/inventory.ref" \
   --validate-inventory :payload/inventory >"$tmp_root/named-validate.out" \
   2>"$tmp_root/named-validate.err" || named_validate_status=$?
 [[ "$named_validate_status" == 0 ]] || { echo "preflight contract: named validation status was $named_validate_status" >&2; exit 1; }
 grep -Fq 'Millstrand inventory validation: PASS' "$tmp_root/named-validate.out"
+
+malformed_inventory="$tmp_root/malformed-inventory.json"
+python3 - "$inventory" "$malformed_inventory" <<'PY'
+import json
+import pathlib
+import sys
+value = json.loads(pathlib.Path(sys.argv[1]).read_text())
+del value["runtime_requirement"]
+pathlib.Path(sys.argv[2]).write_text(json.dumps(value, indent=2) + "\n")
+PY
+malformed_inventory_status=0
+"$preflight" --validate-inventory "$malformed_inventory" \
+  >"$tmp_root/malformed-inventory.out" 2>"$tmp_root/malformed-inventory.err" || malformed_inventory_status=$?
+[[ "$malformed_inventory_status" == 1 ]] || {
+  echo "preflight contract: malformed inventory status was $malformed_inventory_status" >&2
+  exit 1
+}
+grep -Fq 'inventory.runtime_requirement is missing' "$tmp_root/malformed-inventory.err"
+
+malformed_fixture="$tmp_root/malformed-fixture"
+cp -R "$fixtures" "$malformed_fixture"
+python3 - "$malformed_fixture/fixtures.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+del value["source_counts"]
+path.write_text(json.dumps(value, indent=2) + "\n")
+PY
+malformed_fixture_status=0
+"$preflight" --dry-run --inventory "$inventory" --workspace-root "$malformed_fixture" \
+  >"$tmp_root/malformed-fixture.out" 2>"$tmp_root/malformed-fixture.err" || malformed_fixture_status=$?
+[[ "$malformed_fixture_status" == 1 ]] || {
+  echo "preflight contract: malformed fixture status was $malformed_fixture_status" >&2
+  exit 1
+}
+grep -Fq 'fixture.source_counts is missing' "$tmp_root/malformed-fixture.err"
+
+duplicate_cases="$tmp_root/duplicate-cases"
+cp -R "$fixtures" "$duplicate_cases"
+python3 - "$duplicate_cases/fixtures.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+value["cases"].append(dict(value["cases"][0]))
+path.write_text(json.dumps(value, indent=2) + "\n")
+PY
+duplicate_cases_status=0
+"$preflight" --dry-run --inventory "$inventory" --workspace-root "$duplicate_cases" \
+  >"$tmp_root/duplicate-cases.out" 2>"$tmp_root/duplicate-cases.err" || duplicate_cases_status=$?
+[[ "$duplicate_cases_status" == 1 ]] || {
+  echo "preflight contract: duplicate case status was $duplicate_cases_status" >&2
+  exit 1
+}
+grep -Fq "fixture.cases[8].name duplicates fixture case 'success'" "$tmp_root/duplicate-cases.err"
+
+unknown_cases="$tmp_root/unknown-cases"
+cp -R "$fixtures" "$unknown_cases"
+python3 - "$unknown_cases/fixtures.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+value["cases"][0]["name"] = "unknown-case"
+path.write_text(json.dumps(value, indent=2) + "\n")
+PY
+unknown_cases_status=0
+"$preflight" --dry-run --inventory "$inventory" --workspace-root "$unknown_cases" \
+  >"$tmp_root/unknown-cases.out" 2>"$tmp_root/unknown-cases.err" || unknown_cases_status=$?
+[[ "$unknown_cases_status" == 1 ]] || {
+  echo "preflight contract: unknown case status was $unknown_cases_status" >&2
+  exit 1
+}
+grep -Fq "fixture.cases[0].name 'unknown-case' is not allowlisted" "$tmp_root/unknown-cases.err"
 
 named_status=0
 "$preflight" --dry-run \
@@ -79,13 +270,13 @@ runtime_payload_status=0
   --inventory :payload/inventory \
   --workspace-root :payload/workspace \
   --runtime-commit :payload/commit >"$tmp_root/runtime-payload.out" 2>"$tmp_root/runtime-payload.err" || runtime_payload_status=$?
-[[ "$runtime_payload_status" == 1 ]] || { echo "preflight contract: runtime payload status was $runtime_payload_status" >&2; exit 1; }
+[[ "$runtime_payload_status" == 2 ]] || { echo "preflight contract: runtime payload status was $runtime_payload_status" >&2; exit 1; }
 grep -Fq 'runtime commit must be 40 lowercase hexadecimal characters' "$tmp_root/runtime-payload.err"
 
 malformed_status=0
 "$preflight" --dry-run --inventory "$inventory" --workspace-root "$fixtures" \
   --runtime-commit not-a-sha >"$tmp_root/malformed.out" 2>"$tmp_root/malformed.err" || malformed_status=$?
-[[ "$malformed_status" == 1 ]] || { echo "preflight contract: malformed SHA status was $malformed_status" >&2; exit 1; }
+[[ "$malformed_status" == 2 ]] || { echo "preflight contract: malformed SHA status was $malformed_status" >&2; exit 1; }
 grep -Fq 'runtime commit must be 40 lowercase hexadecimal characters' "$tmp_root/malformed.err"
 
 real_git=$(command -v git)
@@ -101,6 +292,7 @@ EOF
 chmod +x "$tmp_root/failing-git/git"
 remote_probe_status=0
 PATH="$tmp_root/failing-git:$PATH" "$preflight" --inventory "$inventory" \
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add \
   >"$tmp_root/remote-probe.out" 2>"$tmp_root/remote-probe.err" || remote_probe_status=$?
 [[ "$remote_probe_status" == 1 ]] || { echo "preflight contract: remote probe failure status was $remote_probe_status" >&2; exit 1; }
 grep -Fq 'cannot inspect core v1 tag prohibition' "$tmp_root/remote-probe.err"
@@ -121,6 +313,7 @@ EOF
 chmod +x "$tmp_root/tagged-git/git"
 tag_probe_status=0
 PATH="$tmp_root/tagged-git:$PATH" "$preflight" --inventory "$inventory" \
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add \
   >"$tmp_root/tag-probe.out" 2>"$tmp_root/tag-probe.err" || tag_probe_status=$?
 [[ "$tag_probe_status" == 1 ]] || { echo "preflight contract: tagged remote probe status was $tag_probe_status" >&2; exit 1; }
 grep -Fq 'forbidden core v1 tag exists at git@github.com:codethread/millstrand.git' "$tmp_root/tag-probe.err"

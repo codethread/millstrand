@@ -1,0 +1,48 @@
+{
+  "schema": "devflow/consumer-preparation-index-v1",
+  "operation": "MSR-14",
+  "landed_main_commit": "144f0481a6d231c32a5bed658525ae0675ac9add",
+  "records": [
+    {
+      "task_id": "m4sr2",
+      "card": "MSR-14A",
+      "consumer": "core",
+      "disposition": "ready",
+      "landed_main_commit": "e8f3a8d00d1dc4b3e361b12b4403bf7cefd27c59",
+      "land_run": "land-msr14a-20260807",
+      "artifacts": ["docs/operations/millstrand-cutover.core.json", "scripts/cutover/verify-core-fragment.sh"]
+    },
+    {
+      "task_id": "euhiw",
+      "card": "MSR-14B-R",
+      "consumer": "notes",
+      "disposition": "verified-no-change",
+      "deferred_to": "dy3zf",
+      "landed_main_commit": null,
+      "land_run": null,
+      "artifacts": []
+    },
+    {
+      "task_id": "8xtkc",
+      "card": "MSR-14C",
+      "consumer": "agent-harness.spool",
+      "disposition": "ready",
+      "landed_main_commit": "761515bc6515673ca9517fe1e780b1937090af9b",
+      "land_run": "land-msr14c-20260807",
+      "artifacts": [
+        "/Users/ct/dev/projects/agent-harness.spool/docs/operations/millstrand-cutover-preparation.json",
+        "/Users/ct/dev/projects/agent-harness.spool/bin/verify-millstrand-preparation"
+      ]
+    },
+    {
+      "task_id": "rcs9r",
+      "card": "MSR-14D-R",
+      "consumer": "editor-dotfiles",
+      "disposition": "verified-no-change",
+      "deferred_to": "dy3zf",
+      "landed_main_commit": null,
+      "land_run": null,
+      "artifacts": []
+    }
+  ]
+}

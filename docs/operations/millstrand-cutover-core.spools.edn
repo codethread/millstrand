@@ -1,0 +1,28 @@
+{:spools {codethread/kanban
+          {:git/url "https://github.com/codethread/kanban.spool.git"
+           :git/sha "87f61bc2750e7026f3650235907db25f19b1536e"
+           :git/tag "v24"
+           :roots {codethread/kanban "."}}
+          millstrand.spools/chime {:millstrand/source-root "spools/chime"}
+          millstrand.spools/unsafe-text-search
+          {:millstrand/source-root "spools/unsafe-text-search"}
+          codethread/devflow
+          {:git/url "https://github.com/codethread/devflow.spool.git"
+           :git/sha "7cb75a66e6bf46b6685496cd95ee6e54eb6ca933"
+           :git/tag "v21"
+           :roots {codethread/devflow "."
+                   codethread/devflow-kanban-adapter "kanban-adapter"}
+           :requires {codethread/kanban "v24"}}
+          millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}
+          millstrand.spools/cron {:millstrand/source-root "spools/cron"}
+          millstrand.spools/workflow {:millstrand/source-root "spools/workflow"}
+          ct.spools/agent-run
+          {:git/url "https://github.com/codethread/agent-harness.spool.git"
+           :git/sha "82f8df466e6caea74a93d994604d94ab6bf78b72"
+           :git/tag "v26"
+           :roots {ct.spools/harness-core "harness-core"
+                   ct.spools/codex-harness "codex-harness"
+                   ct.spools/agent-run "agent-run"
+                   ct.spools/agent-cli "agent-cli"
+                   ct.spools/delegation "delegation"
+                   ct.spools/bench "bench"}}}}

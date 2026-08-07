@@ -1,0 +1,77 @@
+{
+  "schema": "millstrand/cutover-evidence-v1",
+  "operation": "MSR-15",
+  "completed_at": "2026-08-07T09:51:36Z",
+  "runtime_commit": "144f0481a6d231c32a5bed658525ae0675ac9add",
+  "result": "pass",
+  "policy": {
+    "best_effort": true,
+    "fix_forward": true,
+    "core_v1_tag_forbidden": true,
+    "legacy_strand_deletion_used": false,
+    "agent_run_export_fallback_used": false
+  },
+  "mill": {
+    "pid": 1740,
+    "state_root": "/Users/ct/.local/state/millstrand",
+    "socket": "/Users/ct/.local/state/millstrand/mill.sock",
+    "healthy": true
+  },
+  "core": {
+    "strategy": "whole-copy",
+    "source_pid": 58024,
+    "source_database": "/Users/ct/.local/state/skein/weavers/068e8753b69bb0125cbf220b1733cf11/data/skein.sqlite",
+    "backup": "/Users/ct/.local/state/skein/weavers/068e8753b69bb0125cbf220b1733cf11/data/skein.sqlite.millstrand-cutover-backup",
+    "backup_sha256": "c08bdd6c9f18053582fc1727110e23bcbdd1024e34e483eb122bfda64f2750e6",
+    "target_marker": "/Users/ct/dev/projects/millstrand/.millstrand",
+    "target_database": "/Users/ct/.local/state/millstrand/weavers/e9b67c7b8c3d5dce4f2784bb32c0d041/data/millstrand.sqlite",
+    "pid": 14122,
+    "started_at": "2026-08-07T09:50:33.514492Z",
+    "weaver_id": "e2f16172-0843-4125-97c3-630d2b2ae9c5",
+    "integrity": "ok",
+    "strands": 29679,
+    "attributes": 284931,
+    "agent_runs": 7385,
+    "agent_run_attributes": 120131,
+    "representative_run": "a6o3n",
+    "representative_run_queryable": true
+  },
+  "agent_harness": {
+    "strategy": "fresh-world",
+    "source_pid": 73514,
+    "source_database": "/Users/ct/.local/state/skein/weavers/0245892212ec336f39b2496a53ed3269/data/skein.sqlite",
+    "backup": "/Users/ct/.local/state/skein/weavers/0245892212ec336f39b2496a53ed3269/data/skein.sqlite.millstrand-cutover-backup",
+    "backup_sha256": "a4e9ca320240e2c47f24019737822493f732c74550e5820bf809efe3e0658157",
+    "target_marker": "/Users/ct/dev/projects/agent-harness.spool/.millstrand",
+    "target_database": "/Users/ct/.local/state/millstrand/weavers/92ad6dd941f0840553fd7f0fdef15752/data/millstrand.sqlite",
+    "pid": 18087,
+    "started_at": "2026-08-07T09:51:04.849904Z",
+    "weaver_id": "fc20b54f-9c34-45dd-b94f-8a2f5e58a66b",
+    "integrity": "ok",
+    "initial_strands": 0,
+    "agent_operation": true,
+    "kanban_operation": true,
+    "workflow_operation": true,
+    "pins": {
+      "agent_harness": {"tag": "v26", "sha": "82f8df466e6caea74a93d994604d94ab6bf78b72"},
+      "kanban": {"tag": "v24", "sha": "87f61bc2750e7026f3650235907db25f19b1536e"},
+      "devflow": {"tag": "v21", "sha": "7cb75a66e6bf46b6685496cd95ee6e54eb6ca933"}
+    }
+  },
+  "exports": {
+    "agent_runs_csv": "/Users/ct/.local/state/millstrand/cutovers/2026-08-07-msr15/agent-runs.csv",
+    "agent_runs_csv_sha256": "ba062ea7d99119ffaca822ec1e32bb9b9ed38f220f0ca17d5c99e9cf9305c87c",
+    "agent_run_attributes_csv": "/Users/ct/.local/state/millstrand/cutovers/2026-08-07-msr15/agent-run-attributes.csv",
+    "agent_run_attributes_csv_sha256": "da992c4df31dba56590f93420498cfae93519f592b0d277c3f6da258f8966bb2"
+  },
+  "deferred": {
+    "notes_pid": 50593,
+    "notes_untouched": true
+  },
+  "fix_forward": [
+    "Started the local mill supervisor before marker initialization.",
+    "Copied the core marker policy, adapter, agent, job, notification, and workflow sources required by init.clj.",
+    "Updated core spool pins from pre-migration releases to Agent Harness v26, Kanban v24, and Devflow v21.",
+    "Moved the legacy skein.* personal notifier overlay to the durable evidence directory."
+  ]
+}
