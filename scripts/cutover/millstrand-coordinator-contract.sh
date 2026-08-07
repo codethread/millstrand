@@ -23,6 +23,7 @@ grep -Fq -- '--preparation-index' <<<"$help_output"
 grep -Fq -- '--preparation-index-sha256' <<<"$help_output"
 grep -Fq -- '--runtime-commit' <<<"$help_output"
 grep -Fq -- '--dry-run' <<<"$help_output"
+grep -Fq -- '--stdin' <<<"$help_output"
 grep -Fq -- ':payload/<name>' <<<"$help_output"
 ! grep -Fq -- '--fixtures' <<<"$help_output"
 ! grep -Fq -- 'pkill' "$coordinator"
@@ -88,6 +89,75 @@ printf '%s' "$fixtures" >"$tmp_root/workspace.ref"
   --output "$tmp_root/payload-evidence.json" >/dev/null
 jq -e '.schema == "millstrand/cutover-evidence-v1" and .preparation_index.result == "pass"' \
   "$tmp_root/payload-evidence.json" >/dev/null
+
+printf '%s' "$inventory" | "$coordinator" --stdin --dry-run \
+  --inventory :stdin --preparation-index "$index" \
+  --preparation-index-sha256 "$index_sha" --workspace-root "$fixtures" \
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add \
+  --output "$tmp_root/stdin-evidence.json" >/dev/null
+jq -e '.schema == "millstrand/cutover-evidence-v1" and .mode == "dry-run"' \
+  "$tmp_root/stdin-evidence.json" >/dev/null
+
+malformed_inventory="$tmp_root/malformed-inventory.json"
+python3 - "$inventory" "$malformed_inventory" <<'PY'
+import json
+import pathlib
+import sys
+value = json.loads(pathlib.Path(sys.argv[1]).read_text())
+del value["consumers"][0]["source"]["started_at"]
+pathlib.Path(sys.argv[2]).write_text(json.dumps(value, indent=2) + "\n")
+PY
+expect_status 1 "$coordinator" --dry-run --inventory "$malformed_inventory" \
+  --preparation-index "$index" --preparation-index-sha256 "$index_sha" \
+  --workspace-root "$fixtures" --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
+grep -Fq 'inventory.consumers[MSR-14A].source.started_at is missing' "$tmp_root/err"
+
+malformed_fixture="$tmp_root/malformed-fixture"
+cp -R "$fixtures" "$malformed_fixture"
+python3 - "$malformed_fixture/fixtures.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+del value["source_identity"]["weaver_id"]
+path.write_text(json.dumps(value, indent=2) + "\n")
+PY
+expect_status 1 "$coordinator" --dry-run --inventory "$inventory" \
+  --preparation-index "$index" --preparation-index-sha256 "$index_sha" \
+  --workspace-root "$malformed_fixture" --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
+grep -Fq 'fixture.source_identity.weaver_id is missing' "$tmp_root/err"
+
+for drift_field in pid started_at weaver_id; do
+  drift_inventory="$tmp_root/inventory-${drift_field}-drift.json"
+  python3 - "$inventory" "$drift_inventory" "$drift_field" <<'PY'
+import json
+import pathlib
+import sys
+source = pathlib.Path(sys.argv[1])
+destination = pathlib.Path(sys.argv[2])
+field = sys.argv[3]
+value = json.loads(source.read_text())
+identity = value["consumers"][0]["source"]
+if field == "pid":
+    identity["pid"] += 1
+    identity["start_identity"] = f"pid={identity['pid']}:start={identity['started_at']}"
+elif field == "started_at":
+    identity["started_at"] = "2026-08-04T07:58:11.347771Z"
+    identity["start_identity"] = f"pid={identity['pid']}:start={identity['started_at']}"
+else:
+    identity["weaver_id"] = "inventory-drift-weaver"
+destination.write_text(json.dumps(value, indent=2) + "\n")
+PY
+  expect_status 1 "$coordinator" --dry-run --inventory "$drift_inventory" \
+    --preparation-index "$index" --preparation-index-sha256 "$index_sha" \
+    --workspace-root "$fixtures" --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
+  case "$drift_field" in
+    pid) grep -Fq 'source-pid-mismatch' "$tmp_root/err" ;;
+    started_at) grep -Fq 'source-started-at-mismatch' "$tmp_root/err" ;;
+    weaver_id) grep -Fq 'source-weaver-id-mismatch' "$tmp_root/err" ;;
+  esac
+done
 
 cp -R "$fixtures" "$tmp_root/wake-drift"
 python3 - "$tmp_root/wake-drift/fixtures.json" <<'PY'

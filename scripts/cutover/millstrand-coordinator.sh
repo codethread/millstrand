@@ -17,7 +17,9 @@ marker or target, or starting a weaver. The evidence contains a separate
 start command for the later operator phase.
 
 Text values accept the shared whole-value references `:stdin` and
-`:payload/<name>`. Use `--payload name=path` to attach a file.
+`:payload/<name>`. `--stdin` attaches the complete standard input as the
+`stdin` payload, so `--inventory :stdin` resolves the whole input value.
+Use `--payload name=path` to attach a named file.
 EOF
   exit "$status"
 }
@@ -64,6 +66,22 @@ def fail(message):
 def require(condition, message):
     if not condition:
         fail(message)
+
+
+def require_object(value, path):
+    require(isinstance(value, dict), f"{path} must be an object")
+    return value
+
+
+def require_field(value, key, path):
+    require_object(value, path)
+    require(key in value, f"{path}.{key} is missing")
+    return value[key]
+
+
+def require_list(value, path):
+    require(isinstance(value, list), f"{path} must be an array")
+    return value
 
 
 def resolve_path(value):
@@ -136,6 +154,8 @@ def schema_only_copy(source, target):
 
 
 def validate_index(inventory, index, index_path, supplied_hash):
+    require_object(index, "preparation index")
+    require_object(inventory, "inventory")
     require(index.get("schema") == "devflow/consumer-preparation-index-v1",
             "preparation index schema is invalid")
     require(index.get("operation") == "MSR-14", "preparation index operation is invalid")
@@ -149,10 +169,21 @@ def validate_index(inventory, index, index_path, supplied_hash):
             f"preparation index hash mismatch: expected {supplied_hash}, got {actual_hash}")
     require(inventory.get("preparation_index_sha256") == actual_hash,
             "inventory preparation index hash does not match supplied index")
-    records = index.get("records")
-    inventory_records = inventory.get("consumer_preparation_index")
-    require(isinstance(records, list) and isinstance(inventory_records, list),
-            "typed preparation index records are missing")
+    records = require_list(require_field(index, "records", "preparation index"),
+                           "preparation index.records")
+    inventory_records = require_list(
+        require_field(inventory, "consumer_preparation_index", "inventory"),
+        "inventory.consumer_preparation_index")
+    for index, record in enumerate(records):
+        label = f"preparation index.records[{index}]"
+        require_object(record, label)
+        for field in ("task_id", "disposition"):
+            require(field in record, f"{label}.{field} is missing")
+    for index, record in enumerate(inventory_records):
+        require_object(record, f"inventory.consumer_preparation_index[{index}]")
+        for field in ("task_id", "disposition"):
+            require(field in record,
+                    f"inventory.consumer_preparation_index[{index}].{field} is missing")
     require({r.get("task_id") for r in records} == {r.get("task_id") for r in inventory_records},
             "preparation index task set differs from inventory")
     require({r.get("task_id"): r.get("disposition") for r in records} ==
@@ -173,13 +204,16 @@ def validate_index(inventory, index, index_path, supplied_hash):
 
 
 def validate_inventory(inventory, runtime_commit):
+    require_object(inventory, "inventory")
     require(inventory.get("schema") == "millstrand/cutover-inventory-v1", "inventory schema is invalid")
-    runtime = inventory.get("runtime_requirement", {})
+    runtime = require_object(require_field(inventory, "runtime_requirement", "inventory"),
+                             "inventory.runtime_requirement")
     require(runtime.get("required_landed_main_commit") == runtime_commit,
             "runtime commit does not match the landed inventory commit")
     require(runtime_commit == "144f0481a6d231c32a5bed658525ae0675ac9add",
             "runtime commit is not the final MSR-14 main SHA")
-    core = inventory.get("core_dependency", {})
+    core = require_object(require_field(inventory, "core_dependency", "inventory"),
+                          "inventory.core_dependency")
     require(core.get("sha_only") is True and core.get("ref_kind") == "sha",
             "core dependency is not SHA-only")
     require(core.get("sha") == "5790c459e9bb692b5e975f9715df7d5b403feff2",
@@ -188,11 +222,21 @@ def validate_inventory(inventory, runtime_commit):
             "core dependency contains a forbidden tag, peeled SHA, or local root")
     require("v1" in core.get("v1_policy", "") and "never" in core["v1_policy"],
             "core v1 prohibition is missing")
-    consumers = inventory.get("consumers", [])
+    consumers = require_list(require_field(inventory, "consumers", "inventory"),
+                             "inventory.consumers")
     require({c.get("card") for c in consumers} == {"MSR-14A", "MSR-14C"},
             "core and Agent Harness consumers are incomplete")
     for consumer in consumers:
+        require_object(consumer, "inventory.consumers entry")
         source, target = consumer.get("source", {}), consumer.get("target", {})
+        source = require_object(source, f"inventory.consumers[{consumer.get('card')}].source")
+        target = require_object(target, f"inventory.consumers[{consumer.get('card')}].target")
+        for field in ("pid", "started_at", "start_identity", "marker", "database", "weaver_id"):
+            require(field in source,
+                    f"inventory.consumers[{consumer.get('card')}].source.{field} is missing")
+        for field in ("marker", "database", "parent"):
+            require(field in target,
+                    f"inventory.consumers[{consumer.get('card')}].target.{field} is missing")
         require(consumer.get("no_live_lifecycle") is True,
                 f"{consumer.get('card')} permits live lifecycle")
         require(isinstance(source.get("pid"), int) and source["pid"] > 0,
@@ -209,14 +253,21 @@ def validate_inventory(inventory, runtime_commit):
                 f"{consumer.get('card')} source and target are not distinct")
         require(target.get("marker") and target.get("database") and target.get("parent"),
                 f"{consumer.get('card')} target paths are incomplete")
+    release_pins = require_list(
+        require_field(inventory, "agent_harness_release_pins", "inventory"),
+        "inventory.agent_harness_release_pins")
+    for pin in release_pins:
+        require_object(pin, "inventory.agent_harness_release_pins entry")
     pins = {(pin.get("card"), pin.get("tag"), pin.get("sha"), pin.get("ref_kind"))
-            for pin in inventory.get("agent_harness_release_pins", [])}
-    require(len(pins) == len(inventory.get("agent_harness_release_pins", [])) and pins == {
+            for pin in release_pins}
+    require(len(pins) == len(release_pins) and pins == {
         ("MSR-06", "v26", "82f8df466e6caea74a93d994604d94ab6bf78b72", None),
         ("MSR-05", "v24", "87f61bc2750e7026f3650235907db25f19b1536e", None),
         ("MSR-04", None, "5790c459e9bb692b5e975f9715df7d5b403feff2", "sha")},
         "Agent Harness release pins are not exact")
-    authority = inventory.get("standing_authority", {})
+    authority = require_object(
+        require_field(inventory, "standing_authority", "inventory"),
+        "inventory.standing_authority")
     require(authority == {"reference": "Epic ke3rd", "routine_approval_required": False,
                           "unexpected_wake": "abort"}, "standing authority is incomplete")
     return {"runtime_commit": runtime_commit, "core_dependency_sha": core["sha"], "consumers": 2}
@@ -227,21 +278,24 @@ def identity_evidence(consumer, fixture_identity, case_name, start_time):
     observed_pid = fixture_identity["pid"] + (1 if case_name == "pid-mismatch" else 0)
     require(observed_pid == expected_pid,
             f"source-pid-mismatch: expected={expected_pid}, observed={observed_pid}")
-    expected_start = fixture_identity["start_identity"]
-    require(expected_start == f"pid={expected_pid}:start={fixture_identity['started_at']}",
-            "source-start-identity-mismatch: fixture start identity is malformed")
+    expected_started_at = consumer["source"]["started_at"]
+    observed_started_at = fixture_identity["started_at"]
+    require(observed_started_at == expected_started_at,
+            "source-started-at-mismatch: recorded started_at differs")
+    expected_start = consumer["source"]["start_identity"]
     observed_start = fixture_identity["start_identity"]
     if case_name == "start-identity-mismatch":
         observed_start += ":changed"
     require(observed_start == expected_start,
             "source-start-identity-mismatch: recorded start identity differs")
+    expected_weaver_id = consumer["source"]["weaver_id"]
     observed_weaver_id = fixture_identity["weaver_id"]
     if case_name == "weaver-id-mismatch":
         observed_weaver_id += "-changed"
-    require(observed_weaver_id == fixture_identity["weaver_id"],
+    require(observed_weaver_id == expected_weaver_id,
             "source-weaver-id-mismatch: recorded weaver id differs")
     return {"pid": expected_pid, "start_identity": expected_start,
-            "started_at": fixture_identity["started_at"],
+            "started_at": expected_started_at,
             "weaver_id": observed_weaver_id, "status": "stopped-simulated",
             "stop_command": f"kill -TERM -- {expected_pid}", "exact_pid": True,
             "broad_kill": False}
@@ -396,16 +450,39 @@ def main():
             "runtime commit must be 40 lowercase hexadecimal characters")
     inventory_evidence = validate_inventory(inventory, runtime_commit)
     index_evidence = validate_index(inventory, index, index_path, args["preparation-index-sha256"])
-    fixture = read_json(fixture_root / "fixtures.json")
+    fixture = require_object(read_json(fixture_root / "fixtures.json"), "fixture")
     require(fixture.get("schema") == "millstrand/coordinator-fixtures-v1", "fixture schema is invalid")
-    source_sql, wake_path = fixture_root / fixture["source_sql"], fixture_root / fixture["expected_wake"]
+    source_sql_name = require_field(fixture, "source_sql", "fixture")
+    wake_name = require_field(fixture, "expected_wake", "fixture")
+    require(isinstance(source_sql_name, str) and source_sql_name,
+            "fixture.source_sql must be a non-empty string")
+    require(isinstance(wake_name, str) and wake_name,
+            "fixture.expected_wake must be a non-empty string")
+    source_sql = fixture_root / source_sql_name
+    wake_path = fixture_root / wake_name
     require(source_sql.is_file() and wake_path.is_file(), "coordinator fixture files are missing")
+    for identity_name in ("source_identity", "agent_harness_identity"):
+        identity = require_object(require_field(fixture, identity_name, "fixture"),
+                                   f"fixture.{identity_name}")
+        for identity_field in ("pid", "started_at", "start_identity", "weaver_id"):
+            require(identity_field in identity,
+                    f"fixture.{identity_name}.{identity_field} is missing")
+    require_object(require_field(fixture, "agent_harness_fresh_world", "fixture"),
+                   "fixture.agent_harness_fresh_world")
+    require_list(require_field(fixture, "allowlisted_wakes", "fixture"),
+                 "fixture.allowlisted_wakes")
     require(fixture["allowlisted_wakes"], "scheduler wake allowlist is empty")
-    require(re.fullmatch(r"[0-9a-f]{64}", fixture.get("expected_wake_sha256", "")) is not None,
+    require(re.fullmatch(r"[0-9a-f]{64}",
+                         require_field(fixture, "expected_wake_sha256", "fixture")) is not None,
             "expected scheduler wake hash is invalid")
     require(sha256_file(wake_path) == fixture["expected_wake_sha256"],
             "expected scheduler wake artifact hash does not match fixture")
-    expected_cases = {case["name"]: case for case in fixture["cases"]}
+    expected_cases = {}
+    for case in require_list(require_field(fixture, "cases", "fixture"), "fixture.cases"):
+        require_object(case, "fixture.cases entry")
+        require("name" in case, "fixture.cases entry.name is missing")
+        require("result" in case, f"fixture.cases[{case['name']}] .result is missing")
+        expected_cases[case["name"]] = case
     consumers = {consumer["card"]: consumer for consumer in inventory["consumers"]}
     with tempfile.TemporaryDirectory(prefix="millstrand-coordinator-") as temporary_dir:
         temporary = pathlib.Path(temporary_dir)
@@ -416,7 +493,8 @@ def main():
             else:
                 actual = run_core_case(consumers["MSR-14A"], fixture, source_sql, wake_path, temporary, name)
             require(actual["result"] == expected["result"],
-                    f"fixture {name} expected {expected['result']}, got {actual['result']}")
+                    f"fixture {name} expected {expected['result']}, got {actual['result']}: "
+                    f"{actual.get('failure')}")
             if expected["result"] == "fail":
                 require(expected["reason"] in actual["failure"],
                         f"fixture {name} failure reason changed: {actual['failure']}")
@@ -463,5 +541,8 @@ try:
     main()
 except ContractError as error:
     print(f"millstrand-coordinator: {error}", file=sys.stderr)
+    sys.exit(1)
+except (KeyError, TypeError, IndexError) as error:
+    print(f"millstrand-coordinator: malformed inventory or fixture: {error}", file=sys.stderr)
     sys.exit(1)
 PY

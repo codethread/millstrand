@@ -6,15 +6,15 @@
   "allowlisted_wakes": ["expected-wake"],
   "source_identity": {
     "pid": 58024,
-    "started_at": "2026-08-07T07:00:00.000000Z",
-    "start_identity": "pid=58024:start=2026-08-07T07:00:00.000000Z",
-    "weaver_id": "fixture-core-weaver"
+    "started_at": "2026-08-04T07:58:10.347771Z",
+    "start_identity": "pid=58024:start=2026-08-04T07:58:10.347771Z",
+    "weaver_id": "8f751c75-deb1-48f8-be62-99065f85d276"
   },
   "agent_harness_identity": {
     "pid": 73514,
-    "started_at": "2026-08-07T07:01:00.000000Z",
-    "start_identity": "pid=73514:start=2026-08-07T07:01:00.000000Z",
-    "weaver_id": "fixture-agent-harness-weaver"
+    "started_at": "2026-08-05T08:34:50.571905Z",
+    "start_identity": "pid=73514:start=2026-08-05T08:34:50.571905Z",
+    "weaver_id": "027ba5d8-9cbf-413f-b5eb-7a1d84a89ecf"
   },
   "agent_harness_fresh_world": {
     "marker": "/disposable/agent-harness/.millstrand",

@@ -82,6 +82,8 @@ class ContractError(Exception):
 def contract_excepthook(exc_type, exc_value, traceback):
     if exc_type is ContractError:
         print(f"millstrand-preflight: {exc_value}", file=sys.stderr)
+    elif exc_type in (KeyError, TypeError, IndexError):
+        print(f"millstrand-preflight: malformed inventory or fixture: {exc_value}", file=sys.stderr)
     else:
         sys.__excepthook__(exc_type, exc_value, traceback)
 
@@ -93,6 +95,105 @@ def fail(message, diagnostic=None):
 def require(condition, message):
     if not condition:
         fail(message)
+
+def require_object(value, path):
+    require(isinstance(value, dict), f"{path} must be an object")
+    return value
+
+def require_field(value, key, path):
+    require_object(value, path)
+    require(key in value, f"{path}.{key} is missing")
+    return value[key]
+
+def require_list(value, path):
+    require(isinstance(value, list), f"{path} must be an array")
+    return value
+
+def validate_inventory_shape(value):
+    """Validate every nested shape that the preflight reads directly."""
+    inventory = require_object(value, "inventory")
+    for key in ("consumer_preparation_index", "standing_authority", "live_plan",
+                "core_dependency", "runtime_requirement", "msr_15", "release_pins",
+                "excluded_deferred", "consumers", "preparation_index_artifact"):
+        require(key in inventory, f"inventory.{key} is missing")
+    preparation = require_list(inventory["consumer_preparation_index"],
+                               "inventory.consumer_preparation_index")
+    for index, entry in enumerate(preparation):
+        entry = require_object(entry, f"inventory.consumer_preparation_index[{index}]")
+        for key in ("task_id", "disposition"):
+            require(key in entry, f"inventory.consumer_preparation_index[{index}].{key} is missing")
+    require_object(inventory["standing_authority"], "inventory.standing_authority")
+    require_object(inventory["live_plan"], "inventory.live_plan")
+    core = require_object(inventory["core_dependency"], "inventory.core_dependency")
+    for key in ("card", "coordinate", "repository", "ref_kind", "sha", "sha_only", "v1_policy"):
+        require(key in core, f"inventory.core_dependency.{key} is missing")
+    runtime = require_object(inventory["runtime_requirement"], "inventory.runtime_requirement")
+    for key in ("repository", "checkout", "prepared_checkout_sha", "required_landed_main_commit",
+                "msr_15_invariant", "ancestry"):
+        require(key in runtime, f"inventory.runtime_requirement.{key} is missing")
+    ancestry = require_object(runtime["ancestry"], "inventory.runtime_requirement.ancestry")
+    for key in ("policy_commit", "midpoint_commit", "require_policy_ancestor",
+                "require_midpoint_ancestor", "require_clean_checkout"):
+        require(key in ancestry, f"inventory.runtime_requirement.ancestry.{key} is missing")
+    msr_15 = require_object(inventory["msr_15"], "inventory.msr_15")
+    for key in ("record", "pre_land_placeholder", "actual_squash_sha_required",
+                "required_format", "require_checkout_head_equal"):
+        require(key in msr_15, f"inventory.msr_15.{key} is missing")
+    for index, pin in enumerate(require_list(inventory["release_pins"], "inventory.release_pins")):
+        pin = require_object(pin, f"inventory.release_pins[{index}]")
+        require("card" in pin, f"inventory.release_pins[{index}].card is missing")
+        if pin["card"] == "MSR-04":
+            for key in ("ref_kind", "sha"):
+                require(key in pin, f"inventory.release_pins[{index}].{key} is missing")
+        else:
+            for key in ("tag", "peeled_sha"):
+                require(key in pin, f"inventory.release_pins[{index}].{key} is missing")
+    for index, item in enumerate(require_list(inventory["excluded_deferred"],
+                                               "inventory.excluded_deferred")):
+        item = require_object(item, f"inventory.excluded_deferred[{index}]")
+        for key in ("consumer", "source_task_id", "disposition", "deferred_to", "lifecycle_mutation"):
+            require(key in item, f"inventory.excluded_deferred[{index}].{key} is missing")
+    for index, consumer in enumerate(require_list(inventory["consumers"], "inventory.consumers")):
+        consumer = require_object(consumer, f"inventory.consumers[{index}]")
+        for key in ("card", "source", "target", "disposition", "no_live_lifecycle",
+                    "source_task_id", "data_strategy"):
+            require(key in consumer, f"inventory.consumers[{index}].{key} is missing")
+        source = require_object(consumer["source"], f"inventory.consumers[{index}].source")
+        target = require_object(consumer["target"], f"inventory.consumers[{index}].target")
+        for key in ("pid", "started_at", "start_identity", "marker", "database", "weaver_id"):
+            require(key in source, f"inventory.consumers[{index}].source.{key} is missing")
+        for key in ("world_hash_algorithm", "world_hash", "marker", "database", "parent"):
+            require(key in target, f"inventory.consumers[{index}].target.{key} is missing")
+    require(isinstance(inventory["preparation_index_artifact"], str) and
+            inventory["preparation_index_artifact"],
+            "inventory.preparation_index_artifact must be a non-empty string")
+    return inventory
+
+def validate_fixture_shape(value):
+    """Validate every nested fixture shape that the dry-run contract reads."""
+    fixture = require_object(value, "fixture")
+    for key in ("schema", "source_sql", "expected_wake", "expected_wake_sha256",
+                "source_counts", "cases"):
+        require(key in fixture, f"fixture.{key} is missing")
+    require(isinstance(fixture["source_sql"], str) and fixture["source_sql"],
+            "fixture.source_sql must be a non-empty string")
+    require(isinstance(fixture["expected_wake"], str) and fixture["expected_wake"],
+            "fixture.expected_wake must be a non-empty string")
+    require(isinstance(fixture["expected_wake_sha256"], str) and
+            re.fullmatch(r"[0-9a-f]{64}", fixture["expected_wake_sha256"]),
+            "fixture.expected_wake_sha256 must be 64 lowercase hexadecimal characters")
+    source_counts = require_object(fixture["source_counts"], "fixture.source_counts")
+    for key in ("strands", "attributes", "burn_history", "scheduler_history", "spend_rows"):
+        require(key in source_counts, f"fixture.source_counts.{key} is missing")
+    for index, case in enumerate(require_list(fixture["cases"], "fixture.cases")):
+        case = require_object(case, f"fixture.cases[{index}]")
+        for key in ("name", "result"):
+            require(key in case, f"fixture.cases[{index}].{key} is missing")
+        if case["result"] == "fail":
+            failure = require_object(case.get("failure"), f"fixture.cases[{index}].failure")
+            for key in ("reason", "diagnostic"):
+                require(key in failure, f"fixture.cases[{index}].failure.{key} is missing")
+    return fixture
 
 def sha256(path):
     digest = hashlib.sha256()
@@ -126,11 +227,10 @@ require(inventory_path.is_file(), f"inventory does not exist: {inventory_arg}")
 if workspace_root:
     require(workspace_root.is_dir(), f"workspace root does not exist: {workspace_root_arg}")
 
-inventory = read_json(inventory_path)
-require(isinstance(inventory, dict), "inventory must be a JSON object")
+inventory = validate_inventory_shape(read_json(inventory_path))
 require(inventory.get("schema") == "millstrand/cutover-inventory-v1", "inventory schema is invalid")
 require(inventory.get("operation") == "MSR-14", "inventory operation is not MSR-14")
-require(inventory.get("phase") == "pre-land", "inventory must remain pre-land")
+require(inventory.get("phase") == "post-land", "inventory must be post-land")
 
 preparation_index = inventory.get("consumer_preparation_index")
 require(isinstance(preparation_index, list), "consumer-preparation index is missing")
@@ -147,11 +247,23 @@ for entry in preparation_index:
 
 preparation_artifact = resolve_input(inventory.get("preparation_index_artifact", ""))
 require(preparation_artifact.is_file(), f"typed preparation-index artifact is missing: {preparation_artifact}")
-typed_index = read_json(preparation_artifact)
+typed_index = require_object(read_json(preparation_artifact), "typed preparation index")
 require(typed_index.get("schema") == "devflow/consumer-preparation-index-v1" and
         typed_index.get("operation") == "MSR-14",
         "typed preparation-index artifact schema is invalid")
-require({entry.get("task_id") for entry in typed_index.get("records", [])} == required_task_ids,
+typed_records = require_list(require_field(typed_index, "records", "typed preparation index"),
+                             "typed preparation index.records")
+for index, entry in enumerate(typed_records):
+    entry = require_object(entry, f"typed preparation index.records[{index}]")
+    for key in ("task_id", "disposition"):
+        require(key in entry, f"typed preparation index.records[{index}].{key} is missing")
+    if entry["disposition"] == "ready":
+        for key in ("landed_main_commit", "land_run"):
+            require(key in entry, f"typed preparation index.records[{index}].{key} is missing")
+    elif entry["disposition"] == "verified-no-change":
+        require("deferred_to" in entry,
+                f"typed preparation index.records[{index}].deferred_to is missing")
+require({entry.get("task_id") for entry in typed_records} == required_task_ids,
         "typed preparation-index artifact is incomplete")
 typed_index_hash = hashlib.sha256(json.dumps(typed_index, sort_keys=True,
                                               separators=(",", ":")).encode()).hexdigest()
@@ -550,7 +662,8 @@ for consumer in consumers:
     check_consumer_shape(consumer)
 
 fixture_root = workspace_root if dry_run else None
-fixture = read_json(fixture_root / "fixtures.json") if fixture_root else None
+fixture = (validate_fixture_shape(read_json(fixture_root / "fixtures.json"))
+           if fixture_root else None)
 fixture_source = None
 fixture_source_counts = None
 live_snapshots = []

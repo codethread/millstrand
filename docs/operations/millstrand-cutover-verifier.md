@@ -42,4 +42,4 @@ The fixture cases cover the successful dry run and the five rejection paths: run
 
 ## Release/runtime provenance
 
-The fragment records an explicit override from `yvv5n`. MSR-04 remains the SHA-only dependency and release input at `5790c459e9bb692b5e975f9715df7d5b403feff2`. The live MSR-14A runtime checkout is a separate input: it advances to canonical `origin/main` at `8219eb80fafa21e26185806307c749d5b8eecea4` before land and includes policy `9ec1aa2c8055ba97e887dac574a054fc53e695c3` plus midpoint `8219eb80fafa21e26185806307c749d5b8eecea4`. Do not reset the runtime checkout to the MSR-04 dependency SHA.
+The fragment records an explicit override from `yvv5n`. MSR-04 remains the SHA-only dependency and release input at `5790c459e9bb692b5e975f9715df7d5b403feff2`. The live MSR-14A runtime checkout landed at canonical main commit `144f0481a6d231c32a5bed658525ae0675ac9add` after carrying policy `9ec1aa2c8055ba97e887dac574a054fc53e695c3` and midpoint `8219eb80fafa21e26185806307c749d5b8eecea4`. Do not reset the runtime checkout to the MSR-04 dependency SHA.

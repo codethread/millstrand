@@ -163,6 +163,44 @@ named_validate_status=0
 [[ "$named_validate_status" == 0 ]] || { echo "preflight contract: named validation status was $named_validate_status" >&2; exit 1; }
 grep -Fq 'Millstrand inventory validation: PASS' "$tmp_root/named-validate.out"
 
+malformed_inventory="$tmp_root/malformed-inventory.json"
+python3 - "$inventory" "$malformed_inventory" <<'PY'
+import json
+import pathlib
+import sys
+value = json.loads(pathlib.Path(sys.argv[1]).read_text())
+del value["runtime_requirement"]
+pathlib.Path(sys.argv[2]).write_text(json.dumps(value, indent=2) + "\n")
+PY
+malformed_inventory_status=0
+"$preflight" --validate-inventory "$malformed_inventory" \
+  >"$tmp_root/malformed-inventory.out" 2>"$tmp_root/malformed-inventory.err" || malformed_inventory_status=$?
+[[ "$malformed_inventory_status" == 1 ]] || {
+  echo "preflight contract: malformed inventory status was $malformed_inventory_status" >&2
+  exit 1
+}
+grep -Fq 'inventory.runtime_requirement is missing' "$tmp_root/malformed-inventory.err"
+
+malformed_fixture="$tmp_root/malformed-fixture"
+cp -R "$fixtures" "$malformed_fixture"
+python3 - "$malformed_fixture/fixtures.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+del value["source_counts"]
+path.write_text(json.dumps(value, indent=2) + "\n")
+PY
+malformed_fixture_status=0
+"$preflight" --dry-run --inventory "$inventory" --workspace-root "$malformed_fixture" \
+  >"$tmp_root/malformed-fixture.out" 2>"$tmp_root/malformed-fixture.err" || malformed_fixture_status=$?
+[[ "$malformed_fixture_status" == 1 ]] || {
+  echo "preflight contract: malformed fixture status was $malformed_fixture_status" >&2
+  exit 1
+}
+grep -Fq 'fixture.source_counts is missing' "$tmp_root/malformed-fixture.err"
+
 named_status=0
 "$preflight" --dry-run \
   --payload inventory="$tmp_root/inventory.ref" \
@@ -189,13 +227,13 @@ runtime_payload_status=0
   --inventory :payload/inventory \
   --workspace-root :payload/workspace \
   --runtime-commit :payload/commit >"$tmp_root/runtime-payload.out" 2>"$tmp_root/runtime-payload.err" || runtime_payload_status=$?
-[[ "$runtime_payload_status" == 1 ]] || { echo "preflight contract: runtime payload status was $runtime_payload_status" >&2; exit 1; }
+[[ "$runtime_payload_status" == 2 ]] || { echo "preflight contract: runtime payload status was $runtime_payload_status" >&2; exit 1; }
 grep -Fq 'runtime commit must be 40 lowercase hexadecimal characters' "$tmp_root/runtime-payload.err"
 
 malformed_status=0
 "$preflight" --dry-run --inventory "$inventory" --workspace-root "$fixtures" \
   --runtime-commit not-a-sha >"$tmp_root/malformed.out" 2>"$tmp_root/malformed.err" || malformed_status=$?
-[[ "$malformed_status" == 1 ]] || { echo "preflight contract: malformed SHA status was $malformed_status" >&2; exit 1; }
+[[ "$malformed_status" == 2 ]] || { echo "preflight contract: malformed SHA status was $malformed_status" >&2; exit 1; }
 grep -Fq 'runtime commit must be 40 lowercase hexadecimal characters' "$tmp_root/malformed.err"
 
 real_git=$(command -v git)

@@ -5,7 +5,7 @@
   "disposition": "ready",
   "provenance": {
     "override-record": "yvv5n",
-    "statement": "The MSR-04 dependency/release input remains SHA-only at 5790c459e9bb692b5e975f9715df7d5b403feff2. The live MSR-14A runtime checkout advances to canonical origin/main at 8219eb80fafa21e26185806307c749d5b8eecea4 before land and carries the policy and midpoint commits.",
+    "statement": "The MSR-04 dependency/release input remains SHA-only at 5790c459e9bb692b5e975f9715df7d5b403feff2. The MSR-14A runtime checkout landed at canonical main commit 144f0481a6d231c32a5bed658525ae0675ac9add after carrying the policy and midpoint commits.",
     "dependency-input": {
       "card": "MSR-04",
       "role": "consumer dependency/release input",
@@ -16,8 +16,8 @@
       "card": "MSR-14A",
       "role": "live runtime source checkout",
       "ref": "origin/main",
-      "sha": "8219eb80fafa21e26185806307c749d5b8eecea4",
-      "landed-commit": "MSR-14 landed canonical main commit; record its squash SHA at cutover"
+      "sha": "144f0481a6d231c32a5bed658525ae0675ac9add",
+      "landed-commit": "144f0481a6d231c32a5bed658525ae0675ac9add"
     },
     "required-commits": [
       "9ec1aa2c8055ba97e887dac574a054fc53e695c3",
@@ -60,12 +60,12 @@
   "prepared-checkout": {
     "path": "/Users/ct/dev/projects/millstrand",
     "repository": "codethread/millstrand",
-    "sha": "8219eb80fafa21e26185806307c749d5b8eecea4",
-    "origin-main-sha": "8219eb80fafa21e26185806307c749d5b8eecea4",
+    "sha": "144f0481a6d231c32a5bed658525ae0675ac9add",
+    "origin-main-sha": "144f0481a6d231c32a5bed658525ae0675ac9add",
     "advance-from": "5790c459e9bb692b5e975f9715df7d5b403feff2",
     "advance-to": "origin/main",
     "active": false,
-    "msr-14-landed-main-commit": "PRE-LAND: record the canonical origin/main squash commit at cutover",
+    "msr-14-landed-main-commit": "144f0481a6d231c32a5bed658525ae0675ac9add",
     "msr-15-invariant": "checkout HEAD must equal the recorded MSR-14 landed main commit"
   },
   "target": {

@@ -41,7 +41,8 @@
 (s/def ::inventory ::path)
 (s/def ::fragment ::path)
 (s/def ::workspace-root ::path)
-(s/def ::runtime-commit string?)
+(s/def ::runtime-commit #(and (string? %)
+                              (boolean (re-matches #"[0-9a-f]{40}" %))))
 (s/def ::plan #(true? %))
 (s/def ::output ::path)
 (s/def ::dry-run #(true? %))
@@ -166,6 +167,9 @@
 (defn- validate-shape!
   "Validate the standalone command shape through its clojure.spec."
   [parsed]
+  (when (and (contains? parsed :runtime-commit)
+             (not (s/valid? ::runtime-commit (:runtime-commit parsed))))
+    (fail! "runtime commit must be 40 lowercase hexadecimal characters"))
   (when-not (s/valid? ::preflight-arguments parsed)
     (invalid-shape! parsed))
   true)

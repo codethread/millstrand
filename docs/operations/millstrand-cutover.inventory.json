@@ -1,8 +1,8 @@
 {
   "schema": "millstrand/cutover-inventory-v1",
   "operation": "MSR-14",
-  "phase": "pre-land",
-  "source_of_truth": "typed devflow/consumer-preparation records on MSR-14A/MSR-14C and the midpoint evidence record",
+  "phase": "post-land",
+  "source_of_truth": "typed devflow/consumer-preparation records on MSR-14A/MSR-14C, the landed MSR-14 SHA, and the midpoint evidence record",
   "consumer_preparation_index": [
     {
       "task_id": "m4sr2",
