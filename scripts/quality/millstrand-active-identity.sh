@@ -10,7 +10,9 @@ cd "$repo_root"
 
 scan_paths=(
   src cli spools test dev tools scripts integrations docs .github
-  Makefile deps.edn README.md AGENTS.md devflow/specs
+  Makefile deps.edn README.md AGENTS.md CONTRIBUTING.md quality-inventory.md
+  devflow/specs devflow/PHILOSOPHY.md devflow/TENETS.md
+  devflow/UBIQUITOUS-LANGUAGE.md devflow/README.md .agents/skills
 )
 
 set +e

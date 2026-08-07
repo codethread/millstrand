@@ -1,4 +1,5 @@
 # scope	pattern	reason
+# Coordination markers are scoped per file; historical identity rows anchor exact evidence lines.
 docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:47:.*"ref": "https://github\.com/codethread/skein/pull/345"	The immutable MSR-02 pull-request evidence.
 docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:48:.*"ref": "https://github\.com/codethread/skein/actions/runs/31094076775"	The immutable MSR-02 quality-run evidence.
 docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-midpoint-evidence\.json:51:.*"command": "flock -w 3600 /tmp/skein-test\.lock clojure -M:test"	The immutable MSR-02 test command evidence.
@@ -11,7 +12,6 @@ docs/operations/millstrand-midpoint-evidence.json	^docs/operations/millstrand-mi
 scripts/acceptance/millstrand-docs.sh	skein	The acceptance script names the forbidden legacy identity only in negative output and filesystem assertions.
 docs/operations/millstrand-msr17-acceptance.json	^docs/operations/millstrand-msr17-acceptance\.json:102:.*"marker": "\.skein"	The immutable MSR-17 acceptance evidence records rejection of the legacy marker.
 docs/operations/millstrand-msr17-acceptance.json	^docs/operations/millstrand-msr17-acceptance\.json:106:.*"key": ":skein/min"	The immutable MSR-17 acceptance evidence records rejection of the legacy manifest key.
-*	\.skein	The repository coordination workspace and the deliberate legacy application-marker rejection remain named .skein.
 docs/operations/millstrand-cutover.core.json	.*skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json	The MSR-14A expected-wake evidence is recorded at the stable canonical post-land fixture path.
 test/fixtures/millstrand-cutover/core-fragment/fixtures.json	.*skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json	The MSR-14A fixture contract names the stable canonical post-land evidence path.
 scripts/cutover/verify-core-fragment.sh	.*skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json	The MSR-14A verifier enforces the stable canonical post-land evidence path.
@@ -23,3 +23,72 @@ docs/operations/millstrand-cutover.live.json	^docs/operations/millstrand-cutover
 docs/operations/millstrand-cutover.live.json	^docs/operations/millstrand-cutover\.live\.json:41:.*"resolved_path": "/Users/ct/dev/projects/skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json"	The immutable MSR-15 live outcome records the stable canonical expected-wake path.
 docs/operations/millstrand-cutover.live.json	.*skein/weavers/.*	The immutable MSR-15 live outcome records the exact legacy source and backup database paths.
 docs/operations/millstrand-cutover.live.json	.*skein\.\* personal notifier overlay.*	The immutable MSR-15 live outcome records the removed legacy namespace pattern.
+.agents/skills/clojure/SKILL.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+.agents/skills/testing/SKILL.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+.github/workflows/quality.yml	\.skein	The checked-in repository coordination path is intentionally named .skein.
+AGENTS.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+CONTRIBUTING.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+Makefile	\.skein	The checked-in repository coordination path is intentionally named .skein.
+README.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+cli/internal/config/config.go	\.skein	The checked-in repository coordination path is intentionally named .skein.
+cli/internal/config/config_test.go	\.skein	The checked-in repository coordination path is intentionally named .skein.
+deps.edn	\.skein	The checked-in repository coordination path is intentionally named .skein.
+devflow/README.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+devflow/UBIQUITOUS-LANGUAGE.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+docs/clojure-crash-course.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+docs/operations/millstrand-cutover-verifier.md	\.skein	Immutable cutover evidence preserves exact legacy .skein paths.
+docs/operations/millstrand-cutover.core.json	\.skein	Immutable cutover evidence preserves exact legacy .skein paths.
+docs/operations/millstrand-cutover.inventory.json	\.skein	Immutable cutover evidence preserves exact legacy .skein paths.
+docs/operations/millstrand-cutover.live.json	\.skein	Immutable cutover evidence preserves exact legacy .skein paths.
+docs/operations/millstrand-midpoint-evidence.json	\.skein	Immutable cutover evidence preserves exact legacy .skein paths.
+docs/operations/millstrand-msr17-acceptance.json	\.skein	Immutable cutover evidence preserves exact legacy .skein paths.
+docs/reference.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+docs/spools/writing-shared-spools.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+docs/tutorial.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+integrations/neovim/README.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+quality-inventory.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+scripts/cutover/millstrand-preflight.sh	\.skein	Immutable cutover evidence preserves exact legacy .skein paths.
+scripts/cutover/verify-core-fragment.sh	\.skein	Immutable cutover evidence preserves exact legacy .skein paths.
+scripts/cutover/vocab_reset.clj	\.skein	Immutable cutover evidence preserves exact legacy .skein paths.
+scripts/quality/conventions_check.clj	\.skein	The checked-in repository coordination path is intentionally named .skein.
+scripts/quality/millstrand_transition.clj	\.skein	The checked-in repository coordination path is intentionally named .skein.
+scripts/quality/spool_tiers.clj	\.skein	The checked-in repository coordination path is intentionally named .skein.
+scripts/quality/spool_var.clj	\.skein	The checked-in repository coordination path is intentionally named .skein.
+scripts/quality/workspace_tests.clj	\.skein	The checked-in repository coordination path is intentionally named .skein.
+scripts/regen_surface_baseline.clj	\.skein	The checked-in repository coordination path is intentionally named .skein.
+scripts/spool-suite-gate	\.skein	The checked-in repository coordination path is intentionally named .skein.
+spools/README.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+spools/batteries.cookbook.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+spools/chime.cookbook.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+spools/cron.cookbook.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+spools/devflow.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+spools/guild.cookbook.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+spools/guild.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+spools/kanban.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+spools/unsafe-text-search.cookbook.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+spools/workflow.cookbook.md	\.skein	The checked-in repository coordination path is intentionally named .skein.
+test/fixtures/millstrand-cutover/core-fragment/fixtures.json	\.skein	Immutable cutover evidence preserves exact legacy .skein paths.
+test/millstrand/ct/config_ops_test.clj	\.skein	The checked-in repository coordination path is intentionally named .skein.
+test/millstrand/ct/config_test.clj	\.skein	The checked-in repository coordination path is intentionally named .skein.
+test/millstrand/ct/nvd_scan_test.clj	\.skein	The checked-in repository coordination path is intentionally named .skein.
+test/millstrand/quality/conventions_check_test.clj	\.skein	The checked-in repository coordination path is intentionally named .skein.
+test/millstrand/spools/test_support.clj	\.skein	The checked-in repository coordination path is intentionally named .skein.
+docs/operations/millstrand-cutover.md	\.skein	Immutable cutover evidence preserves the exact legacy application-marker rejection.
+devflow/specs/cli.md	\.skein	The implemented CLI spec preserves the repository coordination workspace distinction.
+devflow/specs/daemon-runtime.md	\.skein	The implemented runtime spec preserves the repository coordination workspace distinction.
+.agents/skills/testing/SKILL.md	^\.agents/skills/testing/SKILL\.md:22:.*skein-test\.lock.*	The testing skill retains the existing queue lock filename as a test coordination identifier.
+.agents/skills/testing/SKILL.md	^\.agents/skills/testing/SKILL\.md:26:.*SKEIN_TEST_AWAIT_SCALE.*	The testing skill retains the existing await-scale environment variable name.
+devflow/README.md	^devflow/README\.md:44:.*	Archived feature history preserves the original Skein CLI identity.
+devflow/README.md	^devflow/README\.md:45:.*	Archived feature history preserves the original Skein rename and namespace identity.
+devflow/README.md	^devflow/README\.md:50:.*	Archived feature history preserves the original batch API namespace.
+devflow/README.md	^devflow/README\.md:52:.*	Archived feature history preserves the original testing helper namespace.
+devflow/README.md	^devflow/README\.md:58:.*	Archived feature history preserves the original runtime helper namespace.
+devflow/README.md	^devflow/README\.md:59:.*	Archived feature history preserves the original spool namespace.
+devflow/README.md	^devflow/README\.md:60:.*	Archived feature history preserves the original REPL namespace.
+devflow/README.md	^devflow/README\.md:61:.*	Archived feature history preserves the original workflow namespace.
+devflow/README.md	^devflow/README\.md:71:.*	Archived feature history preserves the original peers and guild namespaces.
+devflow/README.md	^devflow/README\.md:74:.*	Archived feature history preserves the original batteries and CLI namespaces.
+devflow/README.md	^devflow/README\.md:81:.*	Archived feature history preserves the original clock and test namespaces.
+devflow/README.md	^devflow/README\.md:95:.*	Archived feature history preserves the original vocabulary namespace.
+devflow/README.md	^devflow/README\.md:119:.*	Archived feature history preserves the original format namespace.
+devflow/README.md	^devflow/README\.md:120:.*	Archived feature history preserves the original return-shape namespace.
