@@ -1,6 +1,6 @@
 # Core fragment verifier
 
-Run `scripts/cutover/verify-core-fragment.sh` from this repository when reviewing the MSR-14A core cutover fragment. The verifier reads the checked-in fragment and fixture database, checks the inactive runtime checkout and source database, simulates the copy contract, and writes a machine-readable result.
+Run `scripts/cutover/verify-core-fragment.sh` from this repository when reviewing the historical MSR-14A core cutover fragment. The verifier reads the checked-in fragment and fixture database, checks the checkout state recorded before MSR-15 and the source database, simulates the copy contract, and writes a machine-readable result. MSR-15 completed on 2026-08-07; [millstrand-cutover.live.json](./millstrand-cutover.live.json) is the authoritative live outcome, so the verifier's target-absence assertion is intentionally not valid against the completed live target.
 
 ## Prerequisites
 

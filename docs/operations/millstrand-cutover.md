@@ -1,5 +1,7 @@
 # Millstrand cutover preflight
 
+MSR-15 completed successfully on 2026-08-07. The authoritative outcome is [millstrand-cutover.live.json](./millstrand-cutover.live.json). The commands below are the historical preflight and recovery contract; do not rerun the live stop, copy, or start sequence against the completed targets.
+
 MSR-14 records the inputs for the controlled move from the Skein world to Millstrand. The inventory is [millstrand-cutover.inventory.json](./millstrand-cutover.inventory.json). It imports the typed preparation records for core (MSR-14A) and Agent Harness (MSR-14C). Notes and editor/dotfiles are recorded as verified no-change exclusions. Their follow-up work belongs to `dy3zf`.
 
 MSR-14 is a read-only preparation step. It does not stop or restart a weaver, change a marker, copy a database, create a target marker, or mutate a live workspace.
@@ -8,7 +10,7 @@ MSR-14 is a read-only preparation step. It does not stop or restart a weaver, ch
 
 The core dependency remains the exact SHA `5790c459e9bb692b5e975f9715df7d5b403feff2`. It has no tag or local-root form, and the `v1` core tag remains prohibited.
 
-The inactive runtime checkout is `/Users/ct/dev/projects/millstrand`. Its prepared midpoint is `8219eb80fafa21e26185806307c749d5b8eecea4`, with the local-quality policy commit `9ec1aa2c8055ba97e887dac574a054fc53e695c3` in its ancestry. MSR-14 landed at `144f0481a6d231c32a5bed658525ae0675ac9add`; the inventory records that SHA and MSR-15 proves that the checkout and runtime source commit equal it.
+At preflight time the inactive runtime checkout was `/Users/ct/dev/projects/millstrand`. Its prepared midpoint was `8219eb80fafa21e26185806307c749d5b8eecea4`, with the local-quality policy commit `9ec1aa2c8055ba97e887dac574a054fc53e695c3` in its ancestry. MSR-14 landed at `144f0481a6d231c32a5bed658525ae0675ac9add`; the inventory records that SHA, and the live outcome records the checkout running under `.millstrand`.
 
 The target world hashes are marker-neutral. Core uses `e9b67c7b8c3d5dce4f2784bb32c0d041`; Agent Harness uses `92ad6dd941f0840553fd7f0fdef15752`. A target marker, target database, or target parent that already exists fails the preflight.
 
@@ -162,9 +164,9 @@ cat docs/operations/millstrand-cutover.inventory.json |
     --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
 ```
 
-## MSR-15 handoff
+## Historical MSR-15 handoff
 
-MSR-15 may proceed only after MSR-14 evidence is green. Run:
+This handoff was executed on 2026-08-07 after MSR-14 evidence passed. It remains here for recovery and audit only:
 
 ```sh
 scripts/cutover/millstrand-preflight.sh \
