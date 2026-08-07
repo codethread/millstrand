@@ -569,8 +569,18 @@ def operator_plan(consumer, status, before):
     init = f"cd {mill_cwd} && {state} {mill} init --workspace {target_marker}"
     config_dir = q(f"{source['marker']}/config")
     config_copy = f"if test -d {config_dir}; then cp -R -- {config_dir} {target_marker}/config; fi"
-    spools = (f"cp -- {source_marker}/spools.edn {target_marker}/spools.edn"
-              if consumer["card"] == "MSR-14A" else
+    if consumer["card"] == "MSR-14A":
+        spools = (
+            f"cp -- {q(str(repo_root / 'docs/operations/millstrand-cutover-core.spools.edn'))} "
+            f"{target_marker}/spools.edn"
+        )
+        required_dirs = " ".join(
+            f"cp -R -- {source_marker}/{name} {target_marker}/{name} &&"
+            for name in ("adapters", "agents", "jobs", "notifications", "policy", "workflows")
+        )
+        config_copy = f"{required_dirs} cp -- {source_marker}/land-quality.sh {target_marker}/land-quality.sh"
+    else:
+        spools = (
               f"cp -- {q(str(repo_root / 'docs/operations/millstrand-cutover-agent-harness.spools.edn'))} "
               f"{target_marker}/spools.edn")
     copy_config = (
@@ -672,6 +682,7 @@ def operator_plan(consumer, status, before):
         "backup": consumer["backup"],
         "before": before,
         "commands": {
+            "mill_status": f"cd {mill_cwd} && {state} {mill} status",
             "stop": f"kill -TERM -- {source['pid']}",
             "wait_for_exact_pid_stopped": wait_for_stopped,
             "backup": backup_command,
