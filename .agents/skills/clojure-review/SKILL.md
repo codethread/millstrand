@@ -37,7 +37,7 @@ Example:
 
 When scanning Clojure conformity, actively look for and report these before listing positives:
 
-- Any docstring or string literal line past column 180, or long prose built from `(str ...)` fragments instead of a `|`-margin block through `skein.api.format.alpha`.
+- Any docstring or string literal line past column 180, or long prose built from `(str ...)` fragments instead of a `|`-margin block through `millstrand.api.format.alpha`.
 - Public namespace lacks an `ns` docstring and has a non-trivial public role.
 - Public `defn`, `defmacro`, protocol, record/type, or important public `def` lacks a useful docstring.
 - Boundary data is validated only ad hoc when a reusable spec would clarify the shipped contract or enable generated checks.

@@ -1,5 +1,5 @@
-site_name: Skein Docs
-site_description: Source documentation projection for Skein
+site_name: Millstrand Docs
+site_description: Generated documentation for Millstrand
 site_url: ""
 docs_dir: .mkdocs
 site_dir: site
@@ -49,7 +49,7 @@ nav:
   - Tutorial: docs/tutorial.md
   - Reference: docs/reference.md
   # The user-side spools ladder: customise -> test -> share. The bundled
-  # spools Skein ships keep their own section below.
+  # spools Millstrand ships keep their own section below.
   - Spools:
       - Customising your workspace: docs/spools/customisation.md
       - Testing your config and spools: docs/spools/testing.md

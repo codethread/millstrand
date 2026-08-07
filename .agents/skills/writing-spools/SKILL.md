@@ -7,4 +7,4 @@ description: Use when authoring, changing, or reviewing shared or shipped spools
 
 ## Spool state
 
-Spool state is runtime-owned via `skein.api.runtime.alpha/spool-state`. No module-level atoms in spools. Full discipline: `docs/spools/writing-shared-spools.md`.
+Spool state is runtime-owned via `millstrand.api.runtime.alpha/spool-state`. No module-level atoms in spools. Full discipline: `docs/spools/writing-shared-spools.md`.

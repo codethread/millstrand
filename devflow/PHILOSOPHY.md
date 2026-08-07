@@ -2,21 +2,21 @@
 
 The tool's runtime model is closer to Emacs than to a stateless command-line utility.
 
-Start the daemon as the local application core. It owns the live database connection and runtime state for that daemon lifetime. Users who want customized runtime behavior should load trusted Clojure config at daemon startup, reload their own files while working, or experiment through the REPL.
+Start the weaver as the local application core. It owns the live database connection and runtime state for that weaver lifetime. Users who want customized runtime behavior should load trusted Clojure config at weaver startup, reload their own files while working, or experiment through the REPL.
 
-The CLI is a convenience surface for common, scriptable operations. It should stay small, predictable, and suitable for lower-privilege workers that should use known structures without receiving broad REPL access. Do not grow the CLI into a parallel configuration or extension system when the daemon config and REPL already provide that role.
+The CLI is a convenience surface for common, scriptable operations. It should stay small, predictable, and suitable for lower-privilege workers that should use known structures without receiving broad REPL access. Do not grow the CLI into a parallel configuration or extension system when the weaver config and REPL already provide that role.
 
 Design implications:
 
 - Runtime customization belongs in trusted startup files and REPL workflows.
-- CLI commands should cover common task operations and safe consumption of existing daemon state.
-- Prefer daemon-owned in-memory runtime state over ad hoc per-client state when multiple clients need to share behavior during one daemon lifetime.
+- CLI commands should cover common strand operations and safe consumption of existing weaver state.
+- Prefer weaver-owned in-memory runtime state over ad hoc per-client state when multiple clients need to share behavior during one weaver lifetime.
 - Do not persist runtime behavior unless the feature explicitly calls for durable storage.
-- Keep user-authored behavior data-first where possible, and fail loudly when a CLI worker references daemon state that has not been loaded.
+- Keep user-authored behavior data-first where possible, and fail loudly when a CLI worker references weaver state that has not been loaded.
 
 ## No harness is home
 
-Skein assumes several agent harnesses and privileges none. A harness is a replaceable seat; coordination lives above it, in workspace config and spools, so switching provider changes a config entry, not the process.
+Millstrand assumes several agent harnesses and privileges none. A harness is a replaceable seat; coordination lives above it, in workspace config and spools, so switching provider changes a config entry, not the process.
 
 Design implications:
 
@@ -36,9 +36,9 @@ Design implications:
 
 ## The work record is not the source of truth
 
-The code and its documentation are the durable record of a project. Skein's strands are a working memory beside them: they let a returning human or a cold agent pick up where work stopped. Some trackers (beads, for example) treat their own database as the project's truth; skein does not.
+The code and its documentation are the durable record of a project. Millstrand's strands are a working memory beside them: they let a returning human or a cold agent pick up where work stopped. Some trackers (beads, for example) treat their own database as the project's truth; Millstrand does not.
 
-Skein therefore aims at resumability, never replayability. Resuming means reading the handover and moving forward from the current state of the code. Replaying, in the sense of rolling back a change and re-deriving it from recorded events, assumes an event log that agent work cannot honestly provide: an agent hands over a finished change, and while file edits could in principle be traced, one shell command breaks the chain. Recording a history that pretends otherwise would be a false promise.
+Millstrand therefore aims at resumability, never replayability. Resuming means reading the handover and moving forward from the current state of the code. Replaying, in the sense of rolling back a change and re-deriving it from recorded events, assumes an event log that agent work cannot honestly provide: an agent hands over a finished change, and while file edits could in principle be traced, one shell command breaks the chain. Recording a history that pretends otherwise would be a false promise.
 
 Design implications:
 

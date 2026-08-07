@@ -25,5 +25,5 @@ Notes:
 
 - `SKEIN_TEST_AWAIT_SCALE` multiplies await budgets on slow hosts (CI sets 3).
 - `make spool-suite-gate` — `GITLIBS=<dir>` overrides the gitlibs cache.
-- After spool or `skein.api.*.alpha` docstring changes: `make api-docs`.
+- After spool or `millstrand.api.*.alpha` docstring changes: `make api-docs`.
 - After validation, `git status --short` must not show generated SQLite or runtime metadata artifacts.
