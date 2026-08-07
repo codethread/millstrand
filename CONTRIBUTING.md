@@ -2,17 +2,21 @@
 
 Millstrand is alpha software; the tenets in [`devflow/TENETS.md`](./devflow/TENETS.md) and [`devflow/PHILOSOPHY.md`](./devflow/PHILOSOPHY.md) govern every change. [`devflow/UBIQUITOUS-LANGUAGE.md`](./devflow/UBIQUITOUS-LANGUAGE.md) defines the vocabulary those documents and the rest of the repo use without re-explaining.
 
-This repo is agent-first: most changes are planned, built, reviewed, and landed by coding agents coordinating through the repo's own `.skein` world. The main contributor skill is steering those agents well. [`AGENTS.md`](./AGENTS.md) is the contract the agents follow; this file is the human side.
+This repo is agent-first: most changes are planned, built, reviewed, and landed by coding agents using the repo's checked-in `.skein` coordination source and config. The main contributor skill is steering those agents well. [`AGENTS.md`](./AGENTS.md) is the contract the agents follow; this file is the human side.
 
 ## Setup
 
 ```sh
 make install        # build strand + mill from this checkout and install them on PATH
 mill start          # supervisor; leave it running in a terminal
-mill weaver start   # boot this repo's weaver — the shared coordination world
+workspace="$PWD/.millstrand"  # use "$PWD/.ms" when that marker already exists
+mill init --workspace "$workspace"
+mill weaver start --workspace "$workspace"
 ```
 
 `make install` records this checkout as mill's install-time source for weaver launches. Re-run it after pulling main. Agents never run it; that one is yours.
+
+The selected application workspace is the repo-local `.millstrand` directory, or `.ms` when that marker already exists. Pass `--workspace "$workspace"` on every `mill` or `strand` command that should use it. This checkout's checked-in `.skein` tree contains coordination source and config; it is not the application workspace.
 
 ## How work flows
 
@@ -28,7 +32,7 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
 ## Steering agents
 
 - State the outcome you want and let the coordinator drive. The conventions (card claiming, devflow, delegation, review) live in AGENTS.md and the workflow briefs, so you should not need to restate them. By default the session still stops at every human checkpoint; the `bonkai` skill (`.agents/skills/bonkai`) is the opt-in authority grant that lets it decide checkpoints and sign off on your behalf for AFK runs.
-- Human decisions come back as HITL checkpoints, which agents may not answer for you. Bind how you are notified in a gitignored `.skein/init.local.clj`:
+- Human decisions come back as HITL checkpoints, which agents may not answer for you. Bind how you are notified in the gitignored overlay for this repo's checked-in coordination workspace, `.skein/init.local.clj`:
 
   ```clojure
   (require '[millstrand.spools.chime :as chime])
@@ -43,7 +47,7 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
 Millstrand has one convention for "how do I find out?", in three escalating tiers (canonical write-up: [`docs/reference.md`](./docs/reference.md) "Discovery tiers"):
 
 - **`help`** — generated from arg-spec data, never hand-written: `strand help [<op>]`.
-- **`about`** — the authored per-op manual, such as `strand agent about` and `strand kanban about`.
+- **`about`** — the authored per-op manual, such as `strand about agent` and `strand about kanban`.
 - **`prime`** — run-first orientation: `mill millstrand prime`, `mill strand prime`, `strand kanban prime`.
 
 ## Working by hand
@@ -58,7 +62,7 @@ strand --workspace "$ws" add "Sketch model"
 mill weaver stop --workspace "$ws"
 ```
 
-`mill weaver repl` attaches a live REPL to a running weaver. [The tutorial](./docs/tutorial.md) walks the whole surface, and [`docs/reference.md`](./docs/reference.md) covers workspaces, reload/restart boundaries, and the REPL in depth.
+`mill weaver repl --workspace "$workspace"` attaches a live REPL to a running weaver. [The tutorial](./docs/tutorial.md) walks the whole surface, and [`docs/reference.md`](./docs/reference.md) covers workspaces, reload/restart boundaries, and the REPL in depth.
 
 Validate before committing:
 
