@@ -4,7 +4,7 @@ This file owns the *word*; the contract it names owns the *behavior*. Other docu
 
 For anything enumerable the live surface stays authoritative: `strand vocab` for registered attribute namespaces and relations, `strand help` for registered ops, `strand about <op>` for an op's manual.
 
-Scope is Skein and this repo. Vocabulary owned by external spools — kanban, devflow, delegation — belongs in their own repositories, so terms from them appear here only where this repo's own discipline depends on them.
+Scope is Millstrand and this repository. Vocabulary owned by external spools — kanban, devflow, delegation — belongs in their own repositories, so terms from them appear here only where this repository's own discipline depends on them.
 
 ## Runtime and topology
 
@@ -13,7 +13,7 @@ Scope is Skein and this repo. Vocabulary owned by external spools — kanban, de
 | **mill** | The Go router and supervisor. Owns everything that must work without a running weaver: workspace resolution, bootstrap, weaver lifecycle, and the trusted nREPL attach. | Daemon, weaver, launcher, the CLI |
 | **`strand` CLI** | The Go client. A pure dispatcher with zero builtin subcommands: it resolves selection context, assembles one invoke envelope per call, and relays NDJSON back. | Strand (the graph node), client if the REPL is also meant, tool |
 | **Weaver** | The application core. A long-lived local Clojure process owning the SQLite connection, the query and pattern registries, event handlers, approved-root acquisition state, and module activation state. | Daemon, server, backend, mill |
-| **Workspace** | The directory holding config, spool approvals, and startup code. Without a flag, commands target the canonical repository root's `.skein`. | Worktree, repo, project, database |
+| **Workspace** | The directory holding config, spool approvals, and startup code. Without a flag, commands target the canonical repository root's `.millstrand`. | Worktree, repo, project, database |
 | **Selected workspace** | The workspace a given command actually targets, after `--workspace` resolution. | Default workspace, current workspace |
 | **World** | Informal synonym for a workspace plus the weaver and data behind it. "Disposable world" is a `mktemp -d` workspace for tests and config experiments. | Workspace in specs, environment, instance |
 | **Client** | Anything talking to a weaver: the `strand` CLI over the Unix socket, or the weaver REPL over nREPL. | Consumer, user, agent |
@@ -32,7 +32,7 @@ Scope is Skein and this repo. Vocabulary owned by external spools — kanban, de
 | --- | --- | --- |
 | **Strand** | The unit of the graph: an id, a title, a `state`, timestamps, and an attribute map. | Task, ticket, issue, node, todo, card |
 | **State** | The only built-in lifecycle field, one of `active`, `closed`, or `replaced`. | Status, phase, lane, lifecycle |
-| **Attributes** | The userland extension point: a JSON object on a strand, stored as JSON `TEXT` rows. Physical storage belongs to `skein.core.*` alone (TEN-007). | Metadata, fields, columns, properties |
+| **Attributes** | The userland extension point: a JSON object on a strand, stored as JSON `TEXT` rows. Physical storage belongs to `millstrand.core.*` alone (TEN-007). | Metadata, fields, columns, properties |
 | **Hot attribute** | A live attribute row, visible to query and list paths. | Active attribute, current value |
 | **Archived attribute** | An attribute row flagged archived: excluded from hot query and list paths, still projected by full point reads. Writing the key returns it to hot. | Deleted, soft-deleted, hidden, old value |
 | **Immutable key** | An attribute key declared write-once per strand. Once its row exists the value cannot be changed, deleted, or archived. | Read-only, frozen, constant, protected |
@@ -56,16 +56,16 @@ How code gets into a weaver.
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
 | **Spool** | Trusted, authorable Clojure loaded into the weaver. Spools are how every capability above the core arrives. | Plugin, extension, package, module, library |
-| **Family** | One key in `.skein/spools.edn`. One repository is one release unit and one family entry. | Spool, package, repo, dependency |
-| **Coordinate** | The value under a family key, naming where its source comes from: `:local/root`, `:git/url` plus `:git/sha`, or `:skein/source-root`. | Dependency, source, path, URL, version |
+| **Family** | One key in `.millstrand/spools.edn`. One repository is one release unit and one family entry. | Spool, package, repo, dependency |
+| **Coordinate** | The value under a family key, naming where its source comes from: `:local/root`, `:git/url` plus `:git/sha`, or `:millstrand/source-root`. | Dependency, source, path, URL, version |
 | **Root** | A public library within a family, mapped to a checkout path by `:roots`. Every root has exactly one owner. | Spool, namespace, directory, family |
 | **Module** | A `runtime/module!` declaration naming one source target and its world policy, guarded by the `:spools` roots it needs. The activation unit. | Spool, namespace, plugin, component |
 | **Authoring form** | A top-level form that defines an ordinary Var and collects a registry or lifecycle declaration while the selected module source is evaluated. | Callback, installer, manifest |
 | **Approval** | A coordinate's presence in `spools.edn`. For a Git family the pinned sha is the consumer's consent. | Install, enable, activate, allowlist |
 | **Acquisition** | Resolving and fetching approved roots. | Install, download, resolve, fetch |
 | **Sync** | Materializing acquired roots into the runtime and reporting per-root outcomes. | Load, install, refresh, reload |
-| **Namespace tiers** | The contractual layering of `skein.*` (SPEC-003.C19). `skein.api.*.alpha` promises accretion within each subnamespace; `skein.core.*` promises nothing; `skein.spools.*` is the spool layer; `skein.repl` is the human surface. Workspace-owned helper namespaces are downstream code, not a Skein tier. | Layers, packages, modules, tiers bare |
-| **Unsafe namespace** | A shipped spool namespace whose name marks it as reaching into `skein.core.*`. Only these may touch core, which keeps the coupling visible. | Internal, private, legacy, deprecated |
+| **Namespace tiers** | The contractual layering of `millstrand.*` (SPEC-003.C19). `millstrand.api.*.alpha` promises accretion within each subnamespace; `millstrand.core.*` promises nothing; `millstrand.spools.*` is the spool layer; `millstrand.repl` is the human surface. Workspace-owned helper namespaces are downstream code, not a Millstrand tier. | Layers, packages, modules, tiers bare |
+| **Unsafe namespace** | A shipped spool namespace whose name marks it as reaching into `millstrand.core.*`. Only these may touch core, which keeps the coupling visible. | Internal, private, legacy, deprecated |
 
 ## Spool capabilities
 
@@ -82,8 +82,8 @@ What a module may contribute once it is active.
 | **Event handler** | A registered async reaction dispatched by the weaver's event worker. | Hook, listener, trigger, callback |
 | **Lifecycle hook** | A registered synchronous gate that may reject an operation but not transform it. | Event handler, middleware, interceptor, filter |
 | **Attribute namespace** | A declared family of attribute keys with a stated owner and doc, listed by `strand vocab`. Consumers reuse its keys verbatim. | Schema, model, table, prefix |
-| **Spool state** | Runtime-owned per-key state reached only through `skein.api.runtime.alpha/spool-state`. The sanctioned alternative to module-level atoms. | Global, atom, cache, singleton, session |
-| **Bin** | An executable declared by a spool with `skein.api.skein.alpha/defbin`. Only declared bins appear in `bins list`; `mill bin build` runs its optional recipe and `mill bin run` resolves and executes it in the caller's terminal. | Executable file, script, tool |
+| **Spool state** | Runtime-owned per-key state reached only through `millstrand.api.runtime.alpha/spool-state`. The sanctioned alternative to module-level atoms. | Global, atom, cache, singleton, session |
+| **Bin** | An executable declared by a spool with `millstrand.api.millstrand.alpha/defbin`. Only declared bins appear in `bins list`; `mill bin build` runs its optional recipe and `mill bin run` resolves and executes it in the caller's terminal. | Executable file, script, tool |
 | **Lean read** | The CLI and agent listing projection: oversized attribute values become an omission descriptor, and results are capped before assembly. Over the cap the op fails loudly. | Pagination, truncation, summary, preview |
 
 ## Discovery
@@ -104,7 +104,7 @@ Three tiers answer every "how do I find out" question, and the distinction is lo
 | --- | --- | --- |
 | **Marker** | A published release identity: an annotated, ordered `v<int>` tag. `v0` is reserved, and human labels like `alpha-3` are mechanically inert. | Version, semver, release number, tag |
 | **WIP** | Untagged upstream work. Sha-pin only; no floor can target it. | Unstable, prerelease, alpha, nightly |
-| **Floor** | The minimum marker accepted for a required root (`:requires`) or for Skein itself (`:skein/min`). | Minimum version, constraint, range, pin |
+| **Floor** | The minimum marker accepted for a required root (`:requires`) or for Millstrand itself (`:millstrand/min`). | Minimum version, constraint, range, pin |
 | **Floor raise** | Increasing that minimum. A raise is not a break; the floor and its test pin move in one commit. | Breaking change, major bump |
 | **Previous marker** | The greatest published marker below the release being cut. From `v2` onward `bin/compat-alarm` runs against it. | Last release, latest, HEAD |
 | **Accretion** | Adding to published names without withdrawing or narrowing them. This is the promise `v1` makes. | Backwards compatible, non-breaking, additive |
@@ -211,7 +211,7 @@ Registered by the modules under `.skein/workflows/` and `.skein/policy/config.cl
 ## Flagged ambiguities
 
 - "Run" means at least five things: a **workflow run**, plus the agent, devflow, land, and bench runs their own spools define. A workflow run and an agent run are different kinds of object, not one thing at two scales — always qualify.
-- "Task" is not a Skein term at all. It belongs to kanban, delegation, and AFK queues, which each mean something different by it. Qualify it or say **strand**.
+- "Task" is not a Millstrand term at all. It belongs to kanban, delegation, and AFK queues, which each mean something different by it. Qualify it or say **strand**.
 - "Strand" means both the graph node and the Go CLI. Write **`strand` CLI** in code font when you mean the binary.
 - "Feature" means a **feat folder** here, and a card type or lifecycle key in the kanban and devflow spools. These coincide often enough to hide the times they do not.
 - "State" is the core lifecycle column and nothing else. Kanban lanes and derived task statuses are attributes and projections that spools compute; do not call them state.
@@ -225,7 +225,7 @@ Registered by the modules under `.skein/workflows/` and `.skein/policy/config.cl
 - "Gate" means a workflow step and a CI quality check in `make`. Only the first is a strand.
 - "Hook" was used for both **event handlers** and **lifecycle hooks**. Handlers are async and reactive; hooks are synchronous and may reject.
 - "Checkpoint" should not imply a save point. Nothing rolls back to one — see [PHILOSOPHY](./PHILOSOPHY.md), "resumability, never replayability".
-- "Workspace" is a Skein workspace directory. It is not a git worktree, not a Clojure workspace, and not the repo.
+- "Workspace" is a Millstrand workspace directory. It is not a git worktree, not a Clojure workspace, and not the repository.
 - "Install", "enable", and "activate" were used for **approval**, **acquisition**, and **sync**, which are three distinct steps with distinct failure modes.
 - "Version" is retired for spools. Use **marker** for a published `v<int>`, **floor** for a minimum, and **claims** for a local override's assertion.
 - "Breaking change" is retired for **floor raises**. A raise is not a **break**; a break is rejecting input the published contract accepted.
