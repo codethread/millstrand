@@ -12,8 +12,10 @@ help_output=$($preflight --help 2>&1)
 grep -Fq -- '--validate-inventory' <<<"$help_output"
 grep -Fq -- '--dry-run' <<<"$help_output"
 grep -Fq -- '--inventory' <<<"$help_output"
-grep -Fq -- '--fixtures' <<<"$help_output"
 grep -Fq -- '--runtime-commit' <<<"$help_output"
+grep -Fq -- '--stdin' <<<"$help_output"
+grep -Fq -- '--payload' <<<"$help_output"
+! grep -Fq -- '--fixtures' <<<"$help_output"
 
 expect_usage_error() {
   local output=$1
@@ -31,6 +33,39 @@ expect_usage_error "$tmp_root/missing-runtime.err" "$preflight" --inventory "$in
 
 "$preflight" --validate-inventory "$inventory" >"$tmp_root/validate.out"
 grep -Fq 'Millstrand inventory validation: PASS' "$tmp_root/validate.out"
+
+printf '%s' "$inventory" | "$preflight" --stdin --validate-inventory :stdin >"$tmp_root/stdin-validate.out"
+grep -Fq 'Millstrand inventory validation: PASS' "$tmp_root/stdin-validate.out"
+
+printf '%s' "$inventory" >"$tmp_root/inventory.ref"
+printf '%s' "$fixtures" >"$tmp_root/workspace.ref"
+named_validate_status=0
+"$preflight" --payload inventory="$tmp_root/inventory.ref" \
+  --validate-inventory :payload/inventory >"$tmp_root/named-validate.out" \
+  2>"$tmp_root/named-validate.err" || named_validate_status=$?
+[[ "$named_validate_status" == 0 ]] || { echo "preflight contract: named validation status was $named_validate_status" >&2; exit 1; }
+grep -Fq 'Millstrand inventory validation: PASS' "$tmp_root/named-validate.out"
+
+named_status=0
+"$preflight" --dry-run \
+  --payload inventory="$tmp_root/inventory.ref" \
+  --payload workspace="$tmp_root/workspace.ref" \
+  --inventory :payload/inventory \
+  --workspace-root :payload/workspace >"$tmp_root/named.out" 2>"$tmp_root/named.err" || named_status=$?
+[[ "$named_status" == 0 ]] || { echo "preflight contract: named payload status was $named_status" >&2; cat "$tmp_root/named.err" >&2; exit 1; }
+grep -Fq 'mode: dry-run' "$tmp_root/named.out"
+
+printf '%s' 'not-a-sha' >"$tmp_root/runtime.ref"
+runtime_payload_status=0
+"$preflight" --dry-run \
+  --payload inventory="$tmp_root/inventory.ref" \
+  --payload workspace="$tmp_root/workspace.ref" \
+  --payload commit="$tmp_root/runtime.ref" \
+  --inventory :payload/inventory \
+  --workspace-root :payload/workspace \
+  --runtime-commit :payload/commit >"$tmp_root/runtime-payload.out" 2>"$tmp_root/runtime-payload.err" || runtime_payload_status=$?
+[[ "$runtime_payload_status" == 1 ]] || { echo "preflight contract: runtime payload status was $runtime_payload_status" >&2; exit 1; }
+grep -Fq 'runtime commit must be 40 lowercase hexadecimal characters' "$tmp_root/runtime-payload.err"
 
 malformed_status=0
 "$preflight" --dry-run --inventory "$inventory" --workspace-root "$fixtures" \
@@ -50,8 +85,30 @@ mismatch_status=0
 [[ "$mismatch_status" == 1 ]] || { echo "preflight contract: mismatched SHA status was $mismatch_status" >&2; exit 1; }
 grep -Fq 'runtime commit does not match the inventory landed commit' "$tmp_root/mismatch.err"
 
-# Preserve the pre-existing spelling and behavior of the fixture mode.
-"$preflight" --inventory "$inventory" --fixtures "$fixtures" >"$tmp_root/legacy.out"
-grep -Fq 'mode: fixtures' "$tmp_root/legacy.out"
+drift_root="$tmp_root/drift"
+cp -R "$fixtures" "$drift_root"
+rm "$drift_root/expected-scheduler-wake.json"
+drift_status=0
+"$preflight" --dry-run --inventory "$inventory" --workspace-root "$drift_root" \
+  >"$tmp_root/drift.out" 2>"$tmp_root/drift.err" || drift_status=$?
+[[ "$drift_status" == 1 ]] || { echo "preflight contract: missing wake artifact status was $drift_status" >&2; exit 1; }
+grep -Fq 'fixture expected wake artifact is missing' "$tmp_root/drift.err"
+
+cp "$fixtures/expected-scheduler-wake.json" "$drift_root/expected-scheduler-wake.json"
+python3 - "$drift_root/fixtures.json" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+manifest = json.loads(path.read_text())
+manifest["expected_wake_sha256"] = "0" * 64
+path.write_text(json.dumps(manifest, indent=2) + "\n")
+PY
+drift_status=0
+"$preflight" --dry-run --inventory "$inventory" --workspace-root "$drift_root" \
+  >"$tmp_root/drift-hash.out" 2>"$tmp_root/drift-hash.err" || drift_status=$?
+[[ "$drift_status" == 1 ]] || { echo "preflight contract: wake hash drift status was $drift_status" >&2; exit 1; }
+grep -Fq 'fixture expected wake artifact hash does not match manifest' "$tmp_root/drift-hash.err"
 
 echo 'Millstrand preflight CLI contract: PASS'

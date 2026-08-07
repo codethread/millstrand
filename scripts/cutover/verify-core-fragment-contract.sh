@@ -13,7 +13,8 @@ help_status=0
 help_output=$("$verifier" --help 2>&1) || help_status=$?
 [[ "$help_status" == 0 ]] || { echo "verifier contract: --help exited $help_status" >&2; exit 1; }
 grep -Fq -- '--fragment' <<<"$help_output"
-grep -Fq -- '--fixtures' <<<"$help_output"
+grep -Fq -- '--workspace-root' <<<"$help_output"
+! grep -Fq -- '--fixtures' <<<"$help_output"
 grep -Fq 'Relative paths are resolved from the repository root.' <<<"$help_output"
 
 missing_status=0
@@ -24,11 +25,11 @@ grep -Fq 'usage:' "$tmp_root/missing.err"
 unknown_status=0
 "$verifier" --unknown 2>"$tmp_root/unknown.err" || unknown_status=$?
 [[ "$unknown_status" == 2 ]] || { echo "verifier contract: unknown argument exited $unknown_status" >&2; exit 1; }
-grep -Fq 'unknown argument: --unknown' "$tmp_root/unknown.err"
+grep -Fq 'Unknown flag --unknown' "$tmp_root/unknown.err"
 
-(cd "$tmp_root" && "$verifier" --fragment "$fragment" --fixtures "$fixtures" >absolute.out)
+(cd "$tmp_root" && "$verifier" --fragment "$fragment" --workspace-root "$fixtures" >absolute.out)
 cp "$artifact" "$tmp_root/absolute-artifact.json"
-(cd "$tmp_root" && "$verifier" --fragment docs/operations/millstrand-cutover.core.json --fixtures test/fixtures/millstrand-cutover/core-fragment >relative.out)
+(cd "$tmp_root" && "$verifier" --fragment docs/operations/millstrand-cutover.core.json --workspace-root test/fixtures/millstrand-cutover/core-fragment >relative.out)
 cmp -s "$tmp_root/absolute.out" "$tmp_root/relative.out"
 cmp -s "$tmp_root/absolute-artifact.json" "$artifact"
 

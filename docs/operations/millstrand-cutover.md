@@ -51,8 +51,9 @@ Run the same contract without touching a live workspace:
 
 ```sh
 scripts/cutover/millstrand-preflight.sh \
+  --dry-run \
   --inventory docs/operations/millstrand-cutover.inventory.json \
-  --fixtures test/fixtures/millstrand-cutover/preflight
+  --workspace-root test/fixtures/millstrand-cutover/preflight
 ```
 
 The fixture creates SQLite state below a temporary directory and removes it when the command exits. It checks a successful whole-copy dry run and injected failures for a running source, target collision, hash mismatch, SQLite integrity failure, history mismatch, spend mismatch, and unexpected wake. The fixture source hash is checked again after every case.
@@ -62,8 +63,9 @@ Run the fixture command twice and compare the generated evidence:
 ```sh
 cp target/millstrand-cutover/preflight-verification.json /tmp/millstrand-preflight.first.json
 scripts/cutover/millstrand-preflight.sh \
+  --dry-run \
   --inventory docs/operations/millstrand-cutover.inventory.json \
-  --fixtures test/fixtures/millstrand-cutover/preflight
+  --workspace-root test/fixtures/millstrand-cutover/preflight
 cmp -s /tmp/millstrand-preflight.first.json target/millstrand-cutover/preflight-verification.json
 ```
 

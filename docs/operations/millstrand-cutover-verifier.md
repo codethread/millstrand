@@ -4,7 +4,7 @@ Run `scripts/cutover/verify-core-fragment.sh` from this repository when reviewin
 
 ## Prerequisites
 
-The verifier needs Git, `jq`, `realpath`, `mktemp`, SQLite, `sha256sum`, `cp`, `cmp`, `mkdir`, `chmod`, and `stat` on `PATH`. The canonical source workspace and database must exist, and the prepared runtime checkout must be a clean Git checkout at the recorded canonical `origin/main` commit. The verifier does not stop or start a weaver, create a marker, or copy a live database.
+The verifier needs Clojure, Git, `jq`, `realpath`, `mktemp`, SQLite, `sha256sum`, `cp`, `cmp`, `mkdir`, `chmod`, and `stat` on `PATH`. The canonical source workspace and database must exist, and the prepared runtime checkout must be a clean Git checkout at the recorded canonical `origin/main` commit. The verifier does not stop or start a weaver, create a marker, or copy a live database.
 
 The checked-in fragment uses these operator paths:
 
@@ -18,12 +18,12 @@ These paths describe the recorded cutover evidence. Change the fragment and fixt
 
 ## Invocation
 
-The two required options are `--fragment` and `--fixtures`:
+The two required options are `--fragment` and `--workspace-root`:
 
 ```sh
 scripts/cutover/verify-core-fragment.sh \
   --fragment docs/operations/millstrand-cutover.core.json \
-  --fixtures test/fixtures/millstrand-cutover/core-fragment
+  --workspace-root test/fixtures/millstrand-cutover/core-fragment
 ```
 
 Each option accepts an absolute path or a repository-relative path. Relative paths resolve from the repository root found beside the verifier, so the command also works from another current directory. `--help` prints the usage contract and exits zero. A missing option value or unknown argument prints usage and exits two.

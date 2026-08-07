@@ -9,75 +9,38 @@ usage:
   scripts/cutover/millstrand-preflight.sh --dry-run --inventory <inventory> \
     --workspace-root <disposable-fixture-root>
   scripts/cutover/millstrand-preflight.sh --inventory <inventory> \
-    [--fixtures <legacy-fixture-root>] [--runtime-commit <40hex>]
+    [--runtime-commit <40hex>]
 
 --validate-inventory checks only the typed inventory and preparation index.
 The default run is a read-only live-source preflight. --dry-run runs the same
-contract against disposable SQLite state and injected failures. --fixtures is
-the legacy spelling of the disposable fixture mode. MSR-14 never stops a
-weaver, copies a live database, or creates a live target marker.
+contract against disposable SQLite state and injected failures. `--stdin` and
+`--payload name=path` provide the standard whole-value payload references.
+MSR-14 never stops a weaver, copies a live database, or creates a live target
+marker.
 EOF
   exit "$status"
 }
 
-inventory_arg=""
-fixtures_arg=""
-workspace_root_arg=""
-runtime_commit_arg=""
-validate_inventory=0
-dry_run=0
-while (($# > 0)); do
-  case "$1" in
-    --inventory)
-      [[ $# -ge 2 && -z "$inventory_arg" ]] || usage
-      inventory_arg=$2; shift 2 ;;
-    --fixtures)
-      [[ $# -ge 2 && -z "$fixtures_arg" ]] || usage
-      fixtures_arg=$2; shift 2 ;;
-    --workspace-root)
-      [[ $# -ge 2 && -z "$workspace_root_arg" ]] || usage
-      workspace_root_arg=$2; shift 2 ;;
-    --runtime-commit)
-      [[ $# -ge 2 && -z "$runtime_commit_arg" ]] || usage
-      runtime_commit_arg=$2; shift 2 ;;
-    --validate-inventory)
-      [[ $# -ge 2 && "$validate_inventory" == 0 && -z "$inventory_arg" ]] || usage
-      validate_inventory=1; inventory_arg=$2; shift 2 ;;
-    --dry-run) [[ "$dry_run" == 0 ]] || usage; dry_run=1; shift ;;
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+
+for argument in "$@"; do
+  case "$argument" in
     -h|--help) usage 0 ;;
-    *) echo "millstrand-preflight: unknown argument: $1" >&2; usage ;;
   esac
 done
 
-if [[ "$validate_inventory" == 1 ]]; then
-  [[ -n "$inventory_arg" && -z "$fixtures_arg" && -z "$workspace_root_arg" && "$dry_run" == 0 && -z "$runtime_commit_arg" ]] || usage
-elif [[ "$dry_run" == 1 ]]; then
-  [[ -n "$inventory_arg" && -n "$workspace_root_arg" && -z "$fixtures_arg" ]] || usage
-else
-  [[ -n "$inventory_arg" && -z "$workspace_root_arg" ]] || usage
-fi
-
-repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
-resolve_input() {
-  if [[ "$1" = /* ]]; then realpath "$1"; else realpath "$repo_root/$1"; fi
+command -v clojure >/dev/null 2>&1 || {
+  echo "millstrand-preflight: missing command clojure" >&2
+  exit 1
 }
-inventory=$(resolve_input "$inventory_arg")
-[[ -f "$inventory" ]] || { echo "millstrand-preflight: inventory does not exist: $inventory_arg" >&2; exit 1; }
-if [[ -n "$fixtures_arg" ]]; then
-  fixtures=$(resolve_input "$fixtures_arg")
-  [[ -d "$fixtures" ]] || { echo "millstrand-preflight: fixtures do not exist: $fixtures_arg" >&2; exit 1; }
-else
-  fixtures=""
-fi
-if [[ -n "$workspace_root_arg" ]]; then
-  workspace_root=$(resolve_input "$workspace_root_arg")
-  [[ -d "$workspace_root" ]] || { echo "millstrand-preflight: workspace root does not exist: $workspace_root_arg" >&2; exit 1; }
-else
-  workspace_root=""
+cd "$repo_root"
+parsed_args=""
+if ! parsed_args=$(clojure -Sdeps '{:paths ["src" "dev" "scripts"]}' -M -m cutover.millstrand-preflight-cli "$@"); then
+  usage
 fi
 
 command -v python3 >/dev/null 2>&1 || { echo "millstrand-preflight: missing command python3" >&2; exit 1; }
-exec python3 - "$repo_root" "$inventory" "$fixtures" "$workspace_root" "$validate_inventory" "$dry_run" "$runtime_commit_arg" <<'PY'
+exec python3 - "$repo_root" "$parsed_args" <<'PY'
 import hashlib
 import json
 import os
@@ -91,12 +54,21 @@ import sys
 import tempfile
 
 repo_root = pathlib.Path(sys.argv[1]).resolve()
-inventory_path = pathlib.Path(sys.argv[2]).resolve()
-fixtures_path = pathlib.Path(sys.argv[3]).resolve() if sys.argv[3] else None
-workspace_root = pathlib.Path(sys.argv[4]).resolve() if sys.argv[4] else None
-validate_only = sys.argv[5] == "1"
-dry_run = sys.argv[6] == "1"
-runtime_commit = sys.argv[7] or None
+parsed_args = json.loads(sys.argv[2])
+inventory_arg = parsed_args.get("inventory") or parsed_args.get("validate-inventory")
+fixtures_arg = parsed_args.get("fixtures")
+workspace_root_arg = parsed_args.get("workspace-root")
+validate_only = "validate-inventory" in parsed_args
+dry_run = bool(parsed_args.get("dry-run") or fixtures_arg)
+runtime_commit = parsed_args.get("runtime-commit") or None
+
+def resolve_input(value):
+    path = pathlib.Path(value)
+    return path.resolve() if path.is_absolute() else (repo_root / path).resolve()
+
+inventory_path = resolve_input(inventory_arg)
+fixtures_path = resolve_input(fixtures_arg) if fixtures_arg else None
+workspace_root = resolve_input(workspace_root_arg) if workspace_root_arg else None
 output_path = repo_root / "target/millstrand-cutover/preflight-verification.json"
 
 class ContractError(Exception):
@@ -144,6 +116,12 @@ def read_json(path):
             return json.load(stream)
     except (OSError, json.JSONDecodeError) as exc:
         fail(f"cannot read JSON {path}: {exc}")
+
+require(inventory_path.is_file(), f"inventory does not exist: {inventory_arg}")
+if fixtures_path:
+    require(fixtures_path.is_dir(), f"fixtures do not exist: {fixtures_arg}")
+if workspace_root:
+    require(workspace_root.is_dir(), f"workspace root does not exist: {workspace_root_arg}")
 
 inventory = read_json(inventory_path)
 require(isinstance(inventory, dict), "inventory must be a JSON object")
@@ -334,12 +312,28 @@ def check_wake_contract(consumer):
     require(sha256(artifact) == consumer["expected_wake_sha256"],
             f"{consumer['card']} expected wake artifact hash does not match")
 
+def fixture_wake_contract(fixture_root, fixture):
+    """Return the manifest's validated expected-wake artifact."""
+    expected_wake_name = fixture.get("expected_wake")
+    require(isinstance(expected_wake_name, str) and expected_wake_name,
+            "fixture expected_wake is missing")
+    expected_wake = pathlib.Path(expected_wake_name)
+    require(not expected_wake.is_absolute(), "fixture expected_wake must be relative")
+    expected_wake = (fixture_root / expected_wake).resolve()
+    require(expected_wake.is_file(), f"fixture expected wake artifact is missing: {expected_wake}")
+    expected_sha = fixture.get("expected_wake_sha256")
+    require(isinstance(expected_sha, str) and re.fullmatch(r"[0-9a-f]{64}", expected_sha),
+            "fixture expected_wake_sha256 is invalid")
+    require(sha256(expected_wake) == expected_sha,
+            "fixture expected wake artifact hash does not match manifest")
+    return expected_wake, expected_sha
+
 consumers = inventory["consumers"]
 require({item["card"] for item in consumers} == {"MSR-14A", "MSR-14C"}, "core and Agent Harness preparations are incomplete")
 for consumer in consumers:
     check_consumer_shape(consumer)
 
-fixture_root = workspace_root if dry_run else fixtures_path
+fixture_root = workspace_root if dry_run and workspace_root else fixtures_path
 fixture = read_json(fixture_root / "fixtures.json") if fixture_root else None
 fixture_source = None
 fixture_source_counts = None
@@ -350,6 +344,7 @@ if fixture:
     fixture_source_counts = fixture["source_counts"]
     source_sql = fixture_root / fixture["source_sql"]
     require(source_sql.is_file(), f"fixture source SQL is missing: {source_sql}")
+    expected_wake, expected_wake_sha = fixture_wake_contract(fixture_root, fixture)
     with tempfile.TemporaryDirectory(prefix="millstrand-preflight-") as temporary:
         temporary = pathlib.Path(temporary)
         fixture_source = temporary / "source.sqlite"
@@ -362,7 +357,8 @@ if fixture:
                     f"fixture source {key} count does not match manifest")
         before = sha256(fixture_source)
         check_git_runtime()
-        check_wake_contract(consumers[0])
+        core_consumer = next(item for item in consumers if item["card"] == "MSR-14A")
+        check_wake_contract(core_consumer)
         cases = []
         for expected in fixture["cases"]:
             name = expected["name"]
@@ -391,8 +387,13 @@ if fixture:
                 if name == "unexpected-wake":
                     bad_wake = case_root / "unexpected-wake.json"
                     bad_wake.write_text('{"key":"unexpected-wake"}\n', encoding="utf-8")
-                    if sha256(bad_wake) != fixture["expected_wake_sha256"]:
+                    if sha256(bad_wake) != expected_wake_sha:
                         fail("unexpected-wake", "wake_artifact_sha256=unexpected")
+                elif name == "success":
+                    nominal_wake = case_root / "expected-wake.json"
+                    shutil.copyfile(expected_wake, nominal_wake)
+                    require(sha256(nominal_wake) == expected_wake_sha,
+                            "expected-wake-sha256=unexpected")
                 if name == "history-mismatch":
                     counts = sqlite_counts(target)
                     if counts["strands"] != fixture_source_counts["strands"] + 1:
@@ -420,6 +421,8 @@ if fixture:
                 require(actual["failure"]["reason"] == expected["failure"]["reason"], f"fixture {name} failure reason changed")
                 require(actual["failure"]["diagnostic"] == expected["failure"]["diagnostic"], f"fixture {name} failure diagnostic changed")
             cases.append(actual)
+            require(sha256(fixture_source) == before,
+                    f"fixture source changed during case {name}")
         require(sha256(fixture_source) == before, "fixture source changed during dry run")
         for consumer in (item for item in consumers if item["data_strategy"] == "fresh-world"):
             fresh_root = temporary / "fresh-world" / consumer["card"]
@@ -491,7 +494,7 @@ output = {
     "schema": "millstrand/preflight-verification-v1",
     "inventory": "docs/operations/millstrand-cutover.inventory.json",
     "inventory_sha256": sha256(inventory_path),
-    "mode": "dry-run" if dry_run else ("fixtures" if fixture else "live-read-only"),
+    "mode": "dry-run" if dry_run else "live-read-only",
     "checks": [
         "typed-consumer-preparations", "consumer-preparation-index", "excluded-deferred-no-lifecycle", "core-sha-only-no-v1",
         "immutable-agent-v26-kanban-v24-devflow-v21", "runtime-placeholder-and-msr-15-invariant",

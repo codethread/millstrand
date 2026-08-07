@@ -9,7 +9,7 @@
       "card": "MSR-14A",
       "consumer": "core",
       "disposition": "ready",
-      "verification": "scripts/cutover/verify-core-fragment.sh --fragment docs/operations/millstrand-cutover.core.json --fixtures test/fixtures/millstrand-cutover/core-fragment"
+      "verification": "scripts/cutover/verify-core-fragment.sh --fragment docs/operations/millstrand-cutover.core.json --workspace-root test/fixtures/millstrand-cutover/core-fragment"
     },
     {
       "task_id": "euhiw",
@@ -221,7 +221,7 @@
   },
   "verification": {
     "fixture_manifest": "test/fixtures/millstrand-cutover/preflight/fixtures.json",
-    "command": "scripts/cutover/millstrand-preflight.sh --inventory docs/operations/millstrand-cutover.inventory.json --fixtures test/fixtures/millstrand-cutover/preflight",
+    "command": "scripts/cutover/millstrand-preflight.sh --dry-run --inventory docs/operations/millstrand-cutover.inventory.json --workspace-root test/fixtures/millstrand-cutover/preflight",
     "deterministic": true,
     "output": "target/millstrand-cutover/preflight-verification.json"
   }
