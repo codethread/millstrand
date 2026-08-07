@@ -45,10 +45,10 @@ mill weaver start --workspace "$workspace"
 
 ## Find the nREPL port
 
-List the selected workspace's running weaver through mill:
+List known weavers through mill. The list command has no workspace selector, so find the row whose `config_dir` matches `$workspace`:
 
 ```sh
-mill weaver list --workspace "$workspace"
+mill weaver list
 ```
 
 The output is JSON. Find the row for your workspace and use its `nrepl.host` and `nrepl.port` fields, for example:
@@ -64,10 +64,10 @@ The output is JSON. Find the row for your workspace and use its `nrepl.host` and
 ]
 ```
 
-With `jq`, you can print just the endpoints:
+With `jq`, you can filter to the configured workspace and print just its endpoints:
 
 ```sh
-mill weaver list --workspace "$workspace" | jq -r '.[] | select(.state == "running") | "\(.name)\t\(.config_dir)\t\(.nrepl.host):\(.nrepl.port)"'
+mill weaver list | jq -r --arg workspace "$workspace" '.[] | select(.state == "running" and .config_dir == $workspace) | "\(.name)\t\(.config_dir)\t\(.nrepl.host):\(.nrepl.port)"'
 ```
 
 ## Connect from VS Code / Calva
