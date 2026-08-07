@@ -185,7 +185,16 @@
     "core_start": "./bin/mill weaver start --workspace /Users/ct/dev/projects/millstrand/.millstrand",
     "agent_harness_start": "./bin/mill weaver start --workspace /Users/ct/dev/projects/agent-harness.spool/.millstrand",
     "legacy_aliases_created": false,
-    "no_v1": {"repository": "https://github.com/codethread/millstrand.git", "probe": "git ls-remote --tags origin refs/tags/v1 refs/tags/v1^{}", "result": "no output"}
+    "no_v1": {
+      "repository": "https://github.com/codethread/millstrand.git",
+      "remote": "origin",
+      "probe": "git ls-remote --tags origin refs/tags/v1 refs/tags/v1^{}",
+      "exit_code": 0,
+      "stdout": "",
+      "stdout_state": "empty",
+      "status": "success",
+      "result": "no matching refs; probe succeeded with empty stdout"
+    }
   },
   "deferred": {"notes_pid": 50593, "notes_untouched": true},
   "fix_forward": [
