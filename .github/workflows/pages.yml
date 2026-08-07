@@ -37,8 +37,6 @@ jobs:
           path: site
 
   deploy:
-    # Temporary: GitHub Pages remains backend-queued past the deployment timeout.
-    if: ${{ false }}
     name: Deploy to GitHub Pages
     needs: build
     runs-on: ubuntu-latest
