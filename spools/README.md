@@ -112,7 +112,7 @@ How to apply and verify entries like these: [Writing shared spools](../docs/spoo
 
 `ct.spools.kanban` is the second external spool: it lives in [`codethread/kanban.spool`](https://github.com/codethread/kanban.spool). Like Devflow, its pin lives only in `.millstrand/spools.edn`; unlike Devflow, Kanban still uses a release `:git/tag` plus its peeled `:git/sha`. Tests consume that same entry, and developers override it with a gitignored `spools.local.edn` local root.
 
-The `ct.spools.agent-run`, `ct.spools.executors.subagent`, `ct.spools.delegation`, and `ct.spools.bench` family lives in [`codethread/agent-harness.spool`](https://github.com/codethread/agent-harness.spool). This repo pins one untagged family coordinate with a `:roots` map for `harness-core`, `codex-harness`, `agent-run`, `agent-cli`, `delegation`, and `bench`. Tests consume those roots from that one entry. Developers override the whole family from one checkout with one gitignored `spools.local.edn` entry:
+The `ct.spools.agent-run`, `ct.spools.executors.subagent`, `ct.spools.delegation`, and `ct.spools.bench` family lives in [`codethread/agent-harness.spool`](https://github.com/codethread/agent-harness.spool). The table lists its contract-bearing `agent-run`, `delegation`, and `bench` roots; `harness-core`, `codex-harness`, and `agent-cli` are support roots from the same untagged family approval. Tests consume those roots from that one entry. Developers override the whole family from one checkout with one gitignored `spools.local.edn` entry:
 
 ```clojure
 {:spools

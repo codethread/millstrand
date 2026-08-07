@@ -1,7 +1,8 @@
 (ns quality.reflect-check
   "Compile Millstrand namespaces with reflection warnings promoted to failure."
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [quality.external-source-roots :as external-roots]))
 
 (defn- clj-file->ns [root file]
   (let [root-path (.toPath (io/file root))
@@ -25,35 +26,6 @@
          (filter #(and (.isFile %) (str/ends-with? (.getName %) ".clj")))
          (map #(clj-file->ns root %)))))
 
-(defn- resource-source-root [resource-path]
-  (let [url (or (io/resource resource-path)
-                (throw (ex-info "Required Millhouse source resource is missing"
-                                {:resource resource-path
-                                 :allowed-source-root "ancestor directory named src"})))]
-    (when-not (= "file" (.getProtocol url))
-      (throw (ex-info "Required Millhouse source resource is not directory-backed"
-                      {:resource resource-path
-                       :url (str url)
-                       :allowed-source-root "file URL beneath an ancestor directory named src"})))
-    (or (some (fn [^java.io.File candidate]
-                (when (= "src" (.getName candidate))
-                  candidate))
-              (take-while some?
-                          (iterate #(.getParentFile ^java.io.File %)
-                                   (.getParentFile (io/file (.toURI url))))))
-        (throw (ex-info "Required Millhouse source resource has no source-root ancestor"
-                        {:resource resource-path
-                         :url (str url)
-                         :allowed-source-root "ancestor directory named src"})))))
-
-(defn- millhouse-source-roots []
-  (map resource-source-root
-       ["millhouse/spools/workflow.clj"
-        "millhouse/spools/chime.clj"
-        "millhouse/spools/cron.clj"
-        "millhouse/spools/executors/code.clj"
-        "millhouse/spools/executors/shell.clj"]))
-
 (defn -main [& _]
   (let [roots {"src" "millstrand"
                "spools/batteries/src" "millstrand/spools"
@@ -67,7 +39,7 @@
                                     (namespaces-under root subdir))
                                   roots)
                           (mapcat #(namespaces-under % "")
-                                  (distinct (millhouse-source-roots)))))
+                                  (external-roots/millhouse-source-roots))))
         compile-dir (.toFile (java.nio.file.Files/createTempDirectory "millstrand-reflect-check" (make-array java.nio.file.attribute.FileAttribute 0)))
         warnings (atom [])
         original-err *err*

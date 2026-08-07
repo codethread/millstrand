@@ -33,6 +33,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [quality.api-form :as api-form]
+            [quality.external-source-roots :as external-roots]
             [quality.api-tests :as api-tests]
             [quality.json-literals :as json-literals]
             [quality.source-forms :as source-forms]
@@ -40,48 +41,26 @@
             [quality.spool-var :as spool-var]
             [quality.workspace-tests :as workspace-tests]))
 
-(defn- resource-source-root [resource-path]
-  (let [url (or (io/resource resource-path)
-                (throw (ex-info "Required Millhouse source resource is missing"
-                                {:resource resource-path
-                                 :allowed-source-root "ancestor directory named src"})))]
-    (when-not (= "file" (.getProtocol url))
-      (throw (ex-info "Required Millhouse source resource is not directory-backed"
-                      {:resource resource-path
-                       :url (str url)
-                       :allowed-source-root "file URL beneath an ancestor directory named src"})))
-    (or (some (fn [^java.io.File candidate]
-                (when (= "src" (.getName candidate))
-                  (.getPath candidate)))
-              (take-while some?
-                          (iterate #(.getParentFile ^java.io.File %)
-                                   (.getParentFile (io/file (.toURI url))))))
-        (throw (ex-info "Required Millhouse source resource has no source-root ancestor"
-                        {:resource resource-path
-                         :url (str url)
-                         :allowed-source-root "ancestor directory named src"})))))
+(def ^:private local-source-roots
+  ["src"
+   "spools/batteries/src"
+   "spools/workflow/src"
+   "spools/unsafe-text-search/src"
+   "examples/guild/src"
+   "spools/chime/src"
+   "spools/cron/src"
+   ".millstrand"
+   "test"])
 
-(def ^:private source-roots
-  ;; Everything lintable: engine, batteries, local-root spools, trusted
-  ;; workspace config, and tests. A missing root must fail the gate, not
-  ;; silently shrink the scanned set.
-  (vec
-   (concat
-    ["src"
-     "spools/batteries/src"
-     "spools/workflow/src"
-     "spools/unsafe-text-search/src"
-     "examples/guild/src"
-     "spools/chime/src"
-     "spools/cron/src"
-     ".millstrand"
-     "test"]
-    (map resource-source-root
-         ["millhouse/spools/workflow.clj"
-          "millhouse/spools/chime.clj"
-          "millhouse/spools/cron.clj"
-          "millhouse/spools/executors/code.clj"
-          "millhouse/spools/executors/shell.clj"]))))
+(defn- configured-source-roots
+  "Return every lintable engine, spool, workspace-config, and test root.
+
+  Required external roots resolve when the gate runs, so a missing dependency
+  fails at the command boundary rather than while this namespace loads."
+  []
+  (into local-source-roots
+        (map #(.getPath ^java.io.File %))
+        (external-roots/millhouse-source-roots)))
 
 (def ^:private core-macro-names
   (->> (ns-publics 'clojure.core)
@@ -130,7 +109,7 @@
 (defn- resolvable-namespace?
   "True when `ns-sym` maps to a source file under a repo root or on this
   JVM's classpath (clojure.* and other library namespaces)."
-  [ns-sym]
+  [source-roots ns-sym]
   (let [path (-> (name ns-sym) (str/replace "-" "_") (str/replace "." "/"))
         candidates [(str path ".clj") (str path ".cljc")]]
     (boolean (or (some (fn [root]
@@ -141,13 +120,13 @@
 (defn- embedded-require-findings
   "Scan every source file under `source-roots` for embedded literal requires
   of namespaces that resolve nowhere. An unreadable file is itself a finding."
-  []
+  [source-roots]
   (for [root source-roots
         ^java.io.File file (sort (file-seq (io/file root)))
         :when (and (.isFile file) (str/ends-with? (.getName file) ".clj"))
         finding (try
                   (for [{:keys [ns line]} (embedded-requires (source-forms/read-all file))
-                        :when (not (resolvable-namespace? ns))]
+                        :when (not (resolvable-namespace? source-roots ns))]
                     (str (.getPath file) ":" line ": embedded require of `" ns
                          "` resolves to no source file under the repo roots or classpath"))
                   (catch Exception e
@@ -156,36 +135,37 @@
     finding))
 
 (defn -main [& _]
-  (doseq [root source-roots]
-    (when-not (.isDirectory (java.io.File. root))
-      (binding [*out* *err*]
-        (println "conventions-check: configured source root does not exist:" root))
-      (System/exit 1)))
-  (let [{:keys [analysis]} (kondo/run! {:lint source-roots
-                                        :config {:analysis {:locals true}}})
-        undocumented (->> (:namespace-definitions analysis)
-                          (remove :doc)
-                          (map (juxt :filename :name)))
-        macro-shadows (->> (:locals analysis)
-                           (filter #(core-macro-names (str (:name %))))
-                           (map (juxt :filename :row :name)))
-        findings (concat
-                  (for [[file ns-name] undocumented]
-                    (str file ": namespace " ns-name " has no docstring"))
-                  (for [[file row local] macro-shadows]
-                    (str file ":" row ": local `" local
-                         "` shadows the clojure.core macro; rename on destructure"
-                         " (e.g. `{" local "-sym :" local "}`)"))
-                  (embedded-require-findings)
-                  (api-form/check analysis)
-                  (spool-tiers/check analysis)
-                  (spool-var/check)
-                  (api-tests/check "test/millstrand/api")
-                  (json-literals/check source-roots)
-                  (workspace-tests/check analysis "test/millstrand"))]
-    (if (seq findings)
-      (do (binding [*out* *err*]
-            (doseq [f findings] (println f))
-            (println (str "conventions-check: " (count findings) " finding(s)")))
-          (System/exit 1))
-      (println "conventions-check: OK"))))
+  (let [source-roots (configured-source-roots)]
+    (doseq [root source-roots]
+      (when-not (.isDirectory (java.io.File. root))
+        (binding [*out* *err*]
+          (println "conventions-check: configured source root does not exist:" root))
+        (System/exit 1)))
+    (let [{:keys [analysis]} (kondo/run! {:lint source-roots
+                                          :config {:analysis {:locals true}}})
+          undocumented (->> (:namespace-definitions analysis)
+                            (remove :doc)
+                            (map (juxt :filename :name)))
+          macro-shadows (->> (:locals analysis)
+                             (filter #(core-macro-names (str (:name %))))
+                             (map (juxt :filename :row :name)))
+          findings (concat
+                    (for [[file ns-name] undocumented]
+                      (str file ": namespace " ns-name " has no docstring"))
+                    (for [[file row local] macro-shadows]
+                      (str file ":" row ": local `" local
+                           "` shadows the clojure.core macro; rename on destructure"
+                           " (e.g. `{" local "-sym :" local "}`)"))
+                    (embedded-require-findings source-roots)
+                    (api-form/check analysis)
+                    (spool-tiers/check analysis)
+                    (spool-var/check)
+                    (api-tests/check "test/millstrand/api")
+                    (json-literals/check source-roots)
+                    (workspace-tests/check analysis "test/millstrand"))]
+      (if (seq findings)
+        (do (binding [*out* *err*]
+              (doseq [f findings] (println f))
+              (println (str "conventions-check: " (count findings) " finding(s)")))
+            (System/exit 1))
+        (println "conventions-check: OK")))))
