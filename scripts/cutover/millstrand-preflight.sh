@@ -180,7 +180,7 @@ def source_snapshot(marker, database):
     return {"marker_identity": marker.stat().st_ino, "database_identity": database.stat().st_ino,
             "marker_sha256": marker_digest(marker), "database_sha256": sha256(database)}
 
-def check_git_runtime():
+def check_git_runtime(check_remote_policy=False):
     checkout = pathlib.Path(runtime["checkout"])
     require((checkout / ".git").exists(), f"runtime checkout is not a Git checkout: {checkout}")
     head = run(["git", "-C", str(checkout), "rev-parse", "HEAD"])
@@ -191,6 +191,9 @@ def check_git_runtime():
         "git@github.com:codethread/millstrand.git",
         "https://github.com/codethread/millstrand.git",
     }, "runtime checkout origin is not codethread/millstrand")
+    if check_remote_policy:
+        v1 = run(["git", "ls-remote", remote.stdout.strip(), "refs/tags/v1", "refs/tags/v1^{}"])
+        require(v1.returncode == 0 and not v1.stdout.strip(), "forbidden core v1 tag exists")
     for commit, label in ((ancestry["policy_commit"], "policy"), (ancestry["midpoint_commit"], "midpoint")):
         ancestor = run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", commit, "HEAD"])
         require(ancestor.returncode == 0, f"runtime checkout omits {label} ancestry commit {commit}")
@@ -319,7 +322,7 @@ if fixture:
             cases.append(actual)
         require(sha256(fixture_source) == before, "fixture source changed during dry run")
 else:
-    check_git_runtime()
+    check_git_runtime(check_remote_policy=True)
     for consumer in consumers:
         source = consumer["source"]
         marker = pathlib.Path(source["marker"])
