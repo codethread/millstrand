@@ -1173,4 +1173,7 @@
     (smoke-repl! (if db-file (str db-file ".repl") repl-smoke-db))
     (println "\nSmoke completed with weaver-backed Go CLI and REPL flows.")
     (finally
-      (delete-tree! (.toPath smoke-run-root)))))
+      (try
+        (delete-tree! (.toPath smoke-run-root))
+        (finally
+          (shutdown-agents))))))
