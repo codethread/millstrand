@@ -3,16 +3,16 @@
  :pins
  {codethread/devflow
   {:git/url "https://github.com/codethread/devflow.spool.git"
-   :git/tag "v20"
-   :git/sha "b18b326fca39a513abdaa91a132c9c64fa4c4b2e"}
+   :git/tag "v21"
+   :git/sha "7cb75a66e6bf46b6685496cd95ee6e54eb6ca933"}
   codethread/kanban
   {:git/url "https://github.com/codethread/kanban.spool.git"
-   :git/tag "v23"
-   :git/sha "2947590e7965feb95a239189af3bd55f008d1209"}
+   :git/tag "v24"
+   :git/sha "87f61bc2750e7026f3650235907db25f19b1536e"}
   ct.spools/agent-run
   {:git/url "https://github.com/codethread/agent-harness.spool.git"
-   :git/tag "v25"
-   :git/sha "d28bfb35b5fc1891a7a318e06886aa446722241d"}}
+   :git/tag "v26"
+   :git/sha "82f8df466e6caea74a93d994604d94ab6bf78b72"}}
  :deferrals
  [{:scope :workspace-config-integration
    :families #{codethread/devflow codethread/kanban ct.spools/agent-run}
