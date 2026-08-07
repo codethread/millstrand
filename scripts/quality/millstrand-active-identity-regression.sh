@@ -51,8 +51,10 @@ echo "millstrand identity regression: allowlisted identity survived line relocat
 
 manifest="$tmp_root/docs/operations/millstrand-midpoint-evidence.json"
 unrelated_token=$(printf 's%s' kein)
-jq --arg path "docs/$unrelated_token.md" '.proposal.path = $path' "$manifest" >"$manifest.tmp"
-mv "$manifest.tmp" "$manifest"
+sed -i.bak \
+  "s#\"path\": \"devflow/feat/millstrand-rename/proposal.md\"#\"path\": \"docs/$unrelated_token.md\"#" \
+  "$manifest"
+rm -f "$manifest.bak"
 
 output="$tmp_root/identity-audit.out"
 if PATH="$tool_dir" "$bash_path" \
@@ -101,10 +103,11 @@ assert_unclassified devflow-guidance devflow/PHILOSOPHY.md
 assert_unclassified agent-skill .agents/skills/testing/SKILL.md
 assert_unclassified pages-metadata mkdocs.yml "site_name: $pages_identity Docs"
 
-cp "$repo_root/AGENTS.md" "$tmp_root/AGENTS.md"
+same_line_path=cli/internal/config/config.go
+cp "$repo_root/$same_line_path" "$tmp_root/$same_line_path"
 sed -i.bak "1,/${legacy_marker}/s/${legacy_marker}/${legacy_marker} legacy.${stale_namespace}/" \
-  "$tmp_root/AGENTS.md"
-rm -f "$tmp_root/AGENTS.md.bak"
+  "$tmp_root/$same_line_path"
+rm -f "$tmp_root/$same_line_path.bak"
 same_line_output="$tmp_root/same-line.out"
 if PATH="$tool_dir" "$bash_path" \
     "$tmp_root/scripts/quality/millstrand-active-identity.sh" >"$same_line_output" 2>&1; then
@@ -113,7 +116,7 @@ if PATH="$tool_dir" "$bash_path" \
   exit 1
 fi
 
-grep -Fq "unclassified active identity: AGENTS.md:" "$same_line_output" || {
+grep -Fq "unclassified active identity: $same_line_path:" "$same_line_output" || {
   cat "$same_line_output" >&2
   echo "millstrand identity regression: same-line bypass failed for the wrong reason" >&2
   exit 1
