@@ -11,6 +11,11 @@ cp "$repo_root/scripts/quality/millstrand-active-identity.sh" \
 cp "$repo_root/scripts/quality/millstrand-identity-allowlist.tsv" \
   "$tmp_root/scripts/quality/millstrand-identity-allowlist.tsv"
 
+# The audit falls back to git grep when ripgrep is unavailable (as on the
+# hosted Ubuntu runner), so keep the extracted fixture a usable git tree.
+git -C "$tmp_root" init -q
+git -C "$tmp_root" add --all
+
 manifest="$tmp_root/docs/operations/millstrand-midpoint-evidence.json"
 unrelated_token=$(printf 's%s' kein)
 jq --arg path "docs/$unrelated_token.md" '.proposal.path = $path' "$manifest" >"$manifest.tmp"
