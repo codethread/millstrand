@@ -1,9 +1,6 @@
 name: Quality Gates
 
 on:
-  pull_request:
-  push:
-    branches: [main, quality-gates]
   workflow_dispatch:
 
 jobs:
@@ -27,7 +24,7 @@ jobs:
               - 'test/**'
               - 'dev/**'
               - 'spools/**'
-              - '.skein/**'
+              - '.millstrand/**'
               - 'deps.edn'
               - '.clj-kondo/**'
               - '.cljfmt.edn'
