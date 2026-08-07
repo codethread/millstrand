@@ -16,6 +16,22 @@ The active consumer pins are Agent Harness `v26` (`82f8df466e6caea74a93d994604d9
 
 ## Run the preflight
 
+Validate the inventory without inspecting live workspaces:
+
+```sh
+scripts/cutover/millstrand-preflight.sh \
+  --validate-inventory docs/operations/millstrand-cutover.inventory.json
+```
+
+Run the complete disposable contract from a fixture root:
+
+```sh
+scripts/cutover/millstrand-preflight.sh \
+  --dry-run \
+  --inventory docs/operations/millstrand-cutover.inventory.json \
+  --workspace-root test/fixtures/millstrand-cutover/preflight
+```
+
 Run from the repository root:
 
 ```sh
@@ -53,4 +69,12 @@ cmp -s /tmp/millstrand-preflight.first.json target/millstrand-cutover/preflight-
 
 ## MSR-15 handoff
 
-MSR-15 may proceed only after MSR-14 evidence is green and the final squash SHA is known. It must update the runtime landed-commit record, verify the checkout is at that SHA, capture the stopped source backup, review and approve the exact retained wake artifact, install the whole copy into the absent target database, and verify integrity and byte/SHA equality before first start. A failed check blocks the first Millstrand start. Notes and editor/dotfiles remain outside this lifecycle and stay deferred to `dy3zf`.
+MSR-15 may proceed only after MSR-14 evidence is green and the final squash SHA is known. Replace `runtime_requirement.required_landed_main_commit` in the inventory with that exact 40-character lowercase SHA, then run:
+
+```sh
+scripts/cutover/millstrand-preflight.sh \
+  --inventory docs/operations/millstrand-cutover.inventory.json \
+  --runtime-commit <final-msr14-squash-sha>
+```
+
+The command rejects the pre-land placeholder, checks `/Users/ct/dev/projects/millstrand` HEAD and runtime source commit against the supplied SHA, and requires the policy and midpoint commits in its ancestry. A malformed or mismatched SHA fails before any lifecycle action. MSR-15 must then capture the stopped source backup, review the exact retained wake artifact, install the whole copy into the absent target database, and verify integrity and byte/SHA equality before first start. A failed check blocks the first Millstrand start. Notes and editor/dotfiles remain outside this lifecycle and stay deferred to `dy3zf`.

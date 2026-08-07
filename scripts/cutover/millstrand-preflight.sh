@@ -4,28 +4,58 @@ set -euo pipefail
 usage() {
   local status=${1:-2}
   cat >&2 <<'EOF'
-usage: scripts/cutover/millstrand-preflight.sh \
-  --inventory docs/operations/millstrand-cutover.inventory.json \
-  [--fixtures test/fixtures/millstrand-cutover/preflight]
+usage:
+  scripts/cutover/millstrand-preflight.sh --validate-inventory <inventory>
+  scripts/cutover/millstrand-preflight.sh --dry-run --inventory <inventory> \
+    --workspace-root <disposable-fixture-root>
+  scripts/cutover/millstrand-preflight.sh --inventory <inventory> \
+    [--fixtures <legacy-fixture-root>] [--runtime-commit <40hex>]
 
-The default run is a read-only live-source preflight. --fixtures runs the
-same contract against disposable SQLite state and injected failures. MSR-14
-never stops a weaver, copies a database, or creates a live target marker.
+--validate-inventory checks only the typed inventory and preparation index.
+The default run is a read-only live-source preflight. --dry-run runs the same
+contract against disposable SQLite state and injected failures. --fixtures is
+the legacy spelling of the disposable fixture mode. MSR-14 never stops a
+weaver, copies a live database, or creates a live target marker.
 EOF
   exit "$status"
 }
 
 inventory_arg=""
 fixtures_arg=""
+workspace_root_arg=""
+runtime_commit_arg=""
+validate_inventory=0
+dry_run=0
 while (($# > 0)); do
   case "$1" in
-    --inventory) [[ $# -ge 2 ]] || usage; inventory_arg=$2; shift 2 ;;
-    --fixtures) [[ $# -ge 2 ]] || usage; fixtures_arg=$2; shift 2 ;;
+    --inventory)
+      [[ $# -ge 2 && -z "$inventory_arg" ]] || usage
+      inventory_arg=$2; shift 2 ;;
+    --fixtures)
+      [[ $# -ge 2 && -z "$fixtures_arg" ]] || usage
+      fixtures_arg=$2; shift 2 ;;
+    --workspace-root)
+      [[ $# -ge 2 && -z "$workspace_root_arg" ]] || usage
+      workspace_root_arg=$2; shift 2 ;;
+    --runtime-commit)
+      [[ $# -ge 2 && -z "$runtime_commit_arg" ]] || usage
+      runtime_commit_arg=$2; shift 2 ;;
+    --validate-inventory)
+      [[ $# -ge 2 && "$validate_inventory" == 0 && -z "$inventory_arg" ]] || usage
+      validate_inventory=1; inventory_arg=$2; shift 2 ;;
+    --dry-run) [[ "$dry_run" == 0 ]] || usage; dry_run=1; shift ;;
     -h|--help) usage 0 ;;
     *) echo "millstrand-preflight: unknown argument: $1" >&2; usage ;;
   esac
 done
-[[ -n "$inventory_arg" ]] || usage
+
+if [[ "$validate_inventory" == 1 ]]; then
+  [[ -n "$inventory_arg" && -z "$fixtures_arg" && -z "$workspace_root_arg" && "$dry_run" == 0 && -z "$runtime_commit_arg" ]] || usage
+elif [[ "$dry_run" == 1 ]]; then
+  [[ -n "$inventory_arg" && -n "$workspace_root_arg" && -z "$fixtures_arg" ]] || usage
+else
+  [[ -n "$inventory_arg" && -z "$workspace_root_arg" ]] || usage
+fi
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 resolve_input() {
@@ -39,13 +69,20 @@ if [[ -n "$fixtures_arg" ]]; then
 else
   fixtures=""
 fi
+if [[ -n "$workspace_root_arg" ]]; then
+  workspace_root=$(resolve_input "$workspace_root_arg")
+  [[ -d "$workspace_root" ]] || { echo "millstrand-preflight: workspace root does not exist: $workspace_root_arg" >&2; exit 1; }
+else
+  workspace_root=""
+fi
 
 command -v python3 >/dev/null 2>&1 || { echo "millstrand-preflight: missing command python3" >&2; exit 1; }
-exec python3 - "$repo_root" "$inventory" "$fixtures" <<'PY'
+exec python3 - "$repo_root" "$inventory" "$fixtures" "$workspace_root" "$validate_inventory" "$dry_run" "$runtime_commit_arg" <<'PY'
 import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -56,10 +93,22 @@ import tempfile
 repo_root = pathlib.Path(sys.argv[1]).resolve()
 inventory_path = pathlib.Path(sys.argv[2]).resolve()
 fixtures_path = pathlib.Path(sys.argv[3]).resolve() if sys.argv[3] else None
+workspace_root = pathlib.Path(sys.argv[4]).resolve() if sys.argv[4] else None
+validate_only = sys.argv[5] == "1"
+dry_run = sys.argv[6] == "1"
+runtime_commit = sys.argv[7] or None
 output_path = repo_root / "target/millstrand-cutover/preflight-verification.json"
 
 class ContractError(Exception):
     pass
+
+def contract_excepthook(exc_type, exc_value, traceback):
+    if exc_type is ContractError:
+        print(f"millstrand-preflight: {exc_value}", file=sys.stderr)
+    else:
+        sys.__excepthook__(exc_type, exc_value, traceback)
+
+sys.excepthook = contract_excepthook
 
 def fail(message, diagnostic=None):
     raise ContractError(message if diagnostic is None else f"{message}:{diagnostic}")
@@ -97,9 +146,29 @@ def read_json(path):
         fail(f"cannot read JSON {path}: {exc}")
 
 inventory = read_json(inventory_path)
+require(isinstance(inventory, dict), "inventory must be a JSON object")
 require(inventory.get("schema") == "millstrand/cutover-inventory-v1", "inventory schema is invalid")
 require(inventory.get("operation") == "MSR-14", "inventory operation is not MSR-14")
 require(inventory.get("phase") == "pre-land", "inventory must remain pre-land")
+
+preparation_index = inventory.get("consumer_preparation_index")
+require(isinstance(preparation_index, list), "consumer-preparation index is missing")
+required_task_ids = {"m4sr2", "euhiw", "8xtkc", "rcs9r"}
+index_task_ids = {entry.get("task_id") for entry in preparation_index if isinstance(entry, dict)}
+require(index_task_ids == required_task_ids, "consumer-preparation index is incomplete")
+for entry in preparation_index:
+    require(isinstance(entry, dict), "consumer-preparation index entry is invalid")
+    require(entry.get("disposition") in {"ready", "verified-no-change"},
+            f"consumer-preparation {entry.get('task_id')} disposition is invalid")
+    if entry["task_id"] in {"euhiw", "rcs9r"}:
+        require(entry.get("deferred_to") == "dy3zf",
+                f"consumer-preparation {entry['task_id']} is not deferred to dy3zf")
+
+authority = inventory.get("standing_authority")
+require(isinstance(authority, dict) and authority.get("reference") == "Epic ke3rd" and
+        authority.get("routine_approval_required") is False and
+        authority.get("unexpected_wake") == "abort",
+        "standing cutover authority is incomplete")
 
 core = inventory["core_dependency"]
 require(set(core) >= {"card", "coordinate", "repository", "ref_kind", "sha", "sha_only", "v1_policy"},
@@ -118,10 +187,21 @@ require(msr_15["record"] == "runtime_requirement.required_landed_main_commit" an
         msr_15["actual_squash_sha_required"] is True and
         msr_15["require_checkout_head_equal"] is True,
         "MSR-15 does not require an actual squash SHA and checkout equality")
-require(runtime["required_landed_main_commit"] == placeholder, "runtime landed-main placeholder changed")
 require("MSR-15" in runtime["msr_15_invariant"], "MSR-15 runtime invariant is missing")
 require(runtime["prepared_checkout_sha"] == "8219eb80fafa21e26185806307c749d5b8eecea4",
         "prepared runtime midpoint SHA is wrong")
+require(runtime["checkout"] == "/Users/ct/dev/projects/millstrand",
+        "runtime checkout is not the canonical MSR-15 checkout")
+if runtime_commit:
+    require(re.fullmatch(r"[0-9a-f]{40}", runtime_commit) is not None,
+            "runtime commit must be 40 lowercase hexadecimal characters")
+    require(runtime["required_landed_main_commit"] != placeholder,
+            "runtime landed commit is still the pre-land placeholder")
+    require(runtime["required_landed_main_commit"] == runtime_commit,
+            "runtime commit does not match the inventory landed commit")
+else:
+    require(runtime["required_landed_main_commit"] == placeholder,
+            "runtime landed-main placeholder changed")
 ancestry = runtime["ancestry"]
 for key in ("policy_commit", "midpoint_commit"):
     require(len(ancestry[key]) == 40 and all(c in "0123456789abcdef" for c in ancestry[key]),
@@ -149,11 +229,15 @@ for pin in pins:
 require(seen == expected_pins, "Agent v26, Kanban v24, and Devflow v21 pins are not all present")
 
 for excluded in inventory["excluded_deferred"]:
+    require(excluded.get("source_task_id") in {"euhiw", "rcs9r"},
+            "excluded consumer source task is not authoritative")
     require(excluded["disposition"] == "verified-no-change", "excluded consumer has a lifecycle disposition")
     require(excluded["deferred_to"] == "dy3zf", "excluded consumer is not deferred to dy3zf")
     require(excluded["lifecycle_mutation"] is False, "excluded consumer permits lifecycle mutation")
 require({item["consumer"] for item in inventory["excluded_deferred"]} == {"notes", "editor-dotfiles"},
         "Notes and editor/dotfile exclusions are incomplete")
+require({item["source_task_id"] for item in inventory["excluded_deferred"]} == {"euhiw", "rcs9r"},
+        "excluded Notes and editor/dotfile source tasks are incomplete")
 
 def sqlite_counts(database):
     uri = f"file:{pathlib.Path(database).resolve()}?mode=ro"
@@ -184,8 +268,13 @@ def check_git_runtime(check_remote_policy=False):
     checkout = pathlib.Path(runtime["checkout"])
     require((checkout / ".git").exists(), f"runtime checkout is not a Git checkout: {checkout}")
     head = run(["git", "-C", str(checkout), "rev-parse", "HEAD"])
-    require(head.returncode == 0 and head.stdout.strip() == runtime["prepared_checkout_sha"],
-            "runtime checkout HEAD does not match the recorded midpoint")
+    expected_head = runtime_commit or runtime["prepared_checkout_sha"]
+    require(head.returncode == 0 and head.stdout.strip() == expected_head,
+            "runtime checkout HEAD does not match the required runtime commit")
+    if runtime_commit:
+        source_commit = run(["git", "-C", str(checkout), "rev-parse", "--verify", "HEAD"])
+        require(source_commit.returncode == 0 and source_commit.stdout.strip() == runtime_commit,
+                "runtime source commit does not match --runtime-commit")
     remote = run(["git", "-C", str(checkout), "remote", "get-url", "origin"])
     require(remote.returncode == 0 and remote.stdout.strip() in {
         "git@github.com:codethread/millstrand.git",
@@ -203,6 +292,10 @@ def check_git_runtime(check_remote_policy=False):
 def check_consumer_shape(consumer):
     require(consumer["disposition"] == "ready", f"{consumer['card']} is not ready")
     require(consumer["no_live_lifecycle"] is True, f"{consumer['card']} permits live lifecycle")
+    require(consumer.get("source_task_id") in {"m4sr2", "8xtkc"},
+            f"{consumer['card']} source task is not in the preparation index")
+    require(consumer.get("data_strategy") in {"whole-copy", "fresh-world"},
+            f"{consumer['card']} data strategy is missing")
     source = consumer["source"]
     target = consumer["target"]
     require(isinstance(source["pid"], int) and source["pid"] > 0, f"{consumer['card']} source PID is invalid")
@@ -219,6 +312,12 @@ def check_consumer_shape(consumer):
             f"{consumer['card']} target paths do not carry the canonical world hash")
     require(target["database"].endswith("/data/millstrand.sqlite"), f"{consumer['card']} target DB is not canonical")
     require(target["marker"].endswith("/.millstrand"), f"{consumer['card']} target marker is not .millstrand")
+    for label, value in (("source marker", source["marker"]), ("source database", source["database"]),
+                         ("target marker", target["marker"]), ("target database", target["database"]),
+                         ("target parent", target["parent"])):
+        require(pathlib.Path(value).is_absolute(), f"{consumer['card']} {label} is not absolute")
+    require(source["marker"] != target["marker"] and source["database"] != target["database"],
+            f"{consumer['card']} source and target paths are not distinct")
     if consumer["card"] == "MSR-14A":
         require(consumer.get("copy_mode") == "whole-copy", f"{consumer['card']} copy mode is not whole-copy")
         backup = pathlib.Path(consumer["backup"])
@@ -240,7 +339,8 @@ require({item["card"] for item in consumers} == {"MSR-14A", "MSR-14C"}, "core an
 for consumer in consumers:
     check_consumer_shape(consumer)
 
-fixture = read_json(fixtures_path / "fixtures.json") if fixtures_path else None
+fixture_root = workspace_root if dry_run else fixtures_path
+fixture = read_json(fixture_root / "fixtures.json") if fixture_root else None
 fixture_source = None
 fixture_source_counts = None
 live_snapshots = []
@@ -248,7 +348,7 @@ live_snapshots = []
 if fixture:
     require(fixture.get("schema") == "millstrand/preflight-fixtures-v1", "fixture schema is invalid")
     fixture_source_counts = fixture["source_counts"]
-    source_sql = fixtures_path / fixture["source_sql"]
+    source_sql = fixture_root / fixture["source_sql"]
     require(source_sql.is_file(), f"fixture source SQL is missing: {source_sql}")
     with tempfile.TemporaryDirectory(prefix="millstrand-preflight-") as temporary:
         temporary = pathlib.Path(temporary)
@@ -321,6 +421,29 @@ if fixture:
                 require(actual["failure"]["diagnostic"] == expected["failure"]["diagnostic"], f"fixture {name} failure diagnostic changed")
             cases.append(actual)
         require(sha256(fixture_source) == before, "fixture source changed during dry run")
+        for consumer in (item for item in consumers if item["data_strategy"] == "fresh-world"):
+            fresh_root = temporary / "fresh-world" / consumer["card"]
+            fresh_root.mkdir(parents=True)
+            fresh_target = fresh_root / "millstrand.sqlite"
+            source_connection = sqlite3.connect(fixture_source)
+            schema_sql = [row[0] for row in source_connection.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND sql IS NOT NULL ORDER BY name"
+            )]
+            source_connection.close()
+            target_connection = sqlite3.connect(fresh_target)
+            for statement in schema_sql:
+                target_connection.execute(statement)
+            target_connection.commit()
+            target_connection.close()
+            fresh_counts = sqlite_counts(fresh_target)
+            require(all(fresh_counts[key] == 0 for key in
+                         ("strands", "attributes", "burn_history", "scheduler_history", "spend_rows")),
+                    f"{consumer['card']} fresh-world target imported source rows")
+            require(sha256(fresh_target) != sha256(fixture_source),
+                    f"{consumer['card']} fresh-world target matches source database")
+        require(sha256(fixture_source) == before, "fresh-world dry run changed fixture source")
+elif validate_only:
+    pass
 else:
     check_git_runtime(check_remote_policy=True)
     for consumer in consumers:
@@ -360,17 +483,21 @@ else:
         require(after == snapshot, f"{card} live source changed during dry run")
     cases = [{"name": "live-read-only", "result": "pass", "failure": None}]
 
+if validate_only:
+    print("Millstrand inventory validation: PASS")
+    sys.exit(0)
+
 output = {
     "schema": "millstrand/preflight-verification-v1",
     "inventory": "docs/operations/millstrand-cutover.inventory.json",
     "inventory_sha256": sha256(inventory_path),
-    "mode": "fixtures" if fixture else "live-read-only",
+    "mode": "dry-run" if dry_run else ("fixtures" if fixture else "live-read-only"),
     "checks": [
-        "typed-consumer-preparations", "excluded-deferred-no-lifecycle", "core-sha-only-no-v1",
+        "typed-consumer-preparations", "consumer-preparation-index", "excluded-deferred-no-lifecycle", "core-sha-only-no-v1",
         "immutable-agent-v26-kanban-v24-devflow-v21", "runtime-placeholder-and-msr-15-invariant",
         "runtime-policy-midpoint-ancestry", "exact-source-pid-marker-database", "canonical-target-hash-path",
         "target-absence", "source-integrity-history-spend", "backup-and-wake-contract",
-        "live-source-unchanged", "disposable-copy-fixtures"
+        "live-source-unchanged", "disposable-copy-fixtures", "fresh-world-strategy"
     ],
     "cases": cases,
     "live_lifecycle": "forbidden",

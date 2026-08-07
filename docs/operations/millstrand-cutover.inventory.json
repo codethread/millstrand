@@ -3,6 +3,43 @@
   "operation": "MSR-14",
   "phase": "pre-land",
   "source_of_truth": "typed devflow/consumer-preparation records on MSR-14A/MSR-14C and the midpoint evidence record",
+  "consumer_preparation_index": [
+    {
+      "task_id": "m4sr2",
+      "card": "MSR-14A",
+      "consumer": "core",
+      "disposition": "ready",
+      "verification": "scripts/cutover/verify-core-fragment.sh --fragment docs/operations/millstrand-cutover.core.json --fixtures test/fixtures/millstrand-cutover/core-fragment"
+    },
+    {
+      "task_id": "euhiw",
+      "card": "MSR-14B-R",
+      "consumer": "notes",
+      "disposition": "verified-no-change",
+      "deferred_to": "dy3zf",
+      "verification": "/Users/ct/go/bin/mill weaver status --workspace /Users/ct/dev/projects/notes/.skein"
+    },
+    {
+      "task_id": "8xtkc",
+      "card": "MSR-14C",
+      "consumer": "agent-harness.spool",
+      "disposition": "ready",
+      "verification": "bin/identity-check && bin/validate-consumer-preparation docs/operations/millstrand-cutover-preparation.json && test/verify-millstrand-preparation_test.sh && bin/verify-millstrand-preparation"
+    },
+    {
+      "task_id": "rcs9r",
+      "card": "MSR-14D-R",
+      "consumer": "editor-dotfiles",
+      "disposition": "verified-no-change",
+      "deferred_to": "dy3zf",
+      "verification": "user priority override 2026-08-07"
+    }
+  ],
+  "standing_authority": {
+    "reference": "Epic ke3rd",
+    "routine_approval_required": false,
+    "unexpected_wake": "abort"
+  },
   "runtime_requirement": {
     "repository": "codethread/millstrand",
     "checkout": "/Users/ct/dev/projects/millstrand",
@@ -74,6 +111,7 @@
   "consumers": [
     {
       "card": "MSR-14A",
+      "source_task_id": "m4sr2",
       "consumer": "core",
       "disposition": "ready",
       "land_run": "land-msr14a-20260807",
@@ -96,6 +134,7 @@
       "expected_wake_artifact": "test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake.json",
       "expected_wake_sha256": "51e3a6204ff7372abeb9db4bf4f0333b6a6f1a69bb8ff2c9baae3e4a5be0ddcf",
       "copy_mode": "whole-copy",
+      "data_strategy": "whole-copy",
       "no_live_lifecycle": true,
       "history_queries": [
         "SELECT COUNT(*) FROM strands",
@@ -107,6 +146,7 @@
     },
     {
       "card": "MSR-14C",
+      "source_task_id": "8xtkc",
       "consumer": "agent-harness.spool",
       "disposition": "ready",
       "land_run": "land-msr14c-20260807",
@@ -137,12 +177,14 @@
         "await_event": "strand agent await reports one done run",
         "deadline_env": "MILL_READY_TIMEOUT_SECS / AGENT_AWAIT_TIMEOUT_SECS"
       },
+      "data_strategy": "fresh-world",
       "no_live_lifecycle": true
     }
   ],
   "excluded_deferred": [
     {
       "card": "MSR-14B-R",
+      "source_task_id": "euhiw",
       "consumer": "notes",
       "disposition": "verified-no-change",
       "scope": "excluded-from-initial-priority-cutover",
@@ -158,6 +200,7 @@
     },
     {
       "card": "MSR-14D-R",
+      "source_task_id": "rcs9r",
       "consumer": "editor-dotfiles",
       "disposition": "verified-no-change",
       "scope": "excluded-from-initial-priority-cutover",
