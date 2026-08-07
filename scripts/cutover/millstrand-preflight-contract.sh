@@ -13,6 +13,8 @@ grep -Fq -- '--validate-inventory' <<<"$help_output"
 grep -Fq -- '--dry-run' <<<"$help_output"
 grep -Fq -- '--inventory' <<<"$help_output"
 grep -Fq -- '--runtime-commit' <<<"$help_output"
+grep -Fq -- '--plan' <<<"$help_output"
+grep -Fq -- '--output' <<<"$help_output"
 grep -Fq -- '--stdin' <<<"$help_output"
 grep -Fq -- '--payload' <<<"$help_output"
 ! grep -Fq -- '--fixtures' <<<"$help_output"
@@ -43,6 +45,25 @@ grep -Fq 'Millstrand inventory validation: PASS' "$tmp_root/validate.out"
 
 printf '%s' "$inventory" | "$preflight" --stdin --validate-inventory :stdin >"$tmp_root/stdin-validate.out"
 grep -Fq 'Millstrand inventory validation: PASS' "$tmp_root/stdin-validate.out"
+
+plan_shape_status=0
+"$preflight" --plan --inventory "$inventory" --output "$tmp_root/live-plan.json" \
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add \
+  >"$tmp_root/plan.out" 2>"$tmp_root/plan.err" || plan_shape_status=$?
+if [[ "$plan_shape_status" == 0 ]]; then
+  jq -e '.schema == "millstrand/live-cutover-plan-v1" and
+    .operator.worker_lifecycle_authority == false and
+    ([.operator.plans[].commands] | all(has("stop") and has("backup") and
+      has("install") and has("marker_init") and has("start") and has("rollback")))' \
+    "$tmp_root/live-plan.json" >/dev/null
+else
+  [[ "$plan_shape_status" == 1 ]] || {
+    echo "preflight contract: unexpected plan mode status $plan_shape_status" >&2
+    exit 1
+  }
+  ! grep -Fq 'kill -TERM' "$tmp_root/plan.err"
+  ! grep -Fq 'created target' "$tmp_root/plan.err"
+fi
 
 printf '%s' "$inventory" >"$tmp_root/inventory.ref"
 printf '%s' "$fixtures" >"$tmp_root/workspace.ref"

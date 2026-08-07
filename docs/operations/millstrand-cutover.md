@@ -40,11 +40,30 @@ scripts/cutover/millstrand-preflight.sh \
   --inventory docs/operations/millstrand-cutover.inventory.json
 ```
 
-The live mode resolves each recorded source marker and database, checks the exact source PID and weaver identity, runs read-only SQLite integrity/history/spend probes, checks the canonical target paths and their absence, and verifies the runtime ancestry. It also checks the expected scheduler-wake artifact and its SHA-256. The source marker and database are fingerprinted before and after the checks. Any change fails the command.
+The live mode resolves each recorded source marker and database, checks the exact source PID, `started_at`, and weaver identity returned by `mill weaver status`, runs read-only SQLite integrity/history/spend and representative-agent-run probes, checks the canonical target paths and their absence, and verifies the runtime ancestry. It also checks the expected scheduler-wake artifact and its SHA-256. The source marker and database are fingerprinted before and after the checks. Any mismatch fails loudly before any handoff is emitted. The inventory's identities are the old live status evidence; disposable fixture identities live only in the fixture manifests.
 
 The preflight requires the core whole-copy contract: a stopped-world backup before copy, a `0755` target parent, a target that is absent, SQLite integrity, equal history and spend counts, equal byte counts, and equal SHA-256 values. MSR-15 owns the stopped backup, wake approval, copy, and live lifecycle window. MSR-14 only proves that those requirements are recorded.
 
 The command writes `target/millstrand-cutover/preflight-verification.json`. That file is generated evidence and is not a live target marker or database.
+
+To capture live evidence and produce the executable operator handoff, run the
+read-only plan mode:
+
+```sh
+scripts/cutover/millstrand-preflight.sh --plan \
+  --inventory docs/operations/millstrand-cutover.inventory.json \
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add \
+  --output target/millstrand-cutover/live-cutover-plan.json
+```
+
+The plan records the real before SQLite/hash/spend/representative-run evidence
+and resolved commands for both consumers: exact-PID stop, SQLite backup,
+target-parent/install, explicit `.millstrand` `mill init`, configuration and
+pin installation, start, and rollback. It always uses the built
+`/Users/ct/dev/projects/millstrand/bin/mill` with
+`XDG_STATE_HOME=/Users/ct/.local/state`. The plan recorder has no lifecycle
+authority: it does not signal, create a target marker, copy a live database, or
+start a weaver.
 
 The command accepts the standard whole-value payload references. `:stdin` reads one value from standard input, and `:payload/name` reads the contents of the file named by `--payload name=path`:
 
@@ -116,9 +135,24 @@ scripts/cutover/millstrand-coordinator.sh \
   --output target/millstrand-cutover/coordinator-evidence.json
 ```
 
-The evidence schema is `millstrand/cutover-evidence-v1`. It records the preparation-index hash, exact recorded PID and start identity, before/after SQLite counts and integrity, byte and SHA-256 values, spend and representative agent-run records, the retained SQLite `.backup` and rollback path, stopped scheduler-wake classification, target absence/distinctness and mode `0755`, core whole-copy equality, Agent Harness fresh-world results, and a separate deferred start phase. Every failed fixture leaves the simulated new weaver stopped.
+The disposable evidence schema is `millstrand/cutover-evidence-v1`. It records the preparation-index hash, fixture PID and start identity, before/after SQLite counts and integrity, byte and SHA-256 values, spend and representative agent-run records, the retained SQLite `.backup` and rollback path, stopped scheduler-wake classification, target absence/distinctness and mode `0755`, core whole-copy equality, Agent Harness fresh-world results, and a separate deferred start phase. Every failed fixture leaves the simulated new weaver stopped. It is not live evidence.
 
-The later live operator sequence uses exact recorded PIDs and remains outside this non-live contract. After status confirms the recorded identity, the stop command is `kill -TERM -- <recorded-pid>`; never use `pkill` or a pattern kill. The core backup command is `sqlite3 <source-db> ".backup '<backup-db>'"`. Install only after the stopped wake artifact is allowlisted, the target parent is absent and mode `0755`, and backup/target integrity, byte count, SHA-256, history, spend, and representative records compare equal. Start is a separate phase: `mill weaver start --workspace <target-marker>`. A failed validation leaves the new weaver stopped and retains the original plus backup for rollback.
+The coordinator executes the emitted commands only after reviewing the live
+status and evidence, and writes the final live
+`millstrand/cutover-evidence-v1` at the cutover destination. The disposable
+preflight and plan artifacts are not that record. After status confirms the
+recorded identity, the stop command is `kill -TERM -- <recorded-pid>`; never use
+`pkill` or a pattern kill. The core backup command is
+`sqlite3 <source-db> ".backup '<backup-db>'"`. Agent Harness is a fresh world:
+the coordinator does not install the source database, and installs the exact
+Agent Harness `v26`, Kanban `v24`, and core SHA pins into the new marker before
+start. Install only after the stopped wake artifact is allowlisted, the target
+parent is absent and mode `0755`, and backup/target integrity, byte count,
+SHA-256, history, spend, and representative records compare equal. Marker
+creation is exactly `./bin/mill init --workspace <target>/.millstrand`; it does
+not create `.ms` or `.skein`. Start is a separate phase:
+`./bin/mill weaver start --workspace <target-marker>`. A failed validation
+leaves the new weaver stopped and retains the original plus backup for rollback.
 
 Whole-value text arguments use the declared parser semantics. For example:
 

@@ -105,4 +105,13 @@ expect_status 1 "$coordinator" --dry-run --inventory "$inventory" \
   --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
 grep -Fq 'expected scheduler wake artifact hash does not match fixture' "$tmp_root/err"
 
+jq -e '
+  ([.cases[] | select(.name == "pid-mismatch")][0] |
+    .result == "fail" and (.failure | contains("source-pid-mismatch"))) and
+  ([.cases[] | select(.name == "start-identity-mismatch")][0] |
+    .result == "fail" and (.failure | contains("source-start-identity-mismatch"))) and
+  ([.cases[] | select(.name == "weaver-id-mismatch")][0] |
+    .result == "fail" and (.failure | contains("source-weaver-id-mismatch")))
+' "$tmp_root/evidence.json" >/dev/null
+
 echo 'Millstrand coordinator contract: PASS'

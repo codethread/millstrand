@@ -10,10 +10,13 @@ usage:
     --workspace-root <disposable-fixture-root>
   scripts/cutover/millstrand-preflight.sh --inventory <inventory> \
     [--runtime-commit <40hex>]
+  scripts/cutover/millstrand-preflight.sh --plan --inventory <inventory> \
+    [--runtime-commit <40hex>] [--output <plan.json>]
 
 --validate-inventory checks only the typed inventory and preparation index.
-The default run is a read-only live-source preflight. --dry-run runs the same
-contract against disposable SQLite state and injected failures. `--stdin` and
+The default run is a read-only live-source preflight. --plan captures the same
+live evidence and emits an operator command plan, still without lifecycle
+authority. --dry-run runs the same contract against disposable SQLite state and injected failures. `--stdin` and
 `--payload name=path` provide the standard whole-value payload references.
 MSR-14 never stops a weaver, copies a live database, or creates a live target
 marker.
@@ -47,6 +50,7 @@ import os
 import pathlib
 import re
 import shutil
+import shlex
 import sqlite3
 import subprocess
 import stat
@@ -60,6 +64,7 @@ workspace_root_arg = parsed_args.get("workspace-root")
 validate_only = "validate-inventory" in parsed_args
 dry_run = bool(parsed_args.get("dry-run"))
 runtime_commit = parsed_args.get("runtime-commit") or None
+plan_mode = bool(parsed_args.get("plan"))
 
 def resolve_input(value):
     path = pathlib.Path(value)
@@ -67,7 +72,9 @@ def resolve_input(value):
 
 inventory_path = resolve_input(inventory_arg)
 workspace_root = resolve_input(workspace_root_arg) if workspace_root_arg else None
-output_path = repo_root / "target/millstrand-cutover/preflight-verification.json"
+output_path = resolve_input(parsed_args.get("output") or
+                            ("target/millstrand-cutover/live-cutover-plan.json" if plan_mode
+                             else "target/millstrand-cutover/preflight-verification.json"))
 
 class ContractError(Exception):
     pass
@@ -156,6 +163,12 @@ require(isinstance(authority, dict) and authority.get("reference") == "Epic ke3r
         authority.get("routine_approval_required") is False and
         authority.get("unexpected_wake") == "abort",
         "standing cutover authority is incomplete")
+live_plan = inventory.get("live_plan")
+require(isinstance(live_plan, dict) and live_plan.get("schema") == "millstrand/live-cutover-plan-v1" and
+        live_plan.get("executor") == "coordinator" and
+        live_plan.get("worker_lifecycle_authority") is False and
+        live_plan.get("output_is_disposable") is True,
+        "live operator plan contract is incomplete")
 
 core = inventory["core_dependency"]
 require(set(core) >= {"card", "coordinate", "repository", "ref_kind", "sha", "sha_only", "v1_policy"},
@@ -244,6 +257,44 @@ def sqlite_counts(database):
     except sqlite3.Error as exc:
         fail(f"SQLite probe failed for {database}: {exc}")
 
+def sqlite_evidence(database):
+    """Return immutable before-cutover SQLite, hash, spend, and run evidence."""
+    database = pathlib.Path(database)
+    counts = sqlite_counts(database)
+    try:
+        connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True)
+        tables = {row[0] for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )}
+        if "agent_runs" in tables:
+            representative_runs = [
+                {"run_id": row[0], "status": row[1], "cost_usd": row[2], "tokens": row[3]}
+                for row in connection.execute(
+                    "SELECT run_id, status, cost_usd, tokens FROM agent_runs ORDER BY run_id LIMIT 10"
+                )
+            ]
+        else:
+            representative_runs = [
+                {"strand_id": row[0], "run_id": row[1], "state": row[2],
+                 "status": row[3], "cost_usd": row[4], "tokens": row[5]}
+                for row in connection.execute(
+                    """SELECT s.id,
+                       (SELECT value FROM attributes WHERE strand_id = s.id AND key = 'agent-run/run' AND archived = 0),
+                       s.state,
+                       (SELECT value FROM attributes WHERE strand_id = s.id AND key = 'agent-run/completion' AND archived = 0),
+                       (SELECT value FROM attributes WHERE strand_id = s.id AND key = 'agent-run/cost-usd' AND archived = 0),
+                       (SELECT value FROM attributes WHERE strand_id = s.id AND key = 'agent-run/tokens' AND archived = 0)
+                       FROM strands s
+                       WHERE EXISTS (SELECT 1 FROM attributes WHERE strand_id = s.id AND key = 'agent-run/run' AND archived = 0)
+                       ORDER BY s.id LIMIT 10"""
+                )
+            ]
+        connection.close()
+    except sqlite3.Error as exc:
+        fail(f"representative agent-run probe failed for {database}: {exc}")
+    return {"sqlite": counts, "bytes": database.stat().st_size,
+            "sha256": sha256(database), "representative_agent_runs": representative_runs}
+
 def source_snapshot(marker, database):
     marker = pathlib.Path(marker)
     database = pathlib.Path(database)
@@ -294,8 +345,12 @@ def check_consumer_shape(consumer):
     source = consumer["source"]
     target = consumer["target"]
     require(isinstance(source["pid"], int) and source["pid"] > 0, f"{consumer['card']} source PID is invalid")
+    require(re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z", source.get("started_at", "")) is not None,
+            f"{consumer['card']} source started_at is invalid")
     require(re.fullmatch(r"pid=[0-9]+:start=.+", source.get("start_identity", "")) is not None,
             f"{consumer['card']} source start identity is invalid")
+    require(source["start_identity"] == f"pid={source['pid']}:start={source['started_at']}",
+            f"{consumer['card']} source start identity does not match started_at")
     require(source["marker"] in ("/Users/ct/dev/projects/skein-src/.skein",
                                   "/Users/ct/dev/projects/agent-harness.spool/.skein"),
             f"{consumer['card']} source marker is not canonical")
@@ -347,6 +402,61 @@ def fixture_wake_contract(fixture_root, fixture):
             "fixture expected wake artifact hash does not match manifest")
     return expected_wake, expected_sha
 
+def operator_plan(consumer, status, before):
+    """Return resolved coordinator commands without executing any lifecycle action."""
+    source = consumer["source"]
+    target = consumer["target"]
+    runtime_root = pathlib.Path(runtime["checkout"])
+    state = "XDG_STATE_HOME=/Users/ct/.local/state"
+    q = shlex.quote
+    source_marker = q(source["marker"])
+    target_marker = q(target["marker"])
+    target_parent = q(target["parent"])
+    source_db = q(source["database"])
+    backup_db = q(consumer["backup"])
+    target_db = q(target["database"])
+    mill_cwd = q(str(runtime_root))
+    mill = "./bin/mill"
+    init = f"cd {mill_cwd} && {state} {mill} init --workspace {target_marker}"
+    copy_config = (
+        f"cp -- {source_marker}/config.json {target_marker}/config.json && "
+        f"cp -- {source_marker}/init.clj {target_marker}/init.clj && "
+        f"cp -R -- {source_marker}/config {target_marker}/config"
+    )
+    if consumer["card"] == "MSR-14C":
+        copy_config += f" && cp -- {q(str(repo_root / 'docs/operations/millstrand-cutover-agent-harness.spools.edn'))} {target_marker}/spools.edn"
+    else:
+        copy_config += f" && cp -- {source_marker}/spools.edn {target_marker}/spools.edn"
+    start = f"cd {mill_cwd} && {state} {mill} weaver start --workspace {target_marker}"
+    if consumer["card"] == "MSR-14A":
+        install = f"install -d -m 0755 -- {target_parent} && cp -- {backup_db} {target_db}"
+        rollback = f"rm -f -- {target_db} && sqlite3 {source_db} \".restore '{consumer['backup']}'\""
+    else:
+        install = f"install -d -m 0755 -- {target_parent}"
+        rollback = f"rm -rf -- {target_marker} {target_parent}"
+    return {
+        "card": consumer["card"],
+        "source_identity": {"pid": source["pid"], "started_at": source["started_at"],
+                             "weaver_id": source["weaver_id"]},
+        "before": before,
+        "commands": {
+            "stop": f"kill -TERM -- {source['pid']}",
+            "backup": f"sqlite3 {source_db} \".backup '{consumer['backup']}'\"",
+            "install": install,
+            "marker_init": init,
+            "config_install": copy_config,
+            "start": start,
+            "rollback": rollback,
+        },
+        "target": {"marker": target["marker"], "database": target["database"],
+                   "parent": target["parent"], "marker_name": ".millstrand",
+                   "init_semantics": "explicit --workspace creates .millstrand; never .ms or .skein",
+                   "data_strategy": consumer["data_strategy"]},
+        "release_pins": inventory.get("agent_harness_release_pins", []) if consumer["card"] == "MSR-14C" else [],
+        "lifecycle_authority": "coordinator-only; recorder did not stop, copy, create, or start",
+        "status": status,
+    }
+
 consumers = inventory["consumers"]
 require({item["card"] for item in consumers} == {"MSR-14A", "MSR-14C"}, "core and Agent Harness preparations are incomplete")
 for consumer in consumers:
@@ -357,6 +467,7 @@ fixture = read_json(fixture_root / "fixtures.json") if fixture_root else None
 fixture_source = None
 fixture_source_counts = None
 live_snapshots = []
+live_plans = []
 
 if fixture:
     require(fixture.get("schema") == "millstrand/preflight-fixtures-v1", "fixture schema is invalid")
@@ -490,10 +601,11 @@ else:
         require(ps.returncode == 0 and ps.stdout.strip(), f"{consumer['card']} source PID is not running: {source['pid']}")
         require(ps.stdout.split()[0] == str(source["pid"]), f"{consumer['card']} source PID resolution changed")
         require("Z" not in ps.stdout.split()[1], f"{consumer['card']} source PID is zombie")
-        counts = sqlite_counts(database)
+        before_evidence = sqlite_evidence(database)
+        counts = before_evidence["sqlite"]
         for key in ("strands", "attributes", "spend_rows"):
             require(counts[key] > 0, f"{consumer['card']} source lacks non-empty {key} evidence")
-        status_bin = os.environ.get("MILL_BIN") or shutil.which("mill") or "/Users/ct/go/bin/mill"
+        status_bin = os.environ.get("MILL_BIN") or str(pathlib.Path(runtime["checkout"]) / "bin/mill")
         require(os.path.isfile(status_bin) and os.access(status_bin, os.X_OK),
                 f"{consumer['card']} status command is unavailable: {status_bin}")
         status = run([status_bin, "weaver", "status", "--workspace", source["marker"]],
@@ -507,12 +619,15 @@ else:
         require(status_json.get("config_dir") == source["marker"], f"{consumer['card']} status marker differs from inventory")
         require(status_json.get("database_path") == source["database"], f"{consumer['card']} status database differs from inventory")
         require(status_json.get("weaver_id") == source["weaver_id"], f"{consumer['card']} status weaver differs from inventory")
+        require(status_json.get("started_at") == source["started_at"],
+                f"{consumer['card']} status started_at differs from inventory: expected={source['started_at']} observed={status_json.get('started_at')}")
         target = consumer["target"]
         require(not pathlib.Path(target["marker"]).exists(), f"{consumer['card']} target marker already exists")
         require(not pathlib.Path(target["database"]).exists(), f"{consumer['card']} target database already exists")
         require(not pathlib.Path(target["parent"]).exists(), f"{consumer['card']} target parent already exists")
         check_wake_contract(consumer) if consumer["card"] == "MSR-14A" else None
         live_snapshots.append((consumer["card"], marker, database, snapshot))
+        live_plans.append(operator_plan(consumer, status_json, before_evidence))
     for card, marker, database, snapshot in live_snapshots:
         after = source_snapshot(marker, database)
         require(after == snapshot, f"{card} live source changed during dry run")
@@ -527,22 +642,31 @@ output = {
     "inventory": "docs/operations/millstrand-cutover.inventory.json",
     "inventory_sha256": sha256(inventory_path),
     "preparation_index": {"path": str(preparation_artifact), "sha256": typed_index_hash},
-    "mode": "dry-run" if dry_run else "live-read-only",
+    "mode": "dry-run" if dry_run else ("live-read-only-plan" if plan_mode else "live-read-only"),
     "checks": [
         "typed-consumer-preparations", "consumer-preparation-index", "excluded-deferred-no-lifecycle", "core-sha-only-no-v1",
         "immutable-agent-v26-kanban-v24-devflow-v21", "runtime-placeholder-and-msr-15-invariant",
         "runtime-policy-midpoint-ancestry", "exact-source-pid-marker-database", "canonical-target-hash-path",
         "target-absence", "source-integrity-history-spend", "backup-and-wake-contract",
-        "live-source-unchanged", "disposable-copy-fixtures", "fresh-world-strategy"
+        "live-source-unchanged", "status-started-at-identity", "disposable-copy-fixtures", "fresh-world-strategy"
     ],
     "cases": cases,
     "live_lifecycle": "forbidden",
 }
+if plan_mode:
+    output["schema"] = "millstrand/live-cutover-plan-v1"
+    output["operator"] = {
+        "executor": "coordinator",
+        "worker_lifecycle_authority": False,
+        "commands_are_emitted_only": True,
+        "evidence_artifact": "millstrand/cutover-evidence-v1",
+        "plans": live_plans,
+    }
 output_path.parent.mkdir(parents=True, exist_ok=True)
 with open(output_path, "w", encoding="utf-8") as stream:
     json.dump(output, stream, indent=2, sort_keys=True)
     stream.write("\n")
 print("Millstrand cutover preflight: PASS")
 print(f"mode: {output['mode']}")
-print(f"artifact: target/millstrand-cutover/preflight-verification.json")
+print(f"artifact: {output_path}")
 PY

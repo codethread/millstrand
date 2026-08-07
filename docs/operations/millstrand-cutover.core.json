@@ -53,6 +53,8 @@
     "database": "/Users/ct/.local/state/\u0073kein/weavers/068e8753b69bb0125cbf220b1733cf11/data/\u0073kein.sqlite",
     "weaver-id": "8f751c75-deb1-48f8-be62-99065f85d276",
     "observed-pid": 58024,
+    "started-at": "2026-08-04T07:58:10.347771Z",
+    "start-identity": "pid=58024:start=2026-08-04T07:58:10.347771Z",
     "backup": "/Users/ct/.local/state/\u0073kein/weavers/068e8753b69bb0125cbf220b1733cf11/data/\u0073kein.sqlite.millstrand-cutover-backup"
   },
   "prepared-checkout": {

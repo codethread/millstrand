@@ -119,7 +119,8 @@
       "repository": "/Users/ct/dev/projects/millstrand",
       "source": {
         "pid": 58024,
-        "start_identity": "pid=58024:start=2026-08-07T07:00:00Z",
+        "started_at": "2026-08-04T07:58:10.347771Z",
+        "start_identity": "pid=58024:start=2026-08-04T07:58:10.347771Z",
         "marker": "/Users/ct/dev/projects/skein-src/.skein",
         "database": "/Users/ct/.local/state/skein/weavers/068e8753b69bb0125cbf220b1733cf11/data/skein.sqlite",
         "weaver_id": "8f751c75-deb1-48f8-be62-99065f85d276"
@@ -155,7 +156,8 @@
       "repository": "/Users/ct/dev/projects/agent-harness.spool",
       "source": {
         "pid": 73514,
-        "start_identity": "pid=73514:start=2026-08-07T07:01:00Z",
+        "started_at": "2026-08-05T08:34:50.571905Z",
+        "start_identity": "pid=73514:start=2026-08-05T08:34:50.571905Z",
         "marker": "/Users/ct/dev/projects/agent-harness.spool/.skein",
         "database": "/Users/ct/.local/state/skein/weavers/0245892212ec336f39b2496a53ed3269/data/skein.sqlite",
         "weaver_id": "027ba5d8-9cbf-413f-b5eb-7a1d84a89ecf"
@@ -167,6 +169,7 @@
         "database": "/Users/ct/.local/state/millstrand/weavers/92ad6dd941f0840553fd7f0fdef15752/data/millstrand.sqlite",
         "parent": "/Users/ct/.local/state/millstrand/weavers/92ad6dd941f0840553fd7f0fdef15752/data"
       },
+      "backup": "/Users/ct/.local/state/skein/weavers/0245892212ec336f39b2496a53ed3269/data/skein.sqlite.millstrand-cutover-backup",
       "release_inputs": ["MSR-06:v26", "MSR-05:v24", "MSR-04:sha:5790c459e9bb692b5e975f9715df7d5b403feff2"],
       "artifacts": [
         "/Users/ct/dev/projects/agent-harness.spool/docs/operations/millstrand-cutover-preparation.json",
@@ -212,7 +215,7 @@
     }
   ],
   "cutover_policy": {
-    "source_status": "exact recorded PID, marker, database, and weaver identity must resolve",
+    "source_status": "exact recorded PID, started_at, marker, database, and weaver identity must resolve from mill weaver status",
     "target": "canonical marker-neutral world hash and database path; marker and database must be absent",
     "source_integrity": "SQLite integrity, non-empty history, and agent-run spend evidence",
     "backup": "stopped-world backup before whole-copy; target parent mode 0755",
@@ -236,5 +239,17 @@
     "schema": "millstrand/cutover-evidence-v1",
     "deterministic": true,
     "live_lifecycle": "forbidden"
-  }
+  },
+  "live_plan": {
+    "command": "scripts/cutover/millstrand-preflight.sh --plan --inventory docs/operations/millstrand-cutover.inventory.json --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add --output target/millstrand-cutover/live-cutover-plan.json",
+    "schema": "millstrand/live-cutover-plan-v1",
+    "executor": "coordinator",
+    "worker_lifecycle_authority": false,
+    "output_is_disposable": true
+  },
+  "agent_harness_release_pins": [
+    {"card": "MSR-06", "coordinate": "ct.spools/agent-run", "tag": "v26", "sha": "82f8df466e6caea74a93d994604d94ab6bf78b72"},
+    {"card": "MSR-05", "coordinate": "codethread/kanban", "tag": "v24", "sha": "87f61bc2750e7026f3650235907db25f19b1536e"},
+    {"card": "MSR-04", "coordinate": "io.millstrand/millstrand", "ref_kind": "sha", "sha": "5790c459e9bb692b5e975f9715df7d5b403feff2"}
+  ]
 }

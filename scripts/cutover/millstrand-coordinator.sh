@@ -197,12 +197,26 @@ def validate_inventory(inventory, runtime_commit):
                 f"{consumer.get('card')} permits live lifecycle")
         require(isinstance(source.get("pid"), int) and source["pid"] > 0,
                 f"{consumer.get('card')} source PID is invalid")
+        require(re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z", source.get("started_at", "")) is not None,
+                f"{consumer.get('card')} source started_at is invalid")
         require(re.fullmatch(r"pid=[0-9]+:start=.+", source.get("start_identity", "")) is not None,
                 f"{consumer.get('card')} source start identity is invalid")
+        require(source["start_identity"] == f"pid={source['pid']}:start={source['started_at']}",
+                f"{consumer.get('card')} source start identity does not match started_at")
+        require(isinstance(source.get("weaver_id"), str) and source["weaver_id"],
+                f"{consumer.get('card')} source weaver id is invalid")
         require(source.get("marker") != target.get("marker") and source.get("database") != target.get("database"),
                 f"{consumer.get('card')} source and target are not distinct")
-        require(target.get("marker") and target.get("database") and target.get("parent"),
-                f"{consumer.get('card')} target paths are incomplete")
+    require(target.get("marker") and target.get("database") and target.get("parent"),
+            f"{consumer.get('card')} target paths are incomplete")
+    if consumer.get("card") == "MSR-14C":
+        pins = {(pin.get("card"), pin.get("tag"), pin.get("sha"), pin.get("ref_kind"))
+                for pin in inventory.get("agent_harness_release_pins", [])}
+        require(pins == {
+            ("MSR-06", "v26", "82f8df466e6caea74a93d994604d94ab6bf78b72", None),
+            ("MSR-05", "v24", "87f61bc2750e7026f3650235907db25f19b1536e", None),
+            ("MSR-04", None, "5790c459e9bb692b5e975f9715df7d5b403feff2", "sha")},
+            "Agent Harness release pins are not exact")
     authority = inventory.get("standing_authority", {})
     require(authority == {"reference": "Epic ke3rd", "routine_approval_required": False,
                           "unexpected_wake": "abort"}, "standing authority is incomplete")
@@ -214,16 +228,22 @@ def identity_evidence(consumer, fixture_identity, case_name, start_time):
     observed_pid = fixture_identity["pid"] + (1 if case_name == "pid-mismatch" else 0)
     require(observed_pid == expected_pid,
             f"source-pid-mismatch: expected={expected_pid}, observed={observed_pid}")
-    expected_start = consumer["source"]["start_identity"]
-    require(expected_start == f"pid={expected_pid}:start={start_time}",
-            "source-start-identity-mismatch: inventory start identity is malformed")
+    expected_start = fixture_identity["start_identity"]
+    require(expected_start == f"pid={expected_pid}:start={fixture_identity['started_at']}",
+            "source-start-identity-mismatch: fixture start identity is malformed")
     observed_start = fixture_identity["start_identity"]
     if case_name == "start-identity-mismatch":
         observed_start += ":changed"
     require(observed_start == expected_start,
             "source-start-identity-mismatch: recorded start identity differs")
+    observed_weaver_id = fixture_identity["weaver_id"]
+    if case_name == "weaver-id-mismatch":
+        observed_weaver_id += "-changed"
+    require(observed_weaver_id == fixture_identity["weaver_id"],
+            "source-weaver-id-mismatch: recorded weaver id differs")
     return {"pid": expected_pid, "start_identity": expected_start,
-            "weaver_id": fixture_identity["weaver_id"], "status": "stopped-simulated",
+            "started_at": fixture_identity["started_at"],
+            "weaver_id": observed_weaver_id, "status": "stopped-simulated",
             "stop_command": f"kill -TERM -- {expected_pid}", "exact_pid": True,
             "broad_kill": False}
 

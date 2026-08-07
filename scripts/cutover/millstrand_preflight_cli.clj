@@ -18,6 +18,8 @@
            :fragment {:type :string}
            :workspace-root {:type :string}
            :runtime-commit {:type :string}
+           :plan {:type :boolean}
+           :output {:type :string}
            :dry-run {:type :boolean}
            :stdin {:type :boolean}
            :payload {:type :map}}
@@ -27,7 +29,7 @@
 
 (def ^:private value-flags
   #{"--validate-inventory" "--inventory" "--workspace-root"
-    "--runtime-commit" "--fragment" "--payload"})
+    "--runtime-commit" "--fragment" "--plan" "--output" "--payload"})
 
 (defn- non-blank-string?
   "Return true when `value` is a non-blank path or payload reference."
@@ -40,6 +42,8 @@
 (s/def ::fragment ::path)
 (s/def ::workspace-root ::path)
 (s/def ::runtime-commit string?)
+(s/def ::plan #(true? %))
+(s/def ::output ::path)
 (s/def ::dry-run #(true? %))
 (s/def ::stdin boolean?)
 (s/def ::payload map?)
@@ -71,13 +75,20 @@
 (s/def ::live-mode
   (s/and
    (s/keys :req-un [::inventory]
-           :opt-un [::runtime-commit ::stdin ::payload])
+           :opt-un [::runtime-commit ::plan ::output ::stdin ::payload])
+   #(excludes-keys? #{:validate-inventory :fragment :workspace-root :dry-run} %)))
+
+(s/def ::plan-mode
+  (s/and
+   (s/keys :req-un [::plan ::inventory]
+           :opt-un [::runtime-commit ::output ::stdin ::payload])
    #(excludes-keys? #{:validate-inventory :fragment :workspace-root :dry-run} %)))
 
 (s/def ::preflight-arguments
   (s/or :validate-inventory ::validate-mode
         :dry-run ::dry-run-mode
         :fragment ::fragment-mode
+        :plan ::plan-mode
         :live ::live-mode))
 
 (defn- fail!

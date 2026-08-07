@@ -6,12 +6,14 @@
   "allowlisted_wakes": ["expected-wake"],
   "source_identity": {
     "pid": 58024,
-    "start_identity": "pid=58024:start=2026-08-07T07:00:00Z",
+    "started_at": "2026-08-07T07:00:00.000000Z",
+    "start_identity": "pid=58024:start=2026-08-07T07:00:00.000000Z",
     "weaver_id": "fixture-core-weaver"
   },
   "agent_harness_identity": {
     "pid": 73514,
-    "start_identity": "pid=73514:start=2026-08-07T07:01:00Z",
+    "started_at": "2026-08-07T07:01:00.000000Z",
+    "start_identity": "pid=73514:start=2026-08-07T07:01:00.000000Z",
     "weaver_id": "fixture-agent-harness-weaver"
   },
   "agent_harness_fresh_world": {
@@ -22,6 +24,7 @@
     {"name": "success", "result": "pass", "failure": null},
     {"name": "pid-mismatch", "result": "fail", "reason": "source-pid-mismatch"},
     {"name": "start-identity-mismatch", "result": "fail", "reason": "source-start-identity-mismatch"},
+    {"name": "weaver-id-mismatch", "result": "fail", "reason": "source-weaver-id-mismatch"},
     {"name": "target-collision", "result": "fail", "reason": "target-collision"},
     {"name": "unexpected-wake", "result": "fail", "reason": "unexpected-wake"},
     {"name": "hash-mismatch", "result": "fail", "reason": "hash-mismatch"},
