@@ -11,10 +11,28 @@ cp "$repo_root/scripts/quality/millstrand-active-identity.sh" \
 cp "$repo_root/scripts/quality/millstrand-identity-allowlist.tsv" \
   "$tmp_root/scripts/quality/millstrand-identity-allowlist.tsv"
 
-# The audit falls back to git grep when ripgrep is unavailable (as on the
-# hosted Ubuntu runner), so keep the extracted fixture a usable git tree.
+# The audit falls back to git grep when ripgrep is unavailable, so keep the
+# extracted fixture a usable git tree.
 git -C "$tmp_root" init -q
 git -C "$tmp_root" add --all
+
+# Give the checker every command it needs through a controlled PATH, while
+# deliberately leaving rg out. This exercises the fallback even on hosts
+# where ripgrep is installed, without depending on a particular system PATH.
+tool_dir="$tmp_root/no-rg-bin"
+mkdir "$tool_dir"
+for command_name in dirname git grep mktemp pwd rm; do
+  command_path=$(command -v "$command_name") || {
+    echo "millstrand identity regression: required command is unavailable: $command_name" >&2
+    exit 1
+  }
+  ln -s "$command_path" "$tool_dir/$command_name"
+done
+bash_path=$(command -v bash)
+if PATH="$tool_dir" command -v rg >/dev/null 2>&1; then
+  echo "millstrand identity regression: controlled PATH unexpectedly exposes rg" >&2
+  exit 1
+fi
 
 manifest="$tmp_root/docs/operations/millstrand-midpoint-evidence.json"
 unrelated_token=$(printf 's%s' kein)
@@ -22,7 +40,8 @@ jq --arg path "docs/$unrelated_token.md" '.proposal.path = $path' "$manifest" >"
 mv "$manifest.tmp" "$manifest"
 
 output="$tmp_root/identity-audit.out"
-if "$tmp_root/scripts/quality/millstrand-active-identity.sh" >"$output" 2>&1; then
+if PATH="$tool_dir" "$bash_path" \
+    "$tmp_root/scripts/quality/millstrand-active-identity.sh" >"$output" 2>&1; then
   cat "$output" >&2
   echo "millstrand identity regression: unrelated midpoint value was accepted" >&2
   exit 1
