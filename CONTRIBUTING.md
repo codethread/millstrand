@@ -1,6 +1,6 @@
-# Contributing to Skein
+# Contributing to Millstrand
 
-Skein is alpha software; the tenets in [`devflow/TENETS.md`](./devflow/TENETS.md) and [`devflow/PHILOSOPHY.md`](./devflow/PHILOSOPHY.md) govern every change. [`devflow/UBIQUITOUS-LANGUAGE.md`](./devflow/UBIQUITOUS-LANGUAGE.md) defines the vocabulary those documents and the rest of the repo use without re-explaining.
+Millstrand is alpha software; the tenets in [`devflow/TENETS.md`](./devflow/TENETS.md) and [`devflow/PHILOSOPHY.md`](./devflow/PHILOSOPHY.md) govern every change. [`devflow/UBIQUITOUS-LANGUAGE.md`](./devflow/UBIQUITOUS-LANGUAGE.md) defines the vocabulary those documents and the rest of the repo use without re-explaining.
 
 This repo is agent-first: most changes are planned, built, reviewed, and landed by coding agents coordinating through the repo's own `.skein` world. The main contributor skill is steering those agents well. [`AGENTS.md`](./AGENTS.md) is the contract the agents follow; this file is the human side.
 
@@ -31,7 +31,7 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
 - Human decisions come back as HITL checkpoints, which agents may not answer for you. Bind how you are notified in a gitignored `.skein/init.local.clj`:
 
   ```clojure
-  (require '[skein.spools.chime :as chime])
+  (require '[millstrand.spools.chime :as chime])
   (chime/set-notifier! {:argv ["cc-notify"]})   ; anything with the `cmd <title>` + body-on-stdin shape
   ```
 
@@ -40,11 +40,11 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
 
 ## Discovery: help, about, prime
 
-Skein has one convention for "how do I find out?", in three escalating tiers (canonical write-up: [`docs/reference.md`](./docs/reference.md) "Discovery tiers"):
+Millstrand has one convention for "how do I find out?", in three escalating tiers (canonical write-up: [`docs/reference.md`](./docs/reference.md) "Discovery tiers"):
 
 - **`help`** — generated from arg-spec data, never hand-written: `strand help [<op>]`.
 - **`about`** — the authored per-op manual, such as `strand agent about` and `strand kanban about`.
-- **`prime`** — run-first orientation: `mill skein prime`, `mill strand prime`, `strand kanban prime`.
+- **`prime`** — run-first orientation: `mill millstrand prime`, `mill strand prime`, `strand kanban prime`.
 
 ## Working by hand
 
