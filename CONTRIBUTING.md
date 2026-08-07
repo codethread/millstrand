@@ -6,19 +6,35 @@ This repo is agent-first: most changes are planned, built, reviewed, and landed 
 
 ## Setup
 
+Provision the selected application workspace before starting the supervisor. Run this in a terminal from the repository root:
+
 ```sh
 make install        # build strand + mill from this checkout and install them on PATH
-mill start          # supervisor; leave it running in a terminal
 workspace="$PWD/.millstrand"  # use "$PWD/.ms" when that marker already exists
 if [ -d "$PWD/.ms" ]; then workspace="$PWD/.ms"; fi
 mkdir -p "$workspace"
 cp -R .skein/. "$workspace"/
-mill weaver start --workspace "$workspace"
 ```
 
 `make install` records this checkout as mill's install-time source for weaver launches. Re-run it after pulling main. Agents never run it; that one is yours.
 
-The selected application workspace is the repo-local `.millstrand` directory, or `.ms` when that marker already exists. The copy provisions it with this checkout's checked-in coordination source and config before the weaver starts. Pass `--workspace "$workspace"` on every `mill` or `strand` command that should use it; `.skein` itself is not the application workspace.
+The selected application workspace is the repo-local `.millstrand` directory, or `.ms` when that marker already exists. The copy provisions it with this checkout's checked-in coordination source and config before the weaver starts. `.skein` itself is not the application workspace.
+
+Open a second terminal from the repository root and start the supervisor. Leave this foreground process running:
+
+```sh
+mill start
+```
+
+Open a third terminal from the repository root. Shell variables are local to one terminal, so set `workspace` again before running workspace-aware commands:
+
+```sh
+workspace="$PWD/.millstrand"
+if [ -d "$PWD/.ms" ]; then workspace="$PWD/.ms"; fi
+mill weaver start --workspace "$workspace"
+```
+
+Pass `--workspace "$workspace"` on every other `mill` or `strand` command in that terminal that should use the selected workspace.
 
 ## How work flows
 
@@ -34,7 +50,7 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
 ## Steering agents
 
 - State the outcome you want and let the coordinator drive. The conventions (card claiming, devflow, delegation, review) live in AGENTS.md and the workflow briefs, so you should not need to restate them. By default the session still stops at every human checkpoint; the `bonkai` skill (`.agents/skills/bonkai`) is the opt-in authority grant that lets it decide checkpoints and sign off on your behalf for AFK runs.
-- Human decisions come back as HITL checkpoints, which agents may not answer for you. Bind how you are notified in the gitignored overlay for this repo's checked-in coordination workspace, `.skein/init.local.clj`:
+- Human decisions come back as HITL checkpoints, which agents may not answer for you. After the one-time copy above, bind how you are notified in the active workspace's gitignored overlay, `$workspace/init.local.clj`:
 
   ```clojure
   (require '[millstrand.spools.chime :as chime])
