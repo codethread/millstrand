@@ -11,7 +11,7 @@ Tests and embedded runtimes start with `:publish? false` and pass the runtime ex
 
 ## Workspaces
 
-Ordinary cold/warm suite runs do not take `--workspace`. Use disposable `--workspace` worlds from `mktemp -d` (guard with `${ws:?}`) for weaver-world fixtures, smoke config, and other workspace-backed experiments — never the shared `.skein` coordination world. Fixture tiers: `docs/spools/testing.md`.
+Ordinary cold/warm suite runs do not take `--workspace`. Use disposable `--workspace` worlds from `mktemp -d` (guard with `${ws:?}`) for weaver-world fixtures, smoke config, and other workspace-backed experiments — never the shared `.millstrand` coordination world. Fixture tiers: `docs/spools/testing.md`.
 
 ## When / what
 
@@ -19,11 +19,11 @@ Ordinary cold/warm suite runs do not take `--workspace`. Use disposable `--works
 | --- | --- |
 | Iterate a slice | `make test-warm NS="…"` — never Done-when |
 | Slice Done-when | `clojure -M:test <ns…>` |
-| Queue acceptance | `flock -w 3600 /tmp/skein-test.lock clojure -M:test`; `make test-go`; `clojure -M:smoke`; `make spool-suite-gate`; `make fmt-check lint reflect-check docs-check` |
+| Queue acceptance | `flock -w 3600 /tmp/millstrand-test.lock clojure -M:test`; `make test-go`; `clojure -M:smoke`; `make spool-suite-gate`; `make fmt-check lint reflect-check docs-check` |
 
 Notes:
 
-- `SKEIN_TEST_AWAIT_SCALE` multiplies await budgets on slow hosts (CI sets 3).
+- `MILLSTRAND_TEST_AWAIT_SCALE` multiplies await budgets on slow hosts (CI sets 3).
 - `make spool-suite-gate` — `GITLIBS=<dir>` overrides the gitlibs cache.
 - After spool or `millstrand.api.*.alpha` docstring changes: `make api-docs`.
 - After validation, `git status --short` must not show generated SQLite or runtime metadata artifacts.

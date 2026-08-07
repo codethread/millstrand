@@ -103,8 +103,8 @@
     (:spools data)))
 
 (defn validate-current!
-  "Validate the checked-in transition contract against `.skein/spools.edn`."
-  ([] (validate-current! ".skein/spools.edn"))
+  "Validate the checked-in transition contract against `.millstrand/spools.edn`."
+  ([] (validate-current! ".millstrand/spools.edn"))
   ([spools-file]
    (let [contract (validate-contract! (contract))
          approved (approved-pins spools-file)]

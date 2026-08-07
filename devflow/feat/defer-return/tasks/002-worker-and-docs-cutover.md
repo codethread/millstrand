@@ -7,7 +7,7 @@
 
 Type: AFK
 
-Cut the generic worker, discovery, repository guidance, tests, and human docs over to the engine from Task 1. Own `spools/workflow/src/skein/spools/workflow/{cli,internal/discovery}.clj`, the workflow module contribution in `workflow.clj`, workflow CLI tests, `.skein` worker prose, `README.md`, `spools/workflow*.md` including regenerated `spools/workflow.api.md`, `docs/spools/writing-shared-spools.md`, and `devflow/UBIQUITOUS-LANGUAGE.md`.
+Cut the generic worker, discovery, repository guidance, tests, and human docs over to the engine from Task 1. Own `spools/workflow/src/skein/spools/workflow/{cli,internal/discovery}.clj`, the workflow module contribution in `workflow.clj`, workflow CLI tests, `.millstrand` worker prose, `README.md`, `spools/workflow*.md` including regenerated `spools/workflow.api.md`, `docs/spools/writing-shared-spools.md`, and `devflow/UBIQUITOUS-LANGUAGE.md`.
 
 ## TASK-Dfr-002.P2 Must implement exactly
 

@@ -17,7 +17,7 @@ Extract the feature CI watch and PR merge shell programs into executable repo co
 
 ## PLAN-Wgs-001.P2 Approach
 
-- **PLAN-Wgs-001.A1:** Resolve `.skein/scripts` once when `.skein/workflows.clj` loads, then slurp each program into an immutable string used by the existing gate definitions.
+- **PLAN-Wgs-001.A1:** Resolve `.millstrand/scripts` once when `.millstrand/workflows.clj` loads, then slurp each program into an immutable string used by the existing gate definitions.
 - **PLAN-Wgs-001.A2:** Keep positional parameters as separate `shell/argv` elements. A small helper will assemble the repeated `sh -c` prefix without interpolating values into script text.
 - **PLAN-Wgs-001.A3:** Execute both extracted programs against deterministic fake `gh` commands in `skein.config-test`, alongside the existing gate-shape coverage.
 
@@ -25,8 +25,8 @@ Extract the feature CI watch and PR merge shell programs into executable repo co
 
 | ID | Area | Expected change |
 | --- | --- | --- |
-| PLAN-Wgs-001.AA1 | `.skein/workflows.clj` | Load the script files and use them at the existing gate sites. |
-| PLAN-Wgs-001.AA2 | `.skein/scripts/` | Hold the standalone feature CI watch and PR merge programs. |
+| PLAN-Wgs-001.AA1 | `.millstrand/workflows.clj` | Load the script files and use them at the existing gate sites. |
+| PLAN-Wgs-001.AA2 | `.millstrand/scripts/` | Hold the standalone feature CI watch and PR merge programs. |
 | PLAN-Wgs-001.AA3 | `test/skein/config_test.clj` | Execute both extracted programs with fake GitHub CLI behavior. |
 
 ## PLAN-Wgs-001.P4 Contract and migration impact

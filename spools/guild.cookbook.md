@@ -13,7 +13,7 @@ This is the **how/why** half of the guild docs. The other two are:
 
 Division of truth: signatures and the argument tables live in the contract and generated API doc; narrative and composition live here. This cookbook never restates a signature — it links to them.
 
-Guild adds no new protocol, server, or permission system: guild ops are ordinary weaver registry entries with a naming convention and a `guild list` introspection op. The agreement surface is userland — a repo publishes its API by registering ops from its checked-in `.skein/init.clj`, which is effectively a public API file. Recipes assume `(require '[millstrand.spools.guild :as guild])` in trusted config or a live weaver REPL, and a `runtime` in scope — every Guild fn takes it first.
+Guild adds no new protocol, server, or permission system: guild ops are ordinary weaver registry entries with a naming convention and a `guild list` introspection op. The agreement surface is userland — a repo publishes its API by registering ops from its checked-in `.millstrand/init.clj`, which is effectively a public API file. Recipes assume `(require '[millstrand.spools.guild :as guild])` in trusted config or a live weaver REPL, and a `runtime` in scope — every Guild fn takes it first.
 
 ## How to read a recipe
 

@@ -4,7 +4,7 @@
   Naming convention: aliases are pure model handles (`:sol-low`,
   `:terra-med`, `:opus`) — never role names, so a seat cannot be routed by
   connotation. Role policy lives where it is applied: reviewer rosters pick seats
-  in `.skein/agents/reviewers.clj`, workflows take seats as parameters.
+  in `.millstrand/agents/reviewers.clj`, workflows take seats as parameters.
 
   Every seat doc leads with a scorecard a coordinator can scan:
 
@@ -145,7 +145,7 @@
           "|{:complexity X :code-taste X :resilience 1 :ui-design X
            | :coordination - :cost 8}
            |gpt-5.6-luna high via codex. The repo's guide seat: the `guide` op
-           |(.skein/agents/guide.clj) runs here, where a question is answered by
+           |(.millstrand/agents/guide.clj) runs here, where a question is answered by
            |reading the live CLI surface and repo docs rather than by writing
            |code. High effort buys the extra sweeps a surface map needs over
            |:luna-low, at the same rate card; the retrieval strengths and the

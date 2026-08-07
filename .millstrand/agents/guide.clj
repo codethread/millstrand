@@ -67,7 +67,7 @@
      |spools, so the op catalog differs per repo: `strand help` is the ground
      |truth, never assume an op exists.")
    (format-alpha/reflow
-    "|Without --workspace, strand targets the canonical repo's .skein
+    "|Without --workspace, strand targets the canonical repo's .millstrand
      |workspace; `strand --workspace <dir> ...` selects another world
      |explicitly.")
    (format-alpha/reflow
@@ -106,7 +106,7 @@
    "the caller's repo      your working directory; its AGENTS.md / CLAUDE.md carry a seeded"
    "                       `## Millstrand / strand` section plus repo policy — read them for the"
    "                       conventions this workspace layers on top"
-   "workspace config       the config dir (.skein/ unless another workspace is selected) holds init.clj"
+   "workspace config       the config dir (.millstrand/ unless another workspace is selected) holds init.clj"
    "                       — its header documents which modules activate, in what order — beside the"
    "                       workflow, harness, and query definitions it loads"
    "help envelope .source  file:line into the op's implementation — read it when the prose runs out;"

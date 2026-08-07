@@ -47,7 +47,7 @@ strand ready --query ready-for-repo --param repo=skein
 Assume a world uses user attributes such as `example_category="feature"` and `parent-of` edges from feature roots to child work. Startup config can register a read-class op:
 
 ```clojure
-(ns my.skein.reads
+(ns my.millstrand.reads
   (:require [skein.api.current.alpha :as current]
             [skein.api.graph.alpha :as graph]
             [skein.api.weaver.alpha :as weaver]))
@@ -74,7 +74,7 @@ Assume a world uses user attributes such as `example_category="feature"` and `pa
                           :arg-spec {:op "active-feature-dags"
                                      :flags {:repo {:type :string
                                                     :doc "Repo whose active features to expand."}}}}
-                         'my.skein.reads/active-feature-dags)))
+                         'my.millstrand.reads/active-feature-dags)))
 ```
 
 The flagship shape remains: query ids -> graph expansion -> batch hydration -> Clojure shaping -> optional named read-op invocation.

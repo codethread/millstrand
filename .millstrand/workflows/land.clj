@@ -183,7 +183,7 @@
                                "workflow/instruction"
                                (format-alpha/reflow
                                 "|Machine gate locates the canonical checkout through the shared Git
-                                 |directory and runs the tracked executable `.skein/land-quality.sh`
+                                 |directory and runs the tracked executable `.millstrand/land-quality.sh`
                                  |there. The wrapper requires canonical main to be clean and exactly at
                                  |`origin/main`, then verifies that the contract leaves origin/main, HEAD,
                                  |and the tree unchanged. It records combined command output on the gate.
@@ -298,7 +298,7 @@
                                (fn [_]
                                  (format-alpha/reflow
                                   "|Machine gate runs the target repository's tracked executable
-                                   |`.skein/land-quality.sh` from the feature worktree. The wrapper
+                                   |`.millstrand/land-quality.sh` from the feature worktree. The wrapper
                                    |fails closed unless the named branch is checked out, the tree is
                                    |clean, the contract is tracked and executable, and local HEAD
                                    |matches its upstream. It also verifies that the contract leaves

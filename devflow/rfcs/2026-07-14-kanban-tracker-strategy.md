@@ -107,7 +107,7 @@ The `:devflow` card-view key is renamed to `:tracker` in the same change. This i
 a breaking rename, and that is acceptable: kanban is consumed by sha pin, so a
 consumer takes the new key, the new flag, and its own binding in one pin bump.
 
-## RFC-022.D2 Repo binding (this repo's `.skein`)
+## RFC-022.D2 Repo binding (this repo's `.millstrand`)
 
 `init.clj`'s kanban activation drops `codethread/devflow` from its `:spools` guard
 and drops the `:after` edge — kanban no longer needs devflow to load. The join
@@ -139,7 +139,7 @@ tells a cold agent mid-task which convention the steps follow. kanban.md's
 binding contract, with the devflow adapter kept as the worked example. This
 repo's `spools/README.md` index row for kanban drops the "requires
 `skein.spools.devflow`" note in favor of "binds devflow as its tracker via
-`.skein/kanban_tracker.clj`".
+`.millstrand/kanban_tracker.clj`".
 
 ## RFC-022.D4 Alternatives rejected
 
@@ -196,9 +196,9 @@ obey; it has to earn that (TEN-004).
 1. kanban.spool ships the seam: `set-tracker!`, `tracker-join`, `kanban/run` with
    the `kanban/devflow` read fallback, stub-tracker tests, slimmed test deps. New
    sha.
-2. This repo bumps the kanban pin (`.skein/spools.edn` + `deps.edn`, `config_test`
+2. This repo bumps the kanban pin (`.millstrand/spools.edn` + `deps.edn`, `config_test`
    pairing intact), rewires the `init.clj` guard, and adds
-   `.skein/kanban_tracker.clj` with the devflow binding.
+   `.millstrand/kanban_tracker.clj` with the devflow binding.
 3. `spools/README.md` index and the external-spool notes update to describe the
    binding instead of the requirement.
 4. Later, once no live cards carry `kanban/devflow`, the read fallback and the
@@ -243,7 +243,7 @@ Touch list, all in `src/skein/spools/kanban.clj` unless noted:
   `--run` too. New cases: stamped-but-unbound projection, malformed binding
   rejection, symbol-valued `:project` resolution.
 - `deps.edn` — the `:test` alias drops the devflow.spool git dep and the
-  `io.skein/workflow-spool` root.
+  `io.millstrand/workflow-spool` root.
 - `kanban.md` — attribute table row `:41`, claim synopsis `:102`, card-view
   contract paragraph `:115`, and the "Devflow dependency" section `:145-163`
   becomes the tracker-seam contract with the devflow binding as worked example.
@@ -253,10 +253,10 @@ the test classpath, and `kanban.md` documents the binding contract.
 
 ### this repo (step 2)
 
-- `.skein/init.clj` — the kanban module drops `codethread/devflow` from
+- `.millstrand/init.clj` — the kanban module drops `codethread/devflow` from
   its guard and the `:after` devflow edge; a new `:kanban/tracker` block
   (RFC-022.D2) loads `kanban_tracker.clj`.
-- `.skein/kanban_tracker.clj` — new module, essentially:
+- `.millstrand/kanban_tracker.clj` — new module, essentially:
 
   ```clojure
   (defn devflow-projection [runtime run-id]
@@ -273,7 +273,7 @@ the test classpath, and `kanban.md` documents the binding contract.
 
   (`devflow/feature-roots` and `next-steps` sit at devflow.clj `:537` and `:543`;
   kanban's step whitelist means the projection passes steps through untrimmed.)
-- `.skein/spools.edn:20-21` and `deps.edn` `:test` extra-deps — kanban pin bump;
+- `.millstrand/spools.edn:20-21` and `deps.edn` `:test` extra-deps — kanban pin bump;
   `config_test` enforces the sha pairing.
 - `spools/README.md` — kanban index row (`:52`) and the external-spool note
   (`:68`) describe the binding instead of the requirement.

@@ -68,7 +68,7 @@
                 :branch "Bump branch to create for the change."
                 :worktree
                 (format-alpha/reflow
-                 "|Absolute feature worktree path for the branch; its .skein
+                 "|Absolute feature worktree path for the branch; its .millstrand
                   |directory is the selected workspace the bump runs against.")
                 :direct-user-request
                 (format-alpha/reflow
@@ -93,7 +93,7 @@
                        "|From the canonical checkout, create branch `%s` in worktree
                         |`%s`. Refuse an unrelated existing branch, a dirty target, or
                         |any operation that would discard work. The new worktree's
-                        |`.skein` directory is the selected workspace for the bump."
+                        |`.millstrand` directory is the selected workspace for the bump."
                        branch worktree)))})
    (workflow/step :start-bump-world
                   "Start the feature worktree weaver"
@@ -105,7 +105,7 @@
                    (fn [{:keys [worktree]}]
                      (format-alpha/reflow
                       (format
-                       "|Run `mill weaver start --workspace %s/.skein` before invoking
+                       "|Run `mill weaver start --workspace %s/.millstrand` before invoking
                         |`strand --workspace`: every selected workspace needs its own
                         |running weaver. Record the returned PID and config directory so
                         |this workflow can stop exactly the weaver it started."
@@ -124,9 +124,9 @@
                      (let [{:keys [family version]} item]
                        (format-alpha/reflow
                         (format
-                         "|In `%s`, run `strand --workspace %s/.skein spool bump %s%s`.
+                         "|In `%s`, run `strand --workspace %s/.millstrand spool bump %s%s`.
                           |The explicit workspace is mandatory: the bump must update the
-                          |feature branch's `.skein/spools.edn`, never the canonical
+                          |feature branch's `.millstrand/spools.edn`, never the canonical
                           |coordination world. Record the old and new tag and peeled SHA."
                          worktree worktree family
                          (if (= "latest" version)
@@ -143,7 +143,7 @@
                      (format-alpha/reflow
                       (format
                        "|After every requested bump has completed, run
-                        |`mill weaver stop --workspace %s/.skein`. Confirm the stopped
+                        |`mill weaver stop --workspace %s/.millstrand`. Confirm the stopped
                         |PID matches the weaver recorded by the start step; never use a
                         |pattern kill or stop the canonical weaver."
                        worktree)))})
@@ -161,7 +161,7 @@
                         |Copy the feature checkout from `%s/` into
                         |`${validation_ws:?}/` with its relative layout intact but
                         |without `.git`, then run `mill weaver start --workspace
-                        |${validation_ws:?}/.skein`. Record the exact directory and PID.
+                        |${validation_ws:?}/.millstrand`. Record the exact directory and PID.
                         |Never target the canonical workspace for this validation."
                        worktree)))})
    (workflow/step :smoke-test
@@ -177,8 +177,8 @@
                      (format-alpha/reflow
                       (format
                        "|In the disposable world, run `strand --workspace
-                        |${validation_ws:?}/.skein spool status` and prove the effective
-                        |tag and SHA for `%s` match `.skein/spools.edn` with no pending
+                        |${validation_ws:?}/.millstrand spool status` and prove the effective
+                        |tag and SHA for `%s` match `.millstrand/spools.edn` with no pending
                         |generation. Use `prime` and `help` to discover each bumped
                         |spool's available smoke surface, run the strongest non-destructive
                         |command, and record the result. Stop the disposable weaver by its
@@ -194,7 +194,7 @@
                   {"workflow/action-ref" "spool-bump.change.prepare"
                    "workflow/instruction"
                    (format-alpha/reflow
-                    "|Inspect the diff and confirm that `.skein/spools.edn` changes only
+                    "|Inspect the diff and confirm that `.millstrand/spools.edn` changes only
                      |the requested family tags and peeled SHAs unless a bump deliberately
                      |opts into a new root. Remove generated SQLite and runtime metadata,
                      |run the relevant repository checks, and commit the reviewed change.")})

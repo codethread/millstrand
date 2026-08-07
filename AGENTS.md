@@ -13,7 +13,7 @@ Millstrand is a runtime for programming the constraints and loops around coding 
 | `spools/` | Shipped spools (batteries, workflow, …) |
 | `cli/` | Go CLIs (`strand`, `mill`) |
 | `tools/` | Repo tools (`ralph`, `kanban-tree`) |
-| `.skein/` | This repo's coordination workspace (board, workflows, harnesses) |
+| `.millstrand/` | This repo's coordination workspace (board, workflows, harnesses) |
 
 ## Working here
 
@@ -25,7 +25,7 @@ Millstrand is a runtime for programming the constraints and loops around coding 
 
 - **Never restart a running weaver** without explicit user sign-off. Pickup ladder: `make build` (Go CLI); `runtime/refresh!` (config/startup/module source); targeted `(require 'ns :reload)` only for already-loaded base-classpath namespaces; `runtime/reload-code!` for code-only synced roots. Recipes: `docs/spools/customisation.md`.
 - **Kill by PID only** — never `pkill -f <pattern>` (prompts can quote the pattern and strafe siblings).
-- **Disposable workspaces for workspace-backed tests** (weaver-world fixtures, smoke config) — never the shared `.skein` world. Use `--workspace` from `mktemp -d`; guard with `${ws:?}`. Ordinary suite runs: see the `testing` skill.
+- **Disposable workspaces for workspace-backed tests** (weaver-world fixtures, smoke config) — never the shared `.millstrand` world. Use `--workspace` from `mktemp -d`; guard with `${ws:?}`. Ordinary suite runs: see the `testing` skill.
 - **CLI changes:** `make build` — run `./bin/*`, never `make install`.
 - **Testing:** use the `testing` skill (warm / Done-when / queue acceptance).
 
@@ -58,7 +58,7 @@ Load `strand prime agent` before delegating — run success never closes the ser
 This repo uses Millstrand strands to track work. Orientation ships in the `mill` CLI:
 
 - `mill strand prime` — the day-to-day strand workflow; run it before multi-step work.
-- `mill millstrand prime` — read on demand, only when building on this repo's `.skein/` config or spools.
+- `mill millstrand prime` — read on demand, only when building on this repo's `.millstrand/` config or spools.
 <!-- /mill:millstrand-prime -->
 
 Wider questions: `strand guide "<question>"`.

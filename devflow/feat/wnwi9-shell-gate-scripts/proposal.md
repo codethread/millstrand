@@ -26,7 +26,7 @@ The feature CI workflow and land merge continuation store their shell gates as e
 
 ## PROP-Wgs-001.P4 Proposed scope
 
-- **PROP-Wgs-001.S1:** Move the feature CI watch and PR merge scripts into executable files under `.skein/scripts/`.
+- **PROP-Wgs-001.S1:** Move the feature CI watch and PR merge scripts into executable files under `.millstrand/scripts/`.
 - **PROP-Wgs-001.S2:** Load each file at its existing workflow site while keeping the persisted `shell/argv` shape.
 - **PROP-Wgs-001.S3:** Add focused execution coverage for both extracted scripts.
 

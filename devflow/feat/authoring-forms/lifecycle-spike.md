@@ -61,9 +61,9 @@ The selected source universe has 17 reconcilers. Every row maps without a new fo
 | `:skein/spools-treadle-shell` | `spools/workflow/src/skein/spools/executors/shell.clj` | Vocabulary, handler, pool, initial scan | `defseed` plus two `defresource` declarations | Handler is module scoped; pool is runtime scoped | Lossless; pool closes only at runtime stop |
 | `:skein/spools-code-executor` | `spools/workflow/src/skein/spools/executors/code.clj` | Vocabulary, handler, pools, initial scan | `defseed` plus module-scoped `defresource` | Close handler and pools on removal | Lossless |
 | `:skein/spools-guild` | `spools/guild/src/skein/spools/guild.clj` | Reset runtime declarations and republish on both transitions | `defresource` | Module lifetime; open and close both call the reset/republish boundary | Lossless; keep as one irregular boundary |
-| `:skein/kanban-tracker` | `.skein/kanban_tracker.clj` | Bind one tracker singleton | `defresource` | Module lifetime; clear on close | Blocked on Kanban clear API |
-| `:skein/harnesses` | `.skein/harnesses.clj` | Bind task and review contract singletons | Two `defresource` declarations | Module lifetime; setters accept nil to clear | Lossless with existing provider API |
-| `:skein/help-transform` | `.skein/module_adapters.clj` | Elect one default help transform | `defresource` | Module lifetime; clear on close | Blocked on owned unregister API |
+| `:skein/kanban-tracker` | `.millstrand/kanban_tracker.clj` | Bind one tracker singleton | `defresource` | Module lifetime; clear on close | Blocked on Kanban clear API |
+| `:skein/harnesses` | `.millstrand/harnesses.clj` | Bind task and review contract singletons | Two `defresource` declarations | Module lifetime; setters accept nil to clear | Lossless with existing provider API |
+| `:skein/help-transform` | `.millstrand/module_adapters.clj` | Elect one default help transform | `defresource` | Module lifetime; clear on close | Blocked on owned unregister API |
 | `:kanban` | pinned `codethread/kanban` `src/ct/spools/kanban.clj` | Vocabulary and runtime state seed | `defseed` | Process lifetime | Lossless |
 | `:kanban-peering` | pinned `codethread/kanban` `src/ct/spools/kanban/peering.clj` | Register Guild receive operation | `defresource` | Module lifetime; unregister owned receive operation | Provider must expose or confirm owner cleanup |
 | `:delegation` | pinned `ct.spools/delegation` `src/ct/spools/delegation.clj` | Glossary and vocabulary seeds | `defseed` | Process lifetime | Lossless |

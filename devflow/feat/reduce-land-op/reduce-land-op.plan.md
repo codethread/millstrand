@@ -25,9 +25,9 @@ Reduce the repo-local `land` command to three leaves that enforce the policy bou
 
 | ID | Area | Expected change |
 | --- | --- | --- |
-| PLAN-Rlo-001.AA1 | `.skein/workflows.clj` | Smaller land op, policy helpers, and updated workflow instructions |
-| PLAN-Rlo-001.AA2 | `.skein/config.clj` | Merge-lock named query |
-| PLAN-Rlo-001.AA3 | `.skein/init.clj` and contributor docs | Coordinator-owned module comments plus generic landing discovery and command guidance |
+| PLAN-Rlo-001.AA1 | `.millstrand/workflows.clj` | Smaller land op, policy helpers, and updated workflow instructions |
+| PLAN-Rlo-001.AA2 | `.millstrand/config.clj` | Merge-lock named query |
+| PLAN-Rlo-001.AA3 | `.millstrand/init.clj` and contributor docs | Coordinator-owned module comments plus generic landing discovery and command guidance |
 | PLAN-Rlo-001.AA4 | `test/skein/config_test.clj` | Policy-boundary, rollback, concurrency, and generic-driving coverage |
 | PLAN-Rlo-001.AA5 | `scripts/agent-dash` | Merge-lock recovery copy aligned with the surviving verb |
 
@@ -73,10 +73,10 @@ No open questions block implementation.
 
 ## PLAN-Rlo-001.P8 Task context
 
-- **PLAN-Rlo-001.TC1:** Preserve the helper ordering in `.skein/workflows.clj`, but repair rollback ownership as PLAN-Rlo-001.A2 requires. This is a surface reduction, not a workflow-engine extension.
+- **PLAN-Rlo-001.TC1:** Preserve the helper ordering in `.millstrand/workflows.clj`, but repair rollback ownership as PLAN-Rlo-001.A2 requires. This is a surface reduction, not a workflow-engine extension.
 - **PLAN-Rlo-001.TC2:** `land revise` needs no policy wrapper. Use generic `strand workflow choose <run-id> revise`.
 - **PLAN-Rlo-001.TC3:** Do not tag `skein-src` v1. This feature has no sibling-repo release or pin change.
-- **PLAN-Rlo-001.TC4:** Any `.skein/init.clj` edit is coordinator-owned. Delegated workers must not edit startup config.
+- **PLAN-Rlo-001.TC4:** Any `.millstrand/init.clj` edit is coordinator-owned. Delegated workers must not edit startup config.
 
 ## PLAN-Rlo-001.P9 Developer Notes
 

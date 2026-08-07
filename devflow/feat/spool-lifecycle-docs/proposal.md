@@ -20,7 +20,7 @@ The guide also omits owner-complete publication: when a module publishes a chang
 - **PROP-Sld-001.G4:** Keep the division of labour explicit: contribution data says what should be reachable through the blessed registries, reconciliation makes the running process's live effects and resources agree with the transition.
 - **PROP-Sld-001.G5:** Teach entry values as the property of each kind's registered `:entry-spec` rather than enumerating every kind's schema.
 - **PROP-Sld-001.G6:** Present the two contribution authoring styles — top-level collecting authoring macros, or one explicit owner-complete `contribute` — as a fork the reader takes before meeting any schema, rather than as a caveat after it. Reconciliation is orthogonal to that choice and says so.
-- **PROP-Sld-001.G7:** Ground every copyable example in shipped spool source, and label each snippet's context (spool source namespace, trusted config, trusted REPL). The guide does not present this repository's `.skein` coordination config or its workspace-local macros as public authoring surface.
+- **PROP-Sld-001.G7:** Ground every copyable example in shipped spool source, and label each snippet's context (spool source namespace, trusted config, trusted REPL). The guide does not present this repository's `.millstrand` coordination config or its workspace-local macros as public authoring surface.
 
 ## PROP-Sld-001.P3 Non-goals
 

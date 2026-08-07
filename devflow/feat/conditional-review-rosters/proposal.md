@@ -38,7 +38,7 @@ Land reviewers run with the feature worktree as their current directory. The pin
 
 ## PROP-Crr-001.P4 Proposed scope
 
-- **PROP-Crr-001.S1:** A roster seat in trusted configuration, such as this repository's `.skein/agents/reviewers.clj`, may carry a non-empty `:paths` vector of repository globs. A seat applies when any path in `change-context.files` matches any declared glob.
+- **PROP-Crr-001.S1:** A roster seat in trusted configuration, such as this repository's `.millstrand/agents/reviewers.clj`, may carry a non-empty `:paths` vector of repository globs. A seat applies when any path in `change-context.files` matches any declared glob.
 - **PROP-Crr-001.S2:** Repository globs use `/` as the separator and support literal path text, `?` for one non-separator character, `*` for zero or more non-separator characters, and `**` for zero or more characters across separators. Matching is case-sensitive. Absolute paths, `.` or `..` segments, backslashes, blank patterns, negation, and other pattern syntax fail roster validation loudly.
 - **PROP-Crr-001.S3:** A seat without `:paths` applies to every review, preserving current roster behavior.
 - **PROP-Crr-001.S4:** A roster containing any path-scoped seat requires `change-context.files`. Review fails loudly when that selection input is absent or malformed.
@@ -46,7 +46,7 @@ Land reviewers run with the feature worktree as their current directory. The pin
 - **PROP-Crr-001.S6:** No applicable seats is a valid, explicit outcome. Direct review returns an empty reviewer set with a no-applicable-seats reason and dispatches no synthesis run. Land pours no reviewer, synthesis, or finding-resolution gates for that roster pass and proceeds to final CI. Neither path records a review pass.
 - **PROP-Crr-001.S7:** The land workflow has a machine gate before roster fan-out that fails when `git status --porcelain` reports tracked or untracked worktree changes. The operator commits, stashes, moves, or removes those changes, clears the gate's `gate/error` attribute through the existing retry procedure, and waits for the shell executor to retry.
 - **PROP-Crr-001.S8:** The cleanliness gate covers Git-visible tracked and untracked changes. It does not promise that ignored files are absent. Whole-worktree cleanliness is intentional because reviewers may inspect context outside the changed-file list; a path-limited check would not protect that read. A separate `HEAD` equality check adds policy that this feature does not need.
-- **PROP-Crr-001.S9:** The shared roster contract and compiler change ship in `agent-harness.spool`. This repository adopts that release, declares path rules in `.skein/agents/reviewers.clj`, and adds the land cleanliness gate. This delivery boundary does not change what one review may target.
+- **PROP-Crr-001.S9:** The shared roster contract and compiler change ship in `agent-harness.spool`. This repository adopts that release, declares path rules in `.millstrand/agents/reviewers.clj`, and adds the land cleanliness gate. This delivery boundary does not change what one review may target.
 - **PROP-Crr-001.S10:** User-facing documentation describes `:paths`, the repository-glob grammar, missing selection input, the no-applicable-seats result, rename handling, and the land cleanliness gate.
 
 ## PROP-Crr-001.P5 Examples

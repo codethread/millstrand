@@ -12,7 +12,7 @@ Epic `waq0l` (ADR-003) retired `install!` and made `(runtime/module! runtime key
 
 1. The spool namespace defines `contribute`/`reconcile` and _also_ exports a `(def module {:ns … :contribute … :reconcile …})` datum.
 2. Every consumer's `module!` call copies the `:contribute`/`:reconcile` triple into its opts.
-3. Cold-start config cannot deref the datum — spool sources are not loadable when `.skein/init.clj` collects declarations — so it mirrors each triple as a literal map, policed by a parity test.
+3. Cold-start config cannot deref the datum — spool sources are not loadable when `.millstrand/init.clj` collects declarations — so it mirrors each triple as a literal map, policed by a parity test.
 
 The ADR-003.P7 exported-base-declaration amendment named that literal mirror "recorded, tested duplication, not a second source of truth." It is still duplication, and the user's ruling was to remove the burden rather than test it: "they have three functions and then a testing layer to understand. We should provide deep-modules and swallow the complexity" (`PROP-Dsp-001.R1`). TEN-007 already names deep-module discipline as the house style, and TEN-003's own escape clause licenses solving ergonomic friction "in other ways like … better api design."
 
@@ -55,7 +55,7 @@ This is the one place where a refusal moves from declaration time to evaluation 
 
 ## ADR-004.P4 Decision C — the transitional per-key precedence window (Phase A)
 
-The feature lands in three phases across skein-src and its sibling spool repos. `.skein/init.clj` must stay valid against pinned sibling releases at every land, and `make spool-suite-gate` runs pinned sibling suites whose fixtures still declare explicit entry-point keys for in-tree namespaces. That fixes the shape of the transition:
+The feature lands in three phases across skein-src and its sibling spool repos. `.millstrand/init.clj` must stay valid against pinned sibling releases at every land, and `make spool-suite-gate` runs pinned sibling suites whose fixtures still declare explicit entry-point keys for in-tree namespaces. That fixes the shape of the transition:
 
 - **Phase A (this land — skein-src core and in-tree):** the coordinator resolves `spool` by convention, and the grammar _temporarily_ still accepts `:contribute`/`:reconcile`. During the window an explicitly declared key wins **per key** over the `spool` var — silently, documented as transitional. Resolution fills only absent entry-point fields from the var; a complete legacy declaration does not consult or validate it and remains valid when its target namespace carries no `spool` var. This is **precedence, not conflict**: a hard "declared key + `spool` var" conflict would fail the pinned sibling suites the moment in-tree namespaces gain `spool` vars. In-tree spools rename to `def spool`; in-tree init.clj entries drop their triples.
 - **Phase B (siblings):** after Phase A lands, devflow/kanban/agent-harness export `spool`, delete `module`, convert their own surfaces, and publish coordinated breaking markers under TEN-000@1. No `:skein/min` floor is added while Skein has no marker containing Phase A. Each release exception names Phase A merge `343f886880092bc38ed3e0522eca2d95a7cf04bc` as the first compatible Skein commit.

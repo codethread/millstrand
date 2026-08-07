@@ -23,7 +23,7 @@ Reduce the repo-owned named-query catalogue to queries with live consumers, and 
 
 | ID | Area | Expected change |
 | --- | --- | --- |
-| PLAN-Rqc-001.AA1 | `.skein` config | Remove unused registrations and rename the active run query. |
+| PLAN-Rqc-001.AA1 | `.millstrand` config | Remove unused registrations and rename the active run query. |
 | PLAN-Rqc-001.AA2 | Config tests and surface baseline | Assert the reduced catalogue and the renamed query's row set. |
 | PLAN-Rqc-001.AA3 | Batteries cookbook | Teach discovery and invocation with the retained query name. |
 

@@ -23,7 +23,7 @@ Every recipe has the same four parts, so you can skim to the one that matches yo
 4. **Why this shape** — the reasoning: why these ops, what the flags buy you, and
    what the alternative would cost.
 
-Each recipe cites the honest source it was distilled from — the batteries source, the test suite, or this repo's own `.skein` config — so you can read the load-bearing version.
+Each recipe cites the honest source it was distilled from — the batteries source, the test suite, or this repo's own `.millstrand` config — so you can read the load-bearing version.
 
 One thing to internalise before the recipes: `strand` splits its flags into two groups. **Op flags** (`--attr`, `--edge`, `--state`, `--query`, `--param`, `--pattern`, `--input`) come *after* the op name and are parsed by that op's arg-spec. **Dispatcher flags** (`--workspace`, `--stdin`, `--payload name=path`, `--dry-run`) select context and attach payloads, so they come *before* the op name. Put a dispatcher flag after the op and the op's parser rejects it as unknown.
 
@@ -165,7 +165,7 @@ Honest source: the `--dry-run` dispatcher flag documented in [`cli.md`](../devfl
 
 ## Recipe: Discover and run a named query
 
-**Situation.** You're in a workspace that ships named queries (this repo defines `work`, `run-active`, and more in its `.skein` config), and you want to run one without reading the config to learn its name or parameters.
+**Situation.** You're in a workspace that ships named queries (this repo defines `work`, `run-active`, and more in its `.millstrand` config), and you want to run one without reading the config to learn its name or parameters.
 
 **Composition.** `query list` enumerates what's registered; `query explain <name>` tells you a query's parameters and its compiled `where` form; then `list --query <name>` or `ready --query <name>` runs it, with `--param key=value` supplying any runtime values.
 
@@ -196,7 +196,7 @@ strand ready --query work         # same query, gated to the unblocked frontier
   key isn't a declared parameter fails loudly, and `--param` without a `--query`
   is rejected — you can't accidentally pass a value into nothing.
 
-Honest source: the `query`/`list`/`ready` ops in `spools/src/millstrand/spools/batteries.clj`, the `list-and-ready-named-queries` and `query-list-and-explain-shapes` tests in `test/millstrand/spools/batteries_test.clj`, and the `work`/`run-active` queries this repo registers in [`.skein/policy/config.clj`](../.skein/policy/config.clj). Verified against a demo query registered in a disposable workspace.
+Honest source: the `query`/`list`/`ready` ops in `spools/src/millstrand/spools/batteries.clj`, the `list-and-ready-named-queries` and `query-list-and-explain-shapes` tests in `test/millstrand/spools/batteries_test.clj`, and the `work`/`run-active` queries this repo registers in [`.millstrand/policy/config.clj`](../.millstrand/policy/config.clj). Verified against a demo query registered in a disposable workspace.
 
 ---
 

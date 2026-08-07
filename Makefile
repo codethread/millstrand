@@ -119,7 +119,7 @@ lint-splint:
 # spool sources touching millstrand.core.* only from unsafe-named namespaces
 # (quality.spool-tiers), and JSON authored as Clojure data rather than
 # hand-escaped string literals (quality.json-literals). Workspace-config tests
-# use millstrand.ct.* exactly under test/millstrand/ct/, and direct checked-in .skein
+# use millstrand.ct.* exactly under test/millstrand/ct/, and direct checked-in .millstrand
 # paths cannot appear in tests outside that directory (quality.workspace-tests).
 lint-conventions:
 	@if git grep -n -E 'TEN-''000([^@]|$$)' -- . ':!devflow/TENETS.md'; then \
@@ -165,7 +165,7 @@ test-warm:
 	NS="$(NS)" bash scripts/test-warm
 
 # Run the pinned external spool suites against this checkout. The script reads
-# each pin from .skein/spools.edn and materializes an isolated sibling layout.
+# each pin from .millstrand/spools.edn and materializes an isolated sibling layout.
 spool-suite-gate:
 	bash scripts/spool-suite-gate
 

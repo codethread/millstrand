@@ -14,11 +14,11 @@ Provision these linked worktrees from each repo's then-current main after Phase 
 - `/Users/ct/dev/projects/kanban.spool__uwnzl-def-spool-convention` on `codex/uwnzl-def-spool-convention`
 - `/Users/ct/dev/projects/agent-harness.spool__uwnzl-def-spool-convention` on `codex/uwnzl-def-spool-convention`
 
-Owned files are the exported spool namespaces, `.skein/init.clj`, their direct fixtures/helpers, and the repo-local prose that documents activation:
+Owned files are the exported spool namespaces, `.millstrand/init.clj`, their direct fixtures/helpers, and the repo-local prose that documents activation:
 
-- devflow: `src/ct/spools/devflow.clj`, `.skein/init.clj`, `test/ct/spools/devflow_test.clj`, `README.md`, `devflow.md`, and root `release-exception.md`
-- kanban: `src/ct/spools/kanban.clj`, `.skein/init.clj`, `.skein/peering_adapter.clj`, `test/ct/spools/kanban_peering_test.clj`, `README.md`, `kanban.md`, `kanban.cookbook.md`, and root `release-exception.md`
-- agent-harness: `agent-run/src/ct/spools/agent_run.clj`, `delegation/src/ct/spools/delegation.clj`, `bench/src/ct/spools/bench.clj`, `.skein/init.clj`, `test/ct/spools/test_support.clj`, the four component `README.md` files, and root `release-exception.md`
+- devflow: `src/ct/spools/devflow.clj`, `.millstrand/init.clj`, `test/ct/spools/devflow_test.clj`, `README.md`, `devflow.md`, and root `release-exception.md`
+- kanban: `src/ct/spools/kanban.clj`, `.millstrand/init.clj`, `.millstrand/peering_adapter.clj`, `test/ct/spools/kanban_peering_test.clj`, `README.md`, `kanban.md`, `kanban.cookbook.md`, and root `release-exception.md`
+- agent-harness: `agent-run/src/ct/spools/agent_run.clj`, `delegation/src/ct/spools/delegation.clj`, `bench/src/ct/spools/bench.clj`, `.millstrand/init.clj`, `test/ct/spools/test_support.clj`, the four component `README.md` files, and root `release-exception.md`
 
 Before editing, refresh this inventory with `git grep` in each worktree and record any additional direct fixture or activation caller on `l5lwo`; do not expand into unrelated sibling code.
 

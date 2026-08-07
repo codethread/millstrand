@@ -1,5 +1,5 @@
 (ns millstrand.ct.nvd-scan-test
-  "Tests for the scheduled NVD deep-scan job defined in .skein/jobs/nvd_scan.clj.
+  "Tests for the scheduled NVD deep-scan job defined in .millstrand/jobs/nvd_scan.clj.
 
   Covers the injected-seam lock flow (skip when locked / fail loud without a key
   / clean scan / findings raise a p1 card) entirely through fakes, so the suite
@@ -8,12 +8,12 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]))
 
-;; jobs/nvd_scan.clj is a .skein weaver file (ns `ct.jobs.nvd-scan`), not a classpath
+;; jobs/nvd_scan.clj is a .millstrand weaver file (ns `ct.jobs.nvd-scan`), not a classpath
 ;; namespace, so load it once exactly as config-test does and resolve its
 ;; (public and private) vars by symbol. Loading it defines vars only; it never
 ;; activates modules or seeds against gh.
 (defn- load-config-once [f]
-  (load-file ".skein/jobs/nvd_scan.clj")
+  (load-file ".millstrand/jobs/nvd_scan.clj")
   (f))
 
 (use-fixtures :once load-config-once)

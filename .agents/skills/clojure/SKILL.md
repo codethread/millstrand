@@ -111,7 +111,7 @@ Hard limit: no docstring or string literal line may extend past column 180. Long
 
 When a value is prose (op payloads, `about` surfaces, rule descriptions, delegation bodies), do not build it from `(str ...)` fragments or one long literal. Author it as a `|`-margin block and reflow it with the shipped helpers:
 
-- `millstrand.api.format.alpha` — the blessed surface for every tier, spools included: trusted config (`.skein/`)
+- `millstrand.api.format.alpha` — the blessed surface for every tier, spools included: trusted config (`.millstrand/`)
 
 `(fill block)` returns a vector of item strings (bare `|` line separates items; indented-past-the-bar lines keep an item verbatim for command samples). `(reflow block)` soft-wraps one paragraph into one string.
 

@@ -31,7 +31,7 @@ The interactive kanban dashboard lives under `skein-src/scripts/agent-dash`, eve
 
 - **PROP-Kdb-001.S1:** Kanban owns and releases the dashboard under its own `scripts/agent-dash` Bun package, including the source, dependency lock, tests, and a `kanban-dash` bin declaration. This replaces S10's earlier assumption that the dashboard would share `scripts/kanban-export` and its lock.
 - **PROP-Kdb-001.S2:** The released dashboard uses `SKEIN_WORKSPACE` to select the target world and calls the public `strand kanban board`, `strand kanban card`, and strand detail surfaces needed for its projections.
-- **PROP-Kdb-001.S3:** Skein removes its dashboard copy and repository-specific dashboard checks, updates the kanban git tag and peeled commit SHA in `.skein/spools.edn`, and makes `make dash` run `mill bin build kanban-dash` followed by `mill bin run kanban-dash`. Both commands run from the Skein checkout and target its selected workspace.
+- **PROP-Kdb-001.S3:** Skein removes its dashboard copy and repository-specific dashboard checks, updates the kanban git tag and peeled commit SHA in `.millstrand/spools.edn`, and makes `make dash` run `mill bin build kanban-dash` followed by `mill bin run kanban-dash`. Both commands run from the Skein checkout and target its selected workspace.
 - **PROP-Kdb-001.S4:** The moved dashboard tests are the regression baseline for G2. Verification also covers kanban's test and quality gates, Skein's affected gates, bin discovery/build/run from the consumer, and a supplemental interactive tmux session over the retained controls.
 
 ## PROP-Kdb-001.P5 Open questions

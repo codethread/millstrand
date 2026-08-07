@@ -113,7 +113,7 @@ That means: list strands, keep the ones owned by `ct`, keep active-state rows, a
 
 ## Namespaces
 
-A namespace groups related names, like a module or file. `.skein/policy/config.clj` declares `(ns ct.policy.config ...)`, so its top-level definitions live under `ct.policy.config`. From elsewhere you can reach one with a qualified symbol such as `ct.policy.config/work`, or bring names in unqualified with `require`.
+A namespace groups related names, like a module or file. `.millstrand/policy/config.clj` declares `(ns ct.policy.config ...)`, so its top-level definitions live under `ct.policy.config`. From elsewhere you can reach one with a qualified symbol such as `ct.policy.config/work`, or bring names in unqualified with `require`.
 
 ## Require helper namespaces
 

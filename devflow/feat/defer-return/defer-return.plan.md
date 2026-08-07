@@ -29,7 +29,7 @@ Implement the contract in [PROP-Dfr-001](./proposal.md): make `defer` the workfl
 | ID | Area | Expected change |
 | --- | --- | --- |
 | PLAN-Dfr-001.AA1 | `spools/workflow` | Replace authoring, compile, routing, run projection, discovery, CLI, vocabulary, and tests with returning defer semantics. |
-| PLAN-Dfr-001.AA2 | `.skein` | Update worker guidance that lists the removed verbs; registered workflows already use checkpoint routing and need no binding change. |
+| PLAN-Dfr-001.AA2 | `.millstrand` | Update worker guidance that lists the removed verbs; registered workflows already use checkpoint routing and need no binding change. |
 | PLAN-Dfr-001.AA3 | Feature history | Record supersession, contract promotion, the peer audit, and the release precondition. |
 | PLAN-Dfr-001.AA4 | `README.md`, `spools`, and `docs/spools` | Teach the three-part composition model and remove the obsolete adapter and dispatch guidance. |
 | PLAN-Dfr-001.AA5 | Pinned peer spool repositories | No change; retain the exact-SHA audit proving the removed surface has no peer consumer. |
@@ -63,7 +63,7 @@ Outcome: the pinned-peer no-impact audit is recorded, the workflow contract and 
 ## PLAN-Dfr-001.P7 Risks and open questions
 
 - **PLAN-Dfr-001.R1:** Mechanical renaming can hide a surviving transfer assumption. Keep semantic tests for root identity, sibling survival, history, and target entrypoints separate from name-removal assertions.
-- **PLAN-Dfr-001.R2:** The coordination weaver is running the old code while this branch changes its own `.skein` source. Do not refresh or restart it during implementation. Validate configuration in disposable worlds and leave the canonical cold cutover to the release runbook with explicit user authorization.
+- **PLAN-Dfr-001.R2:** The coordination weaver is running the old code while this branch changes its own `.millstrand` source. Do not refresh or restart it during implementation. Validate configuration in disposable worlds and leave the canonical cold cutover to the release runbook with explicit user authorization.
 - **PLAN-Dfr-001.R3:** A pinned peer could read removed graph or failure vocabulary without calling a public workflow function. The exact-SHA source audit covers both calls and durable names; re-run it at acceptance and do not move the pins in this feature.
 
 ## PLAN-Dfr-001.P8 Task context
@@ -107,7 +107,7 @@ Outcome: the pinned-peer no-impact audit is recorded, the workflow contract and 
 
 ### PLAN-Dfr-001.DN6 Task 3 pinned-peer audit — 2026-07-26
 
-The acceptance audit used the exact repository pins from `.skein/spools.edn`. These commands first proved that v15, v9, and v11 peel to the recorded SHAs, then searched every tracked file at each commit for the removed Clojure, CLI, discovery, failure, role, and durable-attribute surface:
+The acceptance audit used the exact repository pins from `.millstrand/spools.edn`. These commands first proved that v15, v9, and v11 peel to the recorded SHAs, then searched every tracked file at each commit for the removed Clojure, CLI, discovery, failure, role, and durable-attribute surface:
 
 ```sh
 git -C /Users/ct/dev/projects/agent-harness.spool rev-parse 'v15^{}'

@@ -17,8 +17,8 @@ Replace the repository's inline main CI shell watch with a code gate while prese
 
 | ID | Area | Expected change |
 | --- | --- | --- |
-| PLAN-Mcg-001.AA1 | `.skein/workflows.clj` | Replace the script and shell attributes with a public code-gate function and poured parameters. |
-| PLAN-Mcg-001.AA2 | `.skein/init.clj` | Activate the code executor after the workflow definitions. |
+| PLAN-Mcg-001.AA1 | `.millstrand/workflows.clj` | Replace the script and shell attributes with a public code-gate function and poured parameters. |
+| PLAN-Mcg-001.AA2 | `.millstrand/init.clj` | Activate the code executor after the workflow definitions. |
 | PLAN-Mcg-001.AA3 | `test/skein/config_test.clj` | Exercise the watch with fake commands and prove cold startup ordering. |
 
 ## PLAN-Mcg-001.P4 Contract and migration impact

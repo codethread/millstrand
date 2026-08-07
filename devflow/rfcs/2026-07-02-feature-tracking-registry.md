@@ -54,7 +54,7 @@ Document a marker-strand convention in the strand skill and `AGENTS.md`: every s
 
 ### RFC-014.O2 Repo-local init.clj ops
 
-Extend this repo's `.skein/init.clj` conventions (the `devflow-*`/`flow-*` op family) with `feature-track`, `feature-finish`, a `features` query, and a `feature-await` op wrapping the marker-strand convention.
+Extend this repo's `.millstrand/init.clj` conventions (the `devflow-*`/`flow-*` op family) with `feature-track`, `feature-finish`, a `features` query, and a `feature-await` op wrapping the marker-strand convention.
 
 - Pros: fits the existing repo-conventions surface (`devflow-conventions`
   already indexes ops/queries); scriptable from any harness.

@@ -20,7 +20,7 @@ Baseline generated on 2026-07-05 from the `quality-gates` worktree before any fi
 
 ### Formatting
 
-- `cljfmt` (baseline; now clean): 66 files would be changed. This includes the explicitly requested roots `src`, `spools/batteries/src`, `spools/workflow/src`, `spools/unsafe-text-search/src`, `spools/guild/src`, `test`, `dev`, and `scripts`, plus only practical top-level repo config files under `.skein` (`init.clj`, `config.clj`, `reviewers.clj`), not nested `.skein/spools` material.
+- `cljfmt` (baseline; now clean): 66 files would be changed. This includes the explicitly requested roots `src`, `spools/batteries/src`, `spools/workflow/src`, `spools/unsafe-text-search/src`, `spools/guild/src`, `test`, `dev`, and `scripts`, plus only practical top-level repo config files under `.millstrand` (`init.clj`, `config.clj`, `reviewers.clj`), not nested `.millstrand/spools` material.
 - `gofumpt` (baseline; now clean): 6 Go files in `cli/` would be changed: `cmd/mill/lifecycle_test.go`, `integration_test.go`, `internal/config/bootstrap.go`, `internal/config/config.go`, `internal/config/config_test.go`, and `internal/config/runtime.go`.
 
 ### clj-kondo
@@ -87,4 +87,4 @@ The clusters hinted to reach zero:
   - `ns` forms must have an immediate docstring.
   - top-level `def`/`defonce` of `atom`/`volatile!` in shipped spool source paths is forbidden.
   - any analyzed form containing `{:keys [... :fn ...]}` is forbidden.
-- Generated/vendored exclusions were not added beyond avoiding recursive `.skein/spools` formatting. Existing lint findings are recorded, not fixed.
+- Generated/vendored exclusions were not added beyond avoiding recursive `.millstrand/spools` formatting. Existing lint findings are recorded, not fixed.

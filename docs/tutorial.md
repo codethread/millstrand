@@ -95,7 +95,7 @@ global one.
 
 That selected `.millstrand` or `.ms` directory holds trusted config only. The runtime state (metadata, sockets, and the SQLite database) lives under Millstrand's own state directory, not in your repo.
 
-Only one accepted marker may exist, and it must be a directory. If both `.millstrand` and `.ms` exist, or either marker is a non-directory, Mill fails with the paths and remediation; repair the application marker before retrying. The legacy `.skein` name is rejected as an application marker; preserve it when it is a repository coordination workspace, and use an explicit `--workspace` or migrate application config to `.millstrand`/`.ms` without deleting coordination state.
+Only one accepted marker may exist, and it must be a directory. If both `.millstrand` and `.ms` exist, or either marker is a non-directory, Mill fails with the paths and remediation; repair the application marker before retrying. The legacy `.millstrand` name is rejected as an application marker; preserve it when it is a repository coordination workspace, and use an explicit `--workspace` or migrate application config to `.millstrand`/`.ms` without deleting coordination state.
 
 Create a workspace in the repo you want to use Millstrand in:
 

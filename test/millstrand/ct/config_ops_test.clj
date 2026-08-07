@@ -48,7 +48,7 @@
 (defn- run-with-config-world [f]
   (t/run-with-weaver-world
    {:storage :sqlite-memory
-    :spools-edn (test-support/embedded-spools-edn ".skein/spools.edn")}
+    :spools-edn (test-support/embedded-spools-edn ".millstrand/spools.edn")}
    (fn [{:keys [runtime]}]
      (weaver-runtime/with-runtime-and-spool-classloader
        runtime
@@ -71,7 +71,7 @@
   [rt module-key file]
   (let [ns-sym (symbol (str "ct."
                             (-> file
-                                (str/replace #"^\.skein/" "")
+                                (str/replace #"^\.millstrand/" "")
                                 (str/replace #"\.clj$" "")
                                 (str/replace "/" ".")
                                 (str/replace "_" "-"))))
@@ -112,14 +112,14 @@
 (deftest repo-config-ops-declare-and-check-every-production-return-leaf
   (run-with-config-world
    (fn [runtime]
-     (publish-authoring! runtime :config ".skein/policy/config.clj")
+     (publish-authoring! runtime :config ".millstrand/policy/config.clj")
      ;; materialize the workflow spool's registry handle so its constructor kind
      ;; is a declared publication backend before workflows/common.clj contributes to it
      (test-support/activate-spool! runtime :millstrand/spools-workflow
                                    'millstrand.spools.workflow)
-     (publish-authoring! runtime :workflows ".skein/workflows/common.clj")
+     (publish-authoring! runtime :workflows ".millstrand/workflows/common.clj")
      ;; the land op lives beside the definitions it drives, in its own module
-     (publish-authoring! runtime :workflows.land-policy ".skein/workflows/land_policy.clj")
+     (publish-authoring! runtime :workflows.land-policy ".millstrand/workflows/land_policy.clj")
      (let [provenances #{'ct.policy.config 'workflows 'ct.workflows.land-policy}
            checked (atom #{})
            check! (fn [operation context value]

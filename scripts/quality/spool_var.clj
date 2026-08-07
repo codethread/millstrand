@@ -6,7 +6,7 @@
   source without resolving symbols or dereferencing vars.
 
   Scope is the module-loadable roots — shipped spools under
-  `spools/*/src` and the workspace's `.skein` config (local spools and
+  `spools/*/src` and the workspace's `.millstrand` config (local spools and
   `:file` modules). Engine `src/` and `test/` namespaces are never
   activated as modules, so a `spool` var there is unaffected and out of
   scope; private `spool` vars are ignored everywhere. Kept clj-kondo-free
@@ -19,7 +19,7 @@
 (def ^:private public-var-forms #{'def 'defonce 'defn 'defmacro})
 
 (def ^:private spools-root "spools")
-(def ^:private config-root ".skein")
+(def ^:private config-root ".millstrand")
 
 (defn- declaration-site
   "Return a site when `form` declares the public var name `spool`.
@@ -132,7 +132,7 @@
 
 (defn- module-loadable-roots
   "Return the roots where a repository namespace can be activated as a
-  module: every shipped spool's `src` plus the `.skein` workspace config."
+  module: every shipped spool's `src` plus the `.millstrand` workspace config."
   []
   (let [spool-dirs (directory-files! spools-root)
         _ (directory-files! config-root)]

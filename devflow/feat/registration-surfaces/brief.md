@@ -4,7 +4,7 @@ Pre-v1 consolidation of the registration/authoring API surface. Devflow run `reg
 
 ## Problem
 
-Five surfaces can put an entry into a weaver registry, accreted over the project's life and never retired: the module authoring forms (`skein.api.skein.alpha`, newest), the explicit-runtime sharp tools (`register-*!`), `skein.repl`'s terse vocabulary (oldest — `defquery!`, `defpattern!`, `load-queries!`), `skein.userland.alpha` duplicating that vocabulary under a different runtime-ownership model, and the JSON socket op table.
+Five surfaces can put an entry into a weaver registry, accreted over the project's life and never retired: the module authoring forms (`skein.api.millstrand.alpha`, newest), the explicit-runtime sharp tools (`register-*!`), `skein.repl`'s terse vocabulary (oldest — `defquery!`, `defpattern!`, `load-queries!`), `skein.userland.alpha` duplicating that vocabulary under a different runtime-ownership model, and the JSON socket op table.
 
 The registry model underneath is sound (layered owner partitions; REPL registrations survive `refresh!` and coexist with module publication — spiked, 13/13 checks in a disposable world). The accumulated problems are surface-level:
 
@@ -21,7 +21,7 @@ The registry model underneath is sound (layered owner partitions; REPL registrat
 2. **One vocabulary, two arities**: retire `defquery!`/`defpattern!`/`load-queries!`. `skein.repl` carries runtime-implicit wrappers of the same verbs (`register-op!` … minus the runtime argument) as the interactive complement of the authoring forms — thin delegations, one implementation per verb. `def*` then reliably means "authoring form, module-owned, durable" everywhere.
 3. **Dissolve `skein.userland.alpha` from published code**: the strand-CRUD sugar (`strand!`, `ready`, terse `query`, …) becomes a worked "build your own userland helpers" example in `docs/spools/customisation.md`; users own the ambient-magic trade. Deletes SPEC-003.C24–C27/P5a, the tier-guard tests, and the `bind!` hazard.
 4. **`skein.repl` scope**: session machinery (attach/eval plumbing, `connect!` + client bridge for standalone JVMs, burn-tombstone recovery reads) plus the registration verbs of (2). The attach bootstrap moves to a neutral session namespace rather than `in-ns 'skein.repl` where that machinery split requires it.
-5. **Cleanups**: fix same-owner-replace docstrings; drop `defquery`'s `-query` suffix stripping as an explicit migration (seven `*-query` Vars in `.skein/config.clj`, names frozen in `config_test.clj` and `surface_baseline.edn`, plus workflow executors and the smoke fixture); amend SPEC-003.C17f to match source passivity; note the SPEC-003.C23 staging race beside any "survives refresh" claim; one reference.md sentence distinguishing "the CLI exposes no mutation verb" from "the socket cannot".
+5. **Cleanups**: fix same-owner-replace docstrings; drop `defquery`'s `-query` suffix stripping as an explicit migration (seven `*-query` Vars in `.millstrand/config.clj`, names frozen in `config_test.clj` and `surface_baseline.edn`, plus workflow executors and the smoke fixture); amend SPEC-003.C17f to match source passivity; note the SPEC-003.C23 staging race beside any "survives refresh" claim; one reference.md sentence distinguishing "the CLI exposes no mutation verb" from "the socket cannot".
 
 ## Settled design constraints (do not relitigate)
 

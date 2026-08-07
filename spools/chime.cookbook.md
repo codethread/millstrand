@@ -69,7 +69,7 @@ The one idea under all of it: **chime owns the plumbing, your config owns the ju
   startup and reload. Putting the call in `init.local.clj` makes that automatic —
   the file re-runs on both.
 
-Honest source: this repo's [`.skein/init.clj`](../.skein/init.clj) chime block and [CLAUDE.md](../CLAUDE.md)'s chime note (`cc-notify` / `osascript` per-developer binding in `init.local.clj`); the argv-and-stdin behaviour is exercised by `notifier-binding-and-manual-notify` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj), which binds a script that appends the title and stdin body to a file and asserts both arrive.
+Honest source: this repo's [`.millstrand/init.clj`](../.millstrand/init.clj) chime block and [CLAUDE.md](../CLAUDE.md)'s chime note (`cc-notify` / `osascript` per-developer binding in `init.local.clj`); the argv-and-stdin behaviour is exercised by `notifier-binding-and-manual-notify` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj), which binds a script that appends the title and stdin body to a file and asserts both arrive.
 
 ---
 
@@ -118,7 +118,7 @@ Honest source: this repo's [`.skein/init.clj`](../.skein/init.clj) chime block a
   concurrent mutation is ordered after registration and still notifies. You
   write the plain predicate; the engine handles "only once."
 
-Honest source: this repo's `hitl-checkpoint-ready` and `kanban-completed` rules in [`.skein/notifications/attention.clj`](../.skein/notifications/attention.clj), registered together in `register-chime-rules!`; the fire-once-per-transition behaviour is pinned by `registered-rules-fire-end-to-end` and `dedup-and-reset-seen` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj).
+Honest source: this repo's `hitl-checkpoint-ready` and `kanban-completed` rules in [`.millstrand/notifications/attention.clj`](../.millstrand/notifications/attention.clj), registered together in `register-chime-rules!`; the fire-once-per-transition behaviour is pinned by `registered-rules-fire-end-to-end` and `dedup-and-reset-seen` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj).
 
 ---
 
@@ -217,7 +217,7 @@ carries `mode`, `backend`, `session`, and `attach` for interactive summaries.
   the strand's `updated_at` age lets a rule notice the absence of progress, which
   is the failure mode a mutation-only trigger would miss entirely.
 
-Honest source: this repo's `hitl-checkpoint-ready-rule` and `parked-run-rule` in [`.skein/notifications/attention.clj`](../.skein/notifications/attention.clj); readiness firing on both born-ready and later-unblocked strands is covered by `ready-rule-fires-born-ready-and-when-unblocked` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj).
+Honest source: this repo's `hitl-checkpoint-ready-rule` and `parked-run-rule` in [`.millstrand/notifications/attention.clj`](../.millstrand/notifications/attention.clj); readiness firing on both born-ready and later-unblocked strands is covered by `ready-rule-fires-born-ready-and-when-unblocked` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj).
 
 ---
 
@@ -258,7 +258,7 @@ Honest source: this repo's `hitl-checkpoint-ready-rule` and `parked-run-rule` in
   clears that memory without touching registrations — the right tool when testing
   a rule interactively, the wrong reflex for a genuinely-once notification.
 
-Honest source: `missing-notifier-is-recorded-loudly`, `rule-failures-are-recorded`, and `dedup-and-reset-seen` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj); the loud-failure discipline is the same one this repo relies on in [`.skein/init.clj`](../.skein/init.clj) ("Unbound chime records loud notifier-missing failures").
+Honest source: `missing-notifier-is-recorded-loudly`, `rule-failures-are-recorded`, and `dedup-and-reset-seen` in [`test/millstrand/chime_test.clj`](../test/millstrand/chime_test.clj); the loud-failure discipline is the same one this repo relies on in [`.millstrand/init.clj`](../.millstrand/init.clj) ("Unbound chime records loud notifier-missing failures").
 
 ---
 

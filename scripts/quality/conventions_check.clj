@@ -23,7 +23,7 @@
     from Clojure data; the narrowing rules live in
     `quality.json-literals`;
   - repository workspace tests use `millstrand.ct.*` exactly under
-    `test/millstrand/ct/`, and a test that directly names a checked-in `.skein` path
+    `test/millstrand/ct/`, and a test that directly names a checked-in `.millstrand` path
     belongs there even before it adopts the namespace; the boundary lives in
     `quality.workspace-tests`;
   - tests under `test/millstrand/api` pin public contracts and do not reach core
@@ -51,7 +51,7 @@
    "spools/guild/src"
    "spools/chime/src"
    "spools/cron/src"
-   ".skein"
+   ".millstrand"
    "test"])
 
 (def ^:private core-macro-names

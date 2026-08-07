@@ -34,7 +34,7 @@
               changes stays deferred to an RFC.
 
   Routing note: pick seats by scanning the scorecards in
-  .skein/agents/harnesses.clj ({:complexity :code-taste :resilience :ui-design
+  .millstrand/agents/harnesses.clj ({:complexity :code-taste :resilience :ui-design
   :cost}, X = untested), matching the axes the contract actually needs -
   route by waste-type, not call count. In practice (review-sweeps bench
   2026-07-13, card vw8pf): mechanical single-target contracts over a
@@ -246,7 +246,7 @@
                  "generated api docs, devflow/specs, source, and tests. Spot-run the "
                  "highest-risk snippets where practical — `make build`, then a disposable "
                  "workspace from your own `ws=$(mktemp -d)` shell variable with every "
-                 "--workspace expansion guarded as \"${ws:?}\"; NEVER the canonical .skein "
+                 "--workspace expansion guarded as \"${ws:?}\"; NEVER the canonical .millstrand "
                  "world. Flag invented surface, stale claims the diff should have updated, "
                  "and citations that do not support the prose. Accuracy findings are "
                  "must-fix. Budget ~15-20 calls plus the snippet runs you choose.")}

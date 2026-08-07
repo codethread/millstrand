@@ -5,7 +5,7 @@
 .nrepl-port
 .test-repl-port
 .test-repl.pid
-.skein/.land-merge-lock.acquire
+.millstrand/.land-merge-lock.acquire
 
 cli/bin/
 /bin/

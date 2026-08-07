@@ -26,7 +26,7 @@ Implement `PLAN-Srs-001.PH4`: fold the four binding deltas into the root specs, 
 
 ## TASK-Srs-004.P4 Out of scope
 
-- **TASK-Srs-004.OS1:** Own root specs and human-facing docs only, plus the batteries namespace/`contribute` docstrings and their generated `spools/batteries.api.md`. Do not change runtime behavior, Clojure tests, `deps.edn`, `.skein/`, smoke behavior, or `cli/`.
+- **TASK-Srs-004.OS1:** Own root specs and human-facing docs only, plus the batteries namespace/`contribute` docstrings and their generated `spools/batteries.api.md`. Do not change runtime behavior, Clojure tests, `deps.edn`, `.millstrand/`, smoke behavior, or `cli/`.
 - **TASK-Srs-004.OS2:** Do not run PH5 queue acceptance, perform the coordinator-owned fresh-generation smoke, land the branch, or sweep sibling repositories.
 - **TASK-Srs-004.OS3:** Every runtime experiment must use a disposable world created with `mktemp -d`, an explicit guarded `${ws:?}` `--workspace` path, and repo-local `./bin/strand` and `./bin/mill` built by `make build`. Never start, stop, restart, or refresh the canonical weaver. Kill only a verified PID, never by process-name or pattern. Never run `make install`.
 

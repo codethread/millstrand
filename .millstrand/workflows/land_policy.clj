@@ -753,7 +753,7 @@
             |At push-draft-pr: push, open or reuse a draft PR, then `strand
             |land complete <run-id> --pr-number <n>` (not bare workflow
             |complete). The first ci-green shell gate runs the tracked
-            |`.skein/land-quality.sh` contract from the feature worktree. The
+            |`.millstrand/land-quality.sh` contract from the feature worktree. The
             |workflow then fans the change-review roster into subagent gates
             |and synthesizes their notes. Resolve the synthesis, commit and
             |push fixes, and complete resolve-review; final-ci-green runs the

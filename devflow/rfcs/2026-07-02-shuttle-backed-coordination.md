@@ -6,7 +6,7 @@
 
 Dogfooding the `workflow-ergonomics` feature proved that strands are a strong coordination substrate, but the executable-agent part of the loop is still too manual. The coordinator had to translate ready strands into harness-native subagent calls, watch chat/session state, reconcile `/tmp` sentinels with strand attributes, update task indexes and plan notes by hand, and recover from partial subagent completion by inspecting diffs and ad hoc progress markers.
 
-The newly landed Shuttle spool supplies the missing executable layer: durable agent-run strands, readiness-driven spawning, harness selection, run results, crash reconciliation, and append-only notes. The decision now is how to compose Shuttle with the existing strand DAG, workflow/devflow stages, and repo-local `.skein` conventions so future features can delegate work through Skein itself rather than through a coordinator's private harness session.
+The newly landed Shuttle spool supplies the missing executable layer: durable agent-run strands, readiness-driven spawning, harness selection, run results, crash reconciliation, and append-only notes. The decision now is how to compose Shuttle with the existing strand DAG, workflow/devflow stages, and repo-local `.millstrand` conventions so future features can delegate work through Skein itself rather than through a coordinator's private harness session.
 
 Pain points to address:
 
@@ -40,7 +40,7 @@ Pain points to address:
   serves.
 - **RFC-010.G2:** Preserve the existing separation of concerns: strands model
   work and dependencies; workflow/devflow model lifecycle; Shuttle executes
-  agent runs; repo `.skein` config composes them into local conventions.
+  agent runs; repo `.millstrand` config composes them into local conventions.
 - **RFC-010.G3:** Use `depends-on` readiness as the only sequencing primitive for
   agent execution. A run starts when its blockers close; fan-out/fan-in is graph
   structure, not coordinator code.
@@ -130,13 +130,13 @@ Pain points to address:
 
 ## RFC-010.P6 Consequences
 
-- **RFC-010.C1:** `.skein/init.clj` and `.skein/spools.edn` should approve and
+- **RFC-010.C1:** `.millstrand/init.clj` and `.millstrand/spools.edn` should approve and
   activate `spools/shuttle` in the canonical repo workspace when the user accepts
   this direction.
-- **RFC-010.C2:** `.skein/config.clj` likely gains one small delegation helper
+- **RFC-010.C2:** `.millstrand/config.clj` likely gains one small delegation helper
   (pattern or op), plus query/view conventions for task-linked Shuttle runs and
   active/failed delegated work.
-- **RFC-010.C3:** the root `AGENTS.md` "Repo coordination workspace" section (formerly `.skein/AGENTS.md`) and the local strand skill should teach the
+- **RFC-010.C3:** the root `AGENTS.md` "Repo coordination workspace" section (formerly `.millstrand/AGENTS.md`) and the local strand skill should teach the
   new default delegation loop: inspect ready work, delegate with Shuttle when
   appropriate, monitor `agent ps`/run strands, verify result, then close the
   coordination strand.

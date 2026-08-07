@@ -12,7 +12,7 @@
   unsafe namespace (no cross-repo lockstep, so the breakage contract
   cannot be encapsulated away); and the ns docstring leads with
   `UNSAFE:` exactly when the name is unsafe. Local workspace spools
-  under `.skein/spools/` are trusted config accepting the compatibility
+  under `.millstrand/spools/` are trusted config accepting the compatibility
   cost (SPEC-004.C40) and are out of scope. The sibling fences owned
   elsewhere are `millstrand.api.*.internal` by `quality.api-form`. The
   findings logic loads on the test classpath; the caller supplies

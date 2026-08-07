@@ -438,7 +438,7 @@ This change intentionally withdraws the accepted `:reconcile` key from `skein.ap
 The cutover sequence is:
 
 1. Implement lifecycle collection, validation, retained state, execution, inspection, and tests.
-2. Convert every in-tree and `.skein` reconciler to lifecycle forms.
+2. Convert every in-tree and `.millstrand` reconciler to lifecycle forms.
 3. Coordinate sibling spool releases and pin bumps so the selected source universe contains no `:reconcile` declarations.
 4. Remove `:reconcile` from the `::spool` grammar and convention resolver.
 5. Delete reconciler retention and dispatch once lifecycle retention covers removal-by-omission.
@@ -458,18 +458,18 @@ After this RFC, a namespace may temporarily still contain:
   {:contribute 'contribute})
 ```
 
-That is not the desired final surface. The current authoring forms are not yet one shipped `skein.api.*` surface: `defop`, `defquery`, `defpattern`, and `defrule` live in this repo's `.skein/spools/macros`; `defjob` and `defworkflow` correctly live in their shipped Cron and Workflow spool namespaces. A separate RFC must verify how to make authoring forms complete before proposing the `:contribute` break.
+That is not the desired final surface. The current authoring forms are not yet one shipped `skein.api.*` surface: `defop`, `defquery`, `defpattern`, and `defrule` live in this repo's `.millstrand/spools/macros`; `defjob` and `defworkflow` correctly live in their shipped Cron and Workflow spool namespaces. A separate RFC must verify how to make authoring forms complete before proposing the `:contribute` break.
 
 ### RFC-Laf-001.P13.1 Unverified migration sketch
 
 The following is a discussion sketch, not a design decision or a claim that the present APIs cover every contribution. Each step needs source archaeology, prototypes against real spools, and its own RFC:
 
 1. Complete the generic declarative kind-and-entry mechanism over the primitives already present in `skein.api.registry.alpha` and `skein.api.runtime.alpha`. The APIs already declare owner-partitioned kinds and collect entries, but provider modules such as Cron and Workflow currently use `:contribute` to materialize their runtime-owned kind registries before dependent contributions stage. Removing the callback requires a declarative kind-bootstrap path.
-2. Promote general authoring forms from `.skein/spools/macros` into shipped APIs. One possible layout colocates a form with the API whose entry it builds: `skein.api.weaver.alpha/defop`, `skein.api.graph.alpha/defquery`, `skein.api.patterns.alpha/defpattern`, `skein.api.events.alpha/defhandler`, and `skein.api.hooks.alpha/defhook`. A central `skein.api.macros.alpha` is another option. Namespace ownership has not been decided.
+2. Promote general authoring forms from `.millstrand/spools/macros` into shipped APIs. One possible layout colocates a form with the API whose entry it builds: `skein.api.weaver.alpha/defop`, `skein.api.graph.alpha/defquery`, `skein.api.patterns.alpha/defpattern`, `skein.api.events.alpha/defhandler`, and `skein.api.hooks.alpha/defhook`. A central `skein.api.macros.alpha` is another option. Namespace ownership has not been decided.
 3. Keep domain forms with their shipped spools. `skein.spools.cron/defjob` and `skein.spools.workflow/defworkflow` are the right ownership direction: the blessed APIs supply collection and registry primitives, while the spool defines the meaning and validation of its entry.
 4. Fill expressiveness gaps without recreating an unrestricted module-wide callback under another name. Static entries, custom kinds, overrides, candidate validation, programmatically generated entries, multi-namespace spools, empty kind-provider modules, provenance, image activation, and removal by omission all need a form or a deliberate boundary. A possible generic computed-entry form should remain scoped to one declared kind.
 5. Make the promoted forms testable through the production module path. Macro expansion, collection, invalid declarations, duplicate and override behavior, activation, removal by omission, image mode, and plan/status projections need public testing support.
-6. Migrate in-tree spools, `.skein` config, sibling spools, examples, and tests. Prove contribution and removal parity before changing the grammar.
+6. Migrate in-tree spools, `.millstrand` config, sibling spools, examples, and tests. Prove contribution and removal parity before changing the grammar.
 7. Only after the selected source universe has moved, remove `:contribute`, delete callback resolution and retention, and reject the old form with an actionable authoring-form remedy.
 
 This sequence may change once verified. In particular, a generic authoring form that accepts a function returning an arbitrary multi-kind map would merely rename `:contribute` and fail the goal.

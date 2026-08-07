@@ -55,7 +55,7 @@ vim.api.nvim_create_autocmd("FileType", {
 
 ## clojure-lsp project root
 
-Every spool in this repo is its own directory with its own `deps.edn` — `spools/*/deps.edn`, plus `.skein/spools/*/deps.edn`. nvim-lspconfig's default `root_markers` for `clojure_lsp` list `deps.edn` and `.git` at equal priority, so the nearest marker wins: opening `spools/workflow/src/millstrand/spools/workflow.clj` roots the server at `spools/workflow`. That directory's `deps.edn` is only `{:paths ["src"]}`, so Millstrand core never reaches the classpath and go-to-definition into `millstrand.core.*` silently fails.
+Every spool in this repo is its own directory with its own `deps.edn` — `spools/*/deps.edn`, plus `.millstrand/spools/*/deps.edn`. nvim-lspconfig's default `root_markers` for `clojure_lsp` list `deps.edn` and `.git` at equal priority, so the nearest marker wins: opening `spools/workflow/src/millstrand/spools/workflow.clj` roots the server at `spools/workflow`. That directory's `deps.edn` is only `{:paths ["src"]}`, so Millstrand core never reaches the classpath and go-to-definition into `millstrand.core.*` silently fails.
 
 Give `.git` its own higher-priority tier so the repo root always wins:
 
@@ -73,7 +73,7 @@ Nested tables are priority tiers, so the second one still roots checkouts that h
 A server that already started in the wrong place leaves a cache behind that survives the config change. Delete those once, then reopen a Clojure file:
 
 ```sh
-rm -rf spools/*/.lsp spools/*/.clj-kondo .skein/spools/*/.lsp .skein/spools/*/.clj-kondo
+rm -rf spools/*/.lsp spools/*/.clj-kondo .millstrand/spools/*/.lsp .millstrand/spools/*/.clj-kondo
 ```
 
 The first open after that rebuilds the repo-root cache, which takes a while on a classpath this size.

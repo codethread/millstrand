@@ -160,8 +160,8 @@
   apart; default \"millstrand-spools-config\") and `:nest-millstrand?` (default false).
   Some spool code (e.g. agent-run's `pinned-strand-command`) derives a
   \"workspace root\" from the config-dir's parent, matching the real
-  repo-root/.skein layout; set `:nest-millstrand?` true so the returned config-dir
-  is a `.skein` child of the temp root instead of the root itself, when a
+  repo-root/.millstrand layout; set `:nest-millstrand?` true so the returned config-dir
+  is a `.millstrand` child of the temp root instead of the root itself, when a
   test exercises that derivation."
   ([] (temp-config-dir {}))
   ([{:keys [prefix nest-millstrand?] :or {prefix "millstrand-spools-config"}}]
@@ -169,7 +169,7 @@
                         (.toPath (io/file "/tmp"))
                         prefix
                         (make-array java.nio.file.attribute.FileAttribute 0)))
-         config-dir (if nest-millstrand? (io/file root ".skein") root)]
+         config-dir (if nest-millstrand? (io/file root ".millstrand") root)]
      (doto config-dir (.mkdirs)))))
 
 (defn await-budget-ms

@@ -4,7 +4,7 @@
 
 ## PROP-Mcg-001.P1 Problem
 
-The repository's main-branch CI watch is an inline shell program in `.skein/workflows.clj`. It uses shell and `jq` to emulate a tuple and a stability counter even though its work is data-oriented polling. The shell gate also owns a working-directory attribute that must not be lost when the watch moves in-process.
+The repository's main-branch CI watch is an inline shell program in `.millstrand/workflows.clj`. It uses shell and `jq` to emulate a tuple and a stability counter even though its work is data-oriented polling. The shell gate also owns a working-directory attribute that must not be lost when the watch moves in-process.
 
 ## PROP-Mcg-001.P2 Goals
 

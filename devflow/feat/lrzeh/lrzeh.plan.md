@@ -59,7 +59,7 @@ Outcome: focused tests pass, the hand-written contract is current, generated API
 ## PLAN-Wrc-001.P8 Task context
 
 - **PLAN-Wrc-001.TC1:** Preserve the settled shallow last-write-wins rule. Do not add producer declarations or change defer parameter behavior.
-- **PLAN-Wrc-001.TC2:** Keep the generic feature disjoint from `.skein/workflows.clj`; land-specific adoption is a dependent card.
+- **PLAN-Wrc-001.TC2:** Keep the generic feature disjoint from `.millstrand/workflows.clj`; land-specific adoption is a dependent card.
 - **PLAN-Wrc-001.TC3:** This card changes `complete!` and `workflow complete` only. It does not add context to the convenience `advance!` wrapper.
 
 ## PLAN-Wrc-001.P9 Developer Notes

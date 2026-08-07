@@ -56,7 +56,7 @@ That mechanism has several costs:
 
 The split also leaves gaps in the authoring forms themselves. Today `collect-entry!` can record explicit override intent, but the workspace-local `defop` form cannot express it. Source evaluation can collect top-level forms, but image loading deliberately evaluates no source and therefore relies on the retained `:contribute` callback. Some domain spools use `contribute` to establish a registry kind before dependent entries publish. These are real differences in the current implementation, but none requires `:contribute` as a permanent authoring abstraction. They identify the behavior a complete authoring-form design must preserve.
 
-The current surface is also split by ownership. `defop`, `defquery`, `defpattern`, and `defrule` are prototypes in this repository's `.skein` workspace, not shipped `skein.api.*` forms, and they call an internal collector. `defworkflow` and `defjob` are shipped by their domain spools and already call the blessed `skein.api.runtime.alpha/collect-entry!`. A complete replacement therefore includes promoting supported forms for core kinds into shipped API surface while domain-specific forms remain owned by their spools. This RFC decides that scope; the feature proposal decides exact namespaces and signatures.
+The current surface is also split by ownership. `defop`, `defquery`, `defpattern`, and `defrule` are prototypes in this repository's `.millstrand` workspace, not shipped `skein.api.*` forms, and they call an internal collector. `defworkflow` and `defjob` are shipped by their domain spools and already call the blessed `skein.api.runtime.alpha/collect-entry!`. A complete replacement therefore includes promoting supported forms for core kinds into shipped API surface while domain-specific forms remain owned by their spools. This RFC decides that scope; the feature proposal decides exact namespaces and signatures.
 
 ## RFC-Saf-001.P3 Mental model
 
@@ -318,7 +318,7 @@ That residual form belongs to the separate reconcile decision. It is not a reaso
 
 The recommendation is ready to become the platform contract only if the feature proposal can demonstrate:
 
-- **RFC-Saf-001.AC1:** every core and shipped domain contribution kind has a named authoring form or a documented factory-backed batch form, with core-kind forms available from shipped API surface rather than repository-local `.skein` code;
+- **RFC-Saf-001.AC1:** every core and shipped domain contribution kind has a named authoring form or a documented factory-backed batch form, with core-kind forms available from shipped API surface rather than repository-local `.millstrand` code;
 - **RFC-Saf-001.AC2:** explicit overrides are expressible without raw contribution maps;
 - **RFC-Saf-001.AC3:** source and image activation produce equal normalized contributions for the same loaded namespace;
 - **RFC-Saf-001.AC4:** removal by omission remains exact after source refresh, including after a declaration form is deleted;

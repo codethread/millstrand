@@ -42,7 +42,7 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
 ## PROP-Sbn-001.P4 Proposed scope
 
-- **PROP-Sbn-001.S1 (the core `:bins` kind, the `defbin` form, and the `bins` protocol):** Core declares `:bins` as a sixth owner-partitioned registry kind and ships `defbin` as the sixth core authoring form, beside `defop`, `defquery`, `defpattern`, `defhook`, and `defhandler` in `skein.api.skein.alpha` (PROP-Auf-001.REC4; AC1 requires every core kind to have a named form). `:bins` is Skein's kind rather than a domain vocabulary a spool owns, which is what puts both the kind and its form in core (S9). Any active module may declare entries, and core owns the one shape check they get, because it applies identically to every declaring module.
+- **PROP-Sbn-001.S1 (the core `:bins` kind, the `defbin` form, and the `bins` protocol):** Core declares `:bins` as a sixth owner-partitioned registry kind and ships `defbin` as the sixth core authoring form, beside `defop`, `defquery`, `defpattern`, `defhook`, and `defhandler` in `skein.api.millstrand.alpha` (PROP-Auf-001.REC4; AC1 requires every core kind to have a named form). `:bins` is Skein's kind rather than a domain vocabulary a spool owns, which is what puts both the kind and its form in core (S9). Any active module may declare entries, and core owns the one shape check they get, because it applies identically to every declaring module.
 
   Core also registers the read-only `bins` op. `bins list` returns the effective winning declarations after overrides, and `bins plan <name>` returns the S7 exec plan. Both are `:read` hook-class. `mill bin list` relays `bins list`; `mill bin build` reads the same plan and runs the recipe; `mill bin run` calls `bins plan` and execs the result. `strand bins list` remains an ordinary op call for clients that want JSON without execution.
 
@@ -52,7 +52,7 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
   ```clojure
   (ns ct.spools.kanban.dash
-    (:require [skein.api.skein.alpha :as skein]))
+    (:require [skein.api.millstrand.alpha :as skein]))
 
   (skein/defbin kanban-dash
     "Interactive kanban board TUI over the live workspace."
@@ -80,7 +80,7 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
   | Anchor | Base | Definition |
   | ------ | ---- | ---------- |
-  | `:family` | the repository checkout | one key in `.skein/spools.edn`, one release unit |
+  | `:family` | the repository checkout | one key in `.millstrand/spools.edn`, one release unit |
   | `:root` | one public library within that family | a `:roots` entry, the path `approved` already stamps as `:root` |
 
   The named file may be a committed compiled program, an executable script with a shebang, the output of the entry's own `:build` recipe, or a program the consumer already has installed.
@@ -110,7 +110,7 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
   Anchors resolve at plan time from the declaring file, which the contribution collector already canonicalizes for every authoring form (`module_graph.clj:298`). The longest `:root` in `approved` that prefixes that file identifies the library, and its family supplies the checkout; `:root` and `:family` take those two bases. No owner-to-root mapping is invented and nothing depends on a module's `:spools` vector, so a module with several prerequisites is unambiguous.
 
-  A declaring file under no approved root resolves neither anchor — the repo's own `.skein/config.clj` is the ordinary case, since workspace configuration is not a library within a family. Such a bin fails at plan time with `bin/anchor-unresolved` naming the file and the anchor, and the remedy is a string spelling, which is what workspace-owned bins want anyway: `~/bin/x` or an absolute path is a legitimate declaration that no anchor could express.
+  A declaring file under no approved root resolves neither anchor — the repo's own `.millstrand/config.clj` is the ordinary case, since workspace configuration is not a library within a family. Such a bin fails at plan time with `bin/anchor-unresolved` naming the file and the anchor, and the remedy is a string spelling, which is what workspace-owned bins want anyway: `~/bin/x` or an absolute path is a legitimate declaration that no anchor could express.
 
   With no path rule to enforce, the kind needs no `:candidate-validator` and registration performs no filesystem check on any bin. Every filesystem question moves to `bins plan`, which evaluates one runnable predicate — the resolved path names an existing regular file carrying an executable bit — and reports the result. This is the one place a bin's readiness is ever consulted, so a bin whose recipe has not run, whose file was deleted after registration, and whose spool was re-materialized at a new pin all reach the same predicate by the same route. A bare `PATH` name is the one spelling this predicate cannot judge, because deciding it would need the very `PATH` search Skein does not perform; such a plan reports `runnable` as `null` and travels as a command rather than a path (S7).
 
@@ -149,7 +149,7 @@ The correctness stance for this whole surface: failures are acceptable provided 
    "bin": "kanban-dash",
    "runnable": false,
    "exec": {"path": "/Users/ct/.cache/skein/spools/603fa7b8…/bin/kanban-dash",
-            "env": {"SKEIN_WORKSPACE": "/Users/ct/dev/projects/skein-src/.skein"}},
+            "env": {"SKEIN_WORKSPACE": "/Users/ct/dev/projects/skein-src/.millstrand"}},
    "build": {"argv": ["bun", "install", "--cwd", "scripts/kanban-export",
                       "--frozen-lockfile"],
              "cwd":  "/Users/ct/.cache/skein/spools/603fa7b8…"}}
@@ -179,9 +179,9 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
   Skein does not preflight interpreters or dependencies. Those failures remain normal executable failures, or the script may check them and print its own remedy.
 
-- **PROP-Sbn-001.S9 (spec and contract accounting):** SPEC-002.P1 currently draws the mill/strand line as "`mill` owns everything that must work without a running weaver; `strand` is a pure dispatcher for everything that needs one." `mill bin` requires a live weaver, so SPEC-002 changes that principle to distinguish privileged client-side behavior from pure relay. SPEC-002 also owns the three verbs, flag cutover, exec behavior, `build`'s child-process contract and result envelope, outcomes, typed Go decoding of the plan, and `SKEIN_WORKSPACE` child-environment contract. SPEC-004 owns the core `:bins` kind, the `bins` read protocol, the closed `:family`/`:root` anchor vocabulary and its resolution from the declaring file, and the named consulted specs for the list and plan result shapes. Both anchor words are `devflow/UBIQUITOUS-LANGUAGE.md` terms used in their registered senses, so the surface adds no vocabulary; the language file already retires bare "spool" wherever a family and a root are both live in a sentence, which is why neither anchor is spelled `:spool`. SPEC-003 owns `defbin` as the sixth public form in `skein.api.skein.alpha`.
+- **PROP-Sbn-001.S9 (spec and contract accounting):** SPEC-002.P1 currently draws the mill/strand line as "`mill` owns everything that must work without a running weaver; `strand` is a pure dispatcher for everything that needs one." `mill bin` requires a live weaver, so SPEC-002 changes that principle to distinguish privileged client-side behavior from pure relay. SPEC-002 also owns the three verbs, flag cutover, exec behavior, `build`'s child-process contract and result envelope, outcomes, typed Go decoding of the plan, and `SKEIN_WORKSPACE` child-environment contract. SPEC-004 owns the core `:bins` kind, the `bins` read protocol, the closed `:family`/`:root` anchor vocabulary and its resolution from the declaring file, and the named consulted specs for the list and plan result shapes. Both anchor words are `devflow/UBIQUITOUS-LANGUAGE.md` terms used in their registered senses, so the surface adds no vocabulary; the language file already retires bare "spool" wherever a family and a root are both live in a sentence, which is why neither anchor is spelled `:spool`. SPEC-003 owns `defbin` as the sixth public form in `skein.api.millstrand.alpha`.
 
-  Adding a public Var to that namespace needs its own TEN-004 justification, and PROP-Auf-001.AC1 does not supply it: AC1 binds core and shipped domain kinds alike, and accepts a documented factory-backed batch form in place of a named form, so it settles neither where `:bins` lives nor that it needs a macro. The justification is the one S1 states — `:bins` is Skein's own kind, sitting beside `:ops`, `:queries`, `:patterns`, `:hooks`, and `:events`, rather than a domain vocabulary some spool owns. Its consequence is what makes the choice load-bearing: the domain route would put the kind in a spool, and every executable-shipping spool would then take a hard dependency and a module-ordering edge on that owner merely to declare a bin, exactly as `.skein/nvd_scan.clj:180` does for cron's `defjob`. That would leave a core `mill` verb family depending on a deletable spool (SPEC-004.C50a). Once the kind is core, the form is core with it, and AC1 then requires that the form be shipped API surface rather than repository-local `.skein` code.
+  Adding a public Var to that namespace needs its own TEN-004 justification, and PROP-Auf-001.AC1 does not supply it: AC1 binds core and shipped domain kinds alike, and accepts a documented factory-backed batch form in place of a named form, so it settles neither where `:bins` lives nor that it needs a macro. The justification is the one S1 states — `:bins` is Skein's own kind, sitting beside `:ops`, `:queries`, `:patterns`, `:hooks`, and `:events`, rather than a domain vocabulary some spool owns. Its consequence is what makes the choice load-bearing: the domain route would put the kind in a spool, and every executable-shipping spool would then take a hard dependency and a module-ordering edge on that owner merely to declare a bin, exactly as `.millstrand/nvd_scan.clj:180` does for cron's `defjob`. That would leave a core `mill` verb family depending on a deletable spool (SPEC-004.C50a). Once the kind is core, the form is core with it, and AC1 then requires that the form be shipped API surface rather than repository-local `.millstrand` code.
 
   The form's option grammar and declaration constructor stay internal in `skein.core.contribution`, and the kind's kernel `:entry-spec` stays permissive, matching the five existing core kinds. `test/skein/api/skein_test.clj` pins that namespace's publics to exactly the five shipped forms, so the feature amends that assertion deliberately rather than discovering it. The alpha-surface index publishes the form and the result spec names; `make api-docs` regenerates `docs/api/skein.api.md` from the `defbin` docstring. The spool authoring guide gains bins in its "Author contributions with kind-specific forms" section, explains how to ship an executable wrapper and consume `SKEIN_WORKSPACE`, and `devflow/UBIQUITOUS-LANGUAGE.md` gains the word "bin".
 

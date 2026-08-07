@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-contract=.skein/land-quality.sh
+contract=.millstrand/land-quality.sh
 target=${1-}
 
 die() {

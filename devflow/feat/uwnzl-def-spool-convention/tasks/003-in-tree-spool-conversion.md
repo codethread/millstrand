@@ -8,13 +8,13 @@ Type: AFK
 
 Convert this checkout's own spools and config to the convention: rename the exported `def module` to `def spool`, add `spool` vars to the file-module namespaces, drop only the in-tree explicit init triples, move `activate-spool!` to a namespace symbol, and narrow the parity coverage truthfully. Rebase onto the verified core commit first so focused tests exercise the real convention. Tracked on strand `vqwbt`.
 
-Owned files only: the seven in-tree spool source files named in `PROP-Dsp-001.P1`; `.skein/module_adapters.clj`, `.skein/harnesses.clj`, `.skein/reviewers.clj`, `.skein/kanban_tracker.clj`, `.skein/workflows.clj`, `.skein/init.clj`; `test/skein/spools/test_support.clj`; the `activate-spool!` caller tests; `test/skein/config_test.clj`.
+Owned files only: the seven in-tree spool source files named in `PROP-Dsp-001.P1`; `.millstrand/module_adapters.clj`, `.millstrand/harnesses.clj`, `.millstrand/reviewers.clj`, `.millstrand/kanban_tracker.clj`, `.millstrand/workflows.clj`, `.millstrand/init.clj`; `test/skein/spools/test_support.clj`; the `activate-spool!` caller tests; `test/skein/config_test.clj`.
 
 ## TASK-Dsp-003.P2 Must implement exactly
 
 - **TASK-Dsp-003.MI1:** Rename the seven exported `def module` declarations to `def spool` and drop `:ns`.
 - **TASK-Dsp-003.MI2:** Add a public `spool` var to the five file-module namespaces.
-- **TASK-Dsp-003.MI3:** Drop the in-tree explicit `:contribute`/`:reconcile` init triples from `.skein/init.clj`; retain the sibling-backed triples for Phase C (Task 9).
+- **TASK-Dsp-003.MI3:** Drop the in-tree explicit `:contribute`/`:reconcile` init triples from `.millstrand/init.clj`; retain the sibling-backed triples for Phase C (Task 9).
 - **TASK-Dsp-003.MI4:** Change `activate-spool!` to accept and require a namespace symbol; sweep every caller and fixture without image-mode workarounds.
 - **TASK-Dsp-003.MI5:** Narrow or replace the parity coverage to describe Phase A behaviour truthfully; do not delete the narrowed parity test yet (Phase C removes it).
 

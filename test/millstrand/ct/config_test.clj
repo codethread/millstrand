@@ -1,5 +1,5 @@
 (ns millstrand.ct.config-test
-  "Tests for the repo-local .skein config modules.
+  "Tests for the repo-local .millstrand config modules.
 
   Covers registration, the delegate-pipeline weave pattern, the land workflow,
   generic workflow integration with ct.spools.devflow, and report scripts."
@@ -38,7 +38,7 @@
   "Write repo spool approvals into target for an embedded runtime."
   [target]
   (spit (io/file target "spools.edn")
-        (pr-str (test-support/embedded-spools-edn ".skein/spools.edn"))))
+        (pr-str (test-support/embedded-spools-edn ".millstrand/spools.edn"))))
 
 (defn- with-runtime-loader
   "Run f with runtime's ambient binding and synced spool classloader."
@@ -68,7 +68,7 @@
   (let [path (.getCanonicalPath (io/file file))
         ns-sym (symbol (str "ct."
                             (-> file
-                                (str/replace #"^\.skein/" "")
+                                (str/replace #"^\.millstrand/" "")
                                 (str/replace #"\.clj$" "")
                                 (str/replace "/" ".")
                                 (str/replace "_" "-"))))]
@@ -99,7 +99,7 @@
       #(spool-sync/load-synced-namespace! rt ns-sym module-key)))))
 
 (defn- with-config-runtime
-  "Run f with an isolated runtime and the repo-local .skein config loaded.
+  "Run f with an isolated runtime and the repo-local .millstrand config loaded.
 
   Loads the split config modules the way init.clj orders them: policy/config.clj
   first, then the harness and guide modules, shared workflow support, the
@@ -129,23 +129,23 @@
                                           'millstrand.spools.workflow.cli
                                           :after [:millstrand/spools-workflow])
             (load-module-namespace! rt :millstrand/spools-devflow 'ct.spools.devflow)
-            (load-module-source! rt :config ".skein/policy/config.clj")
-            (load-module-source! rt :harnesses ".skein/agents/harnesses.clj")
+            (load-module-source! rt :config ".millstrand/policy/config.clj")
+            (load-module-source! rt :harnesses ".millstrand/agents/harnesses.clj")
             ((requiring-resolve 'ct.agents.harnesses/open-review-contract!) {:runtime rt})
             ((requiring-resolve 'ct.agents.harnesses/open-task-contract!) {:runtime rt})
-            (load-module-source! rt :reviewers ".skein/agents/reviewers.clj")
-            (load-module-source! rt :guide ".skein/agents/guide.clj")
-            (load-module-source! rt :workflows.support ".skein/workflows/support.clj")
-            (load-module-source! rt :workflows ".skein/workflows/common.clj")
+            (load-module-source! rt :reviewers ".millstrand/agents/reviewers.clj")
+            (load-module-source! rt :guide ".millstrand/agents/guide.clj")
+            (load-module-source! rt :workflows.support ".millstrand/workflows/support.clj")
+            (load-module-source! rt :workflows ".millstrand/workflows/common.clj")
             (load-module-source! rt :workflows.land
-                                 ".skein/workflows/land.clj")
+                                 ".millstrand/workflows/land.clj")
             (load-module-source! rt :workflows.spool-bump
-                                 ".skein/workflows/spool_bump.clj")
-            (load-module-source! rt :workflows.story ".skein/workflows/story.clj")
-            (load-module-source! rt :workflows.explore ".skein/workflows/explore.clj")
-            (load-module-source! rt :workflows.fix ".skein/workflows/fix.clj")
-            (load-module-source! rt :workflows.land-policy ".skein/workflows/land_policy.clj")
-            (load-module-source! rt :workflows.ralph ".skein/workflows/ralph.clj")
+                                 ".millstrand/workflows/spool_bump.clj")
+            (load-module-source! rt :workflows.story ".millstrand/workflows/story.clj")
+            (load-module-source! rt :workflows.explore ".millstrand/workflows/explore.clj")
+            (load-module-source! rt :workflows.fix ".millstrand/workflows/fix.clj")
+            (load-module-source! rt :workflows.land-policy ".millstrand/workflows/land_policy.clj")
+            (load-module-source! rt :workflows.ralph ".millstrand/workflows/ralph.clj")
             (f rt)))
         (finally
           (weaver-runtime/stop! rt)
@@ -164,11 +164,11 @@
                 "adapters/module.clj" "spools.edn"]]
     (let [destination (io/file target name)]
       (some-> destination .getParentFile .mkdirs)
-      (io/copy (io/file ".skein" name) destination)))
+      (io/copy (io/file ".millstrand" name) destination)))
   (let [scripts-target (io/file target "workflows" "scripts")]
     (.mkdirs scripts-target)
     (doseq [name ["feature-ci-watch.sh" "land-quality-gate.sh" "land-cleanup.sh" "land-merge.sh"]]
-      (io/copy (io/file ".skein/workflows/scripts" name) (io/file scripts-target name))))
+      (io/copy (io/file ".millstrand/workflows/scripts" name) (io/file scripts-target name))))
   ;; The copied config dir would reinterpret repo-relative local roots. Git
   ;; families remain byte-for-byte sourced from the checked-in approvals.
   (write-embedded-spools! target)
@@ -182,7 +182,7 @@
                      (chime/set-notifier! {:argv ["true"]})))))
 
 (defn- with-startup-config-runtime
-  "Run f with an isolated runtime started through copied .skein/init.clj."
+  "Run f with an isolated runtime started through copied .millstrand/init.clj."
   [f]
   (let [db-file (db-test/temp-db-file)
         config-dir (str "/tmp/millstrand-config-startup-" (java.util.UUID/randomUUID))]
@@ -216,7 +216,7 @@
                     ":f16-probe-flow 'ct.workflows.story/story)\n")))))
 
 (deftest f16-workspace-partition-refresh-deletes-omitted-seats-and-constructors
-  ;; F16 regression: the .skein policy files publish their harness seats, reviewer
+  ;; F16 regression: the .millstrand policy files publish their harness seats, reviewer
   ;; rosters, and workflow definitions as :workspace-layer partitions, so removing
   ;; an entry from the file and refreshing must DELETE it from the live registry.
   ;; The reconcile->install! path this replaced upserted into a shared REPL owner,
@@ -316,7 +316,7 @@
 
 (def ^:private named-query-names
   "The config-owned named queries whose registered definitions the surface
-  baseline preserves, authored as `defquery` blocks in .skein/policy/config.clj."
+  baseline preserves, authored as `defquery` blocks in .millstrand/policy/config.clj."
   ["run-active" "kanban-feature-work" "workflow-runs" "merge-lock"
    "merge-queue" "work"])
 
@@ -326,7 +326,7 @@
   The runtime resolves each op's source to an absolute on-disk path — the most
   useful form for the live API — so freezing it verbatim would bind the surface
   baseline to one checkout. Strip the checkout-root prefix here so the frozen
-  surface reads e.g. `.skein/policy/config.clj` and stays portable across CI and other
+  surface reads e.g. `.millstrand/policy/config.clj` and stays portable across CI and other
   worktrees; `:line` is kept as-is."
   [detail]
   (let [root (str (System/getProperty "user.dir") "/")]
@@ -411,7 +411,7 @@
   ;; the repo owns chime's attention rules; the chime engine ships none
   (is (= [:hitl-checkpoint-ready :kanban-completed :parked-run]
          (mapv :key ((requiring-resolve 'millstrand.spools.chime/rules)))))
-  ;; the declarative reviewer rosters register from .skein/agents/reviewers.clj
+  ;; the declarative reviewer rosters register from .millstrand/agents/reviewers.clj
   (let [rosters ((requiring-resolve 'ct.spools.delegation/rosters))]
     (is (= [:change-review :complex-patch-review :docs-review] (mapv :name rosters)))
     (is (some #(= "test-sleeps" (:name %)) (:seats (first rosters))))))
@@ -420,7 +420,7 @@
   ;; The baseline freezes the config-owned op help and named-query definitions.
   ;; Regenerate it only when a feature deliberately changes that public surface.
   (let [golden (edn/read-string (slurp "test/millstrand/surface_baseline.edn"))
-        current (capture-config-surface ".skein/policy/config.clj")]
+        current (capture-config-surface ".millstrand/policy/config.clj")]
     (is (= (:queries golden) (:queries current))
         "every named query definition matches the pre-refactor baseline")
     (doseq [op config-op-names]
@@ -571,7 +571,7 @@
                        ["spool-bump.bump-world.start"
                         :attributes
                         "workflow/instruction"])
-               "mill weaver start --workspace /tmp/bump-demo/.skein"))
+               "mill weaver start --workspace /tmp/bump-demo/.millstrand"))
           (is (str/includes?
                (get-in (first bump-steps) [:attributes "workflow/instruction"])
                "spool bump codethread/kanban`"))
@@ -583,7 +583,7 @@
                        ["spool-bump.bump-world.stop"
                         :attributes
                         "workflow/instruction"])
-               "mill weaver stop --workspace /tmp/bump-demo/.skein"))
+               "mill weaver stop --workspace /tmp/bump-demo/.millstrand"))
           (is (str/includes?
                (get-in by-action-ref
                        ["spool-bump.world.create"
@@ -642,7 +642,7 @@
                 "worktree"
                 (str "<" (fmt/reflow
                           "|Absolute feature worktree path for the branch; its
-                           |.skein directory is the selected workspace the bump
+                           |.millstrand directory is the selected workspace the bump
                            |runs against.") ">")
                 "direct-user-request"
                 (str "<" (fmt/reflow
@@ -979,7 +979,7 @@
   ;; exercises the same contribution path init.clj's reviewers module runs
   (with-config-runtime
     (fn [rt]
-      (load-module-source! rt :reviewers ".skein/agents/reviewers.clj")
+      (load-module-source! rt :reviewers ".millstrand/agents/reviewers.clj")
       (let [rosters ((requiring-resolve 'ct.spools.delegation/rosters))
             roster (first (filter #(= :change-review (:name %)) rosters))
             complex-roster (first (filter #(= :complex-patch-review (:name %)) rosters))
@@ -994,7 +994,7 @@
             "complex patch review is synthesized outside its reviewer seats")
         (let [fact-check (first (filter #(= "docs-fact-check" (:name %)) (:seats docs-roster)))]
           (is (some? fact-check) "docs roster leads with the accuracy seat")
-          (is (str/includes? (:brief fact-check) "NEVER the canonical .skein")))
+          (is (str/includes? (:brief fact-check) "NEVER the canonical .millstrand")))
         (is (= :sol-med (get-in docs-roster [:synthesis :harness]))
             "docs sign-off synthesis stays on the cross-vendor GPT seat")))))
 
@@ -1171,7 +1171,7 @@
       (let [_ (start-land! "land-quality-script" "land-x" (System/getProperty "user.dir"))
             completed (op! "land" ["complete" "land-quality-script" "--pr-number" "411"])
             gate-attrs (:attributes (weaver/show rt (get-in completed [:ready 0 :id])))
-            executable (io/file ".skein/workflows/scripts/land-quality-gate.sh")
+            executable (io/file ".millstrand/workflows/scripts/land-quality-gate.sh")
             worktree (.toFile (java.nio.file.Files/createTempDirectory
                                "millstrand-land-quality-worktree"
                                (make-array java.nio.file.attribute.FileAttribute 0)))
@@ -1180,10 +1180,10 @@
                            "millstrand-land-fake-git"
                            (make-array java.nio.file.attribute.FileAttribute 0)))]
         (try
-          (.mkdirs (io/file worktree ".skein"))
-          (.mkdirs (io/file fake-git-dir ".skein"))
+          (.mkdirs (io/file worktree ".millstrand"))
+          (.mkdirs (io/file fake-git-dir ".millstrand"))
           (doseq [contract-root [worktree fake-git-dir]]
-            (let [contract (io/file contract-root ".skein" "land-quality.sh")]
+            (let [contract (io/file contract-root ".millstrand" "land-quality.sh")]
               (spit contract "#!/bin/sh\nprintf 'contract:%s:%s\\n' \"$LAND_EXPECTED_BRANCH\" \"$LAND_EXPECTED_HEAD\"\n")
               (is (.setExecutable contract true))))
           (write-fake-land-git! fake-git-dir)
@@ -1200,7 +1200,7 @@
             (doseq [[mode expected]
                     [["dirty" "land-x worktree is dirty"]
                      ["diff-dirty" "unstaged changes are present"]
-                     ["missing-contract" "trusted quality contract .skein/land-quality.sh is not present at HEAD"]
+                     ["missing-contract" "trusted quality contract .millstrand/land-quality.sh is not present at HEAD"]
                      ["head-changed" "land-x HEAD changed during quality checks"]]]
               (io/delete-file (io/file fake-git-dir "counter") true)
               (let [{:keys [exit err]} (run-land-quality-gate executable worktree fake-git-dir mode)]
@@ -1223,7 +1223,7 @@
             (test-support/delete-tree! worktree)))))))
 
 (deftest land-merge-script-runs-standalone-with-argv-values
-  (let [executable (io/file ".skein/workflows/scripts/land-merge.sh")
+  (let [executable (io/file ".millstrand/workflows/scripts/land-merge.sh")
         fake-gh-dir (.toFile
                      (java.nio.file.Files/createTempDirectory
                       "millstrand-land-merge-fake-gh"
@@ -1391,7 +1391,7 @@
         (is (= "land.main.quality-green" (:action-ref gate)))
         (is (= "Run local quality gates at canonical main HEAD" (:title gate)))
         (is (= "shell" (:gate gate)))
-        (is (= ["sh" "-c" (slurp (io/file ".skein/workflows/scripts/land-quality-gate.sh"))
+        (is (= ["sh" "-c" (slurp (io/file ".millstrand/workflows/scripts/land-quality-gate.sh"))
                 "land-quality-gate" "main"]
                (:shell/argv gate-attrs)))
         (is (= "/tmp/land-x" (:shell/cwd gate-attrs)))
@@ -2283,11 +2283,11 @@
   (with-startup-config-runtime
     (fn [rt]
       (let [coordinate-roots (coordinate-source-roots rt)
-            modules (map parse-module-form (filter module-form? (read-all-forms ".skein/init.clj")))]
+            modules (map parse-module-form (filter module-form? (read-all-forms ".millstrand/init.clj")))]
         (is (seq modules) "parsed at least one init.clj module! form")
         (doseq [{:keys [key file spools] use-ns :ns} modules]
           (let [required-nss (if file
-                               (->> (ns-require-libs (read-first-form (io/file ".skein" file)))
+                               (->> (ns-require-libs (read-first-form (io/file ".millstrand" file)))
                                     (filter spool-ns?))
                                [use-ns])]
             (doseq [required-ns required-nss]
@@ -2341,7 +2341,7 @@
 (deftest init-modules-use-the-form-only-grammar
   (with-startup-config-runtime
     (fn [_rt]
-      (let [declarations (->> (read-all-forms ".skein/init.clj")
+      (let [declarations (->> (read-all-forms ".millstrand/init.clj")
                               (filter module-form?)
                               (map parse-module-form))
             ns-keys (->> declarations (filter :ns) (map :key))]

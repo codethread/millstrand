@@ -7,7 +7,7 @@
 
 ## PROP-Chp-001.P1 Problem
 
-Chime's module lifecycle never registers its engine. `contribute` returns `{}` (rule kinds only) and `reconcile` only baselines rules; the `:chime/registration-barrier` pre-commit hook and `:chime/engine` event handler are registered only by the legacy `install!`, which production no longer calls — `.skein/init.clj` activates chime via `runtime/module!`. Verified against the live canonical weaver: `events/handlers` lists agent-run/shell/subagent engines and no `:chime/engine`. Event-driven chime notifications (attention rules, HITL checkpoints, agent failures) are silently dead in the canonical world.
+Chime's module lifecycle never registers its engine. `contribute` returns `{}` (rule kinds only) and `reconcile` only baselines rules; the `:chime/registration-barrier` pre-commit hook and `:chime/engine` event handler are registered only by the legacy `install!`, which production no longer calls — `.millstrand/init.clj` activates chime via `runtime/module!`. Verified against the live canonical weaver: `events/handlers` lists agent-run/shell/subagent engines and no `:chime/engine`. Event-driven chime notifications (attention rules, HITL checkpoints, agent failures) are silently dead in the canonical world.
 
 The escape route: chime tests activate via `install!`, production via modules — no test covers the module path end to end. TASK-Olr-008.MI4 deliberately kept the handler/hook as identity-stable live state, but their registration was never moved onto the module path.
 

@@ -6,7 +6,7 @@
 **Status:** Rejected
 **Date:** 2026-07-23
 **Upholds:** [`TEN-004`](../TENETS.md) (Less is More); [`TEN-003`](../TENETS.md) (FAIL LOUDLY); [`TEN-000@1`](../TENETS.md) (this is alpha software).
-**Related:** the module lifecycle surface `module!`/`refresh!`/`plan`/`status` in `skein.api.runtime.alpha` (DELTA-OlrRepl-001, DELTA-OlrDrt-001); the declaration grammar in `skein.core.weaver.module-graph/normalize-declaration`; the reconcile/contribute path in `skein.core.weaver.module-refresh`; the local-notifier convention in `.skein/init.local.clj` + `.skein/notifier_local.clj`; spool classloader semantics in `docs/spools/customisation.md`.
+**Related:** the module lifecycle surface `module!`/`refresh!`/`plan`/`status` in `skein.api.runtime.alpha` (DELTA-OlrRepl-001, DELTA-OlrDrt-001); the declaration grammar in `skein.core.weaver.module-graph/normalize-declaration`; the reconcile/contribute path in `skein.core.weaver.module-refresh`; the local-notifier convention in `.millstrand/init.local.clj` + `.millstrand/notifier_local.clj`; spool classloader semantics in `docs/spools/customisation.md`.
 
 > This ADR records why we prototyped, verified, and then declined a `use-module`
 > macro that would let a stable module's `:contribute`/`:reconcile` be authored
@@ -26,8 +26,8 @@ Both `:contribute` and `:reconcile` are named as **fully qualified symbols**, an
 
 The friction that opened the arc is the machine-local notifier. It is two files for one setter:
 
-- `.skein/init.local.clj` — the `module!` declaration, gated `:after [:skein/spools-chime]`.
-- `.skein/notifier_local.clj` — a `:file` source whose *only* job is to house `notifier-local/reconcile`, a one-line `(chime/set-notifier! …)`.
+- `.millstrand/init.local.clj` — the `module!` declaration, gated `:after [:skein/spools-chime]`.
+- `.millstrand/notifier_local.clj` — a `:file` source whose *only* job is to house `notifier-local/reconcile`, a one-line `(chime/set-notifier! …)`.
 
 The question: could a small effect-only module be authored inline in one file, the way Emacs `use-package` folds a package's config and hooks into a single form?
 

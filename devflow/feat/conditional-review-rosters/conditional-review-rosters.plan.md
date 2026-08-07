@@ -33,8 +33,8 @@ Deliver the conditional roster selection and land cleanliness behavior approved 
 | --- | --- | --- |
 | PLAN-Crr-001.AA1 | `agent-harness.spool/delegation` | Roster schema and closed keys, changed-file contract, glob selection, explicit zero-selection result, direct review behavior, contract docs, and focused tests |
 | PLAN-Crr-001.AA2 | Skein spool coordinates | Adopt the released `ct.spools/agent-run` family through `spool-bump` |
-| PLAN-Crr-001.AA3 | `.skein/agents` | Add conservative path applicability to declared reviewer seats |
-| PLAN-Crr-001.AA4 | `.skein/workflows` | Add the cleanliness shell gate and condition land review work on a non-empty selected roster |
+| PLAN-Crr-001.AA3 | `.millstrand/agents` | Add conservative path applicability to declared reviewer seats |
+| PLAN-Crr-001.AA4 | `.millstrand/workflows` | Add the cleanliness shell gate and condition land review work on a non-empty selected roster |
 | PLAN-Crr-001.AA5 | Repository documentation and config tests | Document and lock the consumer behavior |
 
 ## PLAN-Crr-001.P4 Contract and migration impact

@@ -64,7 +64,7 @@ Outcome: root specs merged from deltas, spool docs and api docs regenerated, all
 
 ## PLAN-Spj-001.P8 Task context
 
-- **PLAN-Spj-001.TC1:** Cards a4gss/9wz9l/6q82n carry the binding constraints and done-when lists; the S11 appendix in `devflow/feat/s9i26-flow-cli/proposal.md` holds the node schema/grammar decisions; benchmark specs are `.skein/workflows.clj` `::delegate-pipeline-input` and the pinned delegation spool's `::agent-plan-input`.
+- **PLAN-Spj-001.TC1:** Cards a4gss/9wz9l/6q82n carry the binding constraints and done-when lists; the S11 appendix in `devflow/feat/s9i26-flow-cli/proposal.md` holds the node schema/grammar decisions; benchmark specs are `.millstrand/workflows.clj` `::delegate-pipeline-input` and the pinned delegation spool's `::agent-plan-input`.
 
 ## PLAN-Spj-001.P9 Developer Notes
 

@@ -27,7 +27,7 @@ Implement `PLAN-Srs-001.PH1`: add `{:skein/source-root "spools/<name>"}` as the 
 ## TASK-Srs-001.P4 Out of scope
 
 - **TASK-Srs-001.OS1:** Own only `src/skein/core/weaver/spool_sync.clj`, `src/skein/core/weaver/runtime.clj`, `src/skein/core/weaver/access.clj`, `src/skein/core/weaver/module_refresh.clj`, and `test/skein/source_root_spools_test.clj`. Do not touch `deps.edn`, `test/skein/spools_test.clj`, or `test/skein/config_test.clj`; Task 2 owns them.
-- **TASK-Srs-001.OS2:** Do not cut batteries over, edit `.skein/`, change Go bootstrap code under `cli/`, promote specs, edit docs, run PH5 acceptance, or perform sibling-repo sweeps.
+- **TASK-Srs-001.OS2:** Do not cut batteries over, edit `.millstrand/`, change Go bootstrap code under `cli/`, promote specs, edit docs, run PH5 acceptance, or perform sibling-repo sweeps.
 - **TASK-Srs-001.OS3:** Every runtime experiment must use a disposable world created with `mktemp -d`, an explicit guarded `${ws:?}` `--workspace` path, and repo-local `./bin/strand` and `./bin/mill` built by `make build`. Never start, stop, restart, or refresh the canonical weaver. Kill only a verified PID, never by process-name or pattern. Never run `make install`.
 
 ## TASK-Srs-001.P5 References

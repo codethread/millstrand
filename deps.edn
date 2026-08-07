@@ -39,24 +39,24 @@
           :main-opts ["-m" "millstrand.smoke"]}
   :format {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
            :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "test" "dev" "scripts"
-                       ".skein/init.clj" ".skein/policy/config.clj" ".skein/workflows/support.clj"
-                       ".skein/workflows/common.clj" ".skein/workflows/land.clj"
-                       ".skein/workflows/spool_bump.clj" ".skein/workflows/story.clj"
-                       ".skein/workflows/explore.clj" ".skein/workflows/fix.clj"
-                       ".skein/workflows/land_policy.clj" ".skein/workflows/ralph.clj"
-                       ".skein/agents/harnesses.clj" ".skein/agents/guide.clj"
-                       ".skein/agents/reviewers.clj" ".skein/notifications/attention.clj"
-                       ".skein/jobs/nvd_scan.clj" ".skein/adapters/module.clj"]}
+                       ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
+                       ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
+                       ".millstrand/workflows/spool_bump.clj" ".millstrand/workflows/story.clj"
+                       ".millstrand/workflows/explore.clj" ".millstrand/workflows/fix.clj"
+                       ".millstrand/workflows/land_policy.clj" ".millstrand/workflows/ralph.clj"
+                       ".millstrand/agents/harnesses.clj" ".millstrand/agents/guide.clj"
+                       ".millstrand/agents/reviewers.clj" ".millstrand/notifications/attention.clj"
+                       ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/module.clj"]}
   :format/fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
                :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "test" "dev" "scripts"
-                           ".skein/init.clj" ".skein/policy/config.clj" ".skein/workflows/support.clj"
-                           ".skein/workflows/common.clj" ".skein/workflows/land.clj"
-                           ".skein/workflows/spool_bump.clj" ".skein/workflows/story.clj"
-                           ".skein/workflows/explore.clj" ".skein/workflows/fix.clj"
-                           ".skein/workflows/land_policy.clj" ".skein/workflows/ralph.clj"
-                           ".skein/agents/harnesses.clj" ".skein/agents/guide.clj"
-                           ".skein/agents/reviewers.clj" ".skein/notifications/attention.clj"
-                           ".skein/jobs/nvd_scan.clj" ".skein/adapters/module.clj"]}
+                           ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
+                           ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
+                           ".millstrand/workflows/spool_bump.clj" ".millstrand/workflows/story.clj"
+                           ".millstrand/workflows/explore.clj" ".millstrand/workflows/fix.clj"
+                           ".millstrand/workflows/land_policy.clj" ".millstrand/workflows/ralph.clj"
+                           ".millstrand/agents/harnesses.clj" ".millstrand/agents/guide.clj"
+                           ".millstrand/agents/reviewers.clj" ".millstrand/notifications/attention.clj"
+                           ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/module.clj"]}
   :lint/clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                    :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/guild/src" "test"]}
   :lint/conventions {:extra-paths ["scripts"]

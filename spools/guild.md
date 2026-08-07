@@ -12,11 +12,11 @@
 
 `millstrand.spools.guild` is a small reference spool for publishing a weaver's trusted operation API to sibling weavers. It does not add a new protocol, server operation, package manager, or permission system. Guild ops are ordinary weaver `op` registry entries with a documented naming/versioning convention and a built-in `guild list` operation for discovery.
 
-Use it when a repo wants other local weavers to call stable, intentional entry points such as `gate.status.v1` or `release.request.v1` instead of reaching into repo-private REPL helpers. The agreement surface is userland: a repo opts in by registering ops from trusted config, usually its checked-in `.skein/init.clj`. For a peering repo, that checked-in `init.clj` is effectively a published API file. Treat its guild declarations like public contract code.
+Use it when a repo wants other local weavers to call stable, intentional entry points such as `gate.status.v1` or `release.request.v1` instead of reaching into repo-private REPL helpers. The agreement surface is userland: a repo opts in by registering ops from trusted config, usually its checked-in `.millstrand/init.clj`. For a peering repo, that checked-in `init.clj` is effectively a published API file. Treat its guild declarations like public contract code.
 
 ## Loading
 
-Approve the Guild root in `.skein/spools.edn`:
+Approve the Guild root in `.millstrand/spools.edn`:
 
 ```clojure
 {:spools {millstrand.spools/guild {:local/root "../spools/guild"}}}
@@ -124,7 +124,7 @@ Peers call `guild list` through the ordinary `op` socket operation. It returns J
 
 ## Worked two-repo example
 
-Assume two repos, `frontend` and `backend`, each with a checked-in portable weaver name in `.skein/config.json`:
+Assume two repos, `frontend` and `backend`, each with a checked-in portable weaver name in `.millstrand/config.json`:
 
 ```json
 {
@@ -133,9 +133,9 @@ Assume two repos, `frontend` and `backend`, each with a checked-in portable weav
 }
 ```
 
-A machine with two clones can disambiguate locally with `.skein/config.local.json` when needed; the local overlay is not committed.
+A machine with two clones can disambiguate locally with `.millstrand/config.local.json` when needed; the local overlay is not committed.
 
-With the Guild root approved in the backend repo's `.skein/spools.edn` and activated as shown in [Loading](#loading) (`runtime/refresh!` + `runtime/module!`), the backend's checked-in `.skein/init.clj` publishes a guild API:
+With the Guild root approved in the backend repo's `.millstrand/spools.edn` and activated as shown in [Loading](#loading) (`runtime/refresh!` + `runtime/module!`), the backend's checked-in `.millstrand/init.clj` publishes a guild API:
 
 ```clojure
 (ns user

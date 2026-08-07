@@ -21,7 +21,7 @@ Continue in the three prepared Task 7 worktrees and branches. This task owns no 
 
 - **TASK-Dsp-008.DW1:** All three ordered markers exist remotely, peel to the reviewed commits, add no false `:skein/min` floor, and have matching release-exception records.
 - **TASK-Dsp-008.DW2:** Each sibling's compatibility gate is green against a recorded skein-src SHA proven to descend from Phase A.
-- **TASK-Dsp-008.DW3:** Marker, peeled-SHA, and gate notes are recorded on kanban task `l5lwo` and the plan's Developer Notes; Skein's own `.skein/spools.edn` pins are unchanged.
+- **TASK-Dsp-008.DW3:** Marker, peeled-SHA, and gate notes are recorded on kanban task `l5lwo` and the plan's Developer Notes; Skein's own `.millstrand/spools.edn` pins are unchanged.
 
 ## TASK-Dsp-008.P4 Out of scope
 

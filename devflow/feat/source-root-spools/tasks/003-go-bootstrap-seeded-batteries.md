@@ -21,7 +21,7 @@ Implement `PLAN-Srs-001.PH3` entirely under `cli/`. Fresh `mill init` worlds mus
 
 ## TASK-Srs-003.P4 Out of scope
 
-- **TASK-Srs-003.OS1:** Own `cli/` only, specifically `cli/internal/config/bootstrap.go`, `cli/integration_test.go`, and any directly required Go test fixture under `cli/`. Do not edit Clojure source/tests, `deps.edn`, `.skein/`, smoke, specs, or docs.
+- **TASK-Srs-003.OS1:** Own `cli/` only, specifically `cli/internal/config/bootstrap.go`, `cli/integration_test.go`, and any directly required Go test fixture under `cli/`. Do not edit Clojure source/tests, `deps.edn`, `.millstrand/`, smoke, specs, or docs.
 - **TASK-Srs-003.OS2:** Do not run PH5 acceptance or perform sibling-repo sweeps.
 - **TASK-Srs-003.OS3:** Every runtime experiment must use a disposable world created with `mktemp -d`, an explicit guarded `${ws:?}` `--workspace` path, and repo-local `./bin/strand` and `./bin/mill` built by `make build`. Never start, stop, restart, or refresh the canonical weaver. Kill only a verified PID, never by process-name or pattern. Never run `make install`.
 

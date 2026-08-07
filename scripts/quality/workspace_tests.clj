@@ -3,7 +3,7 @@
 
   The namespace/path mapping keeps opted-in tests together. A separate source
   scan catches tests that have not opted in yet: a relative literal beneath
-  `.skein/` names this checkout's workspace authoring and therefore belongs in this
+  `.millstrand/` names this checkout's workspace authoring and therefore belongs in this
   directory too."
   (:require [clojure.spec.alpha :as s]
             [clojure.java.io :as io]
@@ -48,11 +48,11 @@
 (defn- checked-in-workspace-path?
   [value]
   (and (string? value)
-       (str/starts-with? value ".skein/")))
+       (str/starts-with? value ".millstrand/")))
 
 (defn- reference-sites
   "Return `{:line :path}` sites for literal paths into this checkout's
-  `.skein` directory in `form`."
+  `.millstrand` directory in `form`."
   [form line]
   (cond
     (checked-in-workspace-path? form)
@@ -83,7 +83,7 @@
    namespace-definitions))
 
 (defn- reference-findings
-  "Return findings for checked-in `.skein` path sites outside the workspace
+  "Return findings for checked-in `.millstrand` path sites outside the workspace
   test directory, including source read failures."
   [sites]
   (for [{:keys [filename line path read-error]} sites]

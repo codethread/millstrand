@@ -21,7 +21,7 @@ if command -v rg >/dev/null 2>&1; then
   rg -n -i --max-columns 100000 --hidden \
     --glob '!.git/**' \
     --glob '!target/**' \
-    --glob '!.skein/**' \
+    --glob '!.millstrand/**' \
     --glob '!scripts/quality/millstrand-active-identity.sh' \
     --glob '!scripts/quality/millstrand-identity-allowlist.tsv' \
     'skein' "${scan_paths[@]}" >"$findings"
