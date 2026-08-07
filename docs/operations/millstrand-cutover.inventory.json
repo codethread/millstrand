@@ -45,7 +45,7 @@
     "checkout": "/Users/ct/dev/projects/millstrand",
     "prepared_checkout_sha": "8219eb80fafa21e26185806307c749d5b8eecea4",
     "prepared_checkout_ref": "origin/main",
-    "required_landed_main_commit": "PRE-LAND: MSR-15 must record the canonical MSR-14 squash SHA",
+    "required_landed_main_commit": "144f0481a6d231c32a5bed658525ae0675ac9add",
     "msr_15_invariant": "MSR-15 must verify prepared checkout HEAD and runtime source commit equal required_landed_main_commit after MSR-14 lands",
     "ancestry": {
       "policy_commit": "9ec1aa2c8055ba97e887dac574a054fc53e695c3",
@@ -119,6 +119,7 @@
       "repository": "/Users/ct/dev/projects/millstrand",
       "source": {
         "pid": 58024,
+        "start_identity": "pid=58024:start=2026-08-07T07:00:00Z",
         "marker": "/Users/ct/dev/projects/skein-src/.skein",
         "database": "/Users/ct/.local/state/skein/weavers/068e8753b69bb0125cbf220b1733cf11/data/skein.sqlite",
         "weaver_id": "8f751c75-deb1-48f8-be62-99065f85d276"
@@ -154,6 +155,7 @@
       "repository": "/Users/ct/dev/projects/agent-harness.spool",
       "source": {
         "pid": 73514,
+        "start_identity": "pid=73514:start=2026-08-07T07:01:00Z",
         "marker": "/Users/ct/dev/projects/agent-harness.spool/.skein",
         "database": "/Users/ct/.local/state/skein/weavers/0245892212ec336f39b2496a53ed3269/data/skein.sqlite",
         "weaver_id": "027ba5d8-9cbf-413f-b5eb-7a1d84a89ecf"
@@ -221,8 +223,18 @@
   },
   "verification": {
     "fixture_manifest": "test/fixtures/millstrand-cutover/preflight/fixtures.json",
-    "command": "scripts/cutover/millstrand-preflight.sh --dry-run --inventory docs/operations/millstrand-cutover.inventory.json --workspace-root test/fixtures/millstrand-cutover/preflight",
+    "command": "scripts/cutover/millstrand-preflight.sh --dry-run --inventory docs/operations/millstrand-cutover.inventory.json --workspace-root test/fixtures/millstrand-cutover/preflight --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add",
     "deterministic": true,
     "output": "target/millstrand-cutover/preflight-verification.json"
+  },
+  "preparation_index_artifact": "docs/operations/millstrand-cutover-preparation-index.json",
+  "preparation_index_sha256": "339e4611aefbf5430d5bfa50c9610df4203546d39925ecdb048d905e40a000b4",
+  "coordinator_contract": {
+    "fixture_manifest": "test/fixtures/millstrand-cutover/coordinator/fixtures.json",
+    "command": "scripts/cutover/millstrand-coordinator-contract.sh",
+    "output": "target/millstrand-cutover/coordinator-evidence.json",
+    "schema": "millstrand/cutover-evidence-v1",
+    "deterministic": true,
+    "live_lifecycle": "forbidden"
   }
 }

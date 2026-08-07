@@ -138,6 +138,19 @@ for entry in preparation_index:
         require(entry.get("deferred_to") == "dy3zf",
                 f"consumer-preparation {entry['task_id']} is not deferred to dy3zf")
 
+preparation_artifact = resolve_input(inventory.get("preparation_index_artifact", ""))
+require(preparation_artifact.is_file(), f"typed preparation-index artifact is missing: {preparation_artifact}")
+typed_index = read_json(preparation_artifact)
+require(typed_index.get("schema") == "devflow/consumer-preparation-index-v1" and
+        typed_index.get("operation") == "MSR-14",
+        "typed preparation-index artifact schema is invalid")
+require({entry.get("task_id") for entry in typed_index.get("records", [])} == required_task_ids,
+        "typed preparation-index artifact is incomplete")
+typed_index_hash = hashlib.sha256(json.dumps(typed_index, sort_keys=True,
+                                              separators=(",", ":")).encode()).hexdigest()
+require(typed_index_hash == inventory.get("preparation_index_sha256"),
+        "typed preparation-index artifact hash does not match inventory")
+
 authority = inventory.get("standing_authority")
 require(isinstance(authority, dict) and authority.get("reference") == "Epic ke3rd" and
         authority.get("routine_approval_required") is False and
@@ -174,8 +187,9 @@ if runtime_commit:
     require(runtime["required_landed_main_commit"] == runtime_commit,
             "runtime commit does not match the inventory landed commit")
 else:
-    require(runtime["required_landed_main_commit"] == placeholder,
-            "runtime landed-main placeholder changed")
+    if runtime["required_landed_main_commit"] != placeholder:
+        require(validate_only or dry_run,
+                "runtime commit is required after MSR-14 land")
 ancestry = runtime["ancestry"]
 for key in ("policy_commit", "midpoint_commit"):
     require(len(ancestry[key]) == 40 and all(c in "0123456789abcdef" for c in ancestry[key]),
@@ -250,7 +264,7 @@ def check_git_runtime(check_remote_policy=False):
     checkout = pathlib.Path(runtime["checkout"])
     require((checkout / ".git").exists(), f"runtime checkout is not a Git checkout: {checkout}")
     head = run(["git", "-C", str(checkout), "rev-parse", "HEAD"])
-    expected_head = runtime_commit or runtime["prepared_checkout_sha"]
+    expected_head = runtime_commit or runtime["required_landed_main_commit"]
     require(head.returncode == 0 and head.stdout.strip() == expected_head,
             "runtime checkout HEAD does not match the required runtime commit")
     if runtime_commit:
@@ -280,6 +294,8 @@ def check_consumer_shape(consumer):
     source = consumer["source"]
     target = consumer["target"]
     require(isinstance(source["pid"], int) and source["pid"] > 0, f"{consumer['card']} source PID is invalid")
+    require(re.fullmatch(r"pid=[0-9]+:start=.+", source.get("start_identity", "")) is not None,
+            f"{consumer['card']} source start identity is invalid")
     require(source["marker"] in ("/Users/ct/dev/projects/skein-src/.skein",
                                   "/Users/ct/dev/projects/agent-harness.spool/.skein"),
             f"{consumer['card']} source marker is not canonical")
@@ -510,6 +526,7 @@ output = {
     "schema": "millstrand/preflight-verification-v1",
     "inventory": "docs/operations/millstrand-cutover.inventory.json",
     "inventory_sha256": sha256(inventory_path),
+    "preparation_index": {"path": str(preparation_artifact), "sha256": typed_index_hash},
     "mode": "dry-run" if dry_run else "live-read-only",
     "checks": [
         "typed-consumer-preparations", "consumer-preparation-index", "excluded-deferred-no-lifecycle", "core-sha-only-no-v1",

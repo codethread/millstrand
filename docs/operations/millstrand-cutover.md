@@ -8,7 +8,7 @@ MSR-14 is a read-only preparation step. It does not stop or restart a weaver, ch
 
 The core dependency remains the exact SHA `5790c459e9bb692b5e975f9715df7d5b403feff2`. It has no tag or local-root form, and the `v1` core tag remains prohibited.
 
-The inactive runtime checkout is `/Users/ct/dev/projects/millstrand`. Its prepared midpoint is `8219eb80fafa21e26185806307c749d5b8eecea4`, with the local-quality policy commit `9ec1aa2c8055ba97e887dac574a054fc53e695c3` in its ancestry. The inventory keeps the runtime landed commit as a pre-land placeholder. MSR-15 must replace that placeholder with the canonical MSR-14 squash SHA and prove that the checkout and runtime source commit equal it.
+The inactive runtime checkout is `/Users/ct/dev/projects/millstrand`. Its prepared midpoint is `8219eb80fafa21e26185806307c749d5b8eecea4`, with the local-quality policy commit `9ec1aa2c8055ba97e887dac574a054fc53e695c3` in its ancestry. MSR-14 landed at `144f0481a6d231c32a5bed658525ae0675ac9add`; the inventory records that SHA and MSR-15 proves that the checkout and runtime source commit equal it.
 
 The target world hashes are marker-neutral. Core uses `e9b67c7b8c3d5dce4f2784bb32c0d041`; Agent Harness uses `92ad6dd941f0840553fd7f0fdef15752`. A target marker, target database, or target parent that already exists fails the preflight.
 
@@ -29,7 +29,8 @@ Run the complete disposable contract from a fixture root:
 scripts/cutover/millstrand-preflight.sh \
   --dry-run \
   --inventory docs/operations/millstrand-cutover.inventory.json \
-  --workspace-root test/fixtures/millstrand-cutover/preflight
+  --workspace-root test/fixtures/millstrand-cutover/preflight \
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
 ```
 
 Run from the repository root:
@@ -92,14 +93,60 @@ scripts/cutover/millstrand-preflight.sh \
 cmp -s /tmp/millstrand-preflight.first.json target/millstrand-cutover/preflight-verification.json
 ```
 
+## MSR-15 coordinator contract
+
+The coordinator consumes the typed preparation index at [millstrand-cutover-preparation-index.json](./millstrand-cutover-preparation-index.json). It checks the canonical JSON SHA-256 recorded in the inventory before it evaluates any cutover-shaped operation. The contract is disposable and dry-run-only. It never sends a signal, creates a live marker or target, copies a live database, or starts a weaver.
+
+Run the full coordinator contract from the repository root:
+
+```sh
+scripts/cutover/millstrand-coordinator-contract.sh
+```
+
+Run the coordinator directly with the landed runtime SHA:
+
+```sh
+scripts/cutover/millstrand-coordinator.sh \
+  --dry-run \
+  --inventory docs/operations/millstrand-cutover.inventory.json \
+  --preparation-index docs/operations/millstrand-cutover-preparation-index.json \
+  --preparation-index-sha256 339e4611aefbf5430d5bfa50c9610df4203546d39925ecdb048d905e40a000b4 \
+  --workspace-root test/fixtures/millstrand-cutover/coordinator \
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add \
+  --output target/millstrand-cutover/coordinator-evidence.json
+```
+
+The evidence schema is `millstrand/cutover-evidence-v1`. It records the preparation-index hash, exact recorded PID and start identity, before/after SQLite counts and integrity, byte and SHA-256 values, spend and representative agent-run records, the retained SQLite `.backup` and rollback path, stopped scheduler-wake classification, target absence/distinctness and mode `0755`, core whole-copy equality, Agent Harness fresh-world results, and a separate deferred start phase. Every failed fixture leaves the simulated new weaver stopped.
+
+The later live operator sequence uses exact recorded PIDs and remains outside this non-live contract. After status confirms the recorded identity, the stop command is `kill -TERM -- <recorded-pid>`; never use `pkill` or a pattern kill. The core backup command is `sqlite3 <source-db> ".backup '<backup-db>'"`. Install only after the stopped wake artifact is allowlisted, the target parent is absent and mode `0755`, and backup/target integrity, byte count, SHA-256, history, spend, and representative records compare equal. Start is a separate phase: `mill weaver start --workspace <target-marker>`. A failed validation leaves the new weaver stopped and retains the original plus backup for rollback.
+
+Whole-value text arguments use the declared parser semantics. For example:
+
+```sh
+printf '%s' docs/operations/millstrand-cutover.inventory.json > /tmp/millstrand-inventory.path
+printf '%s' docs/operations/millstrand-cutover-preparation-index.json > /tmp/millstrand-index.path
+printf '%s' 339e4611aefbf5430d5bfa50c9610df4203546d39925ecdb048d905e40a000b4 > /tmp/millstrand-index.sha
+printf '%s' test/fixtures/millstrand-cutover/coordinator > /tmp/millstrand-coordinator.path
+scripts/cutover/millstrand-coordinator.sh --dry-run \
+  --payload inventory=/tmp/millstrand-inventory.path \
+  --payload preparation=/tmp/millstrand-index.path \
+  --payload hash=/tmp/millstrand-index.sha \
+  --payload workspace=/tmp/millstrand-coordinator.path \
+  --inventory :payload/inventory \
+  --preparation-index :payload/preparation \
+  --preparation-index-sha256 :payload/hash \
+  --workspace-root :payload/workspace \
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
+```
+
 ## MSR-15 handoff
 
-MSR-15 may proceed only after MSR-14 evidence is green and the final squash SHA is known. Replace `runtime_requirement.required_landed_main_commit` in the inventory with that exact 40-character lowercase SHA, then run:
+MSR-15 may proceed only after MSR-14 evidence is green. Run:
 
 ```sh
 scripts/cutover/millstrand-preflight.sh \
   --inventory docs/operations/millstrand-cutover.inventory.json \
-  --runtime-commit <final-msr14-squash-sha>
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add
 ```
 
-The command rejects the pre-land placeholder, checks `/Users/ct/dev/projects/millstrand` HEAD and runtime source commit against the supplied SHA, and requires the policy and midpoint commits in its ancestry. A malformed or mismatched SHA fails before any lifecycle action. MSR-15 must then capture the stopped source backup, review the exact retained wake artifact, install the whole copy into the absent target database, and verify integrity and byte/SHA equality before first start. A failed check blocks the first Millstrand start. Notes and editor/dotfiles remain outside this lifecycle and stay deferred to `dy3zf`.
+The command checks `/Users/ct/dev/projects/millstrand` HEAD and runtime source commit against the supplied SHA, and requires the policy and midpoint commits in its ancestry. A malformed or mismatched SHA fails before any lifecycle action. The coordinator contract then captures the stopped-source evidence on disposable state. Notes and editor/dotfiles remain outside this lifecycle and stay deferred to `dy3zf`.

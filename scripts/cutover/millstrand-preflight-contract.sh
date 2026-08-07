@@ -101,6 +101,7 @@ EOF
 chmod +x "$tmp_root/failing-git/git"
 remote_probe_status=0
 PATH="$tmp_root/failing-git:$PATH" "$preflight" --inventory "$inventory" \
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add \
   >"$tmp_root/remote-probe.out" 2>"$tmp_root/remote-probe.err" || remote_probe_status=$?
 [[ "$remote_probe_status" == 1 ]] || { echo "preflight contract: remote probe failure status was $remote_probe_status" >&2; exit 1; }
 grep -Fq 'cannot inspect core v1 tag prohibition' "$tmp_root/remote-probe.err"
@@ -121,6 +122,7 @@ EOF
 chmod +x "$tmp_root/tagged-git/git"
 tag_probe_status=0
 PATH="$tmp_root/tagged-git:$PATH" "$preflight" --inventory "$inventory" \
+  --runtime-commit 144f0481a6d231c32a5bed658525ae0675ac9add \
   >"$tmp_root/tag-probe.out" 2>"$tmp_root/tag-probe.err" || tag_probe_status=$?
 [[ "$tag_probe_status" == 1 ]] || { echo "preflight contract: tagged remote probe status was $tag_probe_status" >&2; exit 1; }
 grep -Fq 'forbidden core v1 tag exists at git@github.com:codethread/millstrand.git' "$tmp_root/tag-probe.err"
