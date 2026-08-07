@@ -1,0 +1,23 @@
+{
+  "schema": "millstrand/preflight-fixtures-v1",
+  "source_sql": "source.sql",
+  "expected_wake": "expected-scheduler-wake.json",
+  "expected_wake_sha256": "9a24eecba4ddce946e2dd1255b8bda1aa8d118e328d8aee21f1bd9a03f5d3ef7",
+  "source_counts": {
+    "strands": 2,
+    "attributes": 3,
+    "burn_history": 1,
+    "scheduler_history": 1,
+    "spend_rows": 3
+  },
+  "cases": [
+    {"name": "success", "result": "pass", "failure": null},
+    {"name": "running-source", "result": "fail", "failure": {"reason": "source-running", "diagnostic": "source_running=true"}},
+    {"name": "target-collision", "result": "fail", "failure": {"reason": "target-collision", "diagnostic": "target_exists=true"}},
+    {"name": "hash-mismatch", "result": "fail", "failure": {"reason": "hash-mismatch", "diagnostic": "sha256_equal=false"}},
+    {"name": "integrity-failure", "result": "fail", "failure": {"reason": "integrity-failure", "diagnostic": "sqlite_integrity=not-ok"}},
+    {"name": "history-mismatch", "result": "fail", "failure": {"reason": "history-mismatch", "diagnostic": "history_strands=3"}},
+    {"name": "spend-mismatch", "result": "fail", "failure": {"reason": "spend-mismatch", "diagnostic": "spend_rows=4"}},
+    {"name": "unexpected-wake", "result": "fail", "failure": {"reason": "unexpected-wake", "diagnostic": "wake_artifact_sha256=unexpected"}}
+  ]
+}

@@ -13,3 +13,6 @@ scripts/acceptance/millstrand-docs.sh	skein	The acceptance script names the forb
 docs/operations/millstrand-cutover.core.json	.*skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json	The MSR-14A expected-wake evidence is recorded at the stable canonical post-land fixture path.
 test/fixtures/millstrand-cutover/core-fragment/fixtures.json	.*skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json	The MSR-14A fixture contract names the stable canonical post-land evidence path.
 scripts/cutover/verify-core-fragment.sh	.*skein-src/test/fixtures/millstrand-cutover/core-fragment/expected-scheduler-wake\.json	The MSR-14A verifier enforces the stable canonical post-land evidence path.
+docs/operations/millstrand-cutover.md	.*Skein world.*	The cutover runbook names the source world being replaced.
+docs/operations/millstrand-cutover.inventory.json	.*skein/weavers/.*	The typed cutover inventory records exact legacy source database paths.
+scripts/cutover/millstrand-preflight.sh	.*skein/weavers/.*	The preflight validates exact recorded source database paths.

@@ -6,7 +6,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: scripts/cutover/verify-core-fragment.sh \
   --fragment docs/operations/millstrand-cutover.core.json \
-  --fixtures test/fixtures/millstrand-cutover/core-fragment
+  --workspace-root test/fixtures/millstrand-cutover/core-fragment
 
 Relative paths are resolved from the repository root. Absolute paths are accepted.
 The verifier writes target/millstrand-cutover/core-fragment-verification.json.
@@ -15,26 +15,39 @@ EOF
 }
 
 fragment_arg=""
-fixtures_arg=""
-while (($# > 0)); do
-  case "$1" in
-    --fragment) [[ $# -ge 2 ]] || usage; fragment_arg=$2; shift 2 ;;
-    --fixtures) [[ $# -ge 2 ]] || usage; fixtures_arg=$2; shift 2 ;;
+workspace_root_arg=""
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+
+for argument in "$@"; do
+  case "$argument" in
     -h|--help) usage 0 ;;
-    *) echo "verify-core-fragment: unknown argument: $1" >&2; usage ;;
   esac
 done
-[[ -n "$fragment_arg" && -n "$fixtures_arg" ]] || usage
 
-repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+command -v clojure >/dev/null 2>&1 || {
+  echo "verify-core-fragment: missing command clojure" >&2
+  exit 1
+}
+command -v jq >/dev/null 2>&1 || {
+  echo "verify-core-fragment: missing command jq" >&2
+  exit 1
+}
+cd "$repo_root"
+parsed_args=""
+if ! parsed_args=$(clojure -Sdeps '{:paths ["src" "dev" "scripts"]}' -M -m cutover.millstrand-preflight-cli "$@"); then
+  exit 2
+fi
+fragment_arg=$(jq -er '.fragment' <<<"$parsed_args") || usage
+workspace_root_arg=$(jq -er '."workspace-root"' <<<"$parsed_args") || usage
+
 resolve_input() {
   local value=$1
   if [[ "$value" = /* ]]; then realpath "$value"; else realpath "$repo_root/$value"; fi
 }
 fragment=$(resolve_input "$fragment_arg")
-fixtures=$(resolve_input "$fixtures_arg")
+fixtures=$(resolve_input "$workspace_root_arg")
 [[ -f "$fragment" ]] || { echo "verify-core-fragment: fragment does not exist: $fragment_arg" >&2; exit 1; }
-[[ -d "$fixtures" ]] || { echo "verify-core-fragment: fixtures do not exist: $fixtures_arg" >&2; exit 1; }
+[[ -d "$fixtures" ]] || { echo "verify-core-fragment: workspace root does not exist: $workspace_root_arg" >&2; exit 1; }
 
 die() { echo "verify-core-fragment: $*" >&2; exit 1; }
 for command_name in git jq realpath mktemp sqlite3 sha256sum cp cmp mkdir chmod stat; do
