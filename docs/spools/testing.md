@@ -131,7 +131,7 @@ assertion helpers, or CLI subprocess helpers — exercise the real API forms.
 
 ## Testing authoring forms as data
 
-Use `millstrand.test.alpha/collect-module-forms` when a direct test needs to inspect what authoring forms contribute without loading a weaver or reaching into Millstrand core. It runs a thunk under one synthetic module source context and returns the owner-complete `:contribution`, `:lifecycle`, and `:kind-declarations` data alongside the thunk's `:return` value. This tier proves declaration construction and collection only. It does not prove source loading, publication, reconciliation, or startup.
+Use `millstrand.test.alpha/collect-module-forms` when a direct test needs to inspect what authoring forms contribute without loading a weaver or reaching into Millstrand core. Its inputs are specified by `:millstrand.test.alpha/module-key`, `namespace-symbol`, and `thunk`; its owner-complete result is specified by `:millstrand.test.alpha/module-form-collection`. The result contains `:contribution`, `:lifecycle`, and `:kind-declarations` data alongside the thunk's `:return` value. This tier proves declaration construction and collection only. It does not prove source loading, publication, reconciliation, or startup.
 
 ## Activating spool modules from test fixtures
 
@@ -143,7 +143,7 @@ Tests activate a spool exactly the way production does — `runtime/module!` nam
 - **Classpath activation and root approval do not mix.** A test that `module!`-activates a namespace from the classpath must not also approve a real spool root providing the same namespaces: the unledgered-residual and `:non-additive-sync-diff` refusals that follow are correct behavior, not flakes. Tests that genuinely sync roots use freshly generated namespaces in disposable roots.
 - **Activate a kind provider before modules that contribute to its custom kind.** The kernel refuses a contribution naming an undeclared kind; order fixture activation with `:after` edges or explicit sequencing.
 
-`millstrand.test.alpha/activate-module!` wraps the bare-runtime pattern: it takes the runtime, module key, namespace symbol, and optional `:after`/`:load` map, requires the namespace, and declares the module. Forms-only modules default to source activation, which collects and retains their declarations. Pass `{:load :image}` only when the test has already activated that namespace from source. The helper throws with the full refresh result unless the refresh applied or was unchanged. It does not prove root approval, acquisition, or startup-file loading; use a generated weaver world for those claims.
+`millstrand.test.alpha/activate-module!` wraps the bare-runtime pattern: it takes the runtime, module key, namespace symbol, and optional `:after`/`:load` map, requires the namespace, and declares the module. The boundary is specified by `:millstrand.test.alpha/bare-runtime`, `module-key`, `namespace-symbol`, `module-options`, and `module-refresh-outcome`. Forms-only modules default to source activation, which collects and retains their declarations. Pass `{:load :image}` only when the test has already activated that namespace from source. The helper throws with the full refresh result unless the refresh applied or was unchanged. It does not prove root approval, acquisition, or startup-file loading; use a generated weaver world for those claims.
 
 ## The classpath boundary
 

@@ -126,17 +126,11 @@ Guild is kept as a quality-gated example under [`examples/guild`](../examples/gu
 ## Reference examples
 
 - Each retained contract doc ends with worked examples.
-- The test suites drive every documented behavior against a real weaver
-  runtime and double as executable examples:
-  [`test/millstrand/spools/batteries_test.clj`](../test/millstrand/spools/batteries_test.clj),
-  [`test/millstrand/spools/unsafe_text_search_test.clj`](../test/millstrand/spools/unsafe_text_search_test.clj),
-  and the standalone external spool test suites.
+- The test suites drive every documented behavior against a real weaver runtime and double as executable examples: [`test/millstrand/spools/batteries_test.clj`](../test/millstrand/spools/batteries_test.clj), [`test/millstrand/spools/unsafe_text_search_test.clj`](../test/millstrand/spools/unsafe_text_search_test.clj), and the standalone external spool test suites.
 
 ## Using and extending
 
-- Strand **attributes are the extension surface**. Build your own conventions
-  instead of waiting for engine fields, and give them new names only for new
-  concepts ([the vocabulary rule](../docs/spools/writing-shared-spools.md#the-rules-for-shared-spools)).
+- Strand **attributes are the extension surface**. Build your own conventions instead of waiting for engine fields, and give them new names only for new concepts ([the vocabulary rule](../docs/spools/writing-shared-spools.md#the-rules-for-shared-spools)).
 - A spool publishes owner-complete kind entries through contribution forms and owns runtime effects through lifecycle forms. See [Writing shared spools](../docs/spools/writing-shared-spools.md) for the authoring grammar and each contract doc for exact behavior.
 - To author and load your own spool from a workspace-local root, follow
   [Authoring your own spool code](../docs/spools/customisation.md#workspace-modules-and-local-spools).

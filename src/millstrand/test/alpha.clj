@@ -18,6 +18,7 @@
   by default."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [millstrand.api.clock.alpha :as clock]
             [millstrand.api.return-shape.alpha :as return-shape]
@@ -403,43 +404,63 @@
   [ctx key opts]
   (runtime/module! (:runtime ctx) key opts))
 
-(defn- require-non-blank-symbol! [label value]
-  (when-not (and (symbol? value) (not (str/blank? (str value))))
-    (throw (ex-info (str label " must be a non-blank namespace symbol")
-                    {:value value}))))
+(s/def ::bare-runtime map?)
+(s/def ::module-key keyword?)
+(s/def ::namespace-symbol
+  (s/and symbol? #(not (str/blank? (str %)))))
+(s/def ::thunk fn?)
+(s/def ::module-options
+  (s/and map?
+         #(every? #{:after :load} (keys %))
+         #(or (not (contains? % :after))
+              (and (coll? (:after %))
+                   (every? keyword? (:after %))))
+         #(or (not (contains? % :load))
+              (= :image (:load %)))))
+(s/def ::module-refresh-outcome
+  (s/and (s/nonconforming :millstrand.api.runtime.alpha/module-result)
+         #(contains? #{:applied :unchanged} (:status %))))
+(s/def ::module-form-collection
+  (s/and map?
+         #(= #{:return :contribution :lifecycle :kind-declarations}
+             (set (keys %)))
+         #(map? (:contribution %))
+         #(map? (:lifecycle %))
+         #(vector? (:kind-declarations %))))
+
+(defn- require-spec! [spec label value]
+  (when-not (s/valid? spec value)
+    (throw (ex-info (str label " does not conform to " spec)
+                    {:spec spec
+                     :value value
+                     :explain (s/explain-data spec value)})))
+  value)
 
 (defn activate-module!
   "Activate one namespace-backed module on a bare test runtime.
 
   Requires `ns-sym`, then declares `key` through the public `runtime/module!`
   boundary. `opts` is closed to `:after` and `:load`; their values follow the
-  public module grammar. Returns the full applied or unchanged refresh outcome
-  and throws with that outcome for every other status.
+  public module grammar. Inputs conform to the public
+  `:millstrand.test.alpha/bare-runtime`, `module-key`, `namespace-symbol`, and
+  `module-options` specs. Returns a
+  `:millstrand.test.alpha/module-refresh-outcome` and throws with the full
+  outcome for every status other than applied or unchanged.
 
   This is a small authoring-test tier for an already constructed runtime. It
   does not prove spool acquisition, startup-file collection, or weaver startup."
   ([rt key ns-sym]
    (activate-module! rt key ns-sym {}))
   ([rt key ns-sym opts]
-   (when-not (map? rt)
-     (throw (ex-info "activate-module! runtime must be a runtime map"
-                     {:runtime rt})))
-   (when-not (keyword? key)
-     (throw (ex-info "activate-module! key must be a keyword" {:key key})))
-   (require-non-blank-symbol! "activate-module! ns-sym" ns-sym)
-   (when-not (map? opts)
-     (throw (ex-info "activate-module! opts must be a map" {:opts opts})))
-   (when-let [unknown (seq (remove #{:after :load} (keys opts)))]
-     (throw (ex-info "activate-module! opts contain unknown keys"
-                     {:opts opts :unknown (vec unknown)})))
-   (when (and (contains? opts :after)
-              (not (and (coll? (:after opts))
-                        (every? keyword? (:after opts)))))
-     (throw (ex-info "activate-module! :after must contain only module keywords"
-                     {:after (:after opts)})))
-   (when (and (contains? opts :load) (not= :image (:load opts)))
-     (throw (ex-info "activate-module! :load accepts only :image"
-                     {:load (:load opts) :allowed #{:image}})))
+   (require-spec! ::bare-runtime "activate-module! runtime" rt)
+   (require-spec! ::module-key "activate-module! key" key)
+   (require-spec! ::namespace-symbol "activate-module! ns-sym" ns-sym)
+   (when-not (s/valid? ::module-options opts)
+     (throw (ex-info
+             "activate-module! opts contain unknown keys or invalid :after/:load values"
+             {:spec ::module-options
+              :opts opts
+              :explain (s/explain-data ::module-options opts)})))
    (require ns-sym)
    (let [outcome (runtime/module! rt key (assoc opts :ns ns-sym))]
      (when-not (contains? #{:applied :unchanged} (:status outcome))
@@ -447,7 +468,19 @@
                        {:module/key key
                         :module/status (:status outcome)
                         :outcome outcome})))
-     outcome)))
+     (require-spec! ::module-refresh-outcome
+                    "activate-module! outcome"
+                    outcome))))
+
+(s/fdef activate-module!
+  :args (s/or :default (s/cat :runtime ::bare-runtime
+                              :key ::module-key
+                              :ns-sym ::namespace-symbol)
+              :with-opts (s/cat :runtime ::bare-runtime
+                                :key ::module-key
+                                :ns-sym ::namespace-symbol
+                                :opts ::module-options))
+  :ret ::module-refresh-outcome)
 
 (defn collect-module-forms
   "Run `thunk` under one synthetic namespace-backed module source context.
@@ -456,17 +489,16 @@
   `:return`, `:contribution`, `:lifecycle`, and `:kind-declarations`. `ns-sym`
   must name an existing namespace; the thunk runs with that namespace and a
   stable synthetic source file bound so authoring forms can enforce ownership.
+  Inputs conform to the public `:millstrand.test.alpha/module-key`,
+  `namespace-symbol`, and `thunk` specs. The result conforms to
+  `:millstrand.test.alpha/module-form-collection`.
 
   This authoring-form test tier inspects declarations as data. It does not prove
   module acquisition, source loading, publication, reconciliation, or startup."
   [module-key ns-sym thunk]
-  (when-not (keyword? module-key)
-    (throw (ex-info "collect-module-forms module-key must be a keyword"
-                    {:module/key module-key})))
-  (require-non-blank-symbol! "collect-module-forms ns-sym" ns-sym)
-  (when-not (fn? thunk)
-    (throw (ex-info "collect-module-forms thunk must be a function"
-                    {:thunk thunk})))
+  (require-spec! ::module-key "collect-module-forms module-key" module-key)
+  (require-spec! ::namespace-symbol "collect-module-forms ns-sym" ns-sym)
+  (require-spec! ::thunk "collect-module-forms thunk must be a function; value" thunk)
   (let [source-ns (or (find-ns ns-sym)
                       (throw (ex-info "collect-module-forms namespace does not exist"
                                       {:namespace ns-sym})))
@@ -477,11 +509,20 @@
         context {:module/key module-key
                  :source/file source-file
                  :source/namespace ns-sym}]
-    (binding [*ns* source-ns
-              *file* source-file]
-      ((requiring-resolve
-        'millstrand.core.weaver.module-graph/with-contribution-collection)
-       context thunk))))
+    (require-spec!
+     ::module-form-collection
+     "collect-module-forms result"
+     (binding [*ns* source-ns
+               *file* source-file]
+       ((requiring-resolve
+         'millstrand.core.weaver.module-graph/with-contribution-collection)
+        context thunk)))))
+
+(s/fdef collect-module-forms
+  :args (s/cat :module-key ::module-key
+               :ns-sym ::namespace-symbol
+               :thunk ::thunk)
+  :ret ::module-form-collection)
 
 (defn refresh-modules!
   "Refresh `ctx`'s disposable weaver runtime against its declared module graph.

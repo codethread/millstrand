@@ -288,6 +288,18 @@
              (get-in (t/module-status ctx)
                      [:modules :test/clock :ns]))))))
 
+(deftest module-authoring-helpers-publish-their-spec-contracts
+  (doseq [spec [:millstrand.test.alpha/bare-runtime
+                :millstrand.test.alpha/module-key
+                :millstrand.test.alpha/namespace-symbol
+                :millstrand.test.alpha/thunk
+                :millstrand.test.alpha/module-options
+                :millstrand.test.alpha/module-refresh-outcome
+                :millstrand.test.alpha/module-form-collection]]
+    (is (some? (s/get-spec spec)) (str spec " must remain a registered public spec")))
+  (is (some? (s/get-spec `t/activate-module!)))
+  (is (some? (s/get-spec `t/collect-module-forms))))
+
 (deftest activate-module-fails-loudly
   (testing "options are closed"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown keys"

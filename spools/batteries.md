@@ -429,5 +429,4 @@ Not part of batteries (out of scope here): `op help` → the core `help` op (SPE
 
 - [cli.md](../devflow/specs/cli.md) — CLI surface spec (old C6–C13 clauses).
 - [repl-api.md](../devflow/specs/repl-api.md) — op registry and blessed parser.
-- The workflow spool's patterns are one of the userland surfaces that `weave`
-  can drive.
+- The workflow spool's patterns are one of the userland surfaces that `weave` can drive.

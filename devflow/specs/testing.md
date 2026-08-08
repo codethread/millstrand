@@ -2,7 +2,7 @@
 
 **Document ID:** `SPEC-006`
 **Status:** Implemented
-**Last Updated:** 2026-08-06
+**Last Updated:** 2026-08-08
 **Related RFCs:** [Library author testing](../archive/26-07-03__library-author-testing-support/rfcs/2026-06-26-library-author-testing.md), [Test concurrency](../rfcs/2026-07-03-test-concurrency.md)
 **Related root specs:** [REPL API](./repl-api.md), [Weaver Runtime](./daemon-runtime.md), [Alpha Surface](./alpha-surface.md)
 **Code:** `src/millstrand/test`, `src/millstrand/api`
