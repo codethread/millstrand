@@ -57,7 +57,7 @@ Signatures live only in the generated API doc; contracts and cookbooks link to t
 
 The batteries and unsafe-text-search spools remain in this checkout under `spools/<name>/src`, off the production weaver classpath. Their `{:millstrand/source-root "spools/<name>"}` coordinates resolve against the mill-selected Millstrand checkout. Workflow, Chime, Cron, and the gate executors are external Millhouse roots, pinned by this workspace at [`8f386b09`](https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8). Their contracts live in that repository. For publishing a spool by git coordinate, SHA-pinned approval, README dependency/activation snippets, Maven-only spool-root dependencies, and local development overrides, see [Writing shared spools](../docs/spools/writing-shared-spools.md#publishing-a-shared-spool-with-git-distribution).
 
-| Spool | Coordinate (`.millstrand/spools.edn`) | Contract doc | API reference | Purpose |
+| Spool | Coordinate (`.millstrand/spools.edn`) | Contract doc | Documentation | Purpose |
 |---|---|---|---|---|
 | `millstrand.spools.unsafe-text-search` **(UNSAFE)** | `:millstrand/source-root "spools/unsafe-text-search"` | [unsafe-text-search.md](./unsafe-text-search.md) | [unsafe-text-search.api.md](./unsafe-text-search.api.md) · [cookbook](./unsafe-text-search.cookbook.md) | **UNSAFE reference spool** — requires `millstrand.core.db` and runs SQL against the physical tables to `LIKE`-search titles and attribute values, including archived rows the query language cannot see. Registers the `search` op. A maintained example of breaking the namespace-tier rules in the open, not a blessed path; read its [Unsafe declaration](./unsafe-text-search.md#unsafe-declaration) before activating. |
 | Millhouse workflow, Chime, Cron, and gate executors | git, SHA-pinned `millhouse/spools` family | [Millhouse contracts][millhouse-docs] | [Millhouse documentation][millhouse-docs] | External domain spools consumed by this workspace. |
@@ -84,7 +84,7 @@ Tests consume each approved coordinate rather than carrying another pin. Develop
 
 The override inherits the shared family's `:roots`, `:requires`, and `:millstrand/min` declarations.
 
-`millstrand.spools.dresser` ([`codethread/dresser.loom`](https://github.com/codethread/dresser.loom)) is also external, but this repo approves no coordinate for it. Dresser is activated in whichever workspace drives a setup run, and the repo being set up needs no weaver or spool approvals of its own, so consumption is a per-operator choice. Its README carries the dependency and activation recipe.
+`millstrand.spools.dresser` ([`codethread/dresser.spool`](https://github.com/codethread/dresser.spool#readme)) is also external, but this repo approves no coordinate for it. Dresser is activated in whichever workspace drives a setup run, and the repo being set up needs no weaver or spool approvals of its own, so consumption is a per-operator choice. Its README carries the dependency and activation recipe.
 
 ## Guild example
 

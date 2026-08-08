@@ -245,7 +245,7 @@ Make `root-lib`'s current synced source live in dependency order (code only).
   generation's loaded code against current source. It performs no module
   contribution publication or resource reconciliation — use `refresh!` for the
   normal path. `root-lib` is a root-lib symbol from a family's effective `:roots`
-  map (e.g. `millstrand.spools/kanban`); an unresolvable root fails loudly with a
+  map (e.g. `millstrand.spools/batteries`); an unresolvable root fails loudly with a
   `:reason` in ex-data. The result names the reloaded root, its canonical path,
   the namespaces reloaded with their sources, and the residual and hard-conflict
   outcomes from the post-reload classification, conforming to

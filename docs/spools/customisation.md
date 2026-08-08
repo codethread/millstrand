@@ -126,7 +126,7 @@ family's effective `:roots` map and reloads that root's namespaces in dependency
 order:
 
 ```clojure
-(runtime/reload-code! (current/runtime) 'millstrand.spools/kanban)
+(runtime/reload-code! (current/runtime) 'millstrand.spools/batteries)
 ```
 
 The result names the root lib, canonical root, and namespaces in reload order, and conforms to
