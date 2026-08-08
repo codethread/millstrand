@@ -717,7 +717,7 @@
                                       {:failure-modes ["publication/missing"]}}}}}}}
             backends (module-publication/backends rt)
             candidates (module-publication/stage-owner
-                        backends (module-publication/candidates backends)
+                        rt backends (module-publication/candidates backends)
                         :test/published
                         {:ops {:entries {"published-deep" entry}}})]
         (is (= candidates

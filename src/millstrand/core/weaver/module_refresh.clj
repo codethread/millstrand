@@ -775,7 +775,7 @@
           :module/resolved))
 
 (defn- stage-publications
-  [backends candidate-map graph order raw previous-contributions previous-sources]
+  [runtime backends candidate-map graph order raw previous-contributions previous-sources]
   (let [unaffected (set/difference (set (keys graph)) (set order))
         seeded (into (sorted-map)
                      (map (fn [key] [key {:status :unchanged}]))
@@ -806,7 +806,7 @@
                :else
                (try
                  (let [next-candidates (publication/stage-owner
-                                        backends candidates key
+                                        runtime backends candidates key
                                         (:contribution raw-outcome))]
                    (-> result
                        (assoc :candidates next-candidates)
@@ -1147,7 +1147,7 @@
                         base-candidates (reduce publication/remove-owner
                                                 (publication/candidates backends)
                                                 removed)
-                        staged (stage-publications backends base-candidates graph order raw
+                        staged (stage-publications runtime backends base-candidates graph order raw
                                                    previous-contributions previous-sources)
                         _ (require-kind-declarations-staged! raw (:outcomes staged))
                         _ (publication/validate-op-candidates! backends (:candidates staged))
