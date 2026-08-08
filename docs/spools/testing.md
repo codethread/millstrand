@@ -231,12 +231,6 @@ creation fail.
 
 ## CI
 
-### Millstrand publisher transition
-
-The workspace-config integration suites are active against the current untagged Devflow and Agent Harness pins. They run in the isolated add-libs shard with `millstrand.ct.nvd-scan-test`.
-
-One temporary deferral remains: `make spool-suite-gate` stops at the exact Kanban v24 pin because that release still loads the former in-tree Guild namespace. `make transition-check` pins that exception to Kanban only; Devflow and Agent Harness cannot hide behind it. Remove the deferral when Kanban consumes the Guild example's current namespace.
-
 Check out both repos and pin Millstrand to a commit or tag:
 
 ```yaml

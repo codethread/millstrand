@@ -4,7 +4,7 @@ Spools are trusted, authorable Clojure loaded into the weaver. The `millstrand.s
 is reserved for exactly this kind of code (see the [REPL API spec](../devflow/specs/repl-api.md)).
 The agent family (`agent-run`, `executors.subagent`, `delegation`, `bench`) lives in
 [`codethread/agent-harness.spool`](https://github.com/codethread/agent-harness.spool) under
-`ct.spools.*`, the author-prefix convention used by external spools such as `ct.spools.kanban`.
+`ct.spools.*`, the author-prefix convention for external spools.
 The spools in this directory ship with Millstrand as working references. Use them directly, copy them
 as starting points, or study them to author your own.
 
@@ -61,40 +61,19 @@ The batteries and unsafe-text-search spools remain in this checkout under `spool
 |---|---|---|---|---|
 | `millstrand.spools.unsafe-text-search` **(UNSAFE)** | `:millstrand/source-root "spools/unsafe-text-search"` | [unsafe-text-search.md](./unsafe-text-search.md) | [unsafe-text-search.api.md](./unsafe-text-search.api.md) · [cookbook](./unsafe-text-search.cookbook.md) | **UNSAFE reference spool** — requires `millstrand.core.db` and runs SQL against the physical tables to `LIKE`-search titles and attribute values, including archived rows the query language cannot see. Registers the `search` op. A maintained example of breaking the namespace-tier rules in the open, not a blessed path; read its [Unsafe declaration](./unsafe-text-search.md#unsafe-declaration) before activating. |
 | Millhouse workflow, Chime, Cron, and gate executors | git, SHA-pinned `millhouse/spools` family | [Millhouse contracts][millhouse-docs] | [Millhouse documentation][millhouse-docs] | External domain spools consumed by this workspace. |
-| `ct.spools.agent-run` | git, sha-pinned (see below) | [agent-run/README.md][agent-run-contract] | [agent-run.api.md][agent-run-api] · [cookbook][agent-run-cookbook] | Agent-run **engine**: readiness-driven headless coding-agent runs plus interactive multiplexer sessions (backend registry, claims-model reaping), harness aliases, crash reconciliation, storage-enforced write-once run memory, and the preamble seam. Registers no ops. |
-| `ct.spools.delegation` | git, sha-pinned (see below) | [delegation/README.md][delegation-contract] | [delegation.api.md][delegation-api] · [cookbook][delegation-cookbook] | Cross-harness subagent surface over agent-run: the `strand agent` verbs, the `agent-plan` weave pattern, delegation/retry/status, and the worker + coordinator guidance. |
-| `ct.spools.executors.subagent` | git, sha-pinned `agent-run` root (see below) | [agent-run/subagent.md][subagent-contract] | [subagent.api.md][subagent-api] · [cookbook][subagent-cookbook] | Workflow gate bridge: fulfills ready `:subagent` gates by spawning agent-run runs and delivering successful results through `workflow/complete!`. |
-| `ct.spools.kanban` | git, sha-pinned (see below) | [kanban.md](https://github.com/codethread/kanban.spool/blob/87f61bc2750e7026f3650235907db25f19b1536e/kanban.md) | — | User-facing kanban board: feature/epic cards, refinement/pending/claimed/in_review lanes, notes and handovers via `strand kanban`; epics have a reversible finish lifecycle (`finish` completes or abandon-cascades, `reopen` inverts an abandon). |
-| `ct.spools.bench` | git, sha-pinned (see below) | [bench/README.md][bench-contract] | [bench.api.md][bench-api] | Deterministic, containerized benchmarking of coding-agent harnesses: pinned repo/prompt/memory overlays, bench-owned entry execution, normalized metrics, and an agent-run served judge. |
-| `ct.spools.devflow` | git, sha-pinned (see below) | [devflow.md](https://github.com/codethread/devflow.spool/blob/528e0ba636e28032985f7f9706c8350e9f785d97/devflow.md) | — | Reference devflow lifecycle built on the workflow engine: intake → proposal → spec/plan → tasks/implementation stages with HITL checkpoints. |
-| `millstrand.spools.dresser` | *(none approved in this repo)* | [dresser.md](https://github.com/codethread/dresser.loom/blob/fea1d340be3591d008cf0ddeb72b0091d95a380d/dresser.md) | — | Brings a repo onto shared working conventions and surfaces convention upgrades later. Two flavours: scaffold a new shared-spool repo, or install a self-contained `.millstrand/` workspace into any host repo. Applied versions are recorded in the target at `.millstrand/conventions.edn`. |
-
-[agent-run-contract]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/agent-run/README.md
-[agent-run-api]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/agent-run/agent-run.api.md
-[agent-run-cookbook]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/agent-run/agent-run.cookbook.md
-[delegation-contract]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/delegation/README.md
-[delegation-api]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/delegation/delegation.api.md
-[delegation-cookbook]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/delegation/delegation.cookbook.md
-[subagent-contract]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/agent-run/subagent.md
-[subagent-api]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/agent-run/subagent.api.md
-[subagent-cookbook]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/agent-run/subagent.cookbook.md
-[bench-contract]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/bench/README.md
-[bench-api]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/bench/bench.api.md
+| Agent harness (`agent-run`, `delegation`, subagent executor, `bench`) | git, SHA-pinned `ct.spools/agent-run` family | [Agent harness README](https://github.com/codethread/agent-harness.spool#readme) | [Agent harness README](https://github.com/codethread/agent-harness.spool#readme) | Coding-agent runs, delegation, workflow gate execution, and benchmarks. |
+| Kanban | git, SHA-pinned `codethread/kanban` family | [Kanban README](https://github.com/codethread/kanban.spool#readme) | [Kanban README](https://github.com/codethread/kanban.spool#readme) | User-facing board for feature and epic cards, lanes, notes, and handovers. |
+| Devflow | git, SHA-pinned `codethread/devflow` family | [Devflow README](https://github.com/codethread/devflow.spool#readme) | [Devflow README](https://github.com/codethread/devflow.spool#readme) | Reference feature lifecycle built on the workflow engine. |
+| `millstrand.spools.dresser` | *(none approved in this repo)* | [Dresser README](https://github.com/codethread/dresser.spool#readme) | [Dresser README](https://github.com/codethread/dresser.spool#readme) | Brings a repo onto shared working conventions and surfaces convention upgrades later. |
 [millhouse-docs]: https://codethread.github.io/millhouse.spool/
 
-`guild` is a never-activated reference root. This repo carries its source and tests because kanban.spool's peering layer depends on it, but adds no `.millstrand/spools.edn` coordinate. A downstream user opts in by adding one.
+`guild` is a never-activated reference root. This repo carries its source and tests, but adds no `.millstrand/spools.edn` coordinate. A downstream user opts in by adding one.
 
 ## External spool consumption
 
-How to apply and verify entries like these: [Writing shared spools](../docs/spools/writing-shared-spools.md) covers the coordinate shape and publishing; [customisation](../docs/spools/customisation.md) covers activating config changes against a running weaver; `strand spool status` shows what the runtime actually serves.
+External spool contracts live with their projects. The index links to each project's deployed documentation or README; `.millstrand/spools.edn` is the local source of truth for its approved coordinate and pin. [Writing shared spools](../docs/spools/writing-shared-spools.md) covers coordinate shape and publishing, [customisation](../docs/spools/customisation.md) covers activating config changes, and `strand spool status` shows what the runtime serves.
 
-`ct.spools.devflow` is consumed from [`codethread/devflow.spool`](https://github.com/codethread/devflow.spool) by git coordinate rather than a local root — the worked example of publishing a spool for others (RFC-017, [Writing shared spools](../docs/spools/writing-shared-spools.md#publishing-a-shared-spool-with-git-distribution)). This repo pins one untagged family coordinate in `.millstrand/spools.edn` with its `:git/url` and full `:git/sha`. That entry is the single source of the pin, and `.millstrand/init.clj` activates the spool with `:required? true`. Tests consume the approved coordinate rather than carrying a second pin, so the test and weaver pins cannot drift. Developers override the coordinate with a gitignored `spools.local.edn` local root to work against a checkout.
-
-`ct.spools.kanban` does not choose a workflow system. This repo activates Devflow's adapter after both spools are active. The currently pinned untagged Devflow family requires no consumer-owned tracker seed.
-
-`ct.spools.kanban` is the second external spool: it lives in [`codethread/kanban.spool`](https://github.com/codethread/kanban.spool). Like Devflow, its pin lives only in `.millstrand/spools.edn`; unlike Devflow, Kanban still uses a release `:git/tag` plus its peeled `:git/sha`. Tests consume that same entry, and developers override it with a gitignored `spools.local.edn` local root.
-
-The `ct.spools.agent-run`, `ct.spools.executors.subagent`, `ct.spools.delegation`, and `ct.spools.bench` family lives in [`codethread/agent-harness.spool`](https://github.com/codethread/agent-harness.spool). The table lists its contract-bearing `agent-run`, `delegation`, and `bench` roots; `harness-core`, `codex-harness`, and `agent-cli` are support roots from the same untagged family approval. Tests consume those roots from that one entry. Developers override the whole family from one checkout with one gitignored `spools.local.edn` entry:
+Tests consume each approved coordinate rather than carrying another pin. Developers override a family from a checkout with a gitignored `spools.local.edn` entry. For example, the Agent Harness family uses one entry:
 
 ```clojure
 {:spools
