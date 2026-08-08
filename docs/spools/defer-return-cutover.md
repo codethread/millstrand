@@ -42,7 +42,7 @@ git rev-parse HEAD
 make install
 ```
 
-Do not call `runtime/refresh!`, `runtime/reload-code!`, or a namespace `:reload`. This is a generation cutover, and live refresh is not a valid pickup path. Do not change the audited agent-harness v15, devflow v9, or kanban v11 pins as part of this cutover.
+Do not call `runtime/refresh!`, `runtime/reload-code!`, or a namespace `:reload`. This is a generation cutover, and live refresh is not a valid pickup path.
 
 ## 5. Start and smoke-check
 

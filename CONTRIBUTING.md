@@ -40,8 +40,8 @@ Pass `--workspace "$workspace"` on every other `mill` or `strand` command in tha
 
 Every piece of work takes the same shape, whoever does it:
 
-1. **A kanban card.** Anything you ask for becomes a feature card on the strand-backed board (contract: [`kanban.md`](https://github.com/codethread/kanban.spool/blob/2947590e7965feb95a239189af3bd55f008d1209/kanban.md) in the external kanban.spool repo); half-formed ideas sit in the refinement lane until you promote them.
-2. **The devflow lifecycle.** A coordinator agent runs a feature through devflow — proposal, spec/plan, tasks, implementation — in its own worktree, delegating tasks to worker agents.
+1. **A kanban card.** Anything you ask for becomes a feature card on the strand-backed board (see the [Kanban spool README](https://github.com/codethread/kanban.spool#readme)); half-formed ideas sit in the refinement lane until you promote them.
+2. **The devflow lifecycle.** A coordinator agent runs a feature through [Devflow](https://github.com/codethread/devflow.spool#readme) — proposal, spec/plan, tasks, implementation — in its own worktree, delegating tasks to worker agents.
 3. **Adversarial review.** Finished changes are reviewed by the declared rosters in [`.millstrand/agents/reviewers.clj`](./.millstrand/agents/reviewers.clj): small single-concern reviewers, synthesized cross-vendor so no model family signs off its own work.
 4. **Landing.** A coordinator drives the `land` workflow: draft PR, local quality gates, roster sign-off, verified squash-merge, and the canonical main quality contract after pull-main. Read `strand --workspace "$workspace" workflow show land`, then use generic workflow verbs and the policy boundaries in `strand --workspace "$workspace" help land`.
 

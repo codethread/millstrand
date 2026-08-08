@@ -98,12 +98,10 @@ nav:
           - Contract: spools/batteries.md
           - Cookbook: spools/batteries.cookbook.md
           - API: spools/batteries.api.md
-      - Devflow Lifecycle: spools/devflow.md
       - Text Search (UNSAFE):
           - Contract: spools/unsafe-text-search.md
           - Cookbook: spools/unsafe-text-search.cookbook.md
           - API: spools/unsafe-text-search.api.md
-      - Kanban Board: spools/kanban.md
   - Examples:
       - Weaver Guild:
           - Contract: examples/guild/README.md
@@ -111,18 +109,7 @@ nav:
           - API: examples/guild.api.md
   - External Spools:
       - Millhouse: https://codethread.github.io/millhouse.spool/
-      - Agent Runs:
-          - Contract: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/README.md
-          - Cookbook: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/agent-run.cookbook.md
-          - API: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/agent-run.api.md
-      - Delegation Spool:
-          - Contract: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/delegation/README.md
-          - Cookbook: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/delegation/delegation.cookbook.md
-          - API: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/delegation/delegation.api.md
-      - Subagent Gate Executor:
-          - Contract: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/subagent.md
-          - Cookbook: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/subagent.cookbook.md
-          - API: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/subagent.api.md
-      - Bench Harness Benchmarks:
-          - Contract: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/bench/README.md
-          - API: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/bench/bench.api.md
+      - Agent Harness: https://github.com/codethread/agent-harness.spool#readme
+      - Kanban: https://github.com/codethread/kanban.spool#readme
+      - Devflow: https://github.com/codethread/devflow.spool#readme
+      - Dresser: https://github.com/codethread/dresser.spool#readme
