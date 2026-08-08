@@ -1,6 +1,6 @@
 # Defer-return cold cutover
 
-The external Workflow spool's returning-defer change removes the old `dispatch` and `continue` surfaces and changes the meaning of persisted defer strands. It has no migration or old-strand interpreter. Every consuming workspace must have zero active workflow roots before the new build starts. Its contract is in the [Millhouse documentation](https://codethread.github.io/millhouse.spool/spools/workflow/).
+The external Workflow spool's returning-defer change removes the old `dispatch` and `continue` surfaces and changes the meaning of persisted defer strands. It has no migration or old-strand interpreter. Every consuming workspace must have zero active workflow roots before the new build starts. Its contract is in the [Millhouse documentation](https://codethread.github.io/millhouse.spool/).
 
 Use this procedure for each workspace. Keep workflow producers and workers paused from the first check until the final smoke check passes.
 
