@@ -12,6 +12,7 @@ import (
 
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
+	"millstrand-strand-cli/internal/process"
 )
 
 func resolveLifecycleWorld(req client.MillWorldRequest) (config.World, error) {
@@ -583,12 +584,5 @@ func waitForPIDExit(pid int, timeout time.Duration) {
 }
 
 func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return p.Signal(syscall.Signal(0)) == nil
+	return process.Alive(pid)
 }
