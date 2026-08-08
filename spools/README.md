@@ -60,7 +60,7 @@ The batteries and unsafe-text-search spools remain in this checkout under `spool
 | Spool | Coordinate (`.millstrand/spools.edn`) | Contract doc | API reference | Purpose |
 |---|---|---|---|---|
 | `millstrand.spools.unsafe-text-search` **(UNSAFE)** | `:millstrand/source-root "spools/unsafe-text-search"` | [unsafe-text-search.md](./unsafe-text-search.md) | [unsafe-text-search.api.md](./unsafe-text-search.api.md) · [cookbook](./unsafe-text-search.cookbook.md) | **UNSAFE reference spool** — requires `millstrand.core.db` and runs SQL against the physical tables to `LIKE`-search titles and attribute values, including archived rows the query language cannot see. Registers the `search` op. A maintained example of breaking the namespace-tier rules in the open, not a blessed path; read its [Unsafe declaration](./unsafe-text-search.md#unsafe-declaration) before activating. |
-| Millhouse workflow, Chime, Cron, and gate executors | git, SHA-pinned `millhouse/spools` family | [Millhouse contracts][millhouse-contracts] | [Millhouse documentation][millhouse-contracts] | External domain spools consumed by this workspace. |
+| Millhouse workflow, Chime, Cron, and gate executors | git, SHA-pinned `millhouse/spools` family | [Millhouse contracts][millhouse-docs] | [Millhouse documentation][millhouse-docs] | External domain spools consumed by this workspace. |
 | `ct.spools.agent-run` | git, sha-pinned (see below) | [agent-run/README.md][agent-run-contract] | [agent-run.api.md][agent-run-api] · [cookbook][agent-run-cookbook] | Agent-run **engine**: readiness-driven headless coding-agent runs plus interactive multiplexer sessions (backend registry, claims-model reaping), harness aliases, crash reconciliation, storage-enforced write-once run memory, and the preamble seam. Registers no ops. |
 | `ct.spools.delegation` | git, sha-pinned (see below) | [delegation/README.md][delegation-contract] | [delegation.api.md][delegation-api] · [cookbook][delegation-cookbook] | Cross-harness subagent surface over agent-run: the `strand agent` verbs, the `agent-plan` weave pattern, delegation/retry/status, and the worker + coordinator guidance. |
 | `ct.spools.executors.subagent` | git, sha-pinned `agent-run` root (see below) | [agent-run/subagent.md][subagent-contract] | [subagent.api.md][subagent-api] · [cookbook][subagent-cookbook] | Workflow gate bridge: fulfills ready `:subagent` gates by spawning agent-run runs and delivering successful results through `workflow/complete!`. |
@@ -80,7 +80,7 @@ The batteries and unsafe-text-search spools remain in this checkout under `spool
 [subagent-cookbook]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/agent-run/subagent.cookbook.md
 [bench-contract]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/bench/README.md
 [bench-api]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/bench/bench.api.md
-[millhouse-contracts]: https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools
+[millhouse-docs]: https://codethread.github.io/millhouse.spool/
 
 `guild` is a never-activated reference root. This repo carries its source and tests because kanban.spool's peering layer depends on it, but adds no `.millstrand/spools.edn` coordinate. A downstream user opts in by adding one.
 

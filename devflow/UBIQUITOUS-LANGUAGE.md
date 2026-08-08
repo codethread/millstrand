@@ -126,7 +126,7 @@ Three tiers answer every "how do I find out" question, and the distinction is lo
 
 ## Workflow
 
-Workflow terminology (molecule, wisp, pour, bond, squash) belongs to the [external Workflow spool](https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/workflow) and is borrowed from [beads](https://github.com/steveyegge/beads).
+Workflow terminology (molecule, wisp, pour, bond, squash) belongs to the [external Workflow spool](https://codethread.github.io/millhouse.spool/spools/workflow/) and is borrowed from [beads](https://github.com/steveyegge/beads).
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |

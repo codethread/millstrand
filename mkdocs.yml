@@ -111,11 +111,27 @@ nav:
           - API: examples/guild.api.md
   - External Spools:
       - Millhouse:
-          - Workflow: https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/workflow
-          - Chime: https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/chime
-          - Cron: https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/cron
-          - Code executor: https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor
-          - Shell executor: https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/shell-executor
+          - Home: https://codethread.github.io/millhouse.spool/
+          - Workflow:
+              - Contract: https://codethread.github.io/millhouse.spool/spools/workflow/
+              - Cookbook: https://codethread.github.io/millhouse.spool/spools/workflow/workflow.cookbook/
+              - API: https://codethread.github.io/millhouse.spool/spools/workflow/workflow.api/
+          - Chime:
+              - Contract: https://codethread.github.io/millhouse.spool/spools/chime/
+              - Cookbook: https://codethread.github.io/millhouse.spool/spools/chime/chime.cookbook/
+              - API: https://codethread.github.io/millhouse.spool/spools/chime/chime.api/
+          - Cron:
+              - Contract: https://codethread.github.io/millhouse.spool/spools/cron/
+              - Cookbook: https://codethread.github.io/millhouse.spool/spools/cron/cron.cookbook/
+              - API: https://codethread.github.io/millhouse.spool/spools/cron/cron.api/
+          - Code executor:
+              - Contract: https://codethread.github.io/millhouse.spool/spools/code-executor/
+              - Cookbook: https://codethread.github.io/millhouse.spool/spools/code-executor/code.cookbook/
+              - API: https://codethread.github.io/millhouse.spool/spools/code-executor/code.api/
+          - Shell executor:
+              - Contract: https://codethread.github.io/millhouse.spool/spools/shell-executor/
+              - Cookbook: https://codethread.github.io/millhouse.spool/spools/shell-executor/shell.cookbook/
+              - API: https://codethread.github.io/millhouse.spool/spools/shell-executor/shell.api/
       - Agent Runs:
           - Contract: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/README.md
           - Cookbook: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/agent-run.cookbook.md
