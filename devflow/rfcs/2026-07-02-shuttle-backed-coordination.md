@@ -1,6 +1,6 @@
 # Shuttle-backed Agent Coordination
 
-**Document ID:** `RFC-010` **Status:** Implemented **Date:** 2026-07-02 **Related:** [Shuttle spool](../../spools/shuttle/src/skein/spools/shuttle.clj), [Workflow spool](../../spools/workflow.md), [Devflow spool](../../spools/devflow.md), [Workflow ergonomics archive](../archive/26-07-02__workflow-ergonomics/), [Shuttle spool proposal](../archive/26-07-02__shuttle-spool/proposal.md), [Strand Model](../specs/strand-model.md), [Weaver Runtime](../specs/daemon-runtime.md), [CLI Surface](../specs/cli.md)
+**Document ID:** `RFC-010` **Status:** Implemented **Date:** 2026-07-02 **Related:** [Shuttle spool](../../spools/shuttle/src/skein/spools/shuttle.clj), [Workflow spool](../../spools/workflow.md), [Devflow spool](https://github.com/codethread/devflow.spool#readme), [Workflow ergonomics archive](../archive/26-07-02__workflow-ergonomics/), [Shuttle spool proposal](../archive/26-07-02__shuttle-spool/proposal.md), [Strand Model](../specs/strand-model.md), [Weaver Runtime](../specs/daemon-runtime.md), [CLI Surface](../specs/cli.md)
 
 ## RFC-010.P1 Problem
 
