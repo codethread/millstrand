@@ -99,6 +99,40 @@
   [candidate-map owner]
   (update-vals candidate-map #(without-owner % owner)))
 
+(defn- resolve-event-handler-fn!
+  "Resolve one module event handler symbol to its captured callable."
+  [runtime fn-sym]
+  (access/validate-fn-symbol! "Event handler" fn-sym)
+  (let [resolved (try
+                   (access/with-spool-classloader runtime #(requiring-resolve fn-sym))
+                   (catch Throwable throwable
+                     (throw (ex-info "Event handler function could not be resolved"
+                                     {:fn fn-sym}
+                                     throwable))))
+        value (if (var? resolved) @resolved resolved)]
+    (when-not (ifn? value)
+      (throw (ex-info "Event handler symbol must resolve to a callable value"
+                      {:fn fn-sym
+                       :resolved-class (str (class value))})))
+    value))
+
+(defn realize-event-handlers
+  "Return `contribution` with module event handlers bound for dispatch.
+
+  Authoring declarations retain the public `:fn` symbol. The internal event
+  registry additionally captures the resolved `:fn-value` at publication, which
+  gives dispatch one immutable callable snapshot while public readers continue
+  to strip the internal value.
+  "
+  [runtime contribution]
+  (if (contains? contribution :events)
+    (update-in contribution [:events :entries]
+               (fn [entries]
+                 (update-vals entries
+                              #(assoc % :fn-value
+                                      (resolve-event-handler-fn! runtime (:fn %))))))
+    contribution))
+
 (defn stage-owner
   "Validate and stage one owner's complete workspace-layer contribution.
 

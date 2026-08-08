@@ -45,6 +45,7 @@
          (delete-tree! (io/file (:config-dir world))))))))
 
 (def delivered-events (atom []))
+(def module-deliveries (atom []))
 (def handler-started (atom (promise)))
 (def handler-release (atom (promise)))
 (def module-contributions (atom {}))
@@ -83,6 +84,7 @@
 (use-fixtures :each
   (fn [f]
     (reset! delivered-events [])
+    (reset! module-deliveries [])
     (reset! handler-started (promise))
     (reset! handler-release (promise))
     (reset! module-contributions {})
@@ -1170,6 +1172,35 @@
         (t/await-quiescent! rt)
         (is (= #{"in-flight" "queued"}
                (set (map :event/id @delivered-events))))))))
+
+(deftest module-defhandler-publishes-a-dispatchable-event-handler
+  (with-runtime
+    (fn [rt _db-file]
+      (let [workspace (get-in rt [:metadata :config-dir])
+            source "modules/defhandler.clj"
+            suffix (str/replace (str (random-uuid)) "-" "")
+            module-ns (symbol (str "test.module.defhandler-" suffix))
+            handler-sym (symbol (str module-ns) "module-handler")]
+        (module-source!
+         workspace source module-ns
+         (str "(millstrand.api.millstrand.alpha/defhandler module-handler\n"
+              "  \"Capture a module event.\"\n"
+              "  {:types #{:module/test}}\n"
+              "  [event]\n"
+              "  (swap! millstrand.core.weaver.modules-test/module-deliveries\n"
+              "         conj event))"))
+        (is (= :applied
+               (:status (weaver-runtime/declare-module! rt :defhandler {:file source}))))
+        (is (= {:key :module-handler
+                :types #{:module/test}
+                :fn handler-sym
+                :metadata {}}
+               (first (events/handlers rt))))
+        (is (not (contains? (first (events/handlers rt)) :fn-value)))
+        (let [event (test-event :module/test "module-event")]
+          (dispatch/enqueue! rt event)
+          (t/await-quiescent! rt)
+          (is (= [event] @module-deliveries)))))))
 
 (deftest fresh-declarations-refuse-entry-point-keys
   (testing "the direct internal declare-module! route refuses either key"
