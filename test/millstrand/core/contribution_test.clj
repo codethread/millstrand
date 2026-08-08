@@ -4,10 +4,7 @@
             [clojure.test :refer [deftest is testing]]
             [millstrand.api.millstrand.alpha :as millstrand]
             [millstrand.core.contribution :as contribution]
-            [millstrand.core.weaver.module-graph :as module-graph]
-            [millstrand.spools.chime :as chime]
-            [millstrand.spools.cron :as cron]
-            [millstrand.spools.workflow :as workflow]))
+            [millstrand.core.weaver.module-graph :as module-graph]))
 
 (s/def ::pattern-input (s/keys))
 
@@ -131,23 +128,3 @@
                         (contribution/bin-declaration
                          'sample 42 {:executable "x"}
                          'millstrand.core.contribution-test))))
-
-(deftest domain-forms-define-callables-and-collect-override-intent
-  (let [contribution
-        (collect
-         #(eval
-           '(do
-              (workflow/defexecutor sample-executor "Sample."
-                {:override? true} [_] nil)
-              (cron/defjob :sample-job {:override? true}
-                {:interval-ms 1000
-                 :handler 'millstrand.core.contribution-test/sample-handler})
-              (chime/defrule sample-rule "Sample."
-                {:override? true} [_] nil))))]
-    (is (= #{"sample-executor"}
-           (get-in contribution [workflow/executor-kind :overrides])))
-    (is (= #{:sample-job} (get-in contribution [cron/job-kind :overrides])))
-    (is (= #{:sample-rule} (get-in contribution [chime/rule-kind :overrides])))
-    (is (every? var?
-                (map #(ns-resolve test-ns %)
-                     '[sample-executor-stalled? sample-rule-rule])))))

@@ -98,34 +98,24 @@ nav:
           - Contract: spools/batteries.md
           - Cookbook: spools/batteries.cookbook.md
           - API: spools/batteries.api.md
-      - Workflow:
-          - Contract: spools/workflow.md
-          - Cookbook: spools/workflow.cookbook.md
-          - API: spools/workflow.api.md
       - Devflow Lifecycle: spools/devflow.md
       - Text Search (UNSAFE):
           - Contract: spools/unsafe-text-search.md
           - Cookbook: spools/unsafe-text-search.cookbook.md
           - API: spools/unsafe-text-search.api.md
       - Kanban Board: spools/kanban.md
-      - Shell Gate Executor:
-          - Contract: spools/executors/shell.md
-          - Cookbook: spools/executors/shell.cookbook.md
-          - API: spools/executors/shell.api.md
-      - Chime Notifications:
-          - Contract: spools/chime/README.md
-          - Cookbook: spools/chime.cookbook.md
-          - API: spools/chime.api.md
-      - Cron Engine:
-          - Contract: spools/cron/README.md
-          - Cookbook: spools/cron.cookbook.md
-          - API: spools/cron.api.md
   - Examples:
       - Weaver Guild:
           - Contract: examples/guild/README.md
           - Cookbook: examples/guild.cookbook.md
           - API: examples/guild.api.md
   - External Spools:
+      - Millhouse:
+          - Workflow: https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/workflow
+          - Chime: https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/chime
+          - Cron: https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/cron
+          - Code executor: https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/code-executor
+          - Shell executor: https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/shell-executor
       - Agent Runs:
           - Contract: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/README.md
           - Cookbook: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/agent-run.cookbook.md

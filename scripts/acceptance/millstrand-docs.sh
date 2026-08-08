@@ -10,7 +10,6 @@ mill_log="$tmp_root/mill.log"
 status_before="$tmp_root/status-before.json"
 status_running="$tmp_root/status-running.json"
 status_alias="$tmp_root/status-alias.json"
-workflow_list="$tmp_root/workflow-list.json"
 
 mill_pid=""
 metadata_path="$state_root/millstrand/mill.json"
@@ -113,9 +112,6 @@ jq -e '(.state != "running")' "$status_before" >/dev/null
 run_recorded "mill weaver start" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver start
 run_capture "mill weaver status after start" "$status_running" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status
 jq -e '(.state == "running")' "$status_running" >/dev/null
-
-run_capture "strand workflow list" "$workflow_list" env XDG_STATE_HOME="$state_root" "$repo_root/bin/strand" workflow list
-jq -e 'type == "object"' "$workflow_list" >/dev/null
 
 run_recorded "mill weaver stop" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver stop
 mv .millstrand .ms

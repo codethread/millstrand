@@ -156,7 +156,7 @@ From the frontend weaver (or a manager weaver), discover the backend by its port
 
 - [`guild.cookbook.md`](../guild.cookbook.md) — worked composition recipes for this example.
 - [`spools/README.md`](../../spools/README.md) — shipped spools index and loading notes.
-- [`millstrand.spools.workflow`](../../spools/workflow.md) — workflow gates are the durable wait points guild ops often inspect or complete.
+- Workflow gates are the durable wait points guild ops often inspect or complete.
 - [`ct.spools.executors.subagent`][subagent-contract] — external gate adapter shape that
   guild-backed adapters can mirror.
 - [Weaver Runtime spec](../../devflow/specs/daemon-runtime.md) — local weaver peering contract (SPEC-004.P10c).

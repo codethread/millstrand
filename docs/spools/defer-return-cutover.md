@@ -1,6 +1,6 @@
 # Defer-return cold cutover
 
-The workflow spool's returning-defer change removes the old `dispatch` and `continue` surfaces and changes the meaning of persisted defer strands. It has no migration or old-strand interpreter. Every consuming workspace must have zero active workflow roots before the new build starts.
+The external Workflow spool's returning-defer change removes the old `dispatch` and `continue` surfaces and changes the meaning of persisted defer strands. It has no migration or old-strand interpreter. Every consuming workspace must have zero active workflow roots before the new build starts. Its contract is pinned in [Millhouse](https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8/spools/workflow).
 
 Use this procedure for each workspace. Keep workflow producers and workers paused from the first check until the final smoke check passes.
 
@@ -20,7 +20,7 @@ strand --workspace "${workspace:?}" list --query workflow-runs --limit 1
 
 The result must be the empty array `[]`. If it contains a root, keep producers paused, resolve that root, and repeat the command. Do not continue on the strength of an earlier or differently scoped query.
 
-For a consumer without the `workflow-runs` view, inspect `(millstrand.spools.workflow/active-runs)` through its existing trusted operator surface. The result must be empty.
+For a consumer without the `workflow-runs` view, inspect `(millhouse.spools.workflow/active-runs)` through its existing trusted operator surface. The result must be empty.
 
 ## 3. Obtain authorization and stop the weaver
 

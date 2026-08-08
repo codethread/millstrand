@@ -10,10 +10,9 @@ This spec draws the line around what Millstrand ships as "alpha": which surface 
 
 - **SPEC-005.C1:** The four root specs are the behavior contracts for shipped engine surface: strand model and storage semantics (SPEC-001), the public `strand`/`mill` CLI (SPEC-002), the trusted Clojure/REPL surface (SPEC-003), and the weaver runtime, transports, and registries (SPEC-004).
 - **SPEC-005.C2:** The blessed spool-facing API is every `millstrand.api.*.alpha` namespace — currently `batch`, `cli`, `clock`, `current`, `errors`, `events`, `format`, `graph`, `hooks`, `lifecycle`, `notes`, `patterns`, `peers`, `registry`, `relations`, `return-shape`, `runtime`, `scheduler`, `millstrand`, `spec`, `spool`, `vocab`, `weaver` — plus `millstrand.test.alpha` and the human-facing `millstrand.repl` helpers. Each is specified in SPEC-003/SPEC-004 (errors in SPEC-003.C23d, relations in SPEC-001.P5, notes in SPEC-001, vocab in SPEC-001) and follows accretion-based compatibility within its subnamespace. `millstrand.api.return-shape.alpha` exposes the in-contract `validate!`, `explain`, and `check!` functions; `millstrand.test.alpha/check-op-return!` accretes within the already-listed author-side test tier.
-- **SPEC-005.C3:** The reference spools shipped in the Millstrand tree — `batteries`,
-  `executors/code`, `executors/shell`, `unsafe-text-search`, and `workflow` — are in-contract through their spool docs at
-  [`spools/*.md`](../../spools/README.md) (the executor contract docs nest one level deeper,
-  under `spools/executors/`), loaded **opt-in**: an approved `spools.edn`
+- **SPEC-005.C3:** The reference spools shipped in the Millstrand tree — `batteries`
+  and `unsafe-text-search` — are in-contract through their spool docs at
+  [`spools/*.md`](../../spools/README.md), loaded **opt-in**: an approved `spools.edn`
   coordinate and a `:spools`-guarded `runtime/module!` declaration. Batteries follows the same
   path through the `{:millstrand/source-root "spools/batteries"}` entry that `mill init` seeds by
   default. Deleting that entry is its supported opt-out. No reference spool ships on the weaver
@@ -27,8 +26,8 @@ This spec draws the line around what Millstrand ships as "alpha": which surface 
   and `:attributes`, then returns exactly those four keys; domain-specific rows may extend that base
   explicitly, and richer existing rows are not narrowed. After this change the `millstrand.spools.*`
   family is exactly activatable spools and nothing else.
-- **SPEC-005.C4:** Repo-local approved spools in this repository (`spools/chime` and
-  `spools/cron`) and externally distributed spools (the agent family in
+- **SPEC-005.C4:** Externally distributed domain spools (the Millhouse workflow,
+  Chime, Cron, and gate-executor roots, plus the agent family in
   `codethread/agent-harness.spool`, devflow, and kanban) are userland, not shipped alpha surface.
   Their READMEs/docs are their own contracts with their own cadence, outside this line.
   Guild is a quality-gated example under `examples/guild`, not an approved or activated spool in

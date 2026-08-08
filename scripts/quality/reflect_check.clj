@@ -1,8 +1,7 @@
 (ns quality.reflect-check
   "Compile Millstrand namespaces with reflection warnings promoted to failure."
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]
-            [quality.external-source-roots :as external-roots]))
+            [clojure.string :as str]))
 
 (defn- clj-file->ns [root file]
   (let [root-path (.toPath (io/file root))
@@ -29,17 +28,11 @@
 (defn -main [& _]
   (let [roots {"src" "millstrand"
                "spools/batteries/src" "millstrand/spools"
-               "spools/chime/src" "millstrand/spools"
-               "spools/cron/src" "millstrand/spools"
-               "spools/workflow/src" "millstrand/spools"
                "spools/unsafe-text-search/src" "millstrand/spools"
                "examples/guild/src" "skein/examples"}
-        namespaces (sort (concat
-                          (mapcat (fn [[root subdir]]
-                                    (namespaces-under root subdir))
-                                  roots)
-                          (mapcat #(namespaces-under % "")
-                                  (external-roots/millhouse-source-roots))))
+        namespaces (sort (mapcat (fn [[root subdir]]
+                                   (namespaces-under root subdir))
+                                 roots))
         compile-dir (.toFile (java.nio.file.Files/createTempDirectory "millstrand-reflect-check" (make-array java.nio.file.attribute.FileAttribute 0)))
         warnings (atom [])
         original-err *err*

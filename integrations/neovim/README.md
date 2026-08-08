@@ -55,7 +55,7 @@ vim.api.nvim_create_autocmd("FileType", {
 
 ## clojure-lsp project root
 
-Every spool in this repo is its own directory with its own `deps.edn` — `spools/*/deps.edn`, plus `.millstrand/spools/*/deps.edn`. nvim-lspconfig's default `root_markers` for `clojure_lsp` list `deps.edn` and `.git` at equal priority, so the nearest marker wins: opening `spools/workflow/src/millstrand/spools/workflow.clj` roots the server at `spools/workflow`. That directory's `deps.edn` is only `{:paths ["src"]}`, so Millstrand core never reaches the classpath and go-to-definition into `millstrand.core.*` silently fails.
+Every in-tree spool is its own directory with its own `deps.edn` — `spools/*/deps.edn`, plus `.millstrand/spools/*/deps.edn`. nvim-lspconfig's default `root_markers` for `clojure_lsp` list `deps.edn` and `.git` at equal priority, so the nearest marker wins: opening `spools/batteries/src/millstrand/spools/batteries.clj` roots the server at `spools/batteries`. That directory's `deps.edn` is only `{:paths ["src"]}`, so Millstrand core never reaches the classpath and go-to-definition into `millstrand.core.*` silently fails.
 
 Give `.git` its own higher-priority tier so the repo root always wins:
 

@@ -12,8 +12,6 @@ status_before="$tmp_root/status-before.json"
 status_running="$tmp_root/status-running.json"
 status_alias="$tmp_root/status-alias.json"
 status_reopened="$tmp_root/status-reopened.json"
-workflow_before="$tmp_root/workflow-before.json"
-workflow_after="$tmp_root/workflow-after.json"
 list_before="$tmp_root/list-before.json"
 list_after="$tmp_root/list-after.json"
 
@@ -70,9 +68,7 @@ jq -e --arg database "$database_path" '.database_path == $database and (.state =
   "$status_running" >/dev/null
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/strand" --workspace "$config_dir" list --limit 1 >"$list_before"
-XDG_STATE_HOME="$state_root" "$repo_root/bin/strand" --workspace "$config_dir" workflow list >"$workflow_before"
 jq -e '.' "$list_before" >/dev/null
-jq -e '.' "$workflow_before" >/dev/null
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver stop --workspace "$config_dir" >/dev/null
 mv "$config_dir" "$alias_dir"
@@ -85,11 +81,9 @@ alias_database_path=$(jq -er '.database_path' "$status_alias")
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver start --workspace "$alias_dir" >/dev/null
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --workspace "$alias_dir" >"$status_reopened"
 XDG_STATE_HOME="$state_root" "$repo_root/bin/strand" --workspace "$alias_dir" list --limit 1 >"$list_after"
-XDG_STATE_HOME="$state_root" "$repo_root/bin/strand" --workspace "$alias_dir" workflow list >"$workflow_after"
 jq -e '(.state == "running")' "$status_reopened" >/dev/null
 reopened_database_path=$(jq -er '.database_path' "$status_reopened")
 [[ "$(realpath "$reopened_database_path")" == "$database_path" ]]
-jq -e --slurpfile baseline "$workflow_before" '. == $baseline[0]' "$workflow_after" >/dev/null
 jq -e --slurpfile baseline "$list_before" '. == $baseline[0]' "$list_after" >/dev/null
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver stop --workspace "$alias_dir" >/dev/null

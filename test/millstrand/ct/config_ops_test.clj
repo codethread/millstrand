@@ -1,16 +1,8 @@
 (ns millstrand.ct.config-ops-test
   "Focused tests for pure repo-local config operation projections."
   (:require [clojure.java.io :as io]
-            [clojure.set :as set]
-            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [millstrand.api.weaver.alpha :as weaver]
-            [millstrand.core.weaver.module-graph :as module-graph]
-            [millstrand.core.weaver.module-publication :as publication]
-            [millstrand.core.weaver.runtime :as weaver-runtime]
-            [millstrand.core.weaver.spool-sync :as spool-sync]
-            [millstrand.spools.test-support :as test-support]
-            [millstrand.test.alpha :as t]))
+            [millstrand.spools.test-support :as test-support]))
 
 (deftest embedded-spools-edn-validates-before-rewriting
   (let [source (java.io.File/createTempFile "millstrand-embedded-spools" ".edn")
@@ -44,102 +36,3 @@
                    (ex-data error))))))
       (finally
         (io/delete-file source true)))))
-
-(defn- run-with-config-world [f]
-  (t/run-with-weaver-world
-   {:storage :sqlite-memory
-    :spools-edn (test-support/embedded-spools-edn ".millstrand/spools.edn")}
-   (fn [{:keys [runtime]}]
-     (weaver-runtime/with-runtime-and-spool-classloader
-       runtime
-       #(do
-          (spool-sync/sync-approved-spools runtime)
-          ;; devflow loads under its own module key first, the way init.clj's
-          ;; `:after` ordering loads it before `:config`. Its stages are
-          ;; top-level `defworkflow` forms, so letting policy/config.clj's require pull
-          ;; it in for the first time inside the `:config` collector would file
-          ;; devflow's declarations under `:config`, which the module-graph
-          ;; collection-source guard rightly refuses.
-          (spool-sync/load-synced-namespace!
-           runtime 'ct.spools.devflow :millstrand/spools-devflow)
-          (f runtime))))))
-
-(defn- publish-authoring!
-  "Load one defop/defquery authoring file under contribution collection and
-  publish its complete module contribution — the load path init.clj's `:file`
-  modules run, standing in for a full refresh in these focused projections."
-  [rt module-key file]
-  (let [ns-sym (symbol (str "ct."
-                            (-> file
-                                (str/replace #"^\.millstrand/" "")
-                                (str/replace #"\.clj$" "")
-                                (str/replace "/" ".")
-                                (str/replace "_" "-"))))
-        contribution (:contribution
-                      (module-graph/with-contribution-collection
-                        {:module/key module-key
-                         :source/file (.getCanonicalPath (io/file file))
-                         :source/namespace ns-sym}
-                        #(load-file file)))
-        backends (publication/backends rt)]
-    (publication/publish! backends
-                          (publication/stage-owner backends (publication/candidates backends)
-                                                   module-key contribution))))
-
-(defn- return-case-leaves [operation context return-case]
-  (if (and (map? return-case) (contains? return-case :stream))
-    (set (map (fn [channel] [operation (assoc context :channel channel)])
-              [:emits :result]))
-    #{[operation context]}))
-
-(defn- op-return-leaves [{:keys [name returns]}]
-  (if (and (map? returns) (contains? returns :subcommands))
-    (into #{}
-          (mapcat (fn [[subcommand return-case]]
-                    (return-case-leaves name {:subcommand [subcommand]} return-case)))
-          (:subcommands returns))
-    (return-case-leaves name {} returns)))
-
-(defn- owner-return-coverage [rt provenances checked-leaves]
-  (let [entries (filterv #(contains? provenances (:provenance %)) (weaver/ops rt))
-        missing (filterv #(not (contains? % :returns)) entries)
-        required (into #{} (mapcat op-return-leaves) (remove #(not (contains? % :returns)) entries))]
-    {:entries entries
-     :missing (mapv :name missing)
-     :required required
-     :unchecked (set/difference required checked-leaves)}))
-
-(deftest repo-config-ops-declare-and-check-every-production-return-leaf
-  (run-with-config-world
-   (fn [runtime]
-     (publish-authoring! runtime :config ".millstrand/policy/config.clj")
-     ;; materialize the workflow spool's registry handle so its constructor kind
-     ;; is a declared publication backend before workflows/common.clj contributes to it
-     (test-support/activate-spool! runtime :millhouse/spools-workflow
-                                   'millhouse.spools.workflow)
-     (publish-authoring! runtime :workflows ".millstrand/workflows/common.clj")
-     ;; the land op lives beside the definitions it drives, in its own module
-     (publish-authoring! runtime :workflows.land-policy ".millstrand/workflows/land_policy.clj")
-     (let [provenances #{'ct.policy.config 'workflows 'ct.workflows.land-policy}
-           checked (atom #{})
-           check! (fn [operation context value]
-                    (t/check-op-return! runtime (symbol operation) context value)
-                    (swap! checked conj [operation context]))
-           {:keys [entries missing required]}
-           (owner-return-coverage runtime provenances @checked)]
-       (is (seq entries))
-       (is (empty? missing) (str "production ops missing :returns: " missing))
-       (doseq [[operation context] required]
-         (check! operation context {:operation operation}))
-       (let [{:keys [unchecked]} (owner-return-coverage runtime provenances @checked)]
-         (is (= required @checked))
-         (is (empty? unchecked)))
-       (testing "every repo op stamps :operation in its declared return"
-         (is (= #{}
-                (into #{}
-                      (keep (fn [{:keys [name returns]}]
-                              (when (and (= 'ct.policy.config (:provenance
-                                                               (weaver/resolve-op runtime (symbol name))))
-                                         (not (contains? (:required returns {}) :operation)))
-                                name)))
-                      entries))))))))

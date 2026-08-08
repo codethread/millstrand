@@ -400,5 +400,5 @@ Honest source: the `supersede`/`burn`/`update` ops in `spools/src/millstrand/spo
 - [`cli.md`](../devflow/specs/cli.md) — the dispatcher itself: how `strand`
   assembles an invoke envelope, and the `--workspace` / `--stdin` / `--payload` /
   `--dry-run` dispatcher flags.
-- [`workflow.cookbook.md`](./workflow.cookbook.md) — composition recipes for the
-  workflow spool, whose patterns `weave` drives.
+- Workflow composition recipes are maintained by the workflow spool's publisher;
+  the `weave` patterns remain part of the batteries surface.

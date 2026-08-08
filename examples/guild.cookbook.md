@@ -175,7 +175,6 @@ Honest source: the naming/evolution conventions and the "never install a noop co
 - [`guild/README.md`](./guild/README.md) — the contract: declaration surface, naming and
   versioning conventions, and the full worked two-repo example.
 - [`guild.api.md`](./guild.api.md) — generated signatures and docstrings.
-- [`workflow.md`](../spools/workflow.md) — workflow gates are the durable wait points
-  guild ops often inspect or complete.
+- Workflow gates are the durable wait points guild ops often inspect or complete.
 - [REPL API spec](../devflow/specs/repl-api.md) — the blessed
   `millstrand.api.peers.alpha` peering helpers used to discover and call a sibling.

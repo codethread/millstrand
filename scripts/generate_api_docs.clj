@@ -3,22 +3,10 @@
 
 (def github-repo "https://github.com/codethread/millstrand")
 (def git-branch "main")
-(def millhouse-sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8")
-
 (def spool-docs
   [{:name "batteries" :source "spools/batteries/src/millstrand/spools/batteries.clj" :outfile "spools/batteries.api.md"}
-   {:name "workflow" :resource "millhouse/spools/workflow.clj" :outfile "spools/workflow.api.md"
-    :github/repo "https://github.com/codethread/millhouse.spool"}
    {:name "guild" :source "examples/guild/src/skein/examples/guild.clj" :outfile "examples/guild.api.md"}
-   {:name "unsafe-text-search" :source "spools/unsafe-text-search/src/millstrand/spools/unsafe_text_search.clj" :outfile "spools/unsafe-text-search.api.md"}
-   {:name "shell" :resource "millhouse/spools/executors/shell.clj" :outfile "spools/executors/shell.api.md"
-    :github/repo "https://github.com/codethread/millhouse.spool"}
-   {:name "code" :resource "millhouse/spools/executors/code.clj" :outfile "spools/executors/code.api.md"
-    :github/repo "https://github.com/codethread/millhouse.spool"}
-   {:name "chime" :resource "millhouse/spools/chime.clj" :outfile "spools/chime.api.md"
-    :github/repo "https://github.com/codethread/millhouse.spool"}
-   {:name "cron" :resource "millhouse/spools/cron.clj" :outfile "spools/cron.api.md"
-    :github/repo "https://github.com/codethread/millhouse.spool"}])
+   {:name "unsafe-text-search" :source "spools/unsafe-text-search/src/millstrand/spools/unsafe_text_search.clj" :outfile "spools/unsafe-text-search.api.md"}])
 
 ;; The blessed spool-facing API tier (SPEC-005.C2). Generated reference only —
 ;; the behavior contracts stay in the root specs.
@@ -70,7 +58,7 @@
       {:source-paths [source]
        :outfile outfile
        :github/repo (or (:github/repo doc) github-repo)
-       :git/branch (if resource millhouse-sha git-branch)
+       :git/branch git-branch
       ;; quickdoc v0.2.6 links backticked var-shaped tokens even when they name
       ;; private helpers intentionally omitted from public API docs. There is no
       ;; public-only link filter, and including private vars would publish

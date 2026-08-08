@@ -425,7 +425,7 @@ A spool repository is one release unit. Approve it once in `spools.edn`, at one 
    :git/sha "0123456789abcdef0123456789abcdef01234567"
    :roots {acme/priority "priority"
            acme/reports "reports"}
-   :requires {millstrand.spools/workflow "v2"}
+   :requires {acme.spools/workflow "v2"}
    :millstrand/min "v1"}}}
 ```
 
@@ -556,8 +556,7 @@ namespace owner and document each key's contract. A renderer must render unknown
 that vocabulary instead of rejecting a closed set of contributor names. A spool may then add
 `journal.section/daily-update` without a release of the journal spool.
 
-The live precedent is workflow and agent-run composing through the `:subagent` relation: each spool
-owns its behavior while the shared graph vocabulary carries the connection. This is an extension
+Two domain spools can compose through a shared relation such as `:subagent`: each spool owns its behavior while the shared graph vocabulary carries the connection. This is an extension
 point, not permission to mint keys in another spool's namespace; coordinate the vocabulary contract
 with its owner.
 
@@ -596,7 +595,7 @@ distinct from the consumer's plural `spools.edn`:
  :millstrand/min "v1"
  :roots {acme/priority {:root "priority"}
          acme/reports {:root "reports"}}
- :requires {millstrand.spools/workflow "v2"}}
+ :requires {acme.spools/workflow "v2"}}
 ```
 
 The pinned
@@ -645,38 +644,38 @@ Under `:required? true`, missing or failed root prerequisites refuse refresh. Na
 
 ### Author contributions with kind-specific forms
 
-Module sources publish registry entries through kind-specific authoring forms. The six core kinds use `millstrand.api.millstrand.alpha/defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`. Workflow, Cron, and Chime own `defworkflow`/`defexecutor`, `defjob`, and `defrule`. Each form validates its kind's closed declaration grammar before collection.
+Module sources publish registry entries through kind-specific authoring forms. The six core kinds use `millstrand.api.millstrand.alpha/defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`. A domain spool may define forms for its own kinds. Each form validates its kind's closed declaration grammar before collection.
 
-Ordinary `def` and `defn` forms collect nothing. A contribution form defines its ordinary Var or function and calls `collect-entry!` for the module currently being evaluated. `millstrand.spools.cron/defjob` is a compact example:
+Ordinary `def` and `defn` forms collect nothing. A contribution form defines its ordinary Var or function and calls `collect-entry!` for the module currently being evaluated. A domain-specific `defjob` form might look like this:
 
 ```clojure
 ;; report_job.clj — a module source namespace
 (ns report-job
-  (:require [millstrand.spools.cron :as cron]))
+  (:require [acme.spools.schedule :as schedule]))
 
 (defn report-tick [runtime]
   ;; ... do the work ...
   {:outcome :reported})
 
-(cron/defjob :nightly-report
+(schedule/defjob :nightly-report
   {:interval-ms (* 24 60 60 1000)
    :handler     'report-job/report-tick})
 ```
 
-`defn report-tick` defines a function and contributes nothing. `cron/defjob` defines the job declaration *and* collects it under cron's job kind; that difference is the whole style. `millstrand.spools.workflow/defworkflow` behaves the same way and states it sharply: loading the namespace always defines the Var, and only an evaluation running under a module contribution collector also collects the entry — which is exactly why an owner that stops evaluating a `defworkflow` form drops that entry by omission at the next refresh.
+`defn report-tick` defines a function and contributes nothing. `schedule/defjob` defines the job declaration *and* collects it under the schedule spool's job kind. Loading a contribution form always defines its Var; only evaluation under a module contribution collector also collects the entry. An owner that stops evaluating a contribution form drops that entry by omission at the next refresh.
 
 The source remains a flat sequence of top-level forms. Evaluating a form yourself still publishes nothing: `collect-entry!` is passive outside contribution collection, so REPL evaluation and code-only reloads define Vars and stop there. The coordinator retains the collected declaration record and replays it for image activation. Omitting a form from the next successful source evaluation removes that owner's old entry.
 
 Core forms are the public grammar for hand-authored core entries. Their declaration constructors and normalized maps are internal plumbing, not an authoring escape hatch. A domain that genuinely needs generated entries exposes its own validated factory or batch form.
 
-Six kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, `:events`, and `:bins`. Beyond those the set is open over whatever the running runtime declares. A domain spool declares its own kind with `millstrand.api.registry.alpha/declare-kind!`, and other modules then contribute entries to it. The shipped workflow executors do exactly this, mixing a domain kind and a core kind in one contribution:
+Six kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, `:events`, and `:bins`. Beyond those the set is open over whatever the running runtime declares. A domain spool declares its own kind with `millstrand.api.registry.alpha/declare-kind!`, and other modules then contribute entries to it. A gate spool can mix a domain kind and a core kind in one contribution:
 
 ```clojure
 (ns shell-executor
   (:require [millstrand.api.millstrand.alpha :as millstrand]
-            [millstrand.spools.workflow :as workflow]))
+            [acme.spools.gates :as gates]))
 
-(workflow/defexecutor shell
+(gates/defexecutor shell
   "Return detail when a shell-backed gate needs coordinator attention."
   {:request-spec ::request}
   [step]
@@ -733,7 +732,7 @@ exec strand --workspace "$workspace" dashboard render "$@"
 
 Keep the wrapper's cwd assumptions explicit. `mill bin run` preserves the directory from which the operator invoked it; `MILLSTRAND_WORKSPACE` identifies the selected world and is the stable path for `strand` calls. The wrapper should not dial `weaver.sock`, infer a workspace from its cwd, or require the consumer to add the spool checkout to `PATH`. Use `mill bin list` to inspect the declaration, `mill bin build <name>` to run its recipe, and `mill bin run <name> [args...]` to execute it. The `strand` CLI remains a dispatcher and does not execute bins.
 
-A kind provider declares its open kind through a kind declaration form before dependent entries stage. `millstrand.spools.cron` is the shipped example. A module contributing to another spool's kind names that spool's module in `:after`.
+A kind provider declares its open kind through a kind declaration form before dependent entries stage. A module contributing to another spool's kind names that spool's module in `:after`.
 
 ### Moving a direct registration into an authoring form
 
@@ -773,7 +772,7 @@ Everything is validated before anything is swapped. Each of these throws while e
 - an entry that shadows a lower-layer owner's entry for the same key without your contribution naming that key in `:overrides` — override intent has to be declared, never inferred;
 - an `:overrides` key naming an entry you did not supply.
 
-A kind may additionally declare a `:candidate-validator`, which the coordinator runs once per refresh over that kind's complete effective candidate after every owner is staged. It is the seam for rules a per-entry spec cannot state — the workflow spool uses one because a checkpoint route may name another registered workflow, and whether that target still exists depends on what every owner staged. A validator that throws refuses the whole refresh before publication (SPEC-004.C46d).
+A kind may additionally declare a `:candidate-validator`, which the coordinator runs once per refresh over that kind's complete effective candidate after every owner is staged. It is the seam for rules a per-entry spec cannot state — for example, a route may name another registered definition, and whether that target still exists depends on what every owner staged. A validator that throws refuses the whole refresh before publication (SPEC-004.C46d).
 
 ### Declare lifecycle effects
 
@@ -801,7 +800,7 @@ Every lifecycle callable receives one context map carrying `:runtime`, the `:mod
 
 #### Converging state with defreconcile
 
-`defseed` and `defresource` describe a boundary the coordinator opens and closes. `defreconcile` describes something different: a domain whose live state must keep matching what other modules have published, however often that changes. Cron is the shipped example — jobs arrive as `defjob` entries from any module, and the durable wakes behind them have to follow.
+`defseed` and `defresource` describe a boundary the coordinator opens and closes. `defreconcile` describes something different: a domain whose live state must keep matching what other modules have published, however often that changes. A scheduling spool, for example, can receive job entries from any module and keep its durable wakes in step.
 
 A reconcile declaration names four fully qualified callables, all required:
 
@@ -814,21 +813,21 @@ A reconcile declaration names four fully qualified callables, all required:
 
 The coordinator calls the two readers, hands both results to `:apply`, and retains nothing but the summary. Unlike a resource, a reconcile has no handle: the live state lives wherever the domain already keeps it, and `:read-actual` is how the coordinator sees it.
 
-Two options are optional. `:trigger-kinds` is why the form exists. An unchanged, healthy effect is normally *preserved* across a refresh — the coordinator leaves it alone rather than re-running it. A reconcile naming one or more registry kinds in `:trigger-kinds` is re-run instead of preserved whenever a refresh changed any of those kinds, even though its own declaration is identical. That is how a cron reconcile converges wakes for a job some *other* module just published. Leave `:trigger-kinds` off and the effect only runs when its own declaration is new or changed.
+Two options are optional. `:trigger-kinds` is why the form exists. An unchanged, healthy effect is normally *preserved* across a refresh — the coordinator leaves it alone rather than re-running it. A reconcile naming one or more registry kinds in `:trigger-kinds` is re-run instead of preserved whenever a refresh changed any of those kinds, even though its own declaration is identical. That is how a scheduling reconcile converges wakes for a job some *other* module just published. Leave `:trigger-kinds` off and the effect only runs when its own declaration is new or changed.
 
 `:after` is the same ordering set a resource takes: a set of effect ids in this module that must run before this one. It orders application and, reversed, teardown — an effect named in someone's `:after` comes down after its dependent does. Reach for it when a reconcile has to see a resource already open, or a seed already applied.
 
 ```clojure
 (lifecycle/defreconcile scheduled-jobs
-  "Keep durable Cron wakes converged on the effective published job registry."
-  {:read-desired 'millstrand.spools.cron/desired-jobs
-   :read-actual 'millstrand.spools.cron/actual-jobs
-   :apply 'millstrand.spools.cron/apply-jobs!
-   :on-removed 'millstrand.spools.cron/remove-jobs!
+  "Keep durable schedule wakes converged on the effective published job registry."
+  {:read-desired 'acme.spools.schedule/desired-jobs
+   :read-actual 'acme.spools.schedule/actual-jobs
+   :apply 'acme.spools.schedule/apply-jobs!
+   :on-removed 'acme.spools.schedule/remove-jobs!
    :trigger-kinds #{job-kind}})
 ```
 
-Cron's `apply-jobs!` reads the shape this implies: unregister every id in `actual` that `desired` no longer has, then register or re-register the rest, and return `{:reconciled :cron :jobs [...]}`. Convergence is the callable's job, not the coordinator's — nothing diffs the two maps for you.
+The scheduling spool's `apply-jobs!` can unregister every id in `actual` that `desired` no longer has, then register or re-register the rest, and return `{:reconciled :schedule :jobs [...]}`. Convergence is the callable's job, not the coordinator's — nothing diffs the two maps for you.
 
 The closed option grammar is `millstrand.api.lifecycle.alpha/::reconcile-options` (`::seed-options` and `::resource-options` for the other two forms). Each form validates its options as the form is evaluated, before anything is collected, so an unknown key or an unqualified callable symbol fails that module's evaluation rather than surfacing later when the effect would have run. Callable *resolution* is a separate, later check the coordinator makes before publishing the candidate image. Contract: [SPEC-003.C17f](../../devflow/specs/repl-api.md).
 

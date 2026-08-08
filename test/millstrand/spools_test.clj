@@ -1964,45 +1964,6 @@
           (is (= #{lib-a lib-b} (set (map :root-lib (:providers conflict)))))
           (is (= :pending (get-in (sync-state rt) [:pending-generation :status]))))))))
 
-(deftest loaded-namespace-status-separates-test-classpath-ownership
-  (with-runtime
-    (fn [rt _config-dir]
-      ;; Direct requires remain legitimate in tests. Batteries and workflow are
-      ;; visible here because the :test alias adds their source paths; their
-      ;; base-classpath classification is a test-tooling artifact, not shipped
-      ;; production ownership.
-      (require 'millstrand.spools.batteries)
-      (require 'millstrand.spools.workflow)
-      (let [bindings (into {} (map (juxt :namespace identity))
-                           (:classpath-bindings (spool-sync/loaded-namespace-status rt)))]
-        (doseq [ns-sym ['millstrand.api.runtime.alpha
-                        'millstrand.spools.batteries
-                        'millstrand.spools.workflow]]
-          (is (= :classpath (get-in bindings [ns-sym :ownership])))
-          (is (= :base-classpath (get-in bindings [ns-sym :classpath-owner])))
-          (is (string? (get-in bindings [ns-sym :source]))))))))
-
-(deftest f12-base-classpath-overlap-is-not-observed-as-unledgered
-  (with-runtime
-    (fn [rt config-dir]
-      (require 'millstrand.spools.workflow)
-      (let [lib 'demo/workflow-overlap
-            root (write-local-lib! config-dir "workflow-overlap"
-                                   'millstrand.spools.workflow)]
-        (write-spools! config-dir
-                       (pr-str {:spools {lib {:local/root "spools/workflow-overlap"}}}))
-        (is (#{:loaded :already-available}
-             (get-in (sync-approved! rt) [:spools lib :status])))
-        (is (#{:loaded :already-available}
-             (get-in (sync-approved! rt) [:spools lib :status])))
-        (let [status (spool-sync/loaded-namespace-status rt)]
-          (is (:clean? status))
-          (is (nil? (:pending-generation (sync-state rt))))
-          (is (empty? (filter #(= 'millstrand.spools.workflow (:namespace %))
-                              (:residuals status))))
-          (is (= (.getCanonicalPath root)
-                 (get-in status [:provisions 'millstrand.spools.workflow 0 :root]))))))))
-
 (deftest f13-source-load-boundaries-batch-namespace-observation
   (with-runtime
     (fn [rt config-dir]

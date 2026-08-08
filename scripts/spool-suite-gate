@@ -25,13 +25,13 @@ case "$transition_status" in
     ;;
 esac
 
-coords="$(clojure -M -e '(let [spools (:spools (clojure.edn/read-string (slurp ".millstrand/spools.edn"))) g (fn [family] (let [m (get spools family) sha (:git/sha m) url (:git/url m)] (when-not (and (string? sha) (string? url)) (binding [*out* *err*] (println (str "spool-suite-gate: .millstrand/spools.edn is missing :git/url or :git/sha for family " family "; refusing to run against HEAD/an empty sha"))) (System/exit 1)) [url sha]))] (let [[du ds] (g (quote codethread/devflow)) [ku ks] (g (quote codethread/kanban)) [au as] (g (quote ct.spools/agent-run)) [mu ms] (g (quote millhouse/spools))] (println du ds ku ks au as mu ms) (flush) (System/exit 0)))')"
+coords="$(clojure -M -e '(let [spools (:spools (clojure.edn/read-string (slurp ".millstrand/spools.edn"))) g (fn [family] (let [m (get spools family) sha (:git/sha m) url (:git/url m)] (when-not (and (string? sha) (string? url)) (binding [*out* *err*] (println (str "spool-suite-gate: .millstrand/spools.edn is missing :git/url or :git/sha for family " family "; refusing to run against HEAD/an empty sha"))) (System/exit 1)) [url sha]))] (let [[du ds] (g (quote codethread/devflow)) [ku ks] (g (quote codethread/kanban)) [au as] (g (quote ct.spools/agent-run))] (println du ds ku ks au as) (flush) (System/exit 0)))')"
 if [ -z "$coords" ]; then
-  echo "spool-suite-gate: coordinate extraction printed nothing for families codethread/devflow, codethread/kanban, ct.spools/agent-run in .millstrand/spools.edn; refusing to run against HEAD/an empty sha" >&2
+  echo "spool-suite-gate: coordinate extraction printed nothing for the required external families in .millstrand/spools.edn; refusing to run against HEAD/an empty sha" >&2
   exit 1
 fi
 
-read -r durl dsha kurl ksha aurl asha murl msha <<<"$coords"
+read -r durl dsha kurl ksha aurl asha <<<"$coords"
 check_pair() {
   if [ -z "$2" ] || [ -z "$3" ]; then
     echo "spool-suite-gate: family $1 extracted an empty url or sha from .millstrand/spools.edn (url=$2 sha=$3); refusing to run" >&2
@@ -41,7 +41,6 @@ check_pair() {
 check_pair devflow "$durl" "$dsha"
 check_pair kanban "$kurl" "$ksha"
 check_pair agent-run "$aurl" "$asha"
-check_pair millhouse "$murl" "$msha"
 
 root="$(mktemp -d)"
 trap 'rm -rf "$root"' EXIT
@@ -71,12 +70,10 @@ materialize() {
 materialize devflow.spool "$durl" "$dsha" io.github.codethread/devflow.spool
 materialize kanban.spool "$kurl" "$ksha" io.github.codethread/kanban.spool
 materialize agent-harness.spool "$aurl" "$asha" io.github.codethread/agent-run.agent-harness
-materialize millhouse.spool "$murl" "$msha" io.github.codethread/millhouse.spool
 
 dcmd="clojure -M:test"
 kcmd="clojure -Sdeps '{:aliases {:millstrand-suite {:extra-paths [\"../millstrand-src/examples/guild/src\"]}}}' -M:test:millstrand-suite"
 acmd="clojure -M:test"
-mcmd="clojure -Sdeps '{:deps {io.millstrand/millstrand {:local/root \"../millstrand-src\"}}}' -M:test"
 run_suite() {
   local name="$1" sha="$2" command="$3"
   echo "==> spool-suite-gate: $name@$sha${4:-}"
@@ -91,5 +88,4 @@ run_suite() {
 run_suite devflow.spool "$dsha" "$dcmd"
 run_suite kanban.spool "$ksha" "$kcmd"
 run_suite agent-harness.spool "$asha" "$acmd"
-run_suite millhouse.spool "$msha" "$mcmd" " (with millstrand source injection)"
-echo "spool-suite-gate: OK (devflow.spool@$dsha, kanban.spool@$ksha, agent-harness.spool@$asha, millhouse.spool@$msha) against millstrand-src HEAD"
+echo "spool-suite-gate: OK (devflow.spool@$dsha, kanban.spool@$ksha, agent-harness.spool@$asha) against millstrand-src HEAD"
