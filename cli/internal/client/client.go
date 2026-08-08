@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
-	"syscall"
 
 	"millstrand-strand-cli/internal/errfmt"
+	"millstrand-strand-cli/internal/process"
 )
 
 const protocolVersion = 1
@@ -164,9 +163,5 @@ func ValidateStorageIdentity(m Metadata) error {
 }
 
 func pidAlive(pid int) bool {
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return p.Signal(syscall.Signal(0)) == nil
+	return process.Alive(pid)
 }
