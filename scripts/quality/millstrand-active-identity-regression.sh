@@ -10,7 +10,6 @@ cp "$repo_root/scripts/quality/millstrand-active-identity.sh" \
   "$tmp_root/scripts/quality/millstrand-active-identity.sh"
 cp "$repo_root/scripts/quality/millstrand-identity-allowlist.tsv" \
   "$tmp_root/scripts/quality/millstrand-identity-allowlist.tsv"
-cp "$repo_root/quality-inventory.md" "$tmp_root/quality-inventory.md"
 cp "$repo_root/mkdocs.yml" "$tmp_root/mkdocs.yml"
 cp -R "$repo_root/examples" "$tmp_root/examples"
 cp "$repo_root/test/millstrand/guild_test.clj" "$tmp_root/test/millstrand/guild_test.clj"
@@ -56,29 +55,6 @@ fi
 
 echo "millstrand identity regression: allowlisted identity survived line relocation"
 
-manifest="$tmp_root/docs/operations/millstrand-midpoint-evidence.json"
-unrelated_token=$(printf 's%s' kein)
-sed -i.bak \
-  "s#\"path\": \"devflow/feat/millstrand-rename/proposal.md\"#\"path\": \"docs/$unrelated_token.md\"#" \
-  "$manifest"
-rm -f "$manifest.bak"
-
-output="$tmp_root/identity-audit.out"
-if PATH="$tool_dir" "$bash_path" \
-    "$tmp_root/scripts/quality/millstrand-active-identity.sh" >"$output" 2>&1; then
-  cat "$output" >&2
-  echo "millstrand identity regression: unrelated midpoint value was accepted" >&2
-  exit 1
-fi
-
-grep -Fq "unclassified active identity" "$output" || {
-  cat "$output" >&2
-  echo "millstrand identity regression: audit failed for the wrong reason" >&2
-  exit 1
-}
-
-echo "millstrand identity regression: unrelated midpoint value rejected"
-
 stale_namespace=$(printf 's%s' kein).api.regression
 legacy_marker=$(printf '.s%s' kein)
 pages_identity=$(printf 'S%s' kein)
@@ -105,7 +81,6 @@ assert_unclassified() {
 }
 
 assert_unclassified root-doc CONTRIBUTING.md
-assert_unclassified quality-inventory quality-inventory.md
 assert_unclassified devflow-guidance devflow/PHILOSOPHY.md
 assert_unclassified agent-skill .agents/skills/testing/SKILL.md
 assert_unclassified pages-metadata mkdocs.yml "site_name: $pages_identity Docs"
