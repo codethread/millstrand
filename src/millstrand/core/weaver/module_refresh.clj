@@ -806,9 +806,8 @@
                :else
                (try
                  (let [next-candidates (publication/stage-owner
-                                        backends candidates key
-                                        (publication/realize-event-handlers
-                                         runtime (:contribution raw-outcome)))]
+                                        runtime backends candidates key
+                                        (:contribution raw-outcome))]
                    (-> result
                        (assoc :candidates next-candidates)
                        (store-source-stamp key raw-outcome)

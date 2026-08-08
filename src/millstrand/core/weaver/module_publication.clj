@@ -116,14 +116,13 @@
                        :resolved-class (str (class value))})))
     value))
 
-(defn realize-event-handlers
+(defn- realize-event-handlers
   "Return `contribution` with module event handlers bound for dispatch.
 
   Authoring declarations retain the public `:fn` symbol. The internal event
   registry additionally captures the resolved `:fn-value` at publication, which
   gives dispatch one immutable callable snapshot while public readers continue
-  to strip the internal value.
-  "
+  to strip the internal value."
   [runtime contribution]
   (if (contains? contribution :events)
     (update-in contribution [:events :entries]
@@ -140,8 +139,9 @@
   owner previously supplied but now omits are removed. Any undeclared kind,
   invalid entry, same-layer collision, or missing override intent throws while
   leaving the caller's prior candidate map unchanged."
-  [backends candidate-map owner contribution]
-  (let [unknown (seq (remove (set (keys backends)) (keys contribution)))]
+  [runtime backends candidate-map owner contribution]
+  (let [contribution (realize-event-handlers runtime contribution)
+        unknown (seq (remove (set (keys backends)) (keys contribution)))]
     (when unknown
       (throw (ex-info "Module contribution names undeclared registry kinds"
                       {:module/key owner
