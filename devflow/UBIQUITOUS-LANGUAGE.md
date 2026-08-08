@@ -126,7 +126,7 @@ Three tiers answer every "how do I find out" question, and the distinction is lo
 
 ## Workflow
 
-Contract: [`spools/workflow.md`](../spools/workflow.md). Terminology (molecule, wisp, pour, bond, squash) is borrowed from [beads](https://github.com/steveyegge/beads).
+Workflow terminology (molecule, wisp, pour, bond, squash) belongs to the [external Workflow spool](https://codethread.github.io/millhouse.spool/spools/workflow/) and is borrowed from [beads](https://github.com/steveyegge/beads).
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
@@ -206,7 +206,7 @@ Registered by the modules under `.millstrand/workflows/` and `.millstrand/policy
 >
 > **Dev:** "Which doc explains what a `gate` is?"
 >
-> **Domain expert:** "This one — it owns the word. `spools/workflow.md` owns the behavior: when a gate closes, what `:by` it needs, which **executor** fulfills its **waiter**."
+> **Domain expert:** "This one — it owns the word. The workflow spool owns the behavior: when a gate closes, what `:by` it needs, which **executor** fulfills its **waiter**."
 
 ## Flagged ambiguities
 

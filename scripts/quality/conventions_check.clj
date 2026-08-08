@@ -33,7 +33,6 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [quality.api-form :as api-form]
-            [quality.external-source-roots :as external-roots]
             [quality.api-tests :as api-tests]
             [quality.json-literals :as json-literals]
             [quality.source-forms :as source-forms]
@@ -44,23 +43,15 @@
 (def ^:private local-source-roots
   ["src"
    "spools/batteries/src"
-   "spools/workflow/src"
    "spools/unsafe-text-search/src"
    "examples/guild/src"
-   "spools/chime/src"
-   "spools/cron/src"
    ".millstrand"
    "test"])
 
 (defn- configured-source-roots
-  "Return every lintable engine, spool, workspace-config, and test root.
-
-  Required external roots resolve when the gate runs, so a missing dependency
-  fails at the command boundary rather than while this namespace loads."
+  "Return every lintable engine, spool, workspace-config, and test root."
   []
-  (into local-source-roots
-        (map #(.getPath ^java.io.File %))
-        (external-roots/millhouse-source-roots)))
+  local-source-roots)
 
 (def ^:private core-macro-names
   (->> (ns-publics 'clojure.core)

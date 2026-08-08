@@ -44,10 +44,8 @@
    'millstrand.api.events.alpha-test
    'millstrand.api.hooks.alpha-test
    ;; drives one disposable weaver world with its own module source — no shared state.
-   'millstrand.alpha-test 'millstrand.core.client-test 'millstrand.spools.workflow-test
+   'millstrand.alpha-test 'millstrand.core.client-test
    'millstrand.spools.test-support-test
-   ;; each test drives its own disposable runtime and registry — no shared state.
-   'millstrand.spools.workflow-cli-test 'millstrand.spools.workflow-run-cli-test
    'millstrand.spools.batteries-test 'millstrand.api.spool-test
    ;; large-attr load harness structural smoke: boots its own :publish? false
    ;; world and hand-SQL fixtures in temp dirs — no JVM-global or shared state.
@@ -61,15 +59,13 @@
    'millstrand.events-quiescence-test
    ;; Graduated from the serial island: each drives its own unpublished runtime
    ;; and settles work through deterministic seams — an injected runtime clock
-   ;; for the scheduler and cron timers, event-lane quiescence for the async
-   ;; dispatch suites — so there is no JVM-global timer or shared-lane state.
+   ;; for scheduler timers and event-lane quiescence for async dispatch — so
+   ;; there is no JVM-global timer or shared-lane state.
    'millstrand.core.weaver.scheduler.runtime-test 'millstrand.api.scheduler.alpha-test 'millstrand.e2e.scheduler.lifecycle-test
-   'millstrand.spools.cron.runtime-test 'millstrand.e2e.cron.lifecycle-test
    ;; isolated pure coordinator prototype; injected callables own all effects.
    'millstrand.lifecycle-spike-test
    ;; production lifecycle transition engine is pure over injected callables.
    'millstrand.core.weaver.lifecycle-effects-test
-   'millstrand.chime-test
    ;; Behavior-owned slices of the former weaver megasuite. Each owns its
    ;; disposable world and namespace-local callback state.
    'millstrand.core.weaver.bins-test
@@ -101,11 +97,7 @@
    ;; DynamicClassLoader and retained registry snapshots stay serial until
    ;; concurrent execution has an explicit proof.
    'millstrand.core.weaver.registry-snapshots-test
-   'millstrand.core.weaver.modules-test
-   ;; Both executor suites activate the shared Workflow namespace through
-   ;; module refresh; concurrent compilation can race on defexecutor forms.
-   'millstrand.spools.executors.shell-test
-   'millstrand.spools.executors.code-test])
+   'millstrand.core.weaver.modules-test])
 
 (def add-libs-shards
   "Subprocess JVM shard groups for tests that mutate JVM-global tools.deps state."
@@ -113,12 +105,8 @@
    "A" ['millstrand.spools-test]
    ;; runtime-deps intentionally mutates JVM-global tools.deps state.
    "B" ['millstrand.runtime-deps-test]
-   ;; Medium add-libs suites share one JVM to amortize boot without exceeding shard A.
-   ;; Workspace config joins this isolated shard because approved Git roots mutate
-   ;; tools.deps state while the fixture starts disposable runtimes.
-   "C" ['millstrand.ct.nvd-scan-test
-        'millstrand.ct.config-test
-        'millstrand.ct.config-ops-test]})
+   ;; Medium add-libs suite shares one JVM to amortize boot without exceeding shard A.
+   "C" ['millstrand.ct.config-ops-test]})
 
 (def shard-timeout-minutes 5)
 

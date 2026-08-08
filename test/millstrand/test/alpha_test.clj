@@ -1,6 +1,7 @@
 (ns millstrand.test.alpha-test
   "Tests for the blessed millstrand.test.alpha weaver-world helpers."
   (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is testing]]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.clock.alpha :as clock]
@@ -9,6 +10,8 @@
             [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.test.alpha :as t])
   (:import [java.time Duration Instant]))
+
+(s/def ::widget map?)
 
 (deftest manual-clock-advances-while-uninstalled
   (let [start (Instant/parse "2026-01-01T00:00:00Z")
@@ -275,6 +278,97 @@
       (let [planned (t/plan-modules ctx {:only [:demo]})]
         (is (:dry-run? planned))
         (is (= :unchanged (:status planned)))))))
+
+(deftest activate-module-activates-a-namespace-on-a-bare-runtime
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (let [result (t/activate-module! (:runtime ctx) :test/clock
+                                     'millstrand.api.clock.alpha)]
+      (is (contains? #{:applied :unchanged} (:status result)))
+      (is (= 'millstrand.api.clock.alpha
+             (get-in (t/module-status ctx)
+                     [:modules :test/clock :ns]))))))
+
+(deftest module-authoring-helpers-publish-their-spec-contracts
+  (doseq [spec [:millstrand.test.alpha/bare-runtime
+                :millstrand.test.alpha/module-key
+                :millstrand.test.alpha/namespace-symbol
+                :millstrand.test.alpha/thunk
+                :millstrand.test.alpha/module-options
+                :millstrand.test.alpha/module-refresh-outcome
+                :millstrand.test.alpha/module-form-collection]]
+    (is (some? (s/get-spec spec)) (str spec " must remain a registered public spec")))
+  (is (some? (s/get-spec `t/activate-module!)))
+  (is (some? (s/get-spec `t/collect-module-forms))))
+
+(deftest activate-module-fails-loudly
+  (testing "options are closed"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown keys"
+                          (t/activate-module! {} :test/module
+                                              'millstrand.api.clock.alpha
+                                              {:spools []}))))
+  (testing "invalid tested option values are actionable"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #":after"
+                          (t/activate-module! {} :test/module
+                                              'millstrand.api.clock.alpha
+                                              {:after [:ok "bad"]}))))
+  (testing "a refused outcome is preserved in ex-data"
+    (let [outcome {:status :refused :remedies ["fix fixture"]}
+          error (with-redefs [runtime/module! (fn [& _] outcome)]
+                  (try
+                    (t/activate-module! {} :test/module
+                                        'millstrand.api.clock.alpha)
+                    nil
+                    (catch clojure.lang.ExceptionInfo throwable throwable)))]
+      (is (= outcome (:outcome (ex-data error))))
+      (is (= :refused (:module/status (ex-data error)))))))
+
+(deftest collect-module-forms-returns-owner-complete-public-data
+  (let [result
+        (t/collect-module-forms
+         :test/forms 'millstrand.test.alpha-test
+         #(do
+            (runtime/collect-entry! :queries "sample" [:= [:attr :state] "open"])
+            (runtime/collect-lifecycle!
+             :bootstrap
+             {:kind :seed
+              :apply 'millstrand.test.alpha-test/sample-lifecycle})
+            (runtime/collect-kind!
+             :test/registries
+             {:id :test/widgets
+              :entry-spec ::widget
+              :binding-moment :test/use})
+            :thunk-result))]
+    (is (= #{:return :contribution :lifecycle :kind-declarations}
+           (set (keys result))))
+    (is (= :thunk-result (:return result)))
+    (is (= [:= [:attr :state] "open"]
+           (get-in result [:contribution :queries :entries "sample"])))
+    (is (= #{} (get-in result [:contribution :queries :overrides])))
+    (is (= :seed (get-in result [:lifecycle :bootstrap :kind])))
+    (is (= [{:spool-state/key :test/registries
+             :declaration {:id :test/widgets
+                           :entry-spec ::widget
+                           :binding-moment :test/use}}]
+           (:kind-declarations result)))))
+
+(deftest collect-module-forms-fails-loudly-on-invalid-boundaries
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"module-key"
+                        (t/collect-module-forms "bad"
+                                                'millstrand.test.alpha-test
+                                                (constantly nil))))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"namespace does not exist"
+                        (t/collect-module-forms :test/forms
+                                                'missing.test.namespace
+                                                (constantly nil))))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"thunk must be a function"
+                        (t/collect-module-forms :test/forms
+                                                'millstrand.test.alpha-test
+                                                :callable-but-not-a-function))))
+
+(defn sample-lifecycle
+  "Return a deterministic lifecycle marker for collection tests."
+  [_]
+  :applied)
 
 (deftest spool-checkout-root-resolves-directory-checkouts-from-classpath-entry
   (let [checkout (doto (io/file (System/getProperty "java.io.tmpdir")

@@ -129,6 +129,10 @@ The context map contains orchestration facts only: `:config-dir`, `:state-dir`, 
 `:runtime`, `:metadata`, and `:timeout-ms`. There are deliberately no strand/query wrappers,
 assertion helpers, or CLI subprocess helpers — exercise the real API forms.
 
+## Testing authoring forms as data
+
+Use `millstrand.test.alpha/collect-module-forms` when a direct test needs to inspect what authoring forms contribute without loading a weaver or reaching into Millstrand core. Its inputs are specified by `:millstrand.test.alpha/module-key`, `namespace-symbol`, and `thunk`; its owner-complete result is specified by `:millstrand.test.alpha/module-form-collection`. The result contains `:contribution`, `:lifecycle`, and `:kind-declarations` data alongside the thunk's `:return` value. This tier proves declaration construction and collection only. It does not prove source loading, publication, reconciliation, or startup.
+
 ## Activating spool modules from test fixtures
 
 Tests activate a spool exactly the way production does — `runtime/module!` naming a source target — never through a spool-private registration back door. The fixture conventions below follow [ADR-003](../../devflow/adrs/0003-spool-activation-lifecycle.md) and bind any fixture that activates spool modules.
@@ -137,9 +141,9 @@ Tests activate a spool exactly the way production does — `runtime/module!` nam
 - **`:load :image` needs the namespace loaded and a retained declaration record.** Requiring a namespace loads its Vars but does not collect its passive authoring forms. Run one successful source-mode activation before replaying the module from the image. An unloaded namespace, or one without a retained record, fails loudly.
 - **Per-fixture `module!` is fine; full-refresh tests re-declare.** A full `refresh!` recollects the module graph from startup files and removes imperative declarations. Fixtures that never full-refresh are unaffected; a test that runs full `refresh!` declares its modules in startup files or re-declares after.
 - **Classpath activation and root approval do not mix.** A test that `module!`-activates a namespace from the classpath must not also approve a real spool root providing the same namespaces: the unledgered-residual and `:non-additive-sync-diff` refusals that follow are correct behavior, not flakes. Tests that genuinely sync roots use freshly generated namespaces in disposable roots.
-- **Activate `:workflow` before executor modules.** The kernel refuses a contribution naming an undeclared kind; order fixture activation with `:after` edges or explicit sequencing.
+- **Activate a kind provider before modules that contribute to its custom kind.** The kernel refuses a contribution naming an undeclared kind; order fixture activation with `:after` edges or explicit sequencing.
 
-In this repo, `millstrand.spools.test-support/activate-spool!` wraps the pattern: it takes the spool's namespace symbol, requires it, and declares the module. Forms-only modules default to source activation, which collects and retains their declarations. Pass `:load :image` only when the test has already activated that namespace from source. The helper throws with the full refresh result unless the module applied or was unchanged.
+`millstrand.test.alpha/activate-module!` wraps the bare-runtime pattern: it takes the runtime, module key, namespace symbol, and optional `:after`/`:load` map, requires the namespace, and declares the module. The boundary is specified by `:millstrand.test.alpha/bare-runtime`, `module-key`, `namespace-symbol`, `module-options`, and `module-refresh-outcome`. Forms-only modules default to source activation, which collects and retains their declarations. Pass `{:load :image}` only when the test has already activated that namespace from source. The helper throws with the full refresh result unless the refresh applied or was unchanged. It does not prove root approval, acquisition, or startup-file loading; use a generated weaver world for those claims.
 
 ## The classpath boundary
 
@@ -256,10 +260,10 @@ any dependency bump: update the pinned ref, run the suite.
 
 ## What the helper will not do
 
-`millstrand.test.alpha` orchestrates worlds and weaver-routed eval, nothing else:
+`millstrand.test.alpha` orchestrates worlds and exposes two narrow authoring-test helpers:
 
 - No strand/query/assertion wrappers — call real `millstrand.api.*.alpha` forms.
-- No spool activation wrappers — declare modules and call `refresh!` like real config does.
+- `collect-module-forms` inspects declarations as data, and `activate-module!` activates an already-classpath-visible namespace on a bare test runtime. Neither substitutes for approved-root acquisition or startup proof.
 - No Go CLI subprocess helpers or binary discovery — CLI behavior is covered
   by Millstrand's own smoke workflow, not library tests.
 - Never touches your default `~/.config/millstrand` (or any user-owned) workspace;

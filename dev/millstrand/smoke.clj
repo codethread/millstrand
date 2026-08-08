@@ -890,77 +890,6 @@
         (stop-weaver-config! workspace)
         (delete-tree! (smoke-workspace (str db-file ".authoring")))))))
 
-;; --- Workflow worker CLI ----------------------------------------------------
-;; The workflow engine and its root `workflow` op come from the pinned
-;; Millhouse family, so the round trip below crosses the full strand -> mill ->
-;; weaver boundary against the same external root used by local config.
-
-(defn workflow-spools-edn
-  "Return spools.edn approving batteries, Millhouse roots, and the fixture."
-  []
-  (str "{:spools {millstrand.spools/batteries {:millstrand/source-root \"spools/batteries\"}\n"
-       "          millhouse/spools {:git/url \"https://github.com/codethread/millhouse.spool.git\"\n"
-       "                          :git/sha \"8f386b09fb8e8506a3c38105dce8e8552142dbf8\"\n"
-       "                          :roots {millhouse.spools/workflow \"spools/workflow\"\n"
-       "                                  millhouse.spools/chime \"spools/chime\"\n"
-       "                                  millhouse.spools/cron \"spools/cron\"\n"
-       "                                  millhouse.spools.executors/code \"spools/code-executor\"\n"
-       "                                  millhouse.spools.executors/shell \"spools/shell-executor\"}}\n"
-       "          smoke/authoring {:local/root " (pr-str authoring-spool-root) "}}}\n"))
-
-(defn workflow-init-forms
-  "Return init.clj forms activating the workflow engine, its CLI, and the fixture."
-  []
-  ['(require '[millstrand.api.current.alpha :as current]
-             '[millstrand.api.runtime.alpha :as runtime])
-   '(def runtime (current/runtime))
-   '(runtime/module! runtime :millstrand/spools-batteries
-                     {:ns 'millstrand.spools.batteries
-                      :spools ['millstrand.spools/batteries]})
-   '(runtime/module! runtime :millhouse/spools-workflow
-                     {:ns 'millhouse.spools.workflow
-                      :spools ['millhouse.spools/workflow]})
-   ;; The engine ships no verbs; this second module is what puts the root
-   ;; `workflow` op on the CLI.
-   '(runtime/module! runtime :millhouse/spools-workflow-cli
-                     {:ns 'millhouse.spools.workflow.cli
-                      :spools ['millhouse.spools/workflow]
-                      :after [:millhouse/spools-workflow]})
-   '(runtime/module! runtime :smoke/flow
-                     {:ns 'millstrand.smoke.fixtures.flow
-                      :spools ['smoke/authoring 'millhouse.spools/workflow]
-                      :after [:millhouse/spools-workflow]})])
-
-(defn smoke-workflow-cli! [db-file]
-  (let [workspace (bootstrap-workspace db-file "workflow-cli")
-        run-id "smoke-round-run"]
-    (delete-tree! (smoke-workspace (str db-file ".workflow-cli")))
-    (write-client-config-to-dir! workspace)
-    (spit (java.io.File. workspace "spools.edn") (workflow-spools-edn))
-    (source-file/spit-forms! (java.io.File. workspace "init.clj") (workflow-init-forms))
-    (start-weaver-config! workspace)
-    (try
-      (assert (some #(= "smoke-round" (:name %))
-                    (:definitions (parse-json (run-strand-config! workspace "workflow" "list"))))
-              "defworkflow registers the fixture definition in the live catalogue")
-      (assert= "smoke-round"
-               (:name (parse-json (run-strand-config! workspace "workflow" "show" "smoke-round")))
-               "workflow show returns the registered definition")
-      (let [started (parse-json (run-strand-config! workspace "workflow" "start" run-id
-                                                    "--workflow" "smoke-round"))]
-        (assert= ["Do the first half"] (mapv :title (:ready started))
-                 "workflow start pours the run and returns only its unblocked opening step")
-        (assert= false (:done started) "a freshly poured run is not done"))
-      (let [advanced (parse-json (run-strand-config! workspace "workflow" "next" run-id "--by" "smoke"))]
-        (assert= ["Do the second half"] (mapv :title (:ready advanced))
-                 "workflow next closes the ready step and advances the frontier"))
-      (let [finished (parse-json (run-strand-config! workspace "workflow" "next" run-id "--by" "smoke"))]
-        (assert= [] (mapv :title (:ready finished)) "the frontier empties at the end of the run")
-        (assert= true (:done finished) "workflow next completes the run"))
-      (finally
-        (stop-weaver-config! workspace)
-        (delete-tree! (smoke-workspace (str db-file ".workflow-cli")))))))
-
 (defn wait-for-repo-weaver! [repo]
   (loop [attempts 50]
     (when (zero? attempts)
@@ -1012,8 +941,7 @@
   (smoke-dispatcher-surface! db-file)
   (smoke-await-cli! db-file)
   (smoke-startup-transformations! db-file)
-  (smoke-authoring-forms! db-file)
-  (smoke-workflow-cli! db-file))
+  (smoke-authoring-forms! db-file))
 
 (defn smoke-cli! [db-file]
   (clean-runtime-artifacts! db-file)

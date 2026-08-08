@@ -12,35 +12,12 @@
  ;; "scripts" is on the test path so the one-shot cutover scripts under
  ;; scripts/cutover can be exercised by a registered test namespace rather than
  ;; only standalone; the runner's registry, not the classpath, decides what runs.
- {:test {:extra-paths ["test" "scripts" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/chime/src" "spools/cron/src" "examples/guild/src"]
+ {:test {:extra-paths ["test" "scripts" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src"]
          :extra-deps {;; Test-only ergonomics: readable nested-map/JSON assertions
                       ;; (match?) and spec-driven property tests (defspec). Kept
                       ;; off the main src/weaver classpath.
                       nubank/matcher-combinators {:mvn/version "3.9.1"}
-                      org.clojure/test.check {:mvn/version "1.1.1"}
-                      ;; Keep copied in-tree roots on the test path while
-                      ;; exercising the merged Millhouse family at its exact
-                      ;; untagged consumer pin.
-                      millhouse.spools/workflow
-                      {:git/url "https://github.com/codethread/millhouse.spool.git"
-                       :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                       :deps/root "spools/workflow"}
-                      millhouse.spools/chime
-                      {:git/url "https://github.com/codethread/millhouse.spool.git"
-                       :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                       :deps/root "spools/chime"}
-                      millhouse.spools/cron
-                      {:git/url "https://github.com/codethread/millhouse.spool.git"
-                       :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                       :deps/root "spools/cron"}
-                      millhouse.spools.executors/code
-                      {:git/url "https://github.com/codethread/millhouse.spool.git"
-                       :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                       :deps/root "spools/code-executor"}
-                      millhouse.spools.executors/shell
-                      {:git/url "https://github.com/codethread/millhouse.spool.git"
-                       :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                       :deps/root "spools/shell-executor"}}
+                      org.clojure/test.check {:mvn/version "1.1.1"}}
          :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
          :main-opts ["-m" "millstrand.test-runner"]}
   ;; Per-worktree warm test REPL: compose with :test to inherit its classpath and
@@ -61,7 +38,7 @@
   :smoke {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]
           :main-opts ["-m" "millstrand.smoke"]}
   :format {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
-           :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "examples/guild/src" "test" "dev" "scripts"
+           :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src" "test" "dev" "scripts"
                        ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
                        ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
                        ".millstrand/workflows/spool_bump.clj" ".millstrand/workflows/story.clj"
@@ -71,7 +48,7 @@
                        ".millstrand/agents/reviewers.clj" ".millstrand/notifications/attention.clj"
                        ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/module.clj"]}
   :format/fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
-               :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "examples/guild/src" "test" "dev" "scripts"
+               :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src" "test" "dev" "scripts"
                            ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
                            ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
                            ".millstrand/workflows/spool_bump.clj" ".millstrand/workflows/story.clj"
@@ -81,53 +58,13 @@
                            ".millstrand/agents/reviewers.clj" ".millstrand/notifications/attention.clj"
                            ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/module.clj"]}
   :lint/clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
-                   :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "examples/guild/src" "test"]}
+                   :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src" "test"]}
   :lint/conventions {:extra-paths ["scripts"]
-                     :extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}
-                                  millhouse.spools/workflow
-                                  {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                   :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                                   :deps/root "spools/workflow"}
-                                  millhouse.spools/chime
-                                  {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                   :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                                   :deps/root "spools/chime"}
-                                  millhouse.spools/cron
-                                  {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                   :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                                   :deps/root "spools/cron"}
-                                  millhouse.spools.executors/code
-                                  {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                   :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                                   :deps/root "spools/code-executor"}
-                                  millhouse.spools.executors/shell
-                                  {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                   :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                                   :deps/root "spools/shell-executor"}}
+                     :extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                      :main-opts ["-m" "quality.conventions-check"]}
   :lint/splint {:extra-deps {io.github.noahtheduke/splint {:mvn/version "1.21.0"}}
-                :main-opts ["-m" "noahtheduke.splint" "--output" "clj-kondo" "src" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "examples/guild/src" "test"]}
-  :reflect-check {:extra-paths ["scripts" "spools/batteries/src" "spools/workflow/src" "spools/unsafe-text-search/src" "spools/chime/src" "spools/cron/src" "examples/guild/src"]
-                  :extra-deps {millhouse.spools/workflow
-                               {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                                :deps/root "spools/workflow"}
-                               millhouse.spools/chime
-                               {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                                :deps/root "spools/chime"}
-                               millhouse.spools/cron
-                               {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                                :deps/root "spools/cron"}
-                               millhouse.spools.executors/code
-                               {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                                :deps/root "spools/code-executor"}
-                               millhouse.spools.executors/shell
-                               {:git/url "https://github.com/codethread/millhouse.spool.git"
-                                :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-                                :deps/root "spools/shell-executor"}}
+                :main-opts ["-m" "noahtheduke.splint" "--output" "clj-kondo" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src" "test"]}
+  :reflect-check {:extra-paths ["scripts" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src"]
                   :jvm-opts ["--enable-native-access=ALL-UNNAMED" "-Dclojure.compiler.direct-linking=true"]
                   :main-opts ["-m" "quality.reflect-check"]}
   :deps/antq {:extra-deps {com.github.liquidz/antq {:mvn/version "2.11.1276"}}

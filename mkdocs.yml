@@ -98,34 +98,40 @@ nav:
           - Contract: spools/batteries.md
           - Cookbook: spools/batteries.cookbook.md
           - API: spools/batteries.api.md
-      - Workflow:
-          - Contract: spools/workflow.md
-          - Cookbook: spools/workflow.cookbook.md
-          - API: spools/workflow.api.md
       - Devflow Lifecycle: spools/devflow.md
       - Text Search (UNSAFE):
           - Contract: spools/unsafe-text-search.md
           - Cookbook: spools/unsafe-text-search.cookbook.md
           - API: spools/unsafe-text-search.api.md
       - Kanban Board: spools/kanban.md
-      - Shell Gate Executor:
-          - Contract: spools/executors/shell.md
-          - Cookbook: spools/executors/shell.cookbook.md
-          - API: spools/executors/shell.api.md
-      - Chime Notifications:
-          - Contract: spools/chime/README.md
-          - Cookbook: spools/chime.cookbook.md
-          - API: spools/chime.api.md
-      - Cron Engine:
-          - Contract: spools/cron/README.md
-          - Cookbook: spools/cron.cookbook.md
-          - API: spools/cron.api.md
   - Examples:
       - Weaver Guild:
           - Contract: examples/guild/README.md
           - Cookbook: examples/guild.cookbook.md
           - API: examples/guild.api.md
   - External Spools:
+      - Millhouse:
+          - Home: https://codethread.github.io/millhouse.spool/
+          - Workflow:
+              - Contract: https://codethread.github.io/millhouse.spool/spools/workflow/
+              - Cookbook: https://codethread.github.io/millhouse.spool/spools/workflow/workflow.cookbook/
+              - API: https://codethread.github.io/millhouse.spool/spools/workflow/workflow.api/
+          - Chime:
+              - Contract: https://codethread.github.io/millhouse.spool/spools/chime/
+              - Cookbook: https://codethread.github.io/millhouse.spool/spools/chime/chime.cookbook/
+              - API: https://codethread.github.io/millhouse.spool/spools/chime/chime.api/
+          - Cron:
+              - Contract: https://codethread.github.io/millhouse.spool/spools/cron/
+              - Cookbook: https://codethread.github.io/millhouse.spool/spools/cron/cron.cookbook/
+              - API: https://codethread.github.io/millhouse.spool/spools/cron/cron.api/
+          - Code executor:
+              - Contract: https://codethread.github.io/millhouse.spool/spools/code-executor/
+              - Cookbook: https://codethread.github.io/millhouse.spool/spools/code-executor/code.cookbook/
+              - API: https://codethread.github.io/millhouse.spool/spools/code-executor/code.api/
+          - Shell executor:
+              - Contract: https://codethread.github.io/millhouse.spool/spools/shell-executor/
+              - Cookbook: https://codethread.github.io/millhouse.spool/spools/shell-executor/shell.cookbook/
+              - API: https://codethread.github.io/millhouse.spool/spools/shell-executor/shell.api/
       - Agent Runs:
           - Contract: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/README.md
           - Cookbook: https://github.com/codethread/agent-harness.spool/blob/27c7429c1642d1fdb609af4c37d11d51db202bb4/agent-run/agent-run.cookbook.md

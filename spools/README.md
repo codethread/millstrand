@@ -46,8 +46,7 @@ Each shipped spool's docs follow a three-file convention:
   and the attribute vocabulary. This is the load-bearing promise.
 - **`<spool>.cookbook.md`** — authored **composition recipes**: how to shape
   real work out of the primitives, and *why* each shape is right. Present only
-  where the value is in composition; [`workflow.cookbook.md`](./workflow.cookbook.md)
-  is the template.
+  where the value is in composition.
 - **`<spool>.api.md`** — the **generated reference**: every public fn's
   signature, arity, and docstring, produced from source. Never hand-edit these;
   regenerate with `make api-docs`.
@@ -56,21 +55,16 @@ Signatures live only in the generated API doc; contracts and cookbooks link to t
 
 ## Index
 
-The batteries and unsafe-text-search spools remain in this checkout under `spools/<name>/src`, off the production weaver classpath. Their `{:millstrand/source-root "spools/<name>"}` coordinates resolve against the mill-selected Millstrand checkout. Workflow, Chime, Cron, and the two gate executors are owned by the external Millhouse family and consumed at the untagged SHA `8f386b09fb8e8506a3c38105dce8e8552142dbf8`. Every root is still activated by a `:spools`-guarded `runtime/module!` declaration. The copied in-tree roots remain as reference material during this cutover. For publishing a spool by git coordinate, SHA-pinned approval, README dependency/activation snippets, Maven-only spool-root dependencies, and local development overrides, see [Writing shared spools](../docs/spools/writing-shared-spools.md#publishing-a-shared-spool-with-git-distribution).
+The batteries and unsafe-text-search spools remain in this checkout under `spools/<name>/src`, off the production weaver classpath. Their `{:millstrand/source-root "spools/<name>"}` coordinates resolve against the mill-selected Millstrand checkout. Workflow, Chime, Cron, and the gate executors are external Millhouse roots, pinned by this workspace at [`8f386b09`](https://github.com/codethread/millhouse.spool/tree/8f386b09fb8e8506a3c38105dce8e8552142dbf8). Their contracts live in that repository. For publishing a spool by git coordinate, SHA-pinned approval, README dependency/activation snippets, Maven-only spool-root dependencies, and local development overrides, see [Writing shared spools](../docs/spools/writing-shared-spools.md#publishing-a-shared-spool-with-git-distribution).
 
 | Spool | Coordinate (`.millstrand/spools.edn`) | Contract doc | API reference | Purpose |
 |---|---|---|---|---|
-| `millhouse.spools.workflow` | `millhouse/spools` root `spools/workflow`, SHA `8f386b09fb8e8506a3c38105dce8e8552142dbf8` | [workflow.md](./workflow.md) | [workflow.api.md](./workflow.api.md) · [cookbook](./workflow.cookbook.md) | Workflow engine: plain-data definitions compiled to strand batches, with loops, gates, checkpoints, routing, and rebindable tool bindings. Registers no ops. |
-| `millhouse.spools.workflow.cli` | `millhouse/spools` root `spools/workflow` | [workflow.md §5b](./workflow.md#5b-registry-discovery), [§5c](./workflow.md#5c-driving-a-run) | — | Opt-in worker CLI over the workflow engine: registers the `workflow` op (`list`, `show`, `start`, `ready`, `complete`, `choose`, `defer`, `await`). A second module, declared beside the engine and never implied by it. |
-| `millhouse.spools.executors.shell` | `millhouse/spools` root `spools/shell-executor` | [executors/shell.md](./executors/shell.md) | [executors/shell.api.md](./executors/shell.api.md) · [cookbook](./executors/shell.cookbook.md) | Workflow `:shell` gate executor: runs a ready gate's `shell/argv` command directly on a spool-owned worker pool, closes it with `complete!` on a zero exit, and stamps a loud `shell/error` (with exit code and bounded output) on failure. Registers the `:shell` executor and the `stalled-shell-gates` query. |
-| `millhouse.spools.executors.code` | `millhouse/spools` root `spools/code-executor` | [executors/code.md](./executors/code.md) | [executors/code.api.md](./executors/code.api.md) | Workflow `:code` gate executor: resolves a qualified Var through the spool classloader, invokes it with poured JSON params on a bounded worker pool, and records a result or loud `gate/error`. Registers the `:code` executor and the `stalled-code-gates` query. |
 | `millstrand.spools.unsafe-text-search` **(UNSAFE)** | `:millstrand/source-root "spools/unsafe-text-search"` | [unsafe-text-search.md](./unsafe-text-search.md) | [unsafe-text-search.api.md](./unsafe-text-search.api.md) · [cookbook](./unsafe-text-search.cookbook.md) | **UNSAFE reference spool** — requires `millstrand.core.db` and runs SQL against the physical tables to `LIKE`-search titles and attribute values, including archived rows the query language cannot see. Registers the `search` op. A maintained example of breaking the namespace-tier rules in the open, not a blessed path; read its [Unsafe declaration](./unsafe-text-search.md#unsafe-declaration) before activating. |
+| Millhouse workflow, Chime, Cron, and gate executors | git, SHA-pinned `millhouse/spools` family | [Millhouse contracts][millhouse-docs] | [Millhouse documentation][millhouse-docs] | External domain spools consumed by this workspace. |
 | `ct.spools.agent-run` | git, sha-pinned (see below) | [agent-run/README.md][agent-run-contract] | [agent-run.api.md][agent-run-api] · [cookbook][agent-run-cookbook] | Agent-run **engine**: readiness-driven headless coding-agent runs plus interactive multiplexer sessions (backend registry, claims-model reaping), harness aliases, crash reconciliation, storage-enforced write-once run memory, and the preamble seam. Registers no ops. |
 | `ct.spools.delegation` | git, sha-pinned (see below) | [delegation/README.md][delegation-contract] | [delegation.api.md][delegation-api] · [cookbook][delegation-cookbook] | Cross-harness subagent surface over agent-run: the `strand agent` verbs, the `agent-plan` weave pattern, delegation/retry/status, and the worker + coordinator guidance. |
 | `ct.spools.executors.subagent` | git, sha-pinned `agent-run` root (see below) | [agent-run/subagent.md][subagent-contract] | [subagent.api.md][subagent-api] · [cookbook][subagent-cookbook] | Workflow gate bridge: fulfills ready `:subagent` gates by spawning agent-run runs and delivering successful results through `workflow/complete!`. |
-| `millhouse.spools.chime` | `millhouse/spools` root `spools/chime` | [chime/README.md](./chime/README.md) | [chime.api.md](./chime.api.md) · [cookbook](./chime.cookbook.md) | Notification engine: watches graph mutations, evaluates user-registered rules, and sends matches through a user-bound local notifier command. |
 | `ct.spools.kanban` | git, sha-pinned (see below) | [kanban.md](https://github.com/codethread/kanban.spool/blob/87f61bc2750e7026f3650235907db25f19b1536e/kanban.md) | — | User-facing kanban board: feature/epic cards, refinement/pending/claimed/in_review lanes, notes and handovers via `strand kanban`; epics have a reversible finish lifecycle (`finish` completes or abandon-cascades, `reopen` inverts an abandon). |
-| `millhouse.spools.cron` | `millhouse/spools` root `spools/cron` | [cron/README.md](./cron/README.md) | [cron.api.md](./cron.api.md) · [cookbook](./cron.cookbook.md) | Userland recurrence layer over durable scheduler wakes: registers named interval+jitter jobs, records last-outcome/failure status, and leaves next-fire timing to scheduler introspection. Ships no jobs. |
 | `ct.spools.bench` | git, sha-pinned (see below) | [bench/README.md][bench-contract] | [bench.api.md][bench-api] | Deterministic, containerized benchmarking of coding-agent harnesses: pinned repo/prompt/memory overlays, bench-owned entry execution, normalized metrics, and an agent-run served judge. |
 | `ct.spools.devflow` | git, sha-pinned (see below) | [devflow.md](https://github.com/codethread/devflow.spool/blob/528e0ba636e28032985f7f9706c8350e9f785d97/devflow.md) | — | Reference devflow lifecycle built on the workflow engine: intake → proposal → spec/plan → tasks/implementation stages with HITL checkpoints. |
 | `millstrand.spools.dresser` | *(none approved in this repo)* | [dresser.md](https://github.com/codethread/dresser.loom/blob/fea1d340be3591d008cf0ddeb72b0091d95a380d/dresser.md) | — | Brings a repo onto shared working conventions and surfaces convention upgrades later. Two flavours: scaffold a new shared-spool repo, or install a self-contained `.millstrand/` workspace into any host repo. Applied versions are recorded in the target at `.millstrand/conventions.edn`. |
@@ -86,21 +80,9 @@ The batteries and unsafe-text-search spools remain in this checkout under `spool
 [subagent-cookbook]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/agent-run/subagent.cookbook.md
 [bench-contract]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/bench/README.md
 [bench-api]: https://github.com/codethread/agent-harness.spool/blob/911bc4cb3364ce23516963761820ca0a55d01a39/bench/bench.api.md
+[millhouse-docs]: https://codethread.github.io/millhouse.spool/
 
 `guild` is a never-activated reference root. This repo carries its source and tests because kanban.spool's peering layer depends on it, but adds no `.millstrand/spools.edn` coordinate. A downstream user opts in by adding one.
-
-The copied `millstrand.spools.workflow` source remains a reference root while the consumer uses `millhouse.spools.workflow` from the Millhouse family. The external family keeps workflow, Chime, Cron, and both executors on one untagged SHA, so `.millstrand/spools.edn` is the single ownership and pin record for the active config:
-
-```clojure
-{millhouse/spools
- {:git/url "https://github.com/codethread/millhouse.spool.git"
-  :git/sha "8f386b09fb8e8506a3c38105dce8e8552142dbf8"
-  :roots {millhouse.spools/workflow "spools/workflow"
-          millhouse.spools/chime "spools/chime"
-          millhouse.spools/cron "spools/cron"
-          millhouse.spools.executors/code "spools/code-executor"
-          millhouse.spools.executors/shell "spools/shell-executor"}}}
-```
 
 ## External spool consumption
 
@@ -143,30 +125,12 @@ Guild is kept as a quality-gated example under [`examples/guild`](../examples/gu
 
 ## Reference examples
 
-- Each contract doc ends with worked examples ([workflow.md
-  §8](./workflow.md#8-worked-examples), and §4 of the external
-  [devflow.md](./devflow.md) contract).
-- The test suites drive every documented behavior against a real weaver
-  runtime and double as executable examples:
-  [`test/millstrand/spools/workflow_test.clj`](../test/millstrand/spools/workflow_test.clj),
-  and the standalone devflow.spool test suite.
+- Each retained contract doc ends with worked examples.
+- The test suites drive every documented behavior against a real weaver runtime and double as executable examples: [`test/millstrand/spools/batteries_test.clj`](../test/millstrand/spools/batteries_test.clj), [`test/millstrand/spools/unsafe_text_search_test.clj`](../test/millstrand/spools/unsafe_text_search_test.clj), and the standalone external spool test suites.
 
 ## Using and extending
 
-- Strand **attributes are the extension surface**: [workflow.md
-  §7](./workflow.md#7-attribute-vocabulary)'s attribute table is the workflow
-  engine's extension API, and §6 of the external
-  [devflow.md](./devflow.md) contract documents its conventions on top of
-  it. Build your own conventions the same way instead of waiting for engine fields — and give
-  them new names only for new concepts. A spool built on workflow or
-  agent-run reads and writes `workflow/*` / `agent-run/*` attributes
-  directly and reserves its own namespace for state the primitive does not
-  carry ([the vocabulary
-  rule](../docs/spools/writing-shared-spools.md#the-rules-for-shared-spools)).
-- Workflow definitions accept pure-data **tool bindings** ([workflow.md §3
-  "Tool bindings"](./workflow.md#3-definition-layer)), so a consumer rebinds
-  steps to their own tooling from trusted config without touching these
-  namespaces.
+- Strand **attributes are the extension surface**. Build your own conventions instead of waiting for engine fields, and give them new names only for new concepts ([the vocabulary rule](../docs/spools/writing-shared-spools.md#the-rules-for-shared-spools)).
 - A spool publishes owner-complete kind entries through contribution forms and owns runtime effects through lifecycle forms. See [Writing shared spools](../docs/spools/writing-shared-spools.md) for the authoring grammar and each contract doc for exact behavior.
 - To author and load your own spool from a workspace-local root, follow
   [Authoring your own spool code](../docs/spools/customisation.md#workspace-modules-and-local-spools).

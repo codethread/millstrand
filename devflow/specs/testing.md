@@ -2,7 +2,7 @@
 
 **Document ID:** `SPEC-006`
 **Status:** Implemented
-**Last Updated:** 2026-08-06
+**Last Updated:** 2026-08-08
 **Related RFCs:** [Library author testing](../archive/26-07-03__library-author-testing-support/rfcs/2026-06-26-library-author-testing.md), [Test concurrency](../rfcs/2026-07-03-test-concurrency.md)
 **Related root specs:** [REPL API](./repl-api.md), [Weaver Runtime](./daemon-runtime.md), [Alpha Surface](./alpha-surface.md)
 **Code:** `src/millstrand/test`, `src/millstrand/api`
@@ -38,6 +38,7 @@ This spec defines how downstream projects may test code against Millstrand and h
 - **SPEC-006.C6:** Direct `require` resolves through the author's test JVM classpath. Forms sent through `millstrand.test.alpha/repl!` evaluate through the disposable weaver's real nREPL transport and runtime binding. Spool code is visible to that weaver only through its approved-root and module-loading model.
 - **SPEC-006.C7:** An integration fixture that claims to prove spool loading supplies the spool family/root approval and a module source target. A classpath-only activation cannot substitute for acquisition coverage. Tests that exercise real acquisition use disposable roots and fresh fixture namespaces so they do not rely on stale process classpath state.
 - **SPEC-006.C8:** `millstrand.test.alpha/spool-checkout-root` is the supported bridge from a file-backed source resource on the test classpath to the local checkout root a generated `spools.edn` may approve. Its resolution and fail-loud behavior remain owned by `SPEC-003.C32`.
+- **SPEC-006.C8a:** Direct authoring-form tests may use `millstrand.test.alpha/collect-module-forms` to collect one synthetic module target as owner-complete contribution, lifecycle, and kind-declaration data. This tier proves declaration construction and collection only; it does not prove source loading, publication, reconciliation, acquisition, or startup.
 
 ## SPEC-006.P6 World and lifecycle contract
 
@@ -45,7 +46,7 @@ This spec defines how downstream projects may test code against Millstrand and h
 - **SPEC-006.C10:** The weaver-world tier is the isolated generated-world composition specified by `SPEC-003.C29`–`C31`, using unpublished runtimes under `SPEC-004.C8a`. Millstrand does not offer a consumer testing tier that operates on the author's normal workspace.
 - **SPEC-006.C11:** `SPEC-003.C29`–`C31` exclusively own the world options, context, lifecycle, cleanup, and failure behavior. This spec promises that composition as the supported integration tier and adds no alternate lifecycle contract.
 - **SPEC-006.C12:** File-backed and real Xerial SQLite memory storage are supported in the weaver-world tier. Their selection, defaults, lifecycle, metadata, and persistence meaning remain exclusively owned by `SPEC-003.C29` and `SPEC-004.C92`–`C93`.
-- **SPEC-006.C13:** Tests activate modules through the same declaration, approval, contribution, lifecycle, and refresh contracts used by production. A test-only registration back door is not part of the consumer surface.
+- **SPEC-006.C13:** Tests activate modules through the same declaration, contribution, lifecycle, and refresh contracts used by production. `millstrand.test.alpha/activate-module!` is the narrow classpath-visible bare-runtime helper for direct authoring tests; it requires the namespace and delegates to the public module API, failing with the full outcome unless the refresh applied or was unchanged. It does not prove approval, acquisition, or startup-file loading. Tests making those claims use a generated weaver world with approved roots and module source targets. A test-only registration back door is not part of the consumer surface.
 - **SPEC-006.C14:** The weaver-world tier includes the deterministic Clock controls and event-lane settlement surface owned by `SPEC-003.C28a`, `SPEC-004.C1a`, `SPEC-004.C74b`, and `SPEC-005.C5a`. Those clauses exclusively own their inputs, defaults, completion meaning, and failures.
 
 ## SPEC-006.P7 Design decisions

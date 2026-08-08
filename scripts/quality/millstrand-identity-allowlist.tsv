@@ -4,7 +4,6 @@ examples	^examples/.*:.*skein	Guild is a deliberately Skein-namespaced example; 
 test/millstrand/guild_test.clj	^test/millstrand/guild_test\.clj:[0-9]+:.*skein	Guild tests exercise the deliberately Skein-namespaced example implementation.
 scripts/generate_api_docs.clj	^scripts/generate_api_docs\.clj:.*examples/guild/src/skein/examples/guild\.clj	Guild API generation points at the deliberately Skein-namespaced example source.
 scripts/quality/reflect_check.clj	^scripts/quality/reflect_check\.clj:36:.*examples/guild/src.*skein/examples	Reflection coverage maps the deliberately Skein-namespaced Guild example source root.
-scripts/spool-suite-gate	^scripts/spool-suite-gate:[0-9]+:.*skein-src	The pinned Millhouse test fixture retains its historical ../skein-src dependency name while injecting this Millstrand checkout.
 devflow/specs/daemon-runtime.md	^devflow/specs/daemon-runtime\.md:309:.*skein\.examples\.guild	The runtime spec names the deliberately Skein-namespaced Guild example contract.
 cli/internal/config/config_test.go	^cli/internal/config/config_test\.go:301:[[:blank:]][[:blank:]][[:blank:]]return os\.Mkdir\(filepath\.Join\(repo, "\.skein"\), 0o755\)$	Exact checked-in identity context for this line.
 cli/internal/config/config.go	^cli/internal/config/config\.go:17:[[:blank:]]LegacyWorkspace     = "\.skein"$	Exact checked-in identity context for this line.
