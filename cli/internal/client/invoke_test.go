@@ -134,7 +134,7 @@ func TestRelayStreamErrorTerminatorNonZero(t *testing.T) {
 	frames := strings.Join([]string{
 		`{"protocol_version":1,"request_id":"r1","stream":true}`,
 		`{"i":0}`,
-		`{"protocol_version":1,"request_id":"r1","done":true,"success":false,"error":{"type":"domain","code":"op/boom","message":"stream failed","details":{}}}`,
+		`{"protocol_version":1,"request_id":"r1","done":true,"success":false,"error":{"type":"domain","code":"stream/failed","message":"stream failed","details":{}}}`,
 	}, "\n") + "\n"
 	out, er, code := relay(t, frames)
 	if code == 0 {
@@ -143,7 +143,7 @@ func TestRelayStreamErrorTerminatorNonZero(t *testing.T) {
 	if strings.TrimSpace(out) != `{"i":0}` {
 		t.Fatalf("emitted lines before the error must still be relayed: %q", out)
 	}
-	if !strings.Contains(er, "op/boom") {
+	if !strings.Contains(er, "stream/failed") {
 		t.Fatalf("stderr missing terminator error: %q", er)
 	}
 }
