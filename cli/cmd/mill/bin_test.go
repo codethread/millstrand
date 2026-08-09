@@ -147,6 +147,9 @@ func TestInvokeBinUsesSelectedWorldAndReturnsRelayedJSON(t *testing.T) {
 	if gotWorld != world || gotEnvelope["name"] != "bins" || gotEnvelope["workspace"] != "/workspace" || gotEnvelope["cwd"] != "/caller" {
 		t.Fatalf("selected world/envelope mismatch: world=%#v envelope=%#v", gotWorld, gotEnvelope)
 	}
+	if gotEnvelope["is_tty"] != false || gotEnvelope["tty_col"] != nil {
+		t.Fatalf("bin plan terminal capabilities = (%#v, %#v), want (false, nil)", gotEnvelope["is_tty"], gotEnvelope["tty_col"])
+	}
 }
 
 func TestRunBinExecAppendsOpaqueArgumentsAndUsesOverlay(t *testing.T) {
