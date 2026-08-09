@@ -33,10 +33,9 @@
 (runtime/module! runtime :millstrand/spools-batteries
                  {:ns 'millstrand.spools.batteries
                   :spools ['millstrand.spools/batteries]})
-;; This repo elects the batteries reference help transform after batteries loads;
-;; its lifecycle resource releases the singleton when the module is omitted.
+
 (runtime/module! runtime :module-adapters
-                 {:file "adapters/module.clj"
+                 {:file "adapters/help.clj"
                   :after [:millstrand/spools-batteries]})
 
 ;; --- workflow engine + shell executor -------------------------------------

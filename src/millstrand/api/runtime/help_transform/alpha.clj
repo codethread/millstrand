@@ -21,10 +21,14 @@
   Callers own runtime selection and pass the target weaver runtime as the first
   argument; nothing here reads the published ambient runtime."
   (:require [clojure.spec.alpha :as s]
+            [millstrand.api.runtime.alpha :as runtime-api]
             [millstrand.api.spool.alpha :refer [reject-unknown-keys! require-valid!]]
             [millstrand.core.weaver.access :as access]))
 
 (declare clear-transform set-transform replace-transform validate-registration!)
+
+(def ^:private builtin-owner 'millstrand.spools.batteries)
+(def ^:private builtin-transform 'millstrand.spools.batteries/default-help-transform)
 
 (def ^:private registration-keys
   "The closed key set of a default-help-transform registration map."
@@ -50,6 +54,24 @@
 
 (s/fdef register-default-help-transform!
   :args (s/cat :runtime map? :registration ::registration)
+  :ret ::registration)
+
+(defn register-builtin!
+  "Register Batteries' builtin help transform as `runtime`'s default.
+
+  Resolves the transform through the runtime's spool classloader. The Batteries
+  root must already be synced into the running weaver. Like direct registration,
+  this fails loudly when the slot is occupied."
+  [runtime]
+  (let [transform-var (runtime-api/resolve-var runtime builtin-transform)]
+    (when-not transform-var
+      (throw (ex-info "Builtin help transform Var cannot be resolved"
+                      {:transform builtin-transform})))
+    (register-default-help-transform!
+     runtime {:transform @transform-var :owner builtin-owner})))
+
+(s/fdef register-builtin!
+  :args (s/cat :runtime map?)
   :ret ::registration)
 
 (defn replace-default-help-transform!

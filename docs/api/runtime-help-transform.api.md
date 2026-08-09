@@ -38,7 +38,7 @@ Return `runtime`'s registered default-help-transform registration map, or nil.
 
   The read/introspection projection: reports whether a transform is registered
   (`some?`) and its provenance (`:owner`), reading the runtime store explicitly.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L89-L95">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L111-L117">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.help-transform.alpha/default-help-transform-registered?">`default-help-transform-registered?`</a>
 ``` clojure
@@ -47,7 +47,20 @@ Return `runtime`'s registered default-help-transform registration map, or nil.
 Function.
 
 True when `runtime`'s default-help-transform slot holds a transform.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L101-L104">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L123-L126">Source</a></sub></p>
+
+## <a name="millstrand.api.runtime.help-transform.alpha/register-builtin!">`register-builtin!`</a>
+``` clojure
+(register-builtin! runtime)
+```
+Function.
+
+Register Batteries' builtin help transform as `runtime`'s default.
+
+  Resolves the transform through the runtime's spool classloader. The Batteries
+  root must already be synced into the running weaver. Like direct registration,
+  this fails loudly when the slot is occupied.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L59-L71">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.help-transform.alpha/register-default-help-transform!">`register-default-help-transform!`</a>
 ``` clojure
@@ -63,7 +76,7 @@ Register `registration` as `runtime`'s default help transform and return it.
   attempting owners; use `replace-default-help-transform!` for a deliberate
   override. The occupancy check runs inside the `swap!`, so two racing
   registrations cannot both clear a stale read.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L37-L49">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L41-L53">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.help-transform.alpha/replace-default-help-transform!">`replace-default-help-transform!`</a>
 ``` clojure
@@ -77,7 +90,7 @@ Replace `runtime`'s registered default help transform, failing loudly when
   Same map shape as `register-default-help-transform!`. This is the deliberate
   override for an occupied slot; unlike the register path it requires a transform
   to already be registered.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L55-L65">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L77-L87">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.help-transform.alpha/unregister-default-help-transform!">`unregister-default-help-transform!`</a>
 ``` clojure
@@ -89,4 +102,4 @@ Remove `owner`'s registered default help transform and return it.
 
   The slot must be occupied by the same owner. An empty slot or another owner
   fails loudly, so lifecycle cleanup cannot remove a replacement registration.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L71-L83">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L93-L105">Source</a></sub></p>

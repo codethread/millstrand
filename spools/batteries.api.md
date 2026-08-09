@@ -55,7 +55,7 @@ Shipped core strand command surface as parser-backed weaver ops.
 Function.
 
 Create a strand with merged attributes, optional state, and outgoing edges.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1381-L1381">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1392-L1392">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/await-op">`await-op`</a>
 ``` clojure
@@ -64,7 +64,7 @@ Create a strand with merged attributes, optional state, and outgoing edges.
 Function.
 
 Block until a named query's result count is inside the requested band.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1498-L1498">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1509-L1509">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/batteries-glossary-seed">`batteries-glossary-seed`</a>
 
@@ -72,7 +72,7 @@ Block until a named query's result count is inside the requested band.
 
 
 Seed the process-lifetime Batteries failure glossary.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1620-L1622">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1631-L1633">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/blockers-active">`blockers-active`</a>
 
@@ -80,7 +80,7 @@ Seed the process-lifetime Batteries failure glossary.
 
 
 Return active blockers of the strand identified by `id`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1489-L1494">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1500-L1505">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/burn-op">`burn-op`</a>
 ``` clojure
@@ -89,7 +89,7 @@ Return active blockers of the strand identified by `id`.
 Function.
 
 Physically delete one strand by id and return the burn summary.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1431-L1431">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1442-L1442">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/children-active">`children-active`</a>
 
@@ -97,7 +97,7 @@ Physically delete one strand by id and return the burn summary.
 
 
 Return active children of the strand identified by `parent`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1482-L1487">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1493-L1498">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/default-help-transform">`default-help-transform`</a>
 ``` clojure
@@ -119,7 +119,7 @@ Render a canonical help envelope (DELTA-Dtf-001.CC1) as readable text.
   branch is which envelope family this is — an envelope-shape choice, never a
   per-node-level one, so the recursive node renderer stays uniform at every depth
   (the forcing-function invariant, DELTA-Dtf-003.D1).
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1351-L1369">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1362-L1380">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/list-op">`list-op`</a>
 ``` clojure
@@ -128,7 +128,7 @@ Render a canonical help envelope (DELTA-Dtf-001.CC1) as readable text.
 Function.
 
 List lean-projected strands, optionally filtered by lifecycle state or a named query.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1437-L1437">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1448-L1448">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/note-op">`note-op`</a>
 ``` clojure
@@ -137,7 +137,7 @@ List lean-projected strands, optionally filtered by lifecycle state or a named q
 Function.
 
 Append a note to a target strand's memory via the note primitive.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1560-L1560">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1571-L1571">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/notes-op">`notes-op`</a>
 ``` clojure
@@ -146,7 +146,7 @@ Append a note to a target strand's memory via the note primitive.
 Function.
 
 Return a target strand's notes in note/at order.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1570-L1570">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1581-L1581">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/pattern-op">`pattern-op`</a>
 ``` clojure
@@ -155,7 +155,7 @@ Return a target strand's notes in note/at order.
 Function.
 
 Introspect registered weave patterns: list all metadata or explain one.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1548-L1548">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1559-L1559">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/query-op">`query-op`</a>
 ``` clojure
@@ -164,7 +164,7 @@ Introspect registered weave patterns: list all metadata or explain one.
 Function.
 
 Introspect registered named queries: list all metadata or explain one.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1536-L1536">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1547-L1547">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/read-limit">`read-limit`</a>
 ``` clojure
@@ -182,7 +182,7 @@ Return the runtime's batteries read-result cap for CLI list/ready ops.
 Function.
 
 List lean-projected ready strands, optionally from a named query result set.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1454-L1454">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1465-L1465">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/seed-batteries-glossary!">`seed-batteries-glossary!`</a>
 ``` clojure
@@ -193,7 +193,7 @@ Function.
 Seed Batteries' process-lifetime failure glossary.
 
   Input conforms to `::seed-context`; the result conforms to `::seed-result`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1607-L1618">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1618-L1629">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/set-read-limit!">`set-read-limit!`</a>
 ``` clojure
@@ -214,7 +214,7 @@ Set the runtime's batteries read-result cap for CLI list/ready ops.
 Function.
 
 Return one normalized strand by id.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1418-L1418">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1429-L1429">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/spool-op">`spool-op`</a>
 ``` clojure
@@ -223,7 +223,7 @@ Return one normalized strand by id.
 Function.
 
 Dispatch validated `strand spool about|add|bump|status` inputs and results.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1586-L1586">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1597-L1597">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/strand-active">`strand-active`</a>
 
@@ -231,7 +231,7 @@ Dispatch validated `strand spool about|add|bump|status` inputs and results.
 
 
 Return the active strand identified by `id`, when it exists.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1475-L1480">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1486-L1491">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/strand-closed">`strand-closed`</a>
 
@@ -239,7 +239,7 @@ Return the active strand identified by `id`, when it exists.
 
 
 Return the closed strand identified by `id`, when it exists.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1468-L1473">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1479-L1484">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/subgraph-op">`subgraph-op`</a>
 ``` clojure
@@ -248,7 +248,7 @@ Return the closed strand identified by `id`, when it exists.
 Function.
 
 Return a relation-scoped subgraph rooted at one strand.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1513-L1513">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1524-L1524">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/supersede-op">`supersede-op`</a>
 ``` clojure
@@ -257,7 +257,7 @@ Return a relation-scoped subgraph rooted at one strand.
 Function.
 
 Replace one strand with another and return the supersession result.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1424-L1424">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1435-L1435">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/update-op">`update-op`</a>
 ``` clojure
@@ -266,7 +266,7 @@ Replace one strand with another and return the supersession result.
 Function.
 
 Patch one strand's title, state, attributes, and outgoing edges.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1398-L1398">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1409-L1409">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/vocab-op">`vocab-op`</a>
 ``` clojure
@@ -275,7 +275,7 @@ Patch one strand's title, state, attributes, and outgoing edges.
 Function.
 
 List the runtime's vocabulary declarations, optionally narrowed to one kind.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1577-L1577">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1588-L1588">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/weave-op">`weave-op`</a>
 ``` clojure
@@ -284,4 +284,4 @@ List the runtime's vocabulary declarations, optionally narrowed to one kind.
 Function.
 
 Apply a registered create-only weave pattern to one JSON input value.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1525-L1525">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1536-L1536">Source</a></sub></p>

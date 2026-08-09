@@ -1152,7 +1152,10 @@
                         :deadline-class "standard"
                         :failure-modes ["synthetic/leaf-outcome"]))
         mid (synthetic-node "mid" "middle doc" [leaf])
-        root (synthetic-node "root" "root doc" [mid])
+        root (assoc (synthetic-node "root" "root doc" [mid])
+                    :returns {:type "map"
+                              :required {:id {:type "string"}
+                                         :state {:type "string"}}})
         envelope {:schema-version 2
                   :operation {:name "root" :provenance "test" :stream? false
                               :raw-envelope false}
@@ -1168,6 +1171,9 @@
       (is (str/includes? rendered "leaf — deepest leaf doc"))
       (is (str/includes? rendered "--deep <string>  flag at depth three")
           "the depth-3 leaf's own flags render, so recursion reached the deepest node")
+      (is (str/includes? rendered "returns:\n    type: map"))
+      (is (str/includes? rendered
+                         "required: {id: {type: string}, state: {type: string}}"))
       (is (str/includes? rendered "- synthetic/leaf-outcome")))
     (testing "leaf classes render on the leaf only; null interiors stay silent"
       (is (str/includes? rendered "hook-class: read   deadline: standard"))

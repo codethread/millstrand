@@ -4,6 +4,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [millstrand.api.runtime.alpha :as runtime]
             [millstrand.api.runtime.help-transform.alpha :as transform]
+            [millstrand.spools.batteries :as batteries]
             [millstrand.spools.test-support :refer [with-runtime]]))
 
 (defn- registration [owner]
@@ -22,6 +23,14 @@
         (is (= 'my.spool/render (:owner (transform/default-help-transform rt)))
             "introspection reports the provenance")
         (is (fn? (:transform (transform/default-help-transform rt))))))))
+
+(deftest register-builtin-resolves-batteries-transform
+  (with-runtime
+    (fn [rt _]
+      (let [registered (transform/register-builtin! rt)]
+        (is (= 'millstrand.spools.batteries (:owner registered)))
+        (is (identical? batteries/default-help-transform
+                        (:transform registered)))))))
 
 (deftest register-rejects-invalid-shapes
   (with-runtime

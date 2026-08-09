@@ -1213,6 +1213,22 @@
 
 (declare shape-lines)
 
+(defn- inline-shape
+  "Render a nested return-shape value compactly on one line."
+  [value]
+  (cond
+    (map? value)
+    (str "{" (str/join ", " (map (fn [[k v]]
+                                   (str (if (keyword? k) (name k) k)
+                                        ": " (inline-shape v)))
+                                 value)) "}")
+
+    (sequential? value)
+    (str "[" (str/join ", " (map inline-shape value)) "]")
+
+    :else
+    (str value)))
+
 (defn- template-lines
   "Render a declared-spec copyable template block under its arg line, or nil."
   [depth template]
@@ -1250,16 +1266,11 @@
     (map? value)
     (if (empty? value)
       [(str (indent depth) "{}")]
-      (mapcat (fn [[k v]]
-                (let [label (if (keyword? k) (name k) (str k))]
-                  (cond
-                    (and (coll? v) (empty? v))
-                    [(str (indent depth) label ": " (if (map? v) "{}" "[]"))]
-                    (coll? v)
-                    (cons (str (indent depth) label ":") (shape-lines (inc depth) v))
-                    :else
-                    [(str (indent depth) label ": " v)])))
-              value))
+      (map (fn [[k v]]
+             (str (indent depth)
+                  (if (keyword? k) (name k) k)
+                  ": " (inline-shape v)))
+           value))
 
     (sequential? value)
     (if (some coll? value)
