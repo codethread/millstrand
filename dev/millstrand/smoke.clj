@@ -19,7 +19,6 @@
 (def mill-bin (.getAbsolutePath (java.io.File. "cli/bin/mill")))
 (def checkout-root (.getAbsolutePath (java.io.File. ".")))
 (def stream-op-fixture (str checkout-root "/test/fixtures/stream-op-init.clj"))
-(def help-transform-fixture (str checkout-root "/test/fixtures/help-transform-init.clj"))
 ;; Approved as a spool root rather than load-file'd: authoring forms only collect
 ;; while a module source is evaluated, so the fixture has to be a real module.
 (def authoring-spool-root (str checkout-root "/test/fixtures/smoke-authoring"))
@@ -329,10 +328,9 @@
     (delete-tree! (smoke-workspace (str db-file ".dispatcher")))
     (run-mill-config! workspace "init")
     ;; Register the pinned streaming-op fixture from the workspace init.clj so the
-    ;; weaver serves `test-stream` alongside the shipped batteries ops, and elect a
-    ;; default help transform so `strand help` exercises the verbatim relay.
+    ;; weaver serves `test-stream` alongside the shipped batteries ops. The generated
+    ;; me/help.clj module elects Batteries' default help transform.
     (append-load-fixture! init-path stream-op-fixture)
-    (append-load-fixture! init-path help-transform-fixture)
     (start-weaver-config! workspace)
     (try
       (let [design (cli-add-config! workspace "Design model" "--state" "closed" "--attr" "priority=high")
@@ -375,9 +373,9 @@
         (let [all (titles (parse-json (run-strand-config! workspace "list")))]
           (doseq [t ["Design model" "Write docs v2" "Body via stdin" "Body via payload" "Large body"]]
             (assert (some #{t} all) (str "dispatcher list returns all strands, missing: " t "\nin: " (pr-str all)))))
-        ;; Live op discovery through the core help op. With a default help
-        ;; transform elected (help-transform fixture), `--json` bypasses it to the
-        ;; raw canonical envelope (DELTA-Dtf-001.CC4).
+        ;; Live op discovery through the core help op. The generated default help
+        ;; transform renders text, while `--json` bypasses it to the raw canonical
+        ;; envelope (DELTA-Dtf-001.CC4).
         (let [help-list (parse-json (run-strand-config! workspace "help" "--json"))
               help-add (parse-json (run-strand-config! workspace "help" "--json" "add"))]
           (assert (= 2 (:schema-version help-list)) "strand help --json catalog carries the versioned schema")
@@ -385,13 +383,13 @@
           (assert (some #(= "test-stream" (get-in % [:operation :name])) (:ops help-list)) "strand help --json lists the fixture stream op")
           (assert= "add" (get-in help-add [:operation :name]) "strand help --json <op> returns the op detail envelope")
           (assert (= "add" (get-in help-add [:node :name])) "strand help --json <op> projects the op's fractal node"))
-        ;; The elected transform's output relays through the full socket -> mill ->
+        ;; The generated transform's output relays through the full socket -> mill ->
         ;; client chain VERBATIM: raw text, never a JSON-quoted string
         ;; (DELTA-Dtf-002.CC1). The `--json` floor above proves the same op still
         ;; yields the canonical envelope when asked.
         (let [help-text (run-strand-config! workspace "help" "add")]
-          (assert (clojure.string/starts-with? help-text "RENDERED add:")
-                  (str "elected help transform relays raw text verbatim\n" help-text))
+          (assert-contains help-text "add — Create a strand"
+                           "generated help transform renders Batteries help text")
           (assert (not (clojure.string/starts-with? (clojure.string/trim help-text) "\""))
                   (str "verbatim help text must not be JSON-quoted\n" help-text)))
         ;; Unknown ops fail non-zero with the registry's available-names domain error.
@@ -570,7 +568,8 @@
 (defn smoke-bootstrap-clean-config! [db-file]
   (let [workspace (bootstrap-workspace db-file "bootstrap-clean")
         config-file (java.io.File. workspace "config.json")
-        init-file (java.io.File. workspace "init.clj")]
+        init-file (java.io.File. workspace "init.clj")
+        help-file (java.io.File. workspace "me/help.clj")]
     (delete-tree! (smoke-workspace (str db-file ".bootstrap-clean")))
     (run-process! "clean bootstrap creates workspace files before weaver is running"
                   (java.io.File. checkout-root)
@@ -587,7 +586,10 @@
       (let [init-contents (slurp init-file)]
         (doseq [needle ["(runtime/module! runtime :millstrand/spools-batteries"
                         ":ns 'millstrand.spools.batteries"
-                        ":spools ['millstrand.spools/batteries]"]]
+                        ":spools ['millstrand.spools/batteries]"
+                        "(runtime/module! runtime :module-me-help"
+                        "{:file \"me/help.clj\""
+                        ":after [:millstrand/spools-batteries]"]]
           (assert-contains init-contents needle "clean bootstrap creates the guarded batteries module init.clj template"))
         ;; The seeded declaration carries a source target and world policy only:
         ;; the module's contribution is the declaration data the batteries
@@ -598,11 +600,15 @@
                   (str "clean bootstrap seeds no removed entry-point key\nfound: " removed "\nin: " init-contents)))
         (assert (not (clojure.string/includes? init-contents "(require 'millstrand.spools.batteries)"))
                 "clean bootstrap does not create a bare batteries require"))
-      (assert (.isDirectory (java.io.File. workspace "spools")) "clean bootstrap creates spools directory")
+      (assert-contains (slurp help-file)
+                       "(help-transform/register-builtin! runtime)"
+                       "clean bootstrap creates the Batteries help-transform adapter")
+      (assert (not (.exists (java.io.File. workspace "spools")))
+              "clean bootstrap does not create an empty spools directory")
       (assert (not (.exists (java.io.File. workspace ".git"))) "clean bootstrap does not run git init")
-      (doseq [ignored ["state/" "data/" "*.sqlite"]]
-        (assert-contains (slurp (java.io.File. workspace ".gitignore")) ignored
-                         "clean bootstrap seeds the workspace gitignore"))
+      (assert-file-contents (java.io.File. workspace ".gitignore")
+                            "config.local.json\ninit.local.clj\nspools.local.edn\n"
+                            "clean bootstrap ignores only local workspace overlays")
       (let [strand-id (cli-add-config! workspace "Bootstrap clean strand" "--attr" "owner=ct")]
         (assert= "Bootstrap clean strand"
                  (:title (parse-json (run-strand-config! workspace "show" strand-id)))
@@ -643,7 +649,8 @@
       (assert-file-contents config-path original-config "dirty bootstrap does not rewrite existing config.json")
       (assert-file-contents spools-path original-spools "dirty bootstrap does not rewrite existing spools.edn")
       (assert-file-contents init-path original-init "dirty bootstrap does not rewrite existing init.clj")
-      (assert (.isDirectory (java.io.File. workspace "spools")) "dirty bootstrap fills missing spools directory")
+      (assert (not (.exists (java.io.File. workspace "spools")))
+              "dirty bootstrap does not create an empty spools directory")
       (cli-add-config! workspace "Dirty owned strand" "--attr" "owner=dirty")
       (assert= ["Dirty owned strand"]
                (titles (parse-json (run-strand-config! workspace "list" "--query" "dirty")))
@@ -912,8 +919,8 @@
     ;; must not duplicate the marker-guarded block.
     (run-process! "repo bootstrap is idempotent" repo nil [mill-bin "init"])
     (assert-file-contents (java.io.File. repo ".millstrand/.gitignore")
-                          "config.local.json\ninit.local.clj\nspools.local.edn\nstate/\ndata/\nweaver.*\n*.sqlite\n*.sqlite-*\n"
-                          "repo bootstrap seeds the .millstrand gitignore so runtime artifacts stay untracked")
+                          "config.local.json\ninit.local.clj\nspools.local.edn\n"
+                          "repo bootstrap ignores only local workspace overlays")
     (let [guidance (slurp (java.io.File. repo "AGENTS.md"))]
       (assert-contains guidance "<!-- mill:millstrand-prime -->"
                        "repo bootstrap injects the marker-guarded orientation block")
