@@ -70,8 +70,8 @@
   "Return the prompt for one delegate-pipeline task.
 
   Carries no worker-contract text: a gate's run serves its gate strand, so the
-  agent-run preamble already delivers the contract this repo registers in
-  agents/harnesses.clj, and prepending it here would inject it twice."
+  agent-run preamble already delivers the worker contract and prepending it
+  here would inject it twice."
   [run-id item]
   (str "Delegated pipeline run: " run-id "\n"
        "Task: " (task-value item :title) "\n\n"

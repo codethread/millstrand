@@ -25,7 +25,7 @@
 
   Seat shape (validated loudly by ct.spools.delegation/defroster!):
     :name     unique reviewer name; becomes the run's review focus
-    :harness  harness alias from agents/harnesses.clj (resolved at review time)
+    :harness  harness alias from Codethread's agents root (resolved at review time)
     :brief    the reviewer's single concern - precise, judgmental, actionable
     :scope    optional prompt-level confinement (guidance text only). The
               changed-file list and pinned range are supplied separately as
@@ -34,7 +34,7 @@
               changes stays deferred to an RFC.
 
   Routing note: pick seats by scanning the scorecards in
-  .millstrand/agents/harnesses.clj ({:complexity :code-taste :resilience :ui-design
+  Codethread's agents root ({:complexity :code-taste :resilience :ui-design
   :cost}, X = untested), matching the axes the contract actually needs -
   route by waste-type, not call count. In practice (review-sweeps bench
   2026-07-13, card vw8pf): mechanical single-target contracts over a

@@ -1,4 +1,11 @@
-{:spools {codethread/kanban
+{:spools {codethread/spools
+ {:git/url "https://github.com/codethread/codethread.spool.git",
+  :git/sha "d4c3ead266e1215de325e878b471710896c1e571",
+  :roots {codethread/agents "spools/agents",
+          codethread/spool-bump "spools/spool-bump",
+          codethread/devflow-setup "spools/devflow-setup",
+          codethread/ralph "spools/ralph"}},
+ codethread/kanban
  {:git/url "https://github.com/codethread/kanban.spool.git",
   :git/sha "87f61bc2750e7026f3650235907db25f19b1536e",
   :git/tag "v24",

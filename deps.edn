@@ -41,20 +41,18 @@
            :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src" "test" "dev" "scripts"
                        ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
                        ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
-                       ".millstrand/workflows/spool_bump.clj" ".millstrand/workflows/story.clj"
+                       ".millstrand/workflows/story.clj"
                        ".millstrand/workflows/explore.clj" ".millstrand/workflows/fix.clj"
-                       ".millstrand/workflows/land_policy.clj" ".millstrand/workflows/ralph.clj"
-                       ".millstrand/agents/harnesses.clj" ".millstrand/agents/guide.clj"
+                       ".millstrand/workflows/land_policy.clj" ".millstrand/agents/guide.clj"
                        ".millstrand/agents/reviewers.clj" ".millstrand/notifications/attention.clj"
                        ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/help.clj"]}
   :format/fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
                :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src" "test" "dev" "scripts"
                            ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
                            ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
-                           ".millstrand/workflows/spool_bump.clj" ".millstrand/workflows/story.clj"
+                           ".millstrand/workflows/story.clj"
                            ".millstrand/workflows/explore.clj" ".millstrand/workflows/fix.clj"
-                           ".millstrand/workflows/land_policy.clj" ".millstrand/workflows/ralph.clj"
-                           ".millstrand/agents/harnesses.clj" ".millstrand/agents/guide.clj"
+                           ".millstrand/workflows/land_policy.clj" ".millstrand/agents/guide.clj"
                            ".millstrand/agents/reviewers.clj" ".millstrand/notifications/attention.clj"
                            ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/help.clj"]}
   :lint/clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}

@@ -10,12 +10,12 @@
 ;; File-per-concern map (each Clojure file is one module):
 ;;   policy/config.clj            — named queries + shared validation helpers
 ;;   workflows/                   — workflow definitions, policy, support, and scripts
-;;   agents/harnesses.clj         — harness seats + routing policy
 ;;   agents/guide.clj             — guide op: surface questions answered by a run
 ;;   agents/reviewers.clj         — reviewer rosters
 ;;   notifications/attention.clj  — chime attention rules
 ;;   jobs/nvd_scan.clj            — NVD scan cron job
 ;;   adapters/module.clj          — repo election of the batteries help transform
+;;   Codethread roots             — shared agents, spool-bump, Devflow setup, and Ralph
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and every
 ;; refresh; a module key it redeclares shadows the one here and wins, and it binds
@@ -114,27 +114,24 @@
                   :required? true})
 
 ;; --- repo policy over the peer spools ---------------------------------------
-;; agents/harnesses.clj contributes its seats over the :pi harness that agent-run
-;; publishes, as the workspace-owned partitions of agent-run's tool/alias kinds,
-;; so it orders after both peers. Two lifecycle resources own the singleton
-;; review/task contract slots and clear them on removal.
-(runtime/module! runtime :harnesses
-                 {:file "agents/harnesses.clj"
-                  :spools ['ct.spools/delegation 'ct.spools/agent-run]
+;; Codethread publishes the shared harness tools and seat aliases. This
+;; repository keeps reviewer rosters and policy local.
+(runtime/module! runtime :codethread/agents
+                 {:ns 'ct.spools.codethread.agents
+                  :spools ['codethread/agents 'ct.spools/delegation 'ct.spools/agent-run]
                   :after [:millstrand/spools-shuttle :millstrand/spools-delegation]
                   :required? true})
 ;; agents/guide.clj publishes the `guide` op, which spawns its answer as an agent run on
-;; a seat agents/harnesses.clj registers, so it orders after both. Nothing else consumes
-;; it: dropping this declaration and refreshing removes the op and nothing more.
+;; a shared Codethread seat, so it orders after the shared agents module.
 (runtime/module! runtime :guide
                  {:file "agents/guide.clj"
                   :spools ['ct.spools/agent-run]
-                  :after [:millstrand/spools-shuttle :harnesses]
+                  :after [:millstrand/spools-shuttle :codethread/agents]
                   :required? true})
 ;; The declarative reviewer roster stays a small git-reviewable data document,
 ;; collected as the workspace-owned partition of delegation's roster kind.
 ;; Roster harness aliases resolve at review time, not registration time, so order
-;; relative to agents/harnesses.clj is not load-bearing.
+;; relative to the shared Codethread agents module is not load-bearing.
 (runtime/module! runtime :reviewers
                  {:file "agents/reviewers.clj"
                   :spools ['ct.spools/delegation]
@@ -170,6 +167,13 @@
                   :spools ['codethread/devflow-kanban-adapter
                            'codethread/devflow 'codethread/kanban]
                   :after [:millstrand/spools-devflow :millstrand/spools-kanban]
+                  :required? true})
+;; Codethread's setup root elects the external adapter's decompose seed only
+;; after both external Devflow and Kanban adapter roots are active.
+(runtime/module! runtime :codethread/devflow-setup
+                 {:ns 'ct.spools.codethread.devflow-setup
+                  :spools ['codethread/devflow-setup]
+                  :after [:millstrand/spools-devflow-kanban-adapter]
                   :required? true})
 ;; --- cron timer engine + the NVD scan job -----------------------------------
 ;; Cron is a generic weaver timer engine. Its collected open-kind and lifecycle
@@ -213,10 +217,10 @@
                   :after [:millhouse/spools-workflow :millstrand/spools-delegation
                           :reviewers :workflows.support]
                   :required? true})
-(runtime/module! runtime :workflows.spool-bump
-                 {:file "workflows/spool_bump.clj"
-                  :spools ['millhouse.spools/workflow]
-                  :after [:millhouse/spools-workflow :workflows.support]
+(runtime/module! runtime :codethread/spool-bump
+                 {:ns 'ct.spools.codethread.spool-bump
+                  :spools ['codethread/spool-bump 'millhouse.spools/workflow]
+                  :after [:millhouse/spools-workflow]
                   :required? true})
 (runtime/module! runtime :workflows.story
                  {:file "workflows/story.clj"
@@ -242,12 +246,12 @@
                   :after [:millhouse/spools-workflow :workflows
                           :workflows.land]
                   :required? true})
-;; Ralph remains an independent one-card-per-iteration workflow.
-(runtime/module! runtime :workflows.ralph
-                 {:file "workflows/ralph.clj"
-                  :spools ['millhouse.spools/workflow]
-                  :after [:millhouse/spools-workflow :workflows
-                          :workflows.land]
+;; Ralph remains an independent one-card-per-iteration workflow owned by
+;; Codethread; landing policy and reviewer evidence stay local to this repo.
+(runtime/module! runtime :codethread/ralph
+                 {:ns 'ct.spools.codethread.ralph
+                  :spools ['codethread/ralph 'millhouse.spools/workflow]
+                  :after [:millhouse/spools-workflow]
                   :required? true})
 
 ;; The code executor's lifecycle resource scans ready gates when opened. It must load after
@@ -257,18 +261,18 @@
                   :spools ['millhouse.spools.executors/code
                            'millhouse.spools/workflow]
                   :after [:millhouse/spools-workflow :workflows
-                          :workflows.land :workflows.spool-bump
+                          :workflows.land :codethread/spool-bump
                           :workflows.story :workflows.explore :workflows.fix
-                          :workflows.ralph]
+                          :codethread/ralph]
                   :required? true})
 
 ;; The subagent gate executor activates last: its lifecycle resource runs an initial gate
-;; scan, so every harness alias agents/harnesses.clj registers must already exist or a
+;; scan, so every harness alias Codethread agents registers must already exist or a
 ;; durable ready gate would be stamped gate/error on every cold start.
 (runtime/module! runtime :millstrand/spools-treadle
                  {:ns 'ct.spools.executors.subagent
                   :spools ['ct.spools/agent-run]
                   :after [:millstrand/spools-shuttle :millhouse/spools-workflow
-                          :harnesses :reviewers :workflows :workflows.land
-                          :workflows.story :workflows.ralph]
+                          :codethread/agents :reviewers :workflows :workflows.land
+                          :workflows.story :codethread/ralph]
                   :required? true})
