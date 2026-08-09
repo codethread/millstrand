@@ -144,9 +144,9 @@ Invoke a registered CLI operation with raw string argv from a root-level
 
   The handler receives a context map with `:op/name`, `:op/argv`, `:op/runtime`,
   `:op/runtime-metadata`, and `:op/payloads` (defaulting to `{}`). The envelope
-  arity threads any present `:cwd`, `:worktree-root`, `:git-common-dir`, and
-  `:timeout` fields into `:op/cwd`, `:op/worktree-root`, `:op/git-common-dir`,
-  and `:op/timeout`, and an envelope `:emit!` fn (supplied by the streaming
+  arity threads any present `:cwd`, `:worktree-root`, `:git-common-dir`,
+  `:timeout`, `:is-tty`, and `:tty-col` fields into their corresponding
+  `:op/*` context keys, and an envelope `:emit!` fn (supplied by the streaming
   socket transport for `:stream? true` ops) into `:op/emit!`. When the resolved
   op declares an `:arg-spec`, `:op/argv` and the attached payloads are parsed
   through `millstrand.api.cli.alpha/parse` and the result is supplied as `:op/args`;
@@ -162,7 +162,7 @@ Invoke a registered CLI operation with raw string argv from a root-level
   nil, fails loudly with the expected and actual labels. Raw-envelope ops (no
   `:arg-spec`) receive the context unchanged, still carrying the raw
   `:op/payloads` map.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L579-L638">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L579-L642">Source</a></sub></p>
 
 ## <a name="millstrand.api.weaver.alpha/op-provenance">`op-provenance`</a>
 ``` clojure

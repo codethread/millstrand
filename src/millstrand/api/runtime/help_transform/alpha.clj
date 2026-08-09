@@ -1,9 +1,10 @@
 (ns millstrand.api.runtime.help-transform.alpha
   "Explicit-runtime at-most-one slot for the default help transform.
 
-  The slot holds at most one transform: a function from the full canonical help
-  response envelope (DELTA-Dtf-001.CC1) to the rendered string the CLI relays
-  verbatim (JSON or text — the transform's choice). The `help` op renders through
+  The slot holds at most one transform: a function of the full canonical help
+  response envelope (DELTA-Dtf-001.CC1) and a terminal-capabilities map
+  `{:is-tty :tty-col}` to the rendered string the CLI relays verbatim (JSON or
+  text — the transform's choice). The `help` op renders through
   it when present, else emits the raw canonical envelope; `--json` always bypasses
   it, so a broken transform never bricks help (DELTA-Dtf-001.CC4). `about`/`prime`
   output is never transformed.
@@ -41,8 +42,9 @@
 (defn register-default-help-transform!
   "Register `registration` as `runtime`'s default help transform and return it.
 
-  `registration` is a closed map `{:transform :owner}`: a `:transform` fn (full
-  envelope → rendered string) and an `:owner` naming the registrant. Registering
+  `registration` is a closed map `{:transform :owner}`: a `:transform` fn
+  (full envelope, terminal capabilities → rendered string) and an `:owner`
+  naming the registrant. Registering
   when the slot is already occupied fails loudly, naming both the existing and
   attempting owners; use `replace-default-help-transform!` for a deliberate
   override. The occupancy check runs inside the `swap!`, so two racing
@@ -59,7 +61,7 @@
 (defn register-builtin!
   "Register Batteries' builtin help transform as `runtime`'s default.
 
-  Resolves the transform through the runtime's spool classloader. The Batteries
+  Resolves the two-argument transform through the runtime's spool classloader. The Batteries
   root must already be synced into the running weaver. Like direct registration,
   this fails loudly when the slot is occupied."
   [runtime]

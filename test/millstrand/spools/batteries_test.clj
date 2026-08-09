@@ -1150,6 +1150,7 @@
                          :positionals []}
                         :hook-class "read"
                         :deadline-class "standard"
+                        :returns {:type "string"}
                         :failure-modes ["synthetic/leaf-outcome"]))
         mid (synthetic-node "mid" "middle doc" [leaf])
         root (assoc (synthetic-node "root" "root doc" [mid])
@@ -1163,18 +1164,31 @@
                   :glossary {"synthetic/leaf-outcome"
                              "an outcome only the depth-3 leaf references"}
                   :node root}
-        rendered (batteries/default-help-transform envelope)
+        rendered (batteries/default-help-transform envelope {:is-tty false :tty-col nil})
+        colored (batteries/default-help-transform envelope {:is-tty true :tty-col 100})
         lines (str/split-lines rendered)]
+    (testing "terminal capabilities control ANSI color"
+      (is (not (str/includes? rendered "\u001b[")))
+      (is (str/includes? colored "\u001b[1;36mroot\u001b[0m")))
     (testing "every level renders through the one recursive body"
       (is (str/includes? rendered "root — root doc"))
       (is (str/includes? rendered "mid — middle doc"))
       (is (str/includes? rendered "leaf — deepest leaf doc"))
       (is (str/includes? rendered "--deep <string>  flag at depth three")
           "the depth-3 leaf's own flags render, so recursion reached the deepest node")
-      (is (str/includes? rendered "returns:\n    type: map"))
       (is (str/includes? rendered
-                         "required: {id: {type: string}, state: {type: string}}"))
+                         "returns: strand help --json root | jq '.node.returns'"))
+      (is (str/includes? rendered
+                         (str "returns: strand help --json root mid leaf "
+                              "| jq '.node.returns'")))
       (is (str/includes? rendered "- synthetic/leaf-outcome")))
+    (testing "verbose envelope details become exact raw-JSON commands"
+      (is (not (str/includes? rendered "operation: root  [test]")))
+      (is (not (str/includes? rendered "an outcome only the depth-3 leaf references")))
+      (is (str/includes? rendered
+                         "operation: strand help --json root | jq '.operation'"))
+      (is (str/includes? rendered
+                         "glossary:  strand help --json root | jq '.glossary'")))
     (testing "leaf classes render on the leaf only; null interiors stay silent"
       (is (str/includes? rendered "hook-class: read   deadline: standard"))
       (is (= 1 (count (filter #(str/includes? % "hook-class:") lines)))))
@@ -1211,7 +1225,7 @@
                   :source nil
                   :glossary {}
                   :node node}
-        rendered (batteries/default-help-transform envelope)
+        rendered (batteries/default-help-transform envelope {:is-tty false :tty-col nil})
         lines (str/split-lines rendered)]
     (testing "a presence boolean flag renders its bare token, no value placeholder"
       (is (str/includes? rendered "--force  Skip checks"))
@@ -1259,19 +1273,21 @@
       (testing "the reference transform renders every live envelope family"
         (doseq [argv [[] ["add"] ["spool"] ["spool" "add"] ["spool" "status"]
                       ["query"] ["weave"]]]
-          (let [text (batteries/default-help-transform (weaver/op! rt 'help argv))]
+          (let [text (batteries/default-help-transform (weaver/op! rt 'help argv)
+                                                       {:is-tty false :tty-col nil})]
             (is (string? text))
             (is (not (str/blank? text)))
-            (is (str/includes? text "strand help — schema v2")))))
+            (is (not (str/includes? text "schema v2"))))))
       (testing "the folded spool status leaf projects as a read leaf node"
         (let [status (weaver/op! rt 'help ["spool" "status"])]
           (is (= "status" (get-in status [:node :name])))
           (is (= "read" (get-in status [:node :hook-class])))
           (is (= "standard" (get-in status [:node :deadline-class])))))
-      (testing "rendered detail includes authored annotations verbatim"
-        (let [text (batteries/default-help-transform (weaver/op! rt 'help ["add"]))]
+      (testing "rendered detail keeps guidance and points verbose data to JSON"
+        (let [text (batteries/default-help-transform (weaver/op! rt 'help ["add"])
+                                                     {:is-tty false :tty-col nil})]
           (is (str/includes? text "use-when:"))
           (is (str/includes? text "Minting a new unit of work"))
-          (is (str/includes? text "failure-modes:"))
+          (is (str/includes? text "failure-modes-glossary:"))
           (is (str/includes? text
-                             "batteries/state-invalid — A mutation named a lifecycle state")))))))
+                             "glossary:  strand help --json add | jq '.glossary'")))))))

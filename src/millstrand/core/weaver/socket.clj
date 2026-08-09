@@ -28,7 +28,8 @@
   #{"protocol_version" "request_id" "weaver_id" "operation" "arguments" "options"})
 
 (def ^:private invoke-arg-keys
-  #{"name" "argv" "payloads" "cwd" "worktree_root" "git_common_dir" "workspace" "timeout" "client"})
+  #{"name" "argv" "payloads" "cwd" "worktree_root" "git_common_dir" "workspace" "timeout" "client"
+    "is_tty" "tty_col"})
 
 ;; Standard-class ops with no envelope `timeout` get this server-side deadline.
 ;; No server deadline existed before op-only dispatch; this mirrors the client's
@@ -156,6 +157,12 @@
        (every? string? (get args "argv"))
        (contains? args "payloads")
        (string-map? (get args "payloads"))
+       (contains? args "is_tty")
+       (boolean? (get args "is_tty"))
+       (contains? args "tty_col")
+       (if (get args "is_tty")
+         (and (integer? (get args "tty_col")) (pos? (get args "tty_col")))
+         (nil? (get args "tty_col")))
        (or (not (contains? args "cwd")) (string? (get args "cwd")))
        (or (not (contains? args "worktree_root")) (string? (get args "worktree_root")))
        (or (not (contains? args "git_common_dir")) (string? (get args "git_common_dir")))
@@ -218,7 +225,9 @@
   `workspace` and `client` are socket-level diagnostics and are not threaded into
   op handler context (SPEC-004-D003.C1)."
   [args]
-  (cond-> {:payloads (get args "payloads")}
+  (cond-> {:payloads (get args "payloads")
+           :is-tty (get args "is_tty")
+           :tty-col (get args "tty_col")}
     (contains? args "cwd") (assoc :cwd (get args "cwd"))
     (contains? args "worktree_root") (assoc :worktree-root (get args "worktree_root"))
     (contains? args "git_common_dir") (assoc :git-common-dir (get args "git_common_dir"))

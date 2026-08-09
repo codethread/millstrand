@@ -22,7 +22,7 @@ func relay(t *testing.T, frames string) (string, string, int) {
 }
 
 func TestRelaySingleSuccessPrintsResult(t *testing.T) {
-	out, er, code := relay(t, `{"protocol_version":1,"request_id":"r1","ok":true,"result":{"id":"task-1"},"error":null}`+"\n")
+	out, er, code := relay(t, `{"protocol_version":2,"request_id":"r1","ok":true,"result":{"id":"task-1"},"error":null}`+"\n")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr=%q)", code, er)
 	}
@@ -35,7 +35,7 @@ func TestRelaySingleSuccessPrintsResult(t *testing.T) {
 }
 
 func TestRelaySingleSuccessDoesNotHTMLEscapeResult(t *testing.T) {
-	out, er, code := relay(t, `{"protocol_version":1,"request_id":"r1","ok":true,"result":{"usage":"strand kanban <id>"},"error":null}`+"\n")
+	out, er, code := relay(t, `{"protocol_version":2,"request_id":"r1","ok":true,"result":{"usage":"strand kanban <id>"},"error":null}`+"\n")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr=%q)", code, er)
 	}
@@ -51,7 +51,7 @@ func TestRelaySingleVerbatimPrintsRawText(t *testing.T) {
 	// A default help transform's output rides back as a `verbatim` frame whose
 	// result is a JSON string; the relay prints the decoded text raw, never as a
 	// JSON-quoted string (DELTA-Dtf-002.CC1).
-	frame := `{"protocol_version":1,"request_id":"r1","ok":true,"result":"RENDERED add: usage <id>","error":null,"verbatim":true}` + "\n"
+	frame := `{"protocol_version":2,"request_id":"r1","ok":true,"result":"RENDERED add: usage <id>","error":null,"verbatim":true}` + "\n"
 	out, er, code := relay(t, frame)
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr=%q)", code, er)
@@ -70,7 +70,7 @@ func TestRelaySingleVerbatimPrintsRawText(t *testing.T) {
 func TestRelaySingleVerbatimPreservesExistingTrailingNewline(t *testing.T) {
 	// The transform's string already ends in a newline; the relay must not double
 	// it (byte-faithful, mirroring the stream relay).
-	frame := `{"protocol_version":1,"request_id":"r1","ok":true,"result":"line one\nline two\n","error":null,"verbatim":true}` + "\n"
+	frame := `{"protocol_version":2,"request_id":"r1","ok":true,"result":"line one\nline two\n","error":null,"verbatim":true}` + "\n"
 	out, _, code := relay(t, frame)
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d", code)
@@ -83,7 +83,7 @@ func TestRelaySingleVerbatimPreservesExistingTrailingNewline(t *testing.T) {
 func TestRelaySingleNonVerbatimStringStaysJSON(t *testing.T) {
 	// A normal op that legitimately returns a JSON string value keeps canonical
 	// JSON relay: the verbatim path must not blanket-unquote every string result.
-	out, _, code := relay(t, `{"protocol_version":1,"request_id":"r1","ok":true,"result":"plain","error":null}`+"\n")
+	out, _, code := relay(t, `{"protocol_version":2,"request_id":"r1","ok":true,"result":"plain","error":null}`+"\n")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d", code)
 	}
@@ -93,7 +93,7 @@ func TestRelaySingleNonVerbatimStringStaysJSON(t *testing.T) {
 }
 
 func TestRelaySingleErrorGoesToStderrNonZero(t *testing.T) {
-	frame := `{"protocol_version":1,"request_id":"r1","ok":false,"result":null,"error":{"type":"domain","code":"op/not-found","message":"Operation not found","details":{"available":["add","list"]}}}` + "\n"
+	frame := `{"protocol_version":2,"request_id":"r1","ok":false,"result":null,"error":{"type":"domain","code":"op/not-found","message":"Operation not found","details":{"available":["add","list"]}}}` + "\n"
 	var out, er bytes.Buffer
 	code, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, nil)
 	if code == 0 {
@@ -113,10 +113,10 @@ func TestRelaySingleErrorGoesToStderrNonZero(t *testing.T) {
 
 func TestRelayStreamRelaysLinesThenExitsBySuccess(t *testing.T) {
 	frames := strings.Join([]string{
-		`{"protocol_version":1,"request_id":"r1","stream":true}`,
+		`{"protocol_version":2,"request_id":"r1","stream":true}`,
 		`{"i":0}`,
 		`{"i":1}`,
-		`{"protocol_version":1,"request_id":"r1","done":true,"success":true,"result":{"emitted":2}}`,
+		`{"protocol_version":2,"request_id":"r1","done":true,"success":true,"result":{"emitted":2}}`,
 	}, "\n") + "\n"
 	out, er, code := relay(t, frames)
 	if code != 0 {
@@ -132,9 +132,9 @@ func TestRelayStreamRelaysLinesThenExitsBySuccess(t *testing.T) {
 
 func TestRelayStreamErrorTerminatorNonZero(t *testing.T) {
 	frames := strings.Join([]string{
-		`{"protocol_version":1,"request_id":"r1","stream":true}`,
+		`{"protocol_version":2,"request_id":"r1","stream":true}`,
 		`{"i":0}`,
-		`{"protocol_version":1,"request_id":"r1","done":true,"success":false,"error":{"type":"domain","code":"stream/failed","message":"stream failed","details":{}}}`,
+		`{"protocol_version":2,"request_id":"r1","done":true,"success":false,"error":{"type":"domain","code":"stream/failed","message":"stream failed","details":{}}}`,
 	}, "\n") + "\n"
 	out, er, code := relay(t, frames)
 	if code == 0 {
@@ -158,9 +158,9 @@ func TestRelayStreamOverSocketFlushesIncrementally(t *testing.T) {
 	go func() {
 		w := bufio.NewWriter(server)
 		lines := []string{
-			`{"protocol_version":1,"request_id":"r1","stream":true}`,
+			`{"protocol_version":2,"request_id":"r1","stream":true}`,
 			`{"i":0}`,
-			`{"protocol_version":1,"request_id":"r1","done":true,"success":true,"result":null}`,
+			`{"protocol_version":2,"request_id":"r1","done":true,"success":true,"result":null}`,
 		}
 		for _, l := range lines {
 			_, _ = w.WriteString(l)
@@ -185,7 +185,7 @@ func TestRelayStreamOverSocketFlushesIncrementally(t *testing.T) {
 
 func TestRelayStreamTruncatedFailsNonZero(t *testing.T) {
 	// Header + one line but no terminator: the relay must not report success.
-	frames := `{"protocol_version":1,"request_id":"r1","stream":true}` + "\n" + `{"i":0}` + "\n"
+	frames := `{"protocol_version":2,"request_id":"r1","stream":true}` + "\n" + `{"i":0}` + "\n"
 	_, _, code := relay(t, frames)
 	if code == 0 {
 		t.Fatalf("truncated stream (no terminator) must exit non-zero")

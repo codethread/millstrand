@@ -582,9 +582,9 @@
 
   The handler receives a context map with `:op/name`, `:op/argv`, `:op/runtime`,
   `:op/runtime-metadata`, and `:op/payloads` (defaulting to `{}`). The envelope
-  arity threads any present `:cwd`, `:worktree-root`, `:git-common-dir`, and
-  `:timeout` fields into `:op/cwd`, `:op/worktree-root`, `:op/git-common-dir`,
-  and `:op/timeout`, and an envelope `:emit!` fn (supplied by the streaming
+  arity threads any present `:cwd`, `:worktree-root`, `:git-common-dir`,
+  `:timeout`, `:is-tty`, and `:tty-col` fields into their corresponding
+  `:op/*` context keys, and an envelope `:emit!` fn (supplied by the streaming
   socket transport for `:stream? true` ops) into `:op/emit!`. When the resolved
   op declares an `:arg-spec`, `:op/argv` and the attached payloads are parsed
   through `millstrand.api.cli.alpha/parse` and the result is supplied as `:op/args`;
@@ -621,6 +621,10 @@
                    (assoc :op/git-common-dir (:git-common-dir envelope))
                    (contains? envelope :timeout)
                    (assoc :op/timeout (:timeout envelope))
+                   (contains? envelope :is-tty)
+                   (assoc :op/is-tty (:is-tty envelope))
+                   (contains? envelope :tty-col)
+                   (assoc :op/tty-col (:tty-col envelope))
                    (contains? envelope :emit!)
                    (assoc :op/emit! (:emit! envelope))
                    (some? arg-spec)

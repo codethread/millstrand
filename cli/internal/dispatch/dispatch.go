@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
 	"millstrand-strand-cli/internal/errfmt"
@@ -30,6 +32,11 @@ var (
 	deriveGitContext = config.DeriveGitContext
 	sendInvoke       = client.InvokeThroughMill
 )
+
+type terminalCapabilities struct {
+	isTTY  bool
+	ttyCol *int
+}
 
 type parsed struct {
 	workspace    string
@@ -87,7 +94,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, errfmt.CodeContextUnresolved, err)
 	}
-	envelope, err := assembleEnvelope(p, payloads, effectiveCwd, worktreeRoot, gitCommonDir)
+	envelope, err := assembleEnvelope(p, payloads, effectiveCwd, worktreeRoot, gitCommonDir,
+		detectTerminalCapabilities(stdout))
 	if err != nil {
 		return fail(stderr, errfmt.CodeInvalidInvocation, err)
 	}
@@ -266,12 +274,26 @@ func resolveContext(p parsed) (effectiveCwd, worktreeRoot, gitCommonDir string, 
 	return effectiveCwd, worktreeRoot, gitCommonDir, nil
 }
 
-func assembleEnvelope(p parsed, payloads map[string]string, effectiveCwd, worktreeRoot, gitCommonDir string) (map[string]any, error) {
+func detectTerminalCapabilities(stdout io.Writer) terminalCapabilities {
+	file, ok := stdout.(*os.File)
+	if !ok || !term.IsTerminal(int(file.Fd())) {
+		return terminalCapabilities{}
+	}
+	width, _, err := term.GetSize(int(file.Fd()))
+	if err != nil || width <= 0 {
+		width = 80
+	}
+	return terminalCapabilities{isTTY: true, ttyCol: &width}
+}
+
+func assembleEnvelope(p parsed, payloads map[string]string, effectiveCwd, worktreeRoot, gitCommonDir string, terminal terminalCapabilities) (map[string]any, error) {
 	env := map[string]any{
 		"name":     p.opName,
 		"argv":     p.argv,
 		"payloads": payloads,
 		"cwd":      effectiveCwd,
+		"is_tty":   terminal.isTTY,
+		"tty_col":  terminal.ttyCol,
 		"client":   map[string]any{"pid": os.Getpid(), "version": Version},
 	}
 	if worktreeRoot != "" {
@@ -354,8 +376,8 @@ Environment:
 
 Invoke envelope (SPEC-002-D004.C6): the request frame carries protocol version,
 request id, and weaver id; the envelope {name, argv, payloads, cwd,
-worktree_root, git_common_dir, workspace, timeout?, client{pid,version}} rides as
-the operation arguments. Payload references (:stdin, :payload/<name>) are
+worktree_root, git_common_dir, workspace, timeout?, is_tty, tty_col,
+client{pid,version}} rides as the operation arguments. Payload references (:stdin, :payload/<name>) are
 resolved weaver-side; the bin interprets no argv.
 
 Discover ops with the live registry:

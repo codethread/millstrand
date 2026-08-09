@@ -25,7 +25,7 @@
 (defn- metadata-map [state-dir workspace name pid]
   {:pid pid
    :transport :nrepl
-   :protocol-version 1
+   :protocol-version 2
    :endpoint {:host "127.0.0.1" :port 5555}
    :config-dir (.getPath workspace)
    :name name
@@ -68,7 +68,7 @@
          (is (= 1 (count rows)))
          (is (= {:name "alpha"
                  :workspace (.getPath workspace)
-                 :protocol-version 1
+                 :protocol-version 2
                  :socket-path socket-path
                  :state-dir (.getPath state-dir)
                  :running? true}
@@ -195,7 +195,7 @@
   (let [peer-row {:name "offline"
                   :workspace "/tmp/offline"
                   :weaver-id "missing"
-                  :protocol-version 1
+                  :protocol-version 2
                   :socket-path "/tmp/millstrand-peer-missing.sock"
                   :state-dir "/tmp"}]
     (try
@@ -213,7 +213,7 @@
   (let [peer-row {:name "offline"
                   :workspace "/tmp/offline"
                   :weaver-id "missing"
-                  :protocol-version 1
+                  :protocol-version 2
                   :socket-path "/tmp/millstrand-peer-missing.sock"
                   :state-dir "/tmp"}]
     (doseq [[args key] [["not-a-map" :args]

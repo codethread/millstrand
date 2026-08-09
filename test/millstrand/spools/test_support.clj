@@ -286,7 +286,9 @@
                                    "operation" "invoke"
                                    "arguments" {"name" (str op-name)
                                                 "argv" (vec argv)
-                                                "payloads" {}}
+                                                "payloads" {}
+                                                "is_tty" false
+                                                "tty_col" nil}
                                    "options" {}}))
       (.newLine wrt)
       (.flush wrt)

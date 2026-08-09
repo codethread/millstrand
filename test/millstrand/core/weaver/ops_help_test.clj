@@ -1560,7 +1560,8 @@
         (is (map? (weaver/op! rt 'help []))))
       (testing "an elected transform renders the full envelope to a verbatim result"
         (help-transform/register-default-help-transform!
-         rt {:transform (fn [env] (str "RENDERED:" (get-in env [:operation :name])))
+         rt {:transform (fn [env _presentation]
+                          (str "RENDERED:" (get-in env [:operation :name])))
              :owner 'my.spool/render})
         ;; A transformed help result rides back as a verbatim marker so the
         ;; transport relays the string byte-for-byte (DELTA-Dtf-002.CC1).
@@ -1585,7 +1586,7 @@
           (is (= "Prime prose." (:prime (weaver/op! rt 'prime ["described"]))))))
       (testing "a throwing transform fails loudly naming it, without bricking help"
         (help-transform/replace-default-help-transform!
-         rt {:transform (fn [_] (throw (ex-info "boom" {})))
+         rt {:transform (fn [_ _] (throw (ex-info "boom" {})))
              :owner 'my.spool/broken})
         (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                       #"Default help transform failed"

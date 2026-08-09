@@ -63,6 +63,8 @@
   {:cwd (:op/cwd ctx)
    :worktree-root (:op/worktree-root ctx)
    :timeout (:op/timeout ctx)
+   :is-tty (:op/is-tty ctx)
+   :tty-col (:op/tty-col ctx)
    :payloads (:op/payloads ctx)})
 
 ;; Stream/op transport fixtures. Namespace-level for the same by-symbol
@@ -504,7 +506,7 @@
 
 (defn socket-request [rt operation arguments]
   (let [m (:metadata rt)]
-    (socket-request-envelope rt {"protocol_version" 1
+    (socket-request-envelope rt {"protocol_version" 2
                                  "request_id" "test-request"
                                  "weaver_id" (:nonce m)
                                  "operation" operation
@@ -520,18 +522,21 @@
   ([rt name argv payloads extra]
    (socket-request rt "invoke" (merge {"name" name
                                        "argv" (vec argv)
-                                       "payloads" payloads}
+                                       "payloads" payloads
+                                       "is_tty" false
+                                       "tty_col" nil}
                                       extra))))
 
 (defn invoke-frame
   "Build a raw invoke request frame for tests that drive the socket by hand
   (e.g. streaming, which reads more than one response line)."
   [rt name argv]
-  {"protocol_version" 1
+  {"protocol_version" 2
    "request_id" "test-request"
    "weaver_id" (:nonce (:metadata rt))
    "operation" "invoke"
-   "arguments" {"name" name "argv" (vec argv) "payloads" {}}
+   "arguments" {"name" name "argv" (vec argv) "payloads" {}
+                "is_tty" false "tty_col" nil}
    "options" {}})
 (deftest json-socket-operation-surface-stays-thin
   (with-runtime
@@ -566,11 +571,15 @@
         (let [echoed (invoke-request rt "ctx" ["a"] {"body" "hi"} {"cwd" "/tmp/work"
                                                                    "worktree_root" "/tmp/wt"
                                                                    "git_common_dir" "/tmp/wt/.git"
-                                                                   "timeout" 5000})]
+                                                                   "timeout" 5000
+                                                                   "is_tty" true
+                                                                   "tty_col" 120})]
           (is (true? (get echoed "ok")))
           (is (= "/tmp/work" (get-in echoed ["result" "cwd"])))
           (is (= "/tmp/wt" (get-in echoed ["result" "worktree-root"])))
           (is (= 5000 (get-in echoed ["result" "timeout"])))
+          (is (true? (get-in echoed ["result" "is-tty"])))
+          (is (= 120 (get-in echoed ["result" "tty-col"])))
           (is (= {"body" "hi"} (get-in echoed ["result" "payloads"])))))
       (testing "unknown ops fail loudly with the registry's available names"
         (let [missing (invoke-request rt "nope" [])]
@@ -583,6 +592,10 @@
                       {"name" "" "argv" [] "payloads" {}}
                       {"name" "custom" "argv" [] "payloads" {"k" 1}}
                       {"name" "custom" "argv" []}
+                      {"name" "custom" "argv" [] "payloads" {}
+                       "is_tty" true "tty_col" nil}
+                      {"name" "custom" "argv" [] "payloads" {}
+                       "is_tty" false "tty_col" 80}
                       {"name" "custom" "argv" [] "payloads" {} "bogus" true}]]
           (let [bad (socket-request rt "invoke" args)]
             (is (false? (get bad "ok")) (pr-str args))
@@ -691,7 +704,8 @@
         (is (= :invoke (:request/operation ctx)))
         (is (= "test-request" (:request/id ctx)))
         (is (= "mutate" (:op/name ctx)))
-        (is (= {"name" "mutate" "argv" ["--flag" "value"] "payloads" {"body" "hi"}}
+        (is (= {"name" "mutate" "argv" ["--flag" "value"] "payloads" {"body" "hi"}
+                "is_tty" false "tty_col" nil}
                (:request/args ctx)))
         (is (= {} (:request/options ctx))))
       (testing "subcommand help aliases resolve before mutating hook gating"
@@ -812,7 +826,7 @@
       (let [bad (socket-request rt "invoke" {"name" "reader" "argv" [1] "payloads" {}})]
         (is (= "protocol/malformed-request" (get-in bad ["error" "code"])))
         (is (empty? @hook-contexts)))
-      (let [wrong-identity (socket-request-envelope rt {"protocol_version" 1
+      (let [wrong-identity (socket-request-envelope rt {"protocol_version" 2
                                                         "request_id" "wrong-identity"
                                                         "weaver_id" "wrong"
                                                         "operation" "invoke"
@@ -835,7 +849,8 @@
         (is (= "domain" (get-in response ["error" "type"])))
         (is (= "hook/failed" (get-in response ["error" "code"])))
         (is (= "policy/rejected" (get-in response ["error" "details" "hook/cause-code"])))
-        (is (= {"name" "mutate" "argv" ["arg"] "payloads" {"body" "payload"}}
+        (is (= {"name" "mutate" "argv" ["arg"] "payloads" {"body" "payload"}
+                "is_tty" false "tty_col" nil}
                (get-in response ["error" "details" "exception/data" "ctx" "request/args"])))
         ;; the rejection precedes dispatch: the op handler never ran
         (is (empty? @op-side-effects))))))
@@ -928,7 +943,7 @@
   (with-runtime
     (fn [rt _]
       (let [m (:metadata rt)
-            req {"protocol_version" 1 "request_id" "bad-identity" "weaver_id" "wrong"
+            req {"protocol_version" 2 "request_id" "bad-identity" "weaver_id" "wrong"
                  "operation" "status" "arguments" {} "options" {}}]
         (with-open [ch (doto (SocketChannel/open StandardProtocolFamily/UNIX)
                          (.connect (UnixDomainSocketAddress/of (:socket-path m))))

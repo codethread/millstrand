@@ -394,7 +394,7 @@ func TestMillBinMalformedPlanFailureDoesNotInventOutcomeCode(t *testing.T) {
 func TestRunBinExecWaitsForMillAndWeaverRelayBeforeExecSeam(t *testing.T) {
 	world, cfg := forwardWorld(t)
 	serveFakeWeaverStream(t, world, func(req map[string]any) [][]byte {
-		return [][]byte{mustFrame(t, map[string]any{"protocol_version": 1, "request_id": req["request_id"], "ok": true, "result": map[string]any{"operation": "bins plan", "bin": "dashboard", "runnable": true, "exec": map[string]any{"path": "/tmp/dashboard", "env": map[string]string{}}}})}
+		return [][]byte{mustFrame(t, map[string]any{"protocol_version": client.ProtocolVersion, "request_id": req["request_id"], "ok": true, "result": map[string]any{"operation": "bins plan", "bin": "dashboard", "runnable": true, "exec": map[string]any{"path": "/tmp/dashboard", "env": map[string]string{}}}})}
 	})
 	writeWeaverMetadata(t, world, os.Getpid(), "weaver-bin-seam")
 

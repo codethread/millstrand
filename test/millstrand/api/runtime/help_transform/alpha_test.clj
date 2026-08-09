@@ -8,7 +8,8 @@
             [millstrand.spools.test-support :refer [with-runtime]]))
 
 (defn- registration [owner]
-  {:transform (fn [envelope] (str owner ":" (:schema-version envelope)))
+  {:transform (fn [envelope _presentation]
+                (str owner ":" (:schema-version envelope)))
    :owner owner})
 
 (deftest register-and-introspect-round-trip

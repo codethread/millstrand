@@ -18,7 +18,7 @@ func TestInvokeRelaysSingleWeaverResponse(t *testing.T) {
 	var gotReq map[string]any
 	serveFakeWeaverStream(t, world, func(req map[string]any) [][]byte {
 		gotReq = req
-		return [][]byte{mustFrame(t, map[string]any{"protocol_version": 1, "request_id": req["request_id"], "ok": true, "result": map[string]any{"title": "hello"}, "error": nil})}
+		return [][]byte{mustFrame(t, map[string]any{"protocol_version": client.ProtocolVersion, "request_id": req["request_id"], "ok": true, "result": map[string]any{"title": "hello"}, "error": nil})}
 	})
 	writeWeaverMetadata(t, world, os.Getpid(), "weaver-invoke")
 
@@ -40,10 +40,10 @@ func TestInvokeRelaysStreamFramesVerbatim(t *testing.T) {
 	serveFakeWeaverStream(t, world, func(req map[string]any) [][]byte {
 		id := req["request_id"]
 		return [][]byte{
-			mustFrame(t, map[string]any{"protocol_version": 1, "request_id": id, "stream": true}),
+			mustFrame(t, map[string]any{"protocol_version": client.ProtocolVersion, "request_id": id, "stream": true}),
 			mustFrame(t, map[string]any{"i": 0}),
 			mustFrame(t, map[string]any{"i": 1}),
-			mustFrame(t, map[string]any{"protocol_version": 1, "request_id": id, "done": true, "success": true, "result": map[string]any{"emitted": 2}}),
+			mustFrame(t, map[string]any{"protocol_version": client.ProtocolVersion, "request_id": id, "done": true, "success": true, "result": map[string]any{"emitted": 2}}),
 		}
 	})
 	writeWeaverMetadata(t, world, os.Getpid(), "weaver-stream")

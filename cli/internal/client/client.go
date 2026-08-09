@@ -11,7 +11,7 @@ import (
 	"millstrand-strand-cli/internal/process"
 )
 
-const protocolVersion = 1
+const protocolVersion = 2
 
 // ProtocolVersion is the JSON socket protocol version the bin speaks; exported
 // for the dispatcher's --version and dry-run frame identity.

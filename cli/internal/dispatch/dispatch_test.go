@@ -231,6 +231,9 @@ func TestDryRunPrintsEnvelopeWithoutTransport(t *testing.T) {
 	if !reflect.DeepEqual(args["argv"], []any{"x", "--attr", "k=v"}) {
 		t.Fatalf("dry-run argv = %#v", args["argv"])
 	}
+	if args["is_tty"] != false || args["tty_col"] != nil {
+		t.Fatalf("non-terminal capabilities = (%#v, %#v)", args["is_tty"], args["tty_col"])
+	}
 }
 
 func TestDryRunWithStdinPayload(t *testing.T) {

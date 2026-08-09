@@ -456,19 +456,20 @@
 
   With `json?` true, or with no transform registered, returns the raw canonical
   envelope map (the `--json` floor and the default, DELTA-Dtf-001.CC4). A
-  registered transform receives the full envelope and returns the string the CLI
-  relays; that string is wrapped as a `verbatim-result` so the transport relays it
+  registered transform receives the full envelope plus the caller's terminal
+  capabilities and returns the string the CLI relays; that string is wrapped as
+  a `verbatim-result` so the transport relays it
   byte-faithfully (DELTA-Dtf-002.CC1). A throwing transform fails loudly naming
   its owner (`discovery/help-transform-failed`, TEN-003) — never a silent fallback
   — while `--json` always bypasses the slot so a broken transform never bricks
   help."
-  [runtime envelope json?]
+  [runtime envelope presentation json?]
   (if json?
     envelope
     (if-let [{:keys [transform owner]} (registered-transform runtime)]
       (verbatim-result
        (try
-         (transform envelope)
+         (transform envelope presentation)
          (catch Throwable t
            (throw (ex-info "Default help transform failed"
                            {:code "discovery/help-transform-failed"
@@ -553,8 +554,10 @@
       clean-trailing?
       (let [verbs (pop argv)]
         (if (empty? verbs)
-          (render-help runtime (op-envelope runtime entry) false)
-          (render-help runtime (path-envelope runtime entry (vec verbs)) false)))
+          (render-help runtime (op-envelope runtime entry)
+                       (select-keys envelope [:is-tty :tty-col]) false)
+          (render-help runtime (path-envelope runtime entry (vec verbs))
+                       (select-keys envelope [:is-tty :tty-col]) false)))
 
       (and (contains? retired-sugar-tokens head)
            (not (contains? retired-sugar-tokens (:name entry)))
@@ -597,6 +600,7 @@
                                                        (vec verbs))
                    op (op-envelope runtime (resolve-entry runtime op))
                    :else (op-catalog runtime))
+                 {:is-tty (:op/is-tty ctx) :tty-col (:op/tty-col ctx)}
                  (boolean json))))
 
 (def ^:private help-arg-spec

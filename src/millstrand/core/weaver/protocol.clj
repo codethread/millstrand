@@ -3,4 +3,4 @@
 
 (def version
   "Wire version shared by weaver metadata, servers, and peer clients."
-  1)
+  2)

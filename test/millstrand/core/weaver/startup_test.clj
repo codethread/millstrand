@@ -61,7 +61,7 @@
 
 (defn socket-request [rt operation arguments]
   (let [m (:metadata rt)]
-    (socket-request-envelope rt {"protocol_version" 1
+    (socket-request-envelope rt {"protocol_version" 2
                                  "request_id" "test-request"
                                  "weaver_id" (:nonce m)
                                  "operation" operation
@@ -430,7 +430,7 @@
       (is (true? (metadata/stale-or-missing?
                   {:pid 1
                    :transport :nrepl
-                   :protocol-version 1
+                   :protocol-version 2
                    :endpoint {:host "127.0.0.1" :port 5555}
                    :config-dir (:config-dir world)
                    :state-dir (:state-dir world)
@@ -469,7 +469,7 @@
         (is (= (.getName (io/file (:config-dir status))) (:name status)))
         (is (= (:name status) (get json-disk "name")))
         (is (= :nrepl (:transport status)))
-        (is (= 1 (:protocol-version status)))
+        (is (= 2 (:protocol-version status)))
         (is (string? (:socket-path status)))
         (is (= canonical (get json-disk "database_path")))
         (is (= "sqlite-file" (get json-disk "database_kind")))

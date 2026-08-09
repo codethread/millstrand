@@ -254,7 +254,9 @@
     ["status" {}]
     ["invoke" {"name" op
                "argv" (vec argv)
-               "payloads" (or payloads {})}]))
+               "payloads" (or payloads {})
+               "is_tty" false
+               "tty_col" nil}]))
 
 (defn- request-envelope
   "Build the JSON request envelope for one peer roundtrip."

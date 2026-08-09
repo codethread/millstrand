@@ -17,7 +17,7 @@
 
 (defn render-help-text
   "Render the canonical help envelope to a single plain-text line."
-  [env]
+  [env _presentation]
   (str "RENDERED " (get-in env [:operation :name]) ": " (get-in env [:node :doc])))
 
 (help-transform/register-default-help-transform!

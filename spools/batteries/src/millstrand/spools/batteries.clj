@@ -1188,18 +1188,17 @@
   [depth]
   (str/join (repeat depth "  ")))
 
-(defn- source-label
-  "Render the op-wide `source` pointer (DELTA-Dtf-002.CC2) as `file:line`, or the
-  best-effort `unavailable`."
-  [source]
-  (if source (str (:file source) ":" (:line source)) "unavailable"))
-
 (defn- bullet-lines
   "Render a labelled bullet block for a string-array annotation, or nil when empty."
   [depth label items]
   (when (seq items)
     (cons (str (indent depth) label ":")
           (map #(str (indent (inc depth)) "- " %) items))))
+
+(defn- spaced
+  "Prepend a blank line to a non-empty rendered section."
+  [lines]
+  (when (seq lines) (cons "" lines)))
 
 (defn- arg-markers
   "Render the shared trailing markers of a flag or positional line."
@@ -1280,6 +1279,11 @@
     :else
     [(str (indent depth) value)]))
 
+(defn- json-help-command
+  "Return the raw-help command selecting `jq-path` for one help node path."
+  [path jq-path]
+  (str "strand help --json " (str/join " " path) " | jq '" jq-path "'"))
+
 (defn- render-node
   "THE recursive renderer over the uniform fractal node (DELTA-Dtf-001.CC2).
 
@@ -1288,8 +1292,8 @@
   over `:children`. No branch keys off the node's depth or kind — that uniformity
   is the schema's forcing function (DELTA-Dtf-003.D1). If a level ever needed its
   own case, the schema would be wrong, not this renderer."
-  [depth {:keys [name doc invocation returns hook-class deadline-class
-                 use-when notes failure-modes children]}]
+  [path depth {:keys [name doc invocation returns hook-class deadline-class
+                      use-when notes failure-modes children]}]
   (let [field (inc depth)
         entry (inc field)]
     (concat
@@ -1299,50 +1303,44 @@
      ;; (DELTA-Lhc-003.CC1); interior nodes carry null and stay silent.
      (when hook-class
        [(str (indent field) "hook-class: " hook-class "   deadline: " deadline-class)])
-     (when (seq (:flags invocation))
-       (cons (str (indent field) "flags:")
-             (mapcat #(flag-lines entry %) (:flags invocation))))
-     (when (seq (:positionals invocation))
-       (cons (str (indent field) "positionals:")
-             (mapcat #(positional-lines entry %) (:positionals invocation))))
-     (when returns
-       (cons (str (indent field) "returns:")
-             (shape-lines entry returns)))
-     (bullet-lines field "use-when" use-when)
-     (bullet-lines field "notes" notes)
-     (bullet-lines field "failure-modes" failure-modes)
-     (mapcat #(render-node field %) children))))
+     (spaced
+      (when (seq (:flags invocation))
+        (cons (str (indent field) "flags:")
+              (mapcat #(flag-lines entry %) (:flags invocation)))))
+     (spaced
+      (when (seq (:positionals invocation))
+        (cons (str (indent field) "positionals:")
+              (mapcat #(positional-lines entry %) (:positionals invocation)))))
+     (spaced
+      (when returns
+        [(str (indent field) "returns: " (json-help-command path ".node.returns"))]))
+     (spaced (bullet-lines field "use-when" use-when))
+     (spaced (bullet-lines field "notes" notes))
+     (spaced (bullet-lines field "failure-modes-glossary" failure-modes))
+     (mapcat (fn [{child-name :name :as child}]
+               (cons "" (render-node (conj path child-name) field child)))
+             children))))
 
-(defn- operation-lines
-  "Render the op-wide envelope facts (DELTA-Dtf-001.CC1) that stay off the node;
-  hook/deadline classes are per-leaf node facts, not op-wide ones
-  (DELTA-Lhc-003.CC1)."
-  [operation source]
-  [(str "operation: " (:name operation) "  [" (:provenance operation) "]")
-   (str (indent 1) "streaming: " (:stream? operation)
-        "   raw-envelope: " (:raw-envelope operation))
-   (str (indent 1) "source:    " (source-label source))])
-
-(defn- glossary-lines
-  "Render the referenced-term glossary closure (DELTA-Dtf-002.CC5), or nil when
-  the returned subtree references no outcomes."
-  [glossary]
-  (when (seq glossary)
-    (cons "glossary:"
-          (map (fn [[name definition]] (str (indent 1) name " — " definition))
-               (sort glossary)))))
+(defn- inspect-lines
+  "Render commands for op-wide details omitted from friendly help."
+  [path glossary]
+  (cond-> ["inspect:"
+           (str (indent 1) "operation: " (json-help-command path ".operation"))]
+    (seq glossary)
+    (conj (str (indent 1) "glossary:  " (json-help-command path ".glossary")))))
 
 (defn- render-detail
   "Render a detail help envelope `{schema-version, operation, source, glossary,
   node}` (DELTA-Dtf-001.CC1) as text."
-  [{:keys [schema-version operation source glossary node]}]
-  (str/join
-   "\n"
-   (concat [(str "strand help — schema v" schema-version) ""]
-           (operation-lines operation source)
-           [""]
-           (when-let [gloss (glossary-lines glossary)] (concat gloss [""]))
-           (render-node 0 node))))
+  [{:keys [operation glossary node]}]
+  (let [operation-name (:name operation)
+        path (cond-> [operation-name]
+               (not= operation-name (:name node)) (conj (:name node)))]
+    (str/join
+     "\n"
+     (concat (render-node path 0 node)
+             [""]
+             (inspect-lines path glossary)))))
 
 (defn- render-catalog
   "Render the versioned no-arg catalog `{schema-version, ops[]}`
@@ -1350,20 +1348,29 @@
 
   Each shallow per-op envelope's summary node renders through the SAME uniform
   `render-node`, so the catalog reuses the node contract unchanged."
-  [{:keys [schema-version ops]}]
+  [{:keys [ops]}]
   (str/join
    "\n"
-   (concat [(str "strand help — schema v" schema-version " — " (count ops) " ops") ""]
-           (mapcat (fn [{:keys [source node]}]
-                     (concat (render-node 0 node)
-                             [(str (indent 1) "source: " (source-label source)) ""]))
-                   ops))))
+   (mapcat (fn [{:keys [node]}]
+             (concat (render-node [(:name node)] 0 node) [""]))
+           ops)))
+
+(defn- colorize-help
+  "Add ANSI emphasis to friendly help rendered for a terminal."
+  [text]
+  (-> text
+      (str/replace #"(?m)^(\s*)([^ ]+)( — )"
+                   (fn [[_ prefix name separator]]
+                     (str prefix "\u001b[1;36m" name "\u001b[0m" separator)))
+      (str/replace #"(?m)^(\s*)(flags|positionals|returns|use-when|notes|failure-modes-glossary|inspect|operation|glossary):"
+                   (fn [[_ prefix label]]
+                     (str prefix "\u001b[1;33m" label ":\u001b[0m")))))
 
 (defn default-help-transform
   "Render a canonical help envelope (DELTA-Dtf-001.CC1) as readable text.
 
   The batteries reference default help transform (DELTA-Dtf-002.CC1): a full
-  envelope → the string the CLI relays verbatim. It is EXPORTED for trusted
+  envelope plus terminal capabilities → the string the CLI relays verbatim. It is EXPORTED for trusted
   `init.clj` election through `register-default-help-transform!` (Task 8) and is
   deliberately not auto-registered by the module, so a fresh world keeps the
   raw-JSON floor (DELTA-Dtf-002.D1).
@@ -1373,11 +1380,13 @@
   no-arg catalog carrying `ops[]` of summary nodes (DELTA-Dtf-001.CC3). The only
   branch is which envelope family this is — an envelope-shape choice, never a
   per-node-level one, so the recursive node renderer stays uniform at every depth
-  (the forcing-function invariant, DELTA-Dtf-003.D1)."
-  [envelope]
-  (if (contains? envelope :ops)
-    (render-catalog envelope)
-    (render-detail envelope)))
+  (the forcing-function invariant, DELTA-Dtf-003.D1). ANSI color is added only
+  when the caller reports `:is-tty true`; redirected and agent output stays plain."
+  [envelope {:keys [is-tty]}]
+  (cond-> (if (contains? envelope :ops)
+            (render-catalog envelope)
+            (render-detail envelope))
+    is-tty colorize-help))
 
 ;; --- declarations -----------------------------------------------------------
 
