@@ -1,6 +1,7 @@
 package config
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,9 +10,14 @@ import (
 	"strings"
 )
 
+//go:embed all:templates/.millstrand
+var bootstrapTemplates embed.FS
+
 const (
-	DefaultInitCLJ             = "(require '[millstrand.api.current.alpha :as current]\n         '[millstrand.api.runtime.alpha :as runtime])\n\n(def runtime (current/runtime))\n\n;; batteries is approved as a shipped source-root spool by default. The module\n;; guard keeps source loading behind that visible approval. The declaration\n;; carries a source target and world policy only: the module's contribution is\n;; the declaration data the authoring forms in `millstrand.spools.batteries` collect\n;; as its source loads — the strand ops and the glossary seed their documented\n;; failure modes reference.\n(runtime/module! runtime :millstrand/spools-batteries\n                 {:ns 'millstrand.spools.batteries\n                  :spools ['millstrand.spools/batteries]})\n"
-	DefaultMillstrandGitignore = "config.local.json\ninit.local.clj\nspools.local.edn\nstate/\ndata/\nweaver.*\n*.sqlite\n*.sqlite-*\n"
+	spoolsTemplate    = "templates/.millstrand/spools.edn"
+	initTemplate      = "templates/.millstrand/init.clj"
+	helpTemplate      = "templates/.millstrand/me/help.clj"
+	gitignoreTemplate = "templates/.millstrand/.gitignore"
 )
 
 func BootstrapWorld(cwd, configDir, source string) (World, error) {
@@ -26,7 +32,7 @@ func bootstrapWorld(cwd, configDir, source string, injectGuidance bool) (World, 
 	if err := rejectLegacySpoolConfig(world.ConfigDir); err != nil {
 		return World{}, err
 	}
-	if err := os.MkdirAll(filepath.Join(world.ConfigDir, "spools"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(world.ConfigDir, "me"), 0o755); err != nil {
 		return World{}, err
 	}
 	if _, err := os.Stat(world.ConfigFile); os.IsNotExist(err) {
@@ -40,13 +46,16 @@ func bootstrapWorld(cwd, configDir, source string, injectGuidance bool) (World, 
 	} else if err != nil {
 		return World{}, err
 	}
-	if err := writeMissing(filepath.Join(world.ConfigDir, "spools.edn"), "{:spools {millstrand.spools/batteries {:millstrand/source-root \"spools/batteries\"}}}\n"); err != nil {
+	if err := writeMissingTemplate(filepath.Join(world.ConfigDir, "spools.edn"), spoolsTemplate); err != nil {
 		return World{}, err
 	}
-	if err := writeMissing(filepath.Join(world.ConfigDir, "init.clj"), DefaultInitCLJ); err != nil {
+	if err := writeMissingTemplate(filepath.Join(world.ConfigDir, "init.clj"), initTemplate); err != nil {
 		return World{}, err
 	}
-	if err := writeMissing(filepath.Join(world.ConfigDir, ".gitignore"), DefaultMillstrandGitignore); err != nil {
+	if err := writeMissingTemplate(filepath.Join(world.ConfigDir, "me", "help.clj"), helpTemplate); err != nil {
+		return World{}, err
+	}
+	if err := writeMissingTemplate(filepath.Join(world.ConfigDir, ".gitignore"), gitignoreTemplate); err != nil {
 		return World{}, err
 	}
 	if _, _, err := Load(world.ConfigDir); err != nil {
@@ -261,9 +270,13 @@ func rejectLegacySpoolConfig(configDir string) error {
 	return nil
 }
 
-func writeMissing(path, content string) error {
+func writeMissingTemplate(path, templatePath string) error {
+	content, err := bootstrapTemplates.ReadFile(templatePath)
+	if err != nil {
+		return err
+	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return os.WriteFile(path, []byte(content), 0o644)
+		return os.WriteFile(path, content, 0o644)
 	} else {
 		return err
 	}

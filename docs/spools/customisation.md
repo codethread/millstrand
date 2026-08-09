@@ -19,10 +19,11 @@ deliberately absent from this page: the generated [alpha API reference](../api/R
   init.local.clj     -> personal startup overlay loaded after init.clj
   spools.edn         -> shared approved spool families and roots
   spools.local.edn   -> personal approved-spool overlay
-  spools/            -> optional local spools
+  me/help.clj        -> default Batteries help-transform election
+  spools/            -> optional local spools, created only when you add one
 ```
 
-When absent, `mill init` creates the shared half: `config.json` with the alpha format marker, `spools.edn` with the seeded batteries source-root coordinate shown below, `init.clj` with its guarded module, and the `spools/` directory. It also adds a `.gitignore` ignoring the personal overlays (`config.local.json`, `init.local.clj`, `spools.local.edn`). The overlays are yours to add when you want them: each shared file has a gitignored personal counterpart, so shared config is committed and reviewed while personal config stays on your machine. Explicit `--workspace` bootstrap works the same way on the selected directory, preserving whatever already exists.
+When absent, `mill init` creates the shared half: `config.json` with the alpha format marker, `spools.edn` with the seeded batteries source-root coordinate shown below, `init.clj` with its guarded module, and `me/help.clj` with the default help-transform election. It does not create an empty `spools/` directory. Its `.gitignore` ignores only the personal overlays (`config.local.json`, `init.local.clj`, `spools.local.edn`). The overlays are yours to add when you want them: each shared file has a gitignored personal counterpart, so shared config is committed and reviewed while personal config stays on your machine. Explicit `--workspace` bootstrap works the same way on the selected directory, preserving whatever already exists.
 
 ## A private repo-local workspace
 
@@ -30,7 +31,7 @@ Run `mill init --stealth` when you want Millstrand in a repository without commi
 
 Stealth init does not write shared `AGENTS.md` or `CLAUDE.md`. It creates or updates an untracked `CLAUDE.local.md` when safe and prints the instruction Codex users may add to their own guidance. If `.millstrand` or `.ms` is already tracked or a mill-owned marker block was edited, it refuses before changing anything.
 
-Keep the generated startup small. Put personal activation in `init.local.clj`, approvals in `spools.local.edn`, and substantive code in a local spool. If that code needs history, keep the spool in its own Git repository and approve its external root from `spools.local.edn`; `.millstrand` then remains only the repo-local entry point.
+Keep the generated startup small. Put personal activation in `init.local.clj` and approvals in `spools.local.edn`. For workspace-owned code, add a file and activate it with `runtime/module!` and `:file`; use a local spool only when the code needs its own repository and approval boundary. `.millstrand` then remains the repo-local entry point.
 
 ## Startup files
 
@@ -50,12 +51,22 @@ failing files fail loudly with file context. The generated `init.clj` is intenti
 
 (def runtime (current/runtime))
 
+;; batteries load by default, see
+;; https://codethread.github.io/millstrand/spools/batteries/ for details
+;; adds common commands like `strand add` `strand list` etc
+;; you can omit this `module!` and build entirely your own way, see
+;; https://codethread.github.io/millstrand/docs/spools/customisation/
 (runtime/module! runtime :millstrand/spools-batteries
   {:ns 'millstrand.spools.batteries
    :spools ['millstrand.spools/batteries]})
+
+(runtime/module! runtime :module-me-help
+  {:file "me/help.clj"
+   :spools ['millstrand.spools/batteries]
+   :after [:millstrand/spools-batteries]})
 ```
 
-The declaration names only a source target and world policy; Batteries publishes through authoring forms in its source. The source-root coordinate is relative to the mill-selected Millstrand checkout, so bootstrap persists no absolute checkout path. Delete the seeded entry to opt out of batteries; the guarded module then publishes no batteries ops.
+The declarations name only source targets and world policy; Batteries publishes through authoring forms in its source. The generated adapter has the same Batteries root guard and registers Batteries' help transform after the module loads, so `strand help` renders text by default while `strand help --json` keeps the raw envelope. The source-root coordinate is relative to the mill-selected Millstrand checkout, so bootstrap persists no absolute checkout path. Delete the seeded entry to opt out of batteries; the guarded modules then publish no batteries ops.
 
 `millstrand.api.runtime.alpha` is a privileged built-in runtime loader/config helper namespace shipped with Millstrand —
 not an ordinary user spool, which is why loader/config helpers do not live under `millstrand.spools.*`.
