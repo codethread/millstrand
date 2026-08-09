@@ -136,6 +136,37 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 	if strings.Contains(got, "(require 'millstrand.spools.batteries)") {
 		t.Fatalf("init.clj retained the bare batteries require, got:\n%s", got)
 	}
+	for _, want := range []string{
+		";; batteries load by default, see https://codethread.github.io/millstrand/spools/batteries/ for details",
+		";; adds common commands like `strand add` `strand list` etc",
+		";; you can omit this `module!` and build entirely your own way, see https://codethread.github.io/millstrand/docs/spools/customisation/",
+		`(runtime/module! runtime :module-me-help`,
+		`{:file "me/help.clj"`,
+		`:spools ['millstrand.spools/batteries]`,
+		`:after [:millstrand/spools-batteries]})`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("init.clj missing %q, got:\n%s", want, got)
+		}
+	}
+	helpAdapter := string(mustReadFile(t, filepath.Join(cfg, "me", "help.clj")))
+	for _, want := range []string{
+		"(help-transform/register-builtin! runtime)",
+		"(help-transform/unregister-default-help-transform! runtime 'millstrand.spools.batteries)",
+		"(ns me.help",
+		"{:open 'me.help/reconcile-help-transform",
+		":close 'me.help/close-help-transform!}",
+	} {
+		if !strings.Contains(helpAdapter, want) {
+			t.Fatalf("me/help.clj missing %q, got:\n%s", want, helpAdapter)
+		}
+	}
+	if got := string(mustReadFile(t, filepath.Join(cfg, ".gitignore"))); got != "config.local.json\ninit.local.clj\nspools.local.edn\n" {
+		t.Fatalf("unexpected bootstrap .gitignore: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(cfg, "spools")); !os.IsNotExist(err) {
+		t.Fatalf("bootstrap should not create an empty spools directory, stat err=%v", err)
+	}
 	if _, err := os.Stat(filepath.Join(cfg, ".git")); !os.IsNotExist(err) {
 		t.Fatalf("explicit --workspace init must not run git init, stat err=%v", err)
 	}
@@ -319,14 +350,19 @@ func TestMillRoutedStrandOpsAddListHelpAndStream(t *testing.T) {
 		t.Fatalf("list output/error = %q/%v", out, err)
 	}
 
-	// Live op discovery through the core help op.
+	// Live op discovery through the core help op. `mill init` installs the
+	// Batteries help-transform adapter, so default help renders as text.
 	out, err = h.strandCmd("", repo, "", "help")
-	if err != nil || !strings.Contains(out, `"add"`) || !strings.Contains(out, `"test-stream"`) {
+	if err != nil || !strings.Contains(out, "add —") || !strings.Contains(out, "test-stream —") {
 		t.Fatalf("help output/error = %q/%v", out, err)
 	}
 	out, err = h.strandCmd("", repo, "", "help", "add")
-	if err != nil || !strings.Contains(out, `"add"`) {
+	if err != nil || !strings.Contains(out, "add — Create a strand") {
 		t.Fatalf("help add output/error = %q/%v", out, err)
+	}
+	out, err = h.strandCmd("", repo, "", "help", "--json")
+	if err != nil || !strings.Contains(out, `"add"`) || !strings.Contains(out, `"test-stream"`) {
+		t.Fatalf("help --json output/error = %q/%v", out, err)
 	}
 
 	// A streaming op relayed through the full strand -> mill -> weaver chain:
