@@ -137,9 +137,9 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 		t.Fatalf("init.clj retained the bare batteries require, got:\n%s", got)
 	}
 	for _, want := range []string{
-		";; batteries load by default, see https://codethread.github.io/millstrand/spools/batteries/ for details",
+		";; batteries load by default, see\n;; https://codethread.github.io/millstrand/spools/batteries/ for details",
 		";; adds common commands like `strand add` `strand list` etc",
-		";; you can omit this `module!` and build entirely your own way, see https://codethread.github.io/millstrand/docs/spools/customisation/",
+		";; you can omit this `module!` and build entirely your own way, see\n;; https://codethread.github.io/millstrand/docs/spools/customisation/",
 		`(runtime/module! runtime :module-me-help`,
 		`{:file "me/help.clj"`,
 		`:spools ['millstrand.spools/batteries]`,
