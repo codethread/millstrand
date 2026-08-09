@@ -12,6 +12,7 @@
 ;;   workflows/                   — workflow definitions, policy, support, and scripts
 ;;   agents/guide.clj             — guide op: surface questions answered by a run
 ;;   agents/reviewers.clj         — reviewer rosters
+;;   agents/delegation_contracts.clj — workspace task and review contracts
 ;;   notifications/attention.clj  — chime attention rules
 ;;   jobs/nvd_scan.clj            — NVD scan cron job
 ;;   adapters/module.clj          — repo election of the batteries help transform
@@ -115,7 +116,7 @@
 
 ;; --- repo policy over the peer spools ---------------------------------------
 ;; Codethread publishes the shared harness tools and seat aliases. This
-;; repository keeps reviewer rosters and policy local.
+;; repository keeps reviewer rosters and task/review policy local.
 (runtime/module! runtime :codethread/agents
                  {:ns 'ct.spools.codethread.agents
                   :spools ['codethread/agents 'ct.spools/delegation 'ct.spools/agent-run]
@@ -136,6 +137,15 @@
                  {:file "agents/reviewers.clj"
                   :spools ['ct.spools/delegation]
                   :after [:millstrand/spools-delegation]
+                  :required? true})
+;; The delegation contracts are workspace policy over the shared agent-run and
+;; delegation spools. Keep this resource after their shared Codethread agents
+;; contribution so it binds the exported worker/review contract text in order.
+(runtime/module! runtime :delegation-contracts
+                 {:file "agents/delegation_contracts.clj"
+                  :spools ['ct.spools/agent-run 'ct.spools/delegation]
+                  :after [:codethread/agents :millstrand/spools-shuttle
+                          :millstrand/spools-delegation]
                   :required? true})
 
 ;; --- chime notification engine + this repo's attention rules ----------------
