@@ -58,7 +58,7 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
   ```
 
 - Watch progress with `make dash` (interactive kanban board), `strand --workspace "$workspace" kanban board`, `strand --workspace "$workspace" branches [branch]`, and `strand --workspace "$workspace" workflow ready <run-id>`. For an ASCII board: `printf "(do (require 'ct.spools.kanban) (ct.spools.kanban/print-board!))\n" | mill weaver repl --workspace "$workspace" --stdin`.
-- `strand --workspace "$workspace" agent harnesses` lists the model seats and their roles; the routing policy comments sit beside the alias definitions in `.millstrand/agents/harnesses.clj`.
+- `strand --workspace "$workspace" agent harnesses` lists the model seats and their roles; the routing policy comments sit beside the shared alias definitions in Codethread's agents root.
 
 ## Discovery: help, about, prime
 

@@ -22,10 +22,6 @@
   [script name & args]
   (into ["sh" "-c" script name] args))
 
-(def feature-ci-watch-script
-  "POSIX script for the feature CI shell gate."
-  (script "feature-ci-watch.sh"))
-
 (def land-quality-gate-script
   "POSIX script that validates and runs the target repository's quality contract."
   (script "land-quality-gate.sh"))
