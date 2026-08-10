@@ -506,7 +506,7 @@
 
 (defn socket-request [rt operation arguments]
   (let [m (:metadata rt)]
-    (socket-request-envelope rt {"protocol_version" 2
+    (socket-request-envelope rt {"protocol_version" 3
                                  "request_id" "test-request"
                                  "weaver_id" (:nonce m)
                                  "operation" operation
@@ -531,7 +531,7 @@
   "Build a raw invoke request frame for tests that drive the socket by hand
   (e.g. streaming, which reads more than one response line)."
   [rt name argv]
-  {"protocol_version" 2
+  {"protocol_version" 3
    "request_id" "test-request"
    "weaver_id" (:nonce (:metadata rt))
    "operation" "invoke"
@@ -826,7 +826,7 @@
       (let [bad (socket-request rt "invoke" {"name" "reader" "argv" [1] "payloads" {}})]
         (is (= "protocol/malformed-request" (get-in bad ["error" "code"])))
         (is (empty? @hook-contexts)))
-      (let [wrong-identity (socket-request-envelope rt {"protocol_version" 2
+      (let [wrong-identity (socket-request-envelope rt {"protocol_version" 3
                                                         "request_id" "wrong-identity"
                                                         "weaver_id" "wrong"
                                                         "operation" "invoke"
@@ -943,7 +943,7 @@
   (with-runtime
     (fn [rt _]
       (let [m (:metadata rt)
-            req {"protocol_version" 2 "request_id" "bad-identity" "weaver_id" "wrong"
+            req {"protocol_version" 3 "request_id" "bad-identity" "weaver_id" "wrong"
                  "operation" "status" "arguments" {} "options" {}}]
         (with-open [ch (doto (SocketChannel/open StandardProtocolFamily/UNIX)
                          (.connect (UnixDomainSocketAddress/of (:socket-path m))))
