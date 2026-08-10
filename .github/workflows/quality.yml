@@ -86,7 +86,7 @@ jobs:
         with:
           cli: latest
       # The strand CLI's tests boot a real weaver, which is why this job needs
-      # Java and Clojure; ralph's are pure Go and ride along.
+      # Java and Clojure; the remaining Go tools ride along.
       - run: make test-go
 
   smoke-test:

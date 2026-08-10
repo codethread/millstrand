@@ -14,7 +14,7 @@ fi
 
 operation="$1"
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-modules=(cli tools/ralph tools/kanban-tree)
+modules=(cli tools/kanban-tree)
 
 case "$operation" in
   format)

@@ -4,11 +4,12 @@ These scripts support development and coordination in this repository. Run them 
 
 ## Ralph epic loop
 
-`ralph` drives a kanban epic by handing it to a fresh headless agent run over and over until the epic closes. It is a Go program under `tools/ralph`, built into `./bin/ralph` by `make build` (or `make ralph` on its own). It is repo-local development tooling in its own Go module, so it ships with no Millstrand release and belongs to no spool.
+`ralph` drives a kanban epic by handing it to a fresh headless agent run over and over until the epic closes. It is a shared Codethread bin, so build and run it through the active Millstrand weaver:
 
 ```sh
-./bin/ralph <epic-id>
-./bin/ralph --harness codex <epic-id>
+mill bin build ralph
+mill bin run ralph <epic-id>
+mill bin run ralph --harness codex <epic-id>
 ```
 
 The binary generates the prompt and directs each run through the registered `ralph-iterate` workflow. Put steering, decisions, and extra context on the epic or feature card as notes so the next iteration can resume from the strands.
@@ -26,15 +27,15 @@ The loop stops on its own when the epic becomes inactive (`closed` or `replaced`
 
 Before prompting a model, ralph requires an active target that is a kanban epic carrying the `ralph` label. It rechecks the label before every model run and stops without prompting if it has gone, so removing the label is how you stop a loop from outside. Add it with `strand kanban label add <epic-id> ralph`.
 
-Append `--` and any extra harness arguments after the epic id to pass them to `claude` or `codex exec`.
+Append `--` and any extra harness arguments after the epic id to pass them to `claude` or `codex exec`. Arguments before the epic id select Ralph options.
 
 ### Flags and environment
 
-`--harness` picks `claude` (the default) or `codex`. `--model` and `--effort` take the harness's own vocabulary; empty means the harness default, which is `fable` at high effort for Claude and `luna-high` for Codex. Codex also accepts the aliases `luna-high`, `luna-low` and `sol-low`, which select `gpt-5.6-luna` or `gpt-5.6-sol` at the matching reasoning effort; any other name is passed through as a Codex model id.
+`--harness` picks `claude` (the default) or `codex`. `--model` and `--effort` take the harness's own vocabulary; empty means the harness default, which is `fable` at high effort for Claude and `luna-high` for Codex. Codex also accepts the aliases `luna-high`, `luna-low` and `sol-low`, which select `gpt-5.6-luna` or `gpt-5.6-sol` at the matching reasoning effort; any other name is passed through as a Codex model id. Pass Ralph arguments after the bin name to `mill bin run`.
 
 Both harnesses bypass their permission prompts by default because a headless run cannot answer one; `--skip-permissions=false` keeps them. `--max-iterations` caps the run (0 means unlimited, default 30), `--failure-limit` says how many consecutive failed runs end it (default 3), `--log-dir` sets the transcript directory (default `$TMPDIR/ralph/<epic>-<timestamp>`), and `--workspace` selects a non-default strand world. `--full-auth` appends an operator authority grant to the generated prompt: the agent may rebuild and restart mill/weaver CLIs and bump sibling spools as needed (verifying key steps with the `:oracle` seat), with breaking changes permitted pre-v1 but never a v1 tag on millstrand-src itself.
 
-Two flags take Go durations: `--poll` is the board refresh interval (default `10s`) and `--pause` is the breather between iterations (default `3s`), which keeps a crash-looping harness from hot-looping. `--strand` overrides which strand binary ralph reads the board through; by default it takes the one sitting beside itself in `./bin`, falling back to `PATH`.
+Two flags take Go durations: `--poll` is the board refresh interval (default `10s`) and `--pause` is the breather between iterations (default `3s`), which keeps a crash-looping harness from hot-looping. `--strand` overrides which strand binary ralph reads the board through; by default it uses the active `strand` on `PATH`.
 
 `RALPH_HARNESS`, `RALPH_MODEL`, `RALPH_EFFORT`, `RALPH_MAX_ITERATIONS`, `RALPH_SKIP_PERMISSIONS`, `RALPH_LOG_DIR` and `MILLSTRAND_WORKSPACE` supply defaults for the matching flags. An unparseable value is an error rather than a silent fallback.
 

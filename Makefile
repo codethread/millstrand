@@ -1,9 +1,9 @@
-.PHONY: help build ralph kanban-tree install dash api-docs test-go docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
+.PHONY: help build kanban-tree install dash api-docs test-go docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
 
 help:
 	@printf '%s\n' \
 		'Millstrand development commands:' \
-		'  make build              Build repo-local strand, mill, ralph, and kanban-tree binaries' \
+		'  make build              Build repo-local strand, mill, and kanban-tree binaries' \
 		'  make test-go            Run Go tests in every Go module' \
 		'  make fmt-check          Check Clojure and Go formatting' \
 		'  make lint               Run Clojure, convention, and Go linters' \
@@ -19,9 +19,6 @@ help:
 
 GO_CLI := ./cli/cmd/strand
 MILL_CLI := ./cli/cmd/mill
-# ralph is repo-local development tooling in its own module: it ships with no
-# Millstrand release, so it stays out of the published millstrand-strand-cli module.
-RALPH_CLI := ./tools/ralph
 # kanban-tree is repo-local development tooling too, on the same terms.
 KANBAN_TREE_CLI := ./tools/kanban-tree
 # BuildID falls back to the compiled-in "dev" when git is unavailable; it is
@@ -33,19 +30,12 @@ QUICKDOC_SCRIPT := scripts/generate_api_docs.clj
 
 # repo-local build for agents/worktrees validating CLI changes without touching
 # the user's global install; run the resulting ./bin/strand and ./bin/mill directly
-build: ralph kanban-tree
+build: kanban-tree
 	mkdir -p ./bin
 	go build -ldflags "$(SOURCE_LDFLAGS)" -o ./bin/strand $(GO_CLI)
 	go build -ldflags "$(SOURCE_LDFLAGS)" -o ./bin/mill $(MILL_CLI)
 
-# ralph finds the strand binary sitting beside it, so it belongs in ./bin with
-# the rest of the repo-local toolchain.
-ralph:
-	mkdir -p ./bin
-	go build -o ./bin/ralph $(RALPH_CLI)
-
-# kanban-tree reads the board through the strand binary beside it, on the same
-# terms as ralph.
+# kanban-tree reads the board through the strand binary beside it.
 kanban-tree:
 	mkdir -p ./bin
 	go build -o ./bin/kanban-tree $(KANBAN_TREE_CLI)

@@ -12,7 +12,7 @@ Millstrand is a runtime for programming the constraints and loops around coding 
 | `src/millstrand/` | Core runtime (`api`, `core`, `repl`) |
 | `spools/` | Shipped spools (batteries, workflow, …) |
 | `cli/` | Go CLIs (`strand`, `mill`) |
-| `tools/` | Repo tools (`ralph`, `kanban-tree`) |
+| `tools/` | Repo tools (`kanban-tree`) |
 | `.millstrand/` | This repo's coordination workspace (board, workflows, harnesses) |
 
 ## Working here
