@@ -26,7 +26,7 @@ func TestRelayErrorRendersPrettyWithTheTypedFields(t *testing.T) {
 	t.Setenv("MILLSTRAND_ERROR_FORMAT", "pretty")
 	t.Setenv("NO_COLOR", "1")
 	t.Setenv("COLUMNS", "80")
-	frame := `{"protocol_version":2,"request_id":"r1","ok":false,"result":null,"error":{"type":"domain","code":"domain/error","message":"Unknown subcommand \"list\"","details":{"available":["add","board"],"op":"kanban","token":"list"}}}` + "\n"
+	frame := `{"protocol_version":3,"request_id":"r1","ok":false,"result":null,"error":{"type":"domain","code":"domain/error","message":"Unknown subcommand \"list\"","details":{"available":["add","board"],"op":"kanban","token":"list"}}}` + "\n"
 	var out, er bytes.Buffer
 	if _, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, []string{"kanban", "list"}); err == nil {
 		t.Fatal("expected the typed response error")
@@ -50,7 +50,7 @@ func TestRelayErrorRendersPrettyWithTheTypedFields(t *testing.T) {
 // reaches a CLI-over-CLI consumer as structure rather than as prose.
 func TestRelayErrorRendersJSONWhenAsked(t *testing.T) {
 	t.Setenv("MILLSTRAND_ERROR_FORMAT", "json")
-	frame := `{"protocol_version":2,"request_id":"r1","ok":false,"result":null,"error":{"type":"domain","code":"domain/error","message":"Unknown subcommand \"list\"","details":{"available":["add","board"],"op":"kanban","token":"list"}}}` + "\n"
+	frame := `{"protocol_version":3,"request_id":"r1","ok":false,"result":null,"error":{"type":"domain","code":"domain/error","message":"Unknown subcommand \"list\"","details":{"available":["add","board"],"op":"kanban","token":"list"}}}` + "\n"
 	var out, er bytes.Buffer
 	if _, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, []string{"kanban", "list"}); err == nil {
 		t.Fatal("expected the typed response error")
@@ -115,7 +115,7 @@ func TestRelayLeavesAFrameWithoutAnEnvelopeToItsCaller(t *testing.T) {
 		{name: "details of the wrong shape", error: `{"type":"domain","code":"c","message":"m","details":null}`, quote: `"details":null`},
 	}
 	for _, c := range cases {
-		frame := `{"protocol_version":2,"request_id":"r1","ok":false,"result":null,"error":` + c.error + "}\n"
+		frame := `{"protocol_version":3,"request_id":"r1","ok":false,"result":null,"error":` + c.error + "}\n"
 		var out, er bytes.Buffer
 		code, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, nil)
 		if code == 0 || err == nil {
@@ -164,7 +164,7 @@ func TestInvokeThroughMillMarksItsOwnFailuresTransport(t *testing.T) {
 // half-envelope on as if the weaver had declared it. The frame is not lost: it
 // rides in the message the caller renders.
 func TestRelayRejectsAnEmptyMessageEnvelope(t *testing.T) {
-	frame := `{"protocol_version":2,"request_id":"r1","ok":false,"result":null,"error":{"type":"transport","code":"transport/server-error","message":"","details":{}}}` + "\n"
+	frame := `{"protocol_version":3,"request_id":"r1","ok":false,"result":null,"error":{"type":"transport","code":"transport/server-error","message":"","details":{}}}` + "\n"
 	var out, er bytes.Buffer
 	_, err := RelayResponse(bufio.NewReader(strings.NewReader(frame)), &out, &er, nil)
 	var transportErr *TransportError

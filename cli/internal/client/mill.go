@@ -15,7 +15,7 @@ import (
 	"millstrand-strand-cli/internal/errfmt"
 )
 
-const MillProtocolVersion = 2
+const MillProtocolVersion = 3
 
 const defaultWeaverReadyTimeout = 5 * time.Minute
 
