@@ -1,3 +1,4 @@
 # Historical implementation records. Search explicitly with
 # `rg --no-ignore devflow/archive` when needed.
 archive/
+.mkdocs
