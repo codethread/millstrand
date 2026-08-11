@@ -17,7 +17,8 @@
                       ;; (match?) and spec-driven property tests (defspec). Kept
                       ;; off the main src/weaver classpath.
                       nubank/matcher-combinators {:mvn/version "3.9.1"}
-                      org.clojure/test.check {:mvn/version "1.1.1"}}
+                      org.clojure/test.check {:mvn/version "1.1.1"}
+                      clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
          :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
          :main-opts ["-m" "millstrand.test-runner"]}
   ;; Per-worktree warm test REPL: compose with :test to inherit its classpath and

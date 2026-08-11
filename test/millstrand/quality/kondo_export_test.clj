@@ -1,8 +1,11 @@
 (ns millstrand.quality.kondo-export-test
   "Proof that a local tools.deps consumer imports and uses Millstrand's Kondo export."
-  (:require [clojure.java.io :as io]
+  (:require [clj-kondo.hooks-api :as api]
+            [clj-kondo.impl.rewrite-clj.node.protocols :as node]
+            [clj-kondo.impl.rewrite-clj.node.uneval :as uneval]
+            [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is]]))
+            [clojure.test :refer [deftest is testing]]))
 
 (def ^:private clj-kondo-version "2025.06.05")
 
@@ -151,3 +154,43 @@
         (is (.isFile imported-config)))
       (finally
         (delete-tree! root)))))
+
+(defn- defop-node
+  "Return a hook node with `name-node` in the `defop` name position."
+  [name-node]
+  (api/list-node
+   [(api/token-node 'millstrand/defop)
+    name-node
+    (api/string-node "A test operation.")
+    (api/map-node {})
+    (api/vector-node [])]))
+
+(defn- run-exported-defop-hook
+  "Load the exported hook and invoke its public `defop` analyzer."
+  [context]
+  (let [hook-ns (or (find-ns 'hooks.millstrand)
+                    (do
+                      (load-file "resources/clj-kondo.exports/io.millstrand/millstrand/hooks/millstrand.clj")
+                      (find-ns 'hooks.millstrand)))]
+    ((ns-resolve hook-ns 'defop) context)))
+
+(deftest unreadable-defop-name-does-not-synthesize-var
+  (let [node (defop-node (uneval/uneval-node (api/token-node 'ignored)))
+        {:keys [node]} (run-exported-defop-hook {:node node})]
+    (is (= '() (api/sexpr node)))))
+
+(deftest unexpected-hook-sexpr-errors-include-context
+  (let [name-node (reify node/Node
+                    (tag [_] :token)
+                    (printable-only? [_] false)
+                    (sexpr [_] (throw (ex-info "synthetic parser failure" {})))
+                    (length [_] 1)
+                    (string [_] "broken"))]
+    (testing "the API failure remains visible to the caller"
+      (try
+        (run-exported-defop-hook {:node (defop-node name-node)})
+        (is false "expected the hook to fail")
+        (catch clojure.lang.ExceptionInfo error
+          (is (= "Unable to read a clj-kondo hook node" (ex-message error)))
+          (is (contains? (ex-data error) :node))
+          (is (= "synthetic parser failure" (ex-message (.getCause error)))))))))

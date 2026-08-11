@@ -672,6 +672,12 @@ Millstrand publishes the authoring analysis that a shared spool needs at `io.mil
 
 Add Millstrand and clj-kondo to the consumer's tools.deps configuration, then import dependency configs once and lint the consumer source:
 
+```clojure
+{:aliases
+ {:lint {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
+         :main-opts ["-m" "clj-kondo.main"]}}}
+```
+
 ```sh
 mkdir -p .clj-kondo
 clojure -M:lint --lint "$(clojure -Spath)" --dependencies --parallel --copy-configs --skip-lint
