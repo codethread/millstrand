@@ -45,6 +45,14 @@
 (runtime/module! runtime :millhouse/spools-workflow
                  {:ns 'millhouse.spools.workflow
                   :spools ['millhouse.spools/workflow]})
+;; Millhouse's workspace workflow extensions are a separate root over the
+;; engine, and must collect after the engine's module has published its base.
+(runtime/module! runtime :millhouse/spools-millstrand-workflows
+                 {:ns 'millhouse.spools.millstrand-workflows
+                  :spools ['millhouse.spools/millstrand-workflows
+                           'millhouse.spools/workflow]
+                  :after [:millhouse/spools-workflow]
+                  :required? true})
 ;; The generic worker CLI is a separate, opt-in module of the same spool: the
 ;; engine ships no verbs, and this declaration is what puts the root `workflow`
 ;; op (list/show/start/ready/complete/choose/defer/await) on the surface for
