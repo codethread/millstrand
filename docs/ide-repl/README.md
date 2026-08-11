@@ -6,7 +6,13 @@ This guide covers VS Code with [Calva](https://calva.io/), a popular Clojure ext
 
 ## Prerequisites
 
-1. Install the Millstrand CLIs from the Millstrand checkout:
+1. Install the Millstrand CLIs. On macOS with Homebrew:
+
+   ```sh
+   brew install codethread/millstrand/millstrand
+   ```
+
+   Or, from a Millstrand checkout with Go, the Clojure CLI, and a JVM installed:
 
    ```sh
    make install

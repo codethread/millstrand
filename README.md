@@ -93,11 +93,22 @@ A low-risk way in: one repo, one maintainer, the plain CLI. Follow the setup and
 
 ## Quick start
 
-Millstrand installs from a cloned checkout of this repository.
+Install with Homebrew on macOS:
+
+```sh
+brew install codethread/millstrand/millstrand
+```
+
+Homebrew installs Clojure and its JVM dependency. To install from a cloned checkout instead, install Go, Clojure, and a JVM first, then run:
 
 ```sh
 make install   # builds and installs the `strand` and `mill` CLIs from this checkout
-mill start     # start the supervisor once, in a terminal you can leave open
+```
+
+Start the supervisor once, in a terminal you can leave open:
+
+```sh
+mill start
 ```
 
 Go to a Git repo you want to track work in, create its Millstrand workspace, and start the weaver for it:
