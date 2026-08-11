@@ -1,0 +1,37 @@
+(ns hooks.millhouse.spools.chime
+  "clj-kondo hook for Chime's defrule declaration shape."
+  (:require [clj-kondo.hooks-api :as api]))
+
+(defn- identity-node [node]
+  (api/list-node
+   (list (api/token-node 'identity) node)))
+
+(defn defrule
+  "Analyze `chime/defrule` as its generated `<name>-rule` handler.
+
+  The macro accepts either `(defrule name doc argv & body)` or
+  `(defrule name doc options argv & body)`. Keep the macro symbol and options
+  in the replacement form so clj-kondo still analyzes those source forms, and
+  put the authored body under the generated handler so locals and body calls
+  are analyzed in the right scope."
+  [{:keys [node]}]
+  (let [[form-node name-node docstring-node & args] (:children node)
+        [opts-node argv-node body]
+        (if (vector? (api/sexpr (first args)))
+          [nil (first args) (next args)]
+          [(first args) (second args) (nnext args)])
+        handler-node (with-meta
+                       (api/token-node
+                        (symbol (str (api/sexpr name-node) "-rule")))
+                       (meta name-node))
+        defn-node (api/list-node
+                   (list* (api/token-node 'defn)
+                          handler-node docstring-node argv-node body))
+        used (api/list-node
+              (concat [(api/token-node 'do)
+                       (identity-node form-node)]
+                      (if opts-node
+                        [(identity-node opts-node)]
+                        [])
+                      [defn-node]))]
+    {:node (with-meta used (meta node))}))

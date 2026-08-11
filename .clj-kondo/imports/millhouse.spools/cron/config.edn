@@ -1,0 +1,2 @@
+{:lint-as
+ {millhouse.spools.cron/defjob clojure.core/def}}

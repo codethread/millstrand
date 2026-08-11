@@ -1,0 +1,6 @@
+{:lint-as
+ {millhouse.spools.chime/defrule clojure.core/defn}
+ :hooks
+ {:analyze-call
+  {millhouse.spools.chime/defrule
+   hooks.millhouse.spools.chime/defrule}}}

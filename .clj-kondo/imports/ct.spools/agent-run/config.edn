@@ -1,0 +1,3 @@
+{:lint-as
+ {ct.spools.agent-run/defharnesses clojure.core/def
+  ct.spools.agent-run/defaliases clojure.core/def}}
