@@ -6,6 +6,13 @@
 
 (def ^:private clj-kondo-version "2025.06.05")
 
+(def ^:private config-import-command
+  ["sh" "-c"
+   "clojure -M:lint --lint \"$(clojure -Spath)\" --dependencies --parallel --copy-configs --skip-lint"])
+
+(def ^:private source-lint-command
+  ["clojure" "-M:lint" "--lint" "src" "--cache" "false"])
+
 (defn- repository-root
   "Return this checkout's root from the test source location."
   []
@@ -96,28 +103,32 @@
                   (.redirectErrorStream true))
         started (.start process)
         output (slurp (.getInputStream started))]
-    {:exit (.waitFor started)
+    {:command command
+     :exit (.waitFor started)
      :output output}))
 
 (defn- run-config-import!
   "Copy dependency configs from the consumer's complete tools.deps classpath."
   [^java.io.File root]
-  (run-consumer-command!
-   root
-   ["sh" "-c"
-    "clojure -M:lint --lint \"$(clojure -Spath)\" --copy-configs --skip-lint"]))
+  (run-consumer-command! root config-import-command))
 
 (defn- run-source-lint!
   "Lint consumer source after its imported dependency configs are available."
   [^java.io.File root]
-  (run-consumer-command! root ["clojure" "-M:lint" "--lint" "src" "--cache" "false"]))
+  (run-consumer-command! root source-lint-command))
 
 (defn- run-consumer-kondo!
   "Import configs once, then lint the consumer source with the export."
   [^java.io.File root]
-  (let [{import-exit :exit import-output :output} (run-config-import! root)
-        {lint-exit :exit lint-output :output} (run-source-lint! root)]
-    {:exit (if (zero? import-exit) lint-exit import-exit)
+  (let [{import-command :command import-exit :exit import-output :output} (run-config-import! root)
+        {lint-command :command lint-exit :exit lint-output :output} (run-source-lint! root)]
+    {:import-command import-command
+     :import-exit import-exit
+     :import-output import-output
+     :lint-command lint-command
+     :lint-exit lint-exit
+     :lint-output lint-output
+     :exit (if (zero? import-exit) lint-exit import-exit)
      :output (str import-output lint-output)}))
 
 (deftest consumer-imports-and-lints-all-millstrand-forms
@@ -128,10 +139,15 @@
       (write-consumer-file! root "deps.edn" (pr-str (consumer-deps (repository-root))))
       (write-consumer-file! root "src/example/consumer.clj" consumer-source)
       (.mkdirs (io/file root ".clj-kondo"))
-      (let [{:keys [exit output]} (run-consumer-kondo! root)
+      (let [{:keys [exit output import-command import-exit import-output
+                    lint-command lint-exit lint-output]} (run-consumer-kondo! root)
             imported-config (io/file root ".clj-kondo/imports/io.millstrand/millstrand/config.edn")]
         (is (zero? exit) output)
-        (is (str/includes? output "io.millstrand/millstrand") output)
+        (is (= config-import-command import-command))
+        (is (= source-lint-command lint-command))
+        (is (zero? import-exit) import-output)
+        (is (zero? lint-exit) lint-output)
+        (is (str/includes? import-output "io.millstrand/millstrand") import-output)
         (is (.isFile imported-config)))
       (finally
         (delete-tree! root)))))

@@ -674,7 +674,7 @@ Add Millstrand and clj-kondo to the consumer's tools.deps configuration, then im
 
 ```sh
 mkdir -p .clj-kondo
-clojure -M:lint --lint "$(clojure -Spath)" --copy-configs --skip-lint
+clojure -M:lint --lint "$(clojure -Spath)" --dependencies --parallel --copy-configs --skip-lint
 clojure -M:lint --lint src
 ```
 
