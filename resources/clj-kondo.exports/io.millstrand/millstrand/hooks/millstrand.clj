@@ -6,12 +6,10 @@
   (try
     (api/sexpr node)
     (catch Exception error
-      (if (= "java.lang.UnsupportedOperationException"
-             (.getName (class error)))
-        ::unreadable
-        (throw (ex-info "Unable to read a clj-kondo hook node"
-                        {:node (select-keys (meta node) [:filename :row :col :end-row :end-col])}
-                        error))))))
+      (throw (ex-info "Unable to read a clj-kondo hook node"
+                      {:node (select-keys (meta node) [:filename :row :col :end-row :end-col])
+                       :offending-node node}
+                      error)))))
 
 (defn- defn-hook
   "Analyze a function-shaped authoring form as a `defn`."
@@ -29,30 +27,28 @@
                     defn-node))]
     {:node (with-meta used (meta node))}))
 
-(defn- defop-hook
-  "Analyze `defop` as a definition of its `<name>-op` handler Var."
+(defn defop
+  "Analyze a Millstrand `defop` call."
   [{:keys [node]}]
   (let [[form-node name-node docstring-node opts-node argv-node & body] (:children node)
-        name (sexpr name-node)]
-    (if (= ::unreadable name)
-      {:node (api/list-node [])}
-      (let [handler-node (with-meta
-                           (api/token-node (symbol (str name "-op")))
-                           (meta name-node))
-            defn-node (api/list-node
-                       (list* (api/token-node 'defn)
-                              handler-node docstring-node argv-node body))
-            used (api/list-node
-                  (list (api/token-node 'do)
-                        (api/list-node
-                         (list (api/token-node 'identity) form-node))
-                        (api/list-node
-                         (list (api/token-node 'identity) opts-node))
-                        defn-node))]
-        {:node (with-meta used (meta node))}))))
+        name (sexpr name-node)
+        handler-node (with-meta
+                       (api/token-node (symbol (str name "-op")))
+                       (meta name-node))
+        defn-node (api/list-node
+                   (list* (api/token-node 'defn)
+                          handler-node docstring-node argv-node body))
+        used (api/list-node
+              (list (api/token-node 'do)
+                    (api/list-node
+                     (list (api/token-node 'identity) form-node))
+                    (api/list-node
+                     (list (api/token-node 'identity) opts-node))
+                    defn-node))]
+    {:node (with-meta used (meta node))}))
 
-(defn- defquery-hook
-  "Analyze `defquery` as a definition of its query Var."
+(defn defquery
+  "Analyze a Millstrand `defquery` call."
   [{:keys [node]}]
   (let [[form-node name-node docstring-node opts-node query-node] (:children node)
         used (api/list-node
@@ -66,16 +62,6 @@
                   (list (api/token-node 'def)
                         name-node docstring-node used))]
     {:node (with-meta def-node (meta node))}))
-
-(defn defop
-  "Analyze a Millstrand `defop` call."
-  [context]
-  (defop-hook context))
-
-(defn defquery
-  "Analyze a Millstrand `defquery` call."
-  [context]
-  (defquery-hook context))
 
 (defn defpattern
   "Analyze a Millstrand `defpattern` call."
