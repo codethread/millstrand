@@ -318,7 +318,7 @@ rows carry `kind`, `name`, `owner`, `doc`, and an advisory `keys` list. Edge row
 ```
 strand spool about
 strand spool add <git-url> [--tag vN] [--lib family]
-strand spool bump <family> [--to vN]
+strand spool bump <family> --latest tag|sha
 strand spool status
 ```
 
@@ -339,13 +339,15 @@ one root at `.`. Its symbol defaults to the Git URL basename, while `--lib` conf
 that implicit symbol. The completed entry goes through the validated, comment-preserving atomic
 `spools.edn` write path.
 
-Bump lists the same annotated, peeled releases and updates `:git/tag` and `:git/sha` together. An
-explicit `--to vN` chooses the target. Without `--to`, a failing declared floor chooses its computed
-suggestion for that family; when current requirements pass, bump chooses the highest release. The
-result always includes `compare-url`. GitHub HTTPS, SSH, and SCP remotes become an HTTPS web URL
-before the compare path is added. Other HTTP(S) remotes keep their transport URL without a trailing
-`.git`. An unrecognized non-HTTP(S) remote produces a nil `compare-url`, because batteries cannot
-infer a usable web URL. The hint does not claim that the compared releases are compatible.
+Bump requires `--latest tag` or `--latest sha`. `tag` lists annotated, peeled releases and selects the
+highest valid `vN`, then updates `:git/tag` and `:git/sha` together. `sha` resolves the remote default
+branch `HEAD`, fetches that exact 40-character lowercase commit from the declared Git URL, writes
+`:git/sha`, and removes any stale `:git/tag`. The result includes the post-write requirements report
+and `compare-url`; a direct SHA coordinate has a nil tag. GitHub HTTPS, SSH, and SCP remotes become
+an HTTPS web URL before the compare path is added. Other HTTP(S) remotes keep their transport URL
+without a trailing `.git`. An unrecognized non-HTTP(S) remote produces a nil `compare-url`, because
+batteries cannot infer a usable web URL. The hint does not claim that the compared commits are
+compatible.
 
 `spool status` performs no Git call, file write, refresh, or adoption action. It joins the declared family projection with local-overlay provenance and claims, root outcomes, module declarations, pending generation, requirement outcome, and release marker. The result reports current truth; it does not try to repair or adopt anything.
 

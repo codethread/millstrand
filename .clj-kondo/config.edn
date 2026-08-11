@@ -1,11 +1,7 @@
 {:config-paths ["../resources/clj-kondo.exports/io.millstrand/millstrand"]
  ;; Keep repository policy and third-party compatibility rules here; the
  ;; public Millstrand authoring analysis comes from the classpath export above.
- :lint-as {clojure.test.check.clojure-test/defspec clojure.test/deftest
-           ;; defworkflow defines a Var from (name doc opts definition); def's
-           ;; shape resolves the name without kondo expanding the macro.
-           millstrand.spools.workflow/defworkflow clojure.core/def
-           millhouse.spools.workflow/defworkflow clojure.core/def}
+ :lint-as {clojure.test.check.clojure-test/defspec clojure.test/deftest}
  :hooks {:analyze-call {clojure.core/ns hooks.project-rules/ns-docstring
                         ns hooks.project-rules/ns-docstring
                         clojure.core/def hooks.project-rules/no-spool-module-atom
@@ -17,10 +13,7 @@
                         clojure.core/fn hooks.project-rules/no-fn-keys-destructure
                         fn hooks.project-rules/no-fn-keys-destructure
                         clojure.core/defn hooks.project-rules/no-fn-keys-destructure
-                        defn hooks.project-rules/no-fn-keys-destructure
-                        millstrand.spools.workflow/defexecutor hooks.project-rules/defexecutor
-                        millhouse.spools.workflow/defexecutor hooks.project-rules/defexecutor
-                        millstrand.macros.rules/defrule hooks.project-rules/defrule}}
+                        defn hooks.project-rules/no-fn-keys-destructure}}
  :linters {:project/ns-docstring {:level :error}
            :project/no-spool-module-atom {:level :error}
            :project/no-fn-keys-destructure {:level :error}

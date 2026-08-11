@@ -1,0 +1,42 @@
+(ns hooks.millhouse.spools.workflow
+  "clj-kondo hooks for the Workflow spool's declaration macros."
+  (:require [clj-kondo.hooks-api :as api]))
+
+(defn defworkflow
+  "Analyze `workflow/defworkflow` as a definition while retaining its body."
+  [{:keys [node]}]
+  (let [[form name doc opts definition] (:children node)
+        used (api/list-node
+              (list (api/token-node 'do)
+                    (api/list-node
+                     (list (api/token-node 'identity) form))
+                    (api/list-node
+                     (list (api/token-node 'identity) opts))
+                    definition))
+        def-node (api/list-node
+                  (list (api/token-node 'def) name doc used))]
+    {:node (with-meta def-node (meta node))}))
+
+(defn defexecutor
+  "Analyze `workflow/defexecutor` as a defn of its stalled? handler.
+
+  Keep the options expression in the analyzed tree so symbols in explicit
+  options remain checked, while presenting the generated handler as an
+  ordinary function to clj-kondo."
+  [{:keys [node]}]
+  (let [[form name doc opts argv & body] (:children node)
+        handler-node (with-meta
+                       (api/token-node
+                        (symbol (str (api/sexpr name) "-stalled?")))
+                       (meta name))
+        defn-node (api/list-node
+                   (list* (api/token-node 'defn)
+                          handler-node doc argv body))
+        used (api/list-node
+              (list (api/token-node 'do)
+                    (api/list-node
+                     (list (api/token-node 'identity) form))
+                    (api/list-node
+                     (list (api/token-node 'identity) opts))
+                    defn-node))]
+    {:node (with-meta used (meta node))}))
