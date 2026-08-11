@@ -226,19 +226,99 @@
     (api/map-node {})
     (api/vector-node [])]))
 
-(defn- run-exported-defop-hook
-  "Load the exported hook and invoke its public `defop` analyzer."
-  [context]
+(defn- run-exported-hook
+  "Load the exported hook and invoke its public analyzer named by `hook`."
+  [hook context]
   (let [hook-ns (or (find-ns 'hooks.millstrand)
                     (do
                       (load-file "resources/clj-kondo.exports/io.millstrand/millstrand/hooks/millstrand.clj")
                       (find-ns 'hooks.millstrand)))]
-    ((ns-resolve hook-ns 'defop) context)))
+    ((ns-resolve hook-ns hook) context)))
 
-(deftest unreadable-defop-name-does-not-synthesize-var
-  (let [node (defop-node (uneval/uneval-node (api/token-node 'ignored)))
-        {:keys [node]} (run-exported-defop-hook {:node node})]
-    (is (= '() (api/sexpr node)))))
+(deftest unreadable-defop-name-fails-loudly
+  (let [name-node (uneval/uneval-node (api/token-node 'ignored))
+        node (defop-node name-node)]
+    (try
+      (run-exported-hook 'defop {:node node})
+      (is false "expected the hook to fail")
+      (catch clojure.lang.ExceptionInfo error
+        (is (= "Unable to read a clj-kondo hook node" (ex-message error)))
+        (is (= (select-keys (meta name-node) [:filename :row :col :end-row :end-col])
+               (:node (ex-data error))))
+        (is (= name-node (:offending-node (ex-data error))))
+        (is (instance? UnsupportedOperationException (.getCause error)))))))
+
+(deftest readable-defop-names-must-be-symbols
+  (doseq [name-node [(api/string-node "echo") (api/keyword-node :echo)]]
+    (let [node (defop-node name-node)]
+      (try
+        (run-exported-hook 'defop {:node node})
+        (is false "expected the hook to fail")
+        (catch clojure.lang.ExceptionInfo error
+          (is (= "defop hook name must be a symbol" (ex-message error)))
+          (is (= (api/sexpr name-node) (:offending-value (ex-data error))))
+          (is (= name-node (:offending-node (ex-data error))))
+          (is (= (select-keys (meta name-node) [:filename :row :col :end-row :end-col])
+                 (:node (ex-data error)))))))))
+
+(defn- defquery-node
+  "Return a hook node with `name-node` in the `defquery` name position."
+  [name-node]
+  (api/list-node
+   [(api/token-node 'millstrand/defquery)
+    name-node
+    (api/string-node "A test query.")
+    (api/map-node {})
+    (api/vector-node [:= :state "active"])]))
+
+(deftest public-hook-mappings-are-readable
+  (let [defop-result (run-exported-hook
+                      'defop
+                      {:node (defop-node (api/token-node 'echo))})
+        defquery-result (run-exported-hook
+                         'defquery
+                         {:node (defquery-node (api/token-node 'active))})]
+    (is (= '(do
+              (identity millstrand/defop)
+              (identity {})
+              (defn echo-op "A test operation." []))
+           (api/sexpr (:node defop-result))))
+    (is (= '(def active "A test query."
+              (do
+                (identity millstrand/defquery)
+                (identity {})
+                [:= :state "active"]))
+           (api/sexpr (:node defquery-result))))))
+
+(deftest malformed-public-hook-contexts-fail-loudly
+  (doseq [[hook context expected-message]
+          [['defop nil "defop hook context must be a map"]
+           ['defquery {} "defquery hook context must contain a list node"]
+           ['defop {:node (api/list-node [])}
+            "defop hook context node must contain at least 5 children"]
+           ['defquery {:node (api/list-node [(api/token-node 'millstrand/defquery)])}
+            "defquery hook context node must contain exactly 5 children"]
+           ['defquery {:node (assoc (api/list-node
+                                     [(api/token-node 'millstrand/defquery)
+                                      (api/token-node 'active)
+                                      (api/string-node "A test query.")
+                                      (api/map-node {})
+                                      (api/vector-node [])])
+                                    :children
+                                    [(api/token-node 'millstrand/defquery)
+                                     nil
+                                     (api/string-node "A test query.")
+                                     (api/map-node {})
+                                     (api/vector-node [])])}
+            "defquery hook context node contains a non-node child"]]]
+    (try
+      (run-exported-hook hook context)
+      (is false "expected the hook to fail")
+      (catch clojure.lang.ExceptionInfo error
+        (is (= expected-message (ex-message error)))
+        (is (contains? (ex-data error) :offending-value))
+        (is (contains? (ex-data error) :offending-node))
+        (is (contains? (ex-data error) :node))))))
 
 (deftest unexpected-hook-sexpr-errors-include-context
   (let [name-node (api/token-node 'broken)
@@ -246,7 +326,7 @@
     (testing "the API failure remains visible to the caller"
       (try
         (with-redefs [api/sexpr (fn [_] (throw sexpr-error))]
-          (run-exported-defop-hook {:node (defop-node name-node)}))
+          (run-exported-hook 'defop {:node (defop-node name-node)}))
         (is false "expected the hook to fail")
         (catch clojure.lang.ExceptionInfo error
           (is (= "Unable to read a clj-kondo hook node" (ex-message error)))
