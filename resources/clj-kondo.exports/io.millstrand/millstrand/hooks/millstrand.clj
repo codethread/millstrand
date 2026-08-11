@@ -3,19 +3,22 @@
   (:require [clj-kondo.hooks-api :as api]))
 
 (defn- sexpr [node]
-  (api/sexpr node))
+  (try
+    (api/sexpr node)
+    (catch Exception _
+      ::unreadable)))
 
 (defn- defn-hook
   "Analyze a function-shaped authoring form as a `defn`."
   [{:keys [node]}]
-  (let [[_ name-node docstring-node opts-node argv-node & body] (:children node)
-        name (sexpr name-node)
-        handler-node (api/token-node name)
+  (let [[form-node name-node docstring-node opts-node argv-node & body] (:children node)
         defn-node (api/list-node
                    (list* (api/token-node 'defn)
-                          handler-node docstring-node argv-node body))
+                          name-node docstring-node argv-node body))
         used (api/list-node
               (list (api/token-node 'do)
+                    (api/list-node
+                     (list (api/token-node 'identity) form-node))
                     (api/list-node
                      (list (api/token-node 'identity) opts-node))
                     defn-node))]
@@ -24,14 +27,18 @@
 (defn- defop-hook
   "Analyze `defop` as a definition of its `<name>-op` handler Var."
   [{:keys [node]}]
-  (let [[_ name-node docstring-node opts-node argv-node & body] (:children node)
+  (let [[form-node name-node docstring-node opts-node argv-node & body] (:children node)
         name (sexpr name-node)
-        handler-node (api/token-node (symbol (str name "-op")))
+        handler-node (with-meta
+                       (api/token-node (symbol (str name "-op")))
+                       (meta name-node))
         defn-node (api/list-node
                    (list* (api/token-node 'defn)
                           handler-node docstring-node argv-node body))
         used (api/list-node
               (list (api/token-node 'do)
+                    (api/list-node
+                     (list (api/token-node 'identity) form-node))
                     (api/list-node
                      (list (api/token-node 'identity) opts-node))
                     defn-node))]
@@ -40,9 +47,11 @@
 (defn- defquery-hook
   "Analyze `defquery` as a definition of its query Var."
   [{:keys [node]}]
-  (let [[_ name-node docstring-node opts-node query-node] (:children node)
+  (let [[form-node name-node docstring-node opts-node query-node] (:children node)
         used (api/list-node
               (list (api/token-node 'do)
+                    (api/list-node
+                     (list (api/token-node 'identity) form-node))
                     (api/list-node
                      (list (api/token-node 'identity) opts-node))
                     query-node))
@@ -79,9 +88,11 @@
 (defn defbin
   "Analyze a Millstrand `defbin` call as a Var definition."
   [{:keys [node]}]
-  (let [[_ name-node docstring-node opts-node] (:children node)
+  (let [[form-node name-node docstring-node opts-node] (:children node)
         value-node (api/list-node
                     (list (api/token-node 'do)
+                          (api/list-node
+                           (list (api/token-node 'identity) form-node))
                           (api/list-node
                            (list (api/token-node 'identity) opts-node))))
         def-node (api/list-node
