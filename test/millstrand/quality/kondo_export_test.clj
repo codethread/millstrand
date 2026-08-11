@@ -1,6 +1,7 @@
 (ns millstrand.quality.kondo-export-test
   "Proof that a local tools.deps consumer imports and uses Millstrand's Kondo export."
-  (:require [clj-kondo.hooks-api :as api]
+  (:require [clojure.edn :as edn]
+            [clj-kondo.hooks-api :as api]
             [clj-kondo.impl.rewrite-clj.node.protocols :as node]
             [clj-kondo.impl.rewrite-clj.node.uneval :as uneval]
             [clojure.java.io :as io]
@@ -8,6 +9,8 @@
             [clojure.test :refer [deftest is testing]]))
 
 (def ^:private clj-kondo-version "2025.06.05")
+(def ^:private millhouse-url "https://github.com/codethread/millhouse.spool.git")
+(def ^:private millhouse-sha "3dcf93cf511c3a4412ee62ede92bd077f4ca6000")
 
 (def ^:private config-import-command
   ["sh" "-c"
@@ -40,6 +43,16 @@
   [^java.io.File root]
   {:paths ["src"]
    :deps {'io.millstrand/millstrand {:local/root (.getPath root)}
+          'clj-kondo/clj-kondo {:mvn/version clj-kondo-version}}
+   :aliases {:lint {:main-opts ["-m" "clj-kondo.main"]}}})
+
+(defn- millhouse-consumer-deps
+  "Return tools.deps data for a consumer of the pinned Workflow root."
+  []
+  {:paths ["src"]
+   :deps {'millhouse.spools/workflow {:git/url millhouse-url
+                                      :git/sha millhouse-sha
+                                      :deps/root "spools/workflow"}
           'clj-kondo/clj-kondo {:mvn/version clj-kondo-version}}
    :aliases {:lint {:main-opts ["-m" "clj-kondo.main"]}}})
 
@@ -152,6 +165,55 @@
         (is (zero? lint-exit) lint-output)
         (is (str/includes? import-output "io.millstrand/millstrand") import-output)
         (is (.isFile imported-config)))
+      (finally
+        (delete-tree! root)))))
+
+(deftest consumer-imports-landed-millhouse-workflow-export
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "millhouse-kondo-consumer"
+                       (make-array java.nio.file.attribute.FileAttribute 0)))
+        repository (repository-root)
+        configured-sha (get-in (edn/read-string
+                                (slurp (io/file repository ".millstrand" "spools.edn")))
+                               [:spools 'millhouse/spools :git/sha])]
+    (try
+      (write-consumer-file! root "deps.edn" (pr-str (millhouse-consumer-deps)))
+      (write-consumer-file!
+       root "src/example/workflow.clj"
+       (str
+        "(ns example.workflow\n"
+        "  \"Consumer source covering the Workflow declaration forms.\"\n"
+        "  (:require [millhouse.spools.workflow :as workflow]))\n\n"
+        "(workflow/defworkflow sample-workflow\n"
+        "  \"A sample workflow.\"\n"
+        "  {:entrypoints #{:start} :defaults {}}\n"
+        "  (workflow/workflow (fn [_] \"done\")\n"
+        "    (workflow/step :done \"Done\" :self)))\n\n"
+        "(workflow/defexecutor sample-executor\n"
+        "  \"A sample executor.\"\n"
+        "  {}\n"
+        "  [_]\n"
+        "  nil)\n\n"
+        "(sample-executor-stalled? nil)\n"))
+      (.mkdirs (io/file root ".clj-kondo"))
+      (let [{:keys [exit output import-exit import-output lint-exit lint-output]}
+            (run-consumer-kondo! root)
+            imported-config (io/file root
+                                     ".clj-kondo/imports/millhouse.spools/workflow/config.edn")
+            imported-hooks (io/file root
+                                    ".clj-kondo/imports/millhouse.spools/workflow/hooks/millhouse/spools/workflow.clj_kondo")
+            checked-in-config (io/file repository
+                                       ".clj-kondo/imports/millhouse.spools/workflow/config.edn")
+            checked-in-hooks (io/file repository
+                                      ".clj-kondo/imports/millhouse.spools/workflow/hooks/millhouse/spools/workflow.clj_kondo")]
+        (is (= millhouse-sha configured-sha))
+        (is (zero? exit) (str output import-output lint-output))
+        (is (zero? import-exit) import-output)
+        (is (zero? lint-exit) lint-output)
+        (is (.isFile imported-config))
+        (is (.isFile imported-hooks))
+        (is (= (slurp checked-in-config) (slurp imported-config)))
+        (is (= (slurp checked-in-hooks) (slurp imported-hooks))))
       (finally
         (delete-tree! root)))))
 
