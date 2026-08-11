@@ -3,14 +3,14 @@
  :pins
  {codethread/devflow
   {:git/url "https://github.com/codethread/devflow.spool.git"
-   :git/sha "528e0ba636e28032985f7f9706c8350e9f785d97"}
+   :git/sha "e1fed4904447f4752ea99dc27ab174c237604094"}
   codethread/kanban
   {:git/url "https://github.com/codethread/kanban.spool.git"
    :git/tag "v24"
    :git/sha "87f61bc2750e7026f3650235907db25f19b1536e"}
   ct.spools/agent-run
   {:git/url "https://github.com/codethread/agent-harness.spool.git"
-   :git/sha "911bc4cb3364ce23516963761820ca0a55d01a39"}}
+   :git/sha "636ae9ecbb57c4fde2c79485c7ef7767aba5753b"}}
  :deferrals
  [{:scope :pinned-external-spool-suite
    :families #{codethread/kanban}
