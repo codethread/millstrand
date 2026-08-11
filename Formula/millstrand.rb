@@ -23,6 +23,6 @@ class Millstrand < Formula
 
   test do
     assert_path_exists libexec/".millstrand/config.json"
-    assert_match "Millstrand", shell_output("#{bin}/mill millstrand prime")
+    assert_match "Millstrand", shell_output("#{bin}/mill prime millstrand")
   end
 end

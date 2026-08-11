@@ -1,6 +1,6 @@
 # Millstrand orientation: building on `.millstrand`
 
-Read this when you are extending a workspace — its `.millstrand` or `.ms` config, a local or shared spool, or the Millstrand source itself. Day-to-day strand tracking does not need it; that discipline is `mill strand prime`.
+Read this when you are extending a workspace — its `.millstrand` or `.ms` config, a local or shared spool, or the Millstrand source itself. Day-to-day strand tracking does not need it; that discipline is `mill prime strand`.
 
 Millstrand is a local strand graph for agents and humans: a durable SQLite-backed graph of work, notes, dependencies, and workflow state behind a small machine-readable command surface. `mill` is the local router and supervisor, the long-lived weaver owns storage and runtime state, and the `strand` CLI is a thin JSON control surface. A workspace's workflow model lives mostly in custom attributes and its own config/spool code — shaping that code is what this orientation is for.
 

@@ -82,7 +82,7 @@
    "strand about <op>                      authored runbook prose: what the op means and who drives it"
    "strand prime <op>                      the run-first discipline for an op family (agent, workflow)"
    "strand <op> about|prime                some spool ops own these as real subcommands (kanban, spool, bench)"
-   "mill millstrand prime | mill strand prime   millstrand orientation; needs no running weaver; prints paths into the millstrand source docs"
+   "mill prime millstrand|strand                offline orientation from the Millstrand source docs"
    "strand workflow list|show <name>       the definition is the truth for a registered workflow: stages, params, gates, choices"
    "strand agent harnesses|rosters         seats and reviewer rosters with their routing docs"
    "strand query list | strand pattern list | strand vocab   named queries, weave patterns, attribute vocabulary"])
@@ -100,7 +100,7 @@
 (def ^:private docs-map
   "Where authored truth lives, found from any repo — no path here is assumed,
   each is printed by a command or discovered in the caller's checkout."
-  ["millstrand source docs      `mill millstrand prime` prints their paths: the user reference (reference.md —"
+  ["millstrand source docs      `mill prime millstrand` prints their paths: the user reference (reference.md —"
    "                       Discovery tiers, Strand model, Queries), the spool index, and the config and"
    "                       customisation guides; grep there before calling anything undocumented"
    "the caller's repo      your working directory; its AGENTS.md / CLAUDE.md carry a seeded"

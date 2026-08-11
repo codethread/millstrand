@@ -40,6 +40,27 @@ func writeSourceFixture(t *testing.T, manifest string, topics map[string]string)
 	return src
 }
 
+func TestMillPrimeCommandHierarchy(t *testing.T) {
+	root := newMillCommand()
+	for _, topic := range []string{"strand", "millstrand"} {
+		cmd, args, err := root.Find([]string{"prime", topic})
+		if err != nil {
+			t.Fatalf("mill prime %s was not found: %v", topic, err)
+		}
+		if got := cmd.CommandPath(); got != "mill prime "+topic {
+			t.Fatalf("command path = %q, want %q", got, "mill prime "+topic)
+		}
+		if len(args) != 0 {
+			t.Fatalf("mill prime %s left arguments: %v", topic, args)
+		}
+	}
+	for _, old := range [][]string{{"strand", "prime"}, {"millstrand", "prime"}} {
+		if _, _, err := root.Find(old); err == nil {
+			t.Fatalf("legacy command mill %s prime is still registered", old[0])
+		}
+	}
+}
+
 func TestRenderPrimeReadsManifestTopicsAndInterpolatesSource(t *testing.T) {
 	src := writeSourceFixture(t,
 		`{"version": 1, "topics": {"millstrand": "docs/prime/millstrand.md", "strand": "docs/prime/strand.md"}}`,

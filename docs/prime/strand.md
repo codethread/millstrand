@@ -80,4 +80,4 @@ Before reporting success:
 Branching, delegation, review, and landing discipline are repo policy, not strand core: take
 them from repo conventions and from the `about`/`prime` surfaces of the ops the repo
 registers. Building on `.millstrand` itself — config, spools, the source docs — is covered by
-`mill millstrand prime`; day-to-day tracking does not need it.
+`mill prime millstrand`; day-to-day tracking does not need it.

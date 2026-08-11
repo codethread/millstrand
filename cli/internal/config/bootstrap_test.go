@@ -24,7 +24,7 @@ func TestEnsureAgentGuidanceAppendsToExisting(t *testing.T) {
 	if !strings.Contains(got, "Existing prose.") {
 		t.Fatalf("existing prose was dropped: %q", got)
 	}
-	for _, want := range []string{agentGuidanceMarker, agentGuidanceEndMarker, "mill millstrand prime", "mill strand prime"} {
+	for _, want := range []string{agentGuidanceMarker, agentGuidanceEndMarker, "mill prime millstrand", "mill prime strand"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in %q", want, got)
 		}
@@ -60,7 +60,7 @@ func TestEnsureAgentGuidanceCreatesWhenNoneExist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AGENTS.md not created: %v", err)
 	}
-	if !strings.Contains(string(b), "mill millstrand prime") {
+	if !strings.Contains(string(b), "mill prime millstrand") {
 		t.Fatalf("created AGENTS.md missing guidance: %q", string(b))
 	}
 }

@@ -33,34 +33,34 @@ type primeManifest struct {
 func renderPrime(topic string) (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("mill %s prime cannot determine the cwd used to resolve the Millstrand source: %w", topic, err)
+		return "", fmt.Errorf("mill prime %s cannot determine the cwd used to resolve the Millstrand source: %w", topic, err)
 	}
 	source, err := resolveLaunchSource(cwd)
 	if err != nil {
-		return "", fmt.Errorf("mill %s prime cannot resolve the Millstrand source that hosts the docs from cwd %s: %w", topic, cwd, err)
+		return "", fmt.Errorf("mill prime %s cannot resolve the Millstrand source that hosts the docs from cwd %s: %w", topic, cwd, err)
 	}
 	manifestPath := filepath.Join(source, filepath.FromSlash(primeManifestPath))
 	raw, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return "", fmt.Errorf("mill %s prime: reading prime manifest: %w", topic, err)
+		return "", fmt.Errorf("mill prime %s: reading prime manifest: %w", topic, err)
 	}
 	var manifest primeManifest
 	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return "", fmt.Errorf("mill %s prime: parsing prime manifest %s: %w", topic, manifestPath, err)
+		return "", fmt.Errorf("mill prime %s: parsing prime manifest %s: %w", topic, manifestPath, err)
 	}
 	if manifest.Version != primeManifestVersion {
-		return "", fmt.Errorf("mill %s prime: manifest %s is version %d but this mill supports version %d; upgrade mill", topic, manifestPath, manifest.Version, primeManifestVersion)
+		return "", fmt.Errorf("mill prime %s: manifest %s is version %d but this mill supports version %d; upgrade mill", topic, manifestPath, manifest.Version, primeManifestVersion)
 	}
 	rel, ok := manifest.Topics[topic]
 	if !ok {
-		return "", fmt.Errorf("mill %s prime: manifest %s declares no %q topic", topic, manifestPath, topic)
+		return "", fmt.Errorf("mill prime %s: manifest %s declares no %q topic", topic, manifestPath, topic)
 	}
 	if err := validatePrimeTopicPath(rel); err != nil {
-		return "", fmt.Errorf("mill %s prime: manifest %s topic %q has invalid path %q: %w", topic, manifestPath, topic, rel, err)
+		return "", fmt.Errorf("mill prime %s: manifest %s topic %q has invalid path %q: %w", topic, manifestPath, topic, rel, err)
 	}
 	body, err := os.ReadFile(filepath.Join(source, filepath.FromSlash(rel)))
 	if err != nil {
-		return "", fmt.Errorf("mill %s prime: reading manifest topic file %s: %w", topic, rel, err)
+		return "", fmt.Errorf("mill prime %s: reading manifest topic file %s: %w", topic, rel, err)
 	}
 	return strings.ReplaceAll(string(body), "{{.Source}}", source), nil
 }

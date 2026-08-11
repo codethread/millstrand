@@ -22,7 +22,7 @@ Millstrand's own repository is written to be read by coding agents, and it ships
 `prime` orientation commands, and the specs behind every contract. If you already work with a coding
 agent, you can point it at a Millstrand checkout and ask questions as you go.
 
-- `mill millstrand prime` prints orientation for the Millstrand source, docs, and how to extend a `.millstrand` or `.ms` config. `mill strand prime` explains the strand planning-and-tracking workflow. Both run with no weaver.
+- `mill prime millstrand` prints orientation for the Millstrand source, docs, and how to extend a `.millstrand` or `.ms` config. `mill prime strand` explains the strand planning-and-tracking workflow. Both run with no weaver.
 - `docs/reference.md`, the `spools/` contracts, and `devflow/specs/` hold the real
   detail.
 
