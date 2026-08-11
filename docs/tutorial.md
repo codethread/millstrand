@@ -59,21 +59,25 @@ You need a few things on the machine:
 - **Git**, and a Git repository to track work in. Millstrand is repo-first: without
   `--workspace` it selects a repo's `.millstrand` or `.ms`, so no-flag use needs Git. An
   explicit `--workspace <dir>` bootstraps and runs anywhere, Git or not.
-- **make**, to build and install the CLIs.
-- **Go**, which compiles the `strand` and `mill` command-line tools.
-- **A JVM**, which runs the weaver (Millstrand is a Clojure program).
-
-Install those the usual way for your platform before the steps below.
+- **make**, **Go**, the Clojure CLI, and a JVM when installing from a source checkout. Go compiles `strand` and `mill`; the JVM runs the weaver.
 
 ## Install
 
-Millstrand installs from a cloned source checkout of this repository.
+On macOS, Homebrew installs Millstrand and its Clojure/JVM runtime:
+
+```sh
+brew install codethread/millstrand/millstrand
+```
+
+Homebrew retains Millstrand's source under its `libexec` directory and records that path for `mill` when it launches a weaver.
+
+To install from a cloned checkout instead, install the prerequisites above and run:
 
 ```sh
 make install
 ```
 
-This builds and installs the `strand` and `mill` CLIs and records this checkout as mill's source for launching weavers. It does not change anything `mill init` writes into a repo.
+This builds and installs the `strand` and `mill` CLIs and records this checkout as mill's source for launching weavers. Neither installation method changes anything `mill init` writes into a repo.
 
 ## Start mill
 

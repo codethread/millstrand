@@ -55,7 +55,7 @@ Only one accepted marker may exist, and it must be a directory. If both `.millst
 mill init
 ```
 
-Mill resolves the Millstrand source checkout used to launch the weaver from `MILLSTRAND_SOURCE`, the install-time source recorded by `make install`, or a canonical Millstrand checkout cwd. `mill init` does not persist a source path in the selected workspace's `config.json`.
+Mill resolves the Millstrand source directory used to launch the weaver from `MILLSTRAND_SOURCE`, the source directory recorded at installation (the Homebrew `libexec` directory or a `make install` checkout), or a canonical Millstrand checkout cwd. `mill init` does not persist a source path in the selected workspace's `config.json`.
 
 A workspace can also be selected explicitly with:
 
@@ -78,9 +78,7 @@ The important file is `config.json`:
 
 ## Agent guidance files
 
-From a Millstrand source checkout, `make install` installs the Go CLIs (`strand` and `mill`) and records
-the checkout as mill's default source for weaver launch and the thin nREPL attach client. After
-that, use the CLIs directly: `mill start`, `mill init`, and `mill weaver start`.
+On macOS, `brew install codethread/millstrand/millstrand` installs the Go CLIs (`strand` and `mill`) and records Homebrew's retained `libexec` source directory for weaver launch and the thin nREPL attach client. From a source checkout, `make install` records that checkout instead. After either installation, use the CLIs directly: `mill start`, `mill init`, and `mill weaver start`.
 
 `mill init` is the normal repo bootstrap path. With no accepted marker, it creates the canonical repo `.millstrand` workspace; with one accepted marker, it completes that selected workspace. It writes shareable `config.json` with the alpha format marker when absent and leaves shared config files ready to commit. Generated `spools.edn` opts into the batteries command surface with `millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}`; generated `init.clj` activates it through a module guarded by that root, then activates the generated `me/help.clj` module to render `strand help` as text by default. `strand help --json` remains the raw envelope. The relative coordinate resolves against the mill-selected Millstrand checkout, so no absolute source path is persisted. Deleting the seeded entry is the supported opt-out. Init does not run `git init` or initialize database storage; weaver startup prepares storage.
 

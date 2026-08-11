@@ -4,7 +4,7 @@ Read this when you are extending a workspace — its `.millstrand` or `.ms` conf
 
 Millstrand is a local strand graph for agents and humans: a durable SQLite-backed graph of work, notes, dependencies, and workflow state behind a small machine-readable command surface. `mill` is the local router and supervisor, the long-lived weaver owns storage and runtime state, and the `strand` CLI is a thin JSON control surface. A workspace's workflow model lives mostly in custom attributes and its own config/spool code — shaping that code is what this orientation is for.
 
-The Millstrand source checkout for this world is `{{.Source}}`, resolved from `MILLSTRAND_SOURCE`, the install-time source recorded by `make install`, or a canonical Millstrand checkout cwd. Every path below lives under it.
+The Millstrand source directory for this world is `{{.Source}}`, resolved from `MILLSTRAND_SOURCE`, the source directory recorded at installation (the Homebrew `libexec` directory or a `make install` checkout), or a canonical Millstrand checkout cwd. Every path below lives under it.
 
 | Path | What you get there |
 | --- | --- |
