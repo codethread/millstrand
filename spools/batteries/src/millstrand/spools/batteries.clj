@@ -101,7 +101,7 @@
 (s/def ::spool-add-result
   (s/and (s/keys :req-un [::operation ::status ::family ::entry ::requirements])
          #(exact-keys? #{:operation :status :family :entry :requirements} %)))
-(s/def ::tag ::runtime-api/release-marker-claim)
+(s/def ::tag (s/nilable ::runtime-api/release-marker-claim))
 (s/def ::sha #(and (string? %) (boolean (re-matches #"[0-9a-f]{40}" %))))
 (s/def ::coordinate
   (s/and (s/keys :req-un [::tag ::sha])
@@ -169,10 +169,10 @@
          #(or (nil? (:tag %)) (s/valid? ::non-blank-string (:tag %)))
          #(or (nil? (:lib %)) (s/valid? ::non-blank-string (:lib %)))))
 (s/def ::spool-bump-args
-  (s/and #(exact-spool-args? #{:subcommand :family} #{:to} %)
+  (s/and #(exact-spool-args? #{:subcommand :family :latest} #{} %)
          #(= ["bump"] (:subcommand %))
          #(s/valid? ::non-blank-string (:family %))
-         #(or (nil? (:to %)) (s/valid? ::non-blank-string (:to %)))))
+         #(s/valid? ::non-blank-string (:latest %))))
 (s/def ::spool-status-args
   (s/and #(exact-spool-args? #{:subcommand} #{} %)
          #(= ["status"] (:subcommand %))))
@@ -323,6 +323,20 @@
 (defn- ls-remote [git-url]
   (checked-git nil "ls-remote" "--tags" git-url))
 
+(defn- default-branch-head [git-url]
+  (let [output (checked-git nil "ls-remote" git-url "HEAD")
+        matches (keep (fn [line]
+                        (when-let [[_ sha] (re-matches #"([0-9a-f]{40})\s+HEAD" line)]
+                          sha))
+                      (str/split-lines output))]
+    (when-not (= 1 (count matches))
+      (throw (ex-info
+              "Remote default branch HEAD did not resolve to one exact lowercase 40-character Git SHA"
+              {:git-url git-url
+               :reason :invalid-default-branch-head
+               :output (str/trim output)})))
+    (first matches)))
+
 (defn- throw-manifest-git-failure! [git-url sha args result]
   (throw (ex-info "Git command failed while reading advisory spool.edn"
                   {:git-url git-url
@@ -355,8 +369,22 @@
       (finally
         (delete-tree! tmp)))))
 
+(defn- fetch-commit
+  "Fetch `sha` from `git-url`, failing when the remote cannot provide it."
+  [git-url sha]
+  (let [tmp (.toFile (Files/createTempDirectory "millstrand-spool-commit-"
+                                                (make-array FileAttribute 0)))]
+    (try
+      (checked-git tmp "init" "--quiet")
+      (checked-git tmp "fetch" "--quiet" "--depth=1" git-url sha)
+      sha
+      (finally
+        (delete-tree! tmp)))))
+
 (def ^:private default-git-client
   {:ls-remote ls-remote
+   :default-branch-head default-branch-head
+   :fetch-commit fetch-commit
    :manifest-at manifest-at})
 
 (def ^:private git-client-state-version 1)
@@ -391,6 +419,15 @@
              :accepted-format (:accepted-format (release-tag-diagnostics available))
              :available (:available (release-tag-diagnostics available))})))
   tag)
+
+(defn- require-latest-mode [latest]
+  (when-not (contains? #{"tag" "sha"} latest)
+    (throw (ex-info
+            "--latest must be either tag or sha"
+            {:latest latest
+             :reason :invalid-latest-mode
+             :accepted ["tag" "sha"]})))
+  latest)
 
 (defn- peeled-tags [output]
   (into (sorted-map-by #(compare (release-number %1) (release-number %2)))
@@ -503,16 +540,20 @@
      :entry entry
      :requirements requirements}))
 
-(defn- bump-target [declared family requested tags]
-  (if requested
-    (require-release-tag requested "Target tag" (keys tags))
-    (let [requirements (:requirements declared)]
-      (if (:valid? requirements)
-        (last (keys tags))
-        (or (get (:suggestions requirements) family)
-            (throw (ex-info "Current floor failures do not suggest a bump for this family"
-                            {:family family
-                             :requirements requirements})))))))
+(defn- latest-tag-target [git-url client]
+  (let [tags (peeled-tags ((:ls-remote client) git-url))]
+    (if-let [tag (last (keys tags))]
+      {:tag tag :sha (get tags tag)}
+      (throw (ex-info
+              (str "Repository has no annotated release tags matching vN where N is a positive "
+                   "integer; available annotated tags: none found")
+              (merge {:reason :no-release-tags}
+                     (release-tag-diagnostics (keys tags))))))))
+
+(defn- latest-sha-target [git-url client]
+  (let [sha ((:default-branch-head client) git-url)]
+    ((:fetch-commit client) git-url sha)
+    {:tag nil :sha sha}))
 
 (defn- github-web-url [git-url]
   (when-let [[_ owner repository]
@@ -529,7 +570,7 @@
 
 (defn- bump-spool-op [ctx]
   (let [rt (:op/runtime ctx)
-        {:keys [family to]} (:op/args ctx)
+        {:keys [family latest]} (:op/args ctx)
         family (symbol family)
         declared (runtime-api/declared rt)
         old-entry (get-in declared [:families family :declared])]
@@ -537,30 +578,21 @@
       (throw (ex-info "Spool family is not declared" {:family family})))
     (when-not (:git/url old-entry)
       (throw (ex-info "Only Git spool families can be bumped" {:family family :entry old-entry})))
-    (let [tags (peeled-tags ((:ls-remote (git-client rt)) (:git/url old-entry)))
-          target (bump-target declared family to tags)]
-      (when-not target
-        (throw (ex-info
-                (str "Repository has no annotated release tags matching vN where N is a positive "
-                     "integer; available annotated tags: none found")
-                (merge {:family family :reason :no-release-tags}
-                       (release-tag-diagnostics (keys tags))))))
-      (when-not (contains? tags target)
-        (throw (ex-info
-                (str "Target release tag is missing or is not annotated; accepted format is vN "
-                     "where N is a positive integer. Available annotated tags: "
-                     (available-tags-description (keys tags)))
-                (merge {:family family :reason :annotated-tag-not-found :tag target}
-                       (release-tag-diagnostics (keys tags))))))
-      (let [new-sha (get tags target)
-            entry (assoc old-entry :git/tag target :git/sha new-sha)
-            write (runtime-api/upsert-spool-entry! rt family entry)]
-        {:status (:status write)
-         :family family
-         :old {:tag (:git/tag old-entry) :sha (:git/sha old-entry)}
-         :new {:tag target :sha new-sha}
-         :compare-url (compare-url (:git/url old-entry) (:git/sha old-entry) new-sha)
-         :requirements (:requirements (runtime-api/declared rt))}))))
+    (let [client (git-client rt)
+          latest (require-latest-mode latest)
+          target (case latest
+                   "tag" (latest-tag-target (:git/url old-entry) client)
+                   "sha" (latest-sha-target (:git/url old-entry) client))
+          entry (cond-> (assoc old-entry :git/sha (:sha target))
+                  (= "sha" latest) (dissoc :git/tag)
+                  (= "tag" latest) (assoc :git/tag (:tag target)))
+          write (runtime-api/upsert-spool-entry! rt family entry)]
+      {:status (:status write)
+       :family family
+       :old {:tag (:git/tag old-entry) :sha (:git/sha old-entry)}
+       :new target
+       :compare-url (compare-url (:git/url old-entry) (:git/sha old-entry) (:sha target))
+       :requirements (:requirements (runtime-api/declared rt))})))
 
 (defn- family-modules [modules roots]
   (into (sorted-map)
@@ -604,17 +636,19 @@
                  |the validated tag and commit pin to the workspace spools.edn.")}
     {:verb "bump"
      :behavior (format-alpha/reflow
-                "|Queries remote annotated tags, selects a requested, floor-driven,
-                 |or latest release, then atomically rewrites its tag and peeled
-                 |commit pin together.")}
+                "|Requires an explicit latest mode. `tag` selects the highest
+                 |annotated vN release; `sha` resolves and fetches the remote
+                 |default branch HEAD before atomically rewriting the coordinate.")}
     {:verb "status"
      :behavior (format-alpha/reflow
                 "|Reads runtime and workspace state only. It performs no network,
                  |file write, sync, reload, or other adoption action.")}]
    :conventions
    [(format-alpha/reflow
-     "|Add and bump resolve only peeled refs/tags/vN^{} commits. v0,
-      |lightweight tags, and untagged repositories are refused.")
+     "|Add and `--latest tag` resolve only peeled refs/tags/vN^{} commits.
+      |`--latest sha` resolves the remote default branch HEAD and requires its
+      |exact 40-character lowercase commit to be fetchable. v0 and lightweight
+      |tags are refused for release-tag targets.")
     (format-alpha/reflow
      "|An optional producer spool.edn supplies roots and floors. With it,
       |--lib must match one declared root symbol. Without it, add uses one root
@@ -992,11 +1026,12 @@
                           :required? true
                           :doc "Git repository URL."}]
            :annotations {:failure-modes ["batteries/spool-release-unresolved"]}}
-    "bump" {:doc "Bump one Git spool family atomically to an annotated release."
+    "bump" {:doc "Bump one Git spool family atomically to its latest annotated release or default-branch Git SHA."
             :hook-class :mutating
             :deadline-class :standard
-            :flags {:to {:type :string
-                         :doc "Target annotated release tag vN; defaults from floors or latest."}}
+            :flags {:latest {:type :string
+                             :required? true
+                             :doc "Latest coordinate mode: tag for the highest annotated vN, or sha for the remote default branch HEAD."}}
             :positionals [{:name :family
                            :type :string
                            :required? true

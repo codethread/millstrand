@@ -228,7 +228,7 @@
         (check! 'vocab (weaver/op! rt 'vocab []))
         (check! 'spool "about" (weaver/op! rt 'spool ["about"]))
         (check! 'spool "add" (weaver/op! rt 'spool ["add" "https://example.invalid/demo.git"]))
-        (check! 'spool "bump" (weaver/op! rt 'spool ["bump" "demo" "--to" "v1"]))
+        (check! 'spool "bump" (weaver/op! rt 'spool ["bump" "demo" "--latest" "tag"]))
         (check! 'spool "status" (weaver/op! rt 'spool ["status"]))
         (check! 'supersede (weaver/op! rt 'supersede [(:id first-row) (:id replacement)]))
         (check! 'burn (weaver/op! rt 'burn [(:id burnable)]))
@@ -381,7 +381,7 @@
                   :reason :invalid-edn}
                  (ex-data error))))))))
 
-(deftest spool-bump-prefers-floor-suggestion-and-rewrites-tag-sha-together
+(deftest spool-bump-latest-tag-selects-highest-annotated-release
   (with-runtime
     {:release-marker "v4"}
     (fn [rt _config-dir]
@@ -405,20 +405,20 @@
                               ["v3" (sha "b") v3-sha]
                               ["v4" (sha "c") (sha "4")])
                    nil)
-        (let [result (weaver/op! rt 'spool ["bump" "target/family"])]
+        (let [result (weaver/op! rt 'spool
+                                 ["bump" "target/family" "--latest" "tag"])]
           (is (= {:tag "v1" :sha old-sha} (:old result)))
-          (is (= {:tag "v3" :sha v3-sha} (:new result))
-              "a failing floor selects its computed suggestion instead of latest v4")
-          (is (= (str "https://example.invalid/target/compare/" old-sha "..." v3-sha)
+          (is (= {:tag "v4" :sha (sha "4")} (:new result)))
+          (is (= (str "https://example.invalid/target/compare/" old-sha "..." (sha "4"))
                  (:compare-url result)))
-          (is (= {:git/tag "v3" :git/sha v3-sha}
+          (is (= {:git/tag "v4" :git/sha (sha "4")}
                  (select-keys (get-in (runtime/declared rt)
                                       [:families 'target/family :declared])
                               [:git/tag :git/sha])))
           (is (s/valid? ::batteries/spool-bump-result result))
           (is (true? (get-in result [:requirements :valid?]))))))))
 
-(deftest spool-bump-reports-only-usable-compare-urls
+(deftest spool-bump-latest-tag-reports-only-usable-compare-urls
   (doseq [[git-url expected-base]
           [["git@github.com:demo/family.git" "https://github.com/demo/family"]
            ["ssh://git@example.invalid/demo/family.git" nil]]]
@@ -435,12 +435,136 @@
               :git/sha old-sha
               :roots {'demo/root "."}})
             (stub-git! rt (tag-lines ["v2" (sha "a") new-sha]) nil)
-            (let [result (weaver/op! rt 'spool ["bump" "demo/family" "--to" "v2"])]
+            (let [result (weaver/op! rt 'spool
+                                     ["bump" "demo/family" "--latest" "tag"])]
               (is (= (when expected-base
                        (str expected-base "/compare/" old-sha "..." new-sha))
                      (:compare-url result)))
               (is (contains? result :compare-url))
               (is (s/valid? ::batteries/spool-bump-result result)))))))))
+
+(deftest spool-bump-latest-sha-resolves-untagged-default-head
+  (with-runtime
+    (fn [rt _config-dir]
+      (test-support/activate-spool! rt :millstrand/spools-batteries 'millstrand.spools.batteries)
+      (let [old-sha (sha "1")
+            target-sha (sha "2")
+            resolved (atom nil)
+            fetched (atom nil)]
+        (runtime/upsert-spool-entry!
+         rt 'demo/untagged
+         {:git/url "https://example.invalid/demo.git"
+          :git/sha old-sha
+          :roots {'demo/root "."}})
+        (stub-git-client!
+         rt
+         {:ls-remote (fn [_] (throw (ex-info "tag lookup should not run" {})))
+          :default-branch-head (fn [git-url]
+                                 (reset! resolved git-url)
+                                 target-sha)
+          :fetch-commit (fn [git-url git-sha]
+                          (reset! fetched [git-url git-sha]))
+          :manifest-at (fn [_ _] nil)})
+        (let [result (weaver/op! rt 'spool
+                                 ["bump" "demo/untagged" "--latest" "sha"])
+              entry (get-in (runtime/declared rt) [:families 'demo/untagged :declared])]
+          (is (= "https://example.invalid/demo.git" @resolved))
+          (is (= ["https://example.invalid/demo.git" target-sha] @fetched))
+          (is (= {:tag nil :sha old-sha} (:old result)))
+          (is (= {:tag nil :sha target-sha} (:new result)))
+          (is (= (str "https://example.invalid/demo/compare/" old-sha "..." target-sha)
+                 (:compare-url result)))
+          (is (= target-sha (:git/sha entry)))
+          (is (not (contains? entry :git/tag)))
+          (is (true? (get-in result [:requirements :valid?])))
+          (is (s/valid? ::batteries/spool-bump-result result)))))))
+
+(deftest spool-bump-latest-sha-removes-tag-and-fails-loudly
+  (with-runtime
+    (fn [rt _config-dir]
+      (test-support/activate-spool! rt :millstrand/spools-batteries 'millstrand.spools.batteries)
+      (let [old-sha (sha "a")
+            target-sha (sha "b")]
+        (runtime/upsert-spool-entry!
+         rt 'demo/tagged
+         {:git/url "https://example.invalid/demo.git"
+          :git/tag "v1"
+          :git/sha old-sha
+          :roots {'demo/root "."}})
+        (stub-git-client!
+         rt
+         {:ls-remote (fn [_] (throw (ex-info "tag lookup should not run" {})))
+          :default-branch-head (fn [_] target-sha)
+          :fetch-commit (fn [_ _] target-sha)
+          :manifest-at (fn [_ _] nil)})
+        (testing "a tagged family transitions to a default-branch SHA and drops its tag"
+          (let [result (weaver/op! rt 'spool
+                                   ["bump" "demo/tagged" "--latest" "sha"])
+                entry (get-in (runtime/declared rt) [:families 'demo/tagged :declared])]
+            (is (= {:tag "v1" :sha old-sha} (:old result)))
+            (is (= {:tag nil :sha target-sha} (:new result)))
+            (is (not (contains? entry :git/tag)))
+            (is (s/valid? ::batteries/spool-bump-result result))))
+        (runtime/upsert-spool-entry!
+         rt 'demo/unreachable
+         {:git/url "https://example.invalid/unreachable.git"
+          :git/tag "v1"
+          :git/sha old-sha
+          :roots {'demo/unreachable-root "."}})
+        (stub-git-client!
+         rt
+         {:ls-remote (fn [_] (throw (ex-info "tag lookup should not run" {})))
+          :default-branch-head (fn [_] target-sha)
+          :fetch-commit (fn [_ _]
+                          (throw (ex-info "remote did not provide default HEAD" {:reason :unreachable})))
+          :manifest-at (fn [_ _] nil)})
+        (testing "an unfetchable default HEAD fails before the config write"
+          (let [error (try
+                        (weaver/op! rt 'spool
+                                    ["bump" "demo/unreachable" "--latest" "sha"])
+                        nil
+                        (catch clojure.lang.ExceptionInfo cause cause))]
+            (is (some? error))
+            (is (= :unreachable (:reason (ex-data error))))
+            (is (= "v1" (get-in (runtime/declared rt)
+                                [:families 'demo/unreachable :declared :git/tag])))))))))
+
+(deftest spool-bump-requires-valid-latest-mode
+  (with-runtime
+    (fn [rt _config-dir]
+      (test-support/activate-spool! rt :millstrand/spools-batteries 'millstrand.spools.batteries)
+      (runtime/upsert-spool-entry!
+       rt 'demo/family
+       {:git/url "https://example.invalid/demo.git"
+        :git/tag "v1"
+        :git/sha (sha "1")
+        :roots {'demo/root "."}})
+      (stub-git-client!
+       rt
+       {:ls-remote (fn [_] (throw (ex-info "network called" {})))
+        :default-branch-head (fn [_] (throw (ex-info "network called" {})))
+        :fetch-commit (fn [_ _] (throw (ex-info "network called" {})))
+        :manifest-at (fn [_ _] nil)})
+      (testing "missing latest is rejected by the parser"
+        (let [error (try
+                      (weaver/op! rt 'spool ["bump" "demo/family"])
+                      nil
+                      (catch clojure.lang.ExceptionInfo cause cause))]
+          (is (= :missing-required (:reason (ex-data error))))
+          (is (= "--latest" (:flag (ex-data error))))))
+      (testing "invalid latest mode fails before Git access"
+        (let [error (try
+                      (weaver/op! rt 'spool ["bump" "demo/family" "--latest" "release"])
+                      nil
+                      (catch clojure.lang.ExceptionInfo cause cause))]
+          (is (= :invalid-latest-mode (:reason (ex-data error))))
+          (is (= ["tag" "sha"] (:accepted (ex-data error)))))
+        (testing "the retired --to flag is unknown"
+          (let [error (try
+                        (weaver/op! rt 'spool ["bump" "demo/family" "--to" "v2"])
+                        nil
+                        (catch clojure.lang.ExceptionInfo cause cause))]
+            (is (= :unknown-flag (:reason (ex-data error))))))))))
 
 (deftest spool-status-joins-overlay-sync-use-pending-and-release-truth-without-git
   (with-runtime
@@ -1270,6 +1394,15 @@
       (testing "about/prime prose projects for the ops that declare it"
         (is (str/includes? (:about (weaver/op! rt 'about ["add"])) "create verb"))
         (is (str/includes? (:prime (weaver/op! rt 'prime ["weave"])) "pattern list")))
+      (testing "spool bump help names the required latest modes"
+        (let [help (weaver/op! rt 'help ["spool" "bump"])
+              about (batteries/spool-op {:op/args {:subcommand ["about"]}})]
+          (let [latest-flag (some #(when (= "latest" (:name %)) %)
+                                  (get-in help [:node :invocation :flags]))]
+            (is (true? (:required latest-flag)))
+            (is (str/includes? (:doc latest-flag) "tag")))
+          (is (str/includes? (:behavior (some #(when (= "bump" (:verb %)) %) (:commands about)))
+                             "latest mode"))))
       (testing "the reference transform renders every live envelope family"
         (doseq [argv [[] ["add"] ["spool"] ["spool" "add"] ["spool" "status"]
                       ["query"] ["weave"]]]
