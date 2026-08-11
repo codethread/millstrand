@@ -312,7 +312,7 @@
     (assert= root bare "bare strand prints the same static help as --help")
     (assert-contains version "bin_version" "Go CLI --version reports the bin version")
     (assert-contains version "protocol_version" "Go CLI --version reports the protocol version")
-    (doseq [needle ["init" "weaver" "start" "millstrand" "strand"]]
+    (doseq [needle ["init" "weaver" "start" "prime"]]
       (assert-contains mill-root needle "Go mill root help shows the lifecycle and orientation subcommands"))
     (assert-contains millstrand-prime checkout-root
                      "mill prime millstrand renders the manifest topic with the resolved source substituted")
