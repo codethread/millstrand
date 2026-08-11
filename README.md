@@ -243,7 +243,7 @@ With no `--workspace`, `strand` finds the canonical Git repository root and uses
 
 ## Learn it from an agent
 
-Millstrand is built for agents, and its own repository is written for them to read. Point a coding agent at a checkout and ask questions: `mill millstrand prime` and `mill strand prime` print orientation, [`AGENTS.md`](./AGENTS.md) and the specs under [`devflow/specs/`](./devflow/specs/) carry the real contracts, and `mill init` seeds a pointer to the prime commands into your own repo's `AGENTS.md`.
+Millstrand is built for agents, and its own repository is written for them to read. Point a coding agent at a checkout and ask questions: `mill prime millstrand` and `mill prime strand` print orientation, [`AGENTS.md`](./AGENTS.md) and the specs under [`devflow/specs/`](./devflow/specs/) carry the real contracts, and `mill init` seeds a pointer to the prime commands into your own repo's `AGENTS.md`.
 
 ## Where to go next
 

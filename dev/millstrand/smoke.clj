@@ -299,10 +299,10 @@
         mill-root (run-process! "Go mill root help succeeds" [mill-bin "--help"])
         ;; Run from outside the checkout so only MILLSTRAND_SOURCE can resolve the
         ;; manifest the prime text is rendered from.
-        millstrand-prime (run-process! "mill millstrand prime succeeds" (outside-repo-dir) nil
-                                       [mill-bin "millstrand" "prime"])
-        strand-prime (run-process! "mill strand prime succeeds" (outside-repo-dir) nil
-                                   [mill-bin "strand" "prime"])
+        millstrand-prime (run-process! "mill prime millstrand succeeds" (outside-repo-dir) nil
+                                       [mill-bin "prime" "millstrand"])
+        strand-prime (run-process! "mill prime strand succeeds" (outside-repo-dir) nil
+                                   [mill-bin "prime" "strand"])
         dry-run (run-process! "Go CLI dry-run assembles an envelope"
                               [strand-bin "--workspace" "/tmp/smoke-dry-run" "--dry-run"
                                "add" "Dry run strand" "--attr" "owner=ct"])]
@@ -315,9 +315,9 @@
     (doseq [needle ["init" "weaver" "start" "millstrand" "strand"]]
       (assert-contains mill-root needle "Go mill root help shows the lifecycle and orientation subcommands"))
     (assert-contains millstrand-prime checkout-root
-                     "mill millstrand prime renders the manifest topic with the resolved source substituted")
+                     "mill prime millstrand renders the manifest topic with the resolved source substituted")
     (assert (clojure.string/includes? strand-prime "strand")
-            (str "mill strand prime renders its manifest topic\n" strand-prime))
+            (str "mill prime strand renders its manifest topic\n" strand-prime))
     (doseq [needle ["\"operation\":\"invoke\"" "\"name\":\"add\""]]
       (assert-contains dry-run needle "Go CLI --dry-run prints the assembled invoke envelope without contacting a weaver"))))
 
@@ -924,7 +924,7 @@
     (let [guidance (slurp (java.io.File. repo "AGENTS.md"))]
       (assert-contains guidance "<!-- mill:millstrand-prime -->"
                        "repo bootstrap injects the marker-guarded orientation block")
-      (doseq [needle ["mill strand prime" "mill millstrand prime" "<!-- /mill:millstrand-prime -->"]]
+      (doseq [needle ["mill prime strand" "mill prime millstrand" "<!-- /mill:millstrand-prime -->"]]
         (assert-contains guidance needle "repo bootstrap routes a cold agent at the prime commands"))
       (assert= 1 (count (re-seq #"<!-- mill:millstrand-prime -->" guidance))
                "repeated repo bootstrap does not duplicate the orientation block"))

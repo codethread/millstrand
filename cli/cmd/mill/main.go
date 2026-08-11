@@ -161,17 +161,14 @@ Environment:
 	weaver.AddCommand(repl)
 	root.AddCommand(weaver)
 
-	millstrand := &cobra.Command{Use: "millstrand", Short: "Millstrand orientation for agents"}
-	millstrand.AddCommand(&cobra.Command{Use: "prime", Short: "Print orientation for building on .millstrand: resolved source path and the docs to read", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	prime := &cobra.Command{Use: "prime", Short: "Print agent orientation"}
+	prime.AddCommand(&cobra.Command{Use: "millstrand", Short: "Print orientation for building on .millstrand: resolved source path and the docs to read", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		return runPrime("millstrand")
 	}})
-	root.AddCommand(millstrand)
-
-	strandCmd := &cobra.Command{Use: "strand", Short: "Strand workflow guidance for agents"}
-	strandCmd.AddCommand(&cobra.Command{Use: "prime", Short: "Print the strand planning/tracking workflow", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	prime.AddCommand(&cobra.Command{Use: "strand", Short: "Print the strand planning/tracking workflow", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		return runPrime("strand")
 	}})
-	root.AddCommand(strandCmd)
+	root.AddCommand(prime)
 	root.AddCommand(newBinCommand())
 	stampUsageErrors(root)
 	return root
