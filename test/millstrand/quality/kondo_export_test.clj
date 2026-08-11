@@ -2,7 +2,6 @@
   "Proof that a local tools.deps consumer imports and uses Millstrand's Kondo export."
   (:require [clojure.edn :as edn]
             [clj-kondo.hooks-api :as api]
-            [clj-kondo.impl.rewrite-clj.node.protocols :as node]
             [clj-kondo.impl.rewrite-clj.node.uneval :as uneval]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -242,15 +241,12 @@
     (is (= '() (api/sexpr node)))))
 
 (deftest unexpected-hook-sexpr-errors-include-context
-  (let [name-node (reify node/Node
-                    (tag [_] :token)
-                    (printable-only? [_] false)
-                    (sexpr [_] (throw (ex-info "synthetic parser failure" {})))
-                    (length [_] 1)
-                    (string [_] "broken"))]
+  (let [name-node (api/token-node 'broken)
+        sexpr-error (ex-info "synthetic parser failure" {})]
     (testing "the API failure remains visible to the caller"
       (try
-        (run-exported-defop-hook {:node (defop-node name-node)})
+        (with-redefs [api/sexpr (fn [_] (throw sexpr-error))]
+          (run-exported-defop-hook {:node (defop-node name-node)}))
         (is false "expected the hook to fail")
         (catch clojure.lang.ExceptionInfo error
           (is (= "Unable to read a clj-kondo hook node" (ex-message error)))
