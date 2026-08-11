@@ -248,6 +248,19 @@
         (is (= name-node (:offending-node (ex-data error))))
         (is (instance? UnsupportedOperationException (.getCause error)))))))
 
+(deftest readable-defop-names-must-be-symbols
+  (doseq [name-node [(api/string-node "echo") (api/keyword-node :echo)]]
+    (let [node (defop-node name-node)]
+      (try
+        (run-exported-hook 'defop {:node node})
+        (is false "expected the hook to fail")
+        (catch clojure.lang.ExceptionInfo error
+          (is (= "defop hook name must be a symbol" (ex-message error)))
+          (is (= (api/sexpr name-node) (:offending-value (ex-data error))))
+          (is (= name-node (:offending-node (ex-data error))))
+          (is (= (select-keys (meta name-node) [:filename :row :col :end-row :end-col])
+                 (:node (ex-data error)))))))))
+
 (defn- defquery-node
   "Return a hook node with `name-node` in the `defquery` name position."
   [name-node]
@@ -276,6 +289,36 @@
                 (identity {})
                 [:= :state "active"]))
            (api/sexpr (:node defquery-result))))))
+
+(deftest malformed-public-hook-contexts-fail-loudly
+  (doseq [[hook context expected-message]
+          [['defop nil "defop hook context must be a map"]
+           ['defquery {} "defquery hook context must contain a list node"]
+           ['defop {:node (api/list-node [])}
+            "defop hook context node must contain at least 5 children"]
+           ['defquery {:node (api/list-node [(api/token-node 'millstrand/defquery)])}
+            "defquery hook context node must contain exactly 5 children"]
+           ['defquery {:node (assoc (api/list-node
+                                     [(api/token-node 'millstrand/defquery)
+                                      (api/token-node 'active)
+                                      (api/string-node "A test query.")
+                                      (api/map-node {})
+                                      (api/vector-node [])])
+                                    :children
+                                    [(api/token-node 'millstrand/defquery)
+                                     nil
+                                     (api/string-node "A test query.")
+                                     (api/map-node {})
+                                     (api/vector-node [])])}
+            "defquery hook context node contains a non-node child"]]]
+    (try
+      (run-exported-hook hook context)
+      (is false "expected the hook to fail")
+      (catch clojure.lang.ExceptionInfo error
+        (is (= expected-message (ex-message error)))
+        (is (contains? (ex-data error) :offending-value))
+        (is (contains? (ex-data error) :offending-node))
+        (is (contains? (ex-data error) :node))))))
 
 (deftest unexpected-hook-sexpr-errors-include-context
   (let [name-node (api/token-node 'broken)
