@@ -1,8 +1,7 @@
 {:spools {codethread/spools
  {:git/url "https://github.com/codethread/codethread.spool.git",
-  :git/sha "828e90258e1044eefae44e1793712c93efff02ec",
+  :git/sha "26fdf691649e8c92ae6366c627e0a77cd8219549",
   :roots {codethread/agents "spools/agents",
-          codethread/spool-bump "spools/spool-bump",
           codethread/devflow-setup "spools/devflow-setup",
           codethread/ralph "spools/ralph"}},
  codethread/kanban
@@ -22,7 +21,7 @@
  millstrand.spools/batteries {:millstrand/source-root "spools/batteries"},
  millhouse/spools
  {:git/url "https://github.com/codethread/millhouse.spool.git",
-  :git/sha "3dcf93cf511c3a4412ee62ede92bd077f4ca6000",
+  :git/sha "d1affd4065fcf69b81c0191944791475108d7bea",
   :roots
   {millhouse.spools/workflow "spools/workflow",
    millhouse.spools/millstrand-workflows "spools/millstrand-workflows",

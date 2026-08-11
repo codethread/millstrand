@@ -12,5 +12,6 @@ cli/bin/
 /go.work.sum
 site/
 
-.lsp/
-.clj-kondo/
+.lsp/*
+!.lsp/config.edn
+.clj-kondo/.cache/

@@ -16,7 +16,7 @@
 ;;   notifications/attention.clj  — chime attention rules
 ;;   jobs/nvd_scan.clj            — NVD scan cron job
 ;;   adapters/module.clj          — repo election of the batteries help transform
-;;   Codethread roots             — shared agents, spool-bump, Devflow setup, and Ralph
+;;   Codethread roots             — shared agents, Devflow setup, and Ralph
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and every
 ;; refresh; a module key it redeclares shadows the one here and wins, and it binds
@@ -235,11 +235,6 @@
                   :after [:millhouse/spools-workflow :millstrand/spools-delegation
                           :reviewers :workflows.support]
                   :required? true})
-(runtime/module! runtime :codethread/spool-bump
-                 {:ns 'ct.spools.codethread.spool-bump
-                  :spools ['codethread/spool-bump 'millhouse.spools/workflow]
-                  :after [:millhouse/spools-workflow]
-                  :required? true})
 (runtime/module! runtime :workflows.story
                  {:file "workflows/story.clj"
                   :spools ['millhouse.spools/workflow 'ct.spools/delegation]
@@ -279,7 +274,7 @@
                   :spools ['millhouse.spools.executors/code
                            'millhouse.spools/workflow]
                   :after [:millhouse/spools-workflow :workflows
-                          :workflows.land :codethread/spool-bump
+                          :workflows.land
                           :workflows.story :workflows.explore :workflows.fix
                           :codethread/ralph]
                   :required? true})
