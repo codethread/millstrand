@@ -270,15 +270,7 @@ A detail response is a canonical envelope, `{schema-version, operation, source, 
 
 **`about` is the op's runbook context.** `strand about <op>` returns the op's authored `:about` prose as a small JSON object: what the op is for, who drives it, and the contracts and attribute conventions a caller cannot read off the live surface. It stays short, and it points at whatever owns the detail: `help` for invocation, and for an op that drives a definition, the definition itself (`strand workflow show <name>`). A step map, a verb list, or a flag table restated here is a second copy that drifts from the first. An op that declares no `:about` prose returns a loud `discovery/unavailable` rather than empty success; purely structural ops (batteries `add`/`list`/...) need none, since their arg-spec already says everything. Some spool ops instead declare their own `about` subcommand, and for those the resolving form is `strand <op> about`, such as `strand kanban about` and `strand spool about`.
 
-**`prime` is run-first context priming for agents.** A `prime` command prints the working discipline
-for an area: the conventions an agent must load *before* acting, with pointers to deeper docs. `mill
-strand prime` (the day-to-day strand workflow) and `mill prime millstrand` (building on `.millstrand` and the
-source docs, read on demand) need no running weaver: `mill` resolves the Millstrand source checkout and
-renders the topic file the manifest at `docs/prime/index.json` names, so an already-installed `mill`
-prints current orientation text from a newer checkout. Op-level primes are spool-authored prose
-projected through the builtin `prime` meta-verb (`strand prime agent`), so they can never drift from
-the installed surface; spool ops that declare their own `prime` subcommand answer `strand <op> prime`,
-such as `strand kanban prime`. Repo-world `mill init` seeds a marker-guarded
+**`prime` is run-first context priming for agents.** A `prime` command prints the working discipline for an area: the conventions an agent must load *before* acting, with pointers to deeper docs. `mill prime strand` (the day-to-day strand workflow) and `mill prime millstrand` (building on `.millstrand` and the source docs, read on demand) need no running weaver: `mill` resolves the Millstrand source checkout and renders the topic file the manifest at `docs/prime/index.json` names, so an already-installed `mill` prints current orientation text from a newer checkout. Op-level primes are spool-authored prose projected through the builtin `prime` meta-verb (`strand prime agent`), so they can never drift from the installed surface; spool ops that declare their own `prime` subcommand answer `strand <op> prime`, such as `strand kanban prime`. Repo-world `mill init` seeds a marker-guarded
 section into `AGENTS.md`/`CLAUDE.md` pointing fresh agents at the prime commands (see "Agent guidance
 files").
 

@@ -1,6 +1,6 @@
 # CLI Surface
 
-**Document ID:** `SPEC-002` **Status:** Implemented **Last Updated:** 2026-08-09 **Related RFCs:** [RFC-019 Op-only CLI](../archive/26-07-04__op-only-cli/rfcs/2026-07-04-op-only-cli.md), [RFC-002 Task Query DSL](../rfcs/2026-06-24-task-query-dsl.md), [RFC-003 Fast JSON Socket CLI](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-fast-json-socket-cli.md), [RFC-004 Go CLI Migration](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-go-cli-migration.md) **Code:** `cli/`, `src/millstrand/core/weaver`, `src/millstrand/api/weaver/alpha.clj`, `.millstrand/workflows.clj` (this repository's coordination workspace; application workspaces use `.millstrand` or `.ms`)
+**Document ID:** `SPEC-002` **Status:** Implemented **Last Updated:** 2026-08-11 **Related RFCs:** [RFC-019 Op-only CLI](../archive/26-07-04__op-only-cli/rfcs/2026-07-04-op-only-cli.md), [RFC-002 Task Query DSL](../rfcs/2026-06-24-task-query-dsl.md), [RFC-003 Fast JSON Socket CLI](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-fast-json-socket-cli.md), [RFC-004 Go CLI Migration](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-go-cli-migration.md) **Code:** `cli/`, `src/millstrand/core/weaver`, `src/millstrand/api/weaver/alpha.clj`, `.millstrand/workflows.clj` (this repository's coordination workspace; application workspaces use `.millstrand` or `.ms`)
 
 ## SPEC-002.P1 Purpose
 

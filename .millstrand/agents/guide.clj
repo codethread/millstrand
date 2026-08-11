@@ -82,7 +82,7 @@
    "strand about <op>                      authored runbook prose: what the op means and who drives it"
    "strand prime <op>                      the run-first discipline for an op family (agent, workflow)"
    "strand <op> about|prime                some spool ops own these as real subcommands (kanban, spool, bench)"
-   "mill prime millstrand | mill prime strand   millstrand orientation; needs no running weaver; prints paths into the millstrand source docs"
+   "mill prime millstrand|strand                offline orientation from the Millstrand source docs"
    "strand workflow list|show <name>       the definition is the truth for a registered workflow: stages, params, gates, choices"
    "strand agent harnesses|rosters         seats and reviewer rosters with their routing docs"
    "strand query list | strand pattern list | strand vocab   named queries, weave patterns, attribute vocabulary"])
