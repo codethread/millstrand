@@ -23,6 +23,7 @@
    'millstrand.source-file-test
    ;; pure findings logic over its own temp-dir fixtures — no shared state.
    'millstrand.quality.conventions-check-test 'millstrand.quality.transition-contract-test
+   'millstrand.quality.kondo-export-test
    'millstrand.api.return-shape.alpha-test
    'millstrand.api.spec.alpha-test
    'millstrand.api.clock.alpha-test

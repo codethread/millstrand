@@ -1,11 +1,7 @@
-{;; with-weaver-world binds [ctx opts] as
- ;; let-shaped vectors; kondo cannot expand these custom macros, so lint their
- ;; binding forms as let to resolve the bound symbols.
+{:config-paths ["../resources/clj-kondo.exports/io.millstrand/millstrand"]
+ ;; Keep repository policy and third-party compatibility rules here; the
+ ;; public Millstrand authoring analysis comes from the classpath export above.
  :lint-as {clojure.test.check.clojure-test/defspec clojure.test/deftest
-           millstrand.api.lifecycle.alpha/defreconcile clojure.core/def
-           millstrand.api.lifecycle.alpha/defresource clojure.core/def
-           millstrand.api.lifecycle.alpha/defseed clojure.core/def
-           millstrand.test.alpha/with-weaver-world clojure.core/let
            ;; defworkflow defines a Var from (name doc opts definition); def's
            ;; shape resolves the name without kondo expanding the macro.
            millstrand.spools.workflow/defworkflow clojure.core/def
@@ -22,12 +18,8 @@
                         fn hooks.project-rules/no-fn-keys-destructure
                         clojure.core/defn hooks.project-rules/no-fn-keys-destructure
                         defn hooks.project-rules/no-fn-keys-destructure
-                        millstrand.api.millstrand.alpha/defop hooks.project-rules/defop
-                        millstrand.api.millstrand.alpha/defquery hooks.project-rules/defquery
                         millstrand.spools.workflow/defexecutor hooks.project-rules/defexecutor
                         millhouse.spools.workflow/defexecutor hooks.project-rules/defexecutor
-                        millstrand.macros.queries/defquery hooks.project-rules/defquery
-                        millstrand.macros.ops/defop hooks.project-rules/defop
                         millstrand.macros.rules/defrule hooks.project-rules/defrule}}
  :linters {:project/ns-docstring {:level :error}
            :project/no-spool-module-atom {:level :error}
