@@ -1,14 +1,11 @@
-;; ns name intentionally differs from the file path: this directory is a spool
-;; root smoke approves as `smoke/authoring`, so the namespace is rooted at the
-;; root's own `src`, not at the `test` lint root.
-(ns ^{:clj-kondo/ignore [:namespace-name-mismatch]} millstrand.smoke.fixtures.authoring
+(ns millstrand.fixtures.authoring
   "Authoring-forms fixture module: one op, one query, and one paired resource.
 
-  Smoke approves this directory as the `smoke/authoring` spool root and declares
-  this namespace as a module, so the owner-complete publish path runs end to end:
-  the forms below are the module's whole contribution, collected as its source
-  loads, and omitting the module from a later init.clj removes every one of them
-  by omission at the next refresh.
+  The `fixtures/authoring-module` coordinate approves this directory as a spool
+  root and declares this namespace as a module, so the owner-complete publish
+  path runs end to end: the forms below are the module's whole contribution,
+  collected as its source loads, and omitting the module from a later init.clj
+  removes every one of them by omission at the next refresh.
 
   The resource records its phases as strands rather than process state, so both
   `:open` and `:close` are observable from outside the weaver through an ordinary
@@ -19,38 +16,38 @@
             [millstrand.api.weaver.alpha :as weaver]))
 
 (def ^:private echo-arg-spec
-  {:op "smoke-echo"
+  {:op "authoring-fixture-echo"
    :doc "Echo the given text back through the op result."
    :hook-class :read
    :deadline-class :standard
    :positionals [{:name :text :type :string :required? true :doc "Text to echo."}]})
 
-(millstrand/defop smoke-echo
+(millstrand/defop authoring-fixture-echo
   "Echo the positional text back to the caller."
   {:arg-spec echo-arg-spec}
   [ctx]
   {:echoed (:text (:op/args ctx))})
 
-(millstrand/defquery smoke-authored
+(millstrand/defquery authoring-fixture-owned
   "Return strands owned by the authoring-forms fixture."
-  {:usage "strand list --query smoke-authored"}
+  {:usage "strand list --query authoring-fixture-owned"}
   [:= [:attr :owner] "authored"])
 
-(defn open-smoke-marker!
+(defn open-authoring-fixture-marker!
   "Record the resource's open phase as a strand and return its handle."
   [{:keys [runtime]}]
-  {:opened (:id (weaver/add! runtime {:title "smoke-authoring open"
+  {:opened (:id (weaver/add! runtime {:title "authoring-fixture open"
                                       :attributes {:owner "authored"
                                                    :phase "open"}}))})
 
-(defn close-smoke-marker!
+(defn close-authoring-fixture-marker!
   "Record the resource's close phase as a strand carrying the open handle."
   [{:keys [runtime resource]}]
-  (weaver/add! runtime {:title "smoke-authoring close"
+  (weaver/add! runtime {:title "authoring-fixture close"
                         :attributes {:phase "close"
                                      :opened (:opened resource)}}))
 
-(lifecycle/defresource smoke-marker
+(lifecycle/defresource authoring-fixture-marker
   "Own the fixture's open/close phase markers."
-  {:open 'millstrand.smoke.fixtures.authoring/open-smoke-marker!
-   :close 'millstrand.smoke.fixtures.authoring/close-smoke-marker!})
+  {:open 'millstrand.fixtures.authoring/open-authoring-fixture-marker!
+   :close 'millstrand.fixtures.authoring/close-authoring-fixture-marker!})
