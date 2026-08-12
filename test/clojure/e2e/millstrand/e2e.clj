@@ -1768,8 +1768,9 @@
            #(delete-live-add-root! world [old-weaver-pid new-weaver-pid mill-pid]))
           (finish-live-add-cleanup! failure cleanup-errors))))))
 
-(defn authoring-fixture-forms! [db-file]
+(defn authoring-fixture-forms!
   "Exercise the authoring fixture's publication and omission lifecycle."
+  [db-file]
   (let [workspace (bootstrap-workspace db-file "authoring")
         init-path (java.io.File. workspace "init.clj")]
     (delete-tree! (smoke-workspace (str db-file ".authoring")))
