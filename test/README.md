@@ -23,7 +23,7 @@ Clojure tests mirror the source ownership under `test/clojure`; the runner's reg
 
 ## Commands
 
-Run commands from the repository root. A cold run is the evidence gate for a slice; a warm run is for iteration.
+Run commands from the repository root. Cold means starting a fresh test JVM; warm means reusing the worktree JVM. A cold run is the evidence gate for a slice. Warm runs are for iteration only, and `make test-warm-stop` is required when warm iteration is finished.
 
 | Need | Command | What it covers |
 | --- | --- | --- |
@@ -55,15 +55,15 @@ The fixture contract and classpath boundary live in [docs/spools/testing.md](../
 
 ### Process and repository E2E
 
-Use [`test/clojure/e2e/millstrand/e2e.clj`](./clojure/e2e/millstrand/e2e.clj) only for claims that need the repository, built public binaries, public `mill`/`strand` commands, public transport, and separate process identities together. The E2E tier is defined by [SPEC-006.C4a](../devflow/specs/testing.md); it adds evidence to the lower tiers rather than replacing them.
+Use [`test/clojure/e2e/millstrand/e2e.clj`](./clojure/e2e/millstrand/e2e.clj) only for claims that need the repository, public CLI entrypoints built from repository Go sources, public `mill`/`strand` commands, public process transport, and separate process identities together. `mill weaver repl` is an allowed public process transport. It may evaluate trusted forms using blessed `millstrand.api.*.alpha` namespaces and observe process state needed for topology evidence. The forbidden shortcut is a test-side in-process runtime handle or private runtime construction that bypasses the separate process. The E2E tier is defined by [SPEC-006.C4a](../devflow/specs/testing.md); it adds evidence to the lower tiers rather than replacing them.
 
-The E2E entrypoint builds `cli/bin/strand` and `cli/bin/mill` for its run. The shell acceptance scripts use the repository-local `bin/` binaries from `make build`. Both forms must use disposable repositories, workspaces, state, data, cache, sockets, and temporary roots.
+The E2E entrypoint runs `go build` on the repository's CLI sources into `cli/bin/strand` and `cli/bin/mill` for its run; it does not use `make build`. Shell acceptance is separate: run `make build`, then the acceptance scripts use the repository-local `bin/mill` and `bin/strand`. Both forms use disposable repositories, workspaces, state, data, sockets, and fixture roots.
 
 ## Isolation and cleanup
 
-- Never use the shared `.millstrand` coordination world for a workspace-backed test. Use the fixture helper's disposable world or an explicit `--workspace` under `mktemp -d`; guard a shell variable before cleanup with `${ws:?}`.
+- Never use the shared `.millstrand` coordination world for a workspace-backed test. Use the fixture helper's disposable world or an explicit `--workspace` under `mktemp -d`; guard a shell variable before cleanup with `${ws:?}`. `${ws:?}` is a shell guard that aborts when `ws` is unset or empty, so cleanup cannot use an accidental path. For embedded worlds, follow the [weaver-world helper guidance](../docs/spools/testing.md#3-weaver-world-integration-tests).
 - Keep Unix socket paths short. The weaver-world helper uses `/tmp`; an explicit root should also be short enough for the platform socket limit.
-- Process tests isolate `XDG_STATE_HOME`, `MILLSTRAND_SOURCE`, workspace config, repository data, runtime metadata, sockets, and temporary fixture roots. A test owns only the processes it started.
+- Process tests isolate `XDG_STATE_HOME`, `MILLSTRAND_SOURCE`, workspace config, repository data, runtime metadata, sockets, and disposable fixture roots. A test owns only the processes it started.
 - Record each owned PID, terminate that PID, wait for that PID to exit, and assert that it is dead before removing its metadata, socket, or root. Never restart a running shared weaver and never use `pkill -f` or another pattern kill.
 - The warm harness records its own JVM PID in `.test-repl.pid`; `make test-warm-stop` is the cleanup path. Do not stop an unrelated warm REPL or weaver.
 - After a run, `git status --short` must not show generated SQLite, runtime metadata, smoke files, or built CLI artifacts. E2E cleanup also checks the owned process and artifact identities before deleting its guarded roots.
