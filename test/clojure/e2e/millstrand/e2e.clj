@@ -1106,28 +1106,54 @@
     (reset! weaver-status status)
     status))
 
+(defn- parse-live-add-weaver-envelope!
+  "Parse one start/status envelope and require an exact cleanup PID."
+  [output source]
+  (let [status (parse-json output)]
+    (if (and (map? status)
+             (integer? (:pid status))
+             (pos? (:pid status)))
+      status
+      (throw (ex-info (str "live-add weaver " source
+                           " envelope does not publish an exact positive PID")
+                      {:source source
+                       :status status
+                       :pid (:pid status)})))))
+
 (defn start-live-add-weaver!
   "Start the live-add weaver through its explicitly owned mill."
   [xdg-state-home workspace mill-process weaver-status]
   (let [start-output (run-mill-env! xdg-state-home workspace "weaver" "start")
         start-result (try
-                       (parse-json start-output)
-                       (catch Throwable parse-error
+                       (parse-live-add-weaver-envelope! start-output "start")
+                       (catch Throwable start-error
                          ;; A successful start can publish a live weaver before a
-                         ;; malformed envelope reaches this boundary. Recover
-                         ;; only through this isolated mill's status surface so
-                         ;; teardown still has an exact owned PID.
+                         ;; malformed or unusable envelope reaches this boundary.
+                         ;; Recover only through this isolated mill's status
+                         ;; surface so teardown still has an exact owned PID.
                          (try
-                           (parse-json
-                            (run-mill-env! xdg-state-home workspace "weaver" "status"))
+                           (parse-live-add-weaver-envelope!
+                            (run-mill-env! xdg-state-home workspace "weaver" "status")
+                            "status")
                            (catch Throwable recovery-error
-                             (try
-                               (terminate-process! @mill-process
-                                                   "live-add mill after malformed weaver start")
-                               (catch Throwable cleanup-error
-                                 (.addSuppressed parse-error cleanup-error)))
-                             (.addSuppressed parse-error recovery-error)
-                             (throw parse-error)))))]
+                             (let [cleanup-error
+                                   (try
+                                     (if-let [mill @mill-process]
+                                       (terminate-process!
+                                        mill
+                                        "live-add mill after unusable weaver start")
+                                       (throw
+                                        (ex-info
+                                         "live-add mill process is unavailable after unusable weaver start"
+                                         {})))
+                                     nil
+                                     (catch Throwable cleanup-error
+                                       cleanup-error))]
+                               (.addSuppressed start-error recovery-error)
+                               (when cleanup-error
+                                 (.addSuppressed start-error cleanup-error)
+                                 (.addSuppressed recovery-error cleanup-error)))
+                             (throw start-error)))))]
     ;; Record the exact PID before checking any other semantic field. A later
     ;; assertion must never leave a successfully started weaver untracked.
     (record-live-add-weaver-status! weaver-status start-result)
