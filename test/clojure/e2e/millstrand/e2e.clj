@@ -1277,20 +1277,20 @@
   (assert (not (.exists (java.io.File. path)))
           (str "live-add " label " artifact remains: " path)))
 
-(defn- assert-live-add-weaver-artifacts-absent!
-  "Assert that one recorded weaver generation owns no lifecycle artifacts."
-  [weaver-status generation]
+(defn- assert-live-add-weaver-artifact-absent!
+  "Assert that one artifact for a recorded weaver generation is absent."
+  [weaver-status generation artifact]
   (assert (map? weaver-status)
           (str "live-add " generation " cleanup requires weaver status"))
-  (assert-live-add-artifact-absent!
-   (str (:state_dir weaver-status) "/weaver.json")
-   (str generation " weaver metadata"))
-  (assert-live-add-artifact-absent!
-   (str (:state_dir weaver-status) "/weaver.edn")
-   (str generation " weaver EDN"))
-  (assert-live-add-artifact-absent!
-   (:socket_path weaver-status)
-   (str generation " weaver socket")))
+  (let [[path label] (case artifact
+                       :metadata [(str (:state_dir weaver-status) "/weaver.json")
+                                  "weaver metadata"]
+                       :edn [(str (:state_dir weaver-status) "/weaver.edn")
+                             "weaver EDN"]
+                       :socket [(:socket_path weaver-status) "weaver socket"])]
+    (assert-live-add-artifact-absent!
+     path
+     (str generation " " label))))
 
 (defn- assert-live-add-mill-dead!
   "Assert that the recorded live-add mill PID is dead."
@@ -1632,7 +1632,14 @@
                    "live-add refusal preserves v1 through strand"))
         (run-mill-env! state-home workspace-path "weaver" "stop")
         (assert-live-add-weaver-dead! @old-weaver-status)
-        (assert-live-add-weaver-artifacts-absent! @old-weaver-status "old generation")
+        (let [old-artifact-errors (atom [])]
+          (doseq [artifact [:metadata :edn :socket]]
+            (live-add-cleanup-stage!
+             old-artifact-errors
+             (str "verify old generation " (name artifact) " absence")
+             #(assert-live-add-weaver-artifact-absent!
+               @old-weaver-status "old generation" artifact)))
+          (finish-live-add-cleanup! (atom nil) old-artifact-errors))
         (start-live-add-weaver! state-home workspace-path mill-process new-weaver-status)
         (let [identity-after (live-add-runtime-probe! state-home workspace-path)
               runtime-after (:runtime-status identity-after)
@@ -1698,12 +1705,13 @@
            cleanup-errors "verify new weaver PID death"
            #(when @new-weaver-status
               (assert-live-add-weaver-dead! @new-weaver-status)))
-          (doseq [[generation status] generation-statuses]
+          (doseq [[generation status] generation-statuses
+                  artifact [:metadata :edn :socket]]
             (live-add-cleanup-stage!
              cleanup-errors
-             (str "verify " generation " artifacts absence")
+             (str "verify " generation " " (name artifact) " absence")
              #(when status
-                (assert-live-add-weaver-artifacts-absent! status generation))))
+                (assert-live-add-weaver-artifact-absent! status generation artifact))))
           (live-add-cleanup-stage!
            cleanup-errors "terminate mill by recorded PID"
            #(when @mill-process
