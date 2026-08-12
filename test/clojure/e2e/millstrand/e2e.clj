@@ -71,14 +71,13 @@
     (when (and bin-dir (.isDirectory bin-dir) (empty? (seq (.list bin-dir))))
       (.delete bin-dir))))
 
-(defn run-process!
-  ([message command]
-   (run-process! message nil nil command))
-  ([message cwd stdin command]
+(defn run-process-env!
+  "Run a command with an isolated Millstrand environment and preserve diagnostics."
+  ([message xdg-state-home cwd stdin command]
    (let [builder (doto (ProcessBuilder. command)
                    (.redirectErrorStream true))
          _ (doto (.environment builder)
-             (.put "XDG_STATE_HOME" smoke-xdg-state-home)
+             (.put "XDG_STATE_HOME" xdg-state-home)
              (.put "MILLSTRAND_SOURCE" checkout-root))
          _ (when cwd (.directory builder cwd))
          process (.start builder)]
@@ -90,6 +89,12 @@
        (assert (zero? exit-code)
                (str message ": " (pr-str command) "\n" output))
        output))))
+
+(defn run-process!
+  ([message command]
+   (run-process! message nil nil command))
+  ([message cwd stdin command]
+   (run-process-env! message smoke-xdg-state-home cwd stdin command)))
 
 (defn run-process-fails!
   [message cwd command]
@@ -106,6 +111,20 @@
             (str message ": expected failure from " (pr-str command) "\n" output))
     output))
 
+(defn run-process-result!
+  "Run a command and return its exit code and complete merged output."
+  [xdg-state-home cwd command]
+  (let [builder (doto (ProcessBuilder. command)
+                  (.redirectErrorStream true))
+        _ (when xdg-state-home
+            (doto (.environment builder)
+              (.put "XDG_STATE_HOME" xdg-state-home)
+              (.put "MILLSTRAND_SOURCE" checkout-root)))
+        _ (when cwd (.directory builder cwd))
+        process (.start builder)
+        output (slurp (.getInputStream process))]
+    {:exit-code (.waitFor process) :output output}))
+
 (defn terminate-process!
   "Terminate a smoke-owned process and assert that its PID exits."
   [^Process process label]
@@ -120,6 +139,25 @@
     (when (metadata/pid-alive? pid)
       (throw (ex-info (str label " pid " pid " is still alive after teardown")
                       {:label label :pid pid})))))
+
+(defn terminate-recorded-pid!
+  "Terminate exactly one recorded PID when its owning process handle is unavailable."
+  [pid label]
+  (when-let [handle (.orElse (java.lang.ProcessHandle/of pid) nil)]
+    (when (.isAlive handle)
+      (.destroy handle)
+      (loop [attempts 50]
+        (when (and (.isAlive handle) (pos? attempts))
+          (Thread/sleep 100)
+          (recur (dec attempts))))
+      (when (.isAlive handle)
+        (.destroyForcibly handle)
+        (loop [attempts 50]
+          (when (and (.isAlive handle) (pos? attempts))
+            (Thread/sleep 100)
+            (recur (dec attempts))))))
+    (assert (not (.isAlive handle))
+            (str label " pid remains alive after exact-PID cleanup: " pid))))
 
 (defn cleanup-process!
   "Terminate a smoke-owned process without masking an in-flight failure."
@@ -218,6 +256,37 @@
 
 (defn stop-weaver-config! [workspace]
   (run-mill-config! workspace "weaver" "stop"))
+
+(defn run-mill-env!
+  "Run a mill command against the mill selected by `xdg-state-home`."
+  [xdg-state-home workspace & args]
+  (run-process-env! "isolated mill command succeeds" xdg-state-home
+                    (outside-repo-dir) nil
+                    (into [mill-bin] (concat args ["--workspace" workspace]))))
+
+(defn run-mill-env-stdin!
+  "Run a mill REPL command against the mill selected by `xdg-state-home`."
+  [xdg-state-home workspace stdin & args]
+  (run-process-env! "isolated mill stdin command succeeds" xdg-state-home
+                    (outside-repo-dir) stdin
+                    (into [mill-bin] (concat args ["--workspace" workspace]))))
+
+(defn run-strand-env!
+  "Invoke a strand op through an explicitly isolated mill environment."
+  [xdg-state-home cwd workspace & args]
+  (run-process-env! "isolated strand invoke succeeds" xdg-state-home cwd nil
+                    (into [strand-bin "--workspace" workspace] args)))
+
+(defn run-strand-env-fails!
+  "Invoke an op through an isolated environment and require dispatch failure."
+  [xdg-state-home cwd workspace & args]
+  (let [result (run-process-result!
+                xdg-state-home cwd
+                (into [strand-bin "--workspace" workspace] args))]
+    (assert (not= 0 (:exit-code result))
+            (str "isolated strand invocation unexpectedly succeeded: "
+                 (pr-str args) "\n" (:output result)))
+    (:output result)))
 
 (defn assert= [expected actual message]
   (assert (= expected actual)
@@ -855,6 +924,331 @@
         :refreshed)])
    "weaver" "repl" "--stdin"))
 
+(defn live-add-root!
+  "Create a unique guarded root for one live-add process world."
+  []
+  (let [root (java.io.File. "/tmp"
+                            (str "la" (.pid (java.lang.ProcessHandle/current))))
+        _ (assert (.mkdir root)
+                  (str "live-add root already exists or could not be created: "
+                       (.getAbsolutePath root)))
+        marker (java.io.File. root ".live-add-owner")
+        repo (java.io.File. root "repo")
+        workspace (java.io.File. repo ".millstrand")
+        outside (java.io.File. root "outside")
+        xdg-state-home (java.io.File. root "xdg-state")]
+    (.mkdirs repo)
+    (.mkdirs outside)
+    (.mkdirs xdg-state-home)
+    (spit marker "millstrand live-add e2e owner\n")
+    {:root root
+     :marker marker
+     :repo repo
+     :workspace workspace
+     :outside outside
+     :xdg-state-home xdg-state-home}))
+
+(defn delete-live-add-root!
+  "Delete a live-add root only after its ownership marker is verified."
+  [{:keys [root marker]}]
+  (assert (.isFile marker) "live-add cleanup marker is missing")
+  (assert (= "millstrand live-add e2e owner\n" (slurp marker))
+          "live-add cleanup marker has unexpected contents")
+  (delete-tree! (.toPath root))
+  (assert (not (.exists root))
+          (str "live-add root remains after cleanup: " (.getAbsolutePath root))))
+
+(defn live-add-spools-edn
+  "Return the selected world's initial or live-add approved spool config."
+  [fixture? fixture-root]
+  (str
+   (pr-str
+    {:spools
+     (cond-> {'millstrand.spools/batteries
+              {:millstrand/source-root "spools/batteries"}}
+       fixture?
+       (assoc 'e2e/live-spool {:local/root fixture-root}))})
+   "\n"))
+
+(defn live-add-init-forms
+  "Return init forms with the fixture module optionally declared."
+  [fixture?]
+  (cond-> ['(require '[millstrand.api.current.alpha :as current]
+                     '[millstrand.api.runtime.alpha :as runtime])
+           '(def runtime (current/runtime))
+           '(runtime/module! runtime :millstrand/spools-batteries
+                             {:ns 'millstrand.spools.batteries
+                              :spools ['millstrand.spools/batteries]})]
+    fixture?
+    (conj '(runtime/module! runtime :e2e/live-spool
+                            {:ns 'millstrand.e2e.live-spool
+                             :spools ['e2e/live-spool]}))))
+
+(defn start-live-add-mill!
+  "Start one mill owned by the live-add scenario and return its Process."
+  [xdg-state-home]
+  (let [builder (doto (ProcessBuilder. [mill-bin "start"])
+                  (.redirectErrorStream true))
+        _ (doto (.environment builder)
+            (.put "XDG_STATE_HOME" xdg-state-home)
+            (.put "MILLSTRAND_SOURCE" checkout-root))
+        process (.start builder)
+        metadata-file (java.io.File. xdg-state-home "millstrand/mill.json")]
+    (try
+      (loop [attempts 200]
+        (cond
+          (.isFile metadata-file) process
+          (and (zero? attempts) (.isAlive process))
+          (throw (ex-info "live-add mill did not publish metadata"
+                          {:metadata-path (.getAbsolutePath metadata-file)
+                           :pid (.pid process)}))
+          (zero? attempts)
+          (let [output (slurp (.getInputStream process))]
+            (throw (ex-info "live-add mill exited before publishing metadata"
+                            {:metadata-path (.getAbsolutePath metadata-file)
+                             :exit-code (.exitValue process)
+                             :output output})))
+          :else
+          (do (Thread/sleep 50) (recur (dec attempts)))))
+      (catch Throwable t
+        (try
+          (terminate-process! process "live-add mill startup failure")
+          (catch Throwable cleanup-error
+            (.addSuppressed t cleanup-error)))
+        (throw t)))))
+
+(defn live-add-runtime-probe!
+  "Read the live weaver generation and runtime status through its REPL."
+  [xdg-state-home workspace]
+  (edn/read-string
+   (run-mill-env-stdin!
+    xdg-state-home workspace
+    (source-file/render-forms
+     ['(do
+         (require '[millstrand.api.current.alpha :as current]
+                  '[millstrand.api.runtime.alpha :as runtime])
+         (let [rt (current/runtime)]
+           {:generation (:generation-id rt)
+            :runtime-status (runtime/status rt)}))])
+    "weaver" "repl" "--stdin")))
+
+(defn start-live-add-weaver!
+  "Start the live-add weaver through its explicitly owned mill."
+  [xdg-state-home workspace]
+  (run-mill-env! xdg-state-home workspace "weaver" "start")
+  (loop [attempts 50]
+    (when (zero? attempts)
+      (throw (ex-info "live-add weaver did not become ready" {:workspace workspace})))
+    (let [running? (try
+                     (= "running"
+                        (:state (parse-json
+                                 (run-mill-env! xdg-state-home workspace "weaver" "status"))))
+                     (catch AssertionError _ false))]
+      (when-not running?
+        (Thread/sleep 200)
+        (recur (dec attempts))))))
+
+(defn refresh-live-add-weaver!
+  "Refresh the live-add weaver through its public mill REPL attach path."
+  [xdg-state-home workspace]
+  (run-mill-env-stdin!
+   xdg-state-home workspace
+   (source-file/render-forms
+    ['(do
+        (require '[millstrand.api.current.alpha :as current]
+                 '[millstrand.api.runtime.alpha :as runtime])
+        (runtime/refresh! (current/runtime))
+        :refreshed)])
+   "weaver" "repl" "--stdin"))
+
+(defn live-add-help-op?
+  "Return whether the selected weaver help catalogue contains `op-name`."
+  [help op-name]
+  (some #(= op-name (get-in % [:operation :name])) (:ops help)))
+
+(defn assert-live-add-identities!
+  "Assert the process and root identities published by mill and its weaver."
+  [mill-status weaver-status mill-pid workspace xdg-state-home]
+  (let [workspace-path (.getCanonicalPath (java.io.File. workspace))
+        state-root (.getCanonicalPath (java.io.File. xdg-state-home))
+        mill-root (str state-root "/millstrand")
+        weaver-root (str mill-root "/weavers/")]
+    (assert (:healthy mill-status) "live-add mill must report healthy")
+    (assert= mill-pid (:pid mill-status) "live-add mill status reports its exact PID")
+    (assert= mill-root (:state_root mill-status) "live-add mill publishes its isolated state root")
+    (assert= (str mill-root "/mill.sock") (:socket_path mill-status)
+             "live-add mill publishes its isolated socket")
+    (assert= "running" (:state weaver-status) "live-add weaver is running")
+    (assert (pos? (:pid weaver-status)) "live-add weaver publishes a PID")
+    (assert= workspace-path (:config_dir weaver-status)
+             "live-add weaver publishes the selected workspace")
+    (assert (clojure.string/starts-with? (:state_dir weaver-status) weaver-root)
+            "live-add weaver state root is inside the isolated mill state root")
+    (assert (clojure.string/starts-with? (:data_dir weaver-status) weaver-root)
+            "live-add weaver data root is inside the isolated mill state root")
+    (assert (clojure.string/starts-with? (:database_path weaver-status)
+                                         (:data_dir weaver-status))
+            "live-add weaver database is inside its recorded data root")
+    (assert= (str (:state_dir weaver-status) "/weaver.sock") (:socket_path weaver-status)
+             "live-add weaver publishes the selected socket root")
+    (assert (not (clojure.string/blank? (str (:weaver_id weaver-status))))
+            "live-add weaver publishes a nonblank identity")
+    mill-status))
+
+(defn assert-live-add-cleanup!
+  "Assert exact-PID death and removal of all recorded live-add artifacts."
+  [mill-process weaver-status xdg-state-home]
+  (let [weaver-pid (:pid weaver-status)
+        state-dir (:state_dir weaver-status)
+        mill-root (java.io.File. xdg-state-home "millstrand")]
+    (assert (not (metadata/pid-alive? weaver-pid))
+            (str "live-add weaver PID remains alive: " weaver-pid))
+    (doseq [path [(str state-dir "/weaver.json")
+                  (str state-dir "/weaver.edn")
+                  (:socket_path weaver-status)]]
+      (assert (not (.exists (java.io.File. path)))
+              (str "live-add weaver artifact remains: " path)))
+    (terminate-process! mill-process "live-add mill")
+    (assert (not (metadata/pid-alive? (.pid mill-process)))
+            (str "live-add mill PID remains alive: " (.pid mill-process)))
+    (doseq [path [(java.io.File. mill-root "mill.json")
+                  (java.io.File. mill-root "mill.sock")]]
+      (assert (not (.exists path))
+              (str "live-add mill artifact remains: " (.getAbsolutePath path))))))
+
+(defn smoke-live-add!
+  "Prove an absent local spool is additively published by one live weaver."
+  []
+  (let [world (live-add-root!)
+        {:keys [workspace outside xdg-state-home]} world
+        fixture-root (.getCanonicalPath
+                      (java.io.File. checkout-root "test/fixtures/clojure/e2e-live-spool"))
+        workspace-path (.getCanonicalPath workspace)
+        mill-process (atom nil)
+        weaver-status (atom nil)
+        baseline-result (run-process-result! nil outside [mill-bin "status"])
+        baseline (when (zero? (:exit-code baseline-result))
+                   (parse-json (:output baseline-result)))
+        failure (atom nil)]
+    (try
+      (.mkdirs workspace)
+      (write-client-config-to-dir! workspace-path)
+      (spit (java.io.File. workspace "spools.edn")
+            (live-add-spools-edn false fixture-root))
+      (source-file/spit-forms! (java.io.File. workspace "init.clj")
+                               (live-add-init-forms false))
+      (reset! mill-process (start-live-add-mill! (.getCanonicalPath xdg-state-home)))
+      (run-mill-env! (.getCanonicalPath xdg-state-home) workspace-path "init")
+      (start-live-add-weaver! (.getCanonicalPath xdg-state-home) workspace-path)
+      (let [mill-before (parse-json
+                         (run-process-env! "live-add mill status succeeds"
+                                           (.getCanonicalPath xdg-state-home) outside nil
+                                           [mill-bin "status"]))
+            weaver-before (parse-json
+                           (run-mill-env! (.getCanonicalPath xdg-state-home)
+                                          workspace-path "weaver" "status"))
+            identity-before (live-add-runtime-probe!
+                             (.getCanonicalPath xdg-state-home) workspace-path)
+            help-before (parse-json
+                         (run-strand-env! (.getCanonicalPath xdg-state-home) outside
+                                          workspace-path "help" "--json"))]
+        (reset! weaver-status weaver-before)
+        (assert-live-add-identities! mill-before weaver-before (.pid @mill-process)
+                                     workspace-path (.getCanonicalPath xdg-state-home))
+        (assert (not (live-add-help-op? help-before "e2e-live"))
+                "live-add fixture op must be absent before approval and activation")
+        (assert-contains
+         (run-strand-env-fails! (.getCanonicalPath xdg-state-home) outside workspace-path
+                                "e2e-live")
+         "Operation not found"
+         "live-add fixture op absence is proved through strand dispatch")
+        (spit (java.io.File. workspace "spools.edn")
+              (live-add-spools-edn true fixture-root))
+        (source-file/spit-forms! (java.io.File. workspace "init.clj")
+                                 (live-add-init-forms true))
+        (refresh-live-add-weaver! (.getCanonicalPath xdg-state-home) workspace-path)
+        (let [identity-after (live-add-runtime-probe!
+                              (.getCanonicalPath xdg-state-home) workspace-path)
+              mill-after (parse-json
+                          (run-process-env! "live-add mill status after refresh succeeds"
+                                            (.getCanonicalPath xdg-state-home) outside nil
+                                            [mill-bin "status"]))
+              weaver-after (parse-json
+                            (run-mill-env! (.getCanonicalPath xdg-state-home)
+                                           workspace-path "weaver" "status"))
+              runtime-status (:runtime-status identity-after)
+              root-outcome (get-in runtime-status [:root/outcomes 'e2e/live-spool])
+              module-outcome (get-in runtime-status [:module/outcomes :e2e/live-spool])
+              help-after (parse-json
+                          (run-strand-env! (.getCanonicalPath xdg-state-home) outside
+                                           workspace-path "help" "--json"))]
+          (assert-live-add-identities! mill-after weaver-after (.pid @mill-process)
+                                       workspace-path (.getCanonicalPath xdg-state-home))
+          (assert= (:pid mill-before) (:pid mill-after)
+                   "live-add refresh preserves mill PID")
+          (assert= (:mill_id mill-before) (:mill_id mill-after)
+                   "live-add refresh preserves mill identity")
+          (assert= (:pid weaver-before) (:pid weaver-after)
+                   "live-add refresh preserves weaver PID")
+          (assert= (:weaver_id weaver-before) (:weaver_id weaver-after)
+                   "live-add refresh preserves weaver identity")
+          (assert= (:generation identity-before) (:generation identity-after)
+                   "live-add refresh preserves weaver generation")
+          (assert (contains? #{:loaded :synced :already-available}
+                             (:status root-outcome))
+                  (str "live-add root sync did not publish the fixture: "
+                       (pr-str root-outcome)))
+          (assert= :applied (:status module-outcome)
+                   "live-add refresh applies the fixture module")
+          (assert (live-add-help-op? help-after "e2e-live")
+                  "live-add refresh publishes the fixture op in help")
+          (assert= {:e2e "live-add"}
+                   (parse-json
+                    (run-strand-env! (.getCanonicalPath xdg-state-home) outside
+                                     workspace-path "e2e-live"))
+                   "live-add fixture op is invocable through strand")))
+      (catch Throwable t
+        (reset! failure t)
+        (throw t))
+      (finally
+        (try
+          (when (and @weaver-status
+                     (metadata/pid-alive? (:pid @weaver-status)))
+            (try
+              (run-mill-env! (.getCanonicalPath xdg-state-home) workspace-path
+                             "weaver" "stop")
+              (catch Throwable stop-error
+                (try
+                  (terminate-recorded-pid! (:pid @weaver-status) "live-add weaver")
+                  (catch Throwable exact-pid-error
+                    (.addSuppressed stop-error exact-pid-error)))
+                (if-let [primary @failure]
+                  (.addSuppressed primary stop-error)
+                  (throw stop-error)))))
+          (when (and @weaver-status @mill-process)
+            (assert-live-add-cleanup! @mill-process @weaver-status
+                                      (.getCanonicalPath xdg-state-home)))
+          (when (and @mill-process (nil? @weaver-status))
+            (terminate-process! @mill-process "live-add mill after startup failure"))
+          (when baseline
+            (let [after (run-process-result! nil outside [mill-bin "status"])]
+              (assert= 0 (:exit-code after)
+                       "pre-existing normal mill still answers after live-add cleanup")
+              (let [normal-after (parse-json (:output after))]
+                (doseq [key [:pid :mill_id :state_root :socket_path]]
+                  (assert= (get baseline key) (get normal-after key)
+                           (str "normal mill identity remains stable for " (name key)))))))
+          (catch Throwable cleanup-error
+            (if-let [primary @failure]
+              (.addSuppressed primary cleanup-error)
+              (throw cleanup-error))))
+        (try
+          (delete-live-add-root! world)
+          (catch Throwable cleanup-error
+            (if-let [primary @failure]
+              (.addSuppressed primary cleanup-error)
+              (throw cleanup-error))))))))
+
 (defn smoke-authoring-forms! [db-file]
   (let [workspace (bootstrap-workspace db-file "authoring")
         init-path (java.io.File. workspace "init.clj")]
@@ -959,6 +1353,7 @@
           failure (atom nil)]
       (try
         (smoke-cli-help!)
+        (smoke-live-add!)
         (smoke-bootstrap! db-file)
         (catch Throwable t
           (reset! failure t)
