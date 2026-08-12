@@ -1,5 +1,5 @@
 (ns millstrand.integration.scheduler.lifecycle-test
-  "End-to-end hardening for the weaver scheduler (PH4).
+  "Embedded integration hardening for the weaver scheduler (PH4).
 
   The storage layer (`millstrand.core.db.scheduler.storage-test`), the runtime timer/dispatch
   module (`millstrand.core.weaver.scheduler.runtime-test`), and the blessed API tier
