@@ -1,4 +1,4 @@
-(ns millstrand.e2e.scheduler.lifecycle-test
+(ns millstrand.integration.scheduler.lifecycle-test
   "End-to-end hardening for the weaver scheduler (PH4).
 
   The storage layer (`millstrand.core.db.scheduler.storage-test`), the runtime timer/dispatch
@@ -76,7 +76,7 @@
       ;; re-arm from durable pending rows and fire it (SPEC-004.C100).
       (db/schedule-wake! (db/datasource db-file)
                          {:key "survivor" :wake-at (Instant/ofEpochSecond 1)
-                          :handler 'millstrand.e2e.scheduler.lifecycle-test/add-strand-handler
+                          :handler 'millstrand.integration.scheduler.lifecycle-test/add-strand-handler
                           :payload {:title "Survivor strand"}})
       (let [rt2 (weaver-runtime/start! db-file {:world world :publish? false})]
         (try
