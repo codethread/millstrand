@@ -93,19 +93,43 @@ A low-risk way in: one repo, one maintainer, the plain CLI. Follow the setup and
 
 ## Quick start
 
-Install with Homebrew on macOS:
+### Install
+
+Choose an installation method:
+
+<details markdown>
+<summary>macOS with Homebrew</summary>
 
 ```sh
 brew install codethread/millstrand/millstrand
 ```
 
-Homebrew installs Clojure and its JVM dependency. To install from a cloned checkout instead, install Go, Clojure, and a JVM first, then run:
+Homebrew installs Clojure and its JVM dependency.
+
+</details>
+
+<details markdown>
+<summary>Build from source</summary>
+
+Install these prerequisites:
+
+- Go
+- Clojure
+- A JVM
+
+From a Millstrand checkout, run:
 
 ```sh
-make install   # builds and installs the `strand` and `mill` CLIs from this checkout
+make install
 ```
 
-Start the supervisor once, in a terminal you can leave open:
+This builds and installs the `strand` and `mill` CLIs from the checkout.
+
+</details>
+
+### Running
+
+Start the supervisor (mill) once, in a terminal you can leave open:
 
 ```sh
 mill start
@@ -118,24 +142,6 @@ cd ~/some/git/repo
 mill init            # writes this repo's .millstrand config directory
 mill weaver start    # boot the weaver for this workspace
 ```
-
-### Use Millstrand from another Clojure project
-
-Published alpha consumers pin the repository and full commit SHA. The core currently publishes no release marker:
-
-```clojure
-{:deps {io.millstrand/millstrand
-        {:git/url "https://github.com/codethread/millstrand.git"
-         :git/sha "<40-hex-commit-sha>"}}}
-```
-
-For local sibling development, use the checkout beside the consumer:
-
-```clojure
-{:deps {io.millstrand/millstrand {:local/root "../millstrand"}}}
-```
-
-The local form is for development only. `scripts/verify-published-core.sh` has two proof modes: `candidate` checks a clean temporary consumer against the candidate checkout, while `published` checks the fetched Git commit without a local root.
 
 Add a few strands, wiring in dependencies and a `type` attribute as you go (`strand add` prints the new strand as JSON; `jq` pulls the id out):
 
