@@ -73,8 +73,8 @@ The E2E entrypoint runs `go build` on the repository's CLI sources into `cli/bin
 | Fixture class | Location and shape | Evidence |
 | --- | --- | --- |
 | Classpath/direct | Test namespaces and temporary pure-data or file fixtures under `test/clojure/millstrand/`; explicit `:publish? false` runtimes where a runtime is needed. | API, pure, and component behavior. No acquisition or startup claim. |
-| Approved-root/module | `test/fixtures/clojure/authoring-module/` and generated `:spools-edn`/`:files` worlds used with `millstrand.test.alpha`. | Root approval, source loading, module collection/publication, lifecycle, and refresh inside an embedded disposable weaver. |
-| Process E2E | `test/clojure/e2e/millstrand/e2e.clj`, `test/fixtures/shell/acceptance/`, the committed `test/fixtures/clojure/e2e-live-spool/` fixture, and the generated Git repositories and v1/v2 live-spool roots created under disposable `/tmp` paths. | Built binaries, public commands and transport, repository bootstrap, process identity, generation changes, and exact-PID teardown. |
+| Approved-root/module | Generated `:spools-edn`/`:files` worlds used with `millstrand.test.alpha`. | Root approval, source loading, module collection/publication, lifecycle, and refresh inside an embedded disposable weaver. |
+| Process E2E | `test/clojure/e2e/millstrand/e2e.clj`, the committed `test/fixtures/clojure/authoring-module/` and `test/fixtures/clojure/e2e-live-spool/` fixtures, `test/fixtures/shell/acceptance/`, and the generated Git repositories and v1/v2 live-spool roots created under disposable `/tmp` paths. | Built binaries, public commands and transport, repository bootstrap, process identity, generation changes, and exact-PID teardown. |
 
 Do not promote a fixture to a higher tier by accident. A source file on the test classpath is not an approved root, and an embedded weaver is not a repository process E2E.
 
