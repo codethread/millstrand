@@ -61,7 +61,7 @@ The E2E entrypoint runs `go build` on the repository's CLI sources into `cli/bin
 
 ## Isolation and cleanup
 
-- Never use the shared `.millstrand` coordination world for a workspace-backed test. Use the fixture helper's disposable world or an explicit `--workspace` under `mktemp -d`; guard a shell variable before cleanup with `${ws:?}`. `${ws:?}` is a shell guard that aborts when `ws` is unset or empty, so cleanup cannot use an accidental path. For embedded worlds, follow the [weaver-world helper guidance](../docs/spools/testing.md#3-weaver-world-integration-tests).
+- Never use the shared `.millstrand` coordination world for a workspace-backed test. Use the fixture helper's disposable world or an explicit `--workspace` under `mktemp -d`; guard a shell variable before cleanup with `${ws:?}`. `${ws:?}` is a shell guard; the shell aborts expansion when `ws` is unset or empty, preventing a missing workspace variable from becoming a blank cleanup target. For embedded worlds, follow the [weaver-world helper guidance](../docs/spools/testing.md#3-weaver-world-integration-tests).
 - Keep Unix socket paths short. The weaver-world helper uses `/tmp`; an explicit root should also be short enough for the platform socket limit.
 - Process tests isolate `XDG_STATE_HOME`, `MILLSTRAND_SOURCE`, workspace config, repository data, runtime metadata, sockets, and disposable fixture roots. A test owns only the processes it started.
 - Record each owned PID, terminate that PID, wait for that PID to exit, and assert that it is dead before removing its metadata, socket, or root. Never restart a running shared weaver and never use `pkill -f` or another pattern kill.
