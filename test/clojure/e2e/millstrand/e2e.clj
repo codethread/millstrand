@@ -111,7 +111,7 @@
             (str message ": expected failure from " (pr-str command) "\n" output))
     output))
 
-(defn run-process-env-result!
+(defn- run-process-env-result!
   "Run a command with optional isolated environment and return its result."
   [xdg-state-home cwd stdin command]
   (let [builder (doto (ProcessBuilder. command)
@@ -128,7 +128,7 @@
         output (slurp (.getInputStream process))]
     {:exit-code (.waitFor process) :output output}))
 
-(defn run-process-result!
+(defn- run-process-result!
   "Run a command and return its exit code and complete merged output."
   [xdg-state-home cwd command]
   (run-process-env-result! xdg-state-home cwd nil command))
@@ -1120,7 +1120,7 @@
                        :status status
                        :pid (:pid status)})))))
 
-(defn start-live-add-weaver!
+(defn- start-live-add-weaver!
   "Start the live-add weaver through its explicitly owned mill."
   [xdg-state-home workspace mill-process weaver-status]
   (let [start-output (run-mill-env! xdg-state-home workspace "weaver" "start")
@@ -1174,7 +1174,7 @@
         :refreshed)])
    "weaver" "repl" "--stdin"))
 
-(defn refresh-live-add-weaver-refuses!
+(defn- refresh-live-add-weaver-refuses!
   "Refresh through public mill REPL and return its parsed refusal result."
   [xdg-state-home workspace]
   (let [result (run-process-env-result!
@@ -1192,7 +1192,7 @@
              (str "public live-add refresh command failed\n" (:output result)))
     (edn/read-string (:output result))))
 
-(defn live-add-fixture-roots!
+(defn- live-add-fixture-roots!
   "Materialize two versions of the same approved live-add coordinate."
   [{:keys [root]}]
   (into {}
