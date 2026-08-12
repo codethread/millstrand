@@ -2,7 +2,7 @@
 
 **Document ID:** `SPEC-006`
 **Status:** Implemented
-**Last Updated:** 2026-08-08
+**Last Updated:** 2026-08-12
 **Related RFCs:** [Library author testing](../archive/26-07-03__library-author-testing-support/rfcs/2026-06-26-library-author-testing.md), [Test concurrency](../rfcs/2026-07-03-test-concurrency.md)
 **Related root specs:** [REPL API](./repl-api.md), [Weaver Runtime](./daemon-runtime.md), [Alpha Surface](./alpha-surface.md)
 **Code:** `src/millstrand/test`, `src/millstrand/api`
@@ -31,6 +31,7 @@ This spec defines how downstream projects may test code against Millstrand and h
 - **SPEC-006.C2 (direct):** A downstream test JVM may require the blessed `millstrand.api.*.alpha` namespaces and exercise their caller-visible contracts. A call that requires a runtime receives an explicit runtime value rather than relying on ambient selection. This tier does not prove that a weaver can acquire or load a spool.
 - **SPEC-006.C3 (weaver world):** Behavior that depends on startup files, approved roots, module publication, the spool classloader, runtime transports, storage, events, scheduling, or reload uses `millstrand.test.alpha` to create a real disposable weaver world. The helper contract and durable vocabulary remain owned by `SPEC-003.C28`–`C32`; runtime publication and isolation remain owned by `SPEC-004.C8a`.
 - **SPEC-006.C4:** Moving upward through the tiers adds integration evidence. Passing a higher tier does not require authors to move pure behavior out of ordinary unit tests.
+- **SPEC-006.C4a (process/repository E2E):** Repository-only end-to-end tests build the public `cli/bin/strand` and `cli/bin/mill` entrypoints from repository Go sources for the E2E run. They use a separate real `mill` supervisor and weaver process topology, a disposable repository and workspace, and disposable state. They exercise public `mill`/`strand` commands and public process transports, including `mill weaver repl`. That REPL may evaluate trusted forms using blessed `millstrand.api.*.alpha` namespaces and make process-state observations needed for topology evidence. The forbidden shortcut is a test-side in-process runtime handle or private runtime construction that bypasses the separate process. Each test records the exact processes it owns, stops and waits for only those PIDs, verifies their exit, and removes its disposable artifacts. Use this tier only for a claim unavailable to direct or weaver-world tests, such as behavior that requires the repository, built binaries, and separate process identities together. Runtime behavior remains owned by `SPEC-004`; process tests cite `SPEC-004.C44c@sync-diff-classification`, `SPEC-004.C44d@sync-diff-classification`, and `SPEC-004.C46` rather than restating their exact shapes.
 
 ## SPEC-006.P5 Dependency and classpath contract
 

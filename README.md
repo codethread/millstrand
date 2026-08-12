@@ -68,7 +68,7 @@ A few terms up front, since the rest of this page uses them:
 <img src="./docs/assets/mill-weaver-strands.svg" width="560"
      alt="mill, the supervisor, routes to one weaver per workspace; a worktree of repo-a uses the same repo-a weaver; each weaver owns its own millstrand.sqlite of strands.">
 
-Full documentation lives at **[codethread.github.io/millstrand](https://codethread.github.io/millstrand/)**.
+Full documentation lives at **[codethread.github.io/millstrand](https://codethread.github.io/millstrand/)**. Contributors can use the [repository test map](./test/README.md) to find the test tiers and their commands.
 
 > [!NOTE]
 > **Why a live image?**

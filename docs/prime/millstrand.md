@@ -12,6 +12,7 @@ The Millstrand source directory for this world is `{{.Source}}`, resolved from `
 | `docs/reference.md` | the user reference: workspaces, the weaver, the CLI surface, strands, edges, attributes, queries, and the REPL |
 | `docs/spools/customisation.md` | workspace config: `init.clj`, spool approval and activation, authoring a local spool, and REPL hygiene for shared weavers |
 | `docs/spools/testing.md` | testing spools and libraries: the testing tiers and `millstrand.test.alpha` weaver worlds |
+| `test/README.md` | repository test tiers, commands, fixtures, process boundaries, and merge-gate evidence |
 | `docs/spools/writing-shared-spools.md` | the discipline for spools other people run |
 | `docs/api/` | the generated Alpha API reference |
 | `spools/README.md` | the index of shipped spools, each row linking its contract doc |
