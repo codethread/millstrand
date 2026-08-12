@@ -74,13 +74,13 @@ The E2E entrypoint builds `cli/bin/strand` and `cli/bin/mill` for its run. The s
 | --- | --- | --- |
 | Classpath/direct | Test namespaces and temporary pure-data or file fixtures under `test/clojure/millstrand/`; explicit `:publish? false` runtimes where a runtime is needed. | API, pure, and component behavior. No acquisition or startup claim. |
 | Approved-root/module | `test/fixtures/clojure/smoke-authoring/` and generated `:spools-edn`/`:files` worlds used with `millstrand.test.alpha`. | Root approval, source loading, module collection/publication, lifecycle, and refresh inside an embedded disposable weaver. |
-| Process E2E | `test/clojure/e2e/millstrand/e2e.clj`, `test/fixtures/shell/acceptance/`, and the generated Git repositories and v1/v2 live-spool roots created under disposable `/tmp` paths. | Built binaries, public commands and transport, repository bootstrap, process identity, generation changes, and exact-PID teardown. |
+| Process E2E | `test/clojure/e2e/millstrand/e2e.clj`, `test/fixtures/shell/acceptance/`, the committed `test/fixtures/clojure/e2e-live-spool/` fixture, and the generated Git repositories and v1/v2 live-spool roots created under disposable `/tmp` paths. | Built binaries, public commands and transport, repository bootstrap, process identity, generation changes, and exact-PID teardown. |
 
 Do not promote a fixture to a higher tier by accident. A source file on the test classpath is not an approved root, and an embedded weaver is not a repository process E2E.
 
 ## Live process E2E scenarios and specifications
 
-The detailed assertion matrices stay beside the implementation in [`test/clojure/e2e/millstrand/e2e.clj`](./clojure/e2e/millstrand/e2e.clj). This table records the unique process claim each scenario adds and points to the authoritative runtime clauses without copying their behavioral contracts.
+Process-specific assertions stay in [`test/clojure/e2e/millstrand/e2e.clj`](./clojure/e2e/millstrand/e2e.clj). Detailed runtime matrices remain in the lower-tier files named by the table. This table records the unique process claim each scenario adds and points to the authoritative runtime clauses without copying their behavioral contracts.
 
 | Scenario | Unique process/repository claim | Authoritative specification | Lower-tier integration ownership |
 | --- | --- | --- | --- |
