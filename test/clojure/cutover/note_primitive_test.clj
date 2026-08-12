@@ -198,7 +198,7 @@
         (is (= 2 (:kanban-note-text first-run)) "both live-card kanban bodies are re-keyed")
         (is (= 1 (:kanban-note-by first-run)) "only the authored kanban note gains note/by")
         (is (= 13 (:total first-run)) "the first run reports every mutation")
-        (is (= 0 (:total second-run)) "a re-run against a stamped world is a no-op")
+        (is (zero? (:total second-run)) "a re-run against a stamped world is a no-op")
         (is (= 1 (:shuttle-skipped-dangling second-run)) "the dangling shuttle note is still skipped on re-run")
         (is (= 1 (:kanban-skipped-no-card second-run)) "the card-less kanban note is still skipped on re-run"))))
   (with-fixture

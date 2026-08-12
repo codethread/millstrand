@@ -1,10 +1,11 @@
-.PHONY: help build kanban-tree install dash api-docs test-go docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
+.PHONY: help build kanban-tree install dash api-docs test-go test-e2e docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
 
 help:
 	@printf '%s\n' \
 		'Millstrand development commands:' \
 		'  make build              Build repo-local strand, mill, and kanban-tree binaries' \
 		'  make test-go            Run Go tests in every Go module' \
+		'  make test-e2e           Run end-to-end CLI and REPL tests' \
 		'  make fmt-check          Check Clojure and Go formatting' \
 		'  make lint               Run Clojure, convention, and Go linters' \
 		'  make reflect-check      Fail on reflected Java interop' \
@@ -95,6 +96,9 @@ fmt-check-go:
 test-go:
 	bash scripts/go-quality test
 
+test-e2e:
+	clojure -M:e2e
+
 lint: lint-clj lint-splint lint-conventions lint-go
 
 lint-clj:
@@ -109,7 +113,7 @@ lint-splint:
 # spool sources touching millstrand.core.* only from unsafe-named namespaces
 # (quality.spool-tiers), and JSON authored as Clojure data rather than
 # hand-escaped string literals (quality.json-literals). Workspace-config tests
-# use millstrand.ct.* exactly under test/millstrand/ct/, and direct checked-in .millstrand
+# use millstrand.ct.* exactly under test/clojure/millstrand/ct/, and direct checked-in .millstrand
 # paths cannot appear in tests outside that directory (quality.workspace-tests).
 lint-conventions:
 	@if git grep -n -E 'TEN-''000([^@]|$$)' -- . ':!devflow/TENETS.md'; then \
@@ -126,7 +130,7 @@ reflect-check:
 
 identity-check:
 	bash scripts/quality/millstrand-active-identity.sh
-	bash scripts/quality/millstrand-active-identity-regression.sh
+	bash test/shell/quality/millstrand-active-identity-regression.sh
 
 ci-config-check:
 	bash scripts/quality/millstrand-ci-config.sh

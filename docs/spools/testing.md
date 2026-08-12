@@ -118,7 +118,7 @@ transport:
 
 ## Test ownership
 
-Keep `test/millstrand/api` for caller-visible contract pins: public argument grammar, validation, result shapes, and error behavior. Suite size does not change that ownership. The CLI parser suite is a large public contract suite and stays in the API tier.
+Keep `test/clojure/millstrand/api` for caller-visible contract pins: public argument grammar, validation, result shapes, and error behavior. Suite size does not change that ownership. The CLI parser suite is a large public contract suite and stays in the API tier.
 
 Move tests that inspect `millstrand.core.*`, redefine core collaborators, resolve private Vars, manage module or filesystem fixtures, run Git diagnostics, or exercise timer dispatch into a named core or integration namespace. Keep those namespaces in the runner group that matches their isolation needs; JVM-global redefinitions stay serial.
 

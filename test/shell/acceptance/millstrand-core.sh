@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 tmp_root=$(mktemp -d /tmp/millstrand-core.XXXXXX)
 state_root=$(mktemp -d /tmp/millstrand-state.XXXXXX)
 workspace_root="$tmp_root/repo"
@@ -53,8 +53,8 @@ mill_pid=$!
 await_mill_metadata
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" init --workspace "$config_dir" >"$tmp_root/init.json"
-cp "$repo_root/scripts/acceptance/fixtures/millstrand-core-spools.edn" "$config_dir/spools.edn"
-cp "$repo_root/scripts/acceptance/fixtures/millstrand-core-init.clj" "$config_dir/init.clj"
+cp "$repo_root/test/fixtures/shell/acceptance/millstrand-core-spools.edn" "$config_dir/spools.edn"
+cp "$repo_root/test/fixtures/shell/acceptance/millstrand-core-init.clj" "$config_dir/init.clj"
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --workspace "$config_dir" >"$status_before"
 jq -e '(.database_path | type) == "string" and (.database_path | length) > 0' "$status_before" >/dev/null

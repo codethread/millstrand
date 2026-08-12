@@ -11,7 +11,7 @@ run() {
 
 run clojure -M:test
 run make test-go
-run clojure -M:smoke
+run make test-e2e
 run make spool-suite-gate
 run make fmt-check
 run make lint
@@ -19,6 +19,6 @@ run make reflect-check
 run make ci-config-check
 run make identity-check
 run make build
-run scripts/acceptance/millstrand-docs.sh
-run scripts/acceptance/millstrand-neovim.sh
+run test/shell/acceptance/millstrand-docs.sh
+run test/shell/acceptance/millstrand-neovim.sh
 run make docs-check

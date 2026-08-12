@@ -125,7 +125,7 @@
 
 (deftest workspace-test-namespace-and-directory-map-bidirectionally
   (let [valid {:name 'millstrand.ct.config-test
-               :filename "test/millstrand/ct/config_test.clj" :row 1}
+               :filename "test/clojure/millstrand/ct/config_test.clj" :row 1}
         external-ct {:name 'ct.spools.example-test
                      :filename "test/ct/spools/example_test.clj" :row 1}]
     (is (empty? (check-workspace-analysis
@@ -133,8 +133,8 @@
     (testing "the workspace namespace cannot leak outside its directory"
       (let [[finding] (check-workspace-analysis
                        {:namespace-definitions
-                        [(assoc valid :filename "test/millstrand/config_test.clj")]})]
-        (is (str/includes? finding "must be defined under `test/millstrand/ct/`"))))
+                        [(assoc valid :filename "test/clojure/millstrand/config_test.clj")]})]
+        (is (str/includes? finding "must be defined under `test/clojure/millstrand/ct/`"))))
     (testing "the workspace directory cannot carry an unrelated namespace"
       (let [[finding] (check-workspace-analysis
                        {:namespace-definitions
@@ -143,7 +143,7 @@
     (testing "absolute paths preserve the boundary"
       (is (empty? (check-workspace-analysis
                    {:namespace-definitions
-                    [(assoc valid :filename "/tmp/repo/test/millstrand/ct/config_test.clj")]})))))
+                    [(assoc valid :filename "/tmp/repo/test/clojure/millstrand/ct/config_test.clj")]})))))
   (testing "malformed analysis fails at the public quality boundary"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"workspace-test analysis does not conform"
                           (check-workspace-analysis {})))))
@@ -275,7 +275,7 @@
                    :to 'millstrand.api.tidy.internal.shared
                    :filename "src/millstrand/api/tidy/internal/validate.clj" :row 3}
           test-use {:from 'millstrand.api.tidy.alpha-test :to 'millstrand.api.tidy.internal
-                    :filename "test/millstrand/api/tidy/alpha_test.clj" :row 3}]
+                    :filename "test/clojure/millstrand/api/tidy/alpha_test.clj" :row 3}]
       (is (empty? (api-form/findings
                    {:namespace-usages [own nested sibling test-use]} {} #{})))))
   (testing "a foreign module's internal is still fenced, nested or not"
@@ -514,10 +514,10 @@
 
 (deftest findings-locate-the-literal-and-name-the-fix
   (let [[finding] (json-literals/findings
-                   [{:filename "test/millstrand/thing_test.clj"
+                   [{:filename "test/clojure/millstrand/thing_test.clj"
                      :line 12
                      :text reproducible-object}])]
-    (is (str/starts-with? finding "test/millstrand/thing_test.clj:12: "))
+    (is (str/starts-with? finding "test/clojure/millstrand/thing_test.clj:12: "))
     (is (str/includes? finding reproducible-object))
     (is (str/includes? finding "json/write-str")))
   (testing "a long literal is excerpted rather than reprinted whole"

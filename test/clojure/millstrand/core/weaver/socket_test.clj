@@ -649,11 +649,11 @@
             (is (= "stream/failed" (get-in terminator ["error" "code"])))))))))
 
 (deftest json-socket-stream-op-fixture-file-loads-and-runs
-  ;; Guards the shipped test/fixtures/stream-op-init.clj that tasks 8/10 load
+  ;; Guards the shipped test/fixtures/clojure/stream-op-init.clj that tasks 8/10 load
   ;; from a disposable workspace init.clj.
   (with-runtime
     (fn [rt _]
-      (load-file "test/fixtures/stream-op-init.clj")
+      (load-file "test/fixtures/clojure/stream-op-init.clj")
       (let [m (:metadata rt)]
         (with-open [ch (doto (SocketChannel/open StandardProtocolFamily/UNIX)
                          (.connect (UnixDomainSocketAddress/of (:socket-path m))))

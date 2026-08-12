@@ -218,7 +218,7 @@
         (is (= 2 (:supersedes-attrs first-run)) "both active successors gain the lineage attr")
         (is (= 1 (:agent-run-serves-removed first-run)) "only serving-1's boolean is retired; the helper's stays")
         (is (pos? (:total first-run)) "the first run reports changes")
-        (is (= 0 (:total second-run)) "a re-run against a stamped world is a no-op"))))
+        (is (zero? (:total second-run)) "a re-run against a stamped world is a no-op"))))
   (with-fixture
     (fn [ds]
       (cut/stamp! ds)

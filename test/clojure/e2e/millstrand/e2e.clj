@@ -1,5 +1,5 @@
-(ns millstrand.smoke
-  "Run end-to-end smoke coverage for disposable Millstrand CLI and REPL worlds."
+(ns millstrand.e2e
+  "Run end-to-end coverage for disposable Millstrand CLI and REPL worlds."
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
             [clojure.string]
@@ -18,10 +18,10 @@
 (def strand-bin (.getAbsolutePath (java.io.File. "cli/bin/strand")))
 (def mill-bin (.getAbsolutePath (java.io.File. "cli/bin/mill")))
 (def checkout-root (.getAbsolutePath (java.io.File. ".")))
-(def stream-op-fixture (str checkout-root "/test/fixtures/stream-op-init.clj"))
+(def stream-op-fixture (str checkout-root "/test/fixtures/clojure/stream-op-init.clj"))
 ;; Approved as a spool root rather than load-file'd: authoring forms only collect
 ;; while a module source is evaluated, so the fixture has to be a real module.
-(def authoring-spool-root (str checkout-root "/test/fixtures/smoke-authoring"))
+(def authoring-spool-root (str checkout-root "/test/fixtures/clojure/smoke-authoring"))
 (def smoke-run-root
   (doto (java.io.File. "/tmp" (str "sk" (.pid (java.lang.ProcessHandle/current))))
     (.mkdirs)))
@@ -87,7 +87,7 @@
          (.write writer stdin)))
      (let [output (slurp (.getInputStream process))
            exit-code (.waitFor process)]
-       (assert (= 0 exit-code)
+       (assert (zero? exit-code)
                (str message ": " (pr-str command) "\n" output))
        output))))
 
@@ -144,18 +144,18 @@
             (.put "XDG_STATE_HOME" smoke-xdg-state-home)
             (.put "MILLSTRAND_SOURCE" checkout-root))
         process (.start builder)
-        metadata (java.io.File. smoke-run-root "xdg-state/millstrand/mill.json")]
-    (let [failure (atom nil)]
-      (try
-        (loop [attempts 100]
-          (cond
-            (.isFile metadata) process
-            (zero? attempts) (throw (ex-info "mill did not publish metadata" {:metadata-path (.getAbsolutePath metadata)}))
-            :else (do (Thread/sleep 50) (recur (dec attempts)))))
-        (catch Throwable t
-          (reset! failure t)
-          (cleanup-process! process "smoke mill" failure)
-          (throw t))))))
+        metadata (java.io.File. smoke-run-root "xdg-state/millstrand/mill.json")
+        failure (atom nil)]
+    (try
+      (loop [attempts 100]
+        (cond
+          (.isFile metadata) process
+          (zero? attempts) (throw (ex-info "mill did not publish metadata" {:metadata-path (.getAbsolutePath metadata)}))
+          :else (do (Thread/sleep 50) (recur (dec attempts)))))
+      (catch Throwable t
+        (reset! failure t)
+        (cleanup-process! process "smoke mill" failure)
+        (throw t)))))
 
 (defn parse-json [s]
   (json/read-str s :key-fn keyword))
@@ -357,7 +357,7 @@
           (assert= "Body from a file payload"
                    (get-in (parse-json (run-strand-config! workspace "show" via-payload)) [:attributes :body])
                    "dispatcher resolves --attr body=:payload/body from a --payload file"))
-        (let [large-body (apply str (repeat 1025 "x"))
+        (let [large-body (clojure.string/join (repeat 1025 "x"))
               large-id (cli-add-config! workspace "Large body" "--attr" (str "body=" large-body))
               listed-large (first (filter #(= large-id (:id %)) (parse-json (run-strand-config! workspace "list"))))
               shown-large (parse-json (run-strand-config! workspace "show" large-id))
@@ -988,7 +988,7 @@
   ;; A far-future wake is pending and cancellable without ever firing.
   (scheduler/schedule! runtime {:key "smoke-cancel"
                                 :wake-at (.plusSeconds (Instant/now) 100000)
-                                :handler 'millstrand.smoke/smoke-scheduler-handler})
+                                :handler 'millstrand.e2e/smoke-scheduler-handler})
   (assert (some #(= "smoke-cancel" (:key %)) (scheduler/pending runtime))
           "scheduler pending lists a far-future wake")
   (scheduler/cancel! runtime "smoke-cancel")
@@ -996,7 +996,7 @@
   ;; A near-future wake fires through the shared lane and mutates the graph.
   (scheduler/schedule! runtime {:key "smoke-fire"
                                 :wake-at (.plusMillis (Instant/now) 100)
-                                :handler 'millstrand.smoke/smoke-scheduler-handler
+                                :handler 'millstrand.e2e/smoke-scheduler-handler
                                 :payload {:title "Smoke scheduled strand"}})
   (assert (deref @scheduler-fired 5000 false) "scheduler near-future wake fires its handler")
   ;; Completion is recorded after the handler returns; wait for the pending row
@@ -1112,7 +1112,7 @@
   (try
     (smoke-cli! (if db-file (str db-file ".cli") cli-smoke-db))
     (smoke-repl! (if db-file (str db-file ".repl") repl-smoke-db))
-    (println "\nSmoke completed with weaver-backed Go CLI and REPL flows.")
+    (println "\nE2E completed with weaver-backed Go CLI and REPL flows.")
     (finally
       (try
         (delete-tree! (.toPath smoke-run-root))

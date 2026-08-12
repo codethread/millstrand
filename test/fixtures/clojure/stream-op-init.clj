@@ -1,5 +1,5 @@
 ;; Self-contained streaming-op fixture, loadable from a disposable workspace's
-;; init.clj via `(load-file ".../test/fixtures/stream-op-init.clj")`.
+;; init.clj via `(load-file ".../test/fixtures/clojure/stream-op-init.clj")`.
 ;;
 ;; It registers `test-stream`, a `:stream? true` op with an optional `--count n`
 ;; flag (default 3). The handler emits `{"i": <n>}` NDJSON lines through its

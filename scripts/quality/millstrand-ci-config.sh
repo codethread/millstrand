@@ -43,7 +43,7 @@ if ! git -C "$repo_root" grep -l -F 'make identity-check' -- '.github/workflows/
   exit 1
 fi
 
-if ! git -C "$repo_root" grep -l -F 'scripts/acceptance/millstrand-docs.sh' -- '.github/workflows/*.yml' >/dev/null; then
+if ! git -C "$repo_root" grep -l -F 'test/shell/acceptance/millstrand-docs.sh' -- '.github/workflows/*.yml' >/dev/null; then
   echo "millstrand CI config: no workflow invokes the documentation acceptance" >&2
   exit 1
 fi
