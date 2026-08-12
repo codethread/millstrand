@@ -101,10 +101,12 @@ Choose an installation method:
 <summary>macOS with Homebrew</summary>
 
 ```sh
-brew install codethread/millstrand/millstrand
+brew tap codethread/millstrand https://github.com/codethread/millstrand.git
+brew trust --formula codethread/millstrand/millstrand
+brew install millstrand
 ```
 
-Homebrew installs Clojure and its JVM dependency.
+Homebrew requires explicit trust for non-official taps. This trusts only the Millstrand formula, not every current or future item in the tap. Homebrew installs Clojure and its JVM dependency.
 
 </details>
 
