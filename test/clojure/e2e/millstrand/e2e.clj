@@ -87,7 +87,7 @@
          (.write writer stdin)))
      (let [output (slurp (.getInputStream process))
            exit-code (.waitFor process)]
-       (assert (= 0 exit-code)
+       (assert (zero? exit-code)
                (str message ": " (pr-str command) "\n" output))
        output))))
 
@@ -144,18 +144,18 @@
             (.put "XDG_STATE_HOME" smoke-xdg-state-home)
             (.put "MILLSTRAND_SOURCE" checkout-root))
         process (.start builder)
-        metadata (java.io.File. smoke-run-root "xdg-state/millstrand/mill.json")]
-    (let [failure (atom nil)]
-      (try
-        (loop [attempts 100]
-          (cond
-            (.isFile metadata) process
-            (zero? attempts) (throw (ex-info "mill did not publish metadata" {:metadata-path (.getAbsolutePath metadata)}))
-            :else (do (Thread/sleep 50) (recur (dec attempts)))))
-        (catch Throwable t
-          (reset! failure t)
-          (cleanup-process! process "smoke mill" failure)
-          (throw t))))))
+        metadata (java.io.File. smoke-run-root "xdg-state/millstrand/mill.json")
+        failure (atom nil)]
+    (try
+      (loop [attempts 100]
+        (cond
+          (.isFile metadata) process
+          (zero? attempts) (throw (ex-info "mill did not publish metadata" {:metadata-path (.getAbsolutePath metadata)}))
+          :else (do (Thread/sleep 50) (recur (dec attempts)))))
+      (catch Throwable t
+        (reset! failure t)
+        (cleanup-process! process "smoke mill" failure)
+        (throw t)))))
 
 (defn parse-json [s]
   (json/read-str s :key-fn keyword))
@@ -357,7 +357,7 @@
           (assert= "Body from a file payload"
                    (get-in (parse-json (run-strand-config! workspace "show" via-payload)) [:attributes :body])
                    "dispatcher resolves --attr body=:payload/body from a --payload file"))
-        (let [large-body (apply str (repeat 1025 "x"))
+        (let [large-body (clojure.string/join (repeat 1025 "x"))
               large-id (cli-add-config! workspace "Large body" "--attr" (str "body=" large-body))
               listed-large (first (filter #(= large-id (:id %)) (parse-json (run-strand-config! workspace "list"))))
               shown-large (parse-json (run-strand-config! workspace "show" large-id))
