@@ -21,7 +21,7 @@
 (def stream-op-fixture (str checkout-root "/test/fixtures/clojure/stream-op-init.clj"))
 ;; Approved as a spool root rather than load-file'd: authoring forms only collect
 ;; while a module source is evaluated, so the fixture has to be a real module.
-(def authoring-spool-root (str checkout-root "/test/fixtures/clojure/smoke-authoring"))
+(def authoring-fixture-root (str checkout-root "/test/fixtures/clojure/authoring-module"))
 (def smoke-run-root
   (doto (java.io.File. "/tmp" (str "sk" (.pid (java.lang.ProcessHandle/current))))
     (.mkdirs)))
@@ -943,13 +943,13 @@
 ;; root rather than load-file'd from init.clj, and dropping the module from the
 ;; init.clj graph is what removes every entry it published.
 
-(defn authoring-spools-edn
+(defn authoring-fixture-spools-edn
   "Return spools.edn approving batteries plus the authoring-forms fixture root."
   []
   (str "{:spools {millstrand.spools/batteries {:millstrand/source-root \"spools/batteries\"}\n"
-       "          smoke/authoring {:local/root " (pr-str authoring-spool-root) "}}}\n"))
+       "          fixtures/authoring-module {:local/root " (pr-str authoring-fixture-root) "}}}\n"))
 
-(defn authoring-init-forms
+(defn authoring-fixture-init-forms
   "Return the authoring-forms init.clj forms.
 
   `fixture?` false omits the fixture module entirely, which is how whole-module
@@ -962,9 +962,9 @@
                              {:ns 'millstrand.spools.batteries
                               :spools ['millstrand.spools/batteries]})]
     fixture?
-    (conj '(runtime/module! runtime :smoke/authoring
-                            {:ns 'millstrand.smoke.fixtures.authoring
-                             :spools ['smoke/authoring]}))))
+    (conj '(runtime/module! runtime :fixtures/authoring-module
+                            {:ns 'millstrand.fixtures.authoring
+                             :spools ['fixtures/authoring-module]}))))
 
 (defn refresh-live-weaver!
   "Refresh the running weaver's module graph from its config, through mill."
@@ -1768,38 +1768,39 @@
            #(delete-live-add-root! world [old-weaver-pid new-weaver-pid mill-pid]))
           (finish-live-add-cleanup! failure cleanup-errors))))))
 
-(defn smoke-authoring-forms! [db-file]
+(defn authoring-fixture-forms! [db-file]
+  "Exercise the authoring fixture's publication and omission lifecycle."
   (let [workspace (bootstrap-workspace db-file "authoring")
         init-path (java.io.File. workspace "init.clj")]
     (delete-tree! (smoke-workspace (str db-file ".authoring")))
     (write-client-config-to-dir! workspace)
-    (spit (java.io.File. workspace "spools.edn") (authoring-spools-edn))
-    (source-file/spit-forms! init-path (authoring-init-forms true))
+    (spit (java.io.File. workspace "spools.edn") (authoring-fixture-spools-edn))
+    (source-file/spit-forms! init-path (authoring-fixture-init-forms true))
     (start-weaver-config! workspace)
     (try
       (assert= "hello"
-               (:echoed (parse-json (run-strand-config! workspace "smoke-echo" "hello")))
+               (:echoed (parse-json (run-strand-config! workspace "authoring-fixture-echo" "hello")))
                "defop publishes an op invocable at the strand CLI root")
-      (assert (some #(= "smoke-echo" (get-in % [:operation :name]))
+      (assert (some #(= "authoring-fixture-echo" (get-in % [:operation :name]))
                     (:ops (parse-json (run-strand-config! workspace "help" "--json"))))
               "defop's op joins the live help catalogue")
       ;; The fixture resource records its phases as strands, so both the query
       ;; and the module's open phase are provable from one lean list.
-      (let [opened (parse-json (run-strand-config! workspace "list" "--query" "smoke-authored"))]
-        (assert= ["smoke-authoring open"] (titles opened)
+      (let [opened (parse-json (run-strand-config! workspace "list" "--query" "authoring-fixture-owned"))]
+        (assert= ["authoring-fixture open"] (titles opened)
                  "defquery publishes a named query and defresource ran its open phase")
-        (source-file/spit-forms! init-path (authoring-init-forms false))
+        (source-file/spit-forms! init-path (authoring-fixture-init-forms false))
         (refresh-live-weaver! workspace)
-        (assert-contains (run-strand-config-fails! workspace "smoke-echo" "hello")
+        (assert-contains (run-strand-config-fails! workspace "authoring-fixture-echo" "hello")
                          "Operation not found"
                          "omitting the module removes its collected op by omission")
-        (assert-contains (run-strand-config-fails! workspace "list" "--query" "smoke-authored")
-                         "Query not found: smoke-authored"
+        (assert-contains (run-strand-config-fails! workspace "list" "--query" "authoring-fixture-owned")
+                         "Query not found: authoring-fixture-owned"
                          "omitting the module removes its collected query by omission")
         ;; The close marker carries the handle open returned, so the resource is
         ;; proved to have been closed with its own live state rather than a
         ;; freshly reopened one.
-        (let [closed (first (filter #(= "smoke-authoring close" (:title %))
+        (let [closed (first (filter #(= "authoring-fixture close" (:title %))
                                     (parse-json (run-strand-config! workspace "list"))))]
           (assert (some? closed)
                   "removal by omission runs the module resource's close phase")
@@ -1861,7 +1862,7 @@
   (smoke-dispatcher-surface! db-file)
   (smoke-await-cli! db-file)
   (smoke-startup-transformations! db-file)
-  (smoke-authoring-forms! db-file))
+  (authoring-fixture-forms! db-file))
 
 (defn smoke-cli! [db-file]
   (clean-runtime-artifacts! db-file)
