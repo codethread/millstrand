@@ -1,7 +1,7 @@
 # scope	pattern	reason
 # Every retained identity exception is anchored to one complete checked-in line.
 examples	^examples/.*:.*skein	Guild is a deliberately Skein-namespaced example; its source and docs retain that identity outside the Millstrand core.
-test/millstrand/guild_test.clj	^test/millstrand/guild_test\.clj:[0-9]+:.*skein	Guild tests exercise the deliberately Skein-namespaced example implementation.
+test/clojure/millstrand/guild_test.clj	^test/clojure/millstrand/guild_test\.clj:[0-9]+:.*skein	Guild tests exercise the deliberately Skein-namespaced example implementation.
 scripts/generate_api_docs.clj	^scripts/generate_api_docs\.clj:.*examples/guild/src/skein/examples/guild\.clj	Guild API generation points at the deliberately Skein-namespaced example source.
 scripts/quality/reflect_check.clj	^scripts/quality/reflect_check\.clj:[0-9]+:[[:blank:]]*"examples/guild/src"[[:blank:]]+"skein/examples"}$	Reflection coverage maps the deliberately Skein-namespaced Guild example source root.
 scripts/spool-suite-gate	^scripts/spool-suite-gate:[0-9]+:ln -s "\$src" "\$root/skein-src"$	Published external spool suites retain the historical skein-src sibling name for consumer checkouts.
@@ -26,5 +26,5 @@ devflow/README.md	^devflow/README\.md:137:- `26-07-14__stealth-init` — shipped
 devflow/README.md	^devflow/README\.md:145:- `26-07-18__g1men-v1-api-format` — shipped the v1 tightening of `skein\.api\.format\.alpha`, a worked example of the SPEC-003\.C19a form contract\.$	Exact checked-in identity context for this line.
 devflow/README.md	^devflow/README\.md:146:- `26-07-18__wr9ui-v1-api-return-shape` — shipped the v1 tightening of `skein\.api\.return-shape\.alpha` under the same form contract\.$	Exact checked-in identity context for this line.
 scripts/cutover/vocab_reset.clj	^scripts/cutover/vocab_reset\.clj:84:  not against a world an agent owns\. The canonical `\.skein` world is migrated as$	Exact checked-in identity context for this line.
-scripts/acceptance/millstrand-docs.sh	^scripts/acceptance/millstrand-docs\.sh:[0-9]+:  if grep -Eiq 'skein\|io\\\.skein\|:skein/min' "\$transcript"; then$	Exact checked-in identity context for this line.
-scripts/acceptance/millstrand-docs.sh	^scripts/acceptance/millstrand-docs\.sh:[0-9]+:  if find "\$workspace_root" \\\( -name '\.skein' -o -iname '\*skein\*' \\\) -print -quit \| grep -q \.; then$	Exact checked-in identity context for this line.
+test/shell/acceptance/millstrand-docs.sh	^test/shell/acceptance/millstrand-docs\.sh:[0-9]+:  if grep -Eiq 'skein\|io\\\.skein\|:skein/min' "\$transcript"; then$	Exact checked-in identity context for this line.
+test/shell/acceptance/millstrand-docs.sh	^test/shell/acceptance/millstrand-docs\.sh:[0-9]+:  if find "\$workspace_root" \\\( -name '\.skein' -o -iname '\*skein\*' \\\) -print -quit \| grep -q \.; then$	Exact checked-in identity context for this line.

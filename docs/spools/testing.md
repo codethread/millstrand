@@ -118,7 +118,7 @@ transport:
 
 ## Test ownership
 
-Keep `test/millstrand/api` for caller-visible contract pins: public argument grammar, validation, result shapes, and error behavior. Suite size does not change that ownership. The CLI parser suite is a large public contract suite and stays in the API tier.
+Keep `test/clojure/millstrand/api` for caller-visible contract pins: public argument grammar, validation, result shapes, and error behavior. Suite size does not change that ownership. The CLI parser suite is a large public contract suite and stays in the API tier.
 
 Move tests that inspect `millstrand.core.*`, redefine core collaborators, resolve private Vars, manage module or filesystem fixtures, run Git diagnostics, or exercise timer dispatch into a named core or integration namespace. Keep those namespaces in the runner group that matches their isolation needs; JVM-global redefinitions stay serial.
 
@@ -259,6 +259,6 @@ any dependency bump: update the pinned ref, run the suite.
 - No strand/query/assertion wrappers — call real `millstrand.api.*.alpha` forms.
 - `collect-module-forms` inspects declarations as data, and `activate-module!` activates an already-classpath-visible namespace on a bare test runtime. Neither substitutes for approved-root acquisition or startup proof.
 - No Go CLI subprocess helpers or binary discovery — CLI behavior is covered
-  by Millstrand's own smoke workflow, not library tests.
+  by the end-to-end workflow, not library tests.
 - Never touches your default `~/.config/millstrand` (or any user-owned) workspace;
   worlds are generated and isolated by default.

@@ -1,5 +1,5 @@
 (ns regen-surface-baseline
-  "One-shot regenerator for test/millstrand/surface_baseline.edn.
+  "One-shot regenerator for test/clojure/millstrand/surface_baseline.edn.
 
   Runs the (private) config-test capture against the live .millstrand/policy/config.clj and
   pretty-prints the resulting surface to the frozen baseline. Kept out of the
@@ -13,6 +13,6 @@
 (defn run [_]
   (let [capture @(requiring-resolve 'millstrand.ct.config-test/capture-config-surface)
         surface (capture ".millstrand/policy/config.clj")]
-    (spit "test/millstrand/surface_baseline.edn"
+    (spit "test/clojure/millstrand/surface_baseline.edn"
           (with-out-str (pprint/pprint surface)))
-    (println "wrote test/millstrand/surface_baseline.edn")))
+    (println "wrote test/clojure/millstrand/surface_baseline.edn")))

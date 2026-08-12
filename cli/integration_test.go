@@ -543,7 +543,7 @@ func mustReadFile(t *testing.T, path string) []byte {
 // existing workspace init.clj so the started weaver registers `test-stream`.
 func appendFixtureLoad(t *testing.T, initPath string) {
 	t.Helper()
-	fixture, err := filepath.Abs(filepath.Join("..", "test", "fixtures", "stream-op-init.clj"))
+	fixture, err := filepath.Abs(filepath.Join("..", "test", "fixtures", "clojure", "stream-op-init.clj"))
 	if err != nil {
 		t.Fatal(err)
 	}

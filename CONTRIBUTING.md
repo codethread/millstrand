@@ -87,7 +87,7 @@ Validate before committing:
 ```sh
 PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:test
 (cd cli && go test ./...)
-PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:smoke
+PATH="/opt/homebrew/opt/openjdk/bin:$PATH" make test-e2e
 make fmt-check lint reflect-check docs-check
 ```
 

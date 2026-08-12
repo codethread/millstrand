@@ -19,7 +19,7 @@ Ordinary cold/warm suite runs do not take `--workspace`. Use disposable `--works
 | --- | --- |
 | Iterate a slice | `make test-warm NS="…"` — never Done-when |
 | Slice Done-when | `clojure -M:test <ns…>` |
-| Queue acceptance | `flock -w 3600 /tmp/millstrand-test.lock clojure -M:test`; `make test-go`; `clojure -M:smoke`; `make spool-suite-gate`; `make fmt-check lint reflect-check docs-check` |
+| Queue acceptance | `flock -w 3600 /tmp/millstrand-test.lock clojure -M:test`; `make test-go`; `make test-e2e`; `make spool-suite-gate`; `make fmt-check lint reflect-check docs-check` |
 
 Notes:
 

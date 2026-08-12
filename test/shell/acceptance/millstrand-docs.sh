@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 tmp_root=$(mktemp -d /tmp/ms-docs.XXXXXX)
 state_root=$(mktemp -d /tmp/ms-state.XXXXXX)
 workspace_root=$(mktemp -d /tmp/ms-docs-repo.XXXXXX)
@@ -103,8 +103,8 @@ run_capture "mill init" "$tmp_root/init.json" env XDG_STATE_HOME="$state_root" "
   echo "millstrand docs acceptance: mill init did not create the default .millstrand workspace" >&2
   exit 1
 }
-cp "$repo_root/scripts/acceptance/fixtures/millstrand-core-spools.edn" .millstrand/spools.edn
-cp "$repo_root/scripts/acceptance/fixtures/millstrand-core-init.clj" .millstrand/init.clj
+cp "$repo_root/test/fixtures/shell/acceptance/millstrand-core-spools.edn" .millstrand/spools.edn
+cp "$repo_root/test/fixtures/shell/acceptance/millstrand-core-init.clj" .millstrand/init.clj
 
 run_capture "mill weaver status before start" "$status_before" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status
 jq -e '(.state != "running")' "$status_before" >/dev/null

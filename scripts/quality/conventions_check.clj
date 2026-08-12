@@ -23,10 +23,10 @@
     from Clojure data; the narrowing rules live in
     `quality.json-literals`;
   - repository workspace tests use `millstrand.ct.*` exactly under
-    `test/millstrand/ct/`, and a test that directly names a checked-in `.millstrand` path
+    `test/clojure/millstrand/ct/`, and a test that directly names a checked-in `.millstrand` path
     belongs there even before it adopts the namespace; the boundary lives in
     `quality.workspace-tests`;
-  - tests under `test/millstrand/api` pin public contracts and do not reach core
+  - tests under `test/clojure/millstrand/api` pin public contracts and do not reach core
     implementation seams or integration megasuites; the boundary lives in
     `quality.api-tests`."
   (:require [clj-kondo.core :as kondo]
@@ -151,9 +151,9 @@
                     (api-form/check analysis)
                     (spool-tiers/check analysis)
                     (spool-var/check)
-                    (api-tests/check "test/millstrand/api")
+                    (api-tests/check "test/clojure/millstrand/api")
                     (json-literals/check source-roots)
-                    (workspace-tests/check analysis "test/millstrand"))]
+                    (workspace-tests/check analysis "test/clojure/millstrand"))]
       (if (seq findings)
         (do (binding [*out* *err*]
               (doseq [f findings] (println f))

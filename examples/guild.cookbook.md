@@ -84,7 +84,7 @@ A caller invokes it over the ordinary op socket, passing one JSON argument; inpu
   in that runtime and re-seats the `guild` op, so a trusted-config reload
   re-declares your API cleanly rather than stacking stale ops.
 
-Honest source: the worked two-repo example in [`guild/README.md`](./guild/README.md), and `register-op-registers-and-invokes-through-op-registry` / `input-spec-invalid-input-fails-loudly-with-structured-data` in [`test/millstrand/guild_test.clj`](../test/millstrand/guild_test.clj).
+Honest source: the worked two-repo example in [`guild/README.md`](./guild/README.md), and `register-op-registers-and-invokes-through-op-registry` / `input-spec-invalid-input-fails-loudly-with-structured-data` in [`test/clojure/millstrand/guild_test.clj`](../test/clojure/millstrand/guild_test.clj).
 
 ---
 
@@ -126,7 +126,7 @@ Honest source: the worked two-repo example in [`guild/README.md`](./guild/README
   stream-class op all throw. That is the right default for coordination — a
   missing peer should stop you, not be papered over.
 
-Honest source: the peer-side of the worked example in [`guild/README.md`](./guild/README.md) (`peers/call!` and the `guild list` payload) and the `millstrand.api.peers.alpha` helper listing in the [REPL API spec](../devflow/specs/repl-api.md); the `guild list` `:active` / `:deprecated` shape is pinned by `guild-list-reports-active-and-deprecated-ops` in [`test/millstrand/guild_test.clj`](../test/millstrand/guild_test.clj). (The two-weaver call is distilled from the contract's worked example and the listing test rather than run live here.)
+Honest source: the peer-side of the worked example in [`guild/README.md`](./guild/README.md) (`peers/call!` and the `guild list` payload) and the `millstrand.api.peers.alpha` helper listing in the [REPL API spec](../devflow/specs/repl-api.md); the `guild list` `:active` / `:deprecated` shape is pinned by `guild-list-reports-active-and-deprecated-ops` in [`test/clojure/millstrand/guild_test.clj`](../test/clojure/millstrand/guild_test.clj). (The two-weaver call is distilled from the contract's worked example and the listing test rather than run live here.)
 
 ---
 
@@ -166,7 +166,7 @@ Honest source: the peer-side of the worked example in [`guild/README.md`](./guil
   `:since` also surface through `guild list`, so the migration path is
   readable from the peer itself rather than buried in a changelog.
 
-Honest source: the naming/evolution conventions and the "never install a noop compatibility stub" rule in [`guild/README.md`](./guild/README.md), with the deprecated-op behaviour pinned by `deprecated-op-throws-structured-error-and-never-succeeds` and the listing output by `guild-list-reports-active-and-deprecated-ops` in [`test/millstrand/guild_test.clj`](../test/millstrand/guild_test.clj).
+Honest source: the naming/evolution conventions and the "never install a noop compatibility stub" rule in [`guild/README.md`](./guild/README.md), with the deprecated-op behaviour pinned by `deprecated-op-throws-structured-error-and-never-succeeds` and the listing output by `guild-list-reports-active-and-deprecated-ops` in [`test/clojure/millstrand/guild_test.clj`](../test/clojure/millstrand/guild_test.clj).
 
 ---
 

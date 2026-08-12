@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/millstrand-identity.XXXXXX")
 trap 'rm -rf "$tmp_root"' EXIT
 
@@ -12,7 +12,7 @@ cp "$repo_root/scripts/quality/millstrand-identity-allowlist.tsv" \
   "$tmp_root/scripts/quality/millstrand-identity-allowlist.tsv"
 cp "$repo_root/mkdocs.yml" "$tmp_root/mkdocs.yml"
 cp -R "$repo_root/examples" "$tmp_root/examples"
-cp "$repo_root/test/millstrand/guild_test.clj" "$tmp_root/test/millstrand/guild_test.clj"
+cp "$repo_root/test/clojure/millstrand/guild_test.clj" "$tmp_root/test/clojure/millstrand/guild_test.clj"
 cp "$repo_root/scripts/generate_api_docs.clj" "$tmp_root/scripts/generate_api_docs.clj"
 cp "$repo_root/scripts/spool-suite-gate" "$tmp_root/scripts/spool-suite-gate"
 cp "$repo_root/scripts/quality/reflect_check.clj" "$tmp_root/scripts/quality/reflect_check.clj"

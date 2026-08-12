@@ -104,5 +104,5 @@ The runtime validates `search` options against `:millstrand.spools.unsafe-text-s
 - [unsafe-text-search.cookbook.md](./unsafe-text-search.cookbook.md) — worked recipes.
 - [Writing shared spools](../docs/spools/writing-shared-spools.md#unsafe-spools) — the
   unsafe-spool convention this spool is the reference for.
-- `test/millstrand/spools/unsafe_text_search_test.clj` — executable contract examples
+- `test/clojure/millstrand/spools/unsafe_text_search_test.clj` — executable contract examples
   against a real weaver runtime.

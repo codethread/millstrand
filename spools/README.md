@@ -105,7 +105,7 @@ Guild is kept as a quality-gated example under [`examples/guild`](../examples/gu
 ## Reference examples
 
 - Each retained contract doc ends with worked examples.
-- The test suites drive every documented behavior against a real weaver runtime and double as executable examples: [`test/millstrand/spools/batteries_test.clj`](../test/millstrand/spools/batteries_test.clj), [`test/millstrand/spools/unsafe_text_search_test.clj`](../test/millstrand/spools/unsafe_text_search_test.clj), and the standalone external spool test suites.
+- The test suites drive every documented behavior against a real weaver runtime and double as executable examples: [`test/clojure/millstrand/spools/batteries_test.clj`](../test/clojure/millstrand/spools/batteries_test.clj), [`test/clojure/millstrand/spools/unsafe_text_search_test.clj`](../test/clojure/millstrand/spools/unsafe_text_search_test.clj), and the standalone external spool test suites.
 
 ## Using and extending
 

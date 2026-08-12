@@ -1,5 +1,5 @@
 (ns quality.api-tests
-  "Enforce the ownership boundary for tests under test/millstrand/api."
+  "Enforce the ownership boundary for tests under test/clojure/millstrand/api."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
