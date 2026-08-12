@@ -259,6 +259,6 @@ any dependency bump: update the pinned ref, run the suite.
 - No strand/query/assertion wrappers — call real `millstrand.api.*.alpha` forms.
 - `collect-module-forms` inspects declarations as data, and `activate-module!` activates an already-classpath-visible namespace on a bare test runtime. Neither substitutes for approved-root acquisition or startup proof.
 - No Go CLI subprocess helpers or binary discovery — CLI behavior is covered
-  by Millstrand's own smoke workflow, not library tests.
+  by the end-to-end workflow, not library tests.
 - Never touches your default `~/.config/millstrand` (or any user-owned) workspace;
   worlds are generated and isolated by default.
