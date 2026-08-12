@@ -1,6 +1,6 @@
 # Millstrand 🧶 Give your agents a Lisp
 
-Millstrand (pronounced skayne) is a runtime for programming the constraints and loops around your coding agents. Instruction files such as AGENTS.md and Skills still provide context, but load-bearing behavior can be Clojure code that you read, diff, **test**, and **compose**.
+Millstrand is a runtime for programming the constraints and loops around your coding agents. Instruction files such as AGENTS.md and Skills still provide context, but load-bearing behavior can be Clojure code that you read, diff, **test**, and **compose**.
 
 ## Why Millstrand
 
