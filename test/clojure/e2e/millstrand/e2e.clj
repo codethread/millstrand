@@ -125,6 +125,65 @@
         output (slurp (.getInputStream process))]
     {:exit-code (.waitFor process) :output output}))
 
+(defn- smoke-await-scale []
+  (let [raw (System/getenv "MILLSTRAND_TEST_AWAIT_SCALE")
+        scale (if raw
+                (try
+                  (Double/parseDouble raw)
+                  (catch NumberFormatException _
+                    (throw (ex-info "MILLSTRAND_TEST_AWAIT_SCALE must be a number"
+                                    {:env "MILLSTRAND_TEST_AWAIT_SCALE" :value raw}))))
+                1.0)]
+    (when-not (and (Double/isFinite scale) (<= 1.0 scale 10.0))
+      (throw (ex-info "MILLSTRAND_TEST_AWAIT_SCALE must be a finite number from 1 through 10"
+                      {:env "MILLSTRAND_TEST_AWAIT_SCALE" :value raw :allowed [1 10]})))
+    scale))
+
+(defn- smoke-await-ms [base-ms]
+  (long (* base-ms (smoke-await-scale))))
+
+(defn- wait-diagnostics [label started-at timeout-ms]
+  {:label label
+   :elapsed-ms (long (/ (- (System/nanoTime) started-at) 1000000))
+   :deadline-ms timeout-ms})
+
+(defn- await-condition!
+  "Wait for a condition until its scaled deadline, then report timing context."
+  ([label timeout-ms condition]
+   (await-condition! label timeout-ms condition nil))
+  ([label timeout-ms condition on-timeout]
+   (let [started-at (System/nanoTime)
+         deadline (+ started-at (* timeout-ms 1000000))]
+     (loop []
+       (let [diagnostics (wait-diagnostics label started-at timeout-ms)
+             result (condition diagnostics)
+             remaining (- deadline (System/nanoTime))]
+         (if result
+           result
+           (if (pos? remaining)
+             (do
+               (java.util.concurrent.locks.LockSupport/parkNanos
+                (min remaining 50000000))
+               (recur))
+             (if on-timeout
+               (on-timeout diagnostics)
+               (throw (ex-info (str "Timed out waiting for " label
+                                    " after " (:elapsed-ms diagnostics)
+                                    " ms (deadline " timeout-ms " ms)")
+                               diagnostics))))))))))
+
+(defn- await-process-exit!
+  "Await one exact process handle through its completion future."
+  [^java.lang.ProcessHandle handle label]
+  (let [timeout-ms (smoke-await-ms 5000)
+        started-at (System/nanoTime)
+        diagnostics #(wait-diagnostics label started-at timeout-ms)]
+    (try
+      (.get (.onExit handle) timeout-ms java.util.concurrent.TimeUnit/MILLISECONDS)
+      (assoc (diagnostics) :exited? true)
+      (catch java.util.concurrent.TimeoutException _
+        (assoc (diagnostics) :exited? false)))))
+
 (defn terminate-process!
   "Terminate a smoke-owned process and assert that its PID exits."
   [^Process process label]
@@ -146,16 +205,16 @@
   (when-let [handle (.orElse (java.lang.ProcessHandle/of pid) nil)]
     (when (.isAlive handle)
       (.destroy handle)
-      (loop [attempts 50]
-        (when (and (.isAlive handle) (pos? attempts))
-          (Thread/sleep 100)
-          (recur (dec attempts))))
-      (when (.isAlive handle)
-        (.destroyForcibly handle)
-        (loop [attempts 50]
-          (when (and (.isAlive handle) (pos? attempts))
-            (Thread/sleep 100)
-            (recur (dec attempts))))))
+      (let [graceful (await-process-exit! handle (str label " graceful termination"))]
+        (when-not (:exited? graceful)
+          (.destroyForcibly handle)
+          (let [forced (await-process-exit! handle (str label " forced termination"))]
+            (when-not (:exited? forced)
+              (throw (ex-info (str label " pid " pid " did not exit after forced termination"
+                                   " (graceful elapsed " (:elapsed-ms graceful)
+                                   " ms, forced elapsed " (:elapsed-ms forced)
+                                   " ms; deadline " (:deadline-ms forced) " ms)")
+                              (assoc forced :pid pid :graceful graceful))))))))
     (assert (not (.isAlive handle))
             (str label " pid remains alive after exact-PID cleanup: " pid))))
 
@@ -304,18 +363,7 @@
            (str message " returns the complete S2 envelope")))
 
 (defn- smoke-await-secs [base-secs]
-  (let [raw (System/getenv "MILLSTRAND_TEST_AWAIT_SCALE")
-        scale (if raw
-                (try
-                  (Double/parseDouble raw)
-                  (catch NumberFormatException _
-                    (throw (ex-info "MILLSTRAND_TEST_AWAIT_SCALE must be a number"
-                                    {:env "MILLSTRAND_TEST_AWAIT_SCALE" :value raw}))))
-                1.0)]
-    (when-not (and (Double/isFinite scale) (<= 1.0 scale 10.0))
-      (throw (ex-info "MILLSTRAND_TEST_AWAIT_SCALE must be a finite number from 1 through 10"
-                      {:env "MILLSTRAND_TEST_AWAIT_SCALE" :value raw :allowed [1 10]})))
-    (str (long (* base-secs scale)))))
+  (str (long (/ (smoke-await-ms (* base-secs 1000)) 1000))))
 
 (defn- strand-process-builder [workspace args]
   (let [builder (doto (ProcessBuilder. (into [strand-bin "--workspace" workspace] args))
@@ -998,21 +1046,26 @@
         process (.start builder)
         metadata-file (java.io.File. xdg-state-home "millstrand/mill.json")]
     (try
-      (loop [attempts 200]
-        (cond
-          (.isFile metadata-file) process
-          (and (zero? attempts) (.isAlive process))
-          (throw (ex-info "live-add mill did not publish metadata"
-                          {:metadata-path (.getAbsolutePath metadata-file)
-                           :pid (.pid process)}))
-          (zero? attempts)
-          (let [output (slurp (.getInputStream process))]
-            (throw (ex-info "live-add mill exited before publishing metadata"
-                            {:metadata-path (.getAbsolutePath metadata-file)
-                             :exit-code (.exitValue process)
-                             :output output})))
-          :else
-          (do (Thread/sleep 50) (recur (dec attempts)))))
+      (await-condition!
+       "live-add mill metadata"
+       (smoke-await-ms 10000)
+       (fn [diagnostics]
+         (cond
+           (.isFile metadata-file) process
+           (.isAlive process) nil
+           :else
+           (let [output (slurp (.getInputStream process))]
+             (throw (ex-info "live-add mill exited before publishing metadata"
+                             (assoc diagnostics
+                                    :metadata-path (.getAbsolutePath metadata-file)
+                                    :pid (.pid process)
+                                    :exit-code (.exitValue process)
+                                    :output output))))))
+       (fn [diagnostics]
+         (throw (ex-info "live-add mill did not publish metadata"
+                         (assoc diagnostics
+                                :metadata-path (.getAbsolutePath metadata-file)
+                                :pid (.pid process))))))
       (catch Throwable t
         (try
           (terminate-process! process "live-add mill startup failure")
