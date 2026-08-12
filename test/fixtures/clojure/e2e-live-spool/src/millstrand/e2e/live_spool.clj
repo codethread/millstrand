@@ -2,7 +2,7 @@
   "Authoring fixture for the live additive activation E2E scenario."
   (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(def live-arg-spec
+(def ^:private live-arg-spec
   {:op "e2e-live"
    :doc "Return the live-add proof value."
    :hook-class :read

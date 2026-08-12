@@ -950,7 +950,10 @@
 
 (defn delete-live-add-root!
   "Delete a live-add root only after its ownership marker is verified."
-  [{:keys [root marker]}]
+  [{:keys [root marker]} recorded-pids]
+  (doseq [pid (remove nil? recorded-pids)]
+    (assert (not (metadata/pid-alive? pid))
+            (str "live-add root guard found recorded PID alive: " pid)))
   (assert (.isFile marker) "live-add cleanup marker is missing")
   (assert (= "millstrand live-add e2e owner\n" (slurp marker))
           "live-add cleanup marker has unexpected contents")
@@ -1034,19 +1037,22 @@
 
 (defn start-live-add-weaver!
   "Start the live-add weaver through its explicitly owned mill."
-  [xdg-state-home workspace]
+  [xdg-state-home workspace weaver-status]
   (run-mill-env! xdg-state-home workspace "weaver" "start")
   (loop [attempts 50]
     (when (zero? attempts)
       (throw (ex-info "live-add weaver did not become ready" {:workspace workspace})))
-    (let [running? (try
-                     (= "running"
-                        (:state (parse-json
-                                 (run-mill-env! xdg-state-home workspace "weaver" "status"))))
-                     (catch AssertionError _ false))]
-      (when-not running?
-        (Thread/sleep 200)
-        (recur (dec attempts))))))
+    (let [status (try
+                   (parse-json
+                    (run-mill-env! xdg-state-home workspace "weaver" "status"))
+                   (catch AssertionError _ nil))]
+      (when (and (map? status) (pos? (long (or (:pid status) 0))))
+        (reset! weaver-status status))
+      (if (= "running" (:state status))
+        status
+        (do
+          (Thread/sleep 200)
+          (recur (dec attempts)))))))
 
 (defn refresh-live-add-weaver!
   "Refresh the live-add weaver through its public mill REPL attach path."
@@ -1073,13 +1079,22 @@
         state-root (.getCanonicalPath (java.io.File. xdg-state-home))
         mill-root (str state-root "/millstrand")
         weaver-root (str mill-root "/weavers/")]
+    (assert (and (integer? mill-pid) (pos? mill-pid))
+            "live-add mill process has a positive PID")
     (assert (:healthy mill-status) "live-add mill must report healthy")
+    (assert (and (integer? (:pid mill-status)) (pos? (:pid mill-status)))
+            "live-add mill status publishes a positive PID")
     (assert= mill-pid (:pid mill-status) "live-add mill status reports its exact PID")
+    (assert (not (clojure.string/blank? (str (:mill_id mill-status))))
+            "live-add mill publishes a nonblank identity")
     (assert= mill-root (:state_root mill-status) "live-add mill publishes its isolated state root")
     (assert= (str mill-root "/mill.sock") (:socket_path mill-status)
              "live-add mill publishes its isolated socket")
     (assert= "running" (:state weaver-status) "live-add weaver is running")
-    (assert (pos? (:pid weaver-status)) "live-add weaver publishes a PID")
+    (assert (and (integer? (:pid weaver-status)) (pos? (:pid weaver-status)))
+            "live-add weaver publishes a positive PID")
+    (assert (not= mill-pid (:pid weaver-status))
+            "live-add mill and weaver use distinct PIDs")
     (assert= workspace-path (:config_dir weaver-status)
              "live-add weaver publishes the selected workspace")
     (assert (clojure.string/starts-with? (:state_dir weaver-status) weaver-root)
@@ -1095,26 +1110,57 @@
             "live-add weaver publishes a nonblank identity")
     mill-status))
 
-(defn assert-live-add-cleanup!
-  "Assert exact-PID death and removal of all recorded live-add artifacts."
+(defn- assert-live-add-runtime-identity!
+  "Assert that a runtime probe has a generation before stability comparisons."
+  [identity label]
+  (assert (not (clojure.string/blank? (str (:generation identity))))
+          (str label " publishes a nonblank generation")))
+
+(defn assert-live-add-artifacts!
+  "Assert removal of all recorded live-add process artifacts after termination."
   [mill-process weaver-status xdg-state-home]
   (let [weaver-pid (:pid weaver-status)
         state-dir (:state_dir weaver-status)
         mill-root (java.io.File. xdg-state-home "millstrand")]
-    (assert (not (metadata/pid-alive? weaver-pid))
-            (str "live-add weaver PID remains alive: " weaver-pid))
-    (doseq [path [(str state-dir "/weaver.json")
-                  (str state-dir "/weaver.edn")
-                  (:socket_path weaver-status)]]
-      (assert (not (.exists (java.io.File. path)))
-              (str "live-add weaver artifact remains: " path)))
-    (terminate-process! mill-process "live-add mill")
-    (assert (not (metadata/pid-alive? (.pid mill-process)))
-            (str "live-add mill PID remains alive: " (.pid mill-process)))
+    (when weaver-status
+      (assert (not (metadata/pid-alive? weaver-pid))
+              (str "live-add weaver PID remains alive: " weaver-pid))
+      (doseq [path [(str state-dir "/weaver.json")
+                    (str state-dir "/weaver.edn")
+                    (:socket_path weaver-status)]]
+        (assert (not (.exists (java.io.File. path)))
+                (str "live-add weaver artifact remains: " path))))
+    (when mill-process
+      (assert (not (metadata/pid-alive? (.pid mill-process)))
+              (str "live-add mill PID remains alive: " (.pid mill-process))))
     (doseq [path [(java.io.File. mill-root "mill.json")
                   (java.io.File. mill-root "mill.sock")]]
       (assert (not (.exists path))
               (str "live-add mill artifact remains: " (.getAbsolutePath path))))))
+
+(defn- live-add-cleanup-stage!
+  "Run one cleanup stage and retain its diagnostic for later aggregation."
+  [errors label action]
+  (try
+    (action)
+    (catch Throwable cleanup-error
+      (swap! errors conj
+             (ex-info (str "live-add cleanup stage failed: " label)
+                      {:stage label}
+                      cleanup-error)))))
+
+(defn- finish-live-add-cleanup!
+  "Attach independent cleanup diagnostics to the primary failure or throw them."
+  [failure errors]
+  (when (seq @errors)
+    (if-let [primary @failure]
+      (doseq [cleanup-error @errors]
+        (.addSuppressed primary cleanup-error))
+      (let [summary (ex-info "live-add cleanup failed"
+                             {:stages (mapv ex-data @errors)})]
+        (doseq [cleanup-error @errors]
+          (.addSuppressed summary cleanup-error))
+        (throw summary)))))
 
 (defn smoke-live-add!
   "Prove an absent local spool is additively published by one live weaver."
@@ -1139,7 +1185,8 @@
                                (live-add-init-forms false))
       (reset! mill-process (start-live-add-mill! (.getCanonicalPath xdg-state-home)))
       (run-mill-env! (.getCanonicalPath xdg-state-home) workspace-path "init")
-      (start-live-add-weaver! (.getCanonicalPath xdg-state-home) workspace-path)
+      (start-live-add-weaver! (.getCanonicalPath xdg-state-home) workspace-path
+                              weaver-status)
       (let [mill-before (parse-json
                          (run-process-env! "live-add mill status succeeds"
                                            (.getCanonicalPath xdg-state-home) outside nil
@@ -1152,9 +1199,9 @@
             help-before (parse-json
                          (run-strand-env! (.getCanonicalPath xdg-state-home) outside
                                           workspace-path "help" "--json"))]
-        (reset! weaver-status weaver-before)
         (assert-live-add-identities! mill-before weaver-before (.pid @mill-process)
                                      workspace-path (.getCanonicalPath xdg-state-home))
+        (assert-live-add-runtime-identity! identity-before "live-add initial runtime")
         (assert (not (live-add-help-op? help-before "e2e-live"))
                 "live-add fixture op must be absent before approval and activation")
         (assert-contains
@@ -1184,6 +1231,7 @@
                                            workspace-path "help" "--json"))]
           (assert-live-add-identities! mill-after weaver-after (.pid @mill-process)
                                        workspace-path (.getCanonicalPath xdg-state-home))
+          (assert-live-add-runtime-identity! identity-after "live-add refreshed runtime")
           (assert= (:pid mill-before) (:pid mill-after)
                    "live-add refresh preserves mill PID")
           (assert= (:mill_id mill-before) (:mill_id mill-after)
@@ -1194,7 +1242,13 @@
                    "live-add refresh preserves weaver identity")
           (assert= (:generation identity-before) (:generation identity-after)
                    "live-add refresh preserves weaver generation")
-          (assert (contains? #{:loaded :synced :already-available}
+          (assert= nil (:pending-generation runtime-status)
+                   "live-add additive refresh has no pending generation")
+          (assert= [] (get-in runtime-status [:loaded :residuals])
+                   "live-add additive refresh has no loaded-code residuals")
+          (assert= [] (get-in runtime-status [:loaded :hard-conflicts])
+                   "live-add additive refresh has no loaded-code hard conflicts")
+          (assert (contains? #{:loaded :synced}
                              (:status root-outcome))
                   (str "live-add root sync did not publish the fixture: "
                        (pr-str root-outcome)))
@@ -1211,43 +1265,35 @@
         (reset! failure t)
         (throw t))
       (finally
-        (try
-          (when (and @weaver-status
-                     (metadata/pid-alive? (:pid @weaver-status)))
-            (try
-              (run-mill-env! (.getCanonicalPath xdg-state-home) workspace-path
-                             "weaver" "stop")
-              (catch Throwable stop-error
-                (try
-                  (terminate-recorded-pid! (:pid @weaver-status) "live-add weaver")
-                  (catch Throwable exact-pid-error
-                    (.addSuppressed stop-error exact-pid-error)))
-                (if-let [primary @failure]
-                  (.addSuppressed primary stop-error)
-                  (throw stop-error)))))
-          (when (and @weaver-status @mill-process)
-            (assert-live-add-cleanup! @mill-process @weaver-status
-                                      (.getCanonicalPath xdg-state-home)))
-          (when (and @mill-process (nil? @weaver-status))
-            (terminate-process! @mill-process "live-add mill after startup failure"))
-          (when baseline
-            (let [after (run-process-result! nil outside [mill-bin "status"])]
-              (assert= 0 (:exit-code after)
-                       "pre-existing normal mill still answers after live-add cleanup")
-              (let [normal-after (parse-json (:output after))]
-                (doseq [key [:pid :mill_id :state_root :socket_path]]
-                  (assert= (get baseline key) (get normal-after key)
-                           (str "normal mill identity remains stable for " (name key)))))))
-          (catch Throwable cleanup-error
-            (if-let [primary @failure]
-              (.addSuppressed primary cleanup-error)
-              (throw cleanup-error))))
-        (try
-          (delete-live-add-root! world)
-          (catch Throwable cleanup-error
-            (if-let [primary @failure]
-              (.addSuppressed primary cleanup-error)
-              (throw cleanup-error))))))))
+        (let [cleanup-errors (atom [])
+              state-home (.getCanonicalPath xdg-state-home)
+              weaver-pid (some-> @weaver-status :pid)
+              mill-pid (some-> @mill-process .pid)]
+          (live-add-cleanup-stage!
+           cleanup-errors "terminate weaver by recorded PID"
+           #(when weaver-pid
+              (terminate-recorded-pid! weaver-pid "live-add weaver")))
+          (live-add-cleanup-stage!
+           cleanup-errors "terminate mill by recorded PID"
+           #(when @mill-process
+              (terminate-process! @mill-process "live-add mill")))
+          (live-add-cleanup-stage!
+           cleanup-errors "verify process death and artifacts"
+           #(assert-live-add-artifacts! @mill-process @weaver-status state-home))
+          (live-add-cleanup-stage!
+           cleanup-errors "verify ambient mill identity"
+           #(when baseline
+              (let [after (run-process-result! nil outside [mill-bin "status"])]
+                (assert= 0 (:exit-code after)
+                         "pre-existing normal mill still answers after live-add cleanup")
+                (let [normal-after (parse-json (:output after))]
+                  (doseq [key [:pid :mill_id :state_root :socket_path]]
+                    (assert= (get baseline key) (get normal-after key)
+                             (str "normal mill identity remains stable for " (name key))))))))
+          (live-add-cleanup-stage!
+           cleanup-errors "remove guarded live-add root"
+           #(delete-live-add-root! world [weaver-pid mill-pid]))
+          (finish-live-add-cleanup! failure cleanup-errors))))))
 
 (defn smoke-authoring-forms! [db-file]
   (let [workspace (bootstrap-workspace db-file "authoring")
