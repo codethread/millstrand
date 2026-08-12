@@ -1095,19 +1095,42 @@
             :runtime-status (runtime/status rt)}))])
     "weaver" "repl" "--stdin")))
 
-(defn start-live-add-weaver!
-  "Start the live-add weaver through its explicitly owned mill."
-  [xdg-state-home workspace weaver-status]
-  (let [start-result (parse-json
-                      (run-mill-env! xdg-state-home workspace "weaver" "start"))
-        weaver-pid (:pid start-result)]
-    (assert (and (map? start-result)
+(defn- record-live-add-weaver-status!
+  "Record a start/status envelope as soon as its exact PID is observable."
+  [weaver-status status]
+  (let [weaver-pid (:pid status)]
+    (assert (and (map? status)
                  (integer? weaver-pid)
                  (pos? weaver-pid))
             "successful live-add weaver start must publish an exact cleanup PID")
-    ;; Capture the authoritative public start result before any separate probe
-    ;; can fail. A successful start must never leave teardown without a PID.
-    (reset! weaver-status start-result)
+    (reset! weaver-status status)
+    status))
+
+(defn start-live-add-weaver!
+  "Start the live-add weaver through its explicitly owned mill."
+  [xdg-state-home workspace mill-process weaver-status]
+  (let [start-output (run-mill-env! xdg-state-home workspace "weaver" "start")
+        start-result (try
+                       (parse-json start-output)
+                       (catch Throwable parse-error
+                         ;; A successful start can publish a live weaver before a
+                         ;; malformed envelope reaches this boundary. Recover
+                         ;; only through this isolated mill's status surface so
+                         ;; teardown still has an exact owned PID.
+                         (try
+                           (parse-json
+                            (run-mill-env! xdg-state-home workspace "weaver" "status"))
+                           (catch Throwable recovery-error
+                             (try
+                               (terminate-process! @mill-process
+                                                   "live-add mill after malformed weaver start")
+                               (catch Throwable cleanup-error
+                                 (.addSuppressed parse-error cleanup-error)))
+                             (.addSuppressed parse-error recovery-error)
+                             (throw parse-error)))))]
+    ;; Record the exact PID before checking any other semantic field. A later
+    ;; assertion must never leave a successfully started weaver untracked.
+    (record-live-add-weaver-status! weaver-status start-result)
     (assert= "running" (:state start-result)
              "successful live-add weaver start must report running")
     start-result))
@@ -1126,7 +1149,7 @@
    "weaver" "repl" "--stdin"))
 
 (defn refresh-live-add-weaver-refuses!
-  "Refresh through public mill REPL and return the refused refresh output."
+  "Refresh through public mill REPL and return its parsed refusal result."
   [xdg-state-home workspace]
   (let [result (run-process-env-result!
                 xdg-state-home
@@ -1135,14 +1158,13 @@
                  ['(do
                      (require '[millstrand.api.current.alpha :as current]
                               '[millstrand.api.runtime.alpha :as runtime])
-                     (runtime/refresh! (current/runtime))
-                     :refreshed)])
+                     (runtime/refresh! (current/runtime)))])
                 (into [mill-bin]
                       (concat ["weaver" "repl" "--stdin"]
                               ["--workspace" workspace])))]
     (assert= 0 (:exit-code result)
              (str "public live-add refresh command failed\n" (:output result)))
-    (:output result)))
+    (edn/read-string (:output result))))
 
 (defn live-add-fixture-roots!
   "Materialize two versions of the same approved live-add coordinate."
@@ -1255,6 +1277,21 @@
   (assert (not (.exists (java.io.File. path)))
           (str "live-add " label " artifact remains: " path)))
 
+(defn- assert-live-add-weaver-artifacts-absent!
+  "Assert that one recorded weaver generation owns no lifecycle artifacts."
+  [weaver-status generation]
+  (assert (map? weaver-status)
+          (str "live-add " generation " cleanup requires weaver status"))
+  (assert-live-add-artifact-absent!
+   (str (:state_dir weaver-status) "/weaver.json")
+   (str generation " weaver metadata"))
+  (assert-live-add-artifact-absent!
+   (str (:state_dir weaver-status) "/weaver.edn")
+   (str generation " weaver EDN"))
+  (assert-live-add-artifact-absent!
+   (:socket_path weaver-status)
+   (str generation " weaver socket")))
+
 (defn- assert-live-add-mill-dead!
   "Assert that the recorded live-add mill PID is dead."
   [mill-pid]
@@ -1311,7 +1348,7 @@
       (reset! mill-process (start-live-add-mill! (.getCanonicalPath xdg-state-home)))
       (run-mill-env! (.getCanonicalPath xdg-state-home) workspace-path "init")
       (start-live-add-weaver! (.getCanonicalPath xdg-state-home) workspace-path
-                              weaver-status)
+                              mill-process weaver-status)
       (let [mill-before (parse-json
                          (run-process-env! "live-add mill status succeeds"
                                            (.getCanonicalPath xdg-state-home) outside nil
@@ -1472,7 +1509,7 @@
                                (live-add-init-forms true))
       (reset! mill-process (start-live-add-mill! state-home))
       (run-mill-env! state-home workspace-path "init")
-      (start-live-add-weaver! state-home workspace-path old-weaver-status)
+      (start-live-add-weaver! state-home workspace-path mill-process old-weaver-status)
       (let [mill-before (parse-json
                          (run-process-env! "live-add mill status succeeds"
                                            state-home outside nil [mill-bin "status"]))
@@ -1500,7 +1537,11 @@
                  "live-add v1 fixture op is invocable through strand")
         (spit (java.io.File. workspace "spools.edn")
               (live-add-spools-edn true (:v2 fixture-roots)))
-        (let [refresh-output (refresh-live-add-weaver-refuses! state-home workspace-path)
+        (let [changed-roots [{:lib 'e2e/live-spool
+                              :previous-root (:v1 fixture-roots)
+                              :new-root (:v2 fixture-roots)}]
+              refresh-result (refresh-live-add-weaver-refuses! state-home workspace-path)
+              refresh-root-outcome (get-in refresh-result [:roots 'e2e/live-spool])
               identity-refused (live-add-runtime-probe! state-home workspace-path)
               runtime-refused (:runtime-status identity-refused)
               pending (:pending-generation runtime-refused)
@@ -1513,6 +1554,21 @@
               help-refused (parse-json
                             (run-strand-env! state-home outside workspace-path
                                              "help" "--json"))]
+          (assert= :partial (:status refresh-result)
+                   "public refresh returns a partial result for the refused changed root")
+          (assert= :full (:mode refresh-result)
+                   "public refresh refusal reports a full refresh")
+          (assert= :hard-conflict (:status refresh-root-outcome)
+                   "public refresh result reports hard-conflict root refusal")
+          (assert= #{:changed-roots :namespace-residuals}
+                   (set (keys (:conflict refresh-root-outcome)))
+                   "public refresh result nests the non-additive-sync-diff classifications")
+          (assert= changed-roots
+                   (get-in refresh-root-outcome [:conflict :changed-roots])
+                   "public refresh result reports the v1-to-v2 changed root")
+          (assert= ["recorded; takes effect at the next weaver generation (mill-supervised restart, user sign-off)"]
+                   (:remedies refresh-result)
+                   "public refresh result carries the cutover remedy")
           (assert-live-add-identities! mill-refused weaver-refused (.pid @mill-process)
                                        workspace-path state-home)
           (assert-live-add-runtime-identity! identity-refused
@@ -1521,7 +1577,7 @@
                    (get-in runtime-refused
                            [:last-refresh :modules :e2e/live-spool :root/outcome :status])
                    (str "live-add changed-root refresh records loud non-additive-sync-diff: "
-                        refresh-output))
+                        (pr-str refresh-result)))
           (assert= [{:lib 'e2e/live-spool
                      :previous-root (:v1 fixture-roots)
                      :new-root (:v2 fixture-roots)}]
@@ -1543,16 +1599,21 @@
                    "live-add refusal records a pending generation")
           (assert= (:generation identity-before) (:generation pending)
                    "live-add pending generation names the old generation")
-          (assert= [{:lib 'e2e/live-spool
-                     :previous-root (:v1 fixture-roots)
-                     :new-root (:v2 fixture-roots)}]
+          (assert= #{:status :generation :diff :approved-spools :remedy}
+                   (set (keys pending))
+                   "live-add pending generation has its exact public five-key shape")
+          (assert= #{:changed-roots :namespace-residuals}
+                   (set (keys (:diff pending)))
+                   "live-add pending generation diff has the exact deterministic classifications")
+          (assert= changed-roots
                    (get-in pending [:diff :changed-roots])
                    "live-add pending generation records the changed root")
           (assert= #{'millstrand.spools/batteries 'e2e/live-spool}
                    (:approved-spools pending)
                    "live-add pending generation records approved spools")
-          (assert-contains (:remedy pending) "next weaver generation"
-                           "live-add pending generation names the cutover remedy")
+          (assert= "recorded; takes effect at the next weaver generation (mill-supervised restart, user sign-off)"
+                   (:remedy pending)
+                   "live-add pending generation names the exact cutover remedy")
           (assert= (:v1 fixture-roots)
                    (live-cutover-root runtime-refused)
                    "live-add refusal preserves the v1 root")
@@ -1571,7 +1632,8 @@
                    "live-add refusal preserves v1 through strand"))
         (run-mill-env! state-home workspace-path "weaver" "stop")
         (assert-live-add-weaver-dead! @old-weaver-status)
-        (start-live-add-weaver! state-home workspace-path new-weaver-status)
+        (assert-live-add-weaver-artifacts-absent! @old-weaver-status "old generation")
+        (start-live-add-weaver! state-home workspace-path mill-process new-weaver-status)
         (let [identity-after (live-add-runtime-probe! state-home workspace-path)
               runtime-after (:runtime-status identity-after)
               mill-after (parse-json
@@ -1618,7 +1680,8 @@
               old-weaver-pid (some-> @old-weaver-status :pid)
               new-weaver-pid (some-> @new-weaver-status :pid)
               mill-pid (some-> @mill-process .pid)
-              artifact-status (or @new-weaver-status @old-weaver-status)]
+              generation-statuses [["old generation" @old-weaver-status]
+                                   ["new generation" @new-weaver-status]]]
           (live-add-cleanup-stage!
            cleanup-errors "terminate old weaver by recorded PID"
            #(when old-weaver-pid
@@ -1635,21 +1698,12 @@
            cleanup-errors "verify new weaver PID death"
            #(when @new-weaver-status
               (assert-live-add-weaver-dead! @new-weaver-status)))
-          (live-add-cleanup-stage!
-           cleanup-errors "verify weaver metadata absence"
-           #(when artifact-status
-              (assert-live-add-artifact-absent!
-               (str (:state_dir artifact-status) "/weaver.json") "weaver metadata")))
-          (live-add-cleanup-stage!
-           cleanup-errors "verify weaver EDN absence"
-           #(when artifact-status
-              (assert-live-add-artifact-absent!
-               (str (:state_dir artifact-status) "/weaver.edn") "weaver EDN")))
-          (live-add-cleanup-stage!
-           cleanup-errors "verify weaver socket absence"
-           #(when artifact-status
-              (assert-live-add-artifact-absent!
-               (:socket_path artifact-status) "weaver socket")))
+          (doseq [[generation status] generation-statuses]
+            (live-add-cleanup-stage!
+             cleanup-errors
+             (str "verify " generation " artifacts absence")
+             #(when status
+                (assert-live-add-weaver-artifacts-absent! status generation))))
           (live-add-cleanup-stage!
            cleanup-errors "terminate mill by recorded PID"
            #(when @mill-process
