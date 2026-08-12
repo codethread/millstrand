@@ -158,19 +158,18 @@
        (let [diagnostics (wait-diagnostics label started-at timeout-ms)
              result (condition diagnostics)
              remaining (- deadline (System/nanoTime))]
-         (if result
-           result
-           (if (pos? remaining)
-             (do
-               (java.util.concurrent.locks.LockSupport/parkNanos
-                (min remaining 50000000))
-               (recur))
-             (if on-timeout
-               (on-timeout diagnostics)
-               (throw (ex-info (str "Timed out waiting for " label
-                                    " after " (:elapsed-ms diagnostics)
-                                    " ms (deadline " timeout-ms " ms)")
-                               diagnostics))))))))))
+         (or result
+             (if (pos? remaining)
+               (do
+                 (java.util.concurrent.locks.LockSupport/parkNanos
+                  (min remaining 50000000))
+                 (recur))
+               (if on-timeout
+                 (on-timeout diagnostics)
+                 (throw (ex-info (str "Timed out waiting for " label
+                                      " after " (:elapsed-ms diagnostics)
+                                      " ms (deadline " timeout-ms " ms)")
+                                 diagnostics))))))))))
 
 (defn- await-process-exit!
   "Await one exact process handle through its completion future."
