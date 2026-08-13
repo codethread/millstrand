@@ -29,6 +29,7 @@
    'millstrand.api.clock.alpha-test
    'millstrand.api.errors.alpha-test
    'millstrand.api.format.alpha-test
+   'millstrand.api.authoring.alpha-test
    'millstrand.api.millstrand-test
    'millstrand.api.lifecycle.alpha-test
    'millstrand.core.contribution-test
