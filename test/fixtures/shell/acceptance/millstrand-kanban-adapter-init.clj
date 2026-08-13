@@ -6,7 +6,3 @@
 (runtime/module! runtime :kanban-source
                  {:ns 'ct.spools.kanban
                   :spools ['codethread/kanban]})
-(runtime/module! runtime :kanban-adapter
-                 {:file "adapter.clj"
-                  :spools ['codethread/kanban]
-                  :after [:kanban-source]})
