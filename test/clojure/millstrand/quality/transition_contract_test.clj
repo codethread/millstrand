@@ -10,7 +10,7 @@
     (is (= #{'codethread/devflow 'codethread/kanban 'ct.spools/agent-run}
            (set (keys (:pins contract)))))
     (is (= [{:scope :pinned-external-spool-suite
-             :families #{'codethread/kanban}
+             :families #{'codethread/devflow 'codethread/kanban 'ct.spools/agent-run}
              :test-namespaces #{}}]
            (:deferrals contract)))
     (is (not (transition/deferred? :workspace-config-integration)))
@@ -33,13 +33,13 @@
                     {:scope :workspace-config-integration
                      :families #{'codethread/devflow}
                      :test-namespaces #{'millstrand.ct.config-test}})))))
-    (testing "the Kanban-only suite deferral cannot widen to another family"
+    (testing "the deferred suite cannot widen beyond its three pinned families"
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"only the exact incompatible family pin"
            (transition/validate-contract!
             (update-in contract [:deferrals 0 :families]
-                       conj 'codethread/devflow)))))))
+                       conj 'other/downstream)))))))
 
 (deftest approved-pin-drift-invalidates-the-transition
   (let [file (java.io.File/createTempFile "millstrand-transition-spools-" ".edn")

@@ -1,6 +1,6 @@
 # Feature Tracking Registry
 
-**Document ID:** `RFC-014` **Status:** Implemented **Date:** 2026-07-02 **Related:** [RFC-011](../archive/26-07-02__attention-surface/rfcs/2026-07-02-coordination-attention-surface.md) (attention surface for workflow runs), [Workflow spool](../../spools/workflow.md), [Devflow spool](https://github.com/codethread/devflow.spool#readme), [weaver-guild proposal](../archive/26-07-02__weaver-guild/proposal.md) (cross-weaver tie-in), [discovery tiers](../../docs/reference.md#discovery-tiers-help-about-prime)
+**Document ID:** `RFC-014` **Status:** Implemented **Date:** 2026-07-02 **Related:** [RFC-011](../archive/26-07-02__attention-surface/rfcs/2026-07-02-coordination-attention-surface.md) (attention surface for workflow runs), [Workflow spool](../../spools/workflow.md), [Devflow spool](https://github.com/codethread/devflow.spool#readme), [discovery tiers](../../docs/reference.md#discovery-tiers-help-about-prime)
 
 ## RFC-014.P1 Problem
 
@@ -9,10 +9,9 @@
 Concrete incident (2026-07-02): two agent sessions shared this checkout. One had to fall back to
 polling `git status` and file mtimes to detect that the other was mid-flight on the namespace-tier
 docs sweep, because that session had no strand presence — `strand ready --query work`,
-`workflow-runs`, and `flow-await` could say nothing about it. Meanwhile the weaver-guild AFK loop
-(file-based queue in a worktree) was equally invisible to everyone else until a marker strand was
-hand-authored after the fact. The workflow coordination surface existed, but only for runs that
-lived in the graph.
+`workflow-runs`, and `flow-await` could say nothing about it. A file-based AFK loop in a worktree
+was equally invisible to everyone else until a marker strand was hand-authored after the fact. The
+workflow coordination surface existed, but only for runs that lived in the graph.
 
 The cost is real: sessions can't gate merges on each other, can't discover each other's worktrees/branches, and re-derive state from filesystem side effects.
 
@@ -36,9 +35,8 @@ The cost is real: sessions can't gate merges on each other, can't discover each 
   registry describes work, it does not run it.
 - **RFC-014.NG2:** Enforcement. Untracked work stays possible (TEN-002);
   the registry is a convention with good ergonomics, not a gate.
-- **RFC-014.NG3:** Cross-machine visibility. That is the weaver-guild
-  peering feature; this RFC only defines what one weaver would *answer*
-  when a peer asks (see RFC-014.C3).
+- **RFC-014.NG3:** Cross-machine visibility. This RFC defines the local
+  registry and does not prescribe a cross-weaver transport.
 
 ## RFC-014.P4 Options
 
@@ -46,8 +44,7 @@ The cost is real: sessions can't gate merges on each other, can't discover each 
 
 Document a marker-strand convention in the strand skill and `AGENTS.md`: every session/feature creates one strand (`feature=<slug>`, `owner`, `worktree`, `branch`, body describing the work) and closes it on merge/abandon. The existing `feature-active`/`work` queries already surface it.
 
-- Pros: zero code; works today (the weaver-guild marker strand `y9z8t` is
-  exactly this).
+- Pros: zero code; works today and fits the existing marker-strand convention.
 - Cons: unenforced and forgettable — today's incident happened *with* the
   skill loaded; no await semantics; no staleness story; every attribute name
   is ad hoc.
@@ -66,9 +63,7 @@ Extend this repo's `.millstrand/init.clj` conventions (the `devflow-*`/`flow-*` 
 Ship a small `skein.spools.roster` on the classpath beside workflow/devflow: a tiny attribute vocabulary (`roster/feature`, `roster/owner`, `roster/worktree`, `roster/branch`, `roster/engine`, `roster/heartbeat`) plus helpers — `track!`, `finish!`, `roster` (query), `await-quiet!` (block until no active, non-stale entries for a scope). An event-handler adapter stamps roster attributes onto workflow/devflow roots from their existing `family`/`feature` attributes, so strand-tracked flows register for free; file-based loops and ad hoc sessions make one `track!` call (or `strand <op>` equivalent registered by the spool). Liveness is derived, not manually maintained: any graph mutation by the tracked driver counts as a heartbeat, and an explicit `heartbeat!` exists only for engines that never touch the graph between registration and finish (the honest cost for those engines is periodic touches, acknowledged in C1).
 
 - Pros: consistent vocabulary everywhere; awaitable (G2); free for
-  strand-tracked flows (G3); staleness explicit via heartbeat (G4); and the
-  natural cross-repo answer — once weaver-guild peering ships, "what are you
-  working on" is just this roster served over a guild op.
+  strand-tracked flows (G3); and staleness explicit via heartbeat (G4).
 - Cons: another shipped spool to maintain; heartbeat/staleness semantics
   need care to stay fail-loud without being noisy; harnesses (AFK loop
   scripts) need one integration call each.
@@ -99,9 +94,9 @@ Ship a small `skein.spools.roster` on the classpath beside workflow/devflow: a t
 - **RFC-014.C2:** Merge gating becomes graph-native: "can I merge?" is
   `await-quiet!` scoped to main-checkout entries instead of polling
   `git status`.
-- **RFC-014.C3:** Weaver-guild tie-in: a peering repo's `guild.describe`
-  (or a sibling `guild.roster` op) can serve roster entries, giving manager
-  weavers a uniform in-flight view across repos without new state.
+- **RFC-014.C3:** Cross-weaver transport is outside this RFC. A future
+  integration may expose roster entries through the provider's own contract,
+  without adding state to the registry.
 - **RFC-014.C4:** Staleness policy needs one decision: heartbeat via
   periodic `heartbeat!` touches with a threshold, surfaced as `:stale` —
   never auto-burned (TEN-003; cleanup stays a deliberate act).

@@ -5,82 +5,173 @@
 
 Authoring forms for Millstrand's owner-complete core kinds.
 
-  Each form defines an ordinary Clojure Var and collects one validated declaration
-  while a runtime module source is evaluated. The retained declaration record is
-  replayed for image modules, so source and image activation publish the same
-  owner-complete partitions.
+  Every family has an inert definition, a typed use form, and a bang shorthand
+  that defines and selects. Definitions attach a reusable descriptor to the
+  exact authored Var; only selection contributes to a module collector. The
+  imperative runtime registration functions and `collect-kind!` remain the
+  direct low-level surface.
 
 
 
 
 ## <a name="millstrand.api.millstrand.alpha/defbin">`defbin`</a>
 ``` clojure
-(defbin form-name doc opts)
+(defbin & args)
 ```
 Macro.
 
-Define an executable declaration and collect its validated `:bins` entry.
+Define an inert bin declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L76-L85">Source</a></sub></p>
 
-  `:executable` names a command, a declaring-file-relative path, or a closed
-  `[:family path]`/`[:root path]` anchor. An optional `:build` is an argv vector;
-  `:override? true` records explicit override intent.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L86-L99">Source</a></sub></p>
+## <a name="millstrand.api.millstrand.alpha/defbin!">`defbin!`</a>
+``` clojure
+(defbin! & args)
+```
+Macro.
+
+Define and select a bin declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L76-L85">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defhandler">`defhandler`</a>
 ``` clojure
-(defhandler form-name doc opts argv & body)
+(defhandler & args)
 ```
 Macro.
 
-Define an event handler and collect its validated `:events` declaration.
+Define an inert handler declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L64-L74">Source</a></sub></p>
 
-  Options require non-empty event `:types`; `:override? true` records explicit
-  override intent.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L71-L84">Source</a></sub></p>
+## <a name="millstrand.api.millstrand.alpha/defhandler!">`defhandler!`</a>
+``` clojure
+(defhandler! & args)
+```
+Macro.
+
+Define and select a handler declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L64-L74">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defhook">`defhook`</a>
 ``` clojure
-(defhook form-name doc opts argv & body)
+(defhook & args)
 ```
 Macro.
 
-Define a lifecycle hook and collect its validated `:hooks` declaration.
+Define an inert hook declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L52-L62">Source</a></sub></p>
 
-  Options require non-empty event `:types`; `:override? true` records explicit
-  override intent.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L56-L69">Source</a></sub></p>
+## <a name="millstrand.api.millstrand.alpha/defhook!">`defhook!`</a>
+``` clojure
+(defhook! & args)
+```
+Macro.
+
+Define and select a hook declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L52-L62">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defop">`defop`</a>
 ``` clojure
-(defop form-name doc opts argv & body)
+(defop & args)
 ```
 Macro.
 
-Define an operation handler and collect its validated `:ops` declaration.
+Define an inert op declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L20-L29">Source</a></sub></p>
 
-  Options require `:arg-spec`; `:override? true` records explicit override intent
-  without entering the registry value.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L11-L25">Source</a></sub></p>
+## <a name="millstrand.api.millstrand.alpha/defop!">`defop!`</a>
+``` clojure
+(defop! & args)
+```
+Macro.
+
+Define and select an op declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L20-L29">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defpattern">`defpattern`</a>
 ``` clojure
-(defpattern form-name doc opts argv & body)
+(defpattern & args)
 ```
 Macro.
 
-Define a weave handler and collect its validated `:patterns` declaration.
+Define an inert pattern declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L41-L50">Source</a></sub></p>
 
-  Options require a named input `:spec`; `:override? true` records explicit
-  override intent.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L41-L54">Source</a></sub></p>
+## <a name="millstrand.api.millstrand.alpha/defpattern!">`defpattern!`</a>
+``` clojure
+(defpattern! & args)
+```
+Macro.
+
+Define and select a pattern declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L41-L50">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defquery">`defquery`</a>
 ``` clojure
-(defquery form-name doc opts definition)
+(defquery & args)
 ```
 Macro.
 
-Define a named query and collect its validated `:queries` declaration.
+Define an inert query declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L31-L39">Source</a></sub></p>
 
-  Options accept `:usage`; `:override? true` records explicit override intent.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L27-L39">Source</a></sub></p>
+## <a name="millstrand.api.millstrand.alpha/defquery!">`defquery!`</a>
+``` clojure
+(defquery! & args)
+```
+Macro.
+
+Define and select a query declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L31-L39">Source</a></sub></p>
+
+## <a name="millstrand.api.millstrand.alpha/use-bin!">`use-bin!`</a>
+``` clojure
+(use-bin! & args)
+```
+Macro.
+
+Select one or more bin declaration Vars; return them as a vector.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L76-L85">Source</a></sub></p>
+
+## <a name="millstrand.api.millstrand.alpha/use-handler!">`use-handler!`</a>
+``` clojure
+(use-handler! & args)
+```
+Macro.
+
+Select one or more handler declaration Vars; return them as a vector.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L64-L74">Source</a></sub></p>
+
+## <a name="millstrand.api.millstrand.alpha/use-hook!">`use-hook!`</a>
+``` clojure
+(use-hook! & args)
+```
+Macro.
+
+Select one or more hook declaration Vars; return them as a vector.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L52-L62">Source</a></sub></p>
+
+## <a name="millstrand.api.millstrand.alpha/use-op!">`use-op!`</a>
+``` clojure
+(use-op! & args)
+```
+Macro.
+
+Select one or more op declaration Vars; return them as a vector.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L20-L29">Source</a></sub></p>
+
+## <a name="millstrand.api.millstrand.alpha/use-pattern!">`use-pattern!`</a>
+``` clojure
+(use-pattern! & args)
+```
+Macro.
+
+Select one or more pattern declaration Vars; return them as a vector.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L41-L50">Source</a></sub></p>
+
+## <a name="millstrand.api.millstrand.alpha/use-query!">`use-query!`</a>
+``` clojure
+(use-query! & args)
+```
+Macro.
+
+Select one or more query declaration Vars; return them as a vector.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L31-L39">Source</a></sub></p>

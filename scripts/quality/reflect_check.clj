@@ -28,8 +28,7 @@
 (defn -main [& _]
   (let [roots {"src" "millstrand"
                "spools/batteries/src" "millstrand/spools"
-               "spools/unsafe-text-search/src" "millstrand/spools"
-               "examples/guild/src" "skein/examples"}
+               "spools/unsafe-text-search/src" "millstrand/spools"}
         namespaces (sort (mapcat (fn [[root subdir]]
                                    (namespaces-under root subdir))
                                  roots))

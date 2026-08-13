@@ -59,7 +59,17 @@ Default row cap for `search`. Overflow fails loudly rather than truncating,
 
 ## <a name="millstrand.spools.unsafe-text-search/search">`search`</a>
 ``` clojure
-(search runtime opts)
+(search ctx)
+```
+Function.
+
+UNSAFE substring search over strand titles and attribute values, including
+  archived rows.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/unsafe-text-search/src/millstrand/spools/unsafe_text_search.clj#L205-L217">Source</a></sub></p>
+
+## <a name="millstrand.spools.unsafe-text-search/search-rows">`search-rows`</a>
+``` clojure
+(search-rows runtime opts)
 ```
 Function.
 
@@ -81,13 +91,3 @@ Return strand rows whose title or an attribute value contains `substring`.
   fetches one row past `:limit` and, if the result exceeds it, throws naming
   `--limit` and query-narrowing rather than silently truncating.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/unsafe-text-search/src/millstrand/spools/unsafe_text_search.clj#L128-L171">Source</a></sub></p>
-
-## <a name="millstrand.spools.unsafe-text-search/search-op">`search-op`</a>
-``` clojure
-(search-op ctx)
-```
-Function.
-
-UNSAFE substring search over strand titles and attribute values, including
-  archived rows.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/unsafe-text-search/src/millstrand/spools/unsafe_text_search.clj#L205-L217">Source</a></sub></p>

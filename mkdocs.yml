@@ -66,6 +66,7 @@ nav:
   # behavior contracts remain the specs above (SPEC-005.C2).
   - Alpha API:
       - Index: docs/api/README.md
+      - millstrand.api.authoring.alpha: docs/api/authoring.api.md
       - millstrand.api.batch.alpha: docs/api/batch.api.md
       - millstrand.api.cli.alpha: docs/api/cli.api.md
       - millstrand.api.clock.alpha: docs/api/clock.api.md
@@ -102,11 +103,6 @@ nav:
           - Contract: spools/unsafe-text-search.md
           - Cookbook: spools/unsafe-text-search.cookbook.md
           - API: spools/unsafe-text-search.api.md
-  - Examples:
-      - Weaver Guild:
-          - Contract: examples/guild/README.md
-          - Cookbook: examples/guild.cookbook.md
-          - API: examples/guild.api.md
   - External Spools:
       - Millhouse: https://codethread.github.io/millhouse.spool/
       - Agent Harness: https://github.com/codethread/agent-harness.spool#readme

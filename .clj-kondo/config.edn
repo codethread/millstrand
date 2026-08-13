@@ -13,7 +13,9 @@
                         clojure.core/fn hooks.project-rules/no-fn-keys-destructure
                         fn hooks.project-rules/no-fn-keys-destructure
                         clojure.core/defn hooks.project-rules/no-fn-keys-destructure
-                        defn hooks.project-rules/no-fn-keys-destructure}}
+                        defn hooks.project-rules/no-fn-keys-destructure
+                        millstrand.api.authoring.alpha/defauthoring hooks.millstrand/defauthoring
+                        millstrand.api.authoring.alpha/deflifecycle hooks.millstrand/defauthoring}}
  :linters {:project/ns-docstring {:level :error}
            :project/no-spool-module-atom {:level :error}
            :project/no-fn-keys-destructure {:level :error}

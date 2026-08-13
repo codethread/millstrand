@@ -5,14 +5,13 @@
 (def git-branch "main")
 (def spool-docs
   [{:name "batteries" :source "spools/batteries/src/millstrand/spools/batteries.clj" :outfile "spools/batteries.api.md"}
-   {:name "guild" :source "examples/guild/src/skein/examples/guild.clj" :outfile "examples/guild.api.md"}
    {:name "unsafe-text-search" :source "spools/unsafe-text-search/src/millstrand/spools/unsafe_text_search.clj" :outfile "spools/unsafe-text-search.api.md"}])
 
 ;; The blessed spool-facing API tier (SPEC-005.C2). Generated reference only —
 ;; the behavior contracts stay in the root specs.
 (def alpha-api-docs
   (concat
-   (for [nm ["batch" "cli" "clock" "current" "errors" "events" "format" "graph" "hooks"
+   (for [nm ["authoring" "batch" "cli" "clock" "current" "errors" "events" "format" "graph" "hooks"
              "lifecycle" "notes" "patterns" "peers" "registry" "relations" "return-shape"
              "runtime" "scheduler" "millstrand" "spec" "spool" "vocab" "weaver"]]
      {:name nm

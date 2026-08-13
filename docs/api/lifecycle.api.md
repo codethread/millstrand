@@ -16,42 +16,57 @@ Authoring forms and data contracts for module lifecycle effects.
 
 ## <a name="millstrand.api.lifecycle.alpha/defreconcile">`defreconcile`</a>
 ``` clojure
-(defreconcile form-name doc opts)
+(defreconcile & args)
 ```
 Macro.
 
-Define and collect one repeated desired-state reconciliation effect.
+Define an inert reconcile declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L131-L137">Source</a></sub></p>
 
-  The form is `(defreconcile name doc {:read-desired qualified-symbol,
-  :read-actual qualified-symbol, :apply qualified-symbol,
-  :on-removed qualified-symbol, :trigger-kinds #{keywords}, :after #{ids}})`.
-  `:trigger-kinds` and `:after` are optional.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L138-L149">Source</a></sub></p>
+## <a name="millstrand.api.lifecycle.alpha/defreconcile!">`defreconcile!`</a>
+``` clojure
+(defreconcile! & args)
+```
+Macro.
+
+Define and select a reconcile declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L131-L137">Source</a></sub></p>
 
 ## <a name="millstrand.api.lifecycle.alpha/defresource">`defresource`</a>
 ``` clojure
-(defresource form-name doc opts)
+(defresource & args)
 ```
 Macro.
 
-Define and collect one paired resource acquisition and release effect.
+Define an inert resource declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L123-L129">Source</a></sub></p>
 
-  The form is `(defresource name doc {:open qualified-symbol,
-  :close qualified-symbol, :scope :module-or-runtime, :after #{ids}})`.
-  `:scope` defaults to `:module`; `:after` is optional.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L126-L136">Source</a></sub></p>
+## <a name="millstrand.api.lifecycle.alpha/defresource!">`defresource!`</a>
+``` clojure
+(defresource! & args)
+```
+Macro.
+
+Define and select a resource declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L123-L129">Source</a></sub></p>
 
 ## <a name="millstrand.api.lifecycle.alpha/defseed">`defseed`</a>
 ``` clojure
-(defseed form-name doc opts)
+(defseed & args)
 ```
 Macro.
 
-Define and collect one process-lifetime idempotent seed effect.
+Define an inert seed declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L115-L121">Source</a></sub></p>
 
-  The form is `(defseed name doc {:apply qualified-symbol, :after #{ids}})`.
-  `:after` is optional.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L115-L124">Source</a></sub></p>
+## <a name="millstrand.api.lifecycle.alpha/defseed!">`defseed!`</a>
+``` clojure
+(defseed! & args)
+```
+Macro.
+
+Define and select a seed declaration; return its Var.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L115-L121">Source</a></sub></p>
 
 ## <a name="millstrand.api.lifecycle.alpha/kinds">`kinds`</a>
 
@@ -120,3 +135,30 @@ Closed lifecycle effect projection statuses.
   A projection is `:planned`, `:applied`, `:preserved`, `:retained`,
   `:degraded`, `:blocked`, `:removed`, or `:not-attempted`.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L24-L30">Source</a></sub></p>
+
+## <a name="millstrand.api.lifecycle.alpha/use-reconcile!">`use-reconcile!`</a>
+``` clojure
+(use-reconcile! & args)
+```
+Macro.
+
+Select one or more reconcile declaration Vars; return them as a vector.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L131-L137">Source</a></sub></p>
+
+## <a name="millstrand.api.lifecycle.alpha/use-resource!">`use-resource!`</a>
+``` clojure
+(use-resource! & args)
+```
+Macro.
+
+Select one or more resource declaration Vars; return them as a vector.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L123-L129">Source</a></sub></p>
+
+## <a name="millstrand.api.lifecycle.alpha/use-seed!">`use-seed!`</a>
+``` clojure
+(use-seed! & args)
+```
+Macro.
+
+Select one or more seed declaration Vars; return them as a vector.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L115-L121">Source</a></sub></p>

@@ -19,6 +19,7 @@ run make reflect-check
 run make ci-config-check
 run make identity-check
 run make build
+run test/shell/acceptance/millstrand-kanban-adapter.sh
 run test/shell/acceptance/millstrand-docs.sh
 run test/shell/acceptance/millstrand-neovim.sh
 run make docs-check

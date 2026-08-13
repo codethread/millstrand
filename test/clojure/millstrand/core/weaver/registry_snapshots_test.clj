@@ -116,7 +116,7 @@
                                 :opaque (Object.)})))
 
 (defn keyword-code-op
-  "Throw a namespaced keyword `:code`, the shape guild ops use."
+  "Throw a namespaced keyword `:code`, the shape registered ops use."
   [_ctx]
   (throw (ex-info "op is deprecated" {:code :operation/deprecated
                                       :replacement "successor"})))

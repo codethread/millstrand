@@ -4,14 +4,16 @@
   Batteries declares the everyday strand operations — add/update/show/supersede/
   burn/list/ready/subgraph, spool coordinate helpers, the create-only `weave`
   op, and the read-only `query`/`pattern` registry-introspection ops — through
-  `millstrand.api.millstrand.alpha/defop`. Their
+  `millstrand.api.millstrand.alpha/defop!`. Their
   `:arg-spec` is parsed by `millstrand.api.cli.alpha`. Each op delegates to the same
   `millstrand.api.*.alpha` calls the JSON socket dispatch uses and returns
   the same JSON shapes, so the ops are reachable through `strand <name>` at the
   CLI root. The namespace owns no module-level state:
   op handlers read the runtime from their invocation context (`:op/runtime`).
 
-  `defop` declarations are the durable, owner-complete source for this surface.
+  `defop!` declarations are the durable source for this surface. They define
+  Vars and select their declarations during module collection; the selected set
+  publishes as this module's complete, owner-complete ops partition.
   Explicit-runtime registration functions are the live code and test seam, and
   `millstrand.repl` supplies the same verbs with the runtime implied for an in-process
   session. Evaluating an authoring form outside module collection defines its Var
@@ -40,6 +42,7 @@
   lowest precedence; `--edge edge-type:to-id` adds outgoing edges. `--state`
   accepts `active|closed` for mutations and `active|closed|replaced` for `list`
   filtering."
+  (:refer-clojure :exclude [await list update])
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
             [clojure.set :as set]
@@ -1465,7 +1468,7 @@
           :returns (get op-returns op-name)}
          metadata))
 
-(millstrand/defop add
+(millstrand/defop! add
   "Create a strand with merged attributes, optional state, and outgoing edges."
   (op-options 'add add-arg-spec add-meta)
   [ctx]
@@ -1482,7 +1485,7 @@
                      (seq edges) (assoc :edges edges))
                    (request-context :add)))))
 
-(millstrand/defop update
+(millstrand/defop! update
   "Patch one strand's title, state, attributes, and outgoing edges."
   (op-options 'update update-arg-spec)
   [ctx]
@@ -1502,26 +1505,26 @@
                                                  (or attr {}))))]
       (weaver/update! rt id patch (request-context :update)))))
 
-(millstrand/defop show
+(millstrand/defop! show
   "Return one normalized strand by id."
   (op-options 'show show-arg-spec)
   [ctx]
   (weaver/show (:op/runtime ctx) (:id (:op/args ctx))))
 
-(millstrand/defop supersede
+(millstrand/defop! supersede
   "Replace one strand with another and return the supersession result."
   (op-options 'supersede supersede-arg-spec)
   [ctx]
   (let [{:keys [old-id replacement-id]} (:op/args ctx)]
     (weaver/supersede! (:op/runtime ctx) old-id replacement-id (request-context :supersede))))
 
-(millstrand/defop burn
+(millstrand/defop! burn
   "Physically delete one strand by id and return the burn summary."
   (op-options 'burn burn-arg-spec)
   [ctx]
   (graph/burn-by-ids! (:op/runtime ctx) [(:id (:op/args ctx))] (request-context :burn)))
 
-(millstrand/defop list
+(millstrand/defop! list
   "List lean-projected strands, optionally filtered by lifecycle state or a named query."
   (op-options 'list list-arg-spec)
   [ctx]
@@ -1538,7 +1541,7 @@
             (throw (ex-info "--param requires --query" {})))
           (weaver/list-lean rt lean-attribute-byte-floor (if state [:= :state state] [:exists :id]) {} limit)))))
 
-(millstrand/defop ready
+(millstrand/defop! ready
   "List lean-projected ready strands, optionally from a named query result set."
   (op-options 'ready ready-arg-spec)
   [ctx]
@@ -1554,35 +1557,35 @@
             (throw (ex-info "--param requires --query" {})))
           (weaver/ready-lean rt lean-attribute-byte-floor [:exists :id] {} limit)))))
 
-(millstrand/defquery strand-closed
+(millstrand/defquery! strand-closed
   "Return the closed strand identified by `id`, when it exists."
   {:usage "strand await --query strand-closed --param id=<id> --min-count 1"}
   {:params [:id]
    :where [:and [:= :state "closed"]
            [:= :id [:param :id]]]})
 
-(millstrand/defquery strand-active
+(millstrand/defquery! strand-active
   "Return the active strand identified by `id`, when it exists."
   {:usage "strand await --query strand-active --param id=<id> --max-count 0"}
   {:params [:id]
    :where [:and [:= :state "active"]
            [:= :id [:param :id]]]})
 
-(millstrand/defquery children-active
+(millstrand/defquery! children-active
   "Return active children of the strand identified by `parent`."
   {:usage "strand await --query children-active --param parent=<id> --max-count 0"}
   {:params [:parent]
    :where [:and [:= :state "active"]
            [:edge/in "parent-of" [:= :id [:param :parent]]]]})
 
-(millstrand/defquery blockers-active
+(millstrand/defquery! blockers-active
   "Return active blockers of the strand identified by `id`."
   {:usage "strand await --query blockers-active --param id=<id> --max-count 0"}
   {:params [:id]
    :where [:and [:= :state "active"]
            [:edge/in "depends-on" [:= :id [:param :id]]]]})
 
-(millstrand/defop await
+(millstrand/defop! await
   "Block until a named query's result count is inside the requested band."
   (op-options 'await await-arg-spec)
   [ctx]
@@ -1597,7 +1600,7 @@
       :pred->result #(when (:satisfied? %) (await-result rt started opts "satisfied" %))
       :on-timeout #(await-result rt started opts "timeout" %)})))
 
-(millstrand/defop subgraph
+(millstrand/defop! subgraph
   "Return a relation-scoped subgraph rooted at one strand."
   (op-options 'subgraph subgraph-arg-spec)
   [ctx]
@@ -1609,7 +1612,7 @@
      "strands" strands
      "edges" edges}))
 
-(millstrand/defop weave
+(millstrand/defop! weave
   "Apply a registered create-only weave pattern to one JSON input value."
   (op-options 'weave weave-arg-spec weave-meta)
   [ctx]
@@ -1620,7 +1623,7 @@
                      (walk/keywordize-keys (read-single-json input))
                      (request-context :weave))))
 
-(millstrand/defop query
+(millstrand/defop! query
   "Introspect registered named queries: list all metadata or explain one."
   (op-options 'query query-arg-spec)
   [ctx]
@@ -1632,7 +1635,7 @@
                       (throw (ex-info "query explain requires a query name" {})))
                     (json-safe-value (graph/query-explain rt nm))))))
 
-(millstrand/defop pattern
+(millstrand/defop! pattern
   "Introspect registered weave patterns: list all metadata or explain one."
   (op-options 'pattern pattern-arg-spec)
   [ctx]
@@ -1644,7 +1647,7 @@
                       (throw (ex-info "pattern explain requires a pattern name" {})))
                     (patterns/explain rt nm)))))
 
-(millstrand/defop note
+(millstrand/defop! note
   "Append a note to a target strand's memory via the note primitive."
   (op-options 'note note-arg-spec)
   [ctx]
@@ -1654,14 +1657,14 @@
     ;; string-keyed --attr map lands as ordinary strand attrs on the note.
     (notes/note! (:op/runtime ctx) id text (merge (or attr {}) {:by by :round round}))))
 
-(millstrand/defop notes
+(millstrand/defop! notes
   "Return a target strand's notes in note/at order."
   (op-options 'notes notes-arg-spec)
   [ctx]
   (let [{:keys [id round]} (:op/args ctx)]
     (notes/notes (:op/runtime ctx) id {:round round})))
 
-(millstrand/defop vocab
+(millstrand/defop! vocab
   "List the runtime's vocabulary declarations, optionally narrowed to one kind."
   (op-options 'vocab vocab-arg-spec)
   [ctx]
@@ -1670,7 +1673,7 @@
     (json-safe-value
      (vocab/declarations rt (when kind {:kind (validate-vocab-kind kind)})))))
 
-(millstrand/defop spool
+(millstrand/defop! spool
   "Dispatch validated `strand spool about|add|bump|status` inputs and results."
   (op-options 'spool spool-arg-spec)
   [ctx]
@@ -1706,6 +1709,6 @@
        runtime (assoc outcome :owner 'millstrand.spools.batteries)))
     (require-valid! ::seed-result result "Batteries glossary seed result is invalid")))
 
-(lifecycle/defseed batteries-glossary-seed
+(lifecycle/defseed! batteries-glossary-seed
   "Seed the process-lifetime Batteries failure glossary."
   {:apply 'millstrand.spools.batteries/seed-batteries-glossary!})

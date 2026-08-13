@@ -21,6 +21,11 @@
     (:contribution
      (module-graph/with-contribution-collection collection-context f))))
 
+(defn- collect-result [f]
+  (binding [*ns* test-ns
+            *file* (:source/file collection-context)]
+    (module-graph/with-contribution-collection collection-context f)))
+
 (deftest declaration-constructors-enforce-closed-kind-grammars
   (testing "unknown options fail at the authoring boundary"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"defop options are invalid"
@@ -72,31 +77,84 @@
     (is (= 'millstrand.core.contribution-test/sample
            (get-in contribution [:patterns :entries "sample" :fn])))))
 
+(deftest inert-and-typed-core-forms-separate-definition-from-selection
+  (let [{:keys [return contribution]}
+        (collect-result
+         #(eval
+           '(millstrand/defop inert-op "Inert."
+              {:arg-spec {:op "inert-op" :doc "Inert."
+                          :hook-class :read :deadline-class :standard}}
+              [_] :inert)))]
+    (is (var? return))
+    (is (= (ns-resolve test-ns 'inert-op) return))
+    (is (= :inert (@return {})))
+    (is (empty? contribution)))
+  (let [{:keys [return contribution]}
+        (collect-result #(eval '(millstrand/use-op! inert-op)))]
+    (is (= [(ns-resolve test-ns 'inert-op)] return))
+    (is (= 'millstrand.core.contribution-test/inert-op
+           (get-in contribution [:ops :entries "inert-op" :fn])))))
+
+(deftest core-function-and-value-families-return-their-installed-vars
+  (testing "function-backed bang forms return their installed Var"
+    (let [{:keys [return contribution]}
+          (collect-result
+           #(eval
+             '(millstrand/defop! bang-op "Bang."
+                {:arg-spec {:op "bang-op" :doc "Bang."
+                            :hook-class :read :deadline-class :standard}}
+                [_] :bang)))]
+      (is (= (ns-resolve test-ns 'bang-op) return))
+      (is (= :bang (@return {})))
+      (is (= 'millstrand.core.contribution-test/bang-op
+             (get-in contribution [:ops :entries "bang-op" :fn])))))
+  (testing "value-backed forms preserve inert, use, and bang return contracts"
+    (let [{:keys [return contribution]}
+          (collect-result
+           #(eval '(millstrand/defquery inert-query "Inert." {}
+                     [:= :state "active"])))]
+      (is (= (ns-resolve test-ns 'inert-query) return))
+      (is (= [:= :state "active"] @return))
+      (is (empty? contribution)))
+    (let [{:keys [return contribution]}
+          (collect-result #(eval '(millstrand/use-query! inert-query)))]
+      (is (= [(ns-resolve test-ns 'inert-query)] return))
+      (is (= [:= :state "active"]
+             (get-in contribution [:queries :entries "inert-query"]))))
+    (let [{:keys [return contribution]}
+          (collect-result
+           #(eval '(millstrand/defquery! bang-query "Bang." {}
+                     [:= :state "closed"])))]
+      (is (= (ns-resolve test-ns 'bang-query) return))
+      (is (= [:= :state "closed"] @return))
+      (is (= [:= :state "closed"]
+             (get-in contribution [:queries :entries "bang-query"]))))))
+
 (deftest source-forms-define-vars-and-collect-every-core-kind
   (let [contribution
         (collect
          #(eval
            '(do
-              (millstrand/defop sample "Sample."
+              (millstrand/defop! sample "Sample."
                 {:arg-spec {:op "sample" :doc "Sample."
                             :hook-class :read :deadline-class :standard}
                  :override? true}
                 [_] :ok)
-              (millstrand/defquery sample-query "Sample." {}
+              (millstrand/defquery! sample-query "Sample." {}
                 [:= :state "active"])
-              (millstrand/defpattern sample-pattern "Sample."
+              (millstrand/defpattern! sample-pattern "Sample."
                 {:spec ::pattern-input} [_] [])
-              (millstrand/defhook sample-hook "Sample."
+              (millstrand/defhook! sample-hook "Sample."
                 {:types #{:strand/added}} [_] nil)
-              (millstrand/defhandler sample-handler "Sample."
+              (millstrand/defhandler! sample-handler "Sample."
                 {:types #{:strand/added}} [_] nil)
-              (millstrand/defbin sample-bin "Sample executable."
+              (millstrand/defbin! sample-bin "Sample executable."
                 {:executable "sample-bin" :build ["make" "sample-bin"]}))))]
     (is (= #{:ops :queries :patterns :hooks :events :bins} (set (keys contribution))))
     (is (= [:= :state "active"]
            (get-in contribution [:queries :entries "sample-query"])))
     (is (= #{"sample"} (get-in contribution [:ops :overrides])))
-    (is (= 'millstrand.core.contribution-test/sample-op
+    (is (= 'millstrand.core.contribution-test/sample
            (get-in contribution [:ops :entries "sample" :fn])))
     (is (= {:name "sample-bin"
             :doc "Sample executable."
@@ -107,7 +165,7 @@
            (get-in contribution [:bins :entries "sample-bin"])))
     (is (every? var?
                 (map #(ns-resolve test-ns %)
-                     '[sample-op sample-query sample-pattern sample-hook sample-handler
+                     '[sample sample-query sample-pattern sample-hook sample-handler
                        sample-bin])))))
 
 (deftest defbin-rejects-the-closed-option-grammar

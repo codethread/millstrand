@@ -19,7 +19,7 @@
    'millstrand.api.registry.alpha-test
    'millstrand.plugin-test 'millstrand.relations-test 'millstrand.notes-test 'millstrand.vocab-test
    'millstrand.spools.unsafe-text-search-test
-   'millstrand.guild-test 'millstrand.test.alpha-test 'millstrand.warm-test 'millstrand.api.cli.alpha-test
+   'millstrand.test.alpha-test 'millstrand.warm-test 'millstrand.api.cli.alpha-test
    'millstrand.source-file-test
    ;; pure findings logic over its own temp-dir fixtures — no shared state.
    'millstrand.quality.conventions-check-test 'millstrand.quality.transition-contract-test
@@ -29,6 +29,7 @@
    'millstrand.api.clock.alpha-test
    'millstrand.api.errors.alpha-test
    'millstrand.api.format.alpha-test
+   'millstrand.api.authoring.alpha-test
    'millstrand.api.millstrand-test
    'millstrand.api.lifecycle.alpha-test
    'millstrand.core.contribution-test

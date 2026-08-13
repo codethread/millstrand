@@ -21,7 +21,7 @@
     (agent-run/set-default-review-contract! nil)
     (agent-run/set-default-task-contract! nil)))
 
-(lifecycle/defresource delegation-contracts
+(lifecycle/defresource! delegation-contracts
   "Own this workspace's default task and review contracts."
   {:open 'ct.agents.delegation-contracts/open-contracts!
    :close 'ct.agents.delegation-contracts/close-contracts!})

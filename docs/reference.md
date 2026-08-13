@@ -389,7 +389,7 @@ Queries are named values in the weaver registry. The durable path is a module au
 (ns my.workspace
   (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(millstrand/defquery agent-docs
+(millstrand/defquery! agent-docs
   "Return agent-owned documentation strands."
   {}
   [:and
@@ -407,7 +407,7 @@ Activate the module from trusted startup code:
   {:ns 'my.workspace})
 ```
 
-`defquery` defines the `agent-docs` Var and collects its value only while the module source is being evaluated. A Var containing query data is not itself a named query. Module publication owns the registry entry, so refresh and restart can reconstruct it from source.
+The inert `defquery` form defines the `agent-docs` Var but does not select it. `defquery!`, used above, defines and selects its declaration while the module source is evaluated. A Var containing query data is not itself a named query. Module publication owns the registry entry, so refresh and restart can reconstruct it from source.
 
 For code, tests, or a one-off startup helper that already holds a runtime, use the explicit-runtime verb:
 
@@ -446,7 +446,7 @@ strand --workspace "$workspace" ready --query agent-docs
 
 Named query registries are not durable by themselves. The module form above is the durable path; a direct entry is runtime-local, although startup code can reapply it on each restart. Reapplication does not make it refresh-safe or owner-complete. For a workspace that already declares a local spool, add the query to that module's contribution so owner-complete refresh installs everything together.
 
-`defquery` is one of six [authoring forms](#authoring-forms) for core registry entries. It defines a Var and collects the query under a registry key with the same name. The registry key is the Var name exactly, so `defquery mine-query` registers `"mine-query"`.
+`defquery` is one of six [authoring families](#authoring-forms) for core registry entries. It defines an inert Var; `use-query!` selects that Var and `defquery!` defines and selects it. The registry key is the Var name exactly, so `defquery! mine-query` registers `"mine-query"`.
 
 The registry is owner-partitioned and layered. Each writer changes only its own entry map, and the effective view is the layered merge. `replace-query!` records intent to shadow an existing name; `unregister-query!` removes only the caller's own entry and restores the entry below it. Removing a shadow and registering again cannot replace another owner's entry, so remove-then-rerun is not a substitute for replace. Registry verbs change the name-to-value binding, not the Var. Queries have no function to redefine: their registered value is the behavior, and `query explain` reads the current value after a replacement.
 
@@ -605,9 +605,9 @@ The weaver loads trusted startup files from the selected workspace in order — 
 
 ## Authoring forms
 
-Registry entries are authored, not imperatively registered. `millstrand.api.millstrand.alpha` ships one macro per core kind. Each one defines an ordinary Clojure Var and collects one validated declaration while a runtime module source is evaluated.
+Registry entries are authored, not imperatively registered. `millstrand.api.millstrand.alpha` ships one three-form family per core kind. The inert form defines an ordinary Clojure Var, the typed use form selects it, and the bang form performs both while a runtime module source is evaluated.
 
-| Form | Kind it collects | Required options |
+| Definition form | Kind it defines | Required options |
 | --- | --- | --- |
 | `defop` | `:ops`, a `strand <op>` command | `:arg-spec` |
 | `defquery` | `:queries`, a named query | none |
@@ -620,9 +620,9 @@ Each form takes a name, a docstring, an options map, and then the body its kind 
 
 The binding moment differs by kind. Ops, patterns, and hooks resolve their callable Var when they run, so redefining the function is the live hot loop under a stable contract. Registration metadata, including an op's help and arg-spec, stays as it was until the entry is registered again; help can therefore describe the old contract during that window. Event handlers capture the function value at registration, so replace the handler registration to iterate it. Queries have no callable; the registered value is the behavior, and replacing it updates both execution and `query explain`.
 
-The module's coordinate does not affect these registry rules. A workspace module may use `(millstrand/defop {:override? true} ...)` to declare a durable mask over a spool op whether that spool came from a local root or a git pin. Same-layer collisions remain errors; the override is the consumer's explicit workspace-layer choice.
+The module's coordinate does not affect these registry rules. A workspace module may use `(millstrand/defop! {:override? true} ...)` to declare a durable mask over a spool op whether that spool came from a local root or a git pin. Same-layer collisions remain errors; the override is the consumer's explicit workspace-layer choice.
 
-Collection only happens under a module contribution. Evaluating a form at the REPL, or reloading source with `runtime/reload-code!`, defines the Var and publishes nothing. The same rule explains removal: a refresh replaces an owner's whole partition for a kind, so dropping a form from the source drops its entry at the next refresh. There is no unregister call to remember.
+Selection only happens under a module contribution. Evaluating an inert form at the REPL, or reloading source with `runtime/reload-code!`, defines the Var and publishes nothing. The same rule explains removal: a refresh replaces an owner's whole partition for a kind, so dropping a typed selection from the source drops its entry at the next refresh. There is no unregister call to remember.
 
 Domain spools own forms for their own kinds the same way. The external Millhouse family is one example; its workflow, Cron, Chime, and executor forms and behavior are in the [Millhouse documentation](https://codethread.github.io/millhouse.spool/). Module lifecycle effects are declared with `millstrand.api.lifecycle.alpha`: `defresource`, `defseed`, and `defreconcile`.
 
@@ -650,7 +650,7 @@ Pattern registration lives in trusted Clojure config or spools, not in the publi
 (s/def ::title string?)
 (s/def ::task-input (s/keys :req-un [::title]))
 
-(millstrand/defpattern task
+(millstrand/defpattern! task
   "Create an implementation strand and a review strand that depends on it."
   {:spec ::task-input}
   [{:keys [input]}]
@@ -696,7 +696,7 @@ transactional batch engine as REPL-only `millstrand.api.batch.alpha/apply!`. Raw
 loading-dock door: it can create, update, burn, and upsert or remove edges, so it remains a Clojure
 config/REPL workflow instead of a public CLI command.
 
-Like queries, patterns are weaver-lifetime runtime state. Author them in a module source with `defpattern` if they should always exist after restart or refresh.
+Like queries, patterns are weaver-lifetime runtime state. Define and select them in a module source with `defpattern!` if they should always exist after restart or refresh.
 
 ## Graph helpers
 
@@ -728,7 +728,7 @@ Graph helpers include operations such as query id selection, strand hydration by
      :strands (graph/strands-by-ids rt ids)}))
 ```
 
-Declare the `owned` query beside it with `millstrand/defquery`, or register it directly from the live REPL:
+Define and select the `owned` query beside it with `millstrand/defquery!`, or register it directly from the live REPL:
 
 ```clojure
 (graph/register-query! (current/runtime) 'owned [:= [:attr :owner] "ct"])
@@ -741,7 +741,7 @@ printf "(do (require 'my.workflow) (my.workflow/owned-strands {}))\n" \
   | mill weaver repl --stdin --workspace "$workspace"
 ```
 
-Named read surfaces beyond queries are registered CLI operations, authored with `millstrand/defop`. Their flat arg-spec leaves carry `:hook-class :read` and `:deadline-class`; registration opts carry classes only for raw-envelope ops. They add docs, arg parsing, and `strand <op>` invocation on top of plain trusted functions like the one above.
+Named read surfaces beyond queries are registered CLI operations, defined and selected with `millstrand/defop!`. Their flat arg-spec leaves carry `:hook-class :read` and `:deadline-class`; registration opts carry classes only for raw-envelope ops. They add docs, arg parsing, and `strand <op>` invocation on top of plain trusted functions like the one above.
 
 ## Events
 
@@ -753,7 +753,7 @@ Author handlers with `millstrand/defhandler` in startup-loaded code or a weaver-
 (ns my.workflow
   (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(millstrand/defhandler cleanup-temporary
+(millstrand/defhandler! cleanup-temporary
   "Drop workspace-owned temporary rows after a strand changes."
   {:types #{:strand/updated}
    :metadata {:purpose :cleanup}}
@@ -798,7 +798,7 @@ There are two flavours, chosen by the hook type. A **validation** hook has its r
 (require '[millstrand.api.millstrand.alpha :as millstrand]
          '[millstrand.api.spool.alpha :as spool])
 
-(millstrand/defhook require-owner
+(millstrand/defhook! require-owner
   "Refuse a strand added without an owner attribute."
   {:types #{:strand/add-before-commit} :order 10}
   [ctx]

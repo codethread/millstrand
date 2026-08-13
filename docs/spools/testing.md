@@ -173,7 +173,7 @@ Write the spool fixture, approval, and module declaration into the generated wor
                                 {:local/root "spools/demo"}}}
           :files {"spools/demo/deps.edn" "{:paths [\"src\"]}\n"
                   "spools/demo/src/demo/lib.clj"
-                  "(ns demo.lib\n  (:require [millstrand.api.millstrand.alpha :as millstrand]))\n\n(millstrand/defquery demo\n  \"Return demo strands.\"\n  {}\n  [:= [:attr :demo] true])\n"}
+                  "(ns demo.lib\n  (:require [millstrand.api.millstrand.alpha :as millstrand]))\n\n(millstrand/defquery! demo\n  \"Return demo strands.\"\n  {}\n  [:= [:attr :demo] true])\n"}
           :init "(require '[millstrand.api.current.alpha :as current]
                           '[millstrand.api.runtime.alpha :as runtime])
                  (runtime/module! (current/runtime) :demo/lib

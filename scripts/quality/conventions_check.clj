@@ -44,7 +44,6 @@
   ["src"
    "spools/batteries/src"
    "spools/unsafe-text-search/src"
-   "examples/guild/src"
    ".millstrand"
    "test"])
 

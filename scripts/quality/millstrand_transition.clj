@@ -2,25 +2,27 @@
   "Validate the narrowed Millstrand publisher transition contract.
 
   Workspace config is active against the moved publishers. The external suite
-  remains deferred only for Kanban's historical in-tree Guild fixture."
+  is deferred for its exact unmigrated downstream families; their migration
+  cards and the final cutover remove the checked-in deferral."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]))
 
 (def ^:private contract-resource "quality/millstrand-transition-contract.edn")
 (def ^:private expected-scopes #{:pinned-external-spool-suite})
+(def ^:private allowed-scopes #{:pinned-external-spool-suite})
 (def ^:private expected-pins
   {'codethread/devflow
    {:git/url "https://github.com/codethread/devflow.spool.git"
     :git/sha "e1fed4904447f4752ea99dc27ab174c237604094"}
    'codethread/kanban
    {:git/url "https://github.com/codethread/kanban.spool.git"
-    :git/tag "v24"
-    :git/sha "87f61bc2750e7026f3650235907db25f19b1536e"}
+    :git/tag "v25"
+    :git/sha "a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e"}
    'ct.spools/agent-run
    {:git/url "https://github.com/codethread/agent-harness.spool.git"
     :git/sha "636ae9ecbb57c4fde2c79485c7ef7767aba5753b"}})
 (def ^:private expected-families (set (keys expected-pins)))
-(def ^:private expected-deferred-families #{'codethread/kanban})
+(def ^:private expected-deferred-families expected-families)
 
 (defn- fail!
   [message data]
@@ -130,9 +132,9 @@
         (require! (= "--scope" flag)
                   "Transition check accepts only --scope <scope>"
                   {:args args})
-        (require! (contains? expected-scopes scope)
+        (require! (contains? allowed-scopes scope)
                   "Unknown transition deferral scope"
-                  {:scope scope :expected expected-scopes})
+                  {:scope scope :expected allowed-scopes})
         scope)
     (fail! "Transition check expects no arguments or --scope <scope>"
            {:args args})))

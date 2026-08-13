@@ -767,18 +767,18 @@
                  :millstrand/min "v1"}))
   (is (not (s/valid? ::batteries/advisory-manifest
                      {:spool/format 1 :roots {'demo/root {:root "."}} :extra true})))
-  (let [about (batteries/spool-op {:op/args {:subcommand ["about"]}})]
+  (let [about (batteries/spool {:op/args {:subcommand ["about"]}})]
     (is (= ["add" "bump" "status"]
            (mapv :verb (:commands about))))
     (is (s/valid? ::batteries/spool-about-result about)))
   (let [error (is (thrown? clojure.lang.ExceptionInfo
-                           (batteries/spool-op {:op/args {:subcommand :unexpected}})))]
+                           (batteries/spool {:op/args {:subcommand :unexpected}})))]
     (is (= ::batteries/spool-op-context (:spec (ex-data error)))))
   (testing "a legacy scalar subcommand is no longer a valid context (path vectors only)"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"invalid operation context"
-                          (batteries/spool-op {:op/args {:subcommand "about"}}))))
+                          (batteries/spool {:op/args {:subcommand "about"}}))))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"invalid operation context"
-                        (batteries/spool-op
+                        (batteries/spool
                          {:op/args {:subcommand ["add"] :git-url "https://example.invalid/x"}}))))
 
 (deftest add-happy-path-and-json-shape
@@ -1469,7 +1469,7 @@
         (is (str/includes? (:prime (weaver/op! rt 'prime ["weave"])) "pattern list")))
       (testing "spool bump help names the required latest modes"
         (let [help (weaver/op! rt 'help ["spool" "bump"])
-              about (batteries/spool-op {:op/args {:subcommand ["about"]}})]
+              about (batteries/spool {:op/args {:subcommand ["about"]}})]
           (let [latest-flag (some #(when (= "latest" (:name %)) %)
                                   (get-in help [:node :invocation :flags]))]
             (is (true? (:required latest-flag)))

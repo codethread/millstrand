@@ -42,16 +42,16 @@
 (defn- module-source
   "Return module source publishing one entry per kind, named with suffix."
   [suffix]
-  (str "(millstrand/defop mop" suffix " \"Module op.\"\n"
+  (str "(millstrand/defop! mop" suffix " \"Module op.\"\n"
        "  {:arg-spec {:op \"mop" suffix "\" :doc \"Module op.\"\n"
        "              :hook-class :read :deadline-class :standard}}\n"
        "  [_] :module)\n"
-       "(millstrand/defquery mquery" suffix " \"Module query.\" {} [:= [:attr :k] 1])\n"
-       "(millstrand/defpattern mpattern" suffix " \"Module pattern.\"\n"
+       "(millstrand/defquery! mquery" suffix " \"Module query.\" {} [:= [:attr :k] 1])\n"
+       "(millstrand/defpattern! mpattern" suffix " \"Module pattern.\"\n"
        "  {:spec ::module-input} [_] [])\n"
-       "(millstrand/defhook mhook" suffix " \"Module hook.\"\n"
+       "(millstrand/defhook! mhook" suffix " \"Module hook.\"\n"
        "  {:types #{:payload/received}} [_] nil)\n"
-       "(millstrand/defhandler mhandler" suffix " \"Module handler.\"\n"
+       "(millstrand/defhandler! mhandler" suffix " \"Module handler.\"\n"
        "  {:types #{:strand/added}} [_] nil)\n"))
 
 (def ^:private module-preamble
@@ -84,7 +84,7 @@
     :module "mop"
     :fresh "scratch-op"
     :absent "absent-op"
-    :module-tag (module-sym "mop-op")
+    :module-tag (module-sym "mop")
     :direct-tag (direct-sym "direct-op")
     :effective (fn [rt key] (entry-fn (weaver/ops rt) :name key :fn))
     :register! (fn [rt label]

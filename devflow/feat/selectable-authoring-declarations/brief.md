@@ -50,9 +50,9 @@ The authorized repository set is closed:
 - devflow.
 - codethread.
 
-Do not migrate, patch, audit for completeness, or add compatibility for any other spool repository. Separate repositories such as Kanban and third-party spools are explicitly outside this epic even if they still use the old forms after the cutover.
+Do not migrate, patch, audit for completeness, or add compatibility for any other spool repository. Kanban v25 at peeled SHA `a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e` is the explicit external exception. No Kanban Guild, peering operation, or lifecycle resource belongs to the Millstrand surface; Kanban remains core-only.
 
-The selected workspace still requires the separately pinned Kanban spool. Millstrand will keep that pin unchanged and replace its direct module declaration with a Millstrand-owned consumer adapter. On a fresh generation, the unchanged Kanban source is compiled against the new inert `def<kind>` macros, producing declaration Vars; the adapter explicitly selects the declarations the workspace uses. A disposable fresh-generation test must prove that path before restart. This changes no Kanban source and does not preserve the old publishing semantics.
+The selected workspace still requires the separately pinned Kanban spool. Millstrand replaces its direct module declaration with a Millstrand-owned consumer adapter that selects ops `kanban` and `kanban-export`; queries `kanban-cards`, `kanban-pending`, and `kanban-epic-pending`; pattern `kanban-batch`; and bin `kanban-dash`. A disposable fresh-generation test must prove that core-only v25 surface before restart. This does not preserve the old publishing semantics or add a compatibility bridge.
 
 Cron's `defjob` joins the Var-based convention rather than retaining its current keyword-only shape. It takes a symbol name, a docstring, and the job map; the registry id is `(keyword name)`. `use-job!` accepts those declaration Vars, and `defjob!` also accepts an optional selection-options map before the job map. Duplicate keys within one `use-<kind>!` form fail locally. Repeating a key in separate top-level selection forms keeps the existing collector rule: the later contribution replaces the earlier one deterministically.
 

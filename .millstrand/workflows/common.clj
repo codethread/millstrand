@@ -21,7 +21,7 @@
 (s/def ::macros-demo-input
   (s/keys :req-un [::title] :opt-un [::owner]))
 
-(millstrand/defpattern macros-demo
+(millstrand/defpattern! macros-demo
   "Create a tiny two-step dependency chain as a workspace authoring example."
   {:spec ::macros-demo-input}
   [{:keys [input]}]
@@ -93,7 +93,7 @@
                 (seq edge-specs) (assoc :edges edge-specs))))
           strands)))
 
-(millstrand/defpattern delegate-pipeline
+(millstrand/defpattern! delegate-pipeline
   "Create a sequential chain-loop workflow of subagent gates. Input:
   {run_id,tasks:[{id,title,body?,harness?,cwd?,max-attempts?}],harness?,cwd?,accept?}."
   {:spec ::delegate-pipeline-input}

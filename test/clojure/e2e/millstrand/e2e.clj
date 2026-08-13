@@ -727,6 +727,9 @@
       (assert-contains (slurp help-file)
                        "(help-transform/register-builtin! runtime)"
                        "clean bootstrap creates the Batteries help-transform adapter")
+      (assert-contains (slurp help-file)
+                       "(lifecycle/defresource! batteries-help-transform"
+                       "clean bootstrap publishes the Batteries help-transform resource")
       (assert (not (.exists (java.io.File. workspace "spools")))
               "clean bootstrap does not create an empty spools directory")
       (assert (not (.exists (java.io.File. workspace ".git"))) "clean bootstrap does not run git init")
@@ -1211,7 +1214,7 @@
                        "   :doc " (pr-str "Return the live-cutover proof value.") "\n"
                        "   :hook-class :read\n"
                        "   :deadline-class :standard})\n\n"
-                       "(millstrand/defop e2e-live\n"
+                       "(millstrand/defop! e2e-live\n"
                        "  " (pr-str "Return the live-cutover proof value.") "\n"
                        "  {:arg-spec live-arg-spec}\n"
                        "  [_]\n"

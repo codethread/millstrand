@@ -6,13 +6,14 @@ tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/millstrand-identity.XXXXXX")
 trap 'rm -rf "$tmp_root"' EXIT
 
 git -C "$repo_root" archive --format=tar HEAD | tar -xf - -C "$tmp_root"
+# HEAD predates this deletion, so remove the retired example from the extracted
+# fixture before copying the current quality files under test.
+rm -rf "$tmp_root/examples" "$tmp_root/test/clojure/millstrand/guild_test.clj"
 cp "$repo_root/scripts/quality/millstrand-active-identity.sh" \
   "$tmp_root/scripts/quality/millstrand-active-identity.sh"
 cp "$repo_root/scripts/quality/millstrand-identity-allowlist.tsv" \
   "$tmp_root/scripts/quality/millstrand-identity-allowlist.tsv"
 cp "$repo_root/mkdocs.yml" "$tmp_root/mkdocs.yml"
-cp -R "$repo_root/examples" "$tmp_root/examples"
-cp "$repo_root/test/clojure/millstrand/guild_test.clj" "$tmp_root/test/clojure/millstrand/guild_test.clj"
 cp "$repo_root/scripts/generate_api_docs.clj" "$tmp_root/scripts/generate_api_docs.clj"
 cp "$repo_root/scripts/spool-suite-gate" "$tmp_root/scripts/spool-suite-gate"
 cp "$repo_root/scripts/quality/reflect_check.clj" "$tmp_root/scripts/quality/reflect_check.clj"
@@ -40,6 +41,27 @@ bash_path=$(command -v bash)
 if PATH="$tool_dir" command -v rg >/dev/null 2>&1; then
   echo "millstrand identity regression: controlled PATH unexpectedly exposes rg" >&2
   exit 1
+fi
+
+rg_path=$(command -v rg || true)
+if [[ -n "$rg_path" ]]; then
+  rg_tool_dir="$tmp_root/rg-bin"
+  mkdir "$rg_tool_dir"
+  for command_name in dirname git grep mktemp pwd rm sed; do
+    ln -s "$tool_dir/$command_name" "$rg_tool_dir/$command_name"
+  done
+  ln -s "$rg_path" "$rg_tool_dir/rg"
+
+  rg_output="$tmp_root/rg.out"
+  if ! PATH="$rg_tool_dir" "$bash_path" \
+      "$tmp_root/scripts/quality/millstrand-active-identity.sh" >"$rg_output" 2>&1; then
+    cat "$rg_output" >&2
+    echo "millstrand identity regression: rg scan failed with missing examples path" >&2
+    exit 1
+  fi
+  echo "millstrand identity regression: rg scan survived missing examples path"
+else
+  echo "millstrand identity regression: rg unavailable; skipped rg scan subcase"
 fi
 
 cp "$repo_root/AGENTS.md" "$tmp_root/AGENTS.md"

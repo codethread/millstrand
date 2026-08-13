@@ -49,6 +49,10 @@
 (def handler-started (atom (promise)))
 (def handler-release (atom (promise)))
 (def module-contributions (atom {}))
+(def module-lifecycle
+  "Current lifecycle declaration used by source-backed module fixtures."
+  (atom {:effect-id :old-effect
+         :options {:apply 'millstrand.core.weaver.modules-test/lifecycle-marker}}))
 (def bad-lifecycle-callable
   "Malformed lifecycle value used to prove resolution requires a function."
   :not-a-function)
@@ -88,7 +92,15 @@
     (reset! handler-started (promise))
     (reset! handler-release (promise))
     (reset! module-contributions {})
+    (reset! module-lifecycle
+            {:effect-id :old-effect
+             :options {:apply 'millstrand.core.weaver.modules-test/lifecycle-marker}})
     (f)))
+
+(defn lifecycle-marker
+  "Return the lifecycle effect id from its execution context."
+  [{:keys [effect/id]}]
+  id)
 (defn test-op [{:op/keys [name argv]}]
   {:operation name :argv argv})
 
@@ -669,6 +681,105 @@
           (is (= [:= [:attr :version] 2] (get (graph/queries rt) "owned")))
           (is (contains? (graph/queries rt) "unrelated")))))))
 
+(deftest image-replay-retains-only-successfully-published-source-set
+  (with-runtime
+    (fn [rt _db-file]
+      (let [workspace (get-in rt [:metadata :config-dir])
+            suffix (str/replace (str (random-uuid)) "-" "")
+            collision-source "modules/image-retained-collision.clj"
+            first-failed-source "modules/image-retained-first-failed.clj"
+            valid-source "modules/image-retained-valid.clj"
+            collision-ns (symbol (str "test.module.image-retained-collision-" suffix))
+            first-failed-ns (symbol (str "test.module.image-retained-first-failed-" suffix))
+            valid-ns (symbol (str "test.module.image-retained-valid-" suffix))
+            collision-query [:= [:attr :version] "collision"]
+            valid-query [:= [:attr :version] 1]
+            changed-query [:= [:attr :version] 2]]
+        (doseq [[source ns-sym module-key]
+                [[collision-source collision-ns :collision-owner]
+                 [first-failed-source first-failed-ns :first-failed]
+                 [valid-source valid-ns :valid-owner]]]
+          (module-source! workspace source ns-sym (contribution-forms module-key)))
+        (reset! module-contributions
+                {:collision-owner {:queries {"collision" collision-query}}
+                 :first-failed {:queries {"collision" collision-query}}
+                 :valid-owner {:queries {"owned" valid-query}}})
+        (is (= :applied
+               (:status (weaver-runtime/declare-module!
+                         rt :collision-owner {:file collision-source}))))
+        (let [failed (weaver-runtime/declare-module!
+                      rt :first-failed {:file first-failed-source})
+              outcome (get-in failed [:modules :first-failed])]
+          (is (= :partial (:status failed)))
+          (is (= :failed (:status outcome)))
+          (is (= :same-layer-duplicate
+                 (get-in outcome [:error :data :error]))))
+        (let [image (runtime/module! rt :first-failed
+                                     {:ns first-failed-ns :load :image})
+              outcome (get-in image [:modules :first-failed])]
+          (is (= :failed (:status outcome)))
+          (is (= :missing-declaration-record
+                 (get-in outcome [:error :data :reason]))
+              "a first failed publication has no image replay record"))
+        (is (= :applied
+               (:status (weaver-runtime/declare-module!
+                         rt :valid-owner {:file valid-source}))))
+        (is (= valid-query (get (graph/queries rt) "owned")))
+        (swap! module-contributions assoc
+               :valid-owner {:queries {"collision" changed-query}})
+        (let [failed (weaver-runtime/refresh-modules! rt {:only [:valid-owner]})
+              outcome (get-in failed [:modules :valid-owner])]
+          (is (= :partial (:status failed)))
+          (is (= :failed (:status outcome)))
+          (is (= :retained (:contribution/status outcome)))
+          (is (= valid-query (get (graph/queries rt) "owned"))))
+        (let [image (runtime/module! rt :valid-owner
+                                     {:ns valid-ns :load :image})
+              outcome (get-in image [:modules :valid-owner])]
+          (is (= :image (:source/status outcome)))
+          (is (= :unchanged (:status outcome)))
+          (is (= valid-query (get (graph/queries rt) "owned"))
+              "image replay retains the last successfully published set"))))))
+
+(deftest image-replay-retains-lifecycle-from-unchanged-contribution
+  (with-runtime
+    (fn [rt _db-file]
+      (let [workspace (get-in rt [:metadata :config-dir])
+            suffix (str/replace (str (random-uuid)) "-" "")
+            source "modules/image-retained-lifecycle.clj"
+            module-ns (symbol (str "test.module.image-retained-lifecycle-" suffix))]
+        (module-source!
+         workspace source module-ns
+         (str "(let [{:keys [effect-id options]} "
+              "@millstrand.core.weaver.modules-test/module-lifecycle]\n"
+              "  (runtime/collect-lifecycle! effect-id\n"
+              "    ((requiring-resolve 'millstrand.api.lifecycle.alpha/seed-declaration)"
+              " options)))"))
+        (reset! module-contributions {:lifecycle-owner {}})
+        (is (= :applied
+               (:status (weaver-runtime/declare-module!
+                         rt :lifecycle-owner {:file source}))))
+        (is (contains? (get-in (weaver-runtime/module-status rt)
+                               [:lifecycle/outcomes :lifecycle-owner])
+                       :old-effect))
+        (swap! module-lifecycle assoc :effect-id :new-effect)
+        (let [updated (weaver-runtime/refresh-modules! rt
+                                                       {:only [:lifecycle-owner]})
+              outcome (get-in updated [:modules :lifecycle-owner])]
+          (is (= :applied (:status updated)))
+          (is (= :unchanged (:contribution/status outcome)))
+          (is (contains? (:lifecycle/outcomes outcome) :new-effect)))
+        (let [image (runtime/module! rt :lifecycle-owner
+                                     {:ns module-ns :load :image})
+              outcome (get-in image [:modules :lifecycle-owner])
+              lifecycle-status (get-in (weaver-runtime/module-status rt)
+                                       [:lifecycle/outcomes :lifecycle-owner])]
+          (is (= :image (:source/status outcome)))
+          (is (= :unchanged (:status outcome)))
+          (is (contains? lifecycle-status :new-effect)
+              "image replay sees the newer lifecycle declaration")
+          (is (not (contains? lifecycle-status :old-effect))))))))
+
 (deftest plan-dry-run-reports-intentions-without-publishing-or-recording
   (with-runtime
     (fn [rt _db-file]
@@ -1183,7 +1294,7 @@
             handler-sym (symbol (str module-ns) "module-handler")]
         (module-source!
          workspace source module-ns
-         (str "(millstrand.api.millstrand.alpha/defhandler module-handler\n"
+         (str "(millstrand.api.millstrand.alpha/defhandler! module-handler\n"
               "  \"Capture a module event.\"\n"
               "  {:types #{:module/test}}\n"
               "  [event]\n"
