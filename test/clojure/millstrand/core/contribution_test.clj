@@ -95,6 +95,41 @@
     (is (= 'millstrand.core.contribution-test/inert-op
            (get-in contribution [:ops :entries "inert-op" :fn])))))
 
+(deftest core-function-and-value-families-return-their-installed-vars
+  (testing "function-backed bang forms return their installed Var"
+    (let [{:keys [return contribution]}
+          (collect-result
+           #(eval
+             '(millstrand/defop! bang-op "Bang."
+                {:arg-spec {:op "bang-op" :doc "Bang."
+                            :hook-class :read :deadline-class :standard}}
+                [_] :bang)))]
+      (is (= (ns-resolve test-ns 'bang-op) return))
+      (is (= :bang (@return {})))
+      (is (= 'millstrand.core.contribution-test/bang-op
+             (get-in contribution [:ops :entries "bang-op" :fn])))))
+  (testing "value-backed forms preserve inert, use, and bang return contracts"
+    (let [{:keys [return contribution]}
+          (collect-result
+           #(eval '(millstrand/defquery inert-query "Inert." {}
+                     [:= :state "active"])))]
+      (is (= (ns-resolve test-ns 'inert-query) return))
+      (is (= [:= :state "active"] @return))
+      (is (empty? contribution)))
+    (let [{:keys [return contribution]}
+          (collect-result #(eval '(millstrand/use-query! inert-query)))]
+      (is (= [(ns-resolve test-ns 'inert-query)] return))
+      (is (= [:= :state "active"]
+             (get-in contribution [:queries :entries "inert-query"]))))
+    (let [{:keys [return contribution]}
+          (collect-result
+           #(eval '(millstrand/defquery! bang-query "Bang." {}
+                     [:= :state "closed"])))]
+      (is (= (ns-resolve test-ns 'bang-query) return))
+      (is (= [:= :state "closed"] @return))
+      (is (= [:= :state "closed"]
+             (get-in contribution [:queries :entries "bang-query"]))))))
+
 (deftest source-forms-define-vars-and-collect-every-core-kind
   (let [contribution
         (collect
