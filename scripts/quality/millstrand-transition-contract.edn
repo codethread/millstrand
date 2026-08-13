@@ -6,12 +6,9 @@
    :git/sha "e1fed4904447f4752ea99dc27ab174c237604094"}
   codethread/kanban
   {:git/url "https://github.com/codethread/kanban.spool.git"
-   :git/tag "v24"
-   :git/sha "87f61bc2750e7026f3650235907db25f19b1536e"}
+   :git/tag "v25"
+   :git/sha "a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e"}
   ct.spools/agent-run
   {:git/url "https://github.com/codethread/agent-harness.spool.git"
    :git/sha "636ae9ecbb57c4fde2c79485c7ef7767aba5753b"}}
- :deferrals
- [{:scope :pinned-external-spool-suite
-   :families #{codethread/kanban}
-   :test-namespaces #{}}]}
+ :deferrals []}

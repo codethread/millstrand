@@ -14,10 +14,6 @@ cd "$root"
 
 transition_status="$(clojure -M:transition-check --scope pinned-external-spool-suite)"
 case "$transition_status" in
-  DEFERRED)
-    echo "spool-suite-gate: deferred by PROP-Msr-001.S6 pending the authorized Guild-free Kanban successor pin"
-    exit 0
-    ;;
   ACTIVE) ;;
   *)
     echo "spool-suite-gate: transition contract returned unexpected status: $transition_status" >&2

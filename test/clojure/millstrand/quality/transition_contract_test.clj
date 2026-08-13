@@ -9,16 +9,13 @@
     (is (= :external-publishers-compatible (:phase contract)))
     (is (= #{'codethread/devflow 'codethread/kanban 'ct.spools/agent-run}
            (set (keys (:pins contract)))))
-    (is (= [{:scope :pinned-external-spool-suite
-             :families #{'codethread/kanban}
-             :test-namespaces #{}}]
-           (:deferrals contract)))
+    (is (= [] (:deferrals contract)))
     (is (not (transition/deferred? :workspace-config-integration)))
-    (is (transition/deferred? :pinned-external-spool-suite))))
+    (is (not (transition/deferred? :pinned-external-spool-suite)))))
 
 (deftest transition-contract-rejects-scope-widening
   (let [contract (transition/contract)]
-    (testing "an external pin cannot move while its deferral remains"
+    (testing "an external pin cannot drift"
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"external pins drifted"
@@ -27,19 +24,21 @@
     (testing "workspace config cannot regain a deferred scope"
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
-           #"one entry for each scope"
+           #"scopes drifted"
            (transition/validate-contract!
             (update contract :deferrals conj
                     {:scope :workspace-config-integration
                      :families #{'codethread/devflow}
                      :test-namespaces #{'millstrand.ct.config-test}})))))
-    (testing "the Kanban-only suite deferral cannot widen to another family"
+    (testing "the resolved suite cannot regain a deferral"
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
-           #"only the exact incompatible family pin"
+           #"scopes drifted"
            (transition/validate-contract!
-            (update-in contract [:deferrals 0 :families]
-                       conj 'codethread/devflow)))))))
+            (update contract :deferrals conj
+                    {:scope :pinned-external-spool-suite
+                     :families #{}
+                     :test-namespaces #{}})))))))
 
 (deftest approved-pin-drift-invalidates-the-transition
   (let [file (java.io.File/createTempFile "millstrand-transition-spools-" ".edn")
