@@ -48,6 +48,16 @@
       (is (some? ex) (pr-str [template scope]))
       (is (contains? (ex-data ex) expected-key) (pr-str (ex-data ex))))))
 
+(deftest prose-rejects-malformed-placeholders
+  (doseq [template ["{worktree" "{1name}" "{name:}"]]
+    (let [ex (try (fmt/prose template {:worktree "/tmp/worktree"
+                                       :name "Millstrand"})
+                  nil
+                  (catch clojure.lang.ExceptionInfo e e))]
+      (is (some? ex) template)
+      (is (= template (:template (ex-data ex))))
+      (is (contains? (ex-data ex) :placeholder)))))
+
 (deftest reflow-soft-wraps-one-paragraph
   (is (= "one paragraph of prose joined into a single line"
          (fmt/reflow "|one paragraph of prose

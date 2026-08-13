@@ -24,7 +24,7 @@ Reflow a `|`-margin doc block into a vector of item strings.
   soft-wraps into one line per item, and any indentation past the bar keeps the
   whole item verbatim for command samples and other intentional layout. Throws
   when the input does not satisfy `::block`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/format/alpha.clj#L27-L38">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/format/alpha.clj#L139-L150">Source</a></sub></p>
 
 ## <a name="millstrand.api.format.alpha/prose">`prose`</a>
 ``` clojure
@@ -39,7 +39,7 @@ Render an indentation-aware Markdown template with named interpolation.
   preserved. `{name}` interpolates `:name` or `"name"` from `scope`; `{name:json}`
   renders compact JSON. Throws with the offending template or scope when either
   input is invalid, or when rendering finds malformed indentation or placeholders.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/format/alpha.clj#L12-L25">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/format/alpha.clj#L124-L137">Source</a></sub></p>
 
 ## <a name="millstrand.api.format.alpha/reflow">`reflow`</a>
 ``` clojure
@@ -53,4 +53,4 @@ Soft-wrap a single-paragraph `|`-margin block into one string.
   semantics do not apply — every barred line is trimmed and space-joined, so
   the result never contains a newline. Throws when the input does not satisfy
   `::block`, like `fill`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/format/alpha.clj#L40-L51">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/format/alpha.clj#L152-L163">Source</a></sub></p>
