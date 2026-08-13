@@ -18,6 +18,7 @@
 (def ^:private protocol-version 1)
 (def ^:private declaration-keys
   #{:protocol :family :channel :kind :key :entry :var})
+(deftype ^:private PreparedDeclaration [descriptor])
 (def ^:private expansion-plan-keys
   #{:name :definition :kind :key :entry :use-options})
 (def ^:private registry-use-option-keys #{:override?})
@@ -93,6 +94,15 @@
            (merge {:value value :spec spec :explain (s/explain-data spec value)}
                   extras)))
 
+(defn- prepared-declaration [descriptor]
+  (PreparedDeclaration. descriptor))
+
+(defn- prepared-declaration? [value]
+  (instance? PreparedDeclaration value))
+
+(defn- prepared-descriptor [prepared]
+  (.-descriptor ^PreparedDeclaration prepared))
+
 (defn register-registry-kind!
   "Associate a public collector kind with its existing entry spec.
 
@@ -133,12 +143,13 @@
   options)
 
 (defn prepare-registry-declaration!
-  "Validate and return a protocol-1 registry `::declaration` before definition.
+  "Validate and return a prepared protocol-1 registry declaration.
 
   `entry-spec` is the owning registry kind's registered entry spec. The entry is
   checked once here, followed by the closed descriptor. Macro expansions call
   this before executing their `def` or `defn`, so invalid authored values do not
-  replace an existing Var."
+  replace an existing Var. The returned value is an opaque token accepted by
+  `install-declaration!`; the installed metadata remains the descriptor map."
   [family kind key entry var-symbol entry-spec form]
   (let [entry-spec (resolve-entry-spec entry-spec)]
     (when-not (and (qualified-keyword? entry-spec) (s/get-spec entry-spec))
@@ -162,16 +173,21 @@
                          {:form form}
                          {:expected-channel :registry
                           :expected-protocol protocol-version}))
-      declaration)))
+      (prepared-declaration declaration))))
 
 (defn install-declaration!
-  "Attach a validated `::declaration` to `target`; return the Var.
+  "Attach a prepared `::declaration` to `target`; return the Var.
 
-  Callers validate through `prepare-registry-declaration!` before defining the
-  Var. This installation step trusts that normalized descriptor and performs no
-  second boundary validation."
-  [target declaration]
-  (alter-meta! target assoc ::declaration declaration)
+  `prepared` must be the opaque token returned by one of the preparation
+  functions. Invalid installer input is rejected before target metadata can
+  change; the token's validated descriptor is what metadata stores."
+  [target prepared]
+  (when-not (prepared-declaration? prepared)
+    (reject! "Authoring declaration installation input is invalid"
+             :invalid-prepared-declaration
+             {:value prepared}
+             {:expected :prepared-declaration-token}))
+  (alter-meta! target assoc ::declaration (prepared-descriptor prepared))
   target)
 
 (defn- resolved-var-symbol [target]
@@ -444,11 +460,13 @@
 (s/def ::lifecycle-entry valid-lifecycle-entry?)
 
 (defn prepare-lifecycle-declaration!
-  "Validate and return a protocol-1 lifecycle `::declaration`.
+  "Validate and return a prepared protocol-1 lifecycle declaration.
 
   Lifecycle selection has no use options; its effect identity is the authored
   keyword and consumer module. The lifecycle entry is checked before the Var
-  is defined, so invalid declarations cannot replace an existing Var."
+  is defined, so invalid declarations cannot replace an existing Var. The
+  returned value is an opaque token accepted by `install-declaration!`; the
+  installed metadata remains the descriptor map."
   [family kind key entry var-symbol form]
   (when-not (s/valid? ::lifecycle-entry entry)
     (spec-rejection! "Lifecycle authoring entry is invalid"
@@ -468,7 +486,7 @@
                        {:form form}
                        {:expected-channel :lifecycle
                         :expected-protocol protocol-version}))
-    declaration))
+    (prepared-declaration declaration)))
 
 (defn select-lifecycle!
   "Resolve, validate, and collect one typed lifecycle selection.

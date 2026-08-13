@@ -34,7 +34,7 @@ Define an open registry family's inert, typed-use, and bang macros.
   exact simple `:name`. The family's qualified keyword is derived from this
   namespace and `noun`; its qualified kind keyword must name the registered
   entry spec consulted by generated definitions and selections.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L594-L642">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L612-L660">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/deflifecycle">`deflifecycle`</a>
 ``` clojure
@@ -48,7 +48,7 @@ Define an inert and a define-and-use family of lifecycle forms.
   `use-<noun>!`, and `def<noun>!`. The builder receives `:define` or
   `:define-and-use` and returns the same closed expansion plan as
   `defauthoring`; lifecycle use forms are Vars-only.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L545-L592">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L563-L610">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/expand-definition">`expand-definition`</a>
 ``` clojure
@@ -63,7 +63,7 @@ Return one generated inert or define-and-use expansion.
   options are validated before the definition executes. Inert definitions
   require empty use options; bang definitions select once and still return the
   installed Var.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L347-L385">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L363-L401">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/expand-lifecycle-definition">`expand-lifecycle-definition`</a>
 ``` clojure
@@ -76,7 +76,7 @@ Return one generated inert or define-and-use lifecycle expansion.
   `plan` is the closed plan returned by a lifecycle family builder. Inert forms
   install only their descriptor; bang forms select once and still return the
   installed Var.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L518-L543">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L536-L561">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/expand-lifecycle-use">`expand-lifecycle-use`</a>
 ``` clojure
@@ -88,7 +88,7 @@ Return the expansion for a generated typed lifecycle use macro.
 
   Lifecycle use forms accept only one or more symbols resolving to declaration
   Vars; unlike registry families they have no leading selection-options map.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L510-L516">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L528-L534">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/expand-registry-use">`expand-registry-use`</a>
 ``` clojure
@@ -101,20 +101,20 @@ Return the expansion for a generated typed registry use macro.
   Expansion rejects arbitrary value expressions and requires one or more Var
   symbols. The optional leading literal map is evaluated and checked against
   `::registry-use-options` by `select-registry!`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L316-L335">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L332-L351">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/install-declaration!">`install-declaration!`</a>
 ``` clojure
-(install-declaration! target declaration)
+(install-declaration! target prepared)
 ```
 Function.
 
-Attach a validated `::declaration` to `target`; return the Var.
+Attach a prepared `::declaration` to `target`; return the Var.
 
-  Callers validate through `prepare-registry-declaration!` before defining the
-  Var. This installation step trusts that normalized descriptor and performs no
-  second boundary validation.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L167-L175">Source</a></sub></p>
+  `prepared` must be the opaque token returned by one of the preparation
+  functions. Invalid installer input is rejected before target metadata can
+  change; the token's validated descriptor is what metadata stores.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L178-L191">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/prepare-lifecycle-declaration!">`prepare-lifecycle-declaration!`</a>
 ``` clojure
@@ -122,12 +122,14 @@ Attach a validated `::declaration` to `target`; return the Var.
 ```
 Function.
 
-Validate and return a protocol-1 lifecycle `::declaration`.
+Validate and return a prepared protocol-1 lifecycle declaration.
 
   Lifecycle selection has no use options; its effect identity is the authored
   keyword and consumer module. The lifecycle entry is checked before the Var
-  is defined, so invalid declarations cannot replace an existing Var.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L446-L471">Source</a></sub></p>
+  is defined, so invalid declarations cannot replace an existing Var. The
+  returned value is an opaque token accepted by `install-declaration!`; the
+  installed metadata remains the descriptor map.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L462-L489">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/prepare-registry-declaration!">`prepare-registry-declaration!`</a>
 ``` clojure
@@ -135,13 +137,14 @@ Validate and return a protocol-1 lifecycle `::declaration`.
 ```
 Function.
 
-Validate and return a protocol-1 registry `::declaration` before definition.
+Validate and return a prepared protocol-1 registry declaration.
 
   `entry-spec` is the owning registry kind's registered entry spec. The entry is
   checked once here, followed by the closed descriptor. Macro expansions call
   this before executing their `def` or `defn`, so invalid authored values do not
-  replace an existing Var.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L135-L165">Source</a></sub></p>
+  replace an existing Var. The returned value is an opaque token accepted by
+  `install-declaration!`; the installed metadata remains the descriptor map.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L145-L176">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/register-registry-kind!">`register-registry-kind!`</a>
 ``` clojure
@@ -154,7 +157,7 @@ Associate a public collector kind with its existing entry spec.
   Built-in and domain authoring namespaces register this mapping before their
   generated forms are used. The retained descriptor keeps the public collector
   kind while the shared boundary consults the owning entry spec.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L96-L109">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L106-L119">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/reject-definition-use-options!">`reject-definition-use-options!`</a>
 ``` clojure
@@ -165,7 +168,7 @@ Function.
 Return nil for empty options; reject selection options on an inert definition.
 
   `defauthoring` emits this check before the generated definition executes.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L337-L345">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L353-L361">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/select-lifecycle!">`select-lifecycle!`</a>
 ``` clojure
@@ -180,7 +183,7 @@ Resolve, validate, and collect one typed lifecycle selection.
   expressions and registry use options are not accepted. The returned Vars are
   checked with `::selected-vars` before the existing lifecycle collector is
   called.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L473-L508">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L491-L526">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/select-registry!">`select-registry!`</a>
 ``` clojure
@@ -200,7 +203,7 @@ Resolve, validate, and collect one typed registry selection.
   Generated families derive the spec from each qualified kind keyword; domain
   authors register that keyword as the kind's entry spec before defining the
   family. Built-in families pass their distinct registered specs explicitly.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L267-L295">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L283-L311">Source</a></sub></p>
 
 ## <a name="millstrand.api.authoring.alpha/validate-registry-use-options!">`validate-registry-use-options!`</a>
 ``` clojure
@@ -212,4 +215,4 @@ Return registry selection options conforming to `::registry-use-options`.
 
   The map is closed to boolean `:override?`. Rejections name the authored form
   and the allowed option keys.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L122-L133">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/authoring/alpha.clj#L132-L143">Source</a></sub></p>

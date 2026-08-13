@@ -154,6 +154,16 @@
            (:millstrand.api.authoring.alpha/declaration
             (meta target))))))
 
+(deftest public-installation-rejects-malformed-input-before-metadata-mutation
+  (let [target (ns-resolve test-ns 'library-widget)
+        original-meta (meta target)
+        error (exception #(authoring/install-declaration!
+                           target {:protocol 1 :channel :registry}))]
+    (is (= :invalid-prepared-declaration (:reason (ex-data error))))
+    (is (= {:protocol 1 :channel :registry} (:value (ex-data error))))
+    (is (= :prepared-declaration-token (:expected (ex-data error))))
+    (is (= original-meta (meta target)))))
+
 (deftest typed-selection-rejects-the-wrong-family-with-actionable-data
   (let [error (exception
                #(eval-in-test-ns '(use-widget! gadget-declaration)))]
