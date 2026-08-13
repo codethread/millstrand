@@ -561,9 +561,20 @@
     ((:fetch-commit client) git-url sha)
     {:tag nil :sha sha}))
 
+(defn- unversioned-repository? [git-url output]
+  (let [lines (remove str/blank? (str/split-lines output))]
+    (doseq [line lines]
+      (when-not (re-matches #"[0-9a-fA-F]{40}\s+refs/tags/\S+" line)
+        (throw (ex-info "Remote tag listing contains an invalid record"
+                        {:git-url git-url
+                         :reason :invalid-tag-listing
+                         :line line
+                         :output (str/trim output)}))))
+    (empty? lines)))
+
 (defn- unversioned-head-target [git-url client]
   (let [tags ((:ls-remote client) git-url)]
-    (when (re-find #"(?m)^[0-9a-fA-F]{40}\s+refs/tags/" tags)
+    (when-not (unversioned-repository? git-url tags)
       (throw (ex-info "Repository has tags; use --tag instead"
                       {:git-url git-url :reason :repository-tagged})))
     (latest-sha-target git-url client)))
@@ -1034,11 +1045,16 @@
            :hook-class :mutating
            :deadline-class :standard
            :flags {:tag {:type :string
-                         :doc "Annotated release tag vN; defaults to the highest release. Cannot be used with --unversioned-head."}
+                         :doc (format-alpha/reflow
+                               "|Annotated release tag vN; defaults to the highest release.
+                                |Cannot be used with --unversioned-head.")}
                    :unversioned-head {:type :boolean
-                                      :doc "Pin the default-branch HEAD only when the repository has no tags. Cannot be used with --tag."}
+                                      :doc (format-alpha/reflow
+                                            "|Pin the default-branch HEAD only when the repository has
+                                             |no tags. Cannot be used with --tag.")}
                    :lib {:type :string
-                         :doc "Consumer family symbol; defaults to the Git URL basename."}}
+                         :doc (format-alpha/reflow
+                               "|Consumer family symbol; defaults to the Git URL basename.")}}
            :positionals [{:name :git-url
                           :type :string
                           :required? true

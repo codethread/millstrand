@@ -373,6 +373,20 @@
                       (catch clojure.lang.ExceptionInfo cause cause))]
           (is (= :repository-tagged (:reason (ex-data error))))
           (is (re-find #"use --tag instead" (ex-message error)))))
+      (testing "malformed tag output fails before resolving HEAD"
+        (stub-git-client!
+         rt
+         {:ls-remote (fn [_] "unexpected tag listing")
+          :default-branch-head (fn [_] (throw (ex-info "HEAD should not resolve" {})))
+          :fetch-commit (fn [_ _] (throw (ex-info "commit should not fetch" {})))
+          :manifest-at (fn [_ _] nil)})
+        (let [error (try
+                      (weaver/op! rt 'spool ["add" "https://example.invalid/bad.git"
+                                             "--unversioned-head"])
+                      nil
+                      (catch clojure.lang.ExceptionInfo cause cause))]
+          (is (= :invalid-tag-listing (:reason (ex-data error))))
+          (is (= "unexpected tag listing" (:line (ex-data error))))))
       (testing "--tag and --unversioned-head are mutually exclusive"
         (let [error (try
                       (weaver/op! rt 'spool ["add" "https://example.invalid/alpha.git"
