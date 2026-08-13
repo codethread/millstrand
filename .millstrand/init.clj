@@ -180,6 +180,11 @@
                  {:ns 'ct.spools.kanban
                   :spools ['codethread/kanban]
                   :required? true})
+(runtime/module! runtime :millstrand/spools-kanban-adapter
+                 {:file "adapters/kanban.clj"
+                  :spools ['codethread/kanban]
+                  :after [:millstrand/spools-kanban]
+                  :required? true})
 (runtime/module! runtime :millstrand/spools-devflow-kanban-adapter
                  {:ns 'ct.spools.devflow-kanban-adapter
                   :spools ['codethread/devflow-kanban-adapter
