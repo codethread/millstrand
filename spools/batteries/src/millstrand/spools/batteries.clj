@@ -163,11 +163,13 @@
   (s/and #(exact-spool-args? #{:subcommand} #{} %)
          #(= ["about"] (:subcommand %))))
 (s/def ::spool-add-args
-  (s/and #(exact-spool-args? #{:subcommand :git-url} #{:tag :lib} %)
+  (s/and #(exact-spool-args? #{:subcommand :git-url} #{:tag :lib :unversioned-head} %)
          #(= ["add"] (:subcommand %))
          #(s/valid? ::non-blank-string (:git-url %))
          #(or (nil? (:tag %)) (s/valid? ::non-blank-string (:tag %)))
-         #(or (nil? (:lib %)) (s/valid? ::non-blank-string (:lib %)))))
+         #(or (nil? (:lib %)) (s/valid? ::non-blank-string (:lib %)))
+         #(or (nil? (:unversioned-head %)) (boolean? (:unversioned-head %)))
+         #(not (and (:tag %) (:unversioned-head %)))))
 (s/def ::spool-bump-args
   (s/and #(exact-spool-args? #{:subcommand :family :latest} #{} %)
          #(= ["bump"] (:subcommand %))
@@ -517,19 +519,23 @@
 
 (defn- family-entry [git-url tag sha manifest lib]
   (cond-> {:git/url git-url
-           :git/tag tag
            :git/sha sha
            :roots (manifest-roots manifest lib)}
+    tag (assoc :git/tag tag)
     (contains? manifest :requires) (assoc :requires (:requires manifest))
     (contains? manifest :millstrand/min) (assoc :millstrand/min (:millstrand/min manifest))))
 
+(declare unversioned-head-target)
+
 (defn- add-spool-op [ctx]
   (let [rt (:op/runtime ctx)
-        {:keys [git-url tag lib]} (:op/args ctx)
+        {:keys [git-url tag lib unversioned-head]} (:op/args ctx)
         requested-lib (some-> lib symbol)
         lib (or requested-lib (url-basename git-url))
         client (git-client rt)
-        {:keys [tag sha]} (select-tag ((:ls-remote client) git-url) tag)
+        {:keys [tag sha]} (if unversioned-head
+                            (unversioned-head-target git-url client)
+                            (select-tag ((:ls-remote client) git-url) tag))
         manifest (read-manifest git-url sha ((:manifest-at client) git-url sha))
         _ (require-matching-manifest-lib! manifest requested-lib)
         entry (family-entry git-url tag sha manifest lib)
@@ -554,6 +560,13 @@
   (let [sha ((:default-branch-head client) git-url)]
     ((:fetch-commit client) git-url sha)
     {:tag nil :sha sha}))
+
+(defn- unversioned-head-target [git-url client]
+  (let [tags ((:ls-remote client) git-url)]
+    (when (re-find #"(?m)^[0-9a-fA-F]{40}\s+refs/tags/" tags)
+      (throw (ex-info "Repository has tags; use --tag instead"
+                      {:git-url git-url :reason :repository-tagged})))
+    (latest-sha-target git-url client)))
 
 (defn- github-web-url [git-url]
   (when-let [[_ owner repository]
@@ -625,15 +638,17 @@
   []
   {:operation "spool about"
    :purpose (format-alpha/reflow
-             "|Add and bump annotated Git spool releases through the validated,
+             "|Add annotated releases or unversioned default-branch HEAD Git
+              |coordinates, and bump existing coordinates through the validated,
               |comment-preserving runtime write verb. Status joins declared,
               |overlay, sync, use, pending-generation, and release-marker state.")
    :commands
    [{:verb "add"
      :behavior (format-alpha/reflow
-                "|Queries remote annotated tags, fetches the optional advisory
-                 |spool.edn at the selected peeled commit, then atomically writes
-                 |the validated tag and commit pin to the workspace spools.edn.")}
+                "|By default, queries remote annotated tags and pins the selected
+                 |peeled commit. `--unversioned-head` instead requires no remote
+                 |tags, resolves and fetches default-branch HEAD, and writes a
+                 |SHA-only coordinate. Both read advisory spool.edn at the pin.")}
     {:verb "bump"
      :behavior (format-alpha/reflow
                 "|Requires an explicit latest mode. `tag` selects the highest
@@ -646,8 +661,9 @@
    :conventions
    [(format-alpha/reflow
      "|Add and `--latest tag` resolve only peeled refs/tags/vN^{} commits.
-      |`--latest sha` resolves the remote default branch HEAD and requires its
-      |exact 40-character lowercase commit to be fetchable. v0 and lightweight
+      |`--unversioned-head` and `--latest sha` resolve the remote default branch
+      |HEAD and require its exact 40-character lowercase commit to be fetchable.
+      |Unversioned add rejects every repository with tags; v0 and lightweight
       |tags are refused for release-tag targets.")
     (format-alpha/reflow
      "|An optional producer spool.edn supplies roots and floors. With it,
@@ -1009,16 +1025,18 @@
   `spool-status` op's offline contract verbatim (DELTA-Lhc-001.CC8)."
   {:op "spool"
    :doc "Add and bump validated spool family coordinates. Run `strand spool about` for conventions."
-   :annotations {:use-when ["Pinning or advancing an annotated Git spool release in the workspace spools.edn."]}
+   :annotations {:use-when ["Pinning an annotated Git release, an untagged default-branch HEAD, or advancing a Git spool coordinate in workspace spools.edn."]}
    :subcommands
    {"about" {:doc "Return spool helper conventions and status semantics."
              :hook-class :read
              :deadline-class :standard}
-    "add" {:doc "Add one annotated Git spool release to spools.edn."
+    "add" {:doc "Add one annotated release or an unversioned default-branch HEAD Git spool coordinate to spools.edn."
            :hook-class :mutating
            :deadline-class :standard
            :flags {:tag {:type :string
-                         :doc "Annotated release tag vN; defaults to the highest release."}
+                         :doc "Annotated release tag vN; defaults to the highest release. Cannot be used with --unversioned-head."}
+                   :unversioned-head {:type :boolean
+                                      :doc "Pin the default-branch HEAD only when the repository has no tags. Cannot be used with --tag."}
                    :lib {:type :string
                          :doc "Consumer family symbol; defaults to the Git URL basename."}}
            :positionals [{:name :git-url
