@@ -3,13 +3,11 @@
 # <a name="millstrand.api.format.alpha">millstrand.api.format.alpha</a>
 
 
-Blessed `|`-margin doc-block helpers for any tier that publishes prose as data.
+Blessed prose helpers for tiers that publish text as data.
 
-  Long strings in source hurt readability and IDE viewports; author them as
-  `|`-margin blocks instead and reflow with these helpers. Both helpers
-  validate their input against the promised qualified spec key
-  `:millstrand.api.format.alpha/block` — a string in which at least one line
-  carries a `|` — and fail loudly with the offending value in ex-data.
+  `prose` preserves authored Markdown layout while removing only source
+  indentation and interpolating named values. The older `|`-margin helpers stay
+  available for their established item and reflow contracts.
 
 
 
@@ -26,7 +24,22 @@ Reflow a `|`-margin doc block into a vector of item strings.
   soft-wraps into one line per item, and any indentation past the bar keeps the
   whole item verbatim for command samples and other intentional layout. Throws
   when the input does not satisfy `::block`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/format/alpha.clj#L14-L25">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/format/alpha.clj#L139-L150">Source</a></sub></p>
+
+## <a name="millstrand.api.format.alpha/prose">`prose`</a>
+``` clojure
+(prose template scope)
+```
+Function.
+
+Render an indentation-aware Markdown template with named interpolation.
+
+  The first content line establishes the source indentation removed from every
+  nonblank line; remaining whitespace, blank lines, Markdown, and line width are
+  preserved. `{name}` interpolates `:name` or `"name"` from `scope`; `{name:json}`
+  renders compact JSON. Throws with the offending template or scope when either
+  input is invalid, or when rendering finds malformed indentation or placeholders.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/format/alpha.clj#L124-L137">Source</a></sub></p>
 
 ## <a name="millstrand.api.format.alpha/reflow">`reflow`</a>
 ``` clojure
@@ -40,4 +53,4 @@ Soft-wrap a single-paragraph `|`-margin block into one string.
   semantics do not apply — every barred line is trimmed and space-joined, so
   the result never contains a newline. Throws when the input does not satisfy
   `::block`, like `fill`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/format/alpha.clj#L27-L38">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/format/alpha.clj#L152-L163">Source</a></sub></p>

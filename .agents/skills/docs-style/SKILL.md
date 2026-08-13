@@ -62,9 +62,9 @@ No single tell proves anything — one em dash is fine. Flag prose when tells cl
 
 The rule is two-sided. Markdown prose is not hard-wrapped: each paragraph or bullet is one source line, and the reader's IDE wraps it — that is what markdown editors are set up for. Older files in this repo are hard-wrapped; do not rewrap one in a drive-by edit, but write new markdown full-length and let a diff that already owns a file convert it.
 
-Prose inside Clojure source is the opposite: hard-wrapped in the file so it reads without soft-wrap — 96 columns in `millstrand.api.*` modules (SPEC-003.C19a), matching the namespace elsewhere, and never past column 180 anywhere.
+Prose inside Clojure source is the opposite: hard-wrapped in the file so it reads without soft-wrap. Aim for about 80 characters within the prose block regardless of the enclosing form's indentation, and never let a source line pass the absolute 180-column limit (SPEC-003.C19a).
 
-Prose that ships as data inside Clojure source (op payloads, `about` surfaces, rule descriptions) is still human-facing and gets this skill's sweep, but its authoring format is the `|`-margin block reflowed through `millstrand.api.format.alpha` — never one long string literal or `(str ...)` fragments. See `docs/spools/writing-shared-spools.md` for the block contract.
+Prose that ships as data inside Clojure source (op payloads, `about` surfaces, rule descriptions) is still human-facing and gets this skill's sweep. Author multi-paragraph or Markdown content with `millstrand.api.format.alpha/prose`; use `reflow` only when the value's contract is one plain paragraph. Never use one long string literal or `(str ...)` fragments.
 
 ## Procedures
 
@@ -87,4 +87,4 @@ Prose that ships as data inside Clojure source (op payloads, `about` surfaces, r
 - [ ] At most occasional em dashes, none load-bearing for sentence structure
 - [ ] Headings are sentence case; no emoji bullets; bold only where it earns its place
 - [ ] A spot-read of two sections sounds like a person explaining, not a model summarising
-- [ ] Prose embedded in Clojure is hard-wrapped and uses the `|`-margin format helpers; new markdown prose runs full-length, unwrapped
+- [ ] Prose embedded in Clojure is hard-wrapped; multi-paragraph or Markdown values use `format-alpha/prose`; new markdown prose runs full-length, unwrapped

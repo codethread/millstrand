@@ -10,6 +10,54 @@
             [clojure.test :refer [deftest is]]
             [millstrand.api.format.alpha :as fmt]))
 
+(deftest prose-preserves-markdown-after-baseline-dedent
+  (is (= "# Consumer tooling\n\nRead the repository before changing it.\n  - Preserve deliberate list indentation.\n```sh\nstrand spool status\n```"
+         (fmt/prose
+          "
+            # Consumer tooling
+
+            Read the repository before changing it.
+              - Preserve deliberate list indentation.
+            ```sh
+            strand spool status
+            ```
+            "
+          {}))))
+
+(deftest prose-interpolates-values-and-compact-json
+  (is (= "Inspect /tmp/consumer.\n\n```json\n{\"git/url\":\"https://example.test/spool.git\",\"ready\":true}\n```"
+         (fmt/prose
+          "
+            Inspect {worktree}.
+
+            ```json
+            {coordinate:json}
+            ```
+            "
+          {"worktree" "/tmp/consumer"
+           :coordinate {:git/url "https://example.test/spool.git"
+                        :ready true}}))))
+
+(deftest prose-fails-loudly-for-invalid-input-and-placeholders
+  (doseq [[template scope expected-key]
+          [[nil {} :template]
+           ["text" nil :scope]
+           ["{missing}" {} :placeholder]
+           ["\n  first\n second\n" {} :baseline]]]
+    (let [ex (try (fmt/prose template scope) nil (catch clojure.lang.ExceptionInfo e e))]
+      (is (some? ex) (pr-str [template scope]))
+      (is (contains? (ex-data ex) expected-key) (pr-str (ex-data ex))))))
+
+(deftest prose-rejects-malformed-placeholders
+  (doseq [template ["{worktree" "{1name}" "{name:}"]]
+    (let [ex (try (fmt/prose template {:worktree "/tmp/worktree"
+                                       :name "Millstrand"})
+                  nil
+                  (catch clojure.lang.ExceptionInfo e e))]
+      (is (some? ex) template)
+      (is (= template (:template (ex-data ex))))
+      (is (contains? (ex-data ex) :placeholder)))))
+
 (deftest reflow-soft-wraps-one-paragraph
   (is (= "one paragraph of prose joined into a single line"
          (fmt/reflow "|one paragraph of prose

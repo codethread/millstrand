@@ -1,6 +1,6 @@
 ---
 name: clojure
-description: always use for authoring clojure code; also use for reviewing, auditing, or scanning Clojure code conformity
+description: always use for authoring Clojure code, including docstrings, comments, and prose values; also use for reviewing, auditing, or scanning Clojure code conformity
 ---
 
 # Clojure Authoring Guide
@@ -74,7 +74,11 @@ Good property candidates:
 
 Do not add property tests with weak generators just to claim coverage. A few concrete regression examples may be better than a shallow generator.
 
-### Docstrings
+### Docstrings, comments, and prose values
+
+Good prose in Clojure source is formatted for the person reading the source, not merely kept below a lint limit. Aim for about 80 characters of prose within its own block, independent of how far the enclosing form is indented. Column 180 remains the hard limit for every docstring and string-literal line.
+
+#### Docstrings
 
 Docstrings are expected for public API vars more often than specs are.
 
@@ -86,42 +90,88 @@ Use docstrings for:
 
 For audits, treat a top-level var as public unless it has `^:private`, is defined with `defn-`, or the namespace clearly marks it as internal. Missing docstrings on public vars are reportable conformity issues, especially for API, DB, query, REPL, and namespace entry-point functions.
 
-Docstring style:
+Start with a concise standalone summary, preferably imperative: `Return ...`, `Create ...`, `Evaluate ...`. Add a blank line before details. Explain contracts, side effects, important invariants, and return shape when they are not obvious. Do not restate the function name or narrate implementation mechanics.
 
-- First line: concise standalone summary, preferably imperative: `Return ...`, `Create ...`, `Evaluate ...`.
-- Add a blank line before details.
-- Explain contracts, side effects, important invariants, and return shape when not obvious.
-- Do not restate the function name or implementation mechanics.
+A docstring is long-form prose, not one dense paragraph wrapped wherever the width limit happens to fall:
 
-Example:
+- Give each distinct idea, phase, caution, or consequence its own paragraph.
+- Put commands and examples in fenced code blocks instead of burying them inline.
+- Use a list when the reader must scan several requirements, cases, or guarantees.
+- Prefer comfortable reading rhythm over terseness. Blank lines are useful structure.
+- Wrap by the width of the docstring body, not by the source file's absolute column.
 
 ```clojure
 (defn ready
   "Return open strands whose blocking dependencies are closed.
 
-  Traverses only declared structural dependency relations. Annotation edges do not
-  affect readiness."
+  Traverse only declared structural dependency relations.
+
+  Annotation edges do not affect readiness."
   [db]
   ...)
 ```
 
-### Long strings and prose blocks
+Docstrings are macro syntax and metadata as well as strings. Ordinary Clojure docstring positions require a literal, so wrap them by hand. A project macro may explicitly accept a computed documentation expression; use a runtime formatting helper only when that macro's contract permits it.
 
-Hard limit: no docstring or string literal line may extend past column 180. Long lines break IDE viewports and diff review. This is a reportable conformity issue wherever it appears — source, tests, config.
+#### Long-form comments
 
-When a value is prose (op payloads, `about` surfaces, rule descriptions, delegation bodies), do not build it from `(str ...)` fragments or one long literal. Author it as a `|`-margin block and reflow it with the shipped helpers:
+Use comments to explain why the code has a shape, which invariant it protects, or which non-obvious trade-off it accepts. Do not translate the next form into English or preserve history that belongs in version control.
 
-- `millstrand.api.format.alpha` — the blessed surface for every tier, spools included: trusted config (`.millstrand/`)
+Format a long comment like prose:
 
-`(fill block)` returns a vector of item strings (bare `|` line separates items; indented-past-the-bar lines keep an item verbatim for command samples). `(reflow block)` soft-wraps one paragraph into one string.
+- Keep each paragraph to one concern.
+- Separate paragraphs with a blank `;;` line.
+- Wrap the comment text itself at about 80 characters, regardless of indentation.
+- Use a short list or example when it is easier to scan than a sentence.
 
 ```clojure
-(format-alpha/reflow
- "|One rule sentence that would otherwise be an unreadable
-  |single source line, soft-wrapped at authoring time.")
+;; The cache belongs to one runtime generation. Refresh may add roots, but it
+;; cannot unload classes already visible to this classloader.
+;;
+;; Keep invalidation generation-scoped. Clearing individual entries would imply
+;; that a non-additive source change can take effect in the current generation.
 ```
 
-Docstrings cannot use runtime helpers: wrap them by hand well short of the limit (match the surrounding namespace, usually ~80).
+#### Prose stored as data
+
+When a string value carries Markdown or multi-paragraph guidance, use `millstrand.api.format.alpha/prose`. It removes the enclosing form's baseline indentation while preserving paragraphs, lists, code fences, and deliberate line breaks.
+
+````clojure
+(format-alpha/prose
+ "
+   Inspect the failed check before changing the source.
+
+   Retry it with:
+
+   ```sh
+   tool retry <check-id> --attributes '{patch:json}'
+   ```
+
+   Record why the retry is safe.
+   "
+ {:patch {"error" nil}})
+````
+
+Use named interpolation instead of nested string construction or escaped snippets. `{name}` renders an ordinary value and `{name:json}` renders compact JSON. Put a one-use interpolation value directly in the adjacent scope map so the template and the data needed to read it stay together. Hoist a value only when it has genuine meaning or reuse outside that prose call.
+
+Do not turn `prose` blocks into dense walls merely because their authored newlines are preserved. Apply the same paragraph, list, example, and block-relative width rules as docstrings. A useful default is:
+
+1. State the action or fact.
+2. Separate supporting context into its own paragraph.
+3. Display commands in a fenced block.
+4. Put cautions, consequences, and recovery in later paragraphs.
+
+Use `reflow` only for a value whose contract is one plain paragraph with no preserved Markdown layout. Use `fill` only for its established item-vector contract. Do not build long prose from `(str ...)` fragments or one oversized literal.
+
+#### Review prose in source
+
+Before finishing a prose edit:
+
+1. Read the source block at its actual indentation; do not judge it only by rendered output.
+2. Check that paragraph breaks follow changes of idea, action, caution, or consequence.
+3. Check that commands, examples, and multi-case requirements are easy to scan.
+4. Keep authored prose near 80 block-relative characters and every literal line within the absolute 180-column limit.
+5. Remove avoidable escaped snippets and detached one-use interpolation values.
 
 ### The story-file shape (api modules)
 
@@ -178,7 +228,7 @@ Keep a var public and add a docstring when:
 
 - another namespace calls it directly;
 - tests exercise it as a boundary;
-- it is useful from REPL/dev workflows;
+- it is useful from REPL or development sessions;
 - it represents a smaller valid API than the highest-level wrapper;
 - the name appears in docs, specs, examples, or user-facing guidance.
 
