@@ -1,7 +1,6 @@
 (ns ct.workflows.story
   "The module-form story workflow and its continuations (family `story`)."
   (:require [clojure.spec.alpha :as s]
-            [clojure.string :as str]
             [millstrand.api.format.alpha :as format-alpha]
             [millhouse.spools.workflow :as workflow]
             [ct.workflows.support :as support]))
@@ -45,7 +44,7 @@
                   :self
                   :attributes {"workflow/action-ref" "story.fold"
                                "workflow/instruction"
-                               (fn [{:keys [module]}]
+                               (fn [_]
                                  (format-alpha/reflow
                                   "|Merge the concern files back into a single story-ordered
                                    |alpha.clj: publics with real bodies first, section-commented

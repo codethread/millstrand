@@ -80,7 +80,7 @@
                         (io/file config-dir ".land-merge-lock.acquire")
                         "rw")
                   channel (.getChannel file)
-                  lock (.lock channel)]
+                  _lock (.lock channel)]
         (f)))))
 
 (defn- attr-value
