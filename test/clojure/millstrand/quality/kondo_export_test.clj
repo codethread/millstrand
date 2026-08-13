@@ -265,7 +265,7 @@
             "deffn hook context must contain a function argument vector"]
            ["empty generated use"
             "(use-setting!)"
-            "use-vars hook context must contain at least 2 children"]
+            "use-vars hook context node must contain at least 2 children"]
            ["malformed generated use"
             "(use-action! :not-a-var)"
             "use-vars hook Var references must be symbols"]]]
