@@ -407,7 +407,7 @@ Activate the module from trusted startup code:
   {:ns 'my.workspace})
 ```
 
-`defquery` defines the `agent-docs` Var and collects its value only while the module source is being evaluated. A Var containing query data is not itself a named query. Module publication owns the registry entry, so refresh and restart can reconstruct it from source.
+The inert `defquery` form defines the `agent-docs` Var but does not select it. `defquery!`, used above, defines and selects its declaration while the module source is evaluated. A Var containing query data is not itself a named query. Module publication owns the registry entry, so refresh and restart can reconstruct it from source.
 
 For code, tests, or a one-off startup helper that already holds a runtime, use the explicit-runtime verb:
 

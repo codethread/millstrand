@@ -49,9 +49,9 @@ strand search "widget" --limit 200            # raise the row cap
 
 (def rt (current/runtime))
 
-(unsafe-text-search/search rt {:substring "retry backoff"})
-(unsafe-text-search/search rt {:substring "backoff" :attr-key "note"})
-(unsafe-text-search/search rt {:substring "secretword" :archived? true})
+(unsafe-text-search/search-rows rt {:substring "retry backoff"})
+(unsafe-text-search/search-rows rt {:substring "backoff" :attr-key "note"})
+(unsafe-text-search/search-rows rt {:substring "secretword" :archived? true})
 ```
 
 ## 3. Surface

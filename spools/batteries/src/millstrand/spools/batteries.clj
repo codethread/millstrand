@@ -4,14 +4,16 @@
   Batteries declares the everyday strand operations — add/update/show/supersede/
   burn/list/ready/subgraph, spool coordinate helpers, the create-only `weave`
   op, and the read-only `query`/`pattern` registry-introspection ops — through
-  `millstrand.api.millstrand.alpha/defop`. Their
+  `millstrand.api.millstrand.alpha/defop!`. Their
   `:arg-spec` is parsed by `millstrand.api.cli.alpha`. Each op delegates to the same
   `millstrand.api.*.alpha` calls the JSON socket dispatch uses and returns
   the same JSON shapes, so the ops are reachable through `strand <name>` at the
   CLI root. The namespace owns no module-level state:
   op handlers read the runtime from their invocation context (`:op/runtime`).
 
-  `defop` declarations are the durable, owner-complete source for this surface.
+  `defop!` declarations are the durable source for this surface. They define
+  Vars and select their declarations during module collection; the selected set
+  publishes as this module's complete, owner-complete ops partition.
   Explicit-runtime registration functions are the live code and test seam, and
   `millstrand.repl` supplies the same verbs with the runtime implied for an in-process
   session. Evaluating an authoring form outside module collection defines its Var
