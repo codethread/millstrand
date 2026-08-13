@@ -43,6 +43,27 @@ if PATH="$tool_dir" command -v rg >/dev/null 2>&1; then
   exit 1
 fi
 
+rg_path=$(command -v rg || true)
+if [[ -n "$rg_path" ]]; then
+  rg_tool_dir="$tmp_root/rg-bin"
+  mkdir "$rg_tool_dir"
+  for command_name in dirname git grep mktemp pwd rm sed; do
+    ln -s "$tool_dir/$command_name" "$rg_tool_dir/$command_name"
+  done
+  ln -s "$rg_path" "$rg_tool_dir/rg"
+
+  rg_output="$tmp_root/rg.out"
+  if ! PATH="$rg_tool_dir" "$bash_path" \
+      "$tmp_root/scripts/quality/millstrand-active-identity.sh" >"$rg_output" 2>&1; then
+    cat "$rg_output" >&2
+    echo "millstrand identity regression: rg scan failed with missing examples path" >&2
+    exit 1
+  fi
+  echo "millstrand identity regression: rg scan survived missing examples path"
+else
+  echo "millstrand identity regression: rg unavailable; skipped rg scan subcase"
+fi
+
 cp "$repo_root/AGENTS.md" "$tmp_root/AGENTS.md"
 sed -i.bak '1s/^/\n/' "$tmp_root/AGENTS.md"
 rm -f "$tmp_root/AGENTS.md.bak"

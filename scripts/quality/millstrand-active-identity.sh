@@ -16,6 +16,18 @@ scan_paths=(
   devflow/UBIQUITOUS-LANGUAGE.md devflow/README.md .agents/skills
 )
 
+existing_scan_paths=()
+for scan_path in "${scan_paths[@]}"; do
+  if [[ -e "$scan_path" ]]; then
+    existing_scan_paths+=("$scan_path")
+  fi
+done
+
+if [[ ${#existing_scan_paths[@]} -eq 0 ]]; then
+  echo "millstrand identity audit: no existing scan paths" >&2
+  exit 1
+fi
+
 set +e
 if command -v rg >/dev/null 2>&1; then
   rg -n -i --max-columns 100000 --hidden \
@@ -24,10 +36,10 @@ if command -v rg >/dev/null 2>&1; then
     --glob '!.millstrand/**' \
     --glob '!scripts/quality/millstrand-active-identity.sh' \
     --glob '!scripts/quality/millstrand-identity-allowlist.tsv' \
-    'skein' "${scan_paths[@]}" >"$findings"
+    'skein' "${existing_scan_paths[@]}" >"$findings"
 else
   git grep -n -i -- 'skein' -- \
-    "${scan_paths[@]}" \
+    "${existing_scan_paths[@]}" \
     ':(exclude)scripts/quality/millstrand-active-identity.sh' \
     ':(exclude)scripts/quality/millstrand-identity-allowlist.tsv' >"$findings"
 fi
