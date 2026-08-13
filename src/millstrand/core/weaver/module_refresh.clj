@@ -631,6 +631,7 @@
             replay (replay-declarations key ns-sym)]
         {:status :ready
          :module/key key
+         :module/namespace ns-sym
          :source/status :image
          :declaration/source :image-replay
          :kind-declarations (:kind-declarations replay [])
@@ -642,7 +643,7 @@
           (throw (ex-info image-contribution-remedy (ex-data throwable))))))))
 
 (defn- evaluate-module
-  [runtime with-loader key declaration previous-contribution previous-source dry-run?]
+  [runtime with-loader key declaration previous-contribution previous-source]
   (try
     (if (= :image (:load declaration))
       (evaluate-image-module key declaration)
@@ -684,13 +685,10 @@
 
                            :else collected)
             normalized (normalize-contribution contribution)
-            _ (lifecycle-effects/validate! lifecycle)
-            _ (when (and (not= :unchanged source-status)
-                         (not dry-run?))
-                (retain-declarations!
-                 key module-ns normalized kind-declarations lifecycle))]
+            _ (lifecycle-effects/validate! lifecycle)]
         {:status :ready
          :module/key key
+         :module/namespace module-ns
          :source/status source-status
          :source/result return
          :source/stamp (when-let [ns-sym (:ns declaration)]
@@ -708,7 +706,7 @@
 
 (defn- evaluate-affected
   [runtime with-loader graph order root-outcomes previous-contributions
-   previous-sources dry-run?]
+   previous-sources]
   (let [unaffected (set/difference (set (keys graph)) (set order))
         seeded (into (sorted-map)
                      (map (fn [key] [key {:status :unchanged}]))
@@ -724,8 +722,7 @@
                    (retained-outcome key declaration problem)
                    (evaluate-module runtime with-loader key declaration
                                     (get previous-contributions key)
-                                    (get previous-sources key)
-                                    dry-run?)))))
+                                    (get previous-sources key))))))
       seeded
       order)
      order)))
@@ -773,6 +770,7 @@
 
 (defn- publishable-outcome [raw-outcome]
   (dissoc raw-outcome
+          :module/namespace
           :contribution
           :source/stamp
           :module/reconcile-fn
@@ -834,6 +832,24 @@
           :source-stamps previous-sources}
          order)]
     (update staged :outcomes #(select-keys % order))))
+
+(defn- retain-staged-declarations!
+  "Retain declaration records only for modules whose candidates staged.
+
+  Source evaluation is intentionally earlier than owner staging. A staged
+  failure or dependency retention therefore leaves the namespace's previous
+  record untouched, while the outer refresh snapshot still rolls back records
+  if a later coordinator-wide validation or publication step refuses."
+  [raw outcomes]
+  (doseq [[module-key outcome] outcomes
+          :when (= :applied (:status outcome))
+          :let [raw-outcome (get raw module-key)]]
+    (retain-declarations!
+     module-key
+     (:module/namespace raw-outcome)
+     (:contribution raw-outcome)
+     (:kind-declarations raw-outcome)
+     (:lifecycle raw-outcome))))
 
 (defn- provisional-result
   [mode roots conflicts remedies shadows outcomes removed]
@@ -1141,8 +1157,7 @@
                         previous-sources (:contribution-sources state)
                         raw (evaluate-affected runtime with-loader graph order
                                                (:roots sync-result)
-                                               previous-contributions previous-sources
-                                               (:dry-run? opts))
+                                               previous-contributions previous-sources)
                         lifecycle-resolvers
                         (resolve-lifecycle-callables! with-loader raw)
                         staged-runtime (staging-runtime runtime)
@@ -1172,6 +1187,7 @@
                       (let [live-backends (publication/backends runtime)
                             live-candidates (publication/candidates live-backends)
                             live-spool-state @(:spool-state runtime)
+                            _ (retain-staged-declarations! raw (:outcomes staged))
                             changed-kinds (publication/publish!
                                            runtime staged-runtime backends (:candidates staged))
                             removal-order (->> (module-graph/dependency-order old-graph)

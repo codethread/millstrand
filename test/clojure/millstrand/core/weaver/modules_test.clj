@@ -669,6 +669,66 @@
           (is (= [:= [:attr :version] 2] (get (graph/queries rt) "owned")))
           (is (contains? (graph/queries rt) "unrelated")))))))
 
+(deftest image-replay-retains-only-successfully-published-source-set
+  (with-runtime
+    (fn [rt _db-file]
+      (let [workspace (get-in rt [:metadata :config-dir])
+            suffix (str/replace (str (random-uuid)) "-" "")
+            collision-source "modules/image-retained-collision.clj"
+            first-failed-source "modules/image-retained-first-failed.clj"
+            valid-source "modules/image-retained-valid.clj"
+            collision-ns (symbol (str "test.module.image-retained-collision-" suffix))
+            first-failed-ns (symbol (str "test.module.image-retained-first-failed-" suffix))
+            valid-ns (symbol (str "test.module.image-retained-valid-" suffix))
+            collision-query [:= [:attr :version] "collision"]
+            valid-query [:= [:attr :version] 1]
+            changed-query [:= [:attr :version] 2]]
+        (doseq [[source ns-sym module-key]
+                [[collision-source collision-ns :collision-owner]
+                 [first-failed-source first-failed-ns :first-failed]
+                 [valid-source valid-ns :valid-owner]]]
+          (module-source! workspace source ns-sym (contribution-forms module-key)))
+        (reset! module-contributions
+                {:collision-owner {:queries {"collision" collision-query}}
+                 :first-failed {:queries {"collision" collision-query}}
+                 :valid-owner {:queries {"owned" valid-query}}})
+        (is (= :applied
+               (:status (weaver-runtime/declare-module!
+                         rt :collision-owner {:file collision-source}))))
+        (let [failed (weaver-runtime/declare-module!
+                      rt :first-failed {:file first-failed-source})
+              outcome (get-in failed [:modules :first-failed])]
+          (is (= :partial (:status failed)))
+          (is (= :failed (:status outcome)))
+          (is (= :same-layer-duplicate
+                 (get-in outcome [:error :data :error]))))
+        (let [image (runtime/module! rt :first-failed
+                                     {:ns first-failed-ns :load :image})
+              outcome (get-in image [:modules :first-failed])]
+          (is (= :failed (:status outcome)))
+          (is (= :missing-declaration-record
+                 (get-in outcome [:error :data :reason]))
+              "a first failed publication has no image replay record"))
+        (is (= :applied
+               (:status (weaver-runtime/declare-module!
+                         rt :valid-owner {:file valid-source}))))
+        (is (= valid-query (get (graph/queries rt) "owned")))
+        (swap! module-contributions assoc
+               :valid-owner {:queries {"collision" changed-query}})
+        (let [failed (weaver-runtime/refresh-modules! rt {:only [:valid-owner]})
+              outcome (get-in failed [:modules :valid-owner])]
+          (is (= :partial (:status failed)))
+          (is (= :failed (:status outcome)))
+          (is (= :retained (:contribution/status outcome)))
+          (is (= valid-query (get (graph/queries rt) "owned"))))
+        (let [image (runtime/module! rt :valid-owner
+                                     {:ns valid-ns :load :image})
+              outcome (get-in image [:modules :valid-owner])]
+          (is (= :image (:source/status outcome)))
+          (is (= :unchanged (:status outcome)))
+          (is (= valid-query (get (graph/queries rt) "owned"))
+              "image replay retains the last successfully published set"))))))
+
 (deftest plan-dry-run-reports-intentions-without-publishing-or-recording
   (with-runtime
     (fn [rt _db-file]
