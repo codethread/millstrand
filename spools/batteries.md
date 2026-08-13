@@ -317,7 +317,7 @@ rows carry `kind`, `name`, `owner`, `doc`, and an advisory `keys` list. Edge row
 
 ```
 strand spool about
-strand spool add <git-url> [--tag vN] [--lib family]
+strand spool add <git-url> [--tag vN | --unversioned-head] [--lib family]
 strand spool bump <family> --latest tag|sha
 strand spool status
 ```
@@ -329,9 +329,9 @@ The public boundary specs are `::spool-op-context`, `::spool-about-result`, `::s
 Add lists the remote tags and accepts annotated `vN` tags only, where `N` is a positive integer.
 It resolves the peeled `refs/tags/vN^{}` commit and records that 40-character commit sha, never the
 tag-object sha. `--tag` chooses one release; without it, add chooses the highest numbered release.
-Lightweight tags, `v0`, missing releases, and untagged repositories fail loudly.
+Lightweight tags, `v0`, missing releases, and untagged repositories fail loudly. `--unversioned-head` is for a repository with no tags at all: it verifies that condition, resolves and fetches the default-branch `HEAD`, then writes a SHA-only coordinate. It is mutually exclusive with `--tag`. A repository with any tag fails and directs the caller to use `--tag`.
 
-At the peeled commit, add reads the optional producer `spool.edn` as an advisory manifest. A present
+At the selected commit, add reads the optional producer `spool.edn` as an advisory manifest. A present
 manifest supplies the roots, Millstrand floor, and root requirements written into the consumer family
 entry. When `--lib` is also present, it must match one of the manifest's root symbols; a conflict
 fails before any write and names the requested and declared symbols. Without a manifest, add creates
