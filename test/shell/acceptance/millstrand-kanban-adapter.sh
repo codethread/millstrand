@@ -10,6 +10,7 @@ cache_root="$tmp_root/cache"
 verifier_root="$tmp_root/verifier"
 verifier_tree="$tmp_root/verifier-tree"
 mill_pid=""
+mill_drain_pid=""
 weaver_started=0
 kanban_sha="a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e"
 kanban_url="https://github.com/codethread/kanban.spool.git"
@@ -21,6 +22,10 @@ cleanup() {
   if [[ -n "$mill_pid" ]] && kill -0 "$mill_pid" 2>/dev/null; then
     kill "$mill_pid" 2>/dev/null || true
     wait "$mill_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$mill_drain_pid" ]] && kill -0 "$mill_drain_pid" 2>/dev/null; then
+    kill "$mill_drain_pid" 2>/dev/null || true
+    wait "$mill_drain_pid" 2>/dev/null || true
   fi
   rm -rf -- "${tmp_root:?}" "${state_root:?}"
 }
@@ -43,18 +48,48 @@ printf '%s\n' \
 cp "$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter-init.clj" "$workspace/init.clj"
 cp "$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter.clj" "$workspace/adapter.clj"
 
-GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
-  "$repo_root/bin/mill" start >"$tmp_root/mill.log" 2>&1 &
+mill_log="$tmp_root/mill.log"
+exec 3< <(exec env GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
+  "$repo_root/bin/mill" start 2>&1)
 mill_pid=$!
-metadata_path="$state_root/millstrand/mill.json"
-deadline=$((SECONDS + 10))
-until [[ -f "$metadata_path" ]]; do
-  if ! kill -0 "$mill_pid" 2>/dev/null || (( SECONDS >= deadline )); then
-    sed -n '1,160p' "$tmp_root/mill.log" >&2
-    exit 1
+mill_ready_line=""
+read_status=0
+while IFS= read -r -t 10 mill_line <&3; do
+  printf '%s\n' "$mill_line" >>"$mill_log"
+  if [[ "$mill_line" == mill\ listening\ state_root=* ]]; then
+    mill_ready_line="$mill_line"
+    break
   fi
-  sleep 0.05
-done
+done || read_status=$?
+
+if [[ -z "$mill_ready_line" ]]; then
+  if (( read_status == 1 )); then
+    echo "mill exited before publishing its readiness signal" >&2
+  elif (( read_status == 142 )); then
+    echo "timed out waiting for mill readiness after 10 seconds" >&2
+  else
+    echo "mill readiness signal failed (read status $read_status)" >&2
+  fi
+  sed -n '1,160p' "$mill_log" >&2
+  exit 1
+fi
+
+cat <&3 >>"$mill_log" &
+mill_drain_pid=$!
+mill_status_log="$tmp_root/mill-status.log"
+if ! mill_status_json=$(GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
+  "$repo_root/bin/mill" status 2>"$mill_status_log"); then
+  echo "mill readiness health request failed" >&2
+  sed -n '1,160p' "$mill_status_log" >&2
+  sed -n '1,160p' "$mill_log" >&2
+  exit 1
+fi
+if ! jq -e '.healthy == true' <<<"$mill_status_json" >/dev/null; then
+  echo "mill readiness health request returned an unhealthy response" >&2
+  printf '%s\n' "$mill_status_json" >&2
+  sed -n '1,160p' "$mill_log" >&2
+  exit 1
+fi
 
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
   "$repo_root/bin/mill" init --workspace "$workspace" >/dev/null
