@@ -66,6 +66,7 @@ nav:
   # behavior contracts remain the specs above (SPEC-005.C2).
   - Alpha API:
       - Index: docs/api/README.md
+      - millstrand.api.authoring.alpha: docs/api/authoring.api.md
       - millstrand.api.batch.alpha: docs/api/batch.api.md
       - millstrand.api.cli.alpha: docs/api/cli.api.md
       - millstrand.api.clock.alpha: docs/api/clock.api.md

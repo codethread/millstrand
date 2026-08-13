@@ -655,12 +655,13 @@ Ordinary `def` and `defn` forms collect nothing. An inert authoring form defines
   ;; ... do the work ...
   {:outcome :reported})
 
-(schedule/defjob :nightly-report
+(schedule/defjob! nightly-report
+  "Run the nightly report."
   {:interval-ms (* 24 60 60 1000)
    :handler     'report-job/report-tick})
 ```
 
-`defn report-tick` defines a function and contributes nothing. `schedule/defjob` defines the job declaration and collects it under the schedule spool's job kind. Loading an inert form always defines its Var; only a typed use or bang form selects the entry. An owner that stops selecting a declaration drops that entry by omission at the next refresh.
+`defn report-tick` defines a function and contributes nothing. `schedule/defjob!` defines the job declaration and selects it under the schedule spool's job kind. Loading an inert form always defines its Var; only a typed use or bang form selects the entry. An owner that stops selecting a declaration drops that entry by omission at the next refresh.
 
 The source remains a flat sequence of top-level forms. Evaluating a form yourself still publishes nothing: `collect-entry!` is passive outside contribution collection, so REPL evaluation and code-only reloads define Vars and stop there. The coordinator retains the collected declaration record and replays it for image activation. Omitting a form from the next successful source evaluation removes that owner's old entry.
 
@@ -732,7 +733,7 @@ A custom kind's entry values are whatever its owner's `:entry-spec` accepts, so 
 (ns acme.dashboard
   (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(millstrand/defbin dashboard
+(millstrand/defbin! dashboard
   "Open the dashboard in the caller's terminal."
   {:executable [:family "bin/dashboard"]
    :build ["bun" "install" "--cwd" "dashboard"]})
@@ -767,13 +768,13 @@ As a contribution it is one line:
 
 ```clojure
 ;; spool source namespace
-(millstrand/defquery mine
+(millstrand/defquery! mine
   "Return strands owned by ct."
   {}
   [:= [:attr :owner] "ct"])
 ```
 
-Two things changed. The name is now a string: `register-query!` accepts a simple symbol or keyword and canonicalises it to the registry key `"mine"` on your behalf, while an authoring form writes the canonical string key. And the ownership changed: the direct call writes one entry under the direct-registration owner, whereas the form replaces your module's complete `:queries` partition every time it publishes.
+Two things changed. The name is now a string: `register-query!` accepts a simple symbol or keyword and canonicalises it to the registry key `"mine"` on your behalf, while an authoring form writes the canonical string key. And the ownership changed: the direct call writes one entry under the direct-registration owner, whereas the bang form replaces your module's complete `:queries` partition every time it publishes.
 
 ### Publication is owner-complete
 
@@ -875,7 +876,7 @@ A workspace-relative `:file` module can declare authoring forms in its one names
 (ns acme.priority.local
   (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(millstrand/defquery mine
+(millstrand/defquery! mine
   "Return strands owned by the local priority workflow."
   {}
   [:= [:attr :owner] "priority"])

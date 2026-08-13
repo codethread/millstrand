@@ -381,7 +381,7 @@ Inside `mill weaver repl`, `millstrand.repl` supplies the same verb with the run
 
 Use `replace-query!` when you intend to shadow an existing owner. `unregister-query!` removes only your own entry and restores the entry below it; registry verbs never remove or change the Clojure Var. Removing a direct shadow and registering again is not a substitute for replace, because the other owner's entry still occupies the name. For queries, replacing the value is also how you iterate behavior: there is no handler function to redefine, and `query explain` always reads the current registered value.
 
-The same order applies to ops, patterns, hooks, and event handlers: author them with their module forms for durable behavior, use explicit-runtime `register/replace/unregister-*!` calls in code or tests, and use the runtime-implied `millstrand.repl` wrappers while iterating live. A workspace can durably mask a spool op with `millstrand/defop {:override? true}` in a workspace module. The coordinate used to acquire that spool, local or git-pinned, does not change these registry rules.
+The same order applies to ops, patterns, hooks, and event handlers: author them with their module forms for durable behavior, use explicit-runtime `register/replace/unregister-*!` calls in code or tests, and use the runtime-implied `millstrand.repl` wrappers while iterating live. A workspace can durably mask a spool op with `millstrand/defop! {:override? true}` in a workspace module. The coordinate used to acquire that spool, local or git-pinned, does not change these registry rules.
 
 The plain CLI can discover and run the same query for as long as this weaver keeps running:
 

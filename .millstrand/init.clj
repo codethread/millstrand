@@ -28,7 +28,7 @@
 (def runtime (current/runtime))
 
 ;; Batteries is approved as a shipped source-root spool by default. The module
-;; guard keeps source loading behind that visible approval; its `millstrand/defop`
+;; guard keeps source loading behind that visible approval; its `millstrand/defop!`
 ;; forms publish the CLI partition and its lifecycle seed owns the failure
 ;; glossary those operations reference.
 (runtime/module! runtime :millstrand/spools-batteries
@@ -75,7 +75,7 @@
 ;; millstrand.core.db to LIKE-search titles and attribute values, including archived
 ;; rows the query language cannot see. It is a maintained, in-the-open example of
 ;; rule-breaking (see spools/unsafe-text-search.md), activated here so it stays
-;; exercised. Its `millstrand/defop` form contributes the search operation; it owns no
+;; exercised. Its `millstrand/defop!` form contributes the search operation; it owns no
 ;; live resource and therefore declares no lifecycle effect.
 (runtime/module! runtime :millstrand/spools-unsafe-text-search
                  {:ns 'millstrand.spools.unsafe-text-search

@@ -268,7 +268,7 @@ unload guarantee: restart the weaver when you need a clean runtime.
 
 ## Your own CLI command
 
-Every `strand` command is a registered op, and ops use the same three-layer order as queries. Define a durable command with `millstrand/defop` in module source; use `millstrand.api.weaver.alpha/register-op!` from explicit-runtime code or tests for a live experiment; use `millstrand.repl/register-op!` from the connected REPL. `strand help` lists registered ops and `strand help <op>` explains one. The CLI forwards everything after the op name to the handler as string argv.
+Every `strand` command is a registered op, and ops use the same three-layer order as queries. Define and select a durable command with `millstrand/defop!` in module source; use `millstrand.api.weaver.alpha/register-op!` from explicit-runtime code or tests for a live experiment; use `millstrand.repl/register-op!` from the connected REPL. `strand help` lists registered ops and `strand help <op>` explains one. The CLI forwards everything after the op name to the handler as string argv.
 
 The durable form belongs in the module source:
 

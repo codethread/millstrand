@@ -607,7 +607,7 @@ The weaver loads trusted startup files from the selected workspace in order — 
 
 Registry entries are authored, not imperatively registered. `millstrand.api.millstrand.alpha` ships one three-form family per core kind. The inert form defines an ordinary Clojure Var, the typed use form selects it, and the bang form performs both while a runtime module source is evaluated.
 
-| Form | Kind it collects | Required options |
+| Definition form | Kind it defines | Required options |
 | --- | --- | --- |
 | `defop` | `:ops`, a `strand <op>` command | `:arg-spec` |
 | `defquery` | `:queries`, a named query | none |
@@ -696,7 +696,7 @@ transactional batch engine as REPL-only `millstrand.api.batch.alpha/apply!`. Raw
 loading-dock door: it can create, update, burn, and upsert or remove edges, so it remains a Clojure
 config/REPL workflow instead of a public CLI command.
 
-Like queries, patterns are weaver-lifetime runtime state. Author them in a module source with `defpattern` if they should always exist after restart or refresh.
+Like queries, patterns are weaver-lifetime runtime state. Define and select them in a module source with `defpattern!` if they should always exist after restart or refresh.
 
 ## Graph helpers
 
@@ -728,7 +728,7 @@ Graph helpers include operations such as query id selection, strand hydration by
      :strands (graph/strands-by-ids rt ids)}))
 ```
 
-Declare the `owned` query beside it with `millstrand/defquery`, or register it directly from the live REPL:
+Define and select the `owned` query beside it with `millstrand/defquery!`, or register it directly from the live REPL:
 
 ```clojure
 (graph/register-query! (current/runtime) 'owned [:= [:attr :owner] "ct"])
@@ -741,7 +741,7 @@ printf "(do (require 'my.workflow) (my.workflow/owned-strands {}))\n" \
   | mill weaver repl --stdin --workspace "$workspace"
 ```
 
-Named read surfaces beyond queries are registered CLI operations, authored with `millstrand/defop`. Their flat arg-spec leaves carry `:hook-class :read` and `:deadline-class`; registration opts carry classes only for raw-envelope ops. They add docs, arg parsing, and `strand <op>` invocation on top of plain trusted functions like the one above.
+Named read surfaces beyond queries are registered CLI operations, defined and selected with `millstrand/defop!`. Their flat arg-spec leaves carry `:hook-class :read` and `:deadline-class`; registration opts carry classes only for raw-envelope ops. They add docs, arg parsing, and `strand <op>` invocation on top of plain trusted functions like the one above.
 
 ## Events
 
