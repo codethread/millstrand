@@ -50,9 +50,9 @@ The authorized repository set is closed:
 - devflow.
 - codethread.
 
-Do not migrate, patch, audit for completeness, or add compatibility for any other spool repository. Separate repositories such as Kanban and third-party spools are explicitly outside this epic even if they still use the old forms after the cutover.
+Do not migrate, patch, audit for completeness, or add compatibility for any other spool repository. Kanban is the explicit external exception: its source owner is authorized to publish a Guild-free successor and this workspace is authorized to pin that successor. No Kanban peering operation or lifecycle resource belongs to the Millstrand surface; Kanban remains core-only.
 
-The selected workspace still requires the separately pinned Kanban spool. Millstrand will keep that pin unchanged and replace its direct module declaration with a Millstrand-owned consumer adapter. On a fresh generation, the unchanged Kanban source is compiled against the new inert `def<kind>` macros, producing declaration Vars; the adapter explicitly selects the declarations the workspace uses. A disposable fresh-generation test must prove that path before restart. This changes no Kanban source and does not preserve the old publishing semantics.
+The selected workspace still requires the separately pinned Kanban spool. Millstrand replaces its direct module declaration with a Millstrand-owned consumer adapter that selects only the core board operations, queries, pattern, and bin. The authorized external source change and successor pin must remove Kanban peering operations and its lifecycle resource; the exact successor SHA belongs to the Kanban owner and is not guessed here. A disposable fresh-generation test must prove the Guild-free successor path before restart. This does not preserve the old publishing semantics.
 
 Cron's `defjob` joins the Var-based convention rather than retaining its current keyword-only shape. It takes a symbol name, a docstring, and the job map; the registry id is `(keyword name)`. `use-job!` accepts those declaration Vars, and `defjob!` also accepts an optional selection-options map before the job map. Duplicate keys within one `use-<kind>!` form fail locally. Repeating a key in separate top-level selection forms keeps the existing collector rule: the later contribution replaces the earlier one deterministically.
 

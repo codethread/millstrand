@@ -2,7 +2,7 @@
   "Validate the narrowed Millstrand publisher transition contract.
 
   Workspace config is active against the moved publishers. The external suite
-  remains deferred only for Kanban's historical in-tree Guild fixture."
+  remains deferred pending the authorized Guild-free Kanban successor pin."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]))
 

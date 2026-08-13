@@ -12,7 +12,7 @@
  ;; "scripts" is on the test path so the one-shot cutover scripts under
  ;; scripts/cutover can be exercised by a registered test namespace rather than
  ;; only standalone; the runner's registry, not the classpath, decides what runs.
- {:test {:extra-paths ["test/clojure" "scripts" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src"]
+ {:test {:extra-paths ["test/clojure" "scripts" "spools/batteries/src" "spools/unsafe-text-search/src"]
          :extra-deps {;; Test-only ergonomics: readable nested-map/JSON assertions
                       ;; (match?) and spec-driven property tests (defspec). Kept
                       ;; off the main src/weaver classpath.
@@ -40,7 +40,7 @@
         :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
         :main-opts ["-m" "millstrand.e2e"]}
   :format {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
-           :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src" "test/clojure" "dev" "scripts"
+           :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts"
                        ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
                        ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
                        ".millstrand/workflows/story.clj"
@@ -51,7 +51,7 @@
                        ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/help.clj"
                        ".millstrand/adapters/kanban.clj"]}
   :format/fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
-               :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src" "test/clojure" "dev" "scripts"
+               :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts"
                            ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
                            ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
                            ".millstrand/workflows/story.clj"
@@ -62,13 +62,13 @@
                            ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/help.clj"
                            ".millstrand/adapters/kanban.clj"]}
   :lint/clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
-                   :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src" "test/clojure"]}
+                   :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure"]}
   :lint/conventions {:extra-paths ["scripts"]
                      :extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                      :main-opts ["-m" "quality.conventions-check"]}
   :lint/splint {:extra-deps {io.github.noahtheduke/splint {:mvn/version "1.21.0"}}
-                :main-opts ["-m" "noahtheduke.splint" "--output" "clj-kondo" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src" "test/clojure"]}
-  :reflect-check {:extra-paths ["scripts" "spools/batteries/src" "spools/unsafe-text-search/src" "examples/guild/src"]
+                :main-opts ["-m" "noahtheduke.splint" "--output" "clj-kondo" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure"]}
+  :reflect-check {:extra-paths ["scripts" "spools/batteries/src" "spools/unsafe-text-search/src"]
                   :jvm-opts ["--enable-native-access=ALL-UNNAMED" "-Dclojure.compiler.direct-linking=true"]
                   :main-opts ["-m" "quality.reflect-check"]}
   :deps/antq {:extra-deps {com.github.liquidz/antq {:mvn/version "2.11.1276"}}

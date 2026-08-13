@@ -67,8 +67,6 @@ The batteries and unsafe-text-search spools remain in this checkout under `spool
 | `millstrand.spools.dresser` | *(none approved in this repo)* | [Dresser README](https://github.com/codethread/dresser.spool#readme) | [Dresser README](https://github.com/codethread/dresser.spool#readme) | Brings a repo onto shared working conventions and surfaces convention upgrades later. |
 [millhouse-docs]: https://codethread.github.io/millhouse.spool/
 
-`guild` is a never-activated reference root. This repo carries its source and tests, but adds no `.millstrand/spools.edn` coordinate. A downstream user opts in by adding one.
-
 ## External spool consumption
 
 External spool contracts live with their projects. The index links to each project's deployed documentation or README; `.millstrand/spools.edn` is the local source of truth for its approved coordinate and pin. [Writing shared spools](../docs/spools/writing-shared-spools.md) covers coordinate shape and publishing, [customisation](../docs/spools/customisation.md) covers activating config changes, and `strand spool status` shows what the runtime serves.
@@ -85,10 +83,6 @@ Tests consume each approved coordinate rather than carrying another pin. Develop
 The override inherits the shared family's `:roots`, `:requires`, and `:millstrand/min` declarations.
 
 `millstrand.spools.dresser` ([`codethread/dresser.spool`](https://github.com/codethread/dresser.spool#readme)) is also external, but this repo approves no coordinate for it. Dresser is activated in whichever workspace drives a setup run, and the repo being set up needs no weaver or spool approvals of its own, so consumption is a per-operator choice. Its README carries the dependency and activation recipe.
-
-## Guild example
-
-Guild is kept as a quality-gated example under [`examples/guild`](../examples/guild). It is not approved or activated by this repository's default workspace. Its contract, cookbook, API reference, and source are for study rather than a supported setup path.
 
 ## Shipped source-root: batteries
 

@@ -15,7 +15,7 @@ cd "$root"
 transition_status="$(clojure -M:transition-check --scope pinned-external-spool-suite)"
 case "$transition_status" in
   DEFERRED)
-    echo "spool-suite-gate: deferred by PROP-Msr-001.S6 for Kanban v24's historical in-tree Guild fixture"
+    echo "spool-suite-gate: deferred by PROP-Msr-001.S6 pending the authorized Guild-free Kanban successor pin"
     exit 0
     ;;
   ACTIVE) ;;
@@ -72,7 +72,7 @@ materialize kanban.spool "$kurl" "$ksha" io.github.codethread/kanban.spool
 materialize agent-harness.spool "$aurl" "$asha" io.github.codethread/agent-run.agent-harness
 
 dcmd="clojure -M:test"
-kcmd="clojure -Sdeps '{:aliases {:millstrand-suite {:extra-paths [\"../millstrand-src/examples/guild/src\"]}}}' -M:test:millstrand-suite"
+kcmd="clojure -M:test"
 acmd="clojure -M:test"
 run_suite() {
   local name="$1" sha="$2" command="$3"

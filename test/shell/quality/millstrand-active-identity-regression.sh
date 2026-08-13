@@ -6,13 +6,14 @@ tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/millstrand-identity.XXXXXX")
 trap 'rm -rf "$tmp_root"' EXIT
 
 git -C "$repo_root" archive --format=tar HEAD | tar -xf - -C "$tmp_root"
+# HEAD predates this deletion, so remove the retired example from the extracted
+# fixture before copying the current quality files under test.
+rm -rf "$tmp_root/examples" "$tmp_root/test/clojure/millstrand/guild_test.clj"
 cp "$repo_root/scripts/quality/millstrand-active-identity.sh" \
   "$tmp_root/scripts/quality/millstrand-active-identity.sh"
 cp "$repo_root/scripts/quality/millstrand-identity-allowlist.tsv" \
   "$tmp_root/scripts/quality/millstrand-identity-allowlist.tsv"
 cp "$repo_root/mkdocs.yml" "$tmp_root/mkdocs.yml"
-cp -R "$repo_root/examples" "$tmp_root/examples"
-cp "$repo_root/test/clojure/millstrand/guild_test.clj" "$tmp_root/test/clojure/millstrand/guild_test.clj"
 cp "$repo_root/scripts/generate_api_docs.clj" "$tmp_root/scripts/generate_api_docs.clj"
 cp "$repo_root/scripts/spool-suite-gate" "$tmp_root/scripts/spool-suite-gate"
 cp "$repo_root/scripts/quality/reflect_check.clj" "$tmp_root/scripts/quality/reflect_check.clj"

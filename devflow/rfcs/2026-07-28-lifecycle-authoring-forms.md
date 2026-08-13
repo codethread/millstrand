@@ -554,8 +554,6 @@ This RFC discusses whether replacing the callback is a worthwhile and feasible d
 - **Minimum surface:** P14.O6 records the required comparison with existing forms and composition. The three-form sketch is not yet justified as the minimum public API.
 - **Reconcile terminology:** `defconvergence` may rename an existing published concept. It stays provisional until a prototype proves a distinct semantic boundary.
 - **Governing records:** a feature proposal must enumerate the changes to ADR-003 Decisions A and D, SPEC-003.C17d, SPEC-004.C46/C46b/C74a, and the existing “no generic effect callbacks in the registry kernel” boundary. A lifecycle engine may remain coordinator machinery rather than registry-kernel callbacks, but the distinction must be made explicit.
-- **Guild-shaped behavior:** Guild resets runtime-owned declarations and republishes them from one reconciler. Its migration may expose a contribution/lifecycle boundary that the three sketched forms do not yet cover.
-
 None is presently known to make the direction impossible. Cross-module triggers, retained runtime-stop cleanup, atomic clusters, and degraded-effect scheduling all have plausible implementation seams in the current coordinator. They remain claims to test, not settled design.
 
 - **RFC-Laf-001.Q1:** Are `defreaction`, `defresource`, and `defconvergence` the right public names? The semantic split is proposed; naming should be tested against real migrations.

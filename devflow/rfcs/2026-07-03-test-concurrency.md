@@ -29,8 +29,7 @@ Verified current state (2026-07-03):
   any runtime: shuttle (`harness-registry`, `in-flight`,
   `preamble-extension`, reconcile state), chime (`notifier-binding`,
   `rule-registry`, `seen-notifications`, `failure-log`, `scanned-batch-ids`),
-  guild (`guild-ops`, `deprecated-ops`, `fallback-guild-name`), treadle
-  (`scan-monitor`). Parallel tests would race on these even with independent
+  treadle (`scan-monitor`). Parallel tests would race on these even with independent
   runtimes.
 - **RFC-016.P1.5:** `clojure.repl.deps/add-libs` (spool sync of approved local
   roots) mutates JVM-global classpath/basis state. `skein.test-runner` already
@@ -52,7 +51,7 @@ Verified current state (2026-07-03):
   still has exactly one published ambient runtime, `skein.api.current.alpha`
   and trusted startup config keep working unchanged, and publishing a second
   runtime in one process still fails loudly.
-- **RFC-016.G3:** Spool state (shuttle, chime, guild, treadle) becomes
+- **RFC-016.G3:** Spool state (shuttle, chime, treadle) becomes
   runtime-owned so independent runtimes do not share or reset each other's
   registries.
 - **RFC-016.G4:** `clojure -M:test` runs parallel-safe namespaces concurrently
@@ -108,7 +107,7 @@ Split "a runtime exists in this JVM" from "this process's ambient runtime":
 - **RFC-016.D2.1:** The runtime map grows a generic `:spool-state` slot
   (atom of spool-keyed state), with a small blessed accessor in
   `skein.api.runtime.alpha` so spools do not reach into runtime internals.
-- **RFC-016.D2.2:** Shuttle, chime, guild, and treadle move their module-level
+- **RFC-016.D2.2:** Shuttle, chime, and treadle move their module-level
   atoms/monitors into runtime-owned state and take/resolve the runtime
   explicitly (shuttle's `*runtime*`/`(rt)` pattern generalizes via D1.2's
   binding).
