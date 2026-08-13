@@ -49,6 +49,10 @@
 (def handler-started (atom (promise)))
 (def handler-release (atom (promise)))
 (def module-contributions (atom {}))
+(def module-lifecycle
+  "Current lifecycle declaration used by source-backed module fixtures."
+  (atom {:effect-id :old-effect
+         :options {:apply 'millstrand.core.weaver.modules-test/lifecycle-marker}}))
 (def bad-lifecycle-callable
   "Malformed lifecycle value used to prove resolution requires a function."
   :not-a-function)
@@ -88,7 +92,15 @@
     (reset! handler-started (promise))
     (reset! handler-release (promise))
     (reset! module-contributions {})
+    (reset! module-lifecycle
+            {:effect-id :old-effect
+             :options {:apply 'millstrand.core.weaver.modules-test/lifecycle-marker}})
     (f)))
+
+(defn lifecycle-marker
+  "Return the lifecycle effect id from its execution context."
+  [{:keys [effect/id]}]
+  id)
 (defn test-op [{:op/keys [name argv]}]
   {:operation name :argv argv})
 
@@ -728,6 +740,45 @@
           (is (= :unchanged (:status outcome)))
           (is (= valid-query (get (graph/queries rt) "owned"))
               "image replay retains the last successfully published set"))))))
+
+(deftest image-replay-retains-lifecycle-from-unchanged-contribution
+  (with-runtime
+    (fn [rt _db-file]
+      (let [workspace (get-in rt [:metadata :config-dir])
+            suffix (str/replace (str (random-uuid)) "-" "")
+            source "modules/image-retained-lifecycle.clj"
+            module-ns (symbol (str "test.module.image-retained-lifecycle-" suffix))]
+        (module-source!
+         workspace source module-ns
+         (str "(let [{:keys [effect-id options]} "
+              "@millstrand.core.weaver.modules-test/module-lifecycle]\n"
+              "  (runtime/collect-lifecycle! effect-id\n"
+              "    ((requiring-resolve 'millstrand.api.lifecycle.alpha/seed-declaration)"
+              " options)))"))
+        (reset! module-contributions {:lifecycle-owner {}})
+        (is (= :applied
+               (:status (weaver-runtime/declare-module!
+                         rt :lifecycle-owner {:file source}))))
+        (is (contains? (get-in (weaver-runtime/module-status rt)
+                               [:lifecycle/outcomes :lifecycle-owner])
+                       :old-effect))
+        (swap! module-lifecycle assoc :effect-id :new-effect)
+        (let [updated (weaver-runtime/refresh-modules! rt
+                                                       {:only [:lifecycle-owner]})
+              outcome (get-in updated [:modules :lifecycle-owner])]
+          (is (= :applied (:status updated)))
+          (is (= :unchanged (:contribution/status outcome)))
+          (is (contains? (:lifecycle/outcomes outcome) :new-effect)))
+        (let [image (runtime/module! rt :lifecycle-owner
+                                     {:ns module-ns :load :image})
+              outcome (get-in image [:modules :lifecycle-owner])
+              lifecycle-status (get-in (weaver-runtime/module-status rt)
+                                       [:lifecycle/outcomes :lifecycle-owner])]
+          (is (= :image (:source/status outcome)))
+          (is (= :unchanged (:status outcome)))
+          (is (contains? lifecycle-status :new-effect)
+              "image replay sees the newer lifecycle declaration")
+          (is (not (contains? lifecycle-status :old-effect))))))))
 
 (deftest plan-dry-run-reports-intentions-without-publishing-or-recording
   (with-runtime

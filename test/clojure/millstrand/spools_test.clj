@@ -900,7 +900,9 @@
             (write-spools! config-dir (pr-str {:spools {lib {:git/url url :git/sha sha}}}))
             (is (= :loaded (get-in (sync-approved! rt) [:spools lib :status])))
             (is (= :fetched (get-in (sync-state rt) [:spools lib :fetch])))
-            (is (false? (.exists (io/file cache-dir "millstrand" "spools" sha ".git"))))
+            (let [cache-root (io/file cache-dir "millstrand" "spools" sha)]
+              (is (.isDirectory (io/file cache-root ".git")))
+              (is (= sha (str/trim (run-git! cache-root "rev-parse" "HEAD")))))
             (delete-tree! repo)
             (let [result (get-in (sync-approved! rt) [:spools lib])]
               (is (= :already-available (:status result)))

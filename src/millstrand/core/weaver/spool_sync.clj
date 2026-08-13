@@ -994,8 +994,7 @@
       (let [full (run-git tmp "fetch" (:git/url entry) (:git/sha entry))]
         (when-not (zero? (:exit full))
           (fetch-advertised-refs! entry tmp cache-root)))))
-  (checked-git tmp "checkout" "--detach" (:git/sha entry))
-  (delete-tree! (io/file tmp ".git")))
+  (checked-git tmp "checkout" "--detach" (:git/sha entry)))
 
 (defn- move-git-spool-to-cache! [^java.io.File tmp ^java.io.File cache-root]
   (try

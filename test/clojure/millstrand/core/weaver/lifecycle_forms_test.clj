@@ -123,7 +123,7 @@
       (is (= :millstrand.api.lifecycle.alpha/resource
              (:family (ex-data wrong-family)))))
     (eval-in-test-ns '(lifecycle/defseed malformed-seed "Malformed."
-                       {:apply 'millstrand.core.weaver.lifecycle-forms-test/sample-call}))
+                        {:apply 'millstrand.core.weaver.lifecycle-forms-test/sample-call}))
     (let [target (ns-resolve test-ns 'malformed-seed)
           original (:millstrand.api.authoring.alpha/declaration (meta target))]
       (try

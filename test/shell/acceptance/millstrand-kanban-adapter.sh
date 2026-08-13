@@ -66,6 +66,8 @@ jq -e --arg sha "$kanban_sha" --arg url "$kanban_url" \
 resolved_root=$(jq -er '.spools["codethread/kanban"].root' "$baseline")
 [[ "$(basename "$resolved_root")" == "$kanban_sha" ]]
 [[ -f "$resolved_root/deps.edn" ]]
+[[ "$(git -C "$resolved_root" rev-parse --is-inside-work-tree)" == true ]]
+[[ "$(git -C "$resolved_root" rev-parse HEAD)" == "$kanban_sha" ]]
 [[ -z "$(find "$gitlibs_root" -mindepth 1 -print -quit)" ]]
 
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \

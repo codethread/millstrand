@@ -833,6 +833,12 @@
          order)]
     (update staged :outcomes #(select-keys % order))))
 
+(defn- retainable-staged-declarations?
+  [raw-outcome outcome]
+  (and (#{:applied :unchanged} (:status outcome))
+       (= :ready (:status raw-outcome))
+       (= :loaded (:source/status raw-outcome))))
+
 (defn- retain-staged-declarations!
   "Retain declaration records only for modules whose candidates staged.
 
@@ -841,9 +847,9 @@
   record untouched, while the outer refresh snapshot still rolls back records
   if a later coordinator-wide validation or publication step refuses."
   [raw outcomes]
-  (doseq [[module-key outcome] outcomes
-          :when (= :applied (:status outcome))
-          :let [raw-outcome (get raw module-key)]]
+  (doseq [[module-key raw-outcome] raw
+          :let [outcome (get outcomes module-key)]
+          :when (retainable-staged-declarations? raw-outcome outcome)]
     (retain-declarations!
      module-key
      (:module/namespace raw-outcome)
