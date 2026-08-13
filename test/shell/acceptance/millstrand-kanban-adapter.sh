@@ -54,13 +54,24 @@ exec 3< <(exec env GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STAT
 mill_pid=$!
 mill_ready_line=""
 read_status=0
-while IFS= read -r -t 10 mill_line <&3; do
-  printf '%s\n' "$mill_line" >>"$mill_log"
-  if [[ "$mill_line" == mill\ listening\ state_root=* ]]; then
-    mill_ready_line="$mill_line"
+read_deadline=$((SECONDS + 10))
+while :; do
+  read_timeout=$((read_deadline - SECONDS))
+  if (( read_timeout <= 0 )); then
+    read_status=142
     break
   fi
-done || read_status=$?
+  if IFS= read -r -t "$read_timeout" mill_line <&3; then
+    printf '%s\n' "$mill_line" >>"$mill_log"
+    if [[ "$mill_line" == mill\ listening\ state_root=* ]]; then
+      mill_ready_line="$mill_line"
+      break
+    fi
+  else
+    read_status=$?
+    break
+  fi
+done
 
 if [[ -z "$mill_ready_line" ]]; then
   if (( read_status == 1 )); then
