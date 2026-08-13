@@ -4,15 +4,14 @@
   `make deps-report` runs the clj-watson NVD deep scan + govulncheck locally
   (the fast github-advisory gate stays in CI). This job runs that scan on every
   maintainer's weaver every ~6 days. Because every weaver runs it, a `scan-lock
-  running` GitHub issue is a best-effort lock — an OPEN one means another
-  maintainer is scanning right now — and +/-1h jitter keeps concurrent weavers
-  from all firing at once. Coordination is best-effort (a double-scan is
+  running` GitHub issue is a best-effort lock. An OPEN issue means another
+  maintainer is scanning right now. +/-1h jitter keeps concurrent weavers from
+  all firing at once. Coordination is best-effort (a double-scan is
   harmless); silent failure is not, so a missing API key or a gh/scan error
   lands loudly in `(cron/failures)`.
 
   Every side effect (gh, the login-shell scan, the kanban card) is injected into
-  `run-nvd-scan!` so the lock flow is unit-testable without shelling out — see
-  test/clojure/millstrand/nvd_scan_test.clj.
+  `run-nvd-scan!` so the lock flow is unit-testable without shelling out.
 
   This is its own init.clj module (not part of ct/policy/config.clj), so
   config_test's direct ct/policy/config.clj load never registers the job."
