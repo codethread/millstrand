@@ -13,7 +13,7 @@
   Every side effect (gh, the login-shell scan, the kanban card) is injected
   into `run-nvd-scan!` so the lock flow is unit-testable without shelling out —
   see test/clojure/millstrand/nvd_scan_test.clj. This is its own init.clj module (not part of
-  policy/config.clj) so config_test's direct policy/config.clj load never registers the job."
+  ct/policy/config.clj) so config_test's direct ct/policy/config.clj load never registers the job."
   (:require [clojure.data.json :as json]
             [millhouse.spools.cron :as cron]))
 

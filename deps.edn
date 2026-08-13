@@ -41,26 +41,26 @@
         :main-opts ["-m" "millstrand.e2e"]}
   :format {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
            :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts"
-                       ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
-                       ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
-                       ".millstrand/workflows/story.clj"
-                       ".millstrand/workflows/explore.clj" ".millstrand/workflows/fix.clj"
-                       ".millstrand/workflows/land_policy.clj" ".millstrand/agents/guide.clj"
-                       ".millstrand/agents/reviewers.clj" ".millstrand/agents/delegation_contracts.clj"
-                       ".millstrand/notifications/attention.clj"
-                       ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/help.clj"
-                       ".millstrand/adapters/kanban.clj"]}
+                       ".millstrand/init.clj" ".millstrand/ct/policy/config.clj" ".millstrand/ct/workflows/support.clj"
+                       ".millstrand/ct/workflows/common.clj" ".millstrand/ct/workflows/land.clj"
+                       ".millstrand/ct/workflows/story.clj"
+                       ".millstrand/ct/workflows/explore.clj" ".millstrand/ct/workflows/fix.clj"
+                       ".millstrand/ct/workflows/land_policy.clj" ".millstrand/ct/agents/guide.clj"
+                       ".millstrand/ct/agents/reviewers.clj" ".millstrand/ct/agents/delegation_contracts.clj"
+                       ".millstrand/ct/notifications/attention.clj"
+                       ".millstrand/ct/jobs/nvd_scan.clj" ".millstrand/ct/adapters/help.clj"
+                       ".millstrand/ct/adapters/kanban.clj"]}
   :format/fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
                :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts"
-                           ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
-                           ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
-                           ".millstrand/workflows/story.clj"
-                           ".millstrand/workflows/explore.clj" ".millstrand/workflows/fix.clj"
-                           ".millstrand/workflows/land_policy.clj" ".millstrand/agents/guide.clj"
-                           ".millstrand/agents/reviewers.clj" ".millstrand/agents/delegation_contracts.clj"
-                           ".millstrand/notifications/attention.clj"
-                           ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/help.clj"
-                           ".millstrand/adapters/kanban.clj"]}
+                           ".millstrand/init.clj" ".millstrand/ct/policy/config.clj" ".millstrand/ct/workflows/support.clj"
+                           ".millstrand/ct/workflows/common.clj" ".millstrand/ct/workflows/land.clj"
+                           ".millstrand/ct/workflows/story.clj"
+                           ".millstrand/ct/workflows/explore.clj" ".millstrand/ct/workflows/fix.clj"
+                           ".millstrand/ct/workflows/land_policy.clj" ".millstrand/ct/agents/guide.clj"
+                           ".millstrand/ct/agents/reviewers.clj" ".millstrand/ct/agents/delegation_contracts.clj"
+                           ".millstrand/ct/notifications/attention.clj"
+                           ".millstrand/ct/jobs/nvd_scan.clj" ".millstrand/ct/adapters/help.clj"
+                           ".millstrand/ct/adapters/kanban.clj"]}
   :lint/clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                    :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure"]}
   :lint/conventions {:extra-paths ["scripts"]

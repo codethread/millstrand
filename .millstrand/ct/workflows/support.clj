@@ -9,13 +9,17 @@
   (and (string? v) (not (str/blank? v))))
 
 (def scripts-dir
-  "Return the directory containing this workspace's standalone workflow scripts."
-  (.getParentFile (io/file *file*)))
+  "Directory containing this workspace's standalone workflow scripts."
+  (io/file (-> (io/file *file*)
+               .getParentFile
+               .getParentFile
+               .getParentFile)
+           "workflows" "scripts"))
 
 (defn script
   "Return the frozen source of named workspace script."
   [name]
-  (slurp (io/file scripts-dir "scripts" name)))
+  (slurp (io/file scripts-dir name)))
 
 (defn sh-gate
   "Return shell argv that runs script with name as `$0` and args as positionals."

@@ -159,7 +159,7 @@ Contract: [`spools/batteries.md`](../spools/batteries.md).
 
 ## Repo workflows
 
-Registered by the modules under `.millstrand/workflows/` and `.millstrand/policy/config.clj`.
+Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/policy/config.clj`.
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |

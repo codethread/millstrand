@@ -169,7 +169,7 @@
 (deftest direct-workspace-path-catches-a-test-before-it-adopts-the-namespace
   (with-modules
     {"config-ops" (str "(ns millstrand.config-ops-test \"Doc.\")\n"
-                       "(load-file \".millstrand/policy/config.clj\")\n")}
+                       "(load-file \".millstrand/ct/policy/config.clj\")\n")}
     (fn [dirs]
       (let [dir (dirs "config-ops")
             file (.getPath (io/file dir "alpha.clj"))
@@ -179,11 +179,11 @@
                       (.getPath dir))]
         (is (= 1 (count findings)))
         (is (str/includes? (first findings)
-                           "direct workspace path `.millstrand/policy/config.clj`")))))
+                           "direct workspace path `.millstrand/ct/policy/config.clj`")))))
   (testing "incidental and disposable-workspace strings stay out of scope"
     (with-modules
       {"generic" (str "(ns millstrand.generic-test \"Doc.\")\n"
-                      "(def paths [\"mentions .millstrand/policy/config.clj\"\n"
+                      "(def paths [\"mentions .millstrand/ct/policy/config.clj\"\n"
                       "            \".millstrand\"\n"
                       "            \"/tmp/world/.millstrand/init.clj\"])\n")}
       (fn [dirs]

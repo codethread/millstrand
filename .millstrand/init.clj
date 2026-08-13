@@ -8,14 +8,15 @@
 ;; authoring forms. Declarations carry only a source target and world policy.
 ;;
 ;; File-per-concern map (each Clojure file is one module):
-;;   policy/config.clj            — named queries + shared validation helpers
-;;   workflows/                   — workflow definitions, policy, support, and scripts
-;;   agents/guide.clj             — guide op: surface questions answered by a run
-;;   agents/reviewers.clj         — reviewer rosters
-;;   agents/delegation_contracts.clj — workspace task and review contracts
-;;   notifications/attention.clj  — chime attention rules
-;;   jobs/nvd_scan.clj            — NVD scan cron job
-;;   adapters/module.clj          — repo election of the batteries help transform
+;;   ct/policy/config.clj         — named queries + shared validation helpers
+;;   ct/workflows/               — workflow definitions, policy, and support
+;;   workflows/scripts/          — standalone workflow shell scripts
+;;   ct/agents/guide.clj          — guide op: surface questions answered by a run
+;;   ct/agents/reviewers.clj      — reviewer rosters
+;;   ct/agents/delegation_contracts.clj — workspace task and review contracts
+;;   ct/notifications/attention.clj — chime attention rules
+;;   ct/jobs/nvd_scan.clj         — NVD scan cron job
+;;   ct/adapters/help.clj         — repo election of the batteries help transform
 ;;   Codethread roots             — shared agents, Devflow setup, and Ralph
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and every
@@ -36,7 +37,7 @@
                   :spools ['millstrand.spools/batteries]})
 
 (runtime/module! runtime :module-adapters
-                 {:file "adapters/help.clj"
+                 {:file "ct/adapters/help.clj"
                   :after [:millstrand/spools-batteries]})
 
 ;; --- workflow engine + shell executor -------------------------------------
@@ -130,10 +131,10 @@
                   :spools ['codethread/agents 'ct.spools/delegation 'ct.spools/agent-run]
                   :after [:millstrand/spools-shuttle :millstrand/spools-delegation]
                   :required? true})
-;; agents/guide.clj publishes the `guide` op, which spawns its answer as an agent run on
+;; ct/agents/guide.clj publishes the `guide` op, which spawns its answer as an agent run on
 ;; a shared Codethread seat, so it orders after the shared agents module.
 (runtime/module! runtime :guide
-                 {:file "agents/guide.clj"
+                 {:file "ct/agents/guide.clj"
                   :spools ['ct.spools/agent-run]
                   :after [:millstrand/spools-shuttle :codethread/agents]
                   :required? true})
@@ -142,7 +143,7 @@
 ;; Roster harness aliases resolve at review time, not registration time, so order
 ;; relative to the shared Codethread agents module is not load-bearing.
 (runtime/module! runtime :reviewers
-                 {:file "agents/reviewers.clj"
+                 {:file "ct/agents/reviewers.clj"
                   :spools ['ct.spools/delegation]
                   :after [:millstrand/spools-delegation]
                   :required? true})
@@ -150,14 +151,14 @@
 ;; delegation spools. Keep this resource after their shared Codethread agents
 ;; contribution so it binds the exported worker/review contract text in order.
 (runtime/module! runtime :delegation-contracts
-                 {:file "agents/delegation_contracts.clj"
+                 {:file "ct/agents/delegation_contracts.clj"
                   :spools ['ct.spools/agent-run 'ct.spools/delegation]
                   :after [:codethread/agents :millstrand/spools-shuttle
                           :millstrand/spools-delegation]
                   :required? true})
 
 ;; --- chime notification engine + this repo's attention rules ----------------
-;; Chime is vocabulary-agnostic; notifications/attention.clj contributes this repo's attention
+;; Chime is vocabulary-agnostic; ct/notifications/attention.clj contributes this repo's attention
 ;; rules (HITL checkpoints, kanban completion, and parked runs) with defrule, and
 ;; each developer binds how they are notified in
 ;; gitignored init.local.clj. Chime's defresource owns its handler, mutation
@@ -168,7 +169,7 @@
                   :spools ['millhouse.spools/chime]
                   :required? true})
 (runtime/module! runtime :attention
-                 {:file "notifications/attention.clj"
+                 {:file "ct/notifications/attention.clj"
                   :spools ['millhouse.spools/chime 'ct.spools/agent-run]
                   :after [:millhouse/spools-chime :millstrand/spools-shuttle]
                   :required? true})
@@ -181,7 +182,7 @@
                   :spools ['codethread/kanban]
                   :required? true})
 (runtime/module! runtime :millstrand/spools-kanban-adapter
-                 {:file "adapters/kanban.clj"
+                 {:file "ct/adapters/kanban.clj"
                   :spools ['codethread/kanban]
                   :after [:millstrand/spools-kanban]
                   :required? true})
@@ -200,33 +201,33 @@
                   :required? true})
 ;; --- cron timer engine + the NVD scan job -----------------------------------
 ;; Cron is a generic weaver timer engine. Its collected open-kind and lifecycle
-;; declarations own job publication and scheduling; jobs/nvd_scan.clj contributes a
+;; declarations own job publication and scheduling; ct/jobs/nvd_scan.clj contributes a
 ;; job through `defjob`, so it is ordered after cron.
 (runtime/module! runtime :millhouse/spools-cron
                  {:ns 'millhouse.spools.cron
                   :spools ['millhouse.spools/cron]
                   :required? true})
-;; The NVD scan job is its own module (not part of policy/config.clj) so config_test's
-;; direct policy/config.clj load never registers the job or seeds against real gh.
+;; The NVD scan job is its own module (not part of ct/policy/config.clj) so config_test's
+;; direct ct/policy/config.clj load never registers the job or seeds against real gh.
 (runtime/module! runtime :nvd-scan
-                 {:file "jobs/nvd_scan.clj"
+                 {:file "ct/jobs/nvd_scan.clj"
                   :spools ['millhouse.spools/cron]
                   :after [:millhouse/spools-cron :millstrand/spools-kanban]
                   :required? true})
 
 ;; --- config queries/helpers and hand-authored workflows ---------------------
-;; policy/config.clj authors named queries with defquery and public validation helpers.
+;; ct/policy/config.clj authors named queries with defquery and public validation helpers.
 (runtime/module! runtime :config
-                 {:file "policy/config.clj"
+                 {:file "ct/policy/config.clj"
                   :required? true})
 ;; Shared script sources load before the focused workflow modules.
 (runtime/module! runtime :workflows.support
-                 {:file "workflows/support.clj"
+                 {:file "ct/workflows/support.clj"
                   :after [:config]
                   :required? true})
-;; workflows/common.clj owns the shared authoring patterns.
+;; ct/workflows/common.clj owns the shared authoring patterns.
 (runtime/module! runtime :workflows
-                 {:file "workflows/common.clj"
+                 {:file "ct/workflows/common.clj"
                   :spools ['millhouse.spools/workflow 'ct.spools/delegation]
                   :after [:millhouse/spools-workflow :millstrand/spools-delegation
                           :config :workflows.support]
@@ -235,31 +236,31 @@
 ;; these modules independent lets a change to one routine refresh its own
 ;; contribution without growing a broad definitions file.
 (runtime/module! runtime :workflows.land
-                 {:file "workflows/land.clj"
+                 {:file "ct/workflows/land.clj"
                   :spools ['millhouse.spools/workflow 'ct.spools/delegation]
                   :after [:millhouse/spools-workflow :millstrand/spools-delegation
                           :reviewers :workflows.support]
                   :required? true})
 (runtime/module! runtime :workflows.story
-                 {:file "workflows/story.clj"
+                 {:file "ct/workflows/story.clj"
                   :spools ['millhouse.spools/workflow 'ct.spools/delegation]
                   :after [:millhouse/spools-workflow :millstrand/spools-delegation
                           :workflows.support]
                   :required? true})
 (runtime/module! runtime :workflows.explore
-                 {:file "workflows/explore.clj"
+                 {:file "ct/workflows/explore.clj"
                   :spools ['millhouse.spools/workflow]
                   :after [:millhouse/spools-workflow :workflows.support]
                   :required? true})
 (runtime/module! runtime :workflows.fix
-                 {:file "workflows/fix.clj"
+                 {:file "ct/workflows/fix.clj"
                   :spools ['millhouse.spools/workflow]
                   :after [:millhouse/spools-workflow :workflows.support]
                   :required? true})
-;; workflows/land_policy.clj owns the narrow land policy op: merge lock, merge queue,
+;; ct/workflows/land_policy.clj owns the narrow land policy op: merge lock, merge queue,
 ;; and kanban lane moves. It loads after the land definitions it drives.
 (runtime/module! runtime :workflows.land-policy
-                 {:file "workflows/land_policy.clj"
+                 {:file "ct/workflows/land_policy.clj"
                   :spools ['millhouse.spools/workflow]
                   :after [:millhouse/spools-workflow :workflows
                           :workflows.land]
