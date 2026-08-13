@@ -164,6 +164,22 @@
     (is (= :prepared-declaration-token (:expected (ex-data error))))
     (is (= original-meta (meta target)))))
 
+(deftest reflective-prepared-declaration-forgery-fails-before-metadata-mutation
+  (let [target (ns-resolve test-ns 'library-widget)
+        original-meta (meta target)
+        prepared-class (Class/forName
+                        "millstrand.api.authoring.alpha.PreparedDeclaration")
+        constructor (.getDeclaredConstructor
+                     ^Class prepared-class
+                     (into-array Class [Object Object]))
+        forged (.newInstance
+                ^java.lang.reflect.Constructor constructor
+                (object-array [{:forged true} (Object.)]))
+        error (exception #(authoring/install-declaration! target forged))]
+    (is (= :invalid-prepared-declaration (:reason (ex-data error))))
+    (is (= :prepared-declaration-token (:expected (ex-data error))))
+    (is (= original-meta (meta target)))))
+
 (deftest typed-selection-rejects-the-wrong-family-with-actionable-data
   (let [error (exception
                #(eval-in-test-ns '(use-widget! gadget-declaration)))]

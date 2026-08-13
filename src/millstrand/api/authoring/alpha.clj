@@ -19,7 +19,8 @@
 (def ^:private protocol-version 1)
 (def ^:private declaration-keys
   #{:protocol :family :channel :kind :key :entry :var})
-(deftype ^:private PreparedDeclaration [descriptor])
+(def ^:private prepared-declaration-capability (Object.))
+(deftype ^:private PreparedDeclaration [descriptor ^Object capability])
 (def ^:private expansion-plan-keys
   #{:name :definition :kind :key :entry :use-options})
 (def ^:private registry-use-option-keys #{:override?})
@@ -96,10 +97,12 @@
                   extras)))
 
 (defn- prepared-declaration [descriptor]
-  (PreparedDeclaration. descriptor))
+  (PreparedDeclaration. descriptor prepared-declaration-capability))
 
 (defn- prepared-declaration? [value]
-  (instance? PreparedDeclaration value))
+  (and (instance? PreparedDeclaration value)
+       (identical? prepared-declaration-capability
+                   (.-capability ^PreparedDeclaration value))))
 
 (defn- prepared-descriptor [prepared]
   (.-descriptor ^PreparedDeclaration prepared))
