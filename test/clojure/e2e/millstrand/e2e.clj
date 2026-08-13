@@ -1211,7 +1211,7 @@
                        "   :doc " (pr-str "Return the live-cutover proof value.") "\n"
                        "   :hook-class :read\n"
                        "   :deadline-class :standard})\n\n"
-                       "(millstrand/defop e2e-live\n"
+                       "(millstrand/defop! e2e-live\n"
                        "  " (pr-str "Return the live-cutover proof value.") "\n"
                        "  {:arg-spec live-arg-spec}\n"
                        "  [_]\n"

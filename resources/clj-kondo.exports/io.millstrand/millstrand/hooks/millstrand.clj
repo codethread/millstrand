@@ -153,3 +153,15 @@
                   (list (api/token-node 'def)
                         name-node docstring-node value-node))]
     {:node (with-meta def-node (meta node))}))
+
+(defn defauthoring
+  "Analyze the shared authoring-family generator without linting its plan body."
+  [context]
+  (let [[node _] (hook-children :defauthoring context 3 false)]
+    {:node (with-meta (api/list-node [(api/token-node 'do)]) (meta node))}))
+
+(defn deflifecycle
+  "Analyze the lifecycle-family generator without linting its plan body."
+  [context]
+  (let [[node _] (hook-children :deflifecycle context 3 false)]
+    {:node (with-meta (api/list-node [(api/token-node 'do)]) (meta node))}))

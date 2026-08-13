@@ -134,7 +134,7 @@
   "Return one source-level `defbin` form for the acceptance fixtures."
   [name executable & {:keys [build override?]}]
   (str "(require '[millstrand.api.millstrand.alpha :as millstrand])\n"
-       "(millstrand/defbin " name " \"" name "\" "
+       "(millstrand/defbin! " name " \"" name "\" "
        (pr-str (cond-> {:executable executable}
                  build (assoc :build build)
                  override? (assoc :override? true))) ")\n"))

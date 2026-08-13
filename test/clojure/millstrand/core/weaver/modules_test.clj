@@ -1183,7 +1183,7 @@
             handler-sym (symbol (str module-ns) "module-handler")]
         (module-source!
          workspace source module-ns
-         (str "(millstrand.api.millstrand.alpha/defhandler module-handler\n"
+         (str "(millstrand.api.millstrand.alpha/defhandler! module-handler\n"
               "  \"Capture a module event.\"\n"
               "  {:types #{:module/test}}\n"
               "  [event]\n"

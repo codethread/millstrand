@@ -22,13 +22,13 @@
    :deadline-class :standard
    :positionals [{:name :text :type :string :required? true :doc "Text to echo."}]})
 
-(millstrand/defop authoring-fixture-echo
+(millstrand/defop! authoring-fixture-echo
   "Echo the positional text back to the caller."
   {:arg-spec echo-arg-spec}
   [ctx]
   {:echoed (:text (:op/args ctx))})
 
-(millstrand/defquery authoring-fixture-owned
+(millstrand/defquery! authoring-fixture-owned
   "Return strands owned by the authoring-forms fixture."
   {:usage "strand list --query authoring-fixture-owned"}
   [:= [:attr :owner] "authored"])
@@ -47,7 +47,7 @@
                         :attributes {:phase "close"
                                      :opened (:opened resource)}}))
 
-(lifecycle/defresource authoring-fixture-marker
+(lifecycle/defresource! authoring-fixture-marker
   "Own the fixture's open/close phase markers."
   {:open 'millstrand.fixtures.authoring/open-authoring-fixture-marker!
    :close 'millstrand.fixtures.authoring/close-authoring-fixture-marker!})

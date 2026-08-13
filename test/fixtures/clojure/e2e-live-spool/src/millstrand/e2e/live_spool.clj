@@ -8,7 +8,7 @@
    :hook-class :read
    :deadline-class :standard})
 
-(millstrand/defop e2e-live
+(millstrand/defop! e2e-live
   "Return the live-add proof value."
   {:arg-spec live-arg-spec}
   [_]

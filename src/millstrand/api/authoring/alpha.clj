@@ -22,6 +22,7 @@
   #{:name :definition :kind :key :entry :use-options})
 (def ^:private registry-use-option-keys #{:override?})
 (def ^:private selection-keys #{:kind :key :entry :use-options})
+(defonce ^:private registry-entry-specs (atom {}))
 
 (defn- data-first-value? [value]
   (cond
@@ -92,6 +93,25 @@
            (merge {:value value :spec spec :explain (s/explain-data spec value)}
                   extras)))
 
+(defn register-registry-kind!
+  "Associate a public collector kind with its existing entry spec.
+
+  Built-in and domain authoring namespaces register this mapping before their
+  generated forms are used. The retained descriptor keeps the public collector
+  kind while the shared boundary consults the owning entry spec."
+  [kind entry-spec]
+  (when-not (and (keyword? kind) (qualified-keyword? entry-spec)
+                 (s/get-spec entry-spec))
+    (reject! "Registry authoring kind mapping is invalid"
+             :invalid-kind-mapping {:value [kind entry-spec]}
+             {:kind kind :entry-spec entry-spec}))
+  (swap! registry-entry-specs assoc kind entry-spec)
+  entry-spec)
+
+(defn- resolve-entry-spec [entry-spec]
+  (or (get @registry-entry-specs entry-spec)
+      entry-spec))
+
 (defn- conform! [spec value message reason form grammar]
   (let [conformed (s/conform spec value)]
     (if (= ::s/invalid conformed)
@@ -120,28 +140,29 @@
   this before executing their `def` or `defn`, so invalid authored values do not
   replace an existing Var."
   [family kind key entry var-symbol entry-spec form]
-  (when-not (and (qualified-keyword? entry-spec) (s/get-spec entry-spec))
-    (reject! "Registry authoring kind has no registered entry spec"
-             :missing-entry-spec {:form form :value entry-spec}
-             {:kind kind :entry-spec entry-spec}))
-  (when-not (s/valid? entry-spec entry)
-    (spec-rejection! "Registry authoring entry is invalid"
-                     :invalid-kind-entry entry-spec entry {:form form}
-                     {:kind kind :entry-spec entry-spec}))
-  (let [declaration {:protocol protocol-version
-                     :family family
-                     :channel :registry
-                     :kind kind
-                     :key key
-                     :entry entry
-                     :var var-symbol}]
-    (when-not (s/valid? ::declaration declaration)
-      (spec-rejection! "Registry authoring declaration is invalid"
-                       :invalid-declaration ::declaration declaration
-                       {:form form}
-                       {:expected-channel :registry
-                        :expected-protocol protocol-version}))
-    declaration))
+  (let [entry-spec (resolve-entry-spec entry-spec)]
+    (when-not (and (qualified-keyword? entry-spec) (s/get-spec entry-spec))
+      (reject! "Registry authoring kind has no registered entry spec"
+               :missing-entry-spec {:form form :value entry-spec}
+               {:kind kind :entry-spec entry-spec}))
+    (when-not (s/valid? entry-spec entry)
+      (spec-rejection! "Registry authoring entry is invalid"
+                       :invalid-kind-entry entry-spec entry {:form form}
+                       {:kind kind :entry-spec entry-spec}))
+    (let [declaration {:protocol protocol-version
+                       :family family
+                       :channel :registry
+                       :kind kind
+                       :key key
+                       :entry entry
+                       :var var-symbol}]
+      (when-not (s/valid? ::declaration declaration)
+        (spec-rejection! "Registry authoring declaration is invalid"
+                         :invalid-declaration ::declaration declaration
+                         {:form form}
+                         {:expected-channel :registry
+                          :expected-protocol protocol-version}))
+      declaration)))
 
 (defn install-declaration!
   "Attach a validated `::declaration` to `target`; return the Var.
@@ -157,17 +178,20 @@
   (let [{var-ns :ns var-name :name} (meta target)]
     (symbol (str (ns-name var-ns)) (str var-name))))
 
-(defn- resolve-selected-var! [namespace symbol form family]
-  (let [resolved (ns-resolve namespace symbol)]
-    (when-not resolved
-      (reject! "Authoring selection symbol does not resolve"
-               :unresolved-symbol {:symbol symbol :form form}
-               {:expected-family family :expected-channel :registry}))
-    (when-not (var? resolved)
-      (reject! "Authoring selection symbol does not resolve to a Var"
-               :non-var-reference {:symbol symbol :form form :value resolved}
-               {:expected-family family :expected-channel :registry}))
-    resolved))
+(defn- resolve-selected-var!
+  ([namespace symbol form family]
+   (resolve-selected-var! namespace symbol form family :registry))
+  ([namespace symbol form family expected-channel]
+   (let [resolved (ns-resolve namespace symbol)]
+     (when-not resolved
+       (reject! "Authoring selection symbol does not resolve"
+                :unresolved-symbol {:symbol symbol :form form}
+                {:expected-family family :expected-channel expected-channel}))
+     (when-not (var? resolved)
+       (reject! "Authoring selection symbol does not resolve to a Var"
+                :non-var-reference {:symbol symbol :form form :value resolved}
+                {:expected-family family :expected-channel expected-channel}))
+     resolved)))
 
 (defn- descriptor-reason [declaration]
   (cond
@@ -199,7 +223,7 @@
                :wrong-declaration-var {:symbol symbol :form form
                                        :value declaration}
                {:expected-var (resolved-var-symbol target)}))
-    (let [entry-spec (or entry-spec (:kind declaration))]
+    (let [entry-spec (resolve-entry-spec (or entry-spec (:kind declaration)))]
       (when-not (and (qualified-keyword? entry-spec) (s/get-spec entry-spec))
         (reject! "Selected registry kind has no registered entry spec"
                  :missing-entry-spec {:symbol symbol :form form
@@ -359,6 +383,213 @@
                              ~options-binding
                              ['~name]))
        ~target)))
+
+(defn- validate-selected-lifecycle-descriptor!
+  [target symbol family form]
+  (let [declaration (::declaration (meta target))]
+    (when-not (s/valid? ::declaration declaration)
+      (spec-rejection!
+       "Selected Var has an invalid authoring declaration"
+       (descriptor-reason declaration) ::declaration declaration
+       {:symbol symbol :form form}
+       {:expected-family family
+        :expected-channel :lifecycle
+        :expected-protocol protocol-version}))
+    (when-not (= :lifecycle (:channel declaration))
+      (reject! "Selected Var belongs to a different authoring channel"
+               :wrong-channel {:symbol symbol :form form :value declaration}
+               {:expected-channel :lifecycle :channel (:channel declaration)}))
+    (when-not (= family (:family declaration))
+      (reject! "Selected Var belongs to a different authoring family"
+               :wrong-family {:symbol symbol :form form :value declaration}
+               {:expected-family family :family (:family declaration)}))
+    (when-not (= (:var declaration) (resolved-var-symbol target))
+      (reject! "Selected Var does not match its authoring declaration"
+               :wrong-declaration-var {:symbol symbol :form form
+                                       :value declaration}
+               {:expected-var (resolved-var-symbol target)}))
+    (when-not (s/valid? ::lifecycle-entry (:entry declaration))
+      (spec-rejection! "Selected Var carries an invalid lifecycle entry"
+                       :invalid-lifecycle-entry ::lifecycle-entry
+                       (:entry declaration) {:symbol symbol :form form}
+                       {:kind (:kind declaration)}))
+    declaration))
+
+(defn- valid-lifecycle-entry? [{:keys [kind] :as entry}]
+  (and (map? entry)
+       (case kind
+         :seed (and (= #{:kind :apply :after} (set (keys entry)))
+                    (qualified-symbol? (:apply entry))
+                    (set? (:after entry))
+                    (every? keyword? (:after entry)))
+         :resource (and (= #{:kind :open :close :after :scope}
+                           (set (keys entry)))
+                        (qualified-symbol? (:open entry))
+                        (qualified-symbol? (:close entry))
+                        (set? (:after entry))
+                        (every? keyword? (:after entry))
+                        (contains? #{:module :runtime} (:scope entry)))
+         :reconcile (and (= #{:kind :read-desired :read-actual :apply
+                              :on-removed :trigger-kinds :after}
+                            (set (keys entry)))
+                         (every? qualified-symbol?
+                                 (map entry [:read-desired :read-actual
+                                             :apply :on-removed]))
+                         (set? (:trigger-kinds entry))
+                         (every? keyword? (:trigger-kinds entry))
+                         (set? (:after entry))
+                         (every? keyword? (:after entry)))
+         false)))
+
+(s/def ::lifecycle-entry valid-lifecycle-entry?)
+
+(defn prepare-lifecycle-declaration!
+  "Validate and return a protocol-1 lifecycle `::declaration`.
+
+  Lifecycle selection has no use options; its effect identity is the authored
+  keyword and consumer module. The lifecycle entry is checked before the Var
+  is defined, so invalid declarations cannot replace an existing Var."
+  [family kind key entry var-symbol form]
+  (when-not (s/valid? ::lifecycle-entry entry)
+    (spec-rejection! "Lifecycle authoring entry is invalid"
+                     :invalid-lifecycle-entry ::lifecycle-entry entry
+                     {:form form}
+                     {:kind kind :expected-channel :lifecycle}))
+  (let [declaration {:protocol protocol-version
+                     :family family
+                     :channel :lifecycle
+                     :kind kind
+                     :key key
+                     :entry entry
+                     :var var-symbol}]
+    (when-not (s/valid? ::declaration declaration)
+      (spec-rejection! "Lifecycle authoring declaration is invalid"
+                       :invalid-declaration ::declaration declaration
+                       {:form form}
+                       {:expected-channel :lifecycle
+                        :expected-protocol protocol-version}))
+    declaration))
+
+(defn select-lifecycle!
+  "Resolve, validate, and collect one typed lifecycle selection.
+
+  `symbols` are quoted Var references supplied to a generated use macro. Every
+  Var carries a protocol-1 lifecycle descriptor from `family`; arbitrary
+  expressions and registry use options are not accepted. The returned Vars are
+  checked with `::selected-vars` before the existing lifecycle collector is
+  called."
+  [family namespace form symbols]
+  (when (empty? symbols)
+    (reject! "Lifecycle use form requires one or more Var symbols"
+             :invalid-use-grammar {:form form}
+             {:grammar "lifecycle-declaration-var+"}))
+  (when-let [value (first (remove symbol? symbols))]
+    (reject! "Lifecycle use form accepts only Var symbols"
+             :invalid-use-grammar {:form form :value value}
+             {:grammar "lifecycle-declaration-var+"}))
+  (let [targets (mapv #(resolve-selected-var! namespace % form family :lifecycle) symbols)
+        declarations (mapv (fn [target symbol]
+                             (validate-selected-lifecycle-descriptor!
+                              target symbol family form))
+                           targets symbols)]
+    (reject-duplicates! (mapv (fn [declaration]
+                                {:kind (:kind declaration)
+                                 :key (:key declaration)
+                                 :entry (:entry declaration)
+                                 :use-options {}})
+                              declarations)
+                        symbols form)
+    (when-not (s/valid? ::selected-vars targets)
+      (spec-rejection! "Authoring selection returned invalid Vars"
+                       :invalid-selected-vars ::selected-vars targets
+                       {:form form} {}))
+    (doseq [{:keys [key entry]} declarations]
+      (runtime/collect-lifecycle! key entry))
+    targets))
+
+(defn expand-lifecycle-use
+  "Return the expansion for a generated typed lifecycle use macro.
+
+  Lifecycle use forms accept only one or more symbols resolving to declaration
+  Vars; unlike registry families they have no leading selection-options map."
+  [family namespace form args]
+  `(select-lifecycle! ~family '~namespace '~form '~(vec args)))
+
+(defn expand-lifecycle-definition
+  "Return one generated inert or define-and-use lifecycle expansion.
+
+  `plan` is the closed plan returned by a lifecycle family builder. Inert forms
+  install only their descriptor; bang forms select once and still return the
+  installed Var."
+  [mode family namespace form plan]
+  (let [{:keys [name definition kind key entry]}
+        (validate-expansion-plan! (assoc plan :use-options {}) form)
+        var-symbol (symbol (str namespace) (str name))
+        target `(var ~name)
+        kind-binding (gensym "kind")
+        key-binding (gensym "key")
+        entry-binding (gensym "entry")
+        declaration-binding (gensym "declaration")]
+    `(let [~kind-binding ~kind
+           ~key-binding ~key
+           ~entry-binding ~entry
+           ~declaration-binding (prepare-lifecycle-declaration!
+                                 ~family ~kind-binding ~key-binding
+                                 ~entry-binding '~var-symbol '~form)]
+       ~definition
+       (install-declaration! ~target ~declaration-binding)
+       ~(when (= :define-and-use mode)
+          `(select-lifecycle! ~family '~namespace '~form ['~name]))
+       ~target)))
+
+(defmacro deflifecycle
+  "Define an inert and a define-and-use family of lifecycle forms.
+
+  `(deflifecycle noun builder-bindings & plan-body)` generates `def<noun>`,
+  `use-<noun>!`, and `def<noun>!`. The builder receives `:define` or
+  `:define-and-use` and returns the same closed expansion plan as
+  `defauthoring`; lifecycle use forms are Vars-only."
+  [noun builder-bindings & plan-body]
+  (let [form &form
+        namespace (ns-name *ns*)]
+    (when-not (simple-symbol? noun)
+      (reject! "deflifecycle noun must be a simple symbol"
+               :invalid-deflifecycle-noun {:form form :value noun}
+               {:grammar "(deflifecycle noun [mode & ordinary-bindings] & plan-body)"}))
+    (let [_ (conform! ::builder-bindings builder-bindings
+                      "deflifecycle builder bindings are invalid"
+                      :invalid-builder-bindings form
+                      "[mode & ordinary-defmacro-bindings]")
+          mode-binding (first builder-bindings)
+          user-bindings (subvec builder-bindings 1)
+          family (keyword (str namespace) (name noun))
+          define-name (symbol (str "def" noun))
+          use-name (symbol (str "use-" noun "!"))
+          bang-name (symbol (str "def" noun "!"))
+          inert-doc (str "Define an inert " noun " lifecycle declaration; return its Var.")
+          use-doc (format
+                   (str "Select one or more %s lifecycle declaration Vars; "
+                        "return them as a vector.")
+                   noun)
+          bang-doc (str "Define and select a " noun " lifecycle declaration; return its Var.")]
+      `(do
+         (defmacro ~define-name
+           ~inert-doc
+           ~user-bindings
+           (let [~mode-binding :define
+                 plan# (do ~@plan-body)]
+             (expand-lifecycle-definition :define ~family (ns-name *ns*) ~'&form plan#)))
+         (defmacro ~use-name
+           ~use-doc
+           [& args#]
+           (expand-lifecycle-use ~family (ns-name *ns*) ~'&form args#))
+         (defmacro ~bang-name
+           ~bang-doc
+           ~user-bindings
+           (let [~mode-binding :define-and-use
+                 plan# (do ~@plan-body)]
+             (expand-lifecycle-definition :define-and-use ~family (ns-name *ns*)
+                                          ~'&form plan#)))))))
 
 (defmacro defauthoring
   "Define an open registry family's inert, typed-use, and bang macros.

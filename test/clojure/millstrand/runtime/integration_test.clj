@@ -335,7 +335,7 @@
                  "(defn close! [{:keys [resource]}] "
                  "(swap! calls conj [:close resource]) {:closed true})\n"
                  "(require '[millstrand.api.lifecycle.alpha :as lifecycle])\n"
-                 "(lifecycle/defresource worker \"Worker.\" "
+                 "(lifecycle/defresource! worker \"Worker.\" "
                  "{:open 'millstrand.runtime.alpha-test.lifecycle-module/open! "
                  ":close 'millstrand.runtime.alpha-test.lifecycle-module/close!})")]
         (.mkdirs config-dir)

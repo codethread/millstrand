@@ -202,7 +202,7 @@
                       :attr-key [:nullable :string]
                       :snippet :string}}})
 
-(millstrand/defop search
+(millstrand/defop! search
   "UNSAFE substring search over strand titles and attribute values, including
   archived rows."
   {:arg-spec search-arg-spec

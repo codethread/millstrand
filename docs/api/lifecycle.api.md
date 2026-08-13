@@ -14,45 +14,6 @@ Authoring forms and data contracts for module lifecycle effects.
 
 
 
-## <a name="millstrand.api.lifecycle.alpha/defreconcile">`defreconcile`</a>
-``` clojure
-(defreconcile form-name doc opts)
-```
-Macro.
-
-Define and collect one repeated desired-state reconciliation effect.
-
-  The form is `(defreconcile name doc {:read-desired qualified-symbol,
-  :read-actual qualified-symbol, :apply qualified-symbol,
-  :on-removed qualified-symbol, :trigger-kinds #{keywords}, :after #{ids}})`.
-  `:trigger-kinds` and `:after` are optional.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L138-L149">Source</a></sub></p>
-
-## <a name="millstrand.api.lifecycle.alpha/defresource">`defresource`</a>
-``` clojure
-(defresource form-name doc opts)
-```
-Macro.
-
-Define and collect one paired resource acquisition and release effect.
-
-  The form is `(defresource name doc {:open qualified-symbol,
-  :close qualified-symbol, :scope :module-or-runtime, :after #{ids}})`.
-  `:scope` defaults to `:module`; `:after` is optional.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L126-L136">Source</a></sub></p>
-
-## <a name="millstrand.api.lifecycle.alpha/defseed">`defseed`</a>
-``` clojure
-(defseed form-name doc opts)
-```
-Macro.
-
-Define and collect one process-lifetime idempotent seed effect.
-
-  The form is `(defseed name doc {:apply qualified-symbol, :after #{ids}})`.
-  `:after` is optional.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L115-L124">Source</a></sub></p>
-
 ## <a name="millstrand.api.lifecycle.alpha/kinds">`kinds`</a>
 
 

@@ -7,7 +7,7 @@
   Malformed declarations fail at definition; unresolved or non-callable
   symbols fail validation before the candidate image is published."
   (:require [clojure.spec.alpha :as s]
-            [millstrand.api.runtime.alpha :as runtime]
+            [millstrand.api.authoring.alpha :as authoring]
             [millstrand.api.spool.alpha :refer [require-valid!]]))
 
 (def kinds
@@ -112,38 +112,26 @@
          :after (get opts :after #{})
          :trigger-kinds (get opts :trigger-kinds #{})))
 
-(defmacro defseed
-  "Define and collect one process-lifetime idempotent seed effect.
+(authoring/deflifecycle seed [mode form-name doc opts]
+  (let [entry (list 'millstrand.api.lifecycle.alpha/seed-declaration opts)]
+    {:name form-name
+     :definition (list 'def form-name doc entry)
+     :kind :seed
+     :key (keyword form-name)
+     :entry entry}))
 
-  The form is `(defseed name doc {:apply qualified-symbol, :after #{ids}})`.
-  `:after` is optional."
-  [form-name doc opts]
-  `(do
-     (def ~form-name ~doc (seed-declaration ~opts))
-     (runtime/collect-lifecycle! ~(keyword form-name) ~form-name)
-     (var ~form-name)))
+(authoring/deflifecycle resource [mode form-name doc opts]
+  (let [entry (list 'millstrand.api.lifecycle.alpha/resource-declaration opts)]
+    {:name form-name
+     :definition (list 'def form-name doc entry)
+     :kind :resource
+     :key (keyword form-name)
+     :entry entry}))
 
-(defmacro defresource
-  "Define and collect one paired resource acquisition and release effect.
-
-  The form is `(defresource name doc {:open qualified-symbol,
-  :close qualified-symbol, :scope :module-or-runtime, :after #{ids}})`.
-  `:scope` defaults to `:module`; `:after` is optional."
-  [form-name doc opts]
-  `(do
-     (def ~form-name ~doc (resource-declaration ~opts))
-     (runtime/collect-lifecycle! ~(keyword form-name) ~form-name)
-     (var ~form-name)))
-
-(defmacro defreconcile
-  "Define and collect one repeated desired-state reconciliation effect.
-
-  The form is `(defreconcile name doc {:read-desired qualified-symbol,
-  :read-actual qualified-symbol, :apply qualified-symbol,
-  :on-removed qualified-symbol, :trigger-kinds #{keywords}, :after #{ids}})`.
-  `:trigger-kinds` and `:after` are optional."
-  [form-name doc opts]
-  `(do
-     (def ~form-name ~doc (reconcile-declaration ~opts))
-     (runtime/collect-lifecycle! ~(keyword form-name) ~form-name)
-     (var ~form-name)))
+(authoring/deflifecycle reconcile [mode form-name doc opts]
+  (let [entry (list 'millstrand.api.lifecycle.alpha/reconcile-declaration opts)]
+    {:name form-name
+     :definition (list 'def form-name doc entry)
+     :kind :reconcile
+     :key (keyword form-name)
+     :entry entry}))
