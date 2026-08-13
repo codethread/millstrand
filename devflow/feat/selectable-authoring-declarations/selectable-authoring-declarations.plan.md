@@ -12,7 +12,7 @@
 
 ## PLAN-Sad-001.P1 Goal and scope
 
-Deliver the approved three-form authoring API as one coordinated break: inert `def<kind>`, typed `use-<kind>!`, and define-and-select `def<kind>!`. Change only Millstrand, Millhouse, agent-harness, devflow, and codethread. “Millhouse” includes every root in that repository, including `millhouse.spools/kanban`; it does not include the separately pinned `codethread/kanban` repository. That external source and its v24 pin remain unchanged.
+Deliver the approved three-form authoring API as one coordinated break: inert `def<kind>`, typed `use-<kind>!`, and define-and-select `def<kind>!`. Change only Millstrand, Millhouse, agent-harness, devflow, and codethread. “Millhouse” includes every root in that repository, including `millhouse.spools/kanban`; it does not include the separately pinned `codethread/kanban` repository. Kanban v25 at peeled SHA `a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e` is the authorized external exception. Its Millstrand-owned adapter selects only ops `kanban` and `kanban-export`; queries `kanban-cards`, `kanban-pending`, and `kanban-epic-pending`; pattern `kanban-batch`; and bin `kanban-dash`. Guild, peering operations, and lifecycle resources are absent.
 
 The delivery ends with released or immutable commits for the authorized sibling repositories, coherent selected-workspace pins, successful disposable-world acceptance, root-spec promotion, and user-authorized restarts of affected weavers. It adds no compatibility layer or migration behavior for excluded spools.
 
@@ -31,7 +31,7 @@ The delivery ends with released or immutable commits for the authorized sibling 
 | ID | Area | Expected change |
 | --- | --- | --- |
 | PLAN-Sad-001.AA1 | Millstrand authoring, lifecycle, contribution, and module collection modules | Add the descriptor/family boundary, split built-in forms, preserve passive collection and image replay, and bind exact authored names. |
-| PLAN-Sad-001.AA2 | Millstrand clj-kondo export, author tests, fixtures, shipped spools, workspace modules, and guides | Teach the new macros, prove library selection, migrate built-in and lifecycle publishers, inventory domain publishers for cutover, and add the unchanged-Kanban consumer adapter. |
+| PLAN-Sad-001.AA2 | Millstrand clj-kondo export, author tests, fixtures, shipped spools, workspace modules, and guides | Teach the new macros, prove library selection, migrate built-in and lifecycle publishers, inventory domain publishers for cutover, and add the core-only Kanban v25 consumer adapter. |
 | PLAN-Sad-001.AA3 | Millhouse Workflow, Chime, Cron, executors, Kanban, and Millstrand-workflows roots | Generate the domain families, adopt Cron's symbol/doc/job grammar, migrate every publisher, and replace declaration-Var `collect-entry!` adapters with typed use forms. |
 | PLAN-Sad-001.AA4 | agent-harness roots and repository workspace modules | Migrate core, lifecycle, Workflow, and plural domain forms; update its Kondo export and Millhouse dependency. |
 | PLAN-Sad-001.AA5 | devflow library and Kanban-adapter roots | Migrate workflow, query, op, and adapter declarations; update Workflow coordinates and its release contract while authorizing the external Guild-free Kanban successor pin. |
@@ -51,7 +51,7 @@ The delivery ends with released or immutable commits for the authorized sibling 
 
 ### PLAN-Sad-001.PH1 Millstrand API and repository adoption
 
-Outcome: Millstrand ships the complete descriptor, built-in family, Kondo, test, documentation, and built-in/lifecycle source migration as one green commit. Workspace forms owned by external domains remain an explicit cutover inventory until their new APIs are pinned; the running weaver is neither refreshed nor restarted in this mixed interval. A disposable fresh-generation world loads unchanged `codethread/kanban` v24 against the new macros through a Millstrand-owned adapter, selects exactly the workspace declarations, and proves source activation plus retained image replay without changing the external repository.
+Outcome: Millstrand ships the complete descriptor, built-in family, Kondo, test, documentation, and built-in/lifecycle source migration as one green commit. Workspace forms owned by external domains remain an explicit cutover inventory until their new APIs are pinned; the running weaver is neither refreshed nor restarted in this mixed interval. A disposable fresh-generation world loads Kanban v25 at peeled SHA `a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e` through the Millstrand-owned core-only adapter, selects ops `kanban` and `kanban-export`; queries `kanban-cards`, `kanban-pending`, and `kanban-epic-pending`; pattern `kanban-batch`; and bin `kanban-dash`, and proves source activation plus retained image replay. Guild, peering operations, and lifecycle resources are absent.
 
 ### PLAN-Sad-001.PH2 Millhouse domain adoption
 
@@ -75,13 +75,13 @@ Outcome: Millstrand pins the exact Millhouse, agent-harness, devflow, codethread
 - **PLAN-Sad-001.V2:** Module tests prove library namespaces can load under a consumer collector without foreign contribution, the consumer owns publication, omission retracts a selection, code-only library reload does not publish, source refresh adopts the new descriptor, and image activation replays only the retained selected data. Foreign-source failure assertions cover the available module, namespace, and file context without adding an interior error wrapper.
 - **PLAN-Sad-001.V3:** Kondo tests cover the `defauthoring`, `defvalue`, `deffn`, and `use-vars` hook contracts; built-in forms; a generated value family; a generated function family; mode-specific bang arities; exact function names; Var references in use forms; greenfield export import; and brownfield re-bootstrap with no stale copied mapping.
 - **PLAN-Sad-001.V4:** Each authorized sibling runs its repository quality target in its card worktree. Millstrand's final queue acceptance runs the serialized Clojure suite under the shared lock, Go tests, process E2E, spool-suite gate, formatting, lint, reflection, and docs checks described by the testing skill.
-- **PLAN-Sad-001.V5:** Workspace-backed tests use disposable `mktemp -d` workspaces with guarded explicit paths. None use the shared `.millstrand` coordination workspace. The external Kanban proof resolves the exact authorized successor SHA and confirms only the core ops, queries, pattern, and bin after a fresh start and image replay; peering operations and lifecycle resources are absent.
+- **PLAN-Sad-001.V5:** Workspace-backed tests use disposable `mktemp -d` workspaces with guarded explicit paths. None use the shared `.millstrand` coordination workspace. The external Kanban proof resolves v25 at peeled SHA `a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e` and confirms only ops `kanban` and `kanban-export`; queries `kanban-cards`, `kanban-pending`, and `kanban-epic-pending`; pattern `kanban-batch`; and bin `kanban-dash` after a fresh start and image replay. Guild, peering operations, and lifecycle resources are absent.
 - **PLAN-Sad-001.V6:** Before restart, `spool status` must show the coherent authorized coordinates and no unresolved root failure. After restart, smoke checks cover `strand help`, workflow discovery, agent harness discovery, devflow intake discovery, Kanban board/query access, Chime resource status, and Cron job publication. Any failure stops the cutover loudly; there is no mixed-generation fallback.
 
 ## PLAN-Sad-001.P7 Risks and open questions
 
 - **PLAN-Sad-001.R1:** Exact-name function forms remove synthesized Vars such as `<name>-op`, `<name>-rule`, and `<name>-stalled?`. Each authorized repository card must search its source, tests, generated docs, and Kondo mappings for those names and either adopt the exact Var or keep a separately justified ordinary alias. No compatibility alias is added automatically.
-- **PLAN-Sad-001.R2:** The authorized Kanban successor must be Guild-free and core-only. The fresh-generation adapter test is the acceptance boundary: it must prove that the pinned successor defines usable descriptors for the selected core surface and that no internal code requires synthesized handler Vars, peering operations, or lifecycle resources. Failure blocks cutover rather than triggering a guessed source change in that repository.
+- **PLAN-Sad-001.R2:** Kanban v25 at peeled SHA `a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e` is Guild-free and core-only. The fresh-generation adapter test proves usable descriptors for the selected core surface and that no internal code requires synthesized handler Vars, peering operations, or lifecycle resources. Failure blocks cutover; no compatibility bridge is added.
 - **PLAN-Sad-001.R3:** Sibling main checkouts currently contain independent ahead/behind states. Every implementation card creates or claims its own worktree from the intended base and leaves those checkouts untouched. The release card records the landed commits it actually consumes.
 - **PLAN-Sad-001.R4:** `defharnesses` and `defaliases` describe multiple registry entries from one Var. Their local three-form implementation is deliberately not evidence for a general bundle protocol. A future second domain consumer would require a separate API decision.
 - **PLAN-Sad-001.Q1:** None. A card stops only for a contract contradiction or a failed required acceptance proof; speculative hardening is not a reason to widen the design.
@@ -105,7 +105,7 @@ Outcome: Millstrand pins the exact Millhouse, agent-harness, devflow, codethread
 
 ### PLAN-Sad-001.DN3 Repository recon — 2026-08-13
 
-- Millhouse's manifest now includes `millhouse.spools/kanban`, which is inside the authorized Millhouse repository and therefore migrates in PH2. The selected workspace authorizes a separate Guild-free `codethread/kanban` successor pin, handled only by the PH1 consumer adapter proof.
+- Millhouse's manifest now includes `millhouse.spools/kanban`, which is inside the authorized Millhouse repository and therefore migrates in PH2. The selected workspace pins the separate Guild-free `codethread/kanban` v25 at peeled SHA `a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e`, handled only by the PH1 core-only consumer adapter proof.
 - Manual declaration selection already exists in Millhouse's workflow index and agent-harness's workspace workflow loader. These become direct examples of typed use forms. `collect-kind!` calls remain the open-kind bootstrap boundary and are not renamed by this feature.
 
 ### PLAN-Sad-001.DN4 Spec-and-plan review — 2026-08-13
@@ -118,5 +118,5 @@ Outcome: Millstrand pins the exact Millhouse, agent-harness, devflow, codethread
 
 ### PLAN-Sad-001.DN6 Kanban boundary decision — 2026-08-13
 
-- **TASK-Sad-001.MI5:** Kanban remains core-only in Millstrand. The external source change and successor pin are authorized; Kanban peering operations and the lifecycle resource are dropped from the adapter contract. This task does not edit the sibling Kanban repository or guess its successor SHA.
-- **TASK-Sad-001.DW5:** The successor pin is accepted only after a disposable fresh-generation proof shows the core Kanban declarations load and publish through the Millstrand-owned adapter with no peering or lifecycle-resource surface.
+- **TASK-Sad-001.MI5:** Kanban v25 at peeled SHA `a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e` remains core-only in Millstrand. The authorized external exception selects ops `kanban` and `kanban-export`; queries `kanban-cards`, `kanban-pending`, and `kanban-epic-pending`; pattern `kanban-batch`; and bin `kanban-dash`. Guild, peering operations, and lifecycle resources are absent, and no compatibility bridge is added.
+- **TASK-Sad-001.DW5:** The v25 pin is accepted only after a disposable fresh-generation proof shows the selected core Kanban declarations load and publish through the Millstrand-owned adapter with no Guild, peering-operation, or lifecycle-resource surface.
