@@ -19,6 +19,8 @@ Authoring forms for Millstrand's owner-complete core kinds.
 (defbin & args)
 ```
 Macro.
+
+Define an inert bin declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L76-L85">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defbin!">`defbin!`</a>
@@ -26,6 +28,8 @@ Macro.
 (defbin! & args)
 ```
 Macro.
+
+Define and select a bin declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L76-L85">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defhandler">`defhandler`</a>
@@ -33,6 +37,8 @@ Macro.
 (defhandler & args)
 ```
 Macro.
+
+Define an inert handler declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L64-L74">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defhandler!">`defhandler!`</a>
@@ -40,6 +46,8 @@ Macro.
 (defhandler! & args)
 ```
 Macro.
+
+Define and select a handler declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L64-L74">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defhook">`defhook`</a>
@@ -47,6 +55,8 @@ Macro.
 (defhook & args)
 ```
 Macro.
+
+Define an inert hook declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L52-L62">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defhook!">`defhook!`</a>
@@ -54,6 +64,8 @@ Macro.
 (defhook! & args)
 ```
 Macro.
+
+Define and select a hook declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L52-L62">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defop">`defop`</a>
@@ -61,6 +73,8 @@ Macro.
 (defop & args)
 ```
 Macro.
+
+Define an inert op declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L20-L29">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defop!">`defop!`</a>
@@ -68,6 +82,8 @@ Macro.
 (defop! & args)
 ```
 Macro.
+
+Define and select an op declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L20-L29">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defpattern">`defpattern`</a>
@@ -75,6 +91,8 @@ Macro.
 (defpattern & args)
 ```
 Macro.
+
+Define an inert pattern declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L41-L50">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defpattern!">`defpattern!`</a>
@@ -82,6 +100,8 @@ Macro.
 (defpattern! & args)
 ```
 Macro.
+
+Define and select a pattern declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L41-L50">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defquery">`defquery`</a>
@@ -89,6 +109,8 @@ Macro.
 (defquery & args)
 ```
 Macro.
+
+Define an inert query declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L31-L39">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/defquery!">`defquery!`</a>
@@ -96,6 +118,8 @@ Macro.
 (defquery! & args)
 ```
 Macro.
+
+Define and select a query declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L31-L39">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/use-bin!">`use-bin!`</a>
@@ -103,6 +127,8 @@ Macro.
 (use-bin! & args)
 ```
 Macro.
+
+Select one or more bin declaration Vars; return them as a vector.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L76-L85">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/use-handler!">`use-handler!`</a>
@@ -110,6 +136,8 @@ Macro.
 (use-handler! & args)
 ```
 Macro.
+
+Select one or more handler declaration Vars; return them as a vector.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L64-L74">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/use-hook!">`use-hook!`</a>
@@ -117,6 +145,8 @@ Macro.
 (use-hook! & args)
 ```
 Macro.
+
+Select one or more hook declaration Vars; return them as a vector.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L52-L62">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/use-op!">`use-op!`</a>
@@ -124,6 +154,8 @@ Macro.
 (use-op! & args)
 ```
 Macro.
+
+Select one or more op declaration Vars; return them as a vector.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L20-L29">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/use-pattern!">`use-pattern!`</a>
@@ -131,6 +163,8 @@ Macro.
 (use-pattern! & args)
 ```
 Macro.
+
+Select one or more pattern declaration Vars; return them as a vector.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L41-L50">Source</a></sub></p>
 
 ## <a name="millstrand.api.millstrand.alpha/use-query!">`use-query!`</a>
@@ -138,4 +172,6 @@ Macro.
 (use-query! & args)
 ```
 Macro.
+
+Select one or more query declaration Vars; return them as a vector.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/millstrand/alpha.clj#L31-L39">Source</a></sub></p>

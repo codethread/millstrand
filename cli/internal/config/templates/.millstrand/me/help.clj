@@ -15,7 +15,7 @@
   (help-transform/unregister-default-help-transform! runtime 'millstrand.spools.batteries)
   {:unregistered :help-transform})
 
-(lifecycle/defresource batteries-help-transform
+(lifecycle/defresource! batteries-help-transform
   "Own this world's batteries help-transform election for the module lifetime."
   {:open 'me.help/reconcile-help-transform
    :close 'me.help/close-help-transform!})

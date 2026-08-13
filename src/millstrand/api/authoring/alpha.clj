@@ -618,9 +618,10 @@
           define-name (symbol (str "def" noun))
           use-name (symbol (str "use-" noun "!"))
           bang-name (symbol (str "def" noun "!"))
+          article (if (= noun 'op) "an" "a")
           inert-doc (str "Define an inert " noun " declaration; return its Var.")
           use-doc (str "Select one or more " noun " declaration Vars; return them as a vector.")
-          bang-doc (str "Define and select a " noun " declaration; return its Var.")]
+          bang-doc (str "Define and select " article " " noun " declaration; return its Var.")]
       `(do
          (defmacro ~define-name
            ~inert-doc

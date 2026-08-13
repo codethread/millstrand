@@ -5,7 +5,8 @@
             [clj-kondo.impl.rewrite-clj.node.uneval :as uneval]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]))
+            [clojure.test :refer [deftest is testing]]
+            [millstrand.api.millstrand.alpha]))
 
 (def ^:private clj-kondo-version "2025.06.05")
 (def ^:private millhouse-url "https://github.com/codethread/millhouse.spool.git")
@@ -298,10 +299,35 @@
                (api/list-node [])])
         analyzed (run-exported-hook 'defauthoring {:node node})]
     (is (= '(do
-              (defmacro defwidget [& args] args)
-              (defmacro use-widget! [& args] args)
-              (defmacro defwidget! [& args] args))
+              (defmacro defwidget
+                "Define an inert widget declaration; return its Var."
+                [& args] args)
+              (defmacro use-widget!
+                "Select one or more widget declaration Vars; return them as a vector."
+                [& args] args)
+              (defmacro defwidget!
+                "Define and select a widget declaration; return its Var."
+                [& args] args))
            (api/sexpr (:node analyzed))))))
+
+(deftest defauthoring-static-docstrings-match-runtime-macros
+  (let [node (api/list-node
+              [(api/token-node 'millstrand/defauthoring)
+               (api/token-node 'op)
+               (api/vector-node [(api/token-node 'mode)
+                                 (api/token-node 'name)])
+               (api/list-node [])])
+        definitions (rest (api/sexpr (:node (run-exported-hook 'defauthoring
+                                                               {:node node}))))
+        static-docs (into {}
+                          (map (fn [[_ name docstring]] [name docstring]) definitions))
+        runtime-docs (into {}
+                           (map (fn [name]
+                                  [name (:doc (meta (ns-resolve
+                                                     'millstrand.api.millstrand.alpha
+                                                     name)))])
+                                (keys static-docs)))]
+    (is (= runtime-docs static-docs))))
 
 (deftest unreadable-deffn-name-fails-loudly
   (let [name-node (uneval/uneval-node (api/token-node 'ignored))

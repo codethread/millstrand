@@ -168,17 +168,23 @@
       (invalid-hook-context! :defauthoring
                              "builder bindings must start with a symbol"
                              node bindings-node (sexpr bindings-node)))
-    (let [names [(symbol (str "def" noun))
-                 (symbol (str "use-" noun "!"))
-                 (symbol (str "def" noun "!"))]
-          macro-def (fn [name]
+    (let [article (if (= noun 'op) "an" "a")
+          macros [[(symbol (str "def" noun))
+                   (str "Define an inert " noun " declaration; return its Var.")]
+                  [(symbol (str "use-" noun "!"))
+                   (str "Select one or more " noun
+                        " declaration Vars; return them as a vector.")]
+                  [(symbol (str "def" noun "!"))
+                   (str "Define and select " article " " noun " declaration; return its Var.")]]
+          macro-def (fn [[name docstring]]
                       (api/list-node
                        (list (api/token-node 'defmacro)
                              (api/token-node name)
+                             (api/string-node docstring)
                              (api/vector-node [(api/token-node '&)
                                                (api/token-node 'args)])
                              (api/token-node 'args))))]
       {:node (with-meta
                (api/list-node
-                (into [(api/token-node 'do)] (map macro-def names)))
+                (into [(api/token-node 'do)] (map macro-def macros)))
                (meta node))})))

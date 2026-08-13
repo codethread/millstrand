@@ -19,6 +19,8 @@ Authoring forms and data contracts for module lifecycle effects.
 (defreconcile & args)
 ```
 Macro.
+
+Define an inert reconcile declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L131-L137">Source</a></sub></p>
 
 ## <a name="millstrand.api.lifecycle.alpha/defreconcile!">`defreconcile!`</a>
@@ -26,6 +28,8 @@ Macro.
 (defreconcile! & args)
 ```
 Macro.
+
+Define and select a reconcile declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L131-L137">Source</a></sub></p>
 
 ## <a name="millstrand.api.lifecycle.alpha/defresource">`defresource`</a>
@@ -33,6 +37,8 @@ Macro.
 (defresource & args)
 ```
 Macro.
+
+Define an inert resource declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L123-L129">Source</a></sub></p>
 
 ## <a name="millstrand.api.lifecycle.alpha/defresource!">`defresource!`</a>
@@ -40,6 +46,8 @@ Macro.
 (defresource! & args)
 ```
 Macro.
+
+Define and select a resource declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L123-L129">Source</a></sub></p>
 
 ## <a name="millstrand.api.lifecycle.alpha/defseed">`defseed`</a>
@@ -47,6 +55,8 @@ Macro.
 (defseed & args)
 ```
 Macro.
+
+Define an inert seed declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L115-L121">Source</a></sub></p>
 
 ## <a name="millstrand.api.lifecycle.alpha/defseed!">`defseed!`</a>
@@ -54,6 +64,8 @@ Macro.
 (defseed! & args)
 ```
 Macro.
+
+Define and select a seed declaration; return its Var.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L115-L121">Source</a></sub></p>
 
 ## <a name="millstrand.api.lifecycle.alpha/kinds">`kinds`</a>
@@ -129,6 +141,8 @@ Closed lifecycle effect projection statuses.
 (use-reconcile! & args)
 ```
 Macro.
+
+Select one or more reconcile declaration Vars; return them as a vector.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L131-L137">Source</a></sub></p>
 
 ## <a name="millstrand.api.lifecycle.alpha/use-resource!">`use-resource!`</a>
@@ -136,6 +150,8 @@ Macro.
 (use-resource! & args)
 ```
 Macro.
+
+Select one or more resource declaration Vars; return them as a vector.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L123-L129">Source</a></sub></p>
 
 ## <a name="millstrand.api.lifecycle.alpha/use-seed!">`use-seed!`</a>
@@ -143,4 +159,6 @@ Macro.
 (use-seed! & args)
 ```
 Macro.
+
+Select one or more seed declaration Vars; return them as a vector.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L115-L121">Source</a></sub></p>

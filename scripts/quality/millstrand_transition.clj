@@ -2,12 +2,13 @@
   "Validate the narrowed Millstrand publisher transition contract.
 
   Workspace config is active against the moved publishers. The external suite
-  runs against the authorized Guild-free Kanban successor pin."
+  is deferred for its exact unmigrated downstream families; their migration
+  cards and the final cutover remove the checked-in deferral."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]))
 
 (def ^:private contract-resource "quality/millstrand-transition-contract.edn")
-(def ^:private expected-scopes #{})
+(def ^:private expected-scopes #{:pinned-external-spool-suite})
 (def ^:private allowed-scopes #{:pinned-external-spool-suite})
 (def ^:private expected-pins
   {'codethread/devflow
@@ -21,7 +22,7 @@
    {:git/url "https://github.com/codethread/agent-harness.spool.git"
     :git/sha "636ae9ecbb57c4fde2c79485c7ef7767aba5753b"}})
 (def ^:private expected-families (set (keys expected-pins)))
-(def ^:private expected-deferred-families #{})
+(def ^:private expected-deferred-families expected-families)
 
 (defn- fail!
   [message data]
@@ -75,6 +76,9 @@
     (require! (vector? deferrals)
               "Transition contract deferrals must be a vector"
               {:deferrals deferrals})
+    (require! (= (count expected-scopes) (count deferrals))
+              "Transition contract must have one entry for each scope"
+              {:expected (count expected-scopes) :actual (count deferrals)})
     (require! (= expected-scopes (set (map :scope deferrals)))
               "Transition contract scopes drifted"
               {:expected expected-scopes :actual (set (map :scope deferrals))})

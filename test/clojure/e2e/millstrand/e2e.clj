@@ -727,6 +727,9 @@
       (assert-contains (slurp help-file)
                        "(help-transform/register-builtin! runtime)"
                        "clean bootstrap creates the Batteries help-transform adapter")
+      (assert-contains (slurp help-file)
+                       "(lifecycle/defresource! batteries-help-transform"
+                       "clean bootstrap publishes the Batteries help-transform resource")
       (assert (not (.exists (java.io.File. workspace "spools")))
               "clean bootstrap does not create an empty spools directory")
       (assert (not (.exists (java.io.File. workspace ".git"))) "clean bootstrap does not run git init")
