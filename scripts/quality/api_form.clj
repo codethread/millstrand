@@ -5,7 +5,7 @@
   A converted module's `alpha.clj` leads with its public promised vars,
   each carrying a docstring; private helpers below them are welcome when
   they are part of the file's story, genuine plumbing moves to the sibling
-  `internal` namespace, and no source line passes column 96. Reading order
+  `internal` namespace, and no source line passes column 180. Reading order
   and the story/plumbing line are judgment (the source-form reviewer);
   this gate checks only what is mechanical. `pending` names the modules
   not yet converted; each conversion card under epic 9nu0q deletes its own
@@ -21,7 +21,7 @@
   "Modules not yet through their v1 form card (epic 9nu0q)."
   #{})
 
-(def ^:private width-limit 96)
+(def ^:private width-limit 180)
 
 (def ^:private api-root "src/millstrand/api")
 
@@ -111,7 +111,8 @@
                          " api module has no docstring (SPEC-003.C19a)"))
                   (for [{:keys [file line length]} (wide-lines dir)]
                     (str file ":" line ": line is " length " columns; converted api"
-                         " modules wrap at " width-limit " (SPEC-003.C19a)")))]
+                         " modules have a hard limit of " width-limit
+                         " columns (SPEC-003.C19a)")))]
      finding)))
 
 (defn check

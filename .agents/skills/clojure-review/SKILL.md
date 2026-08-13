@@ -27,8 +27,9 @@ Example:
 (defn ready
   "Return open strands whose blocking dependencies are closed.
 
-  Traverses only declared structural dependency relations. Annotation edges do not
-  affect readiness."
+  Traverse only declared structural dependency relations.
+
+  Annotation edges do not affect readiness."
   [db]
   ...)
 ```
@@ -37,7 +38,7 @@ Example:
 
 When scanning Clojure conformity, actively look for and report these before listing positives:
 
-- Any docstring or string literal line past column 180, or long prose built from `(str ...)` fragments instead of a `|`-margin block through `millstrand.api.format.alpha`.
+- Any source line past column 180; prose whose own block runs well past 80 characters; or multi-paragraph prose built from `(str ...)` fragments instead of `millstrand.api.format.alpha/prose`.
 - Public namespace lacks an `ns` docstring and has a non-trivial public role.
 - Public `defn`, `defmacro`, protocol, record/type, or important public `def` lacks a useful docstring.
 - Boundary data is validated only ad hoc when a reusable spec would clarify the shipped contract or enable generated checks.

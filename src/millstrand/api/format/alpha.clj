@@ -1,15 +1,28 @@
 (ns millstrand.api.format.alpha
-  "Blessed `|`-margin doc-block helpers for any tier that publishes prose as data.
+  "Blessed prose helpers for tiers that publish text as data.
 
-  Long strings in source hurt readability and IDE viewports; author them as
-  `|`-margin blocks instead and reflow with these helpers. Both helpers
-  validate their input against the promised qualified spec key
-  `:millstrand.api.format.alpha/block` — a string in which at least one line
-  carries a `|` — and fail loudly with the offending value in ex-data."
+  `prose` preserves authored Markdown layout while removing only source
+  indentation and interpolating named values. The older `|`-margin helpers stay
+  available for their established item and reflow contracts."
   (:require [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
             [clojure.string :as str]
             [millstrand.core.format :as format]))
+
+(defn prose
+  "Render an indentation-aware Markdown template with named interpolation.
+
+  The first content line establishes the source indentation removed from every
+  nonblank line; remaining whitespace, blank lines, Markdown, and line width are
+  preserved. `{name}` interpolates `:name` or `\"name\"` from `scope`; `{name:json}`
+  renders compact JSON. Throws with the offending template or scope when either
+  input is invalid, or when rendering finds malformed indentation or placeholders."
+  [template scope]
+  (when-not (string? template)
+    (throw (ex-info "prose: template must be a string" {:template template})))
+  (when-not (map? scope)
+    (throw (ex-info "prose: scope must be a map" {:scope scope})))
+  (format/prose template scope))
 
 (defn fill
   "Reflow a `|`-margin doc block into a vector of item strings.
@@ -36,6 +49,13 @@
     (throw (ex-info "reflow: no barred lines; ::block is a string with a |-margin line"
                     {:block block :explain (s/explain-data ::block block)})))
   (format/reflow block))
+
+(s/def ::template string?)
+(s/def ::scope map?)
+
+(s/fdef prose
+  :args (s/cat :template ::template :scope ::scope)
+  :ret string?)
 
 (s/def ::block
   (s/with-gen (s/and string? #(str/includes? % "|"))

@@ -7,7 +7,8 @@
   past the bar is preserved verbatim for command samples and other intentional
   layout. This is the single implementation; the blessed consumer surface is
   `millstrand.api.format.alpha`."
-  (:require [clojure.string :as str]))
+  (:require [clojure.data.json :as json]
+            [clojure.string :as str]))
 
 (defn- bar-content
   "Return a `|`-margin line's content (everything after the first bar), or nil
@@ -62,3 +63,108 @@
        (remove str/blank?)
        (map str/trim)
        (str/join " ")))
+
+(def ^:private placeholder-pattern
+  #"\{([A-Za-z][A-Za-z0-9_-]*)(?::([^{}]+))?\}")
+
+(defn- trim-boundary-blank-lines
+  "Return `lines` without whitespace-only leading or trailing lines."
+  [lines]
+  (->> lines
+       (drop-while str/blank?)
+       reverse
+       (drop-while str/blank?)
+       reverse
+       vec))
+
+(defn- baseline-indent
+  "Return the leading-space prefix on the first content line of `lines`."
+  [lines template]
+  (let [indent (re-find #"^[ \t]*" (first lines))]
+    (when (str/includes? indent "\t")
+      (throw (ex-info "prose: tabs are not supported in baseline indentation"
+                      {:template template :indent indent})))
+    indent))
+
+(defn- dedent-line
+  "Remove `baseline` from one nonblank source line."
+  [baseline line line-number template]
+  (cond
+    (str/blank? line) ""
+    (re-find #"^[ \t]*\t" line)
+    (throw (ex-info "prose: tabs are not supported in indentation"
+                    {:template template :line line-number :text line}))
+    (str/starts-with? line baseline) (subs line (count baseline))
+    :else
+    (throw (ex-info "prose: content is less indented than its first line"
+                    {:template template
+                     :line line-number
+                     :baseline baseline
+                     :text line}))))
+
+(defn- dedent
+  "Remove `template`'s first-content-line indentation from every content line."
+  [template]
+  (let [lines (trim-boundary-blank-lines (str/split template #"\n" -1))]
+    (if (empty? lines)
+      ""
+      (let [baseline (baseline-indent lines template)]
+        (->> lines
+             (map-indexed #(dedent-line baseline %2 (inc %1) template))
+             (str/join "\n"))))))
+
+(defn- json-key
+  "Render map keys without dropping keyword or symbol namespaces."
+  [key]
+  (if (instance? clojure.lang.Named key)
+    (if-let [namespace-name (namespace key)]
+      (str namespace-name "/" (name key))
+      (name key))
+    (str key)))
+
+(defn- render-placeholder
+  "Render one named placeholder from `scope`."
+  [scope name renderer template]
+  (let [keyword-key (keyword name)
+        string-key name
+        present? (or (contains? scope keyword-key)
+                     (contains? scope string-key))
+        value (if (contains? scope keyword-key)
+                (get scope keyword-key)
+                (get scope string-key))]
+    (when-not present?
+      (throw (ex-info "prose: placeholder has no value in scope"
+                      {:template template :placeholder name})))
+    (case renderer
+      nil (str value)
+      "json" (json/write-str value :key-fn json-key :escape-slash false)
+      (throw (ex-info "prose: unsupported placeholder renderer"
+                      {:template template :placeholder name :renderer renderer})))))
+
+(defn- interpolate
+  "Replace named placeholders in `text` from `scope`."
+  [text scope template]
+  (let [matcher (re-matcher placeholder-pattern text)
+        output (StringBuffer.)]
+    (while (.find matcher)
+      (.appendReplacement matcher output
+                          (java.util.regex.Matcher/quoteReplacement
+                           (render-placeholder scope (.group matcher 1)
+                                               (.group matcher 2) template))))
+    (.appendTail matcher output)
+    (str output)))
+
+(defn prose
+  "Render an indentation-aware Markdown template with named interpolation.
+
+  Drops whitespace-only boundary lines, removes the first content line's leading
+  spaces from every nonblank line, then preserves the remaining Markdown exactly.
+  `{name}` renders a value from keyword or string key `name` in `scope`; `{name:json}`
+  renders compact JSON. Throws for non-map scope, tabs in indentation, content less
+  indented than the first line, missing values, and unsupported renderers."
+  [template scope]
+  (when-not (string? template)
+    (throw (ex-info "prose: template must be a string" {:template template})))
+  (when-not (map? scope)
+    (throw (ex-info "prose: scope must be a map" {:scope scope})))
+  (interpolate (dedent template) scope template))

@@ -214,13 +214,15 @@
         (is (= 1 (count findings)))
         (is (re-find #"public var `bare`.*no docstring" (first findings)))))))
 
-(deftest converted-module-with-wide-line-is-a-finding
-  (with-modules {"tidy" (str "(ns m.alpha \"Doc.\")\n;; "
-                             (str/join (repeat 100 "x")) "\n")}
+(deftest converted-module-enforces-180-column-hard-limit
+  (with-modules {"tidy" (str "(ns m.alpha \"Doc.\")\n"
+                             ";; " (str/join (repeat 177 "x")) "\n"
+                             ";; " (str/join (repeat 178 "x")) "\n")}
     (fn [dirs]
       (let [findings (api-form/findings {} dirs #{})]
         (is (= 1 (count findings)))
-        (is (re-find #"alpha\.clj:2: line is 103 columns" (first findings)))))))
+        (is (re-find #"alpha\.clj:3: line is 181 columns" (first findings)))
+        (is (re-find #"hard limit of 180 columns" (first findings)))))))
 
 (deftest conformant-converted-module-yields-no-findings
   (with-modules {"tidy" conformant-source}
