@@ -92,10 +92,17 @@
    "  event)\n"
    "(millstrand/defbin tool \"Run a tool.\" {:executable executable-name})\n"
    "\n"
+   "(millstrand/use-op! echo)\n"
+   "(millstrand/use-query! active)\n"
+   "(millstrand/use-pattern! task)\n"
+   "(millstrand/use-hook! validate)\n"
+   "(millstrand/use-handler! report)\n"
+   "(millstrand/use-bin! tool)\n"
+   "\n"
    "(defn use-exported-definitions\n"
    "  \"Reference every Var synthesized by an exported core form.\"\n"
    "  []\n"
-   "  [echo-op active task validate report tool])\n"
+   "  [echo active task validate report tool])\n"
    "\n"
    "(lifecycle/defseed bootstrap \"Bootstrap the consumer.\"\n"
    "  {:apply 'example.consumer/apply-it})\n"
@@ -106,6 +113,9 @@
    "   :read-actual 'example.consumer/read-actual\n"
    "   :apply 'example.consumer/reconcile-it\n"
    "   :on-removed 'example.consumer/removed-it})\n"
+   "(lifecycle/use-seed! bootstrap)\n"
+   "(lifecycle/use-resource! resource)\n"
+   "(lifecycle/use-reconcile! reconciler)\n"
    "\n"
    "(test/with-weaver-world [ctx {}]\n"
    "  (:runtime ctx))\n"))
@@ -167,6 +177,42 @@
       (finally
         (delete-tree! root)))))
 
+(deftest brownfield-consumer-rebootstrap-replaces-stale-millstrand-export
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "millstrand-kondo-brownfield"
+                       (make-array java.nio.file.attribute.FileAttribute 0)))
+        repository (repository-root)]
+    (try
+      (write-consumer-file! root "deps.edn" (pr-str (consumer-deps repository)))
+      (write-consumer-file!
+       root "src/example/brownfield.clj"
+       (str "(ns example.brownfield\n"
+            "  (:require [millstrand.api.millstrand.alpha :as millstrand]))\n\n"
+            "(millstrand/defop exact-name \"An exact-name operation.\"\n"
+            "  {:arg-spec {:op \"exact-name\" :doc \"Exact name.\"\n"
+            "              :hook-class :read :deadline-class :standard}}\n"
+            "  [_] :ok)\n"))
+      (write-consumer-file! root ".clj-kondo/config.edn"
+                            "{:config-paths [\"imports/io.millstrand/millstrand\"]}")
+      (write-consumer-file!
+       root ".clj-kondo/imports/io.millstrand/millstrand/config.edn"
+       "{:hooks {:analyze-call {millstrand.api.millstrand.alpha/defop hooks.millstrand/defop}}}")
+      (write-consumer-file!
+       root ".clj-kondo/imports/io.millstrand/millstrand/hooks/millstrand.clj"
+       "(ns hooks.millstrand)\n(defn defop [_] {:node nil})\n")
+      (let [{:keys [exit import-exit lint-exit lint-output]} (run-consumer-kondo! root)
+            imported-config (io/file root
+                                     ".clj-kondo/imports/io.millstrand/millstrand/config.edn")
+            published-config (io/file repository
+                                      "resources/clj-kondo.exports/io.millstrand/millstrand/config.edn")]
+        (is (zero? exit) lint-output)
+        (is (zero? import-exit))
+        (is (zero? lint-exit) lint-output)
+        (is (= (slurp published-config) (slurp imported-config)))
+        (is (not (str/includes? (slurp imported-config) "hooks.millstrand/defop}"))))
+      (finally
+        (delete-tree! root)))))
+
 (deftest consumer-imports-landed-millhouse-workflow-export
   (let [root (.toFile (java.nio.file.Files/createTempDirectory
                        "millhouse-kondo-consumer"
@@ -217,7 +263,7 @@
         (delete-tree! root)))))
 
 (defn- defop-node
-  "Return a hook node with `name-node` in the `defop` name position."
+  "Return a hook node with `name-node` in a function-backed name position."
   [name-node]
   (api/list-node
    [(api/token-node 'millstrand/defop)
@@ -235,11 +281,33 @@
                       (find-ns 'hooks.millstrand)))]
     ((ns-resolve hook-ns hook) context)))
 
-(deftest unreadable-defop-name-fails-loudly
+(deftest published-hook-surface-has-four-stable-entrypoints
+  (let [hook-ns (or (find-ns 'hooks.millstrand)
+                    (do
+                      (load-file "resources/clj-kondo.exports/io.millstrand/millstrand/hooks/millstrand.clj")
+                      (find-ns 'hooks.millstrand)))]
+    (is (= '#{defauthoring defvalue deffn use-vars}
+           (set (keys (ns-publics hook-ns)))))))
+
+(deftest defauthoring-hook-defines-generated-macro-vars
+  (let [node (api/list-node
+              [(api/token-node 'millstrand/defauthoring)
+               (api/token-node 'widget)
+               (api/vector-node [(api/token-node 'mode)
+                                 (api/token-node 'name)])
+               (api/list-node [])])
+        analyzed (run-exported-hook 'defauthoring {:node node})]
+    (is (= '(do
+              (defmacro defwidget [& args] args)
+              (defmacro use-widget! [& args] args)
+              (defmacro defwidget! [& args] args))
+           (api/sexpr (:node analyzed))))))
+
+(deftest unreadable-deffn-name-fails-loudly
   (let [name-node (uneval/uneval-node (api/token-node 'ignored))
         node (defop-node name-node)]
     (try
-      (run-exported-hook 'defop {:node node})
+      (run-exported-hook 'deffn {:node node})
       (is false "expected the hook to fail")
       (catch clojure.lang.ExceptionInfo error
         (is (= "Unable to read a clj-kondo hook node" (ex-message error)))
@@ -248,14 +316,14 @@
         (is (= name-node (:offending-node (ex-data error))))
         (is (instance? UnsupportedOperationException (.getCause error)))))))
 
-(deftest readable-defop-names-must-be-symbols
+(deftest readable-deffn-names-must-be-symbols
   (doseq [name-node [(api/string-node "echo") (api/keyword-node :echo)]]
     (let [node (defop-node name-node)]
       (try
-        (run-exported-hook 'defop {:node node})
+        (run-exported-hook 'deffn {:node node})
         (is false "expected the hook to fail")
         (catch clojure.lang.ExceptionInfo error
-          (is (= "defop hook name must be a symbol" (ex-message error)))
+          (is (= "deffn hook name must be a symbol" (ex-message error)))
           (is (= (api/sexpr name-node) (:offending-value (ex-data error))))
           (is (= name-node (:offending-node (ex-data error))))
           (is (= (select-keys (meta name-node) [:filename :row :col :end-row :end-col])
@@ -272,33 +340,33 @@
     (api/vector-node [:= :state "active"])]))
 
 (deftest public-hook-mappings-are-readable
-  (let [defop-result (run-exported-hook
-                      'defop
+  (let [deffn-result (run-exported-hook
+                      'deffn
                       {:node (defop-node (api/token-node 'echo))})
-        defquery-result (run-exported-hook
-                         'defquery
+        defvalue-result (run-exported-hook
+                         'defvalue
                          {:node (defquery-node (api/token-node 'active))})]
     (is (= '(do
               (identity millstrand/defop)
               (identity {})
-              (defn echo-op "A test operation." []))
-           (api/sexpr (:node defop-result))))
+              (defn echo "A test operation." []))
+           (api/sexpr (:node deffn-result))))
     (is (= '(def active "A test query."
               (do
                 (identity millstrand/defquery)
                 (identity {})
-                [:= :state "active"]))
-           (api/sexpr (:node defquery-result))))))
+                (identity [:= :state "active"])))
+           (api/sexpr (:node defvalue-result))))))
 
 (deftest malformed-public-hook-contexts-fail-loudly
   (doseq [[hook context expected-message]
-          [['defop nil "defop hook context must be a map"]
-           ['defquery {} "defquery hook context must contain a list node"]
-           ['defop {:node (api/list-node [])}
-            "defop hook context node must contain at least 5 children"]
-           ['defquery {:node (api/list-node [(api/token-node 'millstrand/defquery)])}
-            "defquery hook context node must contain exactly 5 children"]
-           ['defquery {:node (assoc (api/list-node
+          [['deffn nil "deffn hook context must be a map"]
+           ['defvalue {} "defvalue hook context must contain a list node"]
+           ['deffn {:node (api/list-node [])}
+            "deffn hook context node must contain at least 5 children"]
+           ['defvalue {:node (api/list-node [(api/token-node 'millstrand/defquery)])}
+            "defvalue hook context node must contain at least 4 children"]
+           ['defvalue {:node (assoc (api/list-node
                                      [(api/token-node 'millstrand/defquery)
                                       (api/token-node 'active)
                                       (api/string-node "A test query.")
@@ -310,7 +378,7 @@
                                      (api/string-node "A test query.")
                                      (api/map-node {})
                                      (api/vector-node [])])}
-            "defquery hook context node contains a non-node child"]]]
+            "defvalue hook context node contains a non-node child"]]]
     (try
       (run-exported-hook hook context)
       (is false "expected the hook to fail")
@@ -326,7 +394,7 @@
     (testing "the API failure remains visible to the caller"
       (try
         (with-redefs [api/sexpr (fn [_] (throw sexpr-error))]
-          (run-exported-hook 'defop {:node (defop-node name-node)}))
+          (run-exported-hook 'deffn {:node (defop-node name-node)}))
         (is false "expected the hook to fail")
         (catch clojure.lang.ExceptionInfo error
           (is (= "Unable to read a clj-kondo hook node" (ex-message error)))

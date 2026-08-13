@@ -96,7 +96,7 @@ Put behavior that should survive a restart in a module source file first:
 (ns my.workspace
   (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(millstrand/defquery mine
+(millstrand/defquery! mine
   "Return strands owned by me."
   {}
   [:= [:attr :owner] "me"])

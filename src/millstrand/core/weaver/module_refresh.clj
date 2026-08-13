@@ -90,7 +90,11 @@
   [module-key module-ns]
   (when (and module-ns
              (find-ns module-ns)
-             (contains? (ns-publics module-ns) 'spool))
+             (some-> (ns-publics module-ns)
+                     (get 'spool)
+                     meta
+                     (contains? :millstrand.api.authoring.alpha/declaration)
+                     not))
     (fail! (format/reflow
             "|Module namespace exposes the removed public spool entry point.
              |Delete `def spool`; publish registry entries with millstrand/defop,

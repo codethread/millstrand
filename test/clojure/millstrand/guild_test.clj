@@ -60,9 +60,9 @@
                        [:modules :skein/examples-guild :lifecycle/plan
                         :preserve])))
         (is (= "preserved-guild"
-               (:guild (guild/guild-op {:op/runtime rt}))))
+               (:guild (guild/guild {:op/runtime rt}))))
         (is (= ["gate.close.v1"]
-               (mapv :name (:active (guild/guild-op {:op/runtime rt})))))))))
+               (mapv :name (:active (guild/guild {:op/runtime rt})))))))))
 
 (deftest declarations-are-owned-and-delete-by-omission
   (with-runtime
@@ -198,7 +198,7 @@
     (fn [rt _]
       (test-support/activate-spool! rt :skein/examples-guild 'skein.examples.guild)
       (guild/set-fallback-guild-name! rt "fallback-guild")
-      (is (= "fallback-guild" (:guild (guild/guild-op {:op/runtime rt}))))
+      (is (= "fallback-guild" (:guild (guild/guild {:op/runtime rt}))))
       (guild/register-op! rt 'gate.close.v1
                           {:doc "Close v1" :input-spec ::close-input :returns close-return
                            :hook-class :mutating :deadline-class :standard}
@@ -302,7 +302,7 @@
 
 (deftest authored-module-declarations-use-the-public-forms
   (testing "Guild contributes its static op and owns reset as one resource"
-    (is (fn? guild/guild-op))
+    (is (fn? guild/guild))
     (is (= {:kind :resource
             :open 'skein.examples.guild/reset-guild!
             :close 'skein.examples.guild/reset-guild!

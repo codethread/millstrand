@@ -327,7 +327,7 @@
     (publish-declarations! runtime)
     (require-valid! ::reset-result {:reset :guild} "Invalid Guild reset result")))
 
-(millstrand/defop guild
+(millstrand/defop! guild
   "Return JSON-safe metadata describing the registered Guild API."
   {:arg-spec guild-arg-spec
    :returns guild-returns
@@ -346,7 +346,7 @@
                          since (assoc :since since)))
                      (sort-by key @(deprecated-ops runtime)))})
 
-(lifecycle/defresource guild-state
+(lifecycle/defresource! guild-state
   "Own Guild's reset and publication boundary for the module lifetime."
   {:open 'skein.examples.guild/reset-guild!
    :close 'skein.examples.guild/reset-guild!})

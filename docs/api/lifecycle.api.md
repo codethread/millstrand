@@ -14,6 +14,48 @@ Authoring forms and data contracts for module lifecycle effects.
 
 
 
+## <a name="millstrand.api.lifecycle.alpha/defreconcile">`defreconcile`</a>
+``` clojure
+(defreconcile & args)
+```
+Macro.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L131-L137">Source</a></sub></p>
+
+## <a name="millstrand.api.lifecycle.alpha/defreconcile!">`defreconcile!`</a>
+``` clojure
+(defreconcile! & args)
+```
+Macro.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L131-L137">Source</a></sub></p>
+
+## <a name="millstrand.api.lifecycle.alpha/defresource">`defresource`</a>
+``` clojure
+(defresource & args)
+```
+Macro.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L123-L129">Source</a></sub></p>
+
+## <a name="millstrand.api.lifecycle.alpha/defresource!">`defresource!`</a>
+``` clojure
+(defresource! & args)
+```
+Macro.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L123-L129">Source</a></sub></p>
+
+## <a name="millstrand.api.lifecycle.alpha/defseed">`defseed`</a>
+``` clojure
+(defseed & args)
+```
+Macro.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L115-L121">Source</a></sub></p>
+
+## <a name="millstrand.api.lifecycle.alpha/defseed!">`defseed!`</a>
+``` clojure
+(defseed! & args)
+```
+Macro.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L115-L121">Source</a></sub></p>
+
 ## <a name="millstrand.api.lifecycle.alpha/kinds">`kinds`</a>
 
 
@@ -81,3 +123,24 @@ Closed lifecycle effect projection statuses.
   A projection is `:planned`, `:applied`, `:preserved`, `:retained`,
   `:degraded`, `:blocked`, `:removed`, or `:not-attempted`.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L24-L30">Source</a></sub></p>
+
+## <a name="millstrand.api.lifecycle.alpha/use-reconcile!">`use-reconcile!`</a>
+``` clojure
+(use-reconcile! & args)
+```
+Macro.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L131-L137">Source</a></sub></p>
+
+## <a name="millstrand.api.lifecycle.alpha/use-resource!">`use-resource!`</a>
+``` clojure
+(use-resource! & args)
+```
+Macro.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L123-L129">Source</a></sub></p>
+
+## <a name="millstrand.api.lifecycle.alpha/use-seed!">`use-seed!`</a>
+``` clojure
+(use-seed! & args)
+```
+Macro.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/lifecycle/alpha.clj#L115-L121">Source</a></sub></p>

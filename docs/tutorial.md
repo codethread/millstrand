@@ -343,7 +343,7 @@ A query is a data expression, here "the `owner` attribute equals `ct`". Start wi
 (ns my.workspace
   (:require [millstrand.api.millstrand.alpha :as millstrand]))
 
-(millstrand/defquery mine
+(millstrand/defquery! mine
   "Return strands owned by ct."
   {}
   [:= [:attr :owner] "ct"])

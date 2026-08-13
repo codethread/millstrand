@@ -1,13 +1,7 @@
 {:config-paths ["../resources/clj-kondo.exports/io.millstrand/millstrand"]
  ;; Keep repository policy and third-party compatibility rules here; the
  ;; public Millstrand authoring analysis comes from the classpath export above.
- :lint-as {clojure.test.check.clojure-test/defspec clojure.test/deftest
-           millstrand.api.lifecycle.alpha/defseed! clojure.core/def
-           millstrand.api.lifecycle.alpha/defseed clojure.core/def
-           millstrand.api.lifecycle.alpha/defresource! clojure.core/def
-           millstrand.api.lifecycle.alpha/defresource clojure.core/def
-           millstrand.api.lifecycle.alpha/defreconcile! clojure.core/def
-           millstrand.api.lifecycle.alpha/defreconcile clojure.core/def}
+ :lint-as {clojure.test.check.clojure-test/defspec clojure.test/deftest}
  :hooks {:analyze-call {clojure.core/ns hooks.project-rules/ns-docstring
                         ns hooks.project-rules/ns-docstring
                         clojure.core/def hooks.project-rules/no-spool-module-atom
@@ -21,13 +15,7 @@
                         clojure.core/defn hooks.project-rules/no-fn-keys-destructure
                         defn hooks.project-rules/no-fn-keys-destructure
                         millstrand.api.authoring.alpha/defauthoring hooks.millstrand/defauthoring
-                        millstrand.api.authoring.alpha/deflifecycle hooks.millstrand/deflifecycle
-                        millstrand.api.millstrand.alpha/defop! hooks.millstrand/defop
-                        millstrand.api.millstrand.alpha/defquery! hooks.millstrand/defquery
-                        millstrand.api.millstrand.alpha/defpattern! hooks.millstrand/defpattern
-                        millstrand.api.millstrand.alpha/defhook! hooks.millstrand/defhook
-                        millstrand.api.millstrand.alpha/defhandler! hooks.millstrand/defhandler
-                        millstrand.api.millstrand.alpha/defbin! hooks.millstrand/defbin}}
+                        millstrand.api.authoring.alpha/deflifecycle hooks.millstrand/defauthoring}}
  :linters {:project/ns-docstring {:level :error}
            :project/no-spool-module-atom {:level :error}
            :project/no-fn-keys-destructure {:level :error}

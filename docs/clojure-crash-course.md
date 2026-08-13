@@ -12,7 +12,7 @@ means: call `add!` in the `weaver` namespace with two arguments, `rt` and a map.
 
 ## Names
 
-Millstrand has one registration story with three calling surfaces. Put durable behavior in a module source with an authoring form such as `millstrand/defquery`; the form defines a Var and publishes the declaration when its module is collected. For code and tests that already hold a runtime, use the explicit-runtime `millstrand.api.*.alpha` functions. In the connected REPL, `millstrand.repl` provides the same verbs with the runtime implied. The REPL is a shorter calling style, not a separate capability.
+Millstrand has one registration story with three calling surfaces. Put durable behavior in a module source with an authoring form such as `millstrand/defquery!`; the bang form defines a Var and selects the declaration when its module is collected. For reusable library declarations, use inert `defquery` plus an explicit `use-query!`. For code and tests that already hold a runtime, use the explicit-runtime `millstrand.api.*.alpha` functions. In the connected REPL, `millstrand.repl` provides the same verbs with the runtime implied. The REPL is a shorter calling style, not a separate capability.
 
 The strand functions live in `millstrand.api.weaver.alpha` and all take the weaver runtime first:
 

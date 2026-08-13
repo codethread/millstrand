@@ -243,7 +243,7 @@
     |that fails, stalls, or answers with nothing fails the op loudly with its
     |id, so `strand agent logs <run-id>` picks the thread back up."))
 
-(millstrand/defop guide
+(millstrand/defop! guide
   "Answer one millstrand-surface question from a delegated guide run."
   {:arg-spec guide-arg-spec
    :returns guide-returns

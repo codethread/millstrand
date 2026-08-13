@@ -40,6 +40,7 @@
   lowest precedence; `--edge edge-type:to-id` adds outgoing edges. `--state`
   accepts `active|closed` for mutations and `active|closed|replaced` for `list`
   filtering."
+  (:refer-clojure :exclude [await list update])
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
             [clojure.set :as set]

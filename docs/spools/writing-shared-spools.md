@@ -642,9 +642,9 @@ Under `:required? true`, missing or failed root prerequisites refuse refresh. Na
 
 ### Author contributions with kind-specific forms
 
-Module sources publish registry entries through kind-specific authoring forms. The six core kinds use `millstrand.api.millstrand.alpha/defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`. A domain spool may define forms for its own kinds. Each form validates its kind's closed declaration grammar before collection.
+Module sources publish registry entries through kind-specific authoring forms. The six core kinds use `millstrand.api.millstrand.alpha/defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`. Each family has an inert definition, a typed `use-<kind>!`, and a `def<kind>!` define-and-select form. A domain spool may define forms for its own kinds. Each form validates its kind's closed declaration grammar before collection.
 
-Ordinary `def` and `defn` forms collect nothing. A contribution form defines its ordinary Var or function and calls `collect-entry!` for the module currently being evaluated. A domain-specific `defjob` form might look like this:
+Ordinary `def` and `defn` forms collect nothing. An inert authoring form defines its ordinary Var or function without collecting it; the typed use form selects that Var into the current module. The bang form does both. A domain-specific `defjob` form might look like this:
 
 ```clojure
 ;; report_job.clj — a module source namespace
@@ -660,7 +660,7 @@ Ordinary `def` and `defn` forms collect nothing. A contribution form defines its
    :handler     'report-job/report-tick})
 ```
 
-`defn report-tick` defines a function and contributes nothing. `schedule/defjob` defines the job declaration *and* collects it under the schedule spool's job kind. Loading a contribution form always defines its Var; only evaluation under a module contribution collector also collects the entry. An owner that stops evaluating a contribution form drops that entry by omission at the next refresh.
+`defn report-tick` defines a function and contributes nothing. `schedule/defjob` defines the job declaration and collects it under the schedule spool's job kind. Loading an inert form always defines its Var; only a typed use or bang form selects the entry. An owner that stops selecting a declaration drops that entry by omission at the next refresh.
 
 The source remains a flat sequence of top-level forms. Evaluating a form yourself still publishes nothing: `collect-entry!` is passive outside contribution collection, so REPL evaluation and code-only reloads define Vars and stop there. The coordinator retains the collected declaration record and replays it for image activation. Omitting a form from the next successful source evaluation removes that owner's old entry.
 
@@ -668,7 +668,7 @@ Core forms are the public grammar for hand-authored core entries. Their declarat
 
 ### Linting authoring forms in a consumer
 
-Millstrand publishes the authoring analysis that a shared spool needs at `io.millstrand/millstrand`. The export covers `defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`, the lifecycle forms `defseed`, `defresource`, and `defreconcile`, plus `millstrand.test.alpha/with-weaver-world` for test bindings.
+Millstrand publishes four reusable authoring analyzers at `io.millstrand/millstrand`: `hooks.millstrand/defauthoring`, `defvalue`, `deffn`, and `use-vars`. The export maps every built-in inert, use, and bang form to one of them, plus `millstrand.test.alpha/with-weaver-world` for test bindings.
 
 Add Millstrand and clj-kondo to the consumer's tools.deps configuration, then import dependency configs once and lint the consumer source:
 
@@ -701,7 +701,7 @@ Six kinds are always declared: `:ops`, `:queries`, `:patterns`, `:hooks`, `:even
   [step]
   (gate-stalled? step))
 
-(millstrand/defquery stalled-shell-gates
+(millstrand/defquery! stalled-shell-gates
   "Return active shell gates whose executor needs attention."
   {}
   [:and [:= :state "active"]
@@ -810,7 +810,7 @@ Use `defseed` for an idempotent process-lifetime action with no cleanup. Use `de
 (defn close-priority! [{:keys [resource]}]
   (stop-priority-monitor! resource))
 
-(lifecycle/defresource priority-monitor
+(lifecycle/defresource! priority-monitor
   "Run the priority monitor while this module is active."
   {:open 'acme.priority.local/open-priority!
    :close 'acme.priority.local/close-priority!})
@@ -838,7 +838,7 @@ Two options are optional. `:trigger-kinds` is why the form exists. An unchanged,
 `:after` is the same ordering set a resource takes: a set of effect ids in this module that must run before this one. It orders application and, reversed, teardown — an effect named in someone's `:after` comes down after its dependent does. Reach for it when a reconcile has to see a resource already open, or a seed already applied.
 
 ```clojure
-(lifecycle/defreconcile scheduled-jobs
+(lifecycle/defreconcile! scheduled-jobs
   "Keep durable schedule wakes converged on the effective published job registry."
   {:read-desired 'acme.spools.schedule/desired-jobs
    :read-actual 'acme.spools.schedule/actual-jobs

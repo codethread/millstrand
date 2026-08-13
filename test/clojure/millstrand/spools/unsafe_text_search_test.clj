@@ -28,7 +28,7 @@
                               [:modules :millstrand/spools-unsafe-text-search :source/status])))
         (is (= source-entry image-entry)
             "image replay publishes the source-collected normalized entry")
-        (is (= 'millstrand.spools.unsafe-text-search/search-op (:fn source-entry)))
+        (is (= 'millstrand.spools.unsafe-text-search/search (:fn source-entry)))
         (is (= 'millstrand.spools.unsafe-text-search (:provenance source-entry)))
         (is (= "search" (get-in source-entry [:arg-spec :op])))
         (is (= :read (get-in source-entry [:arg-spec :hook-class])))
@@ -53,11 +53,11 @@
       (let [design (weaver/add! rt {:title "Design the payments flow" :attributes {"topic" "billing"}})]
         (weaver/add! rt {:title "Unrelated work" :attributes {"topic" "shipping"}})
         (testing "a title substring hit carries no attribute key"
-          (let [rows (unsafe-text-search/search rt {:substring "payments"})]
+          (let [rows (unsafe-text-search/search-rows rt {:substring "payments"})]
             (is (= [{:id (:id design) :attr-key nil}]
                    (mapv #(select-keys % [:id :attr-key]) rows)))))
         (testing "an attribute-value hit carries the matching key"
-          (let [rows (unsafe-text-search/search rt {:substring "billing"})]
+          (let [rows (unsafe-text-search/search-rows rt {:substring "billing"})]
             (is (= 1 (count rows)))
             (is (= (:id design) (:id (first rows))))
             (is (= "topic" (:attr-key (first rows))))
@@ -69,7 +69,7 @@
       (let [a (weaver/add! rt {:title "shared token here" :attributes {"owner" "shared token"}})]
         (weaver/add! rt {:title "other" :attributes {"note" "shared token"}})
         (testing "--attr-key restricts to one attribute key and drops the title branch"
-          (let [rows (unsafe-text-search/search rt {:substring "shared token" :attr-key "owner"})]
+          (let [rows (unsafe-text-search/search-rows rt {:substring "shared token" :attr-key "owner"})]
             (is (= [{:id (:id a) :attr-key "owner"}]
                    (mapv #(select-keys % [:id :attr-key]) rows)))))))))
 
@@ -79,9 +79,9 @@
       (let [strand (weaver/add! rt {:title "Old session" :attributes {"transcript" "secretword"}})]
         (weaver/archive-attributes! rt (:id strand) ["transcript"])
         (testing "an archived attribute value is invisible to the query language and to a default search"
-          (is (empty? (unsafe-text-search/search rt {:substring "secretword"}))))
+          (is (empty? (unsafe-text-search/search-rows rt {:substring "secretword"}))))
         (testing "--archived opts the cold row back in"
-          (let [rows (unsafe-text-search/search rt {:substring "secretword" :archived? true})]
+          (let [rows (unsafe-text-search/search-rows rt {:substring "secretword" :archived? true})]
             (is (= [{:id (:id strand) :attr-key "transcript"}]
                    (mapv #(select-keys % [:id :attr-key]) rows)))))))))
 
@@ -92,27 +92,27 @@
         (weaver/add! rt {:title "Rollout 50X done"})
         (testing "a LIKE metacharacter in the substring matches literally, not as a wildcard"
           (is (= [(:id pct)]
-                 (mapv :id (unsafe-text-search/search rt {:substring "50%"})))))))))
+                 (mapv :id (unsafe-text-search/search-rows rt {:substring "50%"})))))))))
 
 (deftest blank-substring-fails-loudly
   (with-runtime
     (fn [rt _]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts are invalid"
-                            (unsafe-text-search/search rt {:substring "   "})))
+                            (unsafe-text-search/search-rows rt {:substring "   "})))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts are invalid"
-                            (unsafe-text-search/search rt {:substring nil}))))))
+                            (unsafe-text-search/search-rows rt {:substring nil}))))))
 
 (deftest malformed-options-fail-loudly-before-changing-search-mode
   (with-runtime
     (fn [rt _]
       (testing ":archived? must be a boolean, not a truthy string"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts are invalid"
-                              (unsafe-text-search/search rt {:substring "needle" :archived? "false"}))))
+                              (unsafe-text-search/search-rows rt {:substring "needle" :archived? "false"}))))
       (testing ":attr-key must be a non-blank string"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts are invalid"
-                              (unsafe-text-search/search rt {:substring "needle" :attr-key ""})))
+                              (unsafe-text-search/search-rows rt {:substring "needle" :attr-key ""})))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts are invalid"
-                              (unsafe-text-search/search rt {:substring "needle" :attr-key :owner})))))))
+                              (unsafe-text-search/search-rows rt {:substring "needle" :attr-key :owner})))))))
 
 (deftest overflow-fails-loudly-and-caps-rather-than-truncates
   (with-runtime
@@ -120,13 +120,13 @@
       (dotimes [n 3]
         (weaver/add! rt {:title (str "widget number " n)}))
       (testing "matches within the limit return"
-        (is (= 3 (count (unsafe-text-search/search rt {:substring "widget" :limit 3})))))
+        (is (= 3 (count (unsafe-text-search/search-rows rt {:substring "widget" :limit 3})))))
       (testing "more matches than the limit fail loudly naming --limit"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"more than the --limit"
-                              (unsafe-text-search/search rt {:substring "widget" :limit 2}))))
+                              (unsafe-text-search/search-rows rt {:substring "widget" :limit 2}))))
       (testing "a non-positive limit fails loudly"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts are invalid"
-                              (unsafe-text-search/search rt {:substring "widget" :limit 0})))))))
+                              (unsafe-text-search/search-rows rt {:substring "widget" :limit 0})))))))
 
 (deftest op-handler-threads-args-and-passes-the-archived-flag-through
   (with-runtime
@@ -134,10 +134,10 @@
       (let [strand (weaver/add! rt {:title "Session log" :attributes {"transcript" "coldvalue"}})]
         (weaver/archive-attributes! rt (:id strand) ["transcript"])
         (testing "absent --archived defaults to hot rows only"
-          (is (empty? (unsafe-text-search/search-op {:op/runtime rt :op/args {:substring "coldvalue"}}))))
+          (is (empty? (unsafe-text-search/search {:op/runtime rt :op/args {:substring "coldvalue"}}))))
         (testing "present --archived reads cold rows"
           (is (= [(:id strand)]
-                 (mapv :id (unsafe-text-search/search-op {:op/runtime rt :op/args {:substring "coldvalue" :archived true}})))))
+                 (mapv :id (unsafe-text-search/search {:op/runtime rt :op/args {:substring "coldvalue" :archived true}})))))
         (testing "a non-boolean --archived fails loudly rather than coercing to a truthy read"
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts are invalid"
-                                (unsafe-text-search/search-op {:op/runtime rt :op/args {:substring "coldvalue" :archived "false"}}))))))))
+                                (unsafe-text-search/search {:op/runtime rt :op/args {:substring "coldvalue" :archived "false"}}))))))))

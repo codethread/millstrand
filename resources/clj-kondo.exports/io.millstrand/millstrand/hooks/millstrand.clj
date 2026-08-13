@@ -69,99 +69,116 @@
       (invalid-hook-context! hook "name must be a symbol"
                              name-node name-node name))))
 
-(defn- defn-hook
-  "Analyze a function-shaped authoring form as a `defn`."
-  [{:keys [node]}]
-  (let [[form-node name-node docstring-node opts-node argv-node & body] (:children node)
-        defn-node (api/list-node
-                   (list* (api/token-node 'defn)
-                          name-node docstring-node argv-node body))
-        used (api/list-node
-              (list (api/token-node 'do)
-                    (api/list-node
-                     (list (api/token-node 'identity) form-node))
-                    (api/list-node
-                     (list (api/token-node 'identity) opts-node))
-                    defn-node))]
-    {:node (with-meta used (meta node))}))
+(defn- identity-node [node]
+  (api/list-node (list (api/token-node 'identity) node)))
 
-(defn defop
-  "Analyze a Millstrand `defop` call."
+(defn- used-node [form-node value-nodes]
+  (api/list-node
+   (list* (api/token-node 'do)
+          (identity-node form-node)
+          (map identity-node value-nodes))))
+
+(defn- definition-name-node [hook name-node]
+  (symbol-name hook name-node)
+  name-node)
+
+(defn defvalue
+  "Analyze a value-backed authoring form as a `def` at its authored name."
   [context]
-  (let [[node children] (hook-children :defop context 5 false)
-        [form-node name-node docstring-node opts-node argv-node & body] children
-        name (symbol-name :defop name-node)
-        handler-node (with-meta
-                       (api/token-node (symbol (str name "-op")))
-                       (meta name-node))
-        defn-node (api/list-node
-                   (list* (api/token-node 'defn)
-                          handler-node docstring-node argv-node body))
-        used (api/list-node
-              (list (api/token-node 'do)
-                    (api/list-node
-                     (list (api/token-node 'identity) form-node))
-                    (api/list-node
-                     (list (api/token-node 'identity) opts-node))
-                    defn-node))]
-    {:node (with-meta used (meta node))}))
+  (let [[node children] (hook-children :defvalue context 4 false)
+        [form-node name-node docstring-node & values] children]
+    (definition-name-node :defvalue name-node)
+    {:node (with-meta
+             (api/list-node
+              (list (api/token-node 'def)
+                    name-node docstring-node
+                    (used-node form-node values)))
+             (meta node))}))
 
-(defn defquery
-  "Analyze a Millstrand `defquery` call."
+(defn deffn
+  "Analyze a function-backed authoring form as a `defn` at its authored name."
   [context]
-  (let [[node [form-node name-node docstring-node opts-node query-node]]
-        (hook-children :defquery context 5 true)
-        _ (symbol-name :defquery name-node)
-        used (api/list-node
-              (list (api/token-node 'do)
-                    (api/list-node
-                     (list (api/token-node 'identity) form-node))
-                    (api/list-node
-                     (list (api/token-node 'identity) opts-node))
-                    query-node))
-        def-node (api/list-node
-                  (list (api/token-node 'def)
-                        name-node docstring-node used))]
-    {:node (with-meta def-node (meta node))}))
+  (let [[node children] (hook-children :deffn context 5 false)
+        [form-node name-node docstring-node & after-doc] children
+        argv-index (first (keep-indexed
+                           (fn [index child]
+                             (when (api/vector-node? child) index))
+                           after-doc))]
+    (definition-name-node :deffn name-node)
+    (when-not argv-index
+      (invalid-hook-context! :deffn
+                             "context must contain a function argument vector"
+                             node node after-doc))
+    (let [option-nodes (take argv-index after-doc)
+          argv-node (nth after-doc argv-index)
+          body (drop (inc argv-index) after-doc)
+          defn-node (api/list-node
+                     (list* (api/token-node 'defn)
+                            name-node docstring-node argv-node body))]
+      {:node (with-meta
+               (api/list-node
+                (into [(api/token-node 'do)
+                       (identity-node form-node)]
+                      (concat (map identity-node option-nodes)
+                              [defn-node])))
+               (meta node))})))
 
-(defn defpattern
-  "Analyze a Millstrand `defpattern` call."
+(defn use-vars
+  "Analyze a typed use form as Var references without defining Vars."
   [context]
-  (defn-hook context))
-
-(defn defhook
-  "Analyze a Millstrand `defhook` call."
-  [context]
-  (defn-hook context))
-
-(defn defhandler
-  "Analyze a Millstrand `defhandler` call."
-  [context]
-  (defn-hook context))
-
-(defn defbin
-  "Analyze a Millstrand `defbin` call as a Var definition."
-  [{:keys [node]}]
-  (let [[form-node name-node docstring-node opts-node] (:children node)
-        value-node (api/list-node
-                    (list (api/token-node 'do)
+  (let [[node children] (hook-children :use-vars context 2 false)
+        [form-node & args] children
+        [options var-nodes] (if (api/map-node? (first args))
+                              [(first args) (next args)]
+                              [nil args])]
+    (when (empty? var-nodes)
+      (invalid-hook-context! :use-vars
+                             "context must contain one or more Var symbols"
+                             node node args))
+    (doseq [var-node var-nodes]
+      (when-not (symbol? (sexpr var-node))
+        (invalid-hook-context! :use-vars "Var references must be symbols"
+                               node var-node (sexpr var-node))))
+    (let [option-use (if options [(identity-node options)] [])
+          var-uses (map (fn [var-node]
                           (api/list-node
-                           (list (api/token-node 'identity) form-node))
-                          (api/list-node
-                           (list (api/token-node 'identity) opts-node))))
-        def-node (api/list-node
-                  (list (api/token-node 'def)
-                        name-node docstring-node value-node))]
-    {:node (with-meta def-node (meta node))}))
+                           (list (api/token-node 'var) var-node)))
+                        var-nodes)]
+      {:node (with-meta
+               (api/list-node
+                (into [(api/token-node 'do)
+                       (identity-node form-node)]
+                      (concat option-use var-uses)))
+               (meta node))})))
 
 (defn defauthoring
-  "Analyze the shared authoring-family generator without linting its plan body."
+  "Analyze a family generator as definitions of its three generated macros."
   [context]
-  (let [[node _] (hook-children :defauthoring context 3 false)]
-    {:node (with-meta (api/list-node [(api/token-node 'do)]) (meta node))}))
-
-(defn deflifecycle
-  "Analyze the lifecycle-family generator without linting its plan body."
-  [context]
-  (let [[node _] (hook-children :deflifecycle context 3 false)]
-    {:node (with-meta (api/list-node [(api/token-node 'do)]) (meta node))}))
+  (let [[node [_form-node noun-node bindings-node & _]]
+        (hook-children :defauthoring context 3 false)
+        noun (symbol-name :defauthoring noun-node)
+        bindings (when (api/vector-node? bindings-node)
+                   (:children bindings-node))]
+    (when-not (api/vector-node? bindings-node)
+      (invalid-hook-context! :defauthoring
+                             "builder bindings must be a vector"
+                             node bindings-node (sexpr bindings-node)))
+    (when-not (and (seq bindings)
+                   (simple-symbol? (sexpr (first bindings))))
+      (invalid-hook-context! :defauthoring
+                             "builder bindings must start with a symbol"
+                             node bindings-node (sexpr bindings-node)))
+    (let [names [(symbol (str "def" noun))
+                 (symbol (str "use-" noun "!"))
+                 (symbol (str "def" noun "!"))]
+          macro-def (fn [name]
+                      (api/list-node
+                       (list (api/token-node 'defmacro)
+                             (api/token-node name)
+                             (api/vector-node [(api/token-node '&)
+                                               (api/token-node 'args)])
+                             (api/token-node 'args))))]
+      {:node (with-meta
+               (api/list-node
+                (into [(api/token-node 'do)] (map macro-def names)))
+               (meta node))})))

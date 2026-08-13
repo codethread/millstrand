@@ -45,9 +45,9 @@ Function.
 Dispatch a guild-declared operation after parsing and validating input.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/examples/guild/src/skein/examples/guild.clj#L201-L207">Source</a></sub></p>
 
-## <a name="skein.examples.guild/guild-op">`guild-op`</a>
+## <a name="skein.examples.guild/guild">`guild`</a>
 ``` clojure
-(guild-op #:op{:keys [runtime runtime-metadata]})
+(guild #:op{:keys [runtime runtime-metadata]})
 ```
 Function.
 

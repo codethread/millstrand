@@ -125,7 +125,7 @@
        (when-not archived? " AND a.archived = 0")
        (when attr-key? " AND a.key = ?")))
 
-(defn search
+(defn search-rows
   "Return strand rows whose title or an attribute value contains `substring`.
 
   `opts` is a map: `:substring` (required, non-blank, matched literally),
@@ -210,8 +210,8 @@
    :stream? false}
   [ctx]
   (let [{:keys [substring archived attr-key limit]} (:op/args ctx)]
-    (search (:op/runtime ctx)
-            (cond-> {:substring substring}
-              (some? archived) (assoc :archived? archived)
-              attr-key (assoc :attr-key attr-key)
-              limit (assoc :limit limit)))))
+    (search-rows (:op/runtime ctx)
+                 (cond-> {:substring substring}
+                   (some? archived) (assoc :archived? archived)
+                   attr-key (assoc :attr-key attr-key)
+                   limit (assoc :limit limit)))))

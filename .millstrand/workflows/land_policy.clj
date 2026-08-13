@@ -194,7 +194,7 @@
                                    |restoring one usable :workflow/run-id.")})))
     run-id))
 
-(millstrand/defhook require-merge-lock-at-signoff-approval
+(millstrand/defhook! require-merge-lock-at-signoff-approval
   "Veto committing an approved land sign-off that holds no merge lock.
 
   `strand land choose <run> approved` acquires the singleton merge lock and a
@@ -775,7 +775,7 @@
             |terminal `land complete <run-id>` when ready asks for it. Full
             |verb shapes: `strand help land`.")})
 
-(millstrand/defop land
+(millstrand/defop! land
   "Enforce coordinator landing policy across workflows, kanban, and merge locks.
 
   Use the generic `workflow` op for every operation that does not cross those
