@@ -19,6 +19,16 @@
 (def ^:private source-lint-command
   ["clojure" "-M:lint" "--lint" "src" "--cache" "false"])
 
+(def ^:private generated-family-hook-config
+  (str "{:hooks\n"
+       " {:analyze-call\n"
+       "  {example.consumer/defsetting hooks.millstrand/defvalue\n"
+       "   example.consumer/defsetting! hooks.millstrand/defvalue\n"
+       "   example.consumer/use-setting! hooks.millstrand/use-vars\n"
+       "   example.consumer/defaction hooks.millstrand/deffn\n"
+       "   example.consumer/defaction! hooks.millstrand/deffn\n"
+       "   example.consumer/use-action! hooks.millstrand/use-vars}}}\n"))
+
 (defn- repository-root
   "Return this checkout's root from the test source location."
   []
@@ -150,13 +160,16 @@
    "\n"
    "(authoring/defauthoring setting [mode name doc value] {})\n"
    "(authoring/defauthoring action [mode name doc argv & body] {})\n"
-   "(declare steady fast render publish value)\n"
    "(defsetting steady \"A generated value declaration.\" :steady)\n"
-   "(use-setting! steady)\n"
    "(defsetting! fast \"A generated value bang declaration.\" :fast)\n"
+   "(use-setting! steady fast)\n"
    "(defaction render \"A generated function declaration.\" [value] value)\n"
-   "(use-action! render)\n"
    "(defaction! publish \"A generated function bang declaration.\" [value] value)\n"
+   "(use-action! render publish)\n"
+   "(defn use-generated-definitions\n"
+   "  \"Reference every Var synthesized by the generated domain forms.\"\n"
+   "  []\n"
+   "  [steady fast (render :rendered) (publish :published)])\n"
    "\n"
    "(test/with-weaver-world [ctx {}]\n"
    "  (:runtime ctx))\n"))
@@ -197,6 +210,20 @@
      :exit (if (zero? import-exit) lint-exit import-exit)
      :output (str import-output lint-output)}))
 
+(defn- write-generated-family-hook-config!
+  "Configure a consumer-owned generated family with Millstrand's exported hooks."
+  [^java.io.File root]
+  (write-consumer-file! root ".clj-kondo/config.edn" generated-family-hook-config))
+
+(defn- generated-family-negative-source
+  "Return a minimal consumer source that exercises one generated family failure."
+  [form]
+  (str "(ns example.consumer\n"
+       "  (:require [millstrand.api.authoring.alpha :as authoring]))\n\n"
+       "(authoring/defauthoring setting [mode name doc value] {})\n"
+       "(authoring/defauthoring action [mode name doc argv & body] {})\n"
+       form "\n"))
+
 (deftest consumer-imports-and-lints-all-millstrand-forms
   (let [root (.toFile (java.nio.file.Files/createTempDirectory
                        "millstrand-kondo-consumer"
@@ -205,6 +232,7 @@
       (write-consumer-file! root "deps.edn" (pr-str (consumer-deps (repository-root))))
       (write-consumer-file! root "src/example/consumer.clj" consumer-source)
       (.mkdirs (io/file root ".clj-kondo"))
+      (write-generated-family-hook-config! root)
       (let [{:keys [exit output import-command import-exit import-output
                     lint-command lint-exit lint-output]} (run-consumer-kondo! root)
             imported-config (io/file root ".clj-kondo/imports/io.millstrand/millstrand/config.edn")]
@@ -217,6 +245,48 @@
         (is (.isFile imported-config)))
       (finally
         (delete-tree! root)))))
+
+(deftest generated-family-consumer-failures-use-exported-hook-diagnostics
+  (doseq [[label form diagnostic]
+          [["missing generated value name, docstring, and value"
+            "(defsetting!)"
+            "defvalue hook context node must contain at least 4 children"]
+           ["missing generated value docstring and value"
+            "(defsetting! broken)"
+            "defvalue hook context node must contain at least 4 children"]
+           ["missing generated value"
+            "(defsetting! broken \"Missing value.\")"
+            "defvalue hook context node must contain at least 4 children"]
+           ["invalid generated value name"
+            "(defsetting! \"broken\" \"Invalid name.\" :broken)"
+            "defvalue hook name must be a symbol"]
+           ["missing generated function argument vector"
+            "(defaction! broken \"Missing argv.\" {} :not-an-argv)"
+            "deffn hook context must contain a function argument vector"]
+           ["empty generated use"
+            "(use-setting!)"
+            "use-vars hook context must contain at least 2 children"]
+           ["malformed generated use"
+            "(use-action! :not-a-var)"
+            "use-vars hook Var references must be symbols"]]]
+    (testing label
+      (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                           "millstrand-kondo-generated-family-negative"
+                           (make-array java.nio.file.attribute.FileAttribute 0)))]
+        (try
+          (write-consumer-file! root "deps.edn" (pr-str (consumer-deps (repository-root))))
+          (write-consumer-file! root "src/example/consumer.clj"
+                                (generated-family-negative-source form))
+          (.mkdirs (io/file root ".clj-kondo"))
+          (write-generated-family-hook-config! root)
+          (let [{:keys [exit import-exit import-output lint-exit lint-output]}
+                (run-consumer-kondo! root)]
+            (is (zero? import-exit) import-output)
+            (is (not (zero? exit)) lint-output)
+            (is (not (zero? lint-exit)) lint-output)
+            (is (str/includes? lint-output diagnostic) lint-output))
+          (finally
+            (delete-tree! root)))))))
 
 (deftest brownfield-consumer-rebootstrap-replaces-stale-millstrand-export
   (let [root (.toFile (java.nio.file.Files/createTempDirectory
