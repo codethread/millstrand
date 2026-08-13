@@ -1,7 +1,6 @@
 (ns ct.workflows.explore
   "The open-ended exploration workflow (family `explore`)."
   (:require [clojure.spec.alpha :as s]
-            [clojure.string :as str]
             [millstrand.api.format.alpha :as format-alpha]
             [millhouse.spools.workflow :as workflow]
             [ct.workflows.support :as support]))

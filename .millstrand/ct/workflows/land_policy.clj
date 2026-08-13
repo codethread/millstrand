@@ -1,7 +1,7 @@
 (ns ct.workflows.land-policy
   "The coordinator landing policy: the merge train and the narrow `land` op.
 
-  The land WORKFLOW definitions live in workflows/land.clj — live
+  The land WORKFLOW definitions live in ct/workflows/land.clj — live
   runs carry their qualified symbols on persisted gates — and this module owns
   the policy the engine has no business knowing: the singleton merge lock, the
   first-in first-out merge queue in front of it, and the kanban lane moves that
@@ -80,7 +80,7 @@
                         (io/file config-dir ".land-merge-lock.acquire")
                         "rw")
                   channel (.getChannel file)
-                  lock (.lock channel)]
+                  _lock (.lock channel)]
         (f)))))
 
 (defn- attr-value

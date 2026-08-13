@@ -1,4 +1,8 @@
-{:config-paths ["../resources/clj-kondo.exports/io.millstrand/millstrand"]
+{:config-paths ["../resources/clj-kondo.exports/io.millstrand/millstrand"
+                "imports/ct.spools/agent-run"
+                "imports/millhouse.spools/chime"
+                "imports/millhouse.spools/cron"
+                "imports/millhouse.spools/workflow"]
  ;; Keep repository policy and third-party compatibility rules here; the
  ;; public Millstrand authoring analysis comes from the classpath export above.
  :lint-as {clojure.test.check.clojure-test/defspec clojure.test/deftest}

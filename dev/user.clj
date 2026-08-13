@@ -94,7 +94,7 @@
   (def docs-id (:id (first (filter #(= "docs" (get-in % [:attributes :demo-id])) (demo-strands)))))
   (def replacement-docs-id (:id (demo-strand! "Rewrite docs" {:owner "agent" :demo-id "replacement-docs"})))
   (weaver/supersede! (demo-runtime!) docs-id replacement-docs-id)
-  (weaver/list (demo-runtime!) [:edge/out "supersedes" [:= [:attr :demo-id] "docs"]])
+  (weaver/list (demo-runtime!) [:edge/out "supersedes" [:= [:attr :demo-id] "docs"]] {})
   (weaver/update! (demo-runtime!) replacement-docs-id {:state "closed"})
   (weaver/ready (demo-runtime!))
   ;; The registration verbs, one tier down from millstrand.repl's runtime-implied twins:

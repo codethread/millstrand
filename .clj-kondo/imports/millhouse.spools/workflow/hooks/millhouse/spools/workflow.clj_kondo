@@ -56,15 +56,20 @@
   "Analyze `workflow/defworkflow` as a definition while retaining its body."
   [{:keys [node]}]
   (let [[form name doc opts definition] (:children node)
+        doc-node (if (string? (api/sexpr doc))
+                   doc
+                   (api/string-node "Computed workflow documentation."))
         used (api/list-node
               (list (api/token-node 'do)
                     (api/list-node
                      (list (api/token-node 'identity) form))
                     (api/list-node
+                     (list (api/token-node 'identity) doc))
+                    (api/list-node
                      (list (api/token-node 'identity) opts))
                     definition))
         def-node (api/list-node
-                  (list (api/token-node 'def) name doc used))]
+                  (list (api/token-node 'def) name doc-node used))]
     {:node (with-meta def-node (meta node))}))
 
 (defn defexecutor

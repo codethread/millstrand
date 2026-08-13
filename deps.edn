@@ -35,34 +35,116 @@
   :repl {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
   :rebel {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]
           :main-opts ["-m" "rebel-readline.main"]}
-  :millstrand {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
+  ;; Static projection of the runtime-approved spools used by this repository's
+  ;; Millstrand config. Keep these coordinates aligned with spools.edn.
+  :millstrand {:extra-paths [".millstrand"
+                             "spools/batteries/src"
+                             "spools/unsafe-text-search/src"]
+               :extra-deps {codethread/agents
+                            {:git/url "https://github.com/codethread/codethread.spool.git"
+                             :git/sha "26fdf691649e8c92ae6366c627e0a77cd8219549"
+                             :deps/root "spools/agents"}
+                            codethread/devflow-setup
+                            {:git/url "https://github.com/codethread/codethread.spool.git"
+                             :git/sha "26fdf691649e8c92ae6366c627e0a77cd8219549"
+                             :deps/root "spools/devflow-setup"}
+                            codethread/ralph
+                            {:git/url "https://github.com/codethread/codethread.spool.git"
+                             :git/sha "26fdf691649e8c92ae6366c627e0a77cd8219549"
+                             :deps/root "spools/ralph"}
+                            codethread/kanban
+                            {:git/url "https://github.com/codethread/kanban.spool.git"
+                             :git/sha "a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e"
+                             :deps/root "."}
+                            codethread/devflow
+                            {:git/url "https://github.com/codethread/devflow.spool.git"
+                             :git/sha "e1fed4904447f4752ea99dc27ab174c237604094"
+                             :deps/root "."}
+                            codethread/devflow-kanban-adapter
+                            {:git/url "https://github.com/codethread/devflow.spool.git"
+                             :git/sha "e1fed4904447f4752ea99dc27ab174c237604094"
+                             :deps/root "kanban-adapter"}
+                            ct.spools/harness-core
+                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
+                             :git/sha "636ae9ecbb57c4fde2c79485c7ef7767aba5753b"
+                             :deps/root "harness-core"}
+                            ct.spools/codex-harness
+                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
+                             :git/sha "636ae9ecbb57c4fde2c79485c7ef7767aba5753b"
+                             :deps/root "codex-harness"}
+                            ct.spools/agent-run
+                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
+                             :git/sha "636ae9ecbb57c4fde2c79485c7ef7767aba5753b"
+                             :deps/root "agent-run"}
+                            ct.spools/agent-cli
+                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
+                             :git/sha "636ae9ecbb57c4fde2c79485c7ef7767aba5753b"
+                             :deps/root "agent-cli"}
+                            ct.spools/delegation
+                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
+                             :git/sha "636ae9ecbb57c4fde2c79485c7ef7767aba5753b"
+                             :deps/root "delegation"}
+                            ct.spools/bench
+                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
+                             :git/sha "636ae9ecbb57c4fde2c79485c7ef7767aba5753b"
+                             :deps/root "bench"}
+                            millhouse.spools/workflow
+                            {:git/url "https://github.com/codethread/millhouse.spool.git"
+                             :git/sha "c968e8bb083496cbdc2374def4f2c22347440806"
+                             :deps/root "spools/workflow"}
+                            millhouse.spools/millstrand-workflows
+                            {:git/url "https://github.com/codethread/millhouse.spool.git"
+                             :git/sha "c968e8bb083496cbdc2374def4f2c22347440806"
+                             :deps/root "spools/millstrand-workflows"}
+                            millhouse.spools.executors/code
+                            {:git/url "https://github.com/codethread/millhouse.spool.git"
+                             :git/sha "c968e8bb083496cbdc2374def4f2c22347440806"
+                             :deps/root "spools/code-executor"}
+                            millhouse.spools.executors/shell
+                            {:git/url "https://github.com/codethread/millhouse.spool.git"
+                             :git/sha "c968e8bb083496cbdc2374def4f2c22347440806"
+                             :deps/root "spools/shell-executor"}
+                            millhouse.spools/chime
+                            {:git/url "https://github.com/codethread/millhouse.spool.git"
+                             :git/sha "c968e8bb083496cbdc2374def4f2c22347440806"
+                             :deps/root "spools/chime"}
+                            millhouse.spools/cron
+                            {:git/url "https://github.com/codethread/millhouse.spool.git"
+                             :git/sha "c968e8bb083496cbdc2374def4f2c22347440806"
+                             :deps/root "spools/cron"}}
+               :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
   :e2e {:extra-paths ["test/clojure/e2e"]
         :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
         :main-opts ["-m" "millstrand.e2e"]}
   :format {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
            :main-opts ["-m" "cljfmt.main" "check" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts"
-                       ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
-                       ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
-                       ".millstrand/workflows/story.clj"
-                       ".millstrand/workflows/explore.clj" ".millstrand/workflows/fix.clj"
-                       ".millstrand/workflows/land_policy.clj" ".millstrand/agents/guide.clj"
-                       ".millstrand/agents/reviewers.clj" ".millstrand/agents/delegation_contracts.clj"
-                       ".millstrand/notifications/attention.clj"
-                       ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/help.clj"
-                       ".millstrand/adapters/kanban.clj"]}
+                       ".millstrand/init.clj" ".millstrand/ct/policy/config.clj" ".millstrand/ct/workflows/support.clj"
+                       ".millstrand/ct/workflows/common.clj" ".millstrand/ct/workflows/land.clj"
+                       ".millstrand/ct/workflows/story.clj"
+                       ".millstrand/ct/workflows/explore.clj" ".millstrand/ct/workflows/fix.clj"
+                       ".millstrand/ct/workflows/land_policy.clj" ".millstrand/ct/agents/guide.clj"
+                       ".millstrand/ct/agents/reviewers.clj" ".millstrand/ct/agents/delegation_contracts.clj"
+                       ".millstrand/ct/notifications/attention.clj"
+                       ".millstrand/ct/jobs/nvd_scan.clj" ".millstrand/ct/adapters/help.clj"
+                       ".millstrand/ct/adapters/kanban.clj"]}
   :format/fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
                :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts"
-                           ".millstrand/init.clj" ".millstrand/policy/config.clj" ".millstrand/workflows/support.clj"
-                           ".millstrand/workflows/common.clj" ".millstrand/workflows/land.clj"
-                           ".millstrand/workflows/story.clj"
-                           ".millstrand/workflows/explore.clj" ".millstrand/workflows/fix.clj"
-                           ".millstrand/workflows/land_policy.clj" ".millstrand/agents/guide.clj"
-                           ".millstrand/agents/reviewers.clj" ".millstrand/agents/delegation_contracts.clj"
-                           ".millstrand/notifications/attention.clj"
-                           ".millstrand/jobs/nvd_scan.clj" ".millstrand/adapters/help.clj"
-                           ".millstrand/adapters/kanban.clj"]}
+                           ".millstrand/init.clj" ".millstrand/ct/policy/config.clj" ".millstrand/ct/workflows/support.clj"
+                           ".millstrand/ct/workflows/common.clj" ".millstrand/ct/workflows/land.clj"
+                           ".millstrand/ct/workflows/story.clj"
+                           ".millstrand/ct/workflows/explore.clj" ".millstrand/ct/workflows/fix.clj"
+                           ".millstrand/ct/workflows/land_policy.clj" ".millstrand/ct/agents/guide.clj"
+                           ".millstrand/ct/agents/reviewers.clj" ".millstrand/ct/agents/delegation_contracts.clj"
+                           ".millstrand/ct/notifications/attention.clj"
+                           ".millstrand/ct/jobs/nvd_scan.clj" ".millstrand/ct/adapters/help.clj"
+                           ".millstrand/ct/adapters/kanban.clj"]}
   :lint/clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                    :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure"]}
+  :lint/millstrand {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
+                    :main-opts ["-m" "clj-kondo.main" "--fail-level" "error" "--lint"
+                                "src" "dev" ".millstrand/ct"
+                                "spools/batteries/src" "spools/unsafe-text-search/src"
+                                "test/clojure"]}
   :lint/conventions {:extra-paths ["scripts"]
                      :extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                      :main-opts ["-m" "quality.conventions-check"]}
