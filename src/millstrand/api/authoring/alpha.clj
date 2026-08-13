@@ -13,6 +13,7 @@
   specs at their named boundaries."
   (:require [clojure.core.specs.alpha]
             [clojure.spec.alpha :as s]
+            [millstrand.api.format.alpha :as format-alpha]
             [millstrand.api.runtime.alpha :as runtime]))
 
 (def ^:private protocol-version 1)
@@ -560,6 +561,33 @@
           `(select-lifecycle! ~family '~namespace '~form ['~name]))
        ~target)))
 
+(defn- registry-macro-docstrings
+  "Return the generated registry macro docstrings for `noun`."
+  [noun]
+  (let [article (if (= noun 'op) "an" "a")]
+    [(format (format-alpha/reflow
+              "|Define an inert %s declaration; return its Var.")
+             noun)
+     (format (format-alpha/reflow
+              "|Select one or more %s declaration Vars; return them as a vector.")
+             noun)
+     (format (format-alpha/reflow
+              "|Define and select %s %s declaration; return its Var.")
+             article noun)]))
+
+(defn- lifecycle-macro-docstrings
+  "Return the generated lifecycle macro docstrings for `noun`."
+  [noun]
+  [(format (format-alpha/reflow
+            "|Define an inert %s lifecycle declaration; return its Var.")
+           noun)
+   (format (format-alpha/reflow
+            "|Select one or more %s lifecycle declaration Vars; return them as a vector.")
+           noun)
+   (format (format-alpha/reflow
+            "|Define and select a %s lifecycle declaration; return its Var.")
+           noun)])
+
 (defmacro deflifecycle
   "Define an inert and a define-and-use family of lifecycle forms.
 
@@ -584,12 +612,7 @@
           define-name (symbol (str "def" noun))
           use-name (symbol (str "use-" noun "!"))
           bang-name (symbol (str "def" noun "!"))
-          inert-doc (str "Define an inert " noun " lifecycle declaration; return its Var.")
-          use-doc (format
-                   (str "Select one or more %s lifecycle declaration Vars; "
-                        "return them as a vector.")
-                   noun)
-          bang-doc (str "Define and select a " noun " lifecycle declaration; return its Var.")]
+          [inert-doc use-doc bang-doc] (lifecycle-macro-docstrings noun)]
       `(do
          (defmacro ~define-name
            ~inert-doc
@@ -636,10 +659,7 @@
           define-name (symbol (str "def" noun))
           use-name (symbol (str "use-" noun "!"))
           bang-name (symbol (str "def" noun "!"))
-          article (if (= noun 'op) "an" "a")
-          inert-doc (str "Define an inert " noun " declaration; return its Var.")
-          use-doc (str "Select one or more " noun " declaration Vars; return them as a vector.")
-          bang-doc (str "Define and select " article " " noun " declaration; return its Var.")]
+          [inert-doc use-doc bang-doc] (registry-macro-docstrings noun)]
       `(do
          (defmacro ~define-name
            ~inert-doc

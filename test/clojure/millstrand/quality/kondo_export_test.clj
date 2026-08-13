@@ -421,23 +421,24 @@
            (api/sexpr (:node analyzed))))))
 
 (deftest defauthoring-static-docstrings-match-runtime-macros
-  (let [node (api/list-node
-              [(api/token-node 'millstrand/defauthoring)
-               (api/token-node 'op)
-               (api/vector-node [(api/token-node 'mode)
-                                 (api/token-node 'name)])
-               (api/list-node [])])
-        definitions (rest (api/sexpr (:node (run-exported-hook 'defauthoring
-                                                               {:node node}))))
-        static-docs (into {}
-                          (map (fn [[_ name docstring]] [name docstring]) definitions))
-        runtime-docs (into {}
-                           (map (fn [name]
-                                  [name (:doc (meta (ns-resolve
-                                                     'millstrand.api.millstrand.alpha
-                                                     name)))])
-                                (keys static-docs)))]
-    (is (= runtime-docs static-docs))))
+  (doseq [noun ['op 'query]]
+    (let [node (api/list-node
+                [(api/token-node 'millstrand/defauthoring)
+                 (api/token-node noun)
+                 (api/vector-node [(api/token-node 'mode)
+                                   (api/token-node 'name)])
+                 (api/list-node [])])
+          definitions (rest (api/sexpr (:node (run-exported-hook 'defauthoring
+                                                                 {:node node}))))
+          static-docs (into {}
+                            (map (fn [[_ name docstring]] [name docstring]) definitions))
+          runtime-docs (into {}
+                             (map (fn [name]
+                                    [name (:doc (meta (ns-resolve
+                                                       'millstrand.api.millstrand.alpha
+                                                       name)))])
+                                  (keys static-docs)))]
+      (is (= runtime-docs static-docs) (str noun " generated docstrings")))))
 
 (deftest unreadable-deffn-name-fails-loudly
   (let [name-node (uneval/uneval-node (api/token-node 'ignored))

@@ -1,6 +1,7 @@
 (ns hooks.millstrand
   "clj-kondo analysis hooks for Millstrand's public authoring forms."
-  (:require [clj-kondo.hooks-api :as api]))
+  (:require [clj-kondo.hooks-api :as api]
+            [clojure.string :as str]))
 
 (def ^:private source-meta-keys
   [:filename :row :col :end-row :end-col])
@@ -81,6 +82,33 @@
 (defn- definition-name-node [hook name-node]
   (symbol-name hook name-node)
   name-node)
+
+(defn- barred-lines [block]
+  (let [lines (keep (fn [line]
+                      (when-let [index (str/index-of line "|")]
+                        (subs line (inc index))))
+                    (str/split-lines block))]
+    (when (empty? lines)
+      (throw (ex-info "|-margin block has no barred lines" {:block block})))
+    lines))
+
+(defn- reflow-margin-block [block]
+  (->> (barred-lines block)
+       (remove str/blank?)
+       (map str/trim)
+       (str/join " ")))
+
+(defn- registry-macro-docstrings [noun]
+  (let [article (if (= noun 'op) "an" "a")]
+    [(format (reflow-margin-block
+              "|Define an inert %s declaration; return its Var.")
+             noun)
+     (format (reflow-margin-block
+              "|Select one or more %s declaration Vars; return them as a vector.")
+             noun)
+     (format (reflow-margin-block
+              "|Define and select %s %s declaration; return its Var.")
+             article noun)]))
 
 (defn defvalue
   "Analyze a value-backed authoring form as a `def` at its authored name."
@@ -168,14 +196,10 @@
       (invalid-hook-context! :defauthoring
                              "builder bindings must start with a symbol"
                              node bindings-node (sexpr bindings-node)))
-    (let [article (if (= noun 'op) "an" "a")
-          macros [[(symbol (str "def" noun))
-                   (str "Define an inert " noun " declaration; return its Var.")]
-                  [(symbol (str "use-" noun "!"))
-                   (str "Select one or more " noun
-                        " declaration Vars; return them as a vector.")]
-                  [(symbol (str "def" noun "!"))
-                   (str "Define and select " article " " noun " declaration; return its Var.")]]
+    (let [[inert-doc use-doc bang-doc] (registry-macro-docstrings noun)
+          macros [[(symbol (str "def" noun)) inert-doc]
+                  [(symbol (str "use-" noun "!")) use-doc]
+                  [(symbol (str "def" noun "!")) bang-doc]]
           macro-def (fn [[name docstring]]
                       (api/list-node
                        (list (api/token-node 'defmacro)
