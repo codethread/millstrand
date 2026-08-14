@@ -1,5 +1,5 @@
 (ns ct.adapters.kanban-acceptance
-  "Select the core Kanban v25 declarations for adapter acceptance."
+  "Select the existing Kanban v24 declarations for adapter acceptance."
   (:require [millstrand.api.millstrand.alpha :as millstrand]
             [ct.spools.kanban :as kanban]))
 
