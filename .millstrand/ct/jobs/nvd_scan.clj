@@ -16,7 +16,8 @@
   This is its own init.clj module (not part of ct/policy/config.clj), so
   config_test's direct ct/policy/config.clj load never registers the job."
   (:require [clojure.data.json :as json]
-            [millhouse.spools.cron :as cron]))
+            [millhouse.spools.cron :as cron]
+            [millstrand.api.format.alpha :as format-alpha]))
 
 (def ^:private nvd-scan-interval-ms
   "Base cadence: 6 days between NVD deep scans."
@@ -157,13 +158,24 @@
             (raise-card! {:title (str "NVD scan: vulnerable dependencies found"
                                       (when (pos? watson-n) (str " (clj-watson: " watson-n ")"))
                                       (when govuln? " (govulncheck)"))
-                          :body (str "The scheduled NVD deep scan (make deps-report) reported "
-                                     "vulnerable dependencies.\n\n"
-                                     "clj-watson vulnerable dependencies: " watson-n "\n"
-                                     "govulncheck findings: " (if govuln? "yes" "no") "\n\n"
-                                     "Full scan output:\n\n```\n"
-                                     (subs out 0 (min (count out) nvd-card-body-limit))
-                                     "\n```")}))
+                          :body (format-alpha/prose
+                                 "
+                                  The scheduled NVD deep scan (`make deps-report`) reported
+                                  vulnerable dependencies.
+
+                                  clj-watson vulnerable dependencies: {watson-n}
+                                  govulncheck findings: {govulncheck-findings}
+
+                                  Full scan output:
+
+                                  ```
+                                  {scan-output}
+                                  ```
+                                  "
+                                 {:watson-n watson-n
+                                  :govulncheck-findings (if govuln? "yes" "no")
+                                  :scan-output (subs out 0 (min (count out)
+                                                                nvd-card-body-limit))})}))
           (comment-issue! run-cmd number out)
           {:outcome :scanned :clj-watson watson-n :govulncheck govuln?})
         (finally
@@ -175,7 +187,7 @@
   [runtime]
   (run-nvd-scan! {:run-cmd run-command
                   :raise-card! (fn [{:keys [title body]}]
-                                 ((requiring-resolve 'ct.spools.kanban/add!)
+                                 ((requiring-resolve 'millhouse.spools.kanban/add!)
                                   runtime title {"--body" body "--priority" "p1"}))}))
 
 (cron/defjob! nvd-scan

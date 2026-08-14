@@ -4,5 +4,5 @@
 (def runtime (current/runtime))
 
 (runtime/module! runtime :kanban-source
-                 {:ns 'ct.spools.kanban
-                  :spools ['codethread/kanban]})
+                 {:ns 'millhouse.spools.kanban
+                  :spools ['millhouse.spools/kanban]})

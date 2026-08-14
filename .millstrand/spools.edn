@@ -2,22 +2,13 @@
  {:git/url "https://github.com/codethread/codethread.spool.git",
   :git/sha "f16022c6c110d6108f7c9579a91dbd93928f757a",
   :roots {codethread/agents "spools/agents",
-          codethread/devflow-setup "spools/devflow-setup",
           codethread/ralph "spools/ralph"}},
- codethread/kanban
- {:git/url "https://github.com/codethread/kanban.spool.git",
-  :git/sha "cd6eab928408faf7101af612c2e199796852d669",
-  :git/tag "v26",
-  :roots {codethread/kanban "."}},
  millstrand.spools/unsafe-text-search
  {:millstrand/source-root "spools/unsafe-text-search"},
  codethread/devflow
  {:git/url "https://github.com/codethread/devflow.spool.git",
   :git/sha "3a96415df0429c245191a22e66cc0bfc91524199",
-  :roots
-  {codethread/devflow ".",
-   codethread/devflow-kanban-adapter "kanban-adapter"},
-  :requires {codethread/kanban "v26"}},
+  :roots {codethread/devflow "."}},
  millstrand.spools/batteries {:millstrand/source-root "spools/batteries"},
  millhouse/spools
  {:git/url "https://github.com/codethread/millhouse.spool.git",
@@ -27,6 +18,7 @@
    millhouse.spools/millstrand-workflows "spools/millstrand-workflows",
    millhouse.spools/chime "spools/chime",
    millhouse.spools/cron "spools/cron",
+   millhouse.spools/kanban "spools/kanban",
    millhouse.spools.executors/code "spools/code-executor",
    millhouse.spools.executors/shell "spools/shell-executor"}},
  ct.spools/agent-run

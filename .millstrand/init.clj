@@ -17,7 +17,7 @@
 ;;   ct/notifications/attention.clj — chime attention rules
 ;;   ct/jobs/nvd_scan.clj         — NVD scan cron job
 ;;   ct/adapters/help.clj         — repo election of the batteries help transform
-;;   Codethread roots             — shared agents, Devflow setup, and Ralph
+;;   Codethread roots             — shared agents and Ralph
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and every
 ;; refresh; a module key it redeclares shadows the one here and wins, and it binds
@@ -174,25 +174,11 @@
                   :after [:millhouse/spools-chime :millstrand/spools-shuttle]
                   :required? true})
 
-;; --- kanban board + devflow adapter -----------------------------------------
-;; kanban is an external git-distributed spool. Kanban v26 publishes its
-;; complete board module, so the consumer activates that module directly.
+;; --- kanban board -------------------------------------------------------------
+;; Kanban is the Millhouse root that owns this workspace's board surface.
 (runtime/module! runtime :millstrand/spools-kanban
-                 {:ns 'ct.spools.kanban
-                  :spools ['codethread/kanban]
-                  :required? true})
-(runtime/module! runtime :millstrand/spools-devflow-kanban-adapter
-                 {:ns 'ct.spools.devflow-kanban-adapter
-                  :spools ['codethread/devflow-kanban-adapter
-                           'codethread/devflow 'codethread/kanban]
-                  :after [:millstrand/spools-devflow :millstrand/spools-kanban]
-                  :required? true})
-;; Codethread's setup root elects the external adapter's decompose seed only
-;; after both external Devflow and Kanban adapter roots are active.
-(runtime/module! runtime :codethread/devflow-setup
-                 {:ns 'ct.spools.codethread.devflow-setup
-                  :spools ['codethread/devflow-setup]
-                  :after [:millstrand/spools-devflow-kanban-adapter]
+                 {:ns 'millhouse.spools.kanban
+                  :spools ['millhouse.spools/kanban]
                   :required? true})
 ;; --- cron timer engine + the NVD scan job -----------------------------------
 ;; Cron is a generic weaver timer engine. Its collected open-kind and lifecycle
@@ -206,7 +192,7 @@
 ;; direct ct/policy/config.clj load never registers the job or seeds against real gh.
 (runtime/module! runtime :nvd-scan
                  {:file "ct/jobs/nvd_scan.clj"
-                  :spools ['millhouse.spools/cron]
+                  :spools ['millhouse.spools/cron 'millhouse.spools/kanban]
                   :after [:millhouse/spools-cron :millstrand/spools-kanban]
                   :required? true})
 
@@ -256,9 +242,9 @@
 ;; and kanban lane moves. It loads after the land definitions it drives.
 (runtime/module! runtime :workflows.land-policy
                  {:file "ct/workflows/land_policy.clj"
-                  :spools ['millhouse.spools/workflow]
-                  :after [:millhouse/spools-workflow :workflows
-                          :workflows.land]
+                  :spools ['millhouse.spools/workflow 'millhouse.spools/kanban]
+                  :after [:millhouse/spools-workflow :millstrand/spools-kanban
+                          :workflows :workflows.land]
                   :required? true})
 ;; Ralph remains an independent one-card-per-iteration workflow owned by
 ;; Codethread; landing policy and reviewer evidence stay local to this repo.

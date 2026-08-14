@@ -13,10 +13,9 @@
   {'codethread/devflow
    {:git/url "https://github.com/codethread/devflow.spool.git"
     :git/sha "3a96415df0429c245191a22e66cc0bfc91524199"}
-   'codethread/kanban
-   {:git/url "https://github.com/codethread/kanban.spool.git"
-    :git/tag "v26"
-    :git/sha "cd6eab928408faf7101af612c2e199796852d669"}
+   'millhouse/spools
+   {:git/url "https://github.com/codethread/millhouse.spool.git"
+    :git/sha "b0ac2268685e53510df01dcd0cc533b8fd40a25d"}
    'ct.spools/agent-run
    {:git/url "https://github.com/codethread/agent-harness.spool.git"
     :git/sha "1f06dfd046828f86c262537c190f854b87d90f6f"}})
