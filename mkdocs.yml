@@ -35,12 +35,19 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   # The homepage is the repository README, which is written in GitHub-flavored
   # markdown: md_in_html renders the fenced code inside its <details markdown>
   # dropdowns, gfm_admonition renders its > [!NOTE] alerts.
   - md_in_html
   - gfm_admonition
+
+extra_javascript:
+  - https://unpkg.com/mermaid@11/dist/mermaid.min.js
 
 nav:
   # The root landing page is the repository README (.mkdocs/index.md symlinks
