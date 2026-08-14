@@ -1,6 +1,6 @@
 # Weaver Runtime
 
-**Document ID:** `SPEC-004` **Status:** Implemented **Last Updated:** 2026-08-09 **Related RFCs:** [RFC-002 Task Query DSL](../rfcs/2026-06-24-task-query-dsl.md), [RFC-003 Fast JSON Socket CLI](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-fast-json-socket-cli.md), [RFC-004 Go CLI Migration](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-go-cli-migration.md) **Code:** `src/millstrand/core/weaver`, `src/millstrand/core/client.clj`, `src/millstrand/api/weaver/alpha.clj`, `cli/`
+**Document ID:** `SPEC-004` **Status:** Implemented **Last Updated:** 2026-08-14 **Related RFCs:** [RFC-002 Task Query DSL](../rfcs/2026-06-24-task-query-dsl.md), [RFC-003 Fast JSON Socket CLI](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-fast-json-socket-cli.md), [RFC-004 Go CLI Migration](../archive/26-06-25__go-cli-migration/rfcs/2026-06-25-go-cli-migration.md) **Code:** `src/millstrand/core/weaver`, `src/millstrand/core/client.clj`, `src/millstrand/api/weaver/alpha.clj`, `cli/`
 
 ## SPEC-004.P1 Purpose
 
