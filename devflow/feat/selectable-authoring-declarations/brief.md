@@ -50,9 +50,13 @@ The authorized repository set is closed:
 - devflow.
 - codethread.
 
-Do not migrate, patch, audit for completeness, or add compatibility for any other spool repository. Kanban v25 at peeled SHA `a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e` is the explicit external exception. No Kanban Guild, peering operation, or lifecycle resource belongs to the Millstrand surface; Kanban remains core-only.
+Do not migrate, patch, audit for completeness, or add compatibility for any other spool repository. The selected workspace keeps the unchanged Kanban v24 tag at peeled SHA `87f61bc2750e7026f3650235907db25f19b1536e`. No Kanban Guild, peering operation, or lifecycle resource belongs to the Millstrand surface.
 
-The selected workspace still requires the separately pinned Kanban spool. Millstrand replaces its direct module declaration with a Millstrand-owned consumer adapter that selects ops `kanban` and `kanban-export`; queries `kanban-cards`, `kanban-pending`, and `kanban-epic-pending`; pattern `kanban-batch`; and bin `kanban-dash`. A disposable fresh-generation test must prove that core-only v25 surface before restart. This does not preserve the old publishing semantics or add a compatibility bridge.
+The selected workspace still requires the separately pinned Kanban spool. Millstrand replaces its direct module declaration with a Millstrand-owned consumer adapter that selects ops `kanban` and `kanban-export`; queries `kanban-cards`, `kanban-pending`, and `kanban-epic-pending`; pattern `kanban-batch`; and bin `kanban-dash`. A disposable fresh-generation test proves that selected v24 adapter surface and retained-image replay before restart. The historical v24 full repository suite still requires the removed Guild root; that incompatibility is a gate fact, not a waiver or a full-suite success claim. This does not preserve the old publishing semantics or add a compatibility bridge.
+
+## Implementation reconciliation — 2026-08-14
+
+The proposal-time Kanban v25 target at peeled SHA `a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e` is superseded. The final outcome is the unchanged Kanban v24 tag and peeled SHA recorded above. The v25 target remains historical context only; it is not an active pin or acceptance target.
 
 Cron's `defjob` joins the Var-based convention rather than retaining its current keyword-only shape. It takes a symbol name, a docstring, and the job map; the registry id is `(keyword name)`. `use-job!` accepts those declaration Vars, and `defjob!` also accepts an optional selection-options map before the job map. Duplicate keys within one `use-<kind>!` form fail locally. Repeating a key in separate top-level selection forms keeps the existing collector rule: the later contribution replaces the earlier one deterministically.
 

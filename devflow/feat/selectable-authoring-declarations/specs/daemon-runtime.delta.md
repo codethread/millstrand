@@ -4,7 +4,7 @@
 **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
 **Feature:** [../proposal.md](../proposal.md)
 **Status:** Reviewed
-**Last Updated:** 2026-08-13
+**Last Updated:** 2026-08-14
 **Configuration identification:** `Sad` abbreviates selectable authoring declarations. This is the second delta in that feature's ordered set, so it takes `DELTA-Sad-002`. Nested IDs carry the complete document ID.
 
 ## DELTA-Sad-002.P1 Summary
@@ -19,7 +19,7 @@ Module collection records explicit selections rather than every declaration defi
 - **DELTA-Sad-002.CC4:** Selection copies the descriptor's normalized kind, key, entry, and consumer-supplied override intent into the active collector. The collected and retained record contains publication data, not a live Var or metadata reference. Image activation therefore replays the consumer module's last successful selected set without source loading and without requiring the declaration Var metadata to be rebuilt.
 - **DELTA-Sad-002.CC5:** Repeating a kind/key in separate top-level selection forms uses the current deterministic replacement rule. A duplicate within one typed use form fails before any declaration from that form is collected, so one malformed multi-selection cannot leave a partial staged result. Lifecycle forms keep their stricter duplicate-effect rule across the complete source collection.
 - **DELTA-Sad-002.CC6:** Callable binding moments do not change. Function-backed definitions now bind the callable at the exact authored Var symbol, and their normalized entries name that symbol. Dispatch-time kinds continue to resolve the current Var root at dispatch; generation-bound kinds and lifecycle effects continue to validate and resolve at their existing boundaries.
-- **DELTA-Sad-002.CC7:** A fresh source-mode generation can load Kanban v25 at peeled SHA `a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e` against the new Millstrand macros, then select its core-only descriptor-bearing Vars from the consumer adapter: ops `kanban` and `kanban-export`; queries `kanban-cards`, `kanban-pending`, and `kanban-epic-pending`; pattern `kanban-batch`; and bin `kanban-dash`. Guild, peering operations, and lifecycle resources are absent. A disposable fresh-generation acceptance proof is required before restart, and its retained adapter record follows CC4 for image replay. No compatibility bridge is part of this contract.
+- **DELTA-Sad-002.CC7:** A fresh source-mode generation can load the unchanged Kanban v24 at peeled SHA `87f61bc2750e7026f3650235907db25f19b1536e` against the new Millstrand macros, then select the existing adapter surface: ops `kanban` and `kanban-export`; queries `kanban-cards`, `kanban-pending`, and `kanban-epic-pending`; pattern `kanban-batch`; and bin `kanban-dash`. Guild, peering operations, and lifecycle resources are absent from the selected adapter surface. The historical v24 full repository suite still requires the removed Guild root; a disposable fresh-generation acceptance proof is required before restart and does not claim that full suite is green. Its retained adapter record follows CC4 for image replay. No compatibility bridge is part of this contract.
 
 ## DELTA-Sad-002.P3 Design decisions
 
@@ -38,3 +38,7 @@ Module collection records explicit selections rather than every declaration defi
 ## DELTA-Sad-002.P4 Open questions
 
 None.
+
+## Implementation reconciliation — 2026-08-14
+
+The reviewed delta originally named Kanban v25 at peeled SHA `a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e`. That target is superseded by the unchanged Kanban v24 tag and peeled SHA `87f61bc2750e7026f3650235907db25f19b1536e` above. The v25 target is historical context only; the v24 Guild-suite incompatibility remains a gate fact, with no waiver or acceptance-policy change.
