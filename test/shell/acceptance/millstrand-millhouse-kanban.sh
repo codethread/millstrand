@@ -12,8 +12,8 @@ verifier_tree="$tmp_root/verifier-tree"
 mill_pid=""
 mill_drain_pid=""
 weaver_started=0
-kanban_sha="cd6eab928408faf7101af612c2e199796852d669"
-kanban_url="https://github.com/codethread/kanban.spool.git"
+kanban_sha="b0ac2268685e53510df01dcd0cc533b8fd40a25d"
+kanban_url="https://github.com/codethread/millhouse.spool.git"
 
 cleanup() {
   if [[ "$weaver_started" == 1 ]]; then
@@ -33,18 +33,15 @@ trap cleanup EXIT
 
 mkdir -p "$workspace" "$gitlibs_root" "$cache_root" "$verifier_root" "$verifier_tree"
 git -C "$verifier_root" init -q
-git -C "$verifier_root" fetch -q --depth 1 "$kanban_url" "refs/tags/v26:refs/tags/v26"
-[[ "$(git -C "$verifier_root" cat-file -t refs/tags/v26)" == tag ]]
-[[ "$(git -C "$verifier_root" rev-parse 'v26^{}')" == "$kanban_sha" ]]
+git -C "$verifier_root" fetch -q --depth 1 "$kanban_url" "$kanban_sha"
 git -C "$verifier_root" checkout -q --detach "$kanban_sha"
 [[ -z "$(git -C "$verifier_root" symbolic-ref -q --short HEAD || true)" ]]
 [[ "$(git -C "$verifier_root" rev-parse HEAD)" == "$kanban_sha" ]]
-[[ "$(git -C "$verifier_root" rev-parse 'HEAD^{}')" == "$kanban_sha" ]]
 git -C "$verifier_root" archive "$kanban_sha" | tar -x -f - -C "$verifier_tree"
 printf '%s\n' \
-  "{:spools {codethread/kanban {:git/url \"$kanban_url\" :git/tag \"v26\" :git/sha \"$kanban_sha\" :roots {codethread/kanban \".\"}}}}" \
+  "{:spools {millhouse/spools {:git/url \"$kanban_url\" :git/sha \"$kanban_sha\" :roots {millhouse.spools/kanban \"spools/kanban\"}}}}" \
   >"$workspace/spools.edn"
-cp "$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter-init.clj" "$workspace/init.clj"
+cp "$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-init.clj" "$workspace/init.clj"
 
 mill_log="$tmp_root/mill.log"
 exec 3< <(exec env GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
@@ -109,25 +106,24 @@ weaver_started=1
 baseline="$tmp_root/baseline.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
-  <"$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter-probe.clj" \
+  <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-probe.clj" \
   | sed -n '1p' >"$baseline"
 jq -e --arg sha "$kanban_sha" --arg url "$kanban_url" \
-  '.spools["codethread/kanban"].sha == $sha and
-   .spools["codethread/kanban"].url == $url and
-   .spools["codethread/kanban"].tag == "v26" and
-   .spools["codethread/kanban"].status == "loaded" and
-   .spools["codethread/kanban"].kind == "git"' \
+  '.spools["millhouse.spools/kanban"].sha == $sha and
+   .spools["millhouse.spools/kanban"].url == $url and
+   .spools["millhouse.spools/kanban"].status == "loaded" and
+   .spools["millhouse.spools/kanban"].kind == "git"' \
   "$baseline" >/dev/null || { cat "$baseline" >&2; exit 1; }
-resolved_root=$(jq -er '.spools["codethread/kanban"].root' "$baseline")
-[[ "$(basename "$resolved_root")" == "$kanban_sha" ]]
+resolved_root=$(jq -er '.spools["millhouse.spools/kanban"].root' "$baseline")
+[[ "$(basename "$resolved_root")" == "kanban" ]]
 [[ -f "$resolved_root/deps.edn" ]]
 [[ ! -e "$resolved_root/.git" ]]
-diff -ru "$verifier_tree" "$resolved_root"
+diff -ru "$verifier_tree/spools/kanban" "$resolved_root"
 
 source="$tmp_root/source.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
-  <"$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter-probe.clj" \
+  <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-probe.clj" \
   | sed -n '1p' >"$source"
 jq -e --slurpfile baseline "$baseline" '
   .ops == ["about", "bins", "help", "kanban", "kanban-export", "prime"] and
@@ -137,20 +133,20 @@ jq -e --slurpfile baseline "$baseline" '
   .["lifecycle-modules"] == ["kanban-source"]
 ' "$source" >/dev/null || { cat "$baseline" >&2; cat "$source" >&2; exit 1; }
 jq -e --arg sha "$kanban_sha" --arg url "$kanban_url" \
-  '.spools["codethread/kanban"].sha == $sha and .spools["codethread/kanban"].url == $url and .spools["codethread/kanban"].tag == "v26"' \
+  '.spools["millhouse.spools/kanban"].sha == $sha and .spools["millhouse.spools/kanban"].url == $url' \
   "$source" >/dev/null
 
 image="$tmp_root/image.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
-  <"$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter-image.clj" \
+  <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-image.clj" \
   | sed -n '1p' >"$image"
 jq -e '.["module-status"] == "unchanged" and .["source-status"] == "image"' "$image" >/dev/null || { cat "$image" >&2; exit 1; }
 
 replayed="$tmp_root/replayed.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
-  <"$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter-probe.clj" \
+  <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-probe.clj" \
   | sed -n '1p' >"$replayed"
 jq -e '.queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"]' "$replayed" >/dev/null
 jq -e '.patterns == ["kanban-batch"] and .bins == ["kanban-dash"]' "$replayed" >/dev/null
@@ -162,7 +158,7 @@ jq -e --slurpfile baseline "$baseline" '
   .["lifecycle-modules"] == ["kanban-source"]
 ' "$replayed" >/dev/null
 jq -e --arg sha "$kanban_sha" --arg url "$kanban_url" \
-  '.spools["codethread/kanban"].sha == $sha and .spools["codethread/kanban"].url == $url and .spools["codethread/kanban"].tag == "v26"' \
+  '.spools["millhouse.spools/kanban"].sha == $sha and .spools["millhouse.spools/kanban"].url == $url' \
   "$replayed" >/dev/null
 jq -e '.["source-status"]["kanban-source"] == "image"' "$replayed" >/dev/null
-echo "millstrand Kanban module acceptance: clean (v26 $kanban_sha, source and image)"
+echo "Millhouse Kanban module acceptance: clean ($kanban_sha, source and image)"

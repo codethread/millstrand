@@ -44,26 +44,14 @@
                             {:git/url "https://github.com/codethread/codethread.spool.git"
                              :git/sha "f16022c6c110d6108f7c9579a91dbd93928f757a"
                              :deps/root "spools/agents"}
-                            codethread/devflow-setup
-                            {:git/url "https://github.com/codethread/codethread.spool.git"
-                             :git/sha "f16022c6c110d6108f7c9579a91dbd93928f757a"
-                             :deps/root "spools/devflow-setup"}
                             codethread/ralph
                             {:git/url "https://github.com/codethread/codethread.spool.git"
                              :git/sha "f16022c6c110d6108f7c9579a91dbd93928f757a"
                              :deps/root "spools/ralph"}
-                            codethread/kanban
-                            {:git/url "https://github.com/codethread/kanban.spool.git"
-                             :git/sha "cd6eab928408faf7101af612c2e199796852d669"
-                             :deps/root "."}
                             codethread/devflow
                             {:git/url "https://github.com/codethread/devflow.spool.git"
                              :git/sha "3a96415df0429c245191a22e66cc0bfc91524199"
                              :deps/root "."}
-                            codethread/devflow-kanban-adapter
-                            {:git/url "https://github.com/codethread/devflow.spool.git"
-                             :git/sha "3a96415df0429c245191a22e66cc0bfc91524199"
-                             :deps/root "kanban-adapter"}
                             ct.spools/harness-core
                             {:git/url "https://github.com/codethread/agent-harness.spool.git"
                              :git/sha "1f06dfd046828f86c262537c190f854b87d90f6f"
@@ -111,7 +99,11 @@
                             millhouse.spools/cron
                             {:git/url "https://github.com/codethread/millhouse.spool.git"
                              :git/sha "b0ac2268685e53510df01dcd0cc533b8fd40a25d"
-                             :deps/root "spools/cron"}}
+                             :deps/root "spools/cron"}
+                            millhouse.spools/kanban
+                            {:git/url "https://github.com/codethread/millhouse.spool.git"
+                             :git/sha "b0ac2268685e53510df01dcd0cc533b8fd40a25d"
+                             :deps/root "spools/kanban"}}
                :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
   :e2e {:extra-paths ["test/clojure/e2e"]
         :jvm-opts ["--enable-native-access=ALL-UNNAMED"]

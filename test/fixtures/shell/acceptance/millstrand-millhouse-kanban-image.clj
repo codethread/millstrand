@@ -4,9 +4,9 @@
            '[millstrand.api.runtime.alpha :as runtime])
   (let [rt (current/runtime)
         result (runtime/module! rt :kanban-source
-                                {:ns 'ct.spools.kanban
+                                {:ns 'millhouse.spools.kanban
                                  :load :image
-                                 :spools ['codethread/kanban]})]
+                                 :spools ['millhouse.spools/kanban]})]
     (println
      (json/write-str
       {:module-status (:status result)

@@ -7,7 +7,7 @@
   (let [contract (transition/validate-current!)]
     (is (= "PROP-Msr-001.S6" (:contract contract)))
     (is (= :external-publishers-compatible (:phase contract)))
-    (is (= #{'codethread/devflow 'codethread/kanban 'ct.spools/agent-run}
+    (is (= #{'codethread/devflow 'millhouse/spools 'ct.spools/agent-run}
            (set (keys (:pins contract)))))
     (is (= [] (:deferrals contract)))
     (is (not (transition/deferred? :workspace-config-integration)))

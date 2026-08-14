@@ -45,7 +45,7 @@ kanban-tree:
 install:
 	bash scripts/install
 
-# Interactive kanban TUI supplied by the pinned kanban.spool release.
+# Interactive kanban TUI supplied by the pinned Millhouse Kanban root.
 dash:
 	mill bin build kanban-dash
 	mill bin run kanban-dash

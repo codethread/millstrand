@@ -320,7 +320,7 @@ For a temporary live experiment, register it from the connected REPL:
 strand echo --flag value
 ```
 
-Op handlers return data; the CLI prints it as JSON. The explicit-runtime registration is weaver-lifetime state, so keep a durable command in module source. To mask a spool op durably, put `(millstrand/defop! {:override? true} ...)` in a workspace module; a local-root and a git-pinned spool follow the same registry rules. `replace-op!` is the live, intentional shadow; `unregister-op!` retracts only your shadow and restores the original. The [Kanban spool](https://github.com/codethread/kanban.spool#readme) is a complete example of this pattern: a board surface built from ops, queries, and attributes.
+Op handlers return data; the CLI prints it as JSON. The explicit-runtime registration is weaver-lifetime state, so keep a durable command in module source. To mask a spool op durably, put `(millstrand/defop! {:override? true} ...)` in a workspace module; a local-root and a git-pinned spool follow the same registry rules. `replace-op!` is the live, intentional shadow; `unregister-op!` retracts only your shadow and restores the original. The [Kanban spool](https://github.com/codethread/millhouse.spool/tree/main/spools/kanban) is a complete example of this pattern: a board surface built from ops, queries, and attributes.
 
 Name an op by what it exposes. When your command fronts another spool's surface, keep that spool's
 verbs, nouns, and attribute keys — the op is your entry point to the primitive, not a new language

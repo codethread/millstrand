@@ -40,7 +40,7 @@ Pass `--workspace "$workspace"` on every other `mill` or `strand` command in tha
 
 Every piece of work takes the same shape, whoever does it:
 
-1. **A kanban card.** Anything you ask for becomes a feature card on the strand-backed board (see the [Kanban spool README](https://github.com/codethread/kanban.spool#readme)); half-formed ideas sit in the refinement lane until you promote them.
+1. **A kanban card.** Anything you ask for becomes a feature card on the strand-backed board (see the [Kanban spool README](https://github.com/codethread/millhouse.spool/tree/main/spools/kanban)); half-formed ideas sit in the refinement lane until you promote them.
 2. **The devflow lifecycle.** A coordinator agent runs a feature through [Devflow](https://github.com/codethread/devflow.spool#readme) — proposal, spec/plan, tasks, implementation — in its own worktree, delegating tasks to worker agents.
 3. **Adversarial review.** Finished changes are reviewed by the declared rosters in [`.millstrand/ct/agents/reviewers.clj`](./.millstrand/ct/agents/reviewers.clj): small single-concern reviewers, synthesized cross-vendor so no model family signs off its own work.
 4. **Landing.** A coordinator drives the `land` workflow: draft PR, local quality gates, roster sign-off, verified squash-merge, and the canonical main quality contract after pull-main. Read `strand --workspace "$workspace" workflow show land`, then use generic workflow verbs and the policy boundaries in `strand --workspace "$workspace" help land`.
@@ -57,7 +57,7 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
   (chime/set-notifier! {:argv ["cc-notify"]})   ; anything with the `cmd <title>` + body-on-stdin shape
   ```
 
-- Watch progress with `make dash` (interactive kanban board), `strand --workspace "$workspace" kanban board`, `strand --workspace "$workspace" branches [branch]`, and `strand --workspace "$workspace" workflow ready <run-id>`. For an ASCII board: `printf "(do (require 'ct.spools.kanban) (ct.spools.kanban/print-board!))\n" | mill weaver repl --workspace "$workspace" --stdin`.
+- Watch progress with `make dash` (interactive kanban board), `strand --workspace "$workspace" kanban board`, `strand --workspace "$workspace" branches [branch]`, and `strand --workspace "$workspace" workflow ready <run-id>`. For an ASCII board: `printf "(do (require '[millstrand.api.current.alpha :as current] '[millhouse.spools.kanban :as kanban]) (kanban/print-board! (current/runtime)))\n" | mill weaver repl --workspace "$workspace" --stdin`.
 - `strand --workspace "$workspace" agent harnesses` lists the model seats and their roles; the routing policy comments sit beside the shared alias definitions in Codethread's agents root.
 
 ## Discovery: help, about, prime
