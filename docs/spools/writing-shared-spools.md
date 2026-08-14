@@ -642,7 +642,13 @@ Under `:required? true`, missing or failed root prerequisites refuse refresh. Na
 
 ### Author contributions with kind-specific forms
 
-Module sources publish registry entries through kind-specific authoring forms. The six core kinds use `millstrand.api.millstrand.alpha/defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`. Each family has an inert definition, a typed `use-<kind>!`, and a `def<kind>!` define-and-select form. A domain spool may define forms for its own kinds. Each form validates its kind's closed declaration grammar before collection.
+Module sources publish registry entries through kind-specific authoring forms. The six core kinds use `millstrand.api.millstrand.alpha/defop`, `defquery`, `defpattern`, `defhook`, `defhandler`, and `defbin`. Each family has three forms:
+
+- `def<kind>` validates and defines an ordinary Var but does not select it.
+- `use-<kind>!` selects one or more declaration Vars into the module currently being collected and returns those Vars in argument order as a vector.
+- `def<kind>!` defines and selects one declaration, then returns the installed Var. It is shorthand for an inert definition followed by typed selection, not a direct registry write.
+
+Both definition forms install exactly the simple Var name supplied by the author. A function-backed declaration binds its function at that name; it does not create a second `-handler` or implementation Var. The Var's metadata carries the printable protocol-1 declaration descriptor, while its root remains the natural function or declaration value. Declaration and selection validation happens before collection, and invalid definition input cannot replace an existing Var. The generated [authoring API reference](../api/authoring.api.md) gives the descriptor and validation contracts.
 
 Ordinary `def` and `defn` forms collect nothing. An inert authoring form defines its ordinary Var or function without collecting it; the typed use form selects that Var into the current module. The bang form does both. A domain-specific `defjob` form might look like this:
 
@@ -663,9 +669,47 @@ Ordinary `def` and `defn` forms collect nothing. An inert authoring form defines
 
 `defn report-tick` defines a function and contributes nothing. `schedule/defjob!` defines the job declaration and selects it under the schedule spool's job kind. Loading an inert form always defines its Var; only a typed use or bang form selects the entry. An owner that stops selecting a declaration drops that entry by omission at the next refresh.
 
-The source remains a flat sequence of top-level forms. Evaluating a form yourself still publishes nothing: `collect-entry!` is passive outside contribution collection, so REPL evaluation and code-only reloads define Vars and stop there. The coordinator retains the collected declaration record and replays it for image activation. Omitting a form from the next successful source evaluation removes that owner's old entry.
+Inert definitions let a library publish a catalogue without deciding which consumer modules use it:
+
+```clojure
+;; acme/reports/catalogue.clj
+(ns acme.reports.catalogue
+  (:require [millstrand.api.millstrand.alpha :as millstrand]))
+
+(millstrand/defquery overdue
+  "Return overdue reports."
+  {}
+  [:= [:attr :report/state] "overdue"])
+```
+
+```clojure
+;; acme/reports/module.clj
+(ns acme.reports.module
+  (:require [acme.reports.catalogue :as catalogue]
+            [millstrand.api.millstrand.alpha :as millstrand]))
+
+(millstrand/use-query! catalogue/overdue)
+```
+
+Requiring the catalogue while the consumer module is being collected is safe because inert definitions never contribute. The `use-query!` form owns the selection: it resolves local or qualified symbols to Vars, rejects arbitrary expressions, validates that every descriptor belongs to the query family, and copies normalized publication data into the consumer's record. Retained records contain no live Vars or metadata references.
+
+Registry selection accepts an optional leading map closed to boolean `:override?`:
+
+```clojure
+(millstrand/use-query! {:override? true} catalogue/overdue)
+```
+
+Override intent belongs to this consumer selection, not to the reusable catalogue Var. Use it only when the consumer is meant to shadow the same key from a lower registry layer. It does not resolve two owners at the same layer. Omitting required override intent, declaring an override for an absent entry, or supplying any other option fails before publication. An inert definition accepts no selection options. A bang form takes the same family-specific definition grammar and its documented use-options position; it retains the same Var name and return contract.
+
+Duplicates have two distinct rules. Repeating the same kind and key in separate top-level registry selections is deterministic: the later selection replaces the earlier one, including its override intent. Repeating an effective key within one `use-<kind>!` form fails before that form contributes anything. Lifecycle selection is stricter: a duplicate effect id anywhere in the complete source collection fails. Lifecycle `use-seed!`, `use-resource!`, and `use-reconcile!` accept declaration Var symbols only and have no options map or override concept.
+
+Selection and bang forms belong to the exact module source being collected. A required namespace may evaluate inert definitions during that collection, but a selection or bang form evaluated from a foreign namespace fails with module, namespace, and file context. Outside module collection, inert, use, and bang forms still resolve and validate their inputs but publish nothing. A code-only reload therefore catches malformed declarations without changing a live owner partition.
+
+After successful source publication, the coordinator retains the consumer module's complete normalized selection, open-kind declarations, and lifecycle declarations as one record. Image activation replays that record without source loading, macro evaluation, or descriptor reconstruction. The namespace must already be loaded and the record must match its module key, namespace, and protocol; missing, stale, foreign, or malformed records fail without fallback. On the next successful source publication, omission is removal: a previously selected entry or lifecycle effect that is no longer selected disappears from that owner's record. A dry-run plan and code-only reload do not replace the retained record.
 
 Core forms are the public grammar for hand-authored core entries. Their declaration constructors and normalized maps are internal plumbing, not an authoring escape hatch. A domain that genuinely needs generated entries exposes its own validated factory or batch form.
+
+Registry families are open. A domain spool can use `millstrand.api.authoring.alpha/defauthoring` to generate its own inert, typed-use, and bang macros from one mode-aware builder, then register the family's qualified kind keyword with its entry spec. The builder receives `:define` or `:define-and-use` and returns the closed expansion plan described in the API reference. Generated families share the same descriptor, exact-name, typed-selection, duplicate, and return contracts as the built-ins. Lifecycle families use Millstrand's fixed `defseed`, `defresource`, and `defreconcile` surface rather than registry override semantics.
 
 ### Linting authoring forms in a consumer
 
@@ -774,7 +818,9 @@ As a contribution it is one line:
   [:= [:attr :owner] "ct"])
 ```
 
-Two things changed. The name is now a string: `register-query!` accepts a simple symbol or keyword and canonicalises it to the registry key `"mine"` on your behalf, while an authoring form writes the canonical string key. And the ownership changed: the direct call writes one entry under the direct-registration owner, whereas the bang form replaces your module's complete `:queries` partition every time it publishes.
+Two things changed. The name is now a string: `register-query!` accepts a simple symbol or keyword and canonicalises it to the registry key `"mine"` on your behalf, while an authoring form writes the canonical string key. And the ownership changed: the direct call writes one entry under the direct-registration owner, whereas the bang form participates in your module's owner-complete `:queries` partition.
+
+Do not mechanically change every direct registration to a bang form. First choose the owner that should durably select the entry. Put reusable definitions in an inert catalogue when several modules may choose among them, then use the typed form in each consumer module. Use a bang form when definition and selection belong together in one source. Move `:override?` to the selection site, because it expresses the consumer owner's intent. Remove old direct startup registration only after a disposable-world refresh proves the module owns the effective entry; otherwise the direct and module owners can collide or one can unexpectedly shadow the other.
 
 ### Publication is owner-complete
 

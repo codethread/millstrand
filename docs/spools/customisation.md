@@ -253,6 +253,18 @@ Then implement the spool with an authoring form. Every source evaluation collect
   [:= [:attr :owner] "ct"])
 ```
 
+Use the bang form when this namespace both defines and selects the query. If definitions live in a reusable catalogue, keep them inert and select only what this module owns:
+
+```clojure
+(ns acme.spools.workflows.mine
+  (:require [acme.spools.workflows.catalogue :as catalogue]
+            [millstrand.api.millstrand.alpha :as millstrand]))
+
+(millstrand/use-query! catalogue/mine catalogue/ready-mine)
+```
+
+Removing `catalogue/ready-mine` from that form removes it from this module at the next successful refresh. The catalogue Var remains defined and another module may still select it. Selection options, duplicate behavior, lifecycle differences, and retained-image replay are covered once in [Writing shared spools](./writing-shared-spools.md#author-contributions-with-kind-specific-forms).
+
 `init.clj` names only a source target and world policy:
 
 ```clojure

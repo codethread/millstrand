@@ -253,6 +253,41 @@ With no `--workspace`, `strand` finds the canonical Git repository root and uses
 
 Millstrand is built for agents, and its own repository is written for them to read. Point a coding agent at a checkout and ask questions: `mill prime millstrand` and `mill prime strand` print orientation, [`AGENTS.md`](./AGENTS.md) and the specs under [`devflow/specs/`](./devflow/specs/) carry the real contracts, and `mill init` seeds a pointer to the prime commands into your own repo's `AGENTS.md`.
 
+## Author durable behavior in modules
+
+A module source is a namespace that Millstrand collects under one module key. Its selected declarations become that module's owner partition: the next successful refresh replaces the partition with the complete set selected by the source, so removing a selection removes that entry without touching another module's entries.
+
+Each authoring family has three forms. An inert `def*` defines an ordinary reusable Var but selects nothing. A typed `use-*!` selects one or more declaration Vars from that same family. The `def*!` form defines and selects in one step, which is the usual choice when the declaration belongs only to its defining module.
+
+```clojure
+;; acme/queries.clj: a reusable library declaration
+(ns acme.queries
+  (:require [millstrand.api.millstrand.alpha :as millstrand]))
+
+(millstrand/defquery owned-by-acme
+  "Return strands owned by acme."
+  {}
+  [:= [:attr :owner] "acme"])
+
+;; acme/workspace.clj: the module source
+(ns acme.workspace
+  (:require [acme.queries]
+            [millstrand.api.millstrand.alpha :as millstrand]))
+
+(millstrand/use-query! acme.queries/owned-by-acme)
+
+(millstrand/defquery! ready-for-review
+  "Return strands ready for review."
+  {}
+  [:= [:attr :status] "review"])
+```
+
+The qualified symbol in `use-query!` imports the declaration, but the collecting module owns the published entry. Selection checks that the symbol resolves to a query declaration Var; it does not accept an arbitrary value. Registry use forms also accept a leading `{:override? true}` map when shadowing is intentional. Outside module collection, definition forms still define and validate their Vars, while use forms validate and return their Vars without changing the live registry.
+
+The six built-in registry families cover ops, queries, patterns, hooks, event handlers, and CLI bins. Lifecycle code follows the same inert/use/bang pattern with `defseed`, `defresource`, and `defreconcile`: use a seed for an idempotent action, a resource for paired open and close callables, and a reconcile effect for converging desired and actual state. Lifecycle selections take Var symbols only and their callables are fully qualified symbols. Spools can add their own registry families with the shared [`defauthoring`](./docs/api/authoring.api.md#millstrand.api.authoring.alpha/defauthoring) contract, so forms such as `defworkflow!` keep the same three-part convention.
+
+The [tutorial's named-query example](./docs/tutorial.md#named-queries-from-the-repl-to-the-cli) shows how to activate a module. [Writing shared spools](./docs/spools/writing-shared-spools.md#author-contributions-with-kind-specific-forms) covers owner-complete publication, imported declarations, custom kinds, and lifecycle effects in detail.
+
 ## Where to go next
 
 - [Docs site](https://codethread.github.io/millstrand/) — everything below, rendered.

@@ -337,7 +337,7 @@ Write getting-started
 
 ## Named queries: from the REPL to the CLI
 
-A query is a data expression, here "the `owner` attribute equals `ct`". Start with the durable module form when the query belongs to a workspace or spool:
+A query is a data expression, here "the `owner` attribute equals `ct`". When a query belongs directly to one workspace module, define and select it with `defquery!`:
 
 ```clojure
 (ns my.workspace
@@ -359,7 +359,54 @@ Activate that namespace from trusted startup code:
   {:ns 'my.workspace})
 ```
 
-The authoring form defines the `mine` Var and publishes its query when the module is collected. Evaluating the form at a REPL only defines the Var; it does not publish a registration. The module form is the path that survives refresh and restart, and it gives the weaver the complete owner partition to publish.
+`defquery!` is the direct define-and-select form. It defines the `mine` Var, attaches an authoring descriptor to that Var's metadata, and selects the descriptor for publication. The selection contributes only while the weaver is collecting the selected `my.workspace` module source. Evaluating the same form at a REPL still defines and returns the Var, but collection is not active there, so it publishes nothing.
+
+The descriptor records the authoring protocol, family, channel, registry kind and key, entry data, and fully qualified Var name. Typed selection checks that metadata and the Var's family before it contributes anything. The Var's value remains ordinary Clojure data (or a function for function-backed families); the descriptor is metadata, and registration does not replace or mutate the Var. `defquery!` returns the Var it defined.
+
+### Reuse a catalogue with inert definitions
+
+Use the two-step form when declarations belong to a reusable catalogue. The catalogue defines inert Vars:
+
+```clojure
+(ns my.query-catalogue
+  (:require [millstrand.api.millstrand.alpha :as millstrand]))
+
+(millstrand/defquery mine
+  "Return strands owned by ct."
+  {}
+  [:= [:attr :owner] "ct"])
+
+(millstrand/defquery unowned
+  "Return strands without an owner."
+  {}
+  [:missing [:attr :owner]])
+```
+
+`defquery` defines each Var and installs its descriptor, but selects nothing. A module source imports the catalogue and chooses what it owns:
+
+```clojure
+(ns my.workspace
+  (:require [millstrand.api.millstrand.alpha :as millstrand]
+            [my.query-catalogue :as catalogue]))
+
+(millstrand/use-query! catalogue/mine catalogue/unowned)
+```
+
+Keep the `runtime/module!` declaration pointed at `my.workspace`, not `my.query-catalogue`. Requiring the catalogue evaluates its inert definitions outside collection of the selected source. The `use-query!` call runs in `my.workspace`, validates that both symbols resolve to query declaration Vars, contributes them in source order, and returns a vector containing those Vars. A query selector cannot accept an op Var or arbitrary expression. Registry selectors may take a leading `{:override? true}` when the module intentionally shadows another owner's key.
+
+Collection is source-scoped even for bang forms. An authoring form evaluated in a required namespace cannot contribute accidentally to the module that required it. Outside module collection, definitions and selectors evaluate passively: they return their documented Vars and values without changing a registry. This is why evaluating a source form in an editor is safe but is not a publication step.
+
+Each successful module collection is owner-complete. The collected set replaces that module owner's previous set. If `catalogue/unowned` is omitted from the next version of `my.workspace`, refresh removes the module's `unowned` registration. If the source selects nothing, refresh publishes an empty partition and removes every registry entry previously owned by that module. You do not need matching unregister calls for declarations removed from source.
+
+Ops, patterns, hooks, handlers, and bins use the same three forms: inert `def*`, typed `use-*!`, and direct `def*!`. Custom open registry families created with `defauthoring` follow the same model. Lifecycle families are parallel: `defseed`, `defresource`, and `defreconcile` are inert; their `use-...!` forms select typed lifecycle Vars; and the bang forms define and select. Lifecycle selectors do not take registry override options.
+
+Older module sources may rely on definitions being collected implicitly. Make every intended selection explicit when migrating:
+
+- Change a declaration owned and used in the same source from `defquery` to `defquery!` (and likewise for the other families).
+- Leave reusable catalogue declarations inert and add the matching typed `use-query!`, `use-op!`, or other selector in the selected module source.
+- Refresh the module and inspect the resulting registry. Owner-complete collection removes old entries that the new source omits.
+
+Do not add direct registration calls to preserve the old effect. They create runtime-local entries outside the module's owner-complete publication.
 
 For a live experiment, use the same verb at the explicit-runtime tier:
 
@@ -377,11 +424,11 @@ Inside `mill weaver repl`, `millstrand.repl` supplies the same verb with the run
 (repl/register-query! 'mine [:= [:attr :owner] "ct"])
 ```
 
-`register-query!` is the same operation in both live tiers; the explicit-runtime form is for code, tests, and startup helpers, while `millstrand.repl` is the short form for an interactive session. The registry is owner-partitioned and layered. Each writer changes its own entry map, and the effective name-to-query view is the merge of those partitions.
+`register-query!` is the same operation in both live tiers; the explicit-runtime form is for code and tests, while `millstrand.repl` is the short form for an interactive session. The registry is owner-partitioned and layered. Each writer changes its own entry map, and the effective name-to-query view is the merge of those partitions.
 
 Use `replace-query!` when you intend to shadow an existing owner. `unregister-query!` removes only your own entry and restores the entry below it; registry verbs never remove or change the Clojure Var. Removing a direct shadow and registering again is not a substitute for replace, because the other owner's entry still occupies the name. For queries, replacing the value is also how you iterate behavior: there is no handler function to redefine, and `query explain` always reads the current registered value.
 
-The same order applies to ops, patterns, hooks, and event handlers: author them with their module forms for durable behavior, use explicit-runtime `register/replace/unregister-*!` calls in code or tests, and use the runtime-implied `millstrand.repl` wrappers while iterating live. A workspace can durably mask a spool op with `millstrand/defop! {:override? true}` in a workspace module. The coordinate used to acquire that spool, local or git-pinned, does not change these registry rules.
+For live work on ops, patterns, hooks, and event handlers, use explicit-runtime `register/replace/unregister-*!` calls in code or tests and the runtime-implied `millstrand.repl` wrappers while iterating interactively. A workspace can durably mask a spool op with `millstrand/defop! {:override? true}` in a workspace module. The coordinate used to acquire that spool, local or git-pinned, does not change these registry rules.
 
 The plain CLI can discover and run the same query for as long as this weaver keeps running:
 
