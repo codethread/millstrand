@@ -1,3 +1,9 @@
 {:lint-as
  {ct.spools.agent-run/defharnesses clojure.core/def
-  ct.spools.agent-run/defaliases clojure.core/def}}
+  ct.spools.agent-run/defharnesses! clojure.core/def
+  ct.spools.agent-run/defaliases clojure.core/def
+  ct.spools.agent-run/defaliases! clojure.core/def}
+ :hooks
+ {:analyze-call
+  {ct.spools.agent-run/use-harnesses! hooks.millstrand/use-vars
+   ct.spools.agent-run/use-aliases! hooks.millstrand/use-vars}}}

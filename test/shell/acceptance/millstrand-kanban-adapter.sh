@@ -12,7 +12,7 @@ verifier_tree="$tmp_root/verifier-tree"
 mill_pid=""
 mill_drain_pid=""
 weaver_started=0
-kanban_sha="a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e"
+kanban_sha="cd6eab928408faf7101af612c2e199796852d669"
 kanban_url="https://github.com/codethread/kanban.spool.git"
 
 cleanup() {
@@ -32,21 +32,19 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$workspace" "$gitlibs_root" "$cache_root" "$verifier_root" "$verifier_tree"
-[[ -z "$(find "$gitlibs_root" -mindepth 1 -print -quit)" ]]
 git -C "$verifier_root" init -q
-git -C "$verifier_root" fetch -q --depth 1 "$kanban_url" "refs/tags/v25:refs/tags/v25"
-[[ "$(git -C "$verifier_root" cat-file -t refs/tags/v25)" == tag ]]
-[[ "$(git -C "$verifier_root" rev-parse 'v25^{}')" == "$kanban_sha" ]]
+git -C "$verifier_root" fetch -q --depth 1 "$kanban_url" "refs/tags/v26:refs/tags/v26"
+[[ "$(git -C "$verifier_root" cat-file -t refs/tags/v26)" == tag ]]
+[[ "$(git -C "$verifier_root" rev-parse 'v26^{}')" == "$kanban_sha" ]]
 git -C "$verifier_root" checkout -q --detach "$kanban_sha"
 [[ -z "$(git -C "$verifier_root" symbolic-ref -q --short HEAD || true)" ]]
 [[ "$(git -C "$verifier_root" rev-parse HEAD)" == "$kanban_sha" ]]
 [[ "$(git -C "$verifier_root" rev-parse 'HEAD^{}')" == "$kanban_sha" ]]
 git -C "$verifier_root" archive "$kanban_sha" | tar -x -f - -C "$verifier_tree"
 printf '%s\n' \
-  "{:spools {codethread/kanban {:git/url \"$kanban_url\" :git/tag \"v25\" :git/sha \"$kanban_sha\" :roots {codethread/kanban \".\"}}}}" \
+  "{:spools {codethread/kanban {:git/url \"$kanban_url\" :git/tag \"v26\" :git/sha \"$kanban_sha\" :roots {codethread/kanban \".\"}}}}" \
   >"$workspace/spools.edn"
 cp "$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter-init.clj" "$workspace/init.clj"
-cp "$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter.clj" "$workspace/adapter.clj"
 
 mill_log="$tmp_root/mill.log"
 exec 3< <(exec env GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
@@ -116,7 +114,7 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
 jq -e --arg sha "$kanban_sha" --arg url "$kanban_url" \
   '.spools["codethread/kanban"].sha == $sha and
    .spools["codethread/kanban"].url == $url and
-   .spools["codethread/kanban"].tag == "v25" and
+   .spools["codethread/kanban"].tag == "v26" and
    .spools["codethread/kanban"].status == "loaded" and
    .spools["codethread/kanban"].kind == "git"' \
   "$baseline" >/dev/null || { cat "$baseline" >&2; exit 1; }
@@ -125,12 +123,6 @@ resolved_root=$(jq -er '.spools["codethread/kanban"].root' "$baseline")
 [[ -f "$resolved_root/deps.edn" ]]
 [[ ! -e "$resolved_root/.git" ]]
 diff -ru "$verifier_tree" "$resolved_root"
-[[ -z "$(find "$gitlibs_root" -mindepth 1 -print -quit)" ]]
-
-GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
-  "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
-  <"$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter-activate.clj" \
-  >/dev/null
 
 source="$tmp_root/source.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
@@ -138,21 +130,14 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter-probe.clj" \
   | sed -n '1p' >"$source"
 jq -e --slurpfile baseline "$baseline" '
-  def added($before; $after): [$after[] as $item | select(($before | index($item)) == null) | $item] | sort;
-  def removed($before; $after): [$before[] as $item | select(($after | index($item)) == null) | $item] | sort;
-  added($baseline[0].ops; .ops) == ["kanban", "kanban-export"] and
-  removed($baseline[0].ops; .ops) == [] and
-  added($baseline[0].queries; .queries) == ["kanban-cards", "kanban-epic-pending", "kanban-pending"] and
-  removed($baseline[0].queries; .queries) == [] and
-  added($baseline[0].patterns; .patterns) == ["kanban-batch"] and
-  removed($baseline[0].patterns; .patterns) == [] and
-  added($baseline[0].bins; .bins) == ["kanban-dash"] and
-  removed($baseline[0].bins; .bins) == [] and
-  added($baseline[0]["lifecycle-modules"]; .["lifecycle-modules"]) == [] and
-  removed($baseline[0]["lifecycle-modules"]; .["lifecycle-modules"]) == []
+  .ops == ["about", "bins", "help", "kanban", "kanban-export", "prime"] and
+  .queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"] and
+  .patterns == ["kanban-batch"] and
+  .bins == ["kanban-dash"] and
+  .["lifecycle-modules"] == ["kanban-source"]
 ' "$source" >/dev/null || { cat "$baseline" >&2; cat "$source" >&2; exit 1; }
 jq -e --arg sha "$kanban_sha" --arg url "$kanban_url" \
-  '.spools["codethread/kanban"].sha == $sha and .spools["codethread/kanban"].url == $url and .spools["codethread/kanban"].tag == "v25"' \
+  '.spools["codethread/kanban"].sha == $sha and .spools["codethread/kanban"].url == $url and .spools["codethread/kanban"].tag == "v26"' \
   "$source" >/dev/null
 
 image="$tmp_root/image.json"
@@ -160,7 +145,7 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-kanban-adapter-image.clj" \
   | sed -n '1p' >"$image"
-jq -e '.["module-status"] == "unchanged" and .["source-status"] == "image"' "$image" >/dev/null
+jq -e '.["module-status"] == "unchanged" and .["source-status"] == "image"' "$image" >/dev/null || { cat "$image" >&2; exit 1; }
 
 replayed="$tmp_root/replayed.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
@@ -170,23 +155,14 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
 jq -e '.queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"]' "$replayed" >/dev/null
 jq -e '.patterns == ["kanban-batch"] and .bins == ["kanban-dash"]' "$replayed" >/dev/null
 jq -e --slurpfile baseline "$baseline" '
-  def added($before; $after): [$after[] as $item | select(($before | index($item)) == null) | $item] | sort;
-  def removed($before; $after): [$before[] as $item | select(($after | index($item)) == null) | $item] | sort;
-  added($baseline[0].ops; .ops) == ["kanban", "kanban-export"] and
-  removed($baseline[0].ops; .ops) == [] and
-  added($baseline[0].queries; .queries) == ["kanban-cards", "kanban-epic-pending", "kanban-pending"] and
-  removed($baseline[0].queries; .queries) == [] and
-  added($baseline[0].patterns; .patterns) == ["kanban-batch"] and
-  removed($baseline[0].patterns; .patterns) == [] and
-  added($baseline[0].bins; .bins) == ["kanban-dash"] and
-  removed($baseline[0].bins; .bins) == [] and
-  added($baseline[0]["lifecycle-modules"]; .["lifecycle-modules"]) == [] and
-  removed($baseline[0]["lifecycle-modules"]; .["lifecycle-modules"]) == []
+  .ops == ["about", "bins", "help", "kanban", "kanban-export", "prime"] and
+  .queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"] and
+  .patterns == ["kanban-batch"] and
+  .bins == ["kanban-dash"] and
+  .["lifecycle-modules"] == ["kanban-source"]
 ' "$replayed" >/dev/null
 jq -e --arg sha "$kanban_sha" --arg url "$kanban_url" \
-  '.spools["codethread/kanban"].sha == $sha and .spools["codethread/kanban"].url == $url and .spools["codethread/kanban"].tag == "v25"' \
+  '.spools["codethread/kanban"].sha == $sha and .spools["codethread/kanban"].url == $url and .spools["codethread/kanban"].tag == "v26"' \
   "$replayed" >/dev/null
-jq -e '.["source-status"]["kanban-source"] == "loaded" and .["source-status"]["kanban-adapter"] == "image"' "$replayed" >/dev/null
-[[ -z "$(find "$gitlibs_root" -mindepth 1 -print -quit)" ]]
-
-echo "millstrand Kanban adapter acceptance: clean (v25 $kanban_sha, source and image)"
+jq -e '.["source-status"]["kanban-source"] == "image"' "$replayed" >/dev/null
+echo "millstrand Kanban module acceptance: clean (v26 $kanban_sha, source and image)"

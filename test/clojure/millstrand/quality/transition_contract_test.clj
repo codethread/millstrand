@@ -9,22 +9,19 @@
     (is (= :external-publishers-compatible (:phase contract)))
     (is (= #{'codethread/devflow 'codethread/kanban 'ct.spools/agent-run}
            (set (keys (:pins contract)))))
-    (is (= [{:scope :pinned-external-spool-suite
-             :families #{'codethread/devflow 'codethread/kanban 'ct.spools/agent-run}
-             :test-namespaces #{}}]
-           (:deferrals contract)))
+    (is (= [] (:deferrals contract)))
     (is (not (transition/deferred? :workspace-config-integration)))
-    (is (transition/deferred? :pinned-external-spool-suite))))
+    (is (not (transition/deferred? :pinned-external-spool-suite)))))
 
 (deftest transition-contract-rejects-scope-widening
   (let [contract (transition/contract)]
-    (testing "an external pin cannot move while its deferral remains"
+    (testing "an external pin cannot drift"
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"external pins drifted"
            (transition/validate-contract!
             (assoc-in contract [:pins 'codethread/devflow :git/tag] "v22")))))
-    (testing "workspace config cannot regain a deferred scope"
+    (testing "a removed deferral cannot be reintroduced"
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"one entry for each scope"
@@ -32,14 +29,7 @@
             (update contract :deferrals conj
                     {:scope :workspace-config-integration
                      :families #{'codethread/devflow}
-                     :test-namespaces #{'millstrand.ct.config-test}})))))
-    (testing "the deferred suite cannot widen beyond its three pinned families"
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo
-           #"only the exact incompatible family pin"
-           (transition/validate-contract!
-            (update-in contract [:deferrals 0 :families]
-                       conj 'other/downstream)))))))
+                     :test-namespaces #{'millstrand.ct.config-test}})))))))
 
 (deftest approved-pin-drift-invalidates-the-transition
   (let [file (java.io.File/createTempFile "millstrand-transition-spools-" ".edn")

@@ -1,28 +1,27 @@
 (ns quality.millstrand-transition
-  "Validate the narrowed Millstrand publisher transition contract.
+  "Validate the Millstrand publisher transition contract.
 
-  Workspace config is active against the moved publishers. The external suite
-  is deferred for its exact unmigrated downstream families; their migration
-  cards and the final cutover remove the checked-in deferral."
+  Workspace config and the external suite are active against the published
+  publisher coordinates. The checked-in contract carries no deferrals."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]))
 
 (def ^:private contract-resource "quality/millstrand-transition-contract.edn")
-(def ^:private expected-scopes #{:pinned-external-spool-suite})
+(def ^:private expected-scopes #{})
 (def ^:private allowed-scopes #{:pinned-external-spool-suite})
 (def ^:private expected-pins
   {'codethread/devflow
    {:git/url "https://github.com/codethread/devflow.spool.git"
-    :git/sha "e1fed4904447f4752ea99dc27ab174c237604094"}
+    :git/sha "3a96415df0429c245191a22e66cc0bfc91524199"}
    'codethread/kanban
    {:git/url "https://github.com/codethread/kanban.spool.git"
-    :git/tag "v25"
-    :git/sha "a6b3a36cd5476ec5c36cd58a7f74bfec6b7e665e"}
+    :git/tag "v26"
+    :git/sha "cd6eab928408faf7101af612c2e199796852d669"}
    'ct.spools/agent-run
    {:git/url "https://github.com/codethread/agent-harness.spool.git"
-    :git/sha "636ae9ecbb57c4fde2c79485c7ef7767aba5753b"}})
+    :git/sha "1f06dfd046828f86c262537c190f854b87d90f6f"}})
 (def ^:private expected-families (set (keys expected-pins)))
-(def ^:private expected-deferred-families expected-families)
+(def ^:private expected-deferred-families #{})
 
 (defn- fail!
   [message data]

@@ -1,2 +1,6 @@
 {:lint-as
- {millhouse.spools.cron/defjob clojure.core/def}}
+ {millhouse.spools.cron/defjob clojure.core/def
+  millhouse.spools.cron/defjob! clojure.core/def}
+ :hooks
+ {:analyze-call
+  {millhouse.spools.cron/use-job! hooks.millstrand/use-vars}}}

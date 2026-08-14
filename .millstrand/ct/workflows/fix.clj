@@ -87,7 +87,7 @@
        |run."
       branch worktree))))
 
-(workflow/defworkflow fix
+(workflow/defworkflow! fix
   "Run the light BUG-FIX workflow (family \"fix\").
 
   The low-ceremony path for a bug fix, direct or picking up an existing
