@@ -66,8 +66,12 @@ You need a few things on the machine:
 On macOS, Homebrew installs Millstrand and its Clojure/JVM runtime:
 
 ```sh
-brew install codethread/millstrand/millstrand
+brew tap codethread/millstrand https://github.com/codethread/millstrand.git
+brew trust --formula codethread/millstrand/millstrand
+brew install millstrand
 ```
+
+Homebrew requires explicit trust for non-official taps. This trusts only the Millstrand formula, not every current or future item in the tap. Homebrew installs Clojure and its JVM dependency.
 
 Homebrew retains Millstrand's source under its `libexec` directory and records that path for `mill` when it launches a weaver.
 
@@ -217,7 +221,7 @@ strand burn <strand-id>
 
 ---
 
-That is the everyday CLI: add, relate, ask what is ready, close, and occasionally burn. If you do
+That is the everyday CLI: add, relate, ask what is ready, close, and occasionally burn. Those commands come from the [batteries spool](../spools/batteries.md), which `mill init` activates. If you do
 not need the REPL or runtime customization, you can stop here and run `mill weaver stop`. The rest
 of this guide covers the REPL and building your own behavior.
 
