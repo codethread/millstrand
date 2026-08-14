@@ -14,10 +14,6 @@ cd "$root"
 
 transition_status="$(clojure -M:transition-check --scope pinned-external-spool-suite)"
 case "$transition_status" in
-  DEFERRED)
-    echo "spool-suite-gate: deferred by PROP-Msr-001.S6 for codethread/devflow, codethread/kanban, and ct.spools/agent-run; their migration cards and the final cutover remove this exact deferral"
-    exit 0
-    ;;
   ACTIVE) ;;
   *)
     echo "spool-suite-gate: transition contract returned unexpected status: $transition_status" >&2

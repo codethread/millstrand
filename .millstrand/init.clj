@@ -175,16 +175,11 @@
                   :required? true})
 
 ;; --- kanban board + devflow adapter -----------------------------------------
-;; kanban is an external git-distributed spool. The adapter integrates the
-;; board with devflow after both spools are active.
+;; kanban is an external git-distributed spool. Kanban v26 publishes its
+;; complete board module, so the consumer activates that module directly.
 (runtime/module! runtime :millstrand/spools-kanban
                  {:ns 'ct.spools.kanban
                   :spools ['codethread/kanban]
-                  :required? true})
-(runtime/module! runtime :millstrand/spools-kanban-adapter
-                 {:file "ct/adapters/kanban.clj"
-                  :spools ['codethread/kanban]
-                  :after [:millstrand/spools-kanban]
                   :required? true})
 (runtime/module! runtime :millstrand/spools-devflow-kanban-adapter
                  {:ns 'ct.spools.devflow-kanban-adapter

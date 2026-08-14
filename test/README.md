@@ -34,7 +34,7 @@ Run commands from the repository root. Cold means starting a fresh test JVM; war
 | Stop warm iteration | `make test-warm-stop` | Stops the PID recorded in `.test-repl.pid` and removes the warm runtime files. |
 | Go suite | `make test-go` | Runs `go test ./...` in both `cli` and `tools/kanban-tree`. |
 | Process/repository E2E | `make test-e2e` | Runs the `millstrand.e2e` entrypoint, including public CLI, live refresh, cutover, repository bootstrap, and REPL flows. |
-| Shell acceptance | `make build`, then `test/shell/acceptance/millstrand-core.sh` | Runs public built `bin/mill` and `bin/strand` against disposable worlds. The Kanban adapter script proves the pinned v24 source and retained image surface; the docs and Neovim scripts are `test/shell/acceptance/millstrand-docs.sh` and `test/shell/acceptance/millstrand-neovim.sh`. |
+| Shell acceptance | `make build`, then `test/shell/acceptance/millstrand-core.sh` | Runs public built `bin/mill` and `bin/strand` against disposable worlds. The Kanban module script proves the pinned v26 source and retained image surface; the docs and Neovim scripts are `test/shell/acceptance/millstrand-docs.sh` and `test/shell/acceptance/millstrand-neovim.sh`. |
 | External spool suites | `make spool-suite-gate` | Runs the pinned Devflow, Kanban, and agent-run consumer suites against this checkout. |
 
 The focused cold runner rejects add-libs shard members (`millstrand.spools-test`, `millstrand.runtime-deps-test`, and `millstrand.ct.config-ops-test`) and unknown namespaces. Run the full suite for those namespaces. `MILLSTRAND_TEST_AWAIT_SCALE=3` widens await budgets on slow hosts; it does not change the test tier.

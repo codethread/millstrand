@@ -54,7 +54,7 @@
                              :deps/root "spools/ralph"}
                             codethread/kanban
                             {:git/url "https://github.com/codethread/kanban.spool.git"
-                             :git/sha "87f61bc2750e7026f3650235907db25f19b1536e"
+                             :git/sha "cd6eab928408faf7101af612c2e199796852d669"
                              :deps/root "."}
                             codethread/devflow
                             {:git/url "https://github.com/codethread/devflow.spool.git"
@@ -125,8 +125,7 @@
                        ".millstrand/ct/workflows/land_policy.clj" ".millstrand/ct/agents/guide.clj"
                        ".millstrand/ct/agents/reviewers.clj" ".millstrand/ct/agents/delegation_contracts.clj"
                        ".millstrand/ct/notifications/attention.clj"
-                       ".millstrand/ct/jobs/nvd_scan.clj" ".millstrand/ct/adapters/help.clj"
-                       ".millstrand/ct/adapters/kanban.clj"]}
+                       ".millstrand/ct/jobs/nvd_scan.clj" ".millstrand/ct/adapters/help.clj"]}
   :format/fix {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.13.1"}}
                :main-opts ["-m" "cljfmt.main" "fix" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure" "dev" "scripts"
                            ".millstrand/init.clj" ".millstrand/ct/policy/config.clj" ".millstrand/ct/workflows/support.clj"
@@ -136,8 +135,7 @@
                            ".millstrand/ct/workflows/land_policy.clj" ".millstrand/ct/agents/guide.clj"
                            ".millstrand/ct/agents/reviewers.clj" ".millstrand/ct/agents/delegation_contracts.clj"
                            ".millstrand/ct/notifications/attention.clj"
-                           ".millstrand/ct/jobs/nvd_scan.clj" ".millstrand/ct/adapters/help.clj"
-                           ".millstrand/ct/adapters/kanban.clj"]}
+                           ".millstrand/ct/jobs/nvd_scan.clj" ".millstrand/ct/adapters/help.clj"]}
   :lint/clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                    :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure"]}
   :lint/millstrand {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}

@@ -1,9 +1,8 @@
 (ns quality.millstrand-transition
-  "Validate the narrowed Millstrand publisher transition contract.
+  "Validate the Millstrand publisher transition contract.
 
-  Workspace config is active against the moved publishers. The external suite
-  is deferred for its exact unmigrated downstream families; their migration
-  cards and the final cutover remove the checked-in deferral."
+  Workspace config and the external suite are active against the published
+  publisher coordinates. The checked-in contract carries no deferrals."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]))
 
@@ -16,8 +15,8 @@
     :git/sha "3a96415df0429c245191a22e66cc0bfc91524199"}
    'codethread/kanban
    {:git/url "https://github.com/codethread/kanban.spool.git"
-    :git/tag "v24"
-    :git/sha "87f61bc2750e7026f3650235907db25f19b1536e"}
+    :git/tag "v26"
+    :git/sha "cd6eab928408faf7101af612c2e199796852d669"}
    'ct.spools/agent-run
    {:git/url "https://github.com/codethread/agent-harness.spool.git"
     :git/sha "1f06dfd046828f86c262537c190f854b87d90f6f"}})
