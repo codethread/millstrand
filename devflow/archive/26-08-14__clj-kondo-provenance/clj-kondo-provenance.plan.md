@@ -6,8 +6,8 @@
 **RFC:** None
 **Root specs:** None; the existing authoring contract is in [`docs/spools/writing-shared-spools.md`](../../../docs/spools/writing-shared-spools.md)
 **Feature specs:** None
-**Status:** Active
-**Last Updated:** 2026-08-11
+**Status:** Shipped
+**Last Updated:** 2026-08-14
 **Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version. Nested point IDs use the full document ID.
 
 ## PLAN-Khp-001.P1 Goal and scope

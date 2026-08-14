@@ -23,13 +23,13 @@ Root specs are canonical for shipped behavior:
 
 `devflow/feat/` holds only planned-but-unbuilt work; a feature folder appears here when planning starts and moves to `archive/` once its spec deltas merge into the root specs. In-flight work lives on the kanban board and as devflow runs in the repo's `.millstrand` coordination workspace.
 
-- `source-root-spools` — adds `:millstrand/source-root` as the non-acquiring coordinate for spools shipped in the Millstrand checkout and moves batteries from the production classpath to the ordinary approved-spool path. Contracts are promoted into `cli.md` (SPEC-002.C14a), `repl-api.md` (SPEC-003.C62-adjacent module guidance and C63), `daemon-runtime.md` (SPEC-004.C42/C44/C48@2/C49@2/C50a/C50b/C94a), and `alpha-surface.md` (SPEC-005.C3); awaiting acceptance and archive.
-
 ## Archived features
 
-Archived feature folders preserve historical planning context. Current shipped contracts are the root specs above, even if older archive notes describe pre-spec documentation locations.
-Default `rg` searches skip `archive/`; use `rg --no-ignore devflow/archive` when you need those records.
+Archived feature folders preserve historical planning context. Current shipped contracts are the root specs above, even if older archive notes describe pre-spec documentation locations. Default `rg` searches skip `archive/`; use `rg --no-ignore devflow/archive` when you need those records.
 
+- `26-08-14__clj-kondo-provenance` — shipped clj-kondo ownership and provenance hygiene.
+- `26-08-14__selectable-authoring-declarations` — shipped selectable authoring declarations and the coordinated repository cutover.
+- `26-08-14__source-root-spools` — shipped `:millstrand/source-root` coordinates and the batteries source-root cutover.
 - `26-08-07__9j332` — shipped land-run context, recorded PR numbers, and the sign-off revise route.
 - `26-08-07__9snqu-siblings-rollout` — shipped the sibling-spool installer-removal rollout.
 - `26-08-07__aqw10-main-ci-code-gate` — shipped the main-CI code gate.

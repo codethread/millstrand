@@ -2,20 +2,20 @@ tasks:
   - id: 1
     description: Source-root coordinate core and focused tests
     task_file: tasks/001-source-root-coordinate-core.md
-    status: pending
+    status: complete
     blocked_by: []
   - id: 2
     description: Batteries cutover and repo config migration
     task_file: tasks/002-batteries-cutover-and-repo-config.md
-    status: pending
+    status: complete
     blocked_by: [1, 3]
   - id: 3
     description: Go bootstrap seeds batteries as an approved spool
     task_file: tasks/003-go-bootstrap-seeded-batteries.md
-    status: pending
+    status: complete
     blocked_by: []
   - id: 4
     description: Promote spec deltas and sweep source-root spool docs
     task_file: tasks/004-spec-promotion-and-docs.md
-    status: pending
+    status: complete
     blocked_by: [1, 2, 3]
