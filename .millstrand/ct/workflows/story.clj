@@ -29,7 +29,7 @@
 (s/def ::story-continuation-params (s/keys :req-un [::feature ::module ::worktree]
                                            :opt-un [::card ::reviewer-harness]))
 
-(workflow/defworkflow story-fold
+(workflow/defworkflow! story-fold
   "Fold a story split back into one story-ordered file.
 
   The continuation after the fold-decision checkpoint's `:fold-back` choice."
@@ -74,7 +74,7 @@
                                     |new. Then close this run."
                                    module)))})))
 
-(workflow/defworkflow story-keep
+(workflow/defworkflow! story-keep
   "Keep a story split: the per-concern files are the deliverable.
 
   The continuation after the fold-decision checkpoint's `:keep-split` choice."
@@ -104,7 +104,7 @@
                                     |new. Then close this run."
                                    module)))})))
 
-(workflow/defworkflow story
+(workflow/defworkflow! story
   "Run the module-form STORY workflow (family \"story\").
 
   The forcing function for writing module code: identify the changed

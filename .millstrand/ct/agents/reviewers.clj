@@ -50,8 +50,7 @@
   sign-off invariants: the synthesizer is never a seat that reviewed, and at
   least one reviewing seat comes from outside the authoring model family."
   (:require [ct.spools.delegation :as agents]
-            [millstrand.api.format.alpha :as fmt]
-            [millstrand.api.runtime.alpha :as runtime]))
+            [millstrand.api.format.alpha :as fmt]))
 
 (def change-review
   "Roster fanned out over each reviewed change in this repository."
@@ -291,6 +290,6 @@
 
    :synthesis {:harness :sol-med}})
 
-(runtime/collect-entry! agents/roster-kind :change-review change-review)
-(runtime/collect-entry! agents/roster-kind :complex-patch-review complex-patch-review)
-(runtime/collect-entry! agents/roster-kind :docs-review docs-review)
+(agents/defroster! :change-review change-review)
+(agents/defroster! :complex-patch-review complex-patch-review)
+(agents/defroster! :docs-review docs-review)

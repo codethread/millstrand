@@ -1,7 +1,7 @@
 (ns ct.adapters.kanban
   "Select the core Kanban declarations this workspace publishes.
 
-  Kanban remains an external spool. Its v25 namespace defines inert declaration
+  Kanban remains an external spool. Its v24 namespace defines inert declaration
   Vars; this workspace-owned module selects only the core board surface for its
   own owner partition."
   (:require [millstrand.api.millstrand.alpha :as millstrand]

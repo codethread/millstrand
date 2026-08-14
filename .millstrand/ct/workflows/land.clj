@@ -97,7 +97,7 @@
   [item key]
   (get (:attrs item) key))
 
-(workflow/defworkflow land-abort
+(workflow/defworkflow! land-abort
   (format-alpha/prose
    "
      Record an intentional abort of a land run.
@@ -140,7 +140,7 @@
                                 "
                                 {})})))
 
-(workflow/defworkflow land-merge
+(workflow/defworkflow! land-merge
   (format-alpha/prose
    "
      Run the mechanical merge continuation for an approved land run.
@@ -341,7 +341,7 @@
                                       "
                                     {})))})))
 
-(workflow/defworkflow land
+(workflow/defworkflow! land
   (format-alpha/prose
    "
      Drive the coordinator LANDING workflow for a feature branch (family `land`).

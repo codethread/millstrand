@@ -178,7 +178,8 @@
                                  ((requiring-resolve 'ct.spools.kanban/add!)
                                   runtime title {"--body" body "--priority" "p1"}))}))
 
-(cron/defjob :nvd-scan
+(cron/defjob! nvd-scan
+  "Run the scheduled NVD deep scan."
   {:interval-ms nvd-scan-interval-ms
    :jitter-ms nvd-scan-jitter-ms
    :handler 'ct.jobs.nvd-scan/nvd-scan-tick})

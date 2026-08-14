@@ -5,7 +5,7 @@
   (chime/set-notifier! {:argv [...]})."
   (:require [millstrand.api.current.alpha :as current]
             [millstrand.api.runtime.alpha :as runtime]
-            [millhouse.spools.chime :refer [defrule]]
+            [millhouse.spools.chime :refer [defrule!]]
             [ct.spools.agent-run :as shuttle]))
 
 (defn- config-attr
@@ -14,7 +14,7 @@
   (let [attrs (:attributes strand)]
     (or (get attrs k) (get attrs (subs (str k) 1)))))
 
-(defrule hitl-checkpoint-ready
+(defrule! hitl-checkpoint-ready
   "Notify when a human-in-the-loop workflow checkpoint is ready to decide."
   [{:keys [strand ready-ids]}]
   (when (and (= "active" (:state strand))
@@ -24,7 +24,7 @@
     {:title (str "HITL checkpoint ready: " (:title strand))
      :body (str "Checkpoint " (:id strand) " is ready for human attention.")}))
 
-(defrule kanban-completed
+(defrule! kanban-completed
   "Notify when a kanban card reaches the explicit done outcome."
   [{:keys [strand]}]
   (when (and (= "closed" (:state strand))
@@ -80,7 +80,7 @@
                                    :exception/message (ex-message e)})))))
         nil))))
 
-(defrule parked-run
+(defrule! parked-run
   "Notify when a ready pending agent run has sat unclaimed past the threshold.
 
   This is the silent-parking detector: the morning incident left runs ready and

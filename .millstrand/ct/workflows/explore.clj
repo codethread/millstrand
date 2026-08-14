@@ -28,7 +28,7 @@
 (s/def ::topic ::non-blank-string)
 (s/def ::explore-params (s/keys :req-un [::topic] :opt-un [::card]))
 
-(workflow/defworkflow explore
+(workflow/defworkflow! explore
   "Run the open-ended EXPLORE workflow (family \"explore\").
 
   The zero-ceremony mode for exploration with an agent: claim a kanban
