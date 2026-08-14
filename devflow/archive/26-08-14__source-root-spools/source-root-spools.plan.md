@@ -1,6 +1,6 @@
 # source-root-spools plan
 
-**Document ID:** `PLAN-Srs-001` **Status:** Reviewed **Last Updated:** 2026-07-23 **Proposal:** [proposal.md](./proposal.md) (`PROP-Srs-001`) **Brief:** [brief.md](./brief.md) (card `u4a24`) **Spec deltas:** [daemon-runtime](./specs/daemon-runtime.delta.md) (`SPEC-004-D006`), [repl-api](./specs/repl-api.delta.md) (`SPEC-003-D006`), [cli](./specs/cli.delta.md) (`SPEC-002-D007`), [alpha-surface](./specs/alpha-surface.delta.md) (`SPEC-005-D001`)
+**Document ID:** `PLAN-Srs-001` **Status:** Shipped **Last Updated:** 2026-08-14 **Proposal:** [proposal.md](./proposal.md) (`PROP-Srs-001`) **Brief:** [brief.md](./brief.md) (card `u4a24`) **Spec deltas:** [daemon-runtime](./specs/daemon-runtime.delta.md) (`SPEC-004-D006`), [repl-api](./specs/repl-api.delta.md) (`SPEC-003-D006`), [cli](./specs/cli.delta.md) (`SPEC-002-D007`), [alpha-surface](./specs/alpha-surface.delta.md) (`SPEC-005-D001`)
 
 ## PLAN-Srs-001.P1 Goal and scope
 
