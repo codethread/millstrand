@@ -1,6 +1,6 @@
 {:spools {codethread/spools
  {:git/url "https://github.com/codethread/codethread.spool.git",
-  :git/sha "09eab40d06c97adcdca4de2c7372ca7fd530ecf6",
+  :git/sha "cdded90bba0009377c2d9e58021735d5baa5cf88",
   :roots
   {codethread/config "spools/config",
    codethread/ralph "spools/ralph"}},
