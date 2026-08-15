@@ -3,6 +3,8 @@
   :git/sha "f16022c6c110d6108f7c9579a91dbd93928f757a",
   :roots {codethread/agents "spools/agents",
           codethread/ralph "spools/ralph"}},
+ codethread/config
+ {:local/root "../../codethread.spool/spools/config"},
  millstrand.spools/unsafe-text-search
  {:millstrand/source-root "spools/unsafe-text-search"},
  codethread/devflow

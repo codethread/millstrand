@@ -16,8 +16,7 @@
 ;;   ct/agents/delegation_contracts.clj — workspace task and review contracts
 ;;   ct/notifications/attention.clj — chime attention rules
 ;;   ct/jobs/nvd_scan.clj         — NVD scan cron job
-;;   ct/adapters/help.clj         — repo election of the batteries help transform
-;;   Codethread roots             — shared agents and Ralph
+;;   Codethread roots             — shared agents, config (help transform), and Ralph
 ;;
 ;; Gitignored init.local.clj is layered after this file on startup and every
 ;; refresh; a module key it redeclares shadows the one here and wins, and it binds
@@ -36,8 +35,9 @@
                  {:ns 'millstrand.spools.batteries
                   :spools ['millstrand.spools/batteries]})
 
-(runtime/module! runtime :module-adapters
-                 {:file "ct/adapters/help.clj"
+(runtime/module! runtime :codethread/config
+                 {:ns 'ct.spools.codethread.config
+                  :spools ['codethread/config 'millstrand.spools/batteries]
                   :after [:millstrand/spools-batteries]})
 
 ;; --- workflow engine + shell executor -------------------------------------
