@@ -35,11 +35,6 @@
                  {:ns 'millstrand.spools.batteries
                   :spools ['millstrand.spools/batteries]})
 
-(runtime/module! runtime :codethread/config
-                 {:ns 'ct.spools.codethread.config
-                  :spools ['codethread/config 'millstrand.spools/batteries]
-                  :after [:millstrand/spools-batteries]})
-
 ;; --- workflow engine + shell executor -------------------------------------
 ;; The engine's collected open-kind and lifecycle declarations own Workflow
 ;; definition/executor publication and its process-lifetime vocabulary seed.
@@ -126,17 +121,44 @@
 ;; --- repo policy over the peer spools ---------------------------------------
 ;; Codethread publishes the shared harness tools and seat aliases. This
 ;; repository keeps reviewer rosters and task/review policy local.
-(runtime/module! runtime :codethread/agents
-                 {:ns 'ct.spools.codethread.agents
-                  :spools ['codethread/agents 'ct.spools/delegation 'ct.spools/agent-run]
-                  :after [:millstrand/spools-shuttle :millstrand/spools-delegation]
-                  :required? true})
+(runtime/module! runtime :codethread/config-agents
+  {:ns 'ct.spools.codethread.agents
+   :spools ['codethread/config 'ct.spools/agent-run]
+   :after [:millstrand/spools-shuttle]
+   :required? true})
+(runtime/module! runtime :codethread/config-help
+  {:ns 'ct.spools.codethread.help
+   :spools ['codethread/config 'millstrand.spools/batteries]
+   :after [:millstrand/spools-batteries]
+   :required? true})
+(runtime/module! runtime :codethread/config-devflow
+  {:ns 'ct.spools.codethread.devflow
+   :spools ['codethread/config]
+   :required? true})
+(runtime/module! runtime :devflow/kanban-adapter
+  {:ns 'ct.spools.devflow-kanban-adapter
+   :spools ['codethread/devflow-kanban-adapter 'codethread/devflow
+            'codethread/kanban 'millhouse.spools/workflow]
+   :after [:millstrand/spools-devflow :millstrand/spools-kanban :millhouse/spools-workflow]
+   :required? true})
+(runtime/module! runtime :codethread/config
+  {:ns 'ct.spools.codethread.config
+   :spools ['codethread/config 'millstrand.spools/batteries
+            'ct.spools/agent-run 'ct.spools/delegation]
+   :after [:codethread/config-agents
+           :codethread/config-help
+           :codethread/config-devflow
+           :millstrand/spools-batteries
+           :millstrand/spools-shuttle
+           :millstrand/spools-delegation
+           :devflow/kanban-adapter]
+   :required? true})
 ;; ct/agents/guide.clj publishes the `guide` op, which spawns its answer as an agent run on
 ;; a shared Codethread seat, so it orders after the shared agents module.
 (runtime/module! runtime :guide
                  {:file "ct/agents/guide.clj"
                   :spools ['ct.spools/agent-run]
-                  :after [:millstrand/spools-shuttle :codethread/agents]
+                  :after [:millstrand/spools-shuttle :codethread/config]
                   :required? true})
 ;; The declarative reviewer roster stays a small git-reviewable data document,
 ;; collected as the workspace-owned partition of delegation's roster kind.
@@ -153,7 +175,7 @@
 (runtime/module! runtime :delegation-contracts
                  {:file "ct/agents/delegation_contracts.clj"
                   :spools ['ct.spools/agent-run 'ct.spools/delegation]
-                  :after [:codethread/agents :millstrand/spools-shuttle
+                  :after [:codethread/config :millstrand/spools-shuttle
                           :millstrand/spools-delegation]
                   :required? true})
 
@@ -273,6 +295,6 @@
                  {:ns 'ct.spools.executors.subagent
                   :spools ['ct.spools/agent-run]
                   :after [:millstrand/spools-shuttle :millhouse/spools-workflow
-                          :codethread/agents :reviewers :workflows :workflows.land
+                          :codethread/config :reviewers :workflows :workflows.land
                           :workflows.story :codethread/ralph]
                   :required? true})
