@@ -122,37 +122,37 @@
 ;; Codethread publishes the shared harness tools and seat aliases. This
 ;; repository keeps reviewer rosters and task/review policy local.
 (runtime/module! runtime :codethread/config-agents
-  {:ns 'ct.spools.codethread.agents
-   :spools ['codethread/config 'ct.spools/agent-run]
-   :after [:millstrand/spools-shuttle]
-   :required? true})
+                 {:ns 'ct.spools.codethread.agents
+                  :spools ['codethread/config 'ct.spools/agent-run]
+                  :after [:millstrand/spools-shuttle]
+                  :required? true})
 (runtime/module! runtime :codethread/config-help
-  {:ns 'ct.spools.codethread.help
-   :spools ['codethread/config 'millstrand.spools/batteries]
-   :after [:millstrand/spools-batteries]
-   :required? true})
+                 {:ns 'ct.spools.codethread.help
+                  :spools ['codethread/config 'millstrand.spools/batteries]
+                  :after [:millstrand/spools-batteries]
+                  :required? true})
 (runtime/module! runtime :codethread/config-devflow
-  {:ns 'ct.spools.codethread.devflow
-   :spools ['codethread/config]
-   :required? true})
+                 {:ns 'ct.spools.codethread.devflow
+                  :spools ['codethread/config]
+                  :required? true})
 (runtime/module! runtime :devflow/kanban-adapter
-  {:ns 'ct.spools.devflow-kanban-adapter
-   :spools ['codethread/devflow-kanban-adapter 'codethread/devflow
-            'codethread/kanban 'millhouse.spools/workflow]
-   :after [:millstrand/spools-devflow :millstrand/spools-kanban :millhouse/spools-workflow]
-   :required? true})
+                 {:ns 'ct.spools.devflow-kanban-adapter
+                  :spools ['codethread/devflow-kanban-adapter 'codethread/devflow
+                           'millhouse.spools/kanban 'millhouse.spools/workflow]
+                  :after [:millstrand/spools-devflow :millstrand/spools-kanban :millhouse/spools-workflow]
+                  :required? true})
 (runtime/module! runtime :codethread/config
-  {:ns 'ct.spools.codethread.config
-   :spools ['codethread/config 'millstrand.spools/batteries
-            'ct.spools/agent-run 'ct.spools/delegation]
-   :after [:codethread/config-agents
-           :codethread/config-help
-           :codethread/config-devflow
-           :millstrand/spools-batteries
-           :millstrand/spools-shuttle
-           :millstrand/spools-delegation
-           :devflow/kanban-adapter]
-   :required? true})
+                 {:ns 'ct.spools.codethread.config
+                  :spools ['codethread/config 'millstrand.spools/batteries
+                           'ct.spools/agent-run 'ct.spools/delegation]
+                  :after [:codethread/config-agents
+                          :codethread/config-help
+                          :codethread/config-devflow
+                          :millstrand/spools-batteries
+                          :millstrand/spools-shuttle
+                          :millstrand/spools-delegation
+                          :devflow/kanban-adapter]
+                  :required? true})
 ;; ct/agents/guide.clj publishes the `guide` op, which spawns its answer as an agent run on
 ;; a shared Codethread seat, so it orders after the shared agents module.
 (runtime/module! runtime :guide
