@@ -237,18 +237,18 @@ make install
      alt="mill, the supervisor, routes to one weaver per workspace; a worktree of repo-a uses the same repo-a weaver; each weaver owns its own millstrand.sqlite of strands.">
 
 1. Open a dedicated terminal tab and run:
-   ```sh
-   mill start # Starts a long lived process, so leave this running
-   ```
+    ```sh
+    mill start # Starts a long lived process, so leave this running
+    ```
 2. In a new terminal tab:
-   ```sh
-   mkdir ~/learn-millstrand
-   cd ~/learn-millstrand
-   git init
-   mill init
-   mill weaver start
-   strand help
-   ```
+    ```sh
+    mkdir ~/learn-millstrand
+    cd ~/learn-millstrand
+    git init
+    mill init
+    mill weaver start
+    strand help
+    ```
 3. Spawn your favourite agent and have **it** explain millstrand
 4. Check the [docs](https://codethread.github.io/millstrand/)
 
