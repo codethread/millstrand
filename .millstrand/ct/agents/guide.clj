@@ -85,7 +85,7 @@
    "mill prime millstrand|strand                offline orientation from the Millstrand source docs"
    "strand workflow list|show <name>       the definition is the truth for a registered workflow: stages, params, gates, choices"
    "strand agent harnesses|rosters         seats and reviewer rosters with their routing docs"
-   "strand query list | strand pattern list | strand vocab   named queries, weave patterns, attribute vocabulary"])
+   "strand query list | strand pattern list   named queries and weave patterns"])
 
 (def ^:private jq-recipes
   "Filters that cut the help envelope down to the slice a question needs."

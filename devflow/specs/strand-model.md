@@ -59,7 +59,7 @@ The `notes` relation is a core-owned operational edge from a closed note strand 
 
 Self-edges fail for every relation. Writes to declared acyclic relations fail when they introduce a cycle within that same relation. Undeclared annotation relations may form non-self cycles.
 
-The blessed `millstrand.api.relations.alpha` namespace ships a source-visible advisory catalog of this relation vocabulary for agents, config, and REPL workflows: `catalog` data, each entry carrying the relation's family (operational battery vs behavior-free annotation), direction gloss, declared-acyclicity flag, and help text. It is documentation-only — not a storage allowlist or runtime relation-semantics registry — so relation names outside the catalog remain valid userland annotations. The `millstrand.api.vocab.alpha` registry reflects this catalog as owned `:edge` declarations (owner `:millstrand/core`) so the shipped edge vocabulary has one source and never forks. As an `millstrand.api.*.alpha` namespace it carries accretion-based compatibility within the subnamespace.
+The blessed `millstrand.api.relations.alpha` namespace ships a source-visible advisory catalog for agents, config, and REPL workflows: `catalog` data, each entry carrying the relation's family (operational battery vs behavior-free annotation), direction gloss, declared-acyclicity flag, and help text. It is documentation-only — not a storage allowlist or runtime relation-semantics registry — so relation names outside the catalog remain valid userland annotations. As an `millstrand.api.*.alpha` namespace it carries accretion-based compatibility within the subnamespace.
 
 ## SPEC-001.P6 Batch graph mutation
 

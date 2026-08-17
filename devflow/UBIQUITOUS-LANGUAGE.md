@@ -2,7 +2,7 @@
 
 This glossary defines the terms used by Millstrand and this repository. The contracts and code define behavior. When this file disagrees with the code, this file needs fixing.
 
-The live surfaces are authoritative for anything enumerable: `strand vocab` lists registered attribute namespaces and relations, `strand help` lists registered ops, and `strand about <op>` gives an op's manual.
+The live surfaces are authoritative for anything enumerable: `strand help` lists registered ops, and `strand about <op>` gives an op's manual. Attribute names and relation names remain open userland data.
 
 This glossary covers Millstrand and this repository. Terms owned by external spools, such as kanban, devflow, and delegation, belong in their own repositories. They appear here only when this repository's discipline depends on them.
 
@@ -81,7 +81,7 @@ What a module may contribute once it is active.
 | **Weave pattern** | A registered create-only template applied to one JSON input value, so common graph shapes are poured rather than hand-authored. | Template, macro, generator, recipe, scaffold |
 | **Event handler** | A registered async reaction dispatched by the weaver's event worker. | Hook, listener, trigger, callback |
 | **Lifecycle hook** | A registered synchronous gate that may reject an operation but not transform it. | Event handler, middleware, interceptor, filter |
-| **Attribute namespace** | A declared family of attribute keys with a stated owner and doc, listed by `strand vocab`. Consumers reuse its keys verbatim. | Schema, model, table, prefix |
+| **Attribute namespace** | A conventionally named family of attribute keys, documented by the spool that owns and writes it. Consumers reuse its keys verbatim. | Schema, model, table, prefix |
 | **Spool state** | Runtime-owned per-key state reached only through `millstrand.api.runtime.alpha/spool-state`. The sanctioned alternative to module-level atoms. | Global, atom, cache, singleton, session |
 | **Bin** | An executable declared by a spool with `millstrand.api.millstrand.alpha/defbin`. Only declared bins appear in `bins list`; `mill bin build` runs its optional recipe and `mill bin run` resolves and executes it in the caller's terminal. | Executable file, script, tool |
 | **Lean read** | The CLI and agent listing projection: oversized attribute values become an omission descriptor, and results are capped before assembly. Over the cap the op fails loudly. | Pagination, truncation, summary, preview |
@@ -96,7 +96,6 @@ Three tiers answer every "how do I find out" question, and the distinction is lo
 | **about** | One op's manual: semantics, conventions, and attribute contracts. A machine-readable man page. | Help, docs, description, summary |
 | **help** | Exact invocation: the registered ops, and one op's flags, positionals, and subcommands. | About, manual, usage docs |
 | **Help envelope** | The versioned machine schema behind all three, and the single contract. `--json` is the raw floor the CLI always relays. | Output format, response, JSON schema |
-| **vocab** | The declared attribute-namespace and relation catalogue for the running weaver. | Glossary, this file, schema, dictionary |
 
 ## Spool release
 
@@ -229,4 +228,3 @@ Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/
 - "Install", "enable", and "activate" were used for **approval**, **acquisition**, and **sync**, which are three distinct steps with distinct failure modes.
 - "Version" is retired for spools. Use **marker** for a published `v<int>`, **floor** for a minimum, and **claims** for a local override's assertion.
 - "Breaking change" is retired for **floor raises**. A raise is not a **break**; a break is rejecting input the published contract accepted.
-- "Glossary" and **vocab** are different things: `strand vocab` lists a weaver's registered attribute namespaces and relations, not this file.
