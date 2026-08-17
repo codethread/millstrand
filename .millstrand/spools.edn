@@ -26,7 +26,7 @@
    millhouse.spools.executors/shell "spools/shell-executor"}},
  ct.spools/agent-run
  {:git/url "https://github.com/codethread/agent-harness.spool.git",
-  :git/sha "42b93f8bf030cb0797d684813c6604f1b7206f9e",
+  :git/sha "c391ea7cb70f7a3ed756fe0099a2ce1366aa863b",
   :roots
   {ct.spools/harness-core "harness-core",
    ct.spools/codex-harness "codex-harness",
