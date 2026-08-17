@@ -16,13 +16,13 @@ Docs: [codethread.github.io/millstrand](https://codethread.github.io/millstrand/
 
 - [Why](#why)
 - [About](#about)
-  - [A graph](#a-graph)
-  - [The weaver](#the-weaver)
-  - [Named queries](#named-queries)
-  - [Going further](#going-further)
+    - [A graph](#a-graph)
+    - [The weaver](#the-weaver)
+    - [Named queries](#named-queries)
+    - [Going further](#going-further)
 - [See it in action](#see-it-in-action)
-  - [Install](#install)
-  - [Run](#run)
+    - [Install](#install)
+    - [Run](#run)
 - [Why Clojure](#why-clojure)
 
 <!-- vim-markdown-toc -->
