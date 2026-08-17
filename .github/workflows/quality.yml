@@ -271,6 +271,8 @@ jobs:
       - uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: latest
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
       - uses: astral-sh/setup-uv@v8.2.0
       - uses: actions/setup-go@v5
         with:

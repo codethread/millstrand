@@ -11,6 +11,7 @@ cli/bin/
 /bin/
 /go.work.sum
 site/
+node_modules/
 
 .lsp/*
 !.lsp/config.edn

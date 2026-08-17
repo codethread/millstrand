@@ -1,0 +1,14 @@
+{
+	"name": "millstrand",
+	"private": true,
+	"scripts": {
+		"format:api-docs": "oxfmt docs/api/*.api.md spools/*.api.md",
+		"format:api-docs:check": "oxfmt --check docs/api/*.api.md spools/*.api.md",
+		"format:readme": "oxfmt README.md",
+		"format:readme:check": "oxfmt --check README.md"
+	},
+	"devDependencies": {
+		"oxfmt": "0.63.0"
+	},
+	"packageManager": "bun@1.3.13"
+}

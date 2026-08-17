@@ -1,68 +1,38 @@
+---
 
------
 # <a name="millstrand.spools.batteries">millstrand.spools.batteries</a>
-
 
 Shipped core strand command surface as parser-backed weaver ops.
 
-  Batteries declares the everyday strand operations — add/update/show/supersede/
-  burn/list/ready/subgraph, spool coordinate helpers, the create-only `weave`
-  op, and the read-only `query`/`pattern` registry-introspection ops — through
-  `millstrand.api.millstrand.alpha/defop!`. Their
-  `:arg-spec` is parsed by `millstrand.api.cli.alpha`. Each op delegates to the same
-  `millstrand.api.*.alpha` calls the JSON socket dispatch uses and returns
-  the same JSON shapes, so the ops are reachable through `strand <name>` at the
-  CLI root. The namespace owns no module-level state:
-  op handlers read the runtime from their invocation context (`:op/runtime`).
+Batteries declares the everyday strand operations — add/update/show/supersede/ burn/list/ready/subgraph, spool coordinate helpers, the create-only `weave` op, and the read-only `query`/`pattern` registry-introspection ops — through `millstrand.api.millstrand.alpha/defop!`. Their `:arg-spec` is parsed by `millstrand.api.cli.alpha`. Each op delegates to the same `millstrand.api.*.alpha` calls the JSON socket dispatch uses and returns the same JSON shapes, so the ops are reachable through `strand <name>` at the CLI root. The namespace owns no module-level state: op handlers read the runtime from their invocation context (`:op/runtime`).
 
-  `defop!` declarations are the durable source for this surface. They define
-  Vars and select their declarations during module collection; the selected set
-  publishes as this module's complete, owner-complete ops partition.
-  Explicit-runtime registration functions are the live code and test seam, and
-  `millstrand.repl` supplies the same verbs with the runtime implied for an in-process
-  session. Evaluating an authoring form outside module collection defines its Var
-  but publishes no op.
+`defop!` declarations are the durable source for this surface. They define Vars and select their declarations during module collection; the selected set publishes as this module's complete, owner-complete ops partition. Explicit-runtime registration functions are the live code and test seam, and `millstrand.repl` supplies the same verbs with the runtime implied for an in-process session. Evaluating an authoring form outside module collection defines its Var but publishes no op.
 
-  Production loading follows the ordinary approved-spool path. `mill init` seeds
-  `millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}` in
-  `spools.edn`, and its startup module names that root in `:spools`. Deleting
-  the seeded entry is the supported opt-out; a workspace without it has no
-  batteries ops.
+Production loading follows the ordinary approved-spool path. `mill init` seeds `millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}` in `spools.edn`, and its startup module names that root in `:spools`. Deleting the seeded entry is the supported opt-out; a workspace without it has no batteries ops.
 
-  Ops adopt the discovery-tier pattern (DELTA-Dtf-003.CC2): their arg-specs drive
-  help, and where it adds value they carry closed `:annotations` sub-maps
-  (`use-when`/`notes`/`failure-modes`) and op-level `:about`/`:prime` prose.
-  `failure-modes` reference the batteries-owned glossary outcomes seeded by the
-  batteries module (the load-order contract, DELTA-Dtf-002.CC7).
+Ops adopt the discovery-tier pattern (DELTA-Dtf-003.CC2): their arg-specs drive help, and where it adds value they carry closed `:annotations` sub-maps (`use-when`/`notes`/`failure-modes`) and op-level `:about`/`:prime` prose. `failure-modes` reference the batteries-owned glossary outcomes seeded by the batteries module (the load-order contract, DELTA-Dtf-002.CC7).
 
-  Batteries also EXPORTS `default-help-transform` — the reference default help
-  transform (DELTA-Dtf-002.CC1): one recursive renderer over the uniform fractal
-  node (DELTA-Dtf-001.CC2) with no per-level branch. It is exported for trusted
-  config election and never auto-registers.
+Batteries also EXPORTS `default-help-transform` — the reference default help transform (DELTA-Dtf-002.CC1): one recursive renderer over the uniform fractal node (DELTA-Dtf-001.CC2) with no per-level branch. It is exported for trusted config election and never auto-registers.
 
-  Attribute/edge flag semantics reproduce old SPEC-002.C6–C11: `--attr key=value`
-  is a repeatable, highest-precedence string map whose values may be payload
-  references; `--attributes` references a JSON object of typed bulk attributes at
-  lowest precedence; `--edge edge-type:to-id` adds outgoing edges. `--state`
-  accepts `active|closed` for mutations and `active|closed|replaced` for `list`
-  filtering.
-
-
-
+Attribute/edge flag semantics reproduce old SPEC-002.C6–C11: `--attr key=value` is a repeatable, highest-precedence string map whose values may be payload references; `--attributes` references a JSON object of typed bulk attributes at lowest precedence; `--edge edge-type:to-id` adds outgoing edges. `--state` accepts `active|closed` for mutations and `active|closed|replaced` for `list` filtering.
 
 ## <a name="millstrand.spools.batteries/add">`add`</a>
-``` clojure
+
+```clojure
 (add ctx)
 ```
+
 Function.
 
 Create a strand with merged attributes, optional state, and outgoing edges.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1446-L1446">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/await">`await`</a>
-``` clojure
+
+```clojure
 (await ctx)
 ```
+
 Function.
 
 Block until a named query's result count is inside the requested band.
@@ -70,24 +40,20 @@ Block until a named query's result count is inside the requested band.
 
 ## <a name="millstrand.spools.batteries/batteries-glossary-seed">`batteries-glossary-seed`</a>
 
-
-
-
 Seed the process-lifetime Batteries failure glossary.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1676-L1678">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/blockers-active">`blockers-active`</a>
 
-
-
-
 Return active blockers of the strand identified by `id`.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1554-L1559">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/burn">`burn`</a>
-``` clojure
+
+```clojure
 (burn ctx)
 ```
+
 Function.
 
 Physically delete one strand by id and return the burn summary.
@@ -95,134 +61,144 @@ Physically delete one strand by id and return the burn summary.
 
 ## <a name="millstrand.spools.batteries/children-active">`children-active`</a>
 
-
-
-
 Return active children of the strand identified by `parent`.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1547-L1552">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/default-help-transform">`default-help-transform`</a>
-``` clojure
+
+```clojure
 (default-help-transform envelope {:keys [is-tty]})
 ```
+
 Function.
 
 Render a canonical help envelope (DELTA-Dtf-001.CC1) as readable text.
 
-  The batteries reference default help transform (DELTA-Dtf-002.CC1): a full
-  envelope plus terminal capabilities → the string the CLI relays verbatim. It is EXPORTED for trusted
-  `init.clj` election through `register-default-help-transform!` (Task 8) and is
-  deliberately not auto-registered by the module, so a fresh world keeps the
-  raw-JSON floor (DELTA-Dtf-002.D1).
+The batteries reference default help transform (DELTA-Dtf-002.CC1): a full envelope plus terminal capabilities → the string the CLI relays verbatim. It is EXPORTED for trusted `init.clj` election through `register-default-help-transform!` (Task 8) and is deliberately not auto-registered by the module, so a fresh world keeps the raw-JSON floor (DELTA-Dtf-002.D1).
 
-  Both members of the one help-schema family render through the single uniform
-  node renderer (`render-node`): the detail envelope carrying `node`, and the
-  no-arg catalog carrying `ops[]` of summary nodes (DELTA-Dtf-001.CC3). The only
-  branch is which envelope family this is — an envelope-shape choice, never a
-  per-node-level one, so the recursive node renderer stays uniform at every depth
-  (the forcing-function invariant, DELTA-Dtf-003.D1). ANSI color is added only
-  when the caller reports `:is-tty true`; redirected and agent output stays plain.
+Both members of the one help-schema family render through the single uniform node renderer (`render-node`): the detail envelope carrying `node`, and the no-arg catalog carrying `ops[]` of summary nodes (DELTA-Dtf-001.CC3). The only branch is which envelope family this is — an envelope-shape choice, never a per-node-level one, so the recursive node renderer stays uniform at every depth (the forcing-function invariant, DELTA-Dtf-003.D1). ANSI color is added only when the caller reports `:is-tty true`; redirected and agent output stays plain.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1414-L1434">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/list">`list`</a>
-``` clojure
+
+```clojure
 (list ctx)
 ```
+
 Function.
 
 List lean-projected strands, optionally filtered by lifecycle state or a named query.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1502-L1502">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/note">`note`</a>
-``` clojure
+
+```clojure
 (note ctx)
 ```
+
 Function.
 
 Append a note to a target strand's memory via the note primitive.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1625-L1625">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/notes">`notes`</a>
-``` clojure
+
+```clojure
 (notes ctx)
 ```
+
 Function.
 
 Return a target strand's notes in note/at order.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1635-L1635">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/pattern">`pattern`</a>
-``` clojure
+
+```clojure
 (pattern ctx)
 ```
+
 Function.
 
 Introspect registered weave patterns: list all metadata or explain one.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1613-L1613">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/query">`query`</a>
-``` clojure
+
+```clojure
 (query ctx)
 ```
+
 Function.
 
 Introspect registered named queries: list all metadata or explain one.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1601-L1601">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/read-limit">`read-limit`</a>
-``` clojure
+
+```clojure
 (read-limit rt)
 ```
+
 Function.
 
 Return the runtime's batteries read-result cap for CLI list/ready ops.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L232-L235">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/ready">`ready`</a>
-``` clojure
+
+```clojure
 (ready ctx)
 ```
+
 Function.
 
 List lean-projected ready strands, optionally from a named query result set.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1519-L1519">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/seed-batteries-glossary!">`seed-batteries-glossary!`</a>
-``` clojure
+
+```clojure
 (seed-batteries-glossary! ctx)
 ```
+
 Function.
 
 Seed Batteries' process-lifetime failure glossary.
 
-  Input conforms to `::seed-context`; the result conforms to `::seed-result`.
+Input conforms to `::seed-context`; the result conforms to `::seed-result`.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1663-L1674">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/set-read-limit!">`set-read-limit!`</a>
-``` clojure
+
+```clojure
 (set-read-limit! rt limit)
 ```
+
 Function.
 
 Set the runtime's batteries read-result cap for CLI list/ready ops.
 
-  Intended for trusted workspace config. Invalid values fail loudly instead of
-  falling back to the default cap.
+Intended for trusted workspace config. Invalid values fail loudly instead of falling back to the default cap.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L237-L245">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/show">`show`</a>
-``` clojure
+
+```clojure
 (show ctx)
 ```
+
 Function.
 
 Return one normalized strand by id.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1483-L1483">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/spool">`spool`</a>
-``` clojure
+
+```clojure
 (spool ctx)
 ```
+
 Function.
 
 Dispatch validated `strand spool about|add|bump|status` inputs and results.
@@ -230,51 +206,53 @@ Dispatch validated `strand spool about|add|bump|status` inputs and results.
 
 ## <a name="millstrand.spools.batteries/strand-active">`strand-active`</a>
 
-
-
-
 Return the active strand identified by `id`, when it exists.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1540-L1545">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/strand-closed">`strand-closed`</a>
 
-
-
-
 Return the closed strand identified by `id`, when it exists.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1533-L1538">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/subgraph">`subgraph`</a>
-``` clojure
+
+```clojure
 (subgraph ctx)
 ```
+
 Function.
 
 Return a relation-scoped subgraph rooted at one strand.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1578-L1578">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/supersede">`supersede`</a>
-``` clojure
+
+```clojure
 (supersede ctx)
 ```
+
 Function.
 
 Replace one strand with another and return the supersession result.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1489-L1489">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/update">`update`</a>
-``` clojure
+
+```clojure
 (update ctx)
 ```
+
 Function.
 
 Patch one strand's title, state, attributes, and outgoing edges.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/spools/batteries/src/millstrand/spools/batteries.clj#L1463-L1463">Source</a></sub></p>
 
 ## <a name="millstrand.spools.batteries/weave">`weave`</a>
-``` clojure
+
+```clojure
 (weave ctx)
 ```
+
 Function.
 
 Apply a registered create-only weave pattern to one JSON input value.

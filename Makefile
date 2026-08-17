@@ -56,6 +56,7 @@ api-docs:
 	else \
 		PATH="/opt/homebrew/opt/openjdk/bin:$$PATH" clojure -Sdeps $(QUICKDOC_DEPS) -M $(QUICKDOC_SCRIPT); \
 	fi
+	bun run format:api-docs
 
 docs-site:
 	uvx --from mkdocs --with mkdocs-material --with markdown-gfm-admonition mkdocs build --strict
