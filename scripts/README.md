@@ -2,60 +2,9 @@
 
 These scripts support development and coordination in this repository. Run them from a Millstrand checkout built with `make build`; agent scripts use the repo-local `bin/strand`.
 
-## Ralph epic loop
-
-`ralph` drives a kanban epic by handing it to a fresh headless agent run over and over until the epic closes. It is a shared Codethread bin, so build and run it through the active Millstrand weaver:
-
-```sh
-mill bin build ralph
-mill bin run ralph <epic-id>
-mill bin run ralph --harness codex <epic-id>
-```
-
-The binary generates the prompt and directs each run through the registered `ralph-iterate` workflow. Put steering, decisions, and extra context on the epic or feature card as notes so the next iteration can resume from the strands.
-
-By default it opens a full-screen dashboard: the epic and loop status on top, then the feature cards under the epic with the tasks and ready work of whatever is claimed, then a live log of the agent's actions, then one row per iteration. The log shows one iteration at a time: it clears when a new iteration starts, and moving the cursor in the iterations pane points it back at an earlier run. Only the last twenty iterations keep their log in the dashboard; older ones show where their transcript is instead, which is the whole stream anyway. Enter expands the selected line — a tool call's full input, an iteration's stats, final message and transcript path. `e` opens a run-info popup with the log directory, workspace, and the settings the run started with. Press `?` for the full key list.
-
-Two keys stop the run, and both are always shown in the footer:
-
-- `s` arms a **soft stop**: the current iteration finishes, then ralph exits. Press it again to cancel.
-- `x` asks to confirm a **hard stop**: the agent process group is killed and ralph exits.
-
-`ctrl-c`, `ctrl-d` and `q` all open the same prompt offering those two stops or cancelling; none of them ends a live agent run on its own. `--headless` swaps the dashboard for plain streamed lines, where the first interrupt arms a soft stop and a second one kills the run.
-
-The loop stops on its own when the epic becomes inactive (`closed` or `replaced`), after three consecutive harness failures, at `--max-iterations`, or when the agent ends its final message with `RALPH-STOP: <reason>`.
-
-Before prompting a model, ralph requires an active target that is a kanban epic carrying the `ralph` label. It rechecks the label before every model run and stops without prompting if it has gone, so removing the label is how you stop a loop from outside. Add it with `strand kanban label add <epic-id> ralph`.
-
-Append `--` and any extra harness arguments after the epic id to pass them to `claude` or `codex exec`. Arguments before the epic id select Ralph options.
-
-### Flags and environment
-
-`--harness` picks `claude` (the default) or `codex`. `--model` and `--effort` take the harness's own vocabulary; empty means the harness default, which is `fable` at high effort for Claude and `luna-high` for Codex. Codex also accepts the aliases `luna-high`, `luna-low` and `sol-low`, which select `gpt-5.6-luna` or `gpt-5.6-sol` at the matching reasoning effort; any other name is passed through as a Codex model id. Pass Ralph arguments after the bin name to `mill bin run`.
-
-Both harnesses bypass their permission prompts by default because a headless run cannot answer one; `--skip-permissions=false` keeps them. `--max-iterations` caps the run (0 means unlimited, default 30), `--failure-limit` says how many consecutive failed runs end it (default 3), `--log-dir` sets the transcript directory (default `$TMPDIR/ralph/<epic>-<timestamp>`), and `--workspace` selects a non-default strand world. `--full-auth` appends an operator authority grant to the generated prompt: the agent may rebuild and restart mill/weaver CLIs and bump sibling spools as needed (verifying key steps with the `:oracle` seat), with breaking changes permitted pre-v1 but never a v1 tag on millstrand-src itself.
-
-Two flags take Go durations: `--poll` is the board refresh interval (default `10s`) and `--pause` is the breather between iterations (default `3s`), which keeps a crash-looping harness from hot-looping. `--strand` overrides which strand binary ralph reads the board through; by default it uses the active `strand` on `PATH`.
-
-`RALPH_HARNESS`, `RALPH_MODEL`, `RALPH_EFFORT`, `RALPH_MAX_ITERATIONS`, `RALPH_SKIP_PERMISSIONS`, `RALPH_LOG_DIR` and `MILLSTRAND_WORKSPACE` supply defaults for the matching flags. An unparseable value is an error rather than a silent fallback.
-
-Every iteration's raw stream lands in `<log-dir>/iter-<n>.jsonl` and its stderr in `<log-dir>/iter-<n>.stderr`, whatever the dashboard chose to render.
-
-### What the agent is told
-
-The generated prompt points the agent at `ralph-iterate`, which owns the one-card-per-iteration discipline: orient from live state, claim one feature, work its tasks, review, hand off to `land`, finish the feature, and close the epic only when no feature cards remain. The Go binary keeps the `strand kanban finish <epic> --outcome done` termination contract and `RALPH-STOP` brake in the prompt.
-
-Only the last non-empty line of the agent's final message counts as a brake, so quoting the instruction mid-reply cannot stop the loop; `RALPH-STOP:` with no reason after it is reported as malformed.
-
-Ralph expects a running weaver for the workspace it targets. It only ever reads state — the epic lifecycle between iterations and the board on a timer — while the agent run claims and closes kanban work.
-
-### Exit codes
-
-0 when the epic is already inactive, when the loop observes it become inactive, or after a soft stop. 1 for harness failures, a failed gate, exhausted iterations, and unexpected state. 2 for invalid invocation or environment values. 3 when the agent pulls the emergency brake. 130 after an operator hard stop.
-
 ## Kanban tree
 
-`kanban-tree` prints one kanban card, an epic or a feature, as a terminal tree. The shape of the work reads at a glance: what the card contains, and the order it has to happen in. It is a Go program under `tools/kanban-tree`, built into `./bin/kanban-tree` by `make build` (or `make kanban-tree` on its own). Like ralph, it is repo-local development tooling in its own Go module: no Millstrand release, no spool.
+`kanban-tree` prints one kanban card, an epic or a feature, as a terminal tree. The shape of the work reads at a glance: what the card contains, and the order it has to happen in. It is a Go program under `tools/kanban-tree`, built into `./bin/kanban-tree` by `make build` (or `make kanban-tree` on its own). It is repo-local development tooling in its own Go module: no Millstrand release or spool.
 
 ```sh
 ./bin/kanban-tree <epic-id>            # the epic and its feature cards
