@@ -9,8 +9,8 @@ The public `strand` CLI gains a mutation command, `weave`, that reads JSON from 
 ## DELTA-001.P2 Contract changes
 
 - **DELTA-001.CC1:** Add `weave` and `pattern explain` to the command vocabulary:
-  - `strand [--config-dir <dir>] weave --pattern <name>`
-  - `strand [--config-dir <dir>] pattern explain <name>`
+    - `strand [--config-dir <dir>] weave --pattern <name>`
+    - `strand [--config-dir <dir>] pattern explain <name>`
 - **DELTA-001.CC2:** `weave` requires exactly one non-blank `--pattern` value and accepts no positional arguments.
 - **DELTA-001.CC3:** `weave` reads exactly one JSON value from stdin. Empty stdin, malformed JSON, or trailing non-whitespace after the JSON value fails before the weaver mutation request.
 - **DELTA-001.CC4:** The JSON payload may be any JSON value. Object payloads are expected for most patterns, but shape validation belongs to the trusted pattern function.

@@ -1,8 +1,6 @@
 # Millstrand user reference
 
-Millstrand is a local strand graph for agents and humans. It gives you a durable SQLite-backed graph of
-work, notes, dependencies, and workflow state, while keeping the command-line surface small and
-machine-readable.
+Millstrand is a local strand graph for agents and humans. It gives you a durable SQLite-backed graph of work, notes, dependencies, and workflow state, while keeping the command-line surface small and machine-readable.
 
 The short version:
 
@@ -12,14 +10,11 @@ The short version:
 - The **REPL** is the trusted, high-power surface for customization and exploration.
 - Your workflow model lives mostly in custom **attributes** and your own config/spool code.
 
-This guide is written for Millstrand users and for agents working inside a user's Millstrand workspace.
-Maintainer-facing contracts live in [`devflow/specs/`](../devflow/specs/); see the [spec
-index](#spec-index) at the end.
+This guide is written for Millstrand users and for agents working inside a user's Millstrand workspace. Maintainer-facing contracts live in [`devflow/specs/`](../devflow/specs/); see the [spec index](#spec-index) at the end.
 
 ## Mental model
 
-Millstrand is daemon-core-first behind a small router. You start `mill` once, ask it to start a weaver
-for a selected workspace, then clients send requests through `mill` to that weaver.
+Millstrand is daemon-core-first behind a small router. You start `mill` once, ask it to start a weaver for a selected workspace, then clients send requests through `mill` to that weaver.
 
 ```text
 selected workspace (normally canonical repo .millstrand)
@@ -63,14 +58,13 @@ A workspace can also be selected explicitly with:
 strand --workspace /path/to/workspace ...
 ```
 
-For explicit workspaces, `/path/to/workspace` is the config workspace. Runtime state, metadata,
-sockets, and data are owned by mill under Millstrand's XDG state root for the selected config identity.
+For explicit workspaces, `/path/to/workspace` is the config workspace. Runtime state, metadata, sockets, and data are owned by mill under Millstrand's XDG state root for the selected config identity.
 
 The important file is `config.json`:
 
 ```json
 {
-  "configFormat": "alpha"
+	"configFormat": "alpha"
 }
 ```
 
@@ -134,9 +128,7 @@ mill start
 mill weaver start --workspace "$workspace"
 ```
 
-`mill weaver start` waits up to 5 minutes for ready metadata while the JVM boots and trusted
-workspace config runs. On unusually slow machines or first boots that must fetch and compile a lot
-of code, pass a larger positive Go duration:
+`mill weaver start` waits up to 5 minutes for ready metadata while the JVM boots and trusted workspace config runs. On unusually slow machines or first boots that must fetch and compile a lot of code, pass a larger positive Go duration:
 
 ```sh
 mill weaver start --workspace "$workspace" --ready-timeout 10m
@@ -161,46 +153,19 @@ The weaver exposes two local transports:
 - a Unix socket used by the Go `strand` CLI;
 - an nREPL endpoint used by the live weaver REPL.
 
-A selected workspace may have one running weaver. Runtime registries are weaver-lifetime state, so
-named queries, weave patterns, and synced spool state should be loaded from startup config if
-you want them to appear after every restart.
+A selected workspace may have one running weaver. Runtime registries are weaver-lifetime state, so named queries, weave patterns, and synced spool state should be loaded from startup config if you want them to appear after every restart.
 
 ## Weaver generations and cutover
 
-A **weaver generation** is one weaver process lifetime. It answers two everyday questions: when a
-config or spool change you make takes effect, and what happens to running agent runs when a weaver
-is replaced. The spool classloader is created when the weaver boots and is never swapped while it
-runs, so some changes load into the live weaver and some must wait for the next generation.
+A **weaver generation** is one weaver process lifetime. It answers two everyday questions: when a config or spool change you make takes effect, and what happens to running agent runs when a weaver is replaced. The spool classloader is created when the weaver boots and is never swapped while it runs, so some changes load into the live weaver and some must wait for the next generation.
 
-`runtime/refresh!` classifies each change. Additive changes load into the running weaver: a newly
-approved root, or a coordinate that has never loaded in this generation. Non-additive changes
-cannot, because applying them would mean unloading code the running JVM has no safe way to drop:
-removing a root that already loaded, pointing an already-loaded root at different source, or bumping
-the version of a loaded Maven coordinate. Refresh refuses those in-JVM, records a
-`:pending-generation` entry, and reports `recorded; takes effect at the next weaver generation
-(mill-supervised restart, user sign-off)`. The pending change stays visible in
-`runtime/status` until the weaver process is replaced. If a change you expected
-does not take effect, check status for a pending generation. See daemon-runtime
-SPEC-004.C44c–C44f for the full
-classification.
+`runtime/refresh!` classifies each change. Additive changes load into the running weaver: a newly approved root, or a coordinate that has never loaded in this generation. Non-additive changes cannot, because applying them would mean unloading code the running JVM has no safe way to drop: removing a root that already loaded, pointing an already-loaded root at different source, or bumping the version of a loaded Maven coordinate. Refresh refuses those in-JVM, records a `:pending-generation` entry, and reports `recorded; takes effect at the next weaver generation (mill-supervised restart, user sign-off)`. The pending change stays visible in `runtime/status` until the weaver process is replaced. If a change you expected does not take effect, check status for a pending generation. See daemon-runtime SPEC-004.C44c–C44f for the full classification.
 
-Replacing a weaver ends every agent run it is supervising, so a restart is not free. `mill weaver
-stop` does not drain the work first. It sends the weaver process SIGTERM, waits about five seconds,
-then SIGKILL if it has not exited. The headless runs the weaver was supervising are orphaned, not
-lost: the next weaver start recovers them through `reconcile!`, which resets each run to `pending`
-for auto-respawn, or marks it `exhausted` (non-retryable) once its attempts are spent. Interactive
-sessions survive the stop whatever their backend, tmux included, and the next generation adopts them
-instead of respawning. Before cycling a weaver that has live work, a coordinator either drains it
-first with `strand agent await` on the outstanding runs, or accepts the respawn-and-retry cost for
-whatever runs are still going when the stop lands.
+Replacing a weaver ends every agent run it is supervising, so a restart is not free. `mill weaver stop` does not drain the work first. It sends the weaver process SIGTERM, waits about five seconds, then SIGKILL if it has not exited. The headless runs the weaver was supervising are orphaned, not lost: the next weaver start recovers them through `reconcile!`, which resets each run to `pending` for auto-respawn, or marks it `exhausted` (non-retryable) once its attempts are spent. Interactive sessions survive the stop whatever their backend, tmux included, and the next generation adopts them instead of respawning. Before cycling a weaver that has live work, a coordinator either drains it first with `strand agent await` on the outstanding runs, or accepts the respawn-and-retry cost for whatever runs are still going when the stop lands.
 
 Restarting the canonical weaver requires explicit user sign-off, the same hard rule that governs every canonical-weaver restart (see AGENTS.md).
 
-One-time migration: a weaver started before stateless resolution landed (2026-07,
-SPEC-004.C44@sync-owns-resolution) carries process-global `add-libs` and basis residue that an
-in-JVM upgrade cannot unwind. A single restart of that weaver sheds it, and every generation after
-starts clean with no such restart needed. When to take that restart is a human decision under the
-sign-off rule above.
+One-time migration: a weaver started before stateless resolution landed (2026-07, SPEC-004.C44@sync-owns-resolution) carries process-global `add-libs` and basis residue that an in-JVM upgrade cannot unwind. A single restart of that weaver sheds it, and every generation after starts clean with no such restart needed. When to take that restart is a human decision under the sign-off rule above.
 
 ## CLI
 
@@ -227,9 +192,7 @@ printf '{"title":"New work"}\n' | strand --workspace "$workspace" --stdin weave 
 
 ```
 
-`burn` deletes a strand and its incident edges, and records a durable forensic tombstone in the same
-transaction. It is hand-recoverable from the REPL, not an undo; see the strand model and the
-burn-recovery cookbook below.
+`burn` deletes a strand and its incident edges, and records a durable forensic tombstone in the same transaction. It is hand-recoverable from the REPL, not an undo; see the strand model and the burn-recovery cookbook below.
 
 The public strand/weaver commands emit JSON. CLI attributes are string-valued `key=value` pairs; richer Clojure data belongs in config or REPL workflows.
 
@@ -248,11 +211,7 @@ Do not expect the CLI to be a package manager, query authoring surface, plugin h
 
 ## Discovery tiers: help, about, prime
 
-Millstrand has one deliberate convention for "how do I find out?", with three tiers, and they form an
-escalation path. `prime` orients you; `about` explains an op you are about to lean on; `help`
-answers exact invocation questions. Each is a **meta-verb** you put first, naming the op second:
-`strand prime <op>`, `strand about <op>`, `strand help <op>`. Each tier has a different source of
-truth:
+Millstrand has one deliberate convention for "how do I find out?", with three tiers, and they form an escalation path. `prime` orients you; `about` explains an op you are about to lean on; `help` answers exact invocation questions. Each is a **meta-verb** you put first, naming the op second: `strand prime <op>`, `strand about <op>`, `strand help <op>`. Each tier has a different source of truth:
 
 | Tier | Source | Question it answers | Examples |
 | --- | --- | --- | --- |
@@ -262,14 +221,11 @@ truth:
 
 The meta-verb goes first. The old `<op> help` / `<op> about` / `<op> prime` sole-token sugar is retired: a bare `help`, `about`, or `prime` in verb position now fails with a loud redirect to `strand help <op>`, unless the op declares a real subcommand by that name (several spool ops do, noted below). A trailing `--help` or `-h` flag still works on any op, so `strand agent --help` rewrites to `strand help agent`.
 
-**`help` is never hand-written.** It is one declared, versioned schema, uniformly projected; renderings are transforms over it. `strand help` lists every registered op; `strand help <op>` renders one op's detail from its arg-spec; `strand help <op> <verb> [<verb> ...]` slices to any declared node, including an interior node with further verbs.
-A detail response is a canonical envelope, `{schema-version, operation, source, glossary, node}`, verbose by default, where `node` is a self-similar shape that recurses into subcommands, `source` points at the handler's `file:line` when it resolves, and `glossary` defines the named failure outcomes a node references. With no help transform registered, that raw envelope JSON is the output. A workspace can register one default help transform to render it as friendlier text instead; `--json` is the sole opt-out, always returning the raw envelope, so a failing transform can never brick help. Missing or unknown subcommands at any depth fail with structured parser errors carrying the path walked and the available names. No spool ever writes its own usage strings or dispatch errors. Contracts: SPEC-002.C39 and the discovery-tier deltas.
+**`help` is never hand-written.** It is one declared, versioned schema, uniformly projected; renderings are transforms over it. `strand help` lists every registered op; `strand help <op>` renders one op's detail from its arg-spec; `strand help <op> <verb> [<verb> ...]` slices to any declared node, including an interior node with further verbs. A detail response is a canonical envelope, `{schema-version, operation, source, glossary, node}`, verbose by default, where `node` is a self-similar shape that recurses into subcommands, `source` points at the handler's `file:line` when it resolves, and `glossary` defines the named failure outcomes a node references. With no help transform registered, that raw envelope JSON is the output. A workspace can register one default help transform to render it as friendlier text instead; `--json` is the sole opt-out, always returning the raw envelope, so a failing transform can never brick help. Missing or unknown subcommands at any depth fail with structured parser errors carrying the path walked and the available names. No spool ever writes its own usage strings or dispatch errors. Contracts: SPEC-002.C39 and the discovery-tier deltas.
 
 **`about` is the op's runbook context.** `strand about <op>` returns the op's authored `:about` prose as a small JSON object: what the op is for, who drives it, and the contracts and attribute conventions a caller cannot read off the live surface. It stays short, and it points at whatever owns the detail: `help` for invocation, and for an op that drives a definition, the definition itself (`strand workflow show <name>`). A step map, a verb list, or a flag table restated here is a second copy that drifts from the first. An op that declares no `:about` prose returns a loud `discovery/unavailable` rather than empty success; purely structural ops (batteries `add`/`list`/...) need none, since their arg-spec already says everything. Some spool ops instead declare their own `about` subcommand, and for those the resolving form is `strand <op> about`, such as `strand kanban about` and `strand spool about`.
 
-**`prime` is run-first context priming for agents.** A `prime` command prints the working discipline for an area: the conventions an agent must load *before* acting, with pointers to deeper docs. `mill prime strand` (the day-to-day strand workflow) and `mill prime millstrand` (building on `.millstrand` and the source docs, read on demand) need no running weaver: `mill` resolves the Millstrand source checkout and renders the topic file the manifest at `docs/prime/index.json` names, so an already-installed `mill` prints current orientation text from a newer checkout. Op-level primes are spool-authored prose projected through the builtin `prime` meta-verb (`strand prime agent`), so they can never drift from the installed surface; spool ops that declare their own `prime` subcommand answer `strand <op> prime`, such as `strand kanban prime`. Repo-world `mill init` seeds a marker-guarded
-section into `AGENTS.md`/`CLAUDE.md` pointing fresh agents at the prime commands (see "Agent guidance
-files").
+**`prime` is run-first context priming for agents.** A `prime` command prints the working discipline for an area: the conventions an agent must load _before_ acting, with pointers to deeper docs. `mill prime strand` (the day-to-day strand workflow) and `mill prime millstrand` (building on `.millstrand` and the source docs, read on demand) need no running weaver: `mill` resolves the Millstrand source checkout and renders the topic file the manifest at `docs/prime/index.json` names, so an already-installed `mill` prints current orientation text from a newer checkout. Op-level primes are spool-authored prose projected through the builtin `prime` meta-verb (`strand prime agent`), so they can never drift from the installed surface; spool ops that declare their own `prime` subcommand answer `strand <op> prime`, such as `strand kanban prime`. Repo-world `mill init` seeds a marker-guarded section into `AGENTS.md`/`CLAUDE.md` pointing fresh agents at the prime commands (see "Agent guidance files").
 
 Spool authors: the authoring rules for this surface live in [`docs/spools/writing-shared-spools.md`](./spools/writing-shared-spools.md).
 
@@ -283,12 +239,7 @@ A strand has:
 - `created_at` and `updated_at`;
 - `attributes` — userland JSON object.
 
-`state` is the only built-in lifecycle field. Concepts like `status`, `kind`, `type`, `category`,
-`outcome`, `owner`, `priority`, `project`, `estimate`, or `retention` are your attributes, not core
-fields. "Yours" means yours to define for your own concepts: a consumer of a spool that already
-publishes an attribute vocabulary (such as `workflow/*` or `agent-run/*`) reuses those keys
-verbatim ([the vocabulary
-rule](./spools/writing-shared-spools.md#the-rules-for-shared-spools)).
+`state` is the only built-in lifecycle field. Concepts like `status`, `kind`, `type`, `category`, `outcome`, `owner`, `priority`, `project`, `estimate`, or `retention` are your attributes, not core fields. "Yours" means yours to define for your own concepts: a consumer of a spool that already publishes an attribute vocabulary (such as `workflow/*` or `agent-run/*`) reuses those keys verbatim ([the vocabulary rule](./spools/writing-shared-spools.md#the-rules-for-shared-spools)).
 
 | Concept | Where it belongs |
 | --- | --- |
@@ -311,16 +262,11 @@ Burn only when you want deletion:
 strand --workspace "$workspace" burn <id>
 ```
 
-Every burn records a durable forensic tombstone in the same transaction — the burned strand's core
-row, full attribute map, and incident edges (SPEC-001.P3/P8). A tombstone supports hand-recovery,
-not undo: recovery is a REPL-only activity (`millstrand.repl/burn-history`, `recent-burns`), a replay
-mints a new id, and inbound edges from unburned strands are not restored. See the burn-recovery
-cookbook in the REPL section.
+Every burn records a durable forensic tombstone in the same transaction — the burned strand's core row, full attribute map, and incident edges (SPEC-001.P3/P8). A tombstone supports hand-recovery, not undo: recovery is a REPL-only activity (`millstrand.repl/burn-history`, `recent-burns`), a replay mints a new id, and inbound edges from unburned strands are not restored. See the burn-recovery cookbook in the REPL section.
 
 ## Edges and readiness
 
-Edges connect strands with open relation names. The shipped acyclic relations are `depends-on`, `parent-of`, `supersedes`, `serves`, and `notes`.
-Other annotation relations, such as `references`, are allowed but may form non-self cycles.
+Edges connect strands with open relation names. The shipped acyclic relations are `depends-on`, `parent-of`, `supersedes`, `serves`, and `notes`. Other annotation relations, such as `references`, are allowed but may form non-self cycles.
 
 A `depends-on` edge from `A` to `B` means: `A` is blocked while `B` is active.
 
@@ -334,14 +280,9 @@ strand --workspace "$workspace" update "$docs" --edge depends-on:"$design"
 strand --workspace "$workspace" ready
 ```
 
-Self-edges fail for every relation. The declared acyclic relations `depends-on`, `parent-of`, `supersedes`, `serves`, and `notes` reject relation-local cycles.
-Other annotation relations may form non-self cycles.
+Self-edges fail for every relation. The declared acyclic relations `depends-on`, `parent-of`, `supersedes`, `serves`, and `notes` reject relation-local cycles. Other annotation relations may form non-self cycles.
 
-The batteries `note` verb appends a note strand at the root. The note is born closed, and its
-`note/text` and `note/at` content is storage-enforced write-once (SPEC-001.P4): the birth write is
-legal, but no later path can rewrite, delete, or archive it. The strand itself stays open to
-writer-owned decorating attributes.
-`notes` reads the target's attached notes by walking the `notes` relation, no matter which writer created them.
+The batteries `note` verb appends a note strand at the root. The note is born closed, and its `note/text` and `note/at` content is storage-enforced write-once (SPEC-001.P4): the birth write is legal, but no later path can rewrite, delete, or archive it. The strand itself stays open to writer-owned decorating attributes. `notes` reads the target's attached notes by walking the `notes` relation, no matter which writer created them.
 
 ## Attributes are the extension point
 
@@ -365,18 +306,11 @@ Your workspace can decide what attributes mean. For example:
 - `temporary=true` can identify rows your own tooling treats as temporary;
 - `external.issue=123` can link to another system if your tooling understands it.
 
-Millstrand stores attributes as JSON text. CLI input is simple string pairs; `--attr temporary=true`
-stores the string `"true"`, not a JSON boolean. Trusted Clojure workflows can write richer
-JSON-compatible values.
+Millstrand stores attributes as JSON text. CLI input is simple string pairs; `--attr temporary=true` stores the string `"true"`, not a JSON boolean. Trusted Clojure workflows can write richer JSON-compatible values.
 
-Because attributes are userland, your own config and spools should define the conventions for your
-workspace. Prefer documenting those conventions in source-controlled docs or in your spool docs.
-Attribute names and cleanup behavior are userland choices, not Millstrand core.
+Because attributes are userland, your own config and spools should define the conventions for your workspace. Prefer documenting those conventions in source-controlled docs or in your spool docs. Attribute names and cleanup behavior are userland choices, not Millstrand core.
 
-[Modeling attribute values](spools/writing-shared-spools.md#modeling-attribute-values-enums-absence-empty-history)
-covers how to model a value once you own the convention: when a finite state wants an enum, when an
-optional fact should go absent rather than blank, when an empty string is real data, and when a fact
-belongs in recorded history.
+[Modeling attribute values](spools/writing-shared-spools.md#modeling-attribute-values-enums-absence-empty-history) covers how to model a value once you own the convention: when a finite state wants an enum, when an optional fact should go absent rather than blank, when an empty string is real data, and when a fact belongs in recorded history.
 
 ## Queries
 
@@ -447,14 +381,11 @@ Named query registries are not durable by themselves. The module form above is t
 
 The registry is owner-partitioned and layered. Each writer changes only its own entry map, and the effective view is the layered merge. `replace-query!` records intent to shadow an existing name; `unregister-query!` removes only the caller's own entry and restores the entry below it. Removing a shadow and registering again cannot replace another owner's entry, so remove-then-rerun is not a substitute for replace. Registry verbs change the name-to-value binding, not the Var. Queries have no function to redefine: their registered value is the behavior, and `query explain` reads the current value after a replacement.
 
-`strand list --query mine` returns all matching strands unless you also pass a state filter. Use
-`strand list --query mine --state active` when you only want active matches. `strand ready --query
-mine` always applies readiness semantics, so returned strands are active and unblocked.
+`strand list --query mine` returns all matching strands unless you also pass a state filter. Use `strand list --query mine --state active` when you only want active matches. `strand ready --query mine` always applies readiness semantics, so returned strands are active and unblocked.
 
 ### Query expression grammar
 
-A query definition is either a bare where expression, or a map with `:where` and declared
-`:params`:
+A query definition is either a bare where expression, or a map with `:where` and declared `:params`:
 
 ```clojure
 [:= [:attr :owner] "ct"]                                       ; bare expression
@@ -476,23 +407,11 @@ The grammar is a deliberately narrow boundary surface. New forms must meet the [
 | `[:edge/out rel q]` | this strand has an outgoing `rel` edge to a strand matching `q` |
 | `[:edge/in rel q]` | this strand has an incoming `rel` edge from a strand matching `q` |
 
-A field `f` is a core column written as a bare keyword — `:id`, `:title`, `:state`, `:created_at`,
-`:updated_at` — or an attribute path `[:attr :key]`. Extra path segments read inside the
-attribute's JSON value: `[:attr :external :issue]` matches the `issue` field of the JSON stored
-under `external`.
+A field `f` is a core column written as a bare keyword — `:id`, `:title`, `:state`, `:created_at`, `:updated_at` — or an attribute path `[:attr :key]`. Extra path segments read inside the attribute's JSON value: `[:attr :external :issue]` matches the `issue` field of the JSON stored under `external`.
 
-Attribute comparisons run in SQLite over the extracted JSON value: numbers compare numerically,
-strings lexically, and mixed types follow SQLite's cross-type ordering, where every number sorts
-before every string. The CLI writes strings, so a strand added with `--attr temporary=true`
-matches `[:= [:attr :temporary] "true"]`, not `true`. A stored JSON `null` satisfies `:missing`,
-not `:exists`, and archived attributes never match — `[:missing [:attr :k]]` is true when the
-strand has no hot value under `k`.
+Attribute comparisons run in SQLite over the extracted JSON value: numbers compare numerically, strings lexically, and mixed types follow SQLite's cross-type ordering, where every number sorts before every string. The CLI writes strings, so a strand added with `--attr temporary=true` matches `[:= [:attr :temporary] "true"]`, not `true`. A stored JSON `null` satisfies `:missing`, not `:exists`, and archived attributes never match — `[:missing [:attr :k]]` is true when the strand has no hot value under `k`.
 
-`[:param :name]` can stand in for a comparison value, an `:in` collection, or an edge relation
-name. CLI params are strings, passed as repeated `--param key=value` pairs, so scalar params work
-from the CLI; a query whose `:in` collection is a param can only be invoked from the trusted
-surfaces (the REPL `query` helper or `millstrand.api.graph.alpha`), where params are real EDN values.
-Explicit-runtime registration to invocation looks like:
+`[:param :name]` can stand in for a comparison value, an `:in` collection, or an edge relation name. CLI params are strings, passed as repeated `--param key=value` pairs, so scalar params work from the CLI; a query whose `:in` collection is a param can only be invoked from the trusted surfaces (the REPL `query` helper or `millstrand.api.graph.alpha`), where params are real EDN values. Explicit-runtime registration to invocation looks like:
 
 ```clojure
 (graph/register-query! runtime 'owned-by
@@ -504,25 +423,13 @@ Explicit-runtime registration to invocation looks like:
 strand list --query owned-by --param owner=ct
 ```
 
-Edge endpoint queries are strand-local — nesting another `:edge/out` / `:edge/in` inside `q`
-fails loudly, as does any malformed expression at registration or compile time; nothing coerces
-to an empty or match-all predicate.
+Edge endpoint queries are strand-local — nesting another `:edge/out` / `:edge/in` inside `q` fails loudly, as does any malformed expression at registration or compile time; nothing coerces to an empty or match-all predicate.
 
-`ready` speaks the same grammar: it is equivalent to
-`[:and [:= :state "active"] [:not [:edge/out "depends-on" [:= :state "active"]]]]`, and
-`ready --query <name>` adds your expression on top. The contracts behind this section: queryable
-fields and attribute predicate capability in [SPEC-001.P9](../devflow/specs/strand-model.md), edge
-predicates in [SPEC-003.C13a](../devflow/specs/repl-api.md), and the `ready` equivalence in
-[SPEC-003.C15](../devflow/specs/repl-api.md); the rest reflects the current compiler
-(`millstrand.core.query`).
+`ready` speaks the same grammar: it is equivalent to `[:and [:= :state "active"] [:not [:edge/out "depends-on" [:= :state "active"]]]]`, and `ready --query <name>` adds your expression on top. The contracts behind this section: queryable fields and attribute predicate capability in [SPEC-001.P9](../devflow/specs/strand-model.md), edge predicates in [SPEC-003.C13a](../devflow/specs/repl-api.md), and the `ready` equivalence in [SPEC-003.C15](../devflow/specs/repl-api.md); the rest reflects the current compiler (`millstrand.core.query`).
 
 ## REPL
 
-The REPL is the trusted, high-power surface. `mill weaver repl` attaches directly to the selected
-running weaver nREPL, so forms evaluate in the weaver JVM with weaver process authority. Use it for
-richer inspection, custom query authoring, config reloads, and calling your own spool code. Prefer
-blessed helper/API paths for operations that should preserve validation, hooks, events, and
-normalized return shapes.
+The REPL is the trusted, high-power surface. `mill weaver repl` attaches directly to the selected running weaver nREPL, so forms evaluate in the weaver JVM with weaver process authority. Use it for richer inspection, custom query authoring, config reloads, and calling your own spool code. Prefer blessed helper/API paths for operations that should preserve validation, hooks, events, and normalized return shapes.
 
 Open a live weaver REPL:
 
@@ -552,9 +459,7 @@ Script the live weaver REPL with stdin:
 printf '(millstrand.api.current.alpha/runtime)\n' | mill weaver repl --stdin --workspace "$workspace"
 ```
 
-The session starts in the neutral `user` namespace with `millstrand.repl` aliased `repl`, which carries
-the live registration verbs. Everything else is an ordinary namespace you require. Privileged runtime
-loader/config helpers are explicit built-in namespaces, not ordinary user spools:
+The session starts in the neutral `user` namespace with `millstrand.repl` aliased `repl`, which carries the live registration verbs. Everything else is an ordinary namespace you require. Privileged runtime loader/config helpers are explicit built-in namespaces, not ordinary user spools:
 
 ```clojure
 (require '[millstrand.api.current.alpha :as current]
@@ -564,20 +469,14 @@ loader/config helpers are explicit built-in namespaces, not ordinary user spools
 
 ### Burn recovery
 
-Burn is deletion, not undo. Every burn writes a forensic tombstone (SPEC-001.P3/P8), read from the
-interactive `millstrand.repl` surface over the in-process `millstrand.core.db` read fns. Run these from an
-in-process `mill weaver repl`; they throw with remediation from a connected-client REPL that has no
-in-process runtime.
+Burn is deletion, not undo. Every burn writes a forensic tombstone (SPEC-001.P3/P8), read from the interactive `millstrand.repl` surface over the in-process `millstrand.core.db` read fns. Run these from an in-process `mill weaver repl`; they throw with remediation from a connected-client REPL that has no in-process runtime.
 
 ```clojure
 (repl/recent-burns 20)             ; scan recent deletions across all strands, newest first
 (repl/burn-history "<burned-id>")  ; every tombstone recorded for one burned id
 ```
 
-Each tombstone carries the burned strand's core fields, its full attribute map (each value tagged
-`{:value ... :archived ...}` so archived keys stay distinguishable), its incident edges, and
-`recorded_at`. The shapes map onto the batch graph mutation payload's strand and edge entries, so
-recovery is mechanical: assemble a payload from the tombstone and apply it.
+Each tombstone carries the burned strand's core fields, its full attribute map (each value tagged `{:value ... :archived ...}` so archived keys stay distinguishable), its incident edges, and `recorded_at`. The shapes map onto the batch graph mutation payload's strand and edge entries, so recovery is mechanical: assemble a payload from the tombstone and apply it.
 
 ```clojure
 (require '[millstrand.api.batch.alpha :as batch]
@@ -590,9 +489,7 @@ recovery is mechanical: assemble a payload from the tombstone and apply it.
                :edges   [{:op :upsert :from :parent :to :recovered :type "parent-of"}]})
 ```
 
-Two caveats. The recovered strand gets a new id, so anything that referenced the old id must be
-re-pointed. And only the edges the tombstone recorded are available to replay — inbound edges from
-strands that were never burned are not restored, so re-create them explicitly against the new id.
+Two caveats. The recovered strand gets a new id, so anything that referenced the old id must be re-pointed. And only the edges the tombstone recorded are available to replay — inbound edges from strands that were never burned are not restored, so re-create them explicitly against the new id.
 
 The same `:edges` vector accepts `{:op :remove :from :to :type}` to delete one exact `(from, to, type)` edge, using pre-bound `:refs` for both endpoints. Removal is strict: an absent edge fails the whole batch loudly rather than succeeding silently, so a stale remover must reread and reconcile. Core deletes only that row and adds no graph guard — whether a removal may strand a node or unblock work is caller and hook policy, not an engine promise.
 
@@ -604,14 +501,14 @@ The weaver loads trusted startup files from the selected workspace in order — 
 
 Registry entries are authored, not imperatively registered. `millstrand.api.millstrand.alpha` ships one three-form family per core kind. The inert form defines an ordinary Clojure Var, the typed use form selects it, and the bang form performs both while a runtime module source is evaluated.
 
-| Definition form | Kind it defines | Required options |
-| --- | --- | --- |
-| `defop` | `:ops`, a `strand <op>` command | `:arg-spec` |
-| `defquery` | `:queries`, a named query | none |
-| `defpattern` | `:patterns`, a weave pattern | `:spec` |
-| `defhook` | `:hooks`, a synchronous pre-commit hook | `:types` |
-| `defhandler` | `:events`, an async post-commit handler | `:types` |
-| `defbin` | `:bins`, a discoverable executable | `:executable` |
+| Definition form | Kind it defines                         | Required options |
+| --------------- | --------------------------------------- | ---------------- |
+| `defop`         | `:ops`, a `strand <op>` command         | `:arg-spec`      |
+| `defquery`      | `:queries`, a named query               | none             |
+| `defpattern`    | `:patterns`, a weave pattern            | `:spec`          |
+| `defhook`       | `:hooks`, a synchronous pre-commit hook | `:types`         |
+| `defhandler`    | `:events`, an async post-commit handler | `:types`         |
+| `defbin`        | `:bins`, a discoverable executable      | `:executable`    |
 
 Each form takes a name, a docstring, an options map, and then the body its kind needs: an argument vector and body for the handler kinds, a query definition value for `defquery`. Every form also accepts `{:override? true}` to record explicit intent to shadow a lower layer. `defop`'s `:arg-spec` is the declared argv shape [`millstrand.api.cli.alpha`](./api/cli.api.md) parses and renders help from, so a registered op never writes its own usage strings.
 
@@ -633,9 +530,7 @@ Per-function detail is in the generated [`millstrand.api.millstrand.alpha` refer
 
 ## Weave patterns
 
-Weave patterns are trusted owner-defined transformations that turn a JSON-like input payload into an
-atomic batch of new strands and edges. They are useful when agents should submit intent and your
-workspace should decide the graph shape.
+Weave patterns are trusted owner-defined transformations that turn a JSON-like input payload into an atomic batch of new strands and edges. They are useful when agents should submit intent and your workspace should decide the graph shape.
 
 Pattern registration lives in trusted Clojure config or spools, not in the public CLI. A pattern has a simple name, a handler function loadable in the weaver, and a `clojure.spec` input contract. `millstrand/defpattern` declares all three in one form, in a module source namespace:
 
@@ -678,34 +573,19 @@ printf '{"title":"Implement review flow"}\n' | strand --workspace "$workspace" w
 
 ```
 
-`pattern list` and `pattern explain <name>` are the write-definition discovery pair, parallel to
-`query list` / `query explain <name>` for read definitions. Application stays on `weave --pattern
-<name>`.
+`pattern list` and `pattern explain <name>` are the write-definition discovery pair, parallel to `query list` / `query explain <name>` for read definitions. Application stays on `weave --pattern <name>`.
 
-The pattern function runs inside the weaver and receives `{:input input}`. Its return value must be
-the same batch vector shape accepted by Millstrand's batch primitive: strand maps with optional `:ref`
-and `:edges`. Symbolic refs are transient to the batch and are never durable ids. Input spec
-failure, malformed batch output, missing refs, invalid durable targets, cycles, and database errors
-fail loudly and leave no partial batch writes.
+The pattern function runs inside the weaver and receives `{:input input}`. Its return value must be the same batch vector shape accepted by Millstrand's batch primitive: strand maps with optional `:ref` and `:edges`. Symbolic refs are transient to the batch and are never durable ids. Input spec failure, malformed batch output, missing refs, invalid durable targets, cycles, and database errors fail loudly and leave no partial batch writes.
 
-`weave --pattern` is the CLI-safe, named, spec-checked, create-only front door over the same
-transactional batch engine as REPL-only `millstrand.api.batch.alpha/apply!`. Raw batch is the trusted
-loading-dock door: it can create, update, burn, and upsert or remove edges, so it remains a Clojure
-config/REPL workflow instead of a public CLI command.
+`weave --pattern` is the CLI-safe, named, spec-checked, create-only front door over the same transactional batch engine as REPL-only `millstrand.api.batch.alpha/apply!`. Raw batch is the trusted loading-dock door: it can create, update, burn, and upsert or remove edges, so it remains a Clojure config/REPL workflow instead of a public CLI command.
 
 Like queries, patterns are weaver-lifetime runtime state. Define and select them in a module source with `defpattern!` if they should always exist after restart or refresh.
 
 ## Graph helpers
 
-Millstrand ships built-in privileged alpha namespaces for trusted runtime transformations. They are
-source-visible helper namespaces from the Millstrand checkout/classpath, not user/community spools that
-need `spools.edn` approval — `millstrand.api.spool.alpha` (the spool-authoring helpers `fail!`,
-`reject-unknown-keys!`, `require-valid!`, `attr-key->str`, `attr-get`, `poll-until!`) is
-one of them, the blessed home every reference spool builds on:
+Millstrand ships built-in privileged alpha namespaces for trusted runtime transformations. They are source-visible helper namespaces from the Millstrand checkout/classpath, not user/community spools that need `spools.edn` approval — `millstrand.api.spool.alpha` (the spool-authoring helpers `fail!`, `reject-unknown-keys!`, `require-valid!`, `attr-key->str`, `attr-get`, `poll-until!`) is one of them, the blessed home every reference spool builds on:
 
-`poll-until!` takes a Clock and a relative timeout. Runtime-owned callers pass
-`(millstrand.api.runtime.alpha/clock runtime)`, keeping time reads and sleeps on one
-authority; tests can install `millstrand.test.alpha/manual-clock` to avoid wall-time waits.
+`poll-until!` takes a Clock and a relative timeout. Runtime-owned callers pass `(millstrand.api.runtime.alpha/clock runtime)`, keeping time reads and sleeps on one authority; tests can install `millstrand.test.alpha/manual-clock` to avoid wall-time waits.
 
 ```clojure
 (require '[millstrand.api.graph.alpha :as graph])
@@ -787,7 +667,7 @@ Event handler state is weaver-lifetime runtime state. Author handlers in a modul
 
 ### Hooks run before the commit
 
-Events run after a mutation commits and cannot change it. For code that runs *inside* the mutation, register a lifecycle hook instead. `millstrand.api.hooks.alpha` owns that registry, and `millstrand/defhook` authors an entry: a `:types` set of hook types plus an optional integer `:order` fixing its place in the chain.
+Events run after a mutation commits and cannot change it. For code that runs _inside_ the mutation, register a lifecycle hook instead. `millstrand.api.hooks.alpha` owns that registry, and `millstrand/defhook` authors an entry: a `:types` set of hook types plus an optional integer `:order` fixing its place in the chain.
 
 There are two flavours, chosen by the hook type. A **validation** hook has its return value ignored and vetoes the mutation by throwing, which rolls the whole transaction back. Those types are `:strand/add-before-commit`, `:strand/update-before-commit`, `:strand/burn-before-commit`, `:strand/supersede-before-commit`, `:batch/apply-before-commit`, and `:payload/received` for a decoded JSON socket request.
 
@@ -818,18 +698,9 @@ Read the chain in execution order, and the owner and shadowing picture behind it
 
 ## Scheduler (no-poller wakeups)
 
-The default answer for time-based work is still pull: stamp a `wake-at` attribute on a strand and
-let a named query surface it to whatever already polls the graph. That keeps timing in ordinary,
-inspectable strand data. Reach for the scheduler only for the **no-poller** case — when something
-must proactively happen at instant `T` and there is no client polling to trigger it.
+The default answer for time-based work is still pull: stamp a `wake-at` attribute on a strand and let a named query surface it to whatever already polls the graph. That keeps timing in ordinary, inspectable strand data. Reach for the scheduler only for the **no-poller** case — when something must proactively happen at instant `T` and there is no client polling to trigger it.
 
-`millstrand.api.scheduler.alpha` is a blessed explicit-runtime namespace for that case. A wake is keyed
-by a stable caller key, an absolute `java.time.Instant`, a fully qualified handler symbol, and an
-optional JSON-encodable payload; the weaver persists it in dedicated weaver-owned tables (never as a
-strand), re-arms pending wakes across startup and trusted reload, and dispatches due handlers
-through the same serialized async lane as post-commit events. Delivery is at-least-once, so handlers
-must be idempotent. There is no mutating `strand schedule` CLI: scheduling is a trusted
-REPL/config/API surface only.
+`millstrand.api.scheduler.alpha` is a blessed explicit-runtime namespace for that case. A wake is keyed by a stable caller key, an absolute `java.time.Instant`, a fully qualified handler symbol, and an optional JSON-encodable payload; the weaver persists it in dedicated weaver-owned tables (never as a strand), re-arms pending wakes across startup and trusted reload, and dispatches due handlers through the same serialized async lane as post-commit events. Delivery is at-least-once, so handlers must be idempotent. There is no mutating `strand schedule` CLI: scheduling is a trusted REPL/config/API surface only.
 
 ```clojure
 (require '[millstrand.api.current.alpha :as current]
@@ -850,15 +721,11 @@ REPL/config/API surface only.
   (scheduler/cancel! rt "nightly-sweep"))
 ```
 
-Core stays minimal: no cron, recurrence, retry/backoff, jitter, or DST policy. A handler that wants
-to run again schedules its own next wake. See the Weaver Runtime spec (`SPEC-004.P10d`) and REPL API
-spec (`SPEC-003.P4a`) for the full contract.
+Core stays minimal: no cron, recurrence, retry/backoff, jitter, or DST policy. A handler that wants to run again schedules its own next wake. See the Weaver Runtime spec (`SPEC-004.P10d`) and REPL API spec (`SPEC-003.P4a`) for the full contract.
 
 ## Fail loudly
 
-Millstrand intentionally fails loudly instead of guessing. Expect errors for malformed config,
-unsupported fields, missing weavers, stale metadata, invalid edge targets, cycles, unknown queries,
-missing spools, and bad runtime code.
+Millstrand intentionally fails loudly instead of guessing. Expect errors for malformed config, unsupported fields, missing weavers, stale metadata, invalid edge targets, cycles, unknown queries, missing spools, and bad runtime code.
 
 This is by design: the system is flexible because attributes and user code are open-ended, so surprising states should be visible and fixable rather than silently papered over.
 

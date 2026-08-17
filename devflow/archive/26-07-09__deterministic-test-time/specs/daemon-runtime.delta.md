@@ -1,97 +1,34 @@
 # Weaver Runtime delta for deterministic-test-time
 
-**Document ID:** `DELTA-Dtt-001`
-**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
-**Feature:** [../proposal.md](../proposal.md)
-**Status:** Merged
-**Last Updated:** 2026-07-09
+**Document ID:** `DELTA-Dtt-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-09
 
 ## DELTA-Dtt-001.P1 Summary
 
-The runtime gains two control seams so timer-driven and event-delivered subsystems stop
-waiting on wall-clock time and real async delivery: a runtime-owned clock component read in
-place of `(Instant/now)`, and a blocking event-lane quiescence primitive. Both are additive
-to SPEC-004; production behaviour is unchanged (a real weaver reads a real wall clock and its
-executors fire on real time). The scheduler's private clock (SPEC-004.P10d) collapses into a
-consumer of the shared clock. See [RFC-Dtt-001](../rfcs/2026-07-09-deterministic-test-time.md).
+The runtime gains two control seams so timer-driven and event-delivered subsystems stop waiting on wall-clock time and real async delivery: a runtime-owned clock component read in place of `(Instant/now)`, and a blocking event-lane quiescence primitive. Both are additive to SPEC-004; production behaviour is unchanged (a real weaver reads a real wall clock and its executors fire on real time). The scheduler's private clock (SPEC-004.P10d) collapses into a consumer of the shared clock. See [RFC-Dtt-001](../rfcs/2026-07-09-deterministic-test-time.md).
 
 ## DELTA-Dtt-001.P2 Contract changes
 
-- **DELTA-Dtt-001.CC1 (runtime clock component):** A weaver runtime owns exactly one clock
-  component for its lifetime, alongside the registries SPEC-004.C1 enumerates. The clock is a
-  runtime-map slot holding a zero-arg fn that returns the current `java.time.Instant`,
-  defaulting to `#(Instant/now)`. Core timer-driven subsystems read the current instant
-  through the clock component (via a `skein.core.weaver.runtime` core-tier accessor), never by
-  calling `(Instant/now)` directly for due-detection. Cosmetic failure/running-marker
-  timestamps are not due-detection and are out of scope. Default (production) behaviour is
-  unchanged: the default clock returns real wall-clock instants.
-- **DELTA-Dtt-001.CC2 (blessed time read):** `skein.api.runtime.alpha/now` `[runtime]` returns
-  the runtime clock's current `Instant`. It is the one blessed, runtime-scoped time source
-  trusted spools read instead of `(Instant/now)`; it is data-first (returns an `Instant`, not
-  the clock fn) and takes the target runtime as its first argument like every other
-  `runtime.alpha` helper (SPEC-003.C18). No blessed accessor exposes the clock component
-  internals; core subsystems read it through the core-tier accessor, not the alpha tier.
-- **DELTA-Dtt-001.CC3 (manual-clock advance contract):** Installing a manual clock and moving
-  it forward is an author-side test control (see [repl-api.delta.md](./repl-api.delta.md),
-  DELTA-Dtt-002.CC1). The runtime-level contract the control depends on: one advance of the
-  runtime clock moves it forward and then runs every clock-consuming subsystem's now-due work
-  synchronously before returning. Clock-consuming subsystems that arm real
-  `ScheduledExecutorService` timers (the scheduler's executor, cron) expose a due-check/pump
-  entry point the advance drives, so under a manual clock due work is released deterministically
-  rather than on wall delay. The concrete mechanism (clock-driven due-check plus an explicit
-  pump, versus a virtual-time executor) is a plan-level choice; the contract fixed here is that
-  advancing the clock releases now-due work synchronously.
-- **DELTA-Dtt-001.CC4 (event-lane quiescence):** `skein.api.events.alpha/await-quiescent!`
-  `[runtime]` / `[runtime opts]` blocks until the single sequential event worker (SPEC-004.C74)
-  has drained: the bounded queue is empty and no dispatch is in flight. It throws an `ex-info`
-  on timeout, with a default budget from `skein.spools.test-support/await-budget-ms` honoured
-  via an explicit `:timeout-ms`. "Worker idle" is an atomic dispatch-in-progress flag the worker
-  raises *before* it dequeues an event, not a bare queue-empty check: because the worker claims
-  an event before it could flip any flag, a naive queue-empty test could return while a dispatch
-  is still in flight, so a settle primitive that reported early would violate TEN-003. One
-  blocking primitive is added; no bare `quiescent?` predicate is added, because a predicate
-  invites the caller-rolled sleep loop this seam replaces.
-- **DELTA-Dtt-001.CC5 (off-lane completion boundary):** `await-quiescent!` settles the shared
-  event lane only; it does not observe off-lane subprocess/worker-pool completion (reed's
-  `:shell` process on a private worker pool, chime's per-dispatch notifier daemon threads, a
-  treadle gate's shuttle run reaching a terminal state). Off-lane completion keeps a completion
-  signal layered on top of `await-quiescent!`; that boundary is explicit and is never smuggled
-  into `await-quiescent!`. The layering mechanism (per-owner settle versus one shared
-  process-completion await) is a plan-level choice.
-- **DELTA-Dtt-001.CC6 (scheduler as clock consumer):** The scheduler's private clock and its
-  `set-clock!` (SPEC-004.P10d; `scheduler.clj:110,127`) are removed in favour of the runtime
-  clock. Due-detection and arming read `now` from the runtime clock. The durable rows,
-  at-least-once delivery (SPEC-004.C101/C102), and the persisted `wake_at` millis are unchanged
-  (PROP-Dtt-001.NG4): the scheduler stays the durable wake primitive and merely learns the
-  current instant from the shared clock. Dropping the private `:clock` from scheduler
-  spool-state is a state-shape change and bumps `scheduler-state-version` so SPEC-004.C95/C96
-  reload semantics close and replace stale executors/timers.
+- **DELTA-Dtt-001.CC1 (runtime clock component):** A weaver runtime owns exactly one clock component for its lifetime, alongside the registries SPEC-004.C1 enumerates. The clock is a runtime-map slot holding a zero-arg fn that returns the current `java.time.Instant`, defaulting to `#(Instant/now)`. Core timer-driven subsystems read the current instant through the clock component (via a `skein.core.weaver.runtime` core-tier accessor), never by calling `(Instant/now)` directly for due-detection. Cosmetic failure/running-marker timestamps are not due-detection and are out of scope. Default (production) behaviour is unchanged: the default clock returns real wall-clock instants.
+- **DELTA-Dtt-001.CC2 (blessed time read):** `skein.api.runtime.alpha/now` `[runtime]` returns the runtime clock's current `Instant`. It is the one blessed, runtime-scoped time source trusted spools read instead of `(Instant/now)`; it is data-first (returns an `Instant`, not the clock fn) and takes the target runtime as its first argument like every other `runtime.alpha` helper (SPEC-003.C18). No blessed accessor exposes the clock component internals; core subsystems read it through the core-tier accessor, not the alpha tier.
+- **DELTA-Dtt-001.CC3 (manual-clock advance contract):** Installing a manual clock and moving it forward is an author-side test control (see [repl-api.delta.md](./repl-api.delta.md), DELTA-Dtt-002.CC1). The runtime-level contract the control depends on: one advance of the runtime clock moves it forward and then runs every clock-consuming subsystem's now-due work synchronously before returning. Clock-consuming subsystems that arm real `ScheduledExecutorService` timers (the scheduler's executor, cron) expose a due-check/pump entry point the advance drives, so under a manual clock due work is released deterministically rather than on wall delay. The concrete mechanism (clock-driven due-check plus an explicit pump, versus a virtual-time executor) is a plan-level choice; the contract fixed here is that advancing the clock releases now-due work synchronously.
+- **DELTA-Dtt-001.CC4 (event-lane quiescence):** `skein.api.events.alpha/await-quiescent!` `[runtime]` / `[runtime opts]` blocks until the single sequential event worker (SPEC-004.C74) has drained: the bounded queue is empty and no dispatch is in flight. It throws an `ex-info` on timeout, with a default budget from `skein.spools.test-support/await-budget-ms` honoured via an explicit `:timeout-ms`. "Worker idle" is an atomic dispatch-in-progress flag the worker raises _before_ it dequeues an event, not a bare queue-empty check: because the worker claims an event before it could flip any flag, a naive queue-empty test could return while a dispatch is still in flight, so a settle primitive that reported early would violate TEN-003. One blocking primitive is added; no bare `quiescent?` predicate is added, because a predicate invites the caller-rolled sleep loop this seam replaces.
+- **DELTA-Dtt-001.CC5 (off-lane completion boundary):** `await-quiescent!` settles the shared event lane only; it does not observe off-lane subprocess/worker-pool completion (reed's `:shell` process on a private worker pool, chime's per-dispatch notifier daemon threads, a treadle gate's shuttle run reaching a terminal state). Off-lane completion keeps a completion signal layered on top of `await-quiescent!`; that boundary is explicit and is never smuggled into `await-quiescent!`. The layering mechanism (per-owner settle versus one shared process-completion await) is a plan-level choice.
+- **DELTA-Dtt-001.CC6 (scheduler as clock consumer):** The scheduler's private clock and its `set-clock!` (SPEC-004.P10d; `scheduler.clj:110,127`) are removed in favour of the runtime clock. Due-detection and arming read `now` from the runtime clock. The durable rows, at-least-once delivery (SPEC-004.C101/C102), and the persisted `wake_at` millis are unchanged (PROP-Dtt-001.NG4): the scheduler stays the durable wake primitive and merely learns the current instant from the shared clock. Dropping the private `:clock` from scheduler spool-state is a state-shape change and bumps `scheduler-state-version` so SPEC-004.C95/C96 reload semantics close and replace stale executors/timers.
 
 ## DELTA-Dtt-001.P3 Design decisions
 
 ### DELTA-Dtt-001.D1 Runtime-owned clock, not a JVM-global redef
 
-- **Decision:** The time seam is a runtime-scoped clock component read through a core accessor
-  and the blessed `runtime.alpha/now`, injected per runtime.
-- **Rationale:** Runtime isolation lets parallel runtimes advance time independently and never
-  race on it, which is what lets the timer-driven suites graduate to the parallel batch. It
-  generalizes the seam the scheduler already proves (`scheduler.clj:80-82,127-134`).
-- **Rejected:** A test-only `with-redefs` seam on `Instant/now` — the JVM-global hazard RFC-016
-  removed (`1720a00`), which would reblock parallelism and violate runtime isolation.
+- **Decision:** The time seam is a runtime-scoped clock component read through a core accessor and the blessed `runtime.alpha/now`, injected per runtime.
+- **Rationale:** Runtime isolation lets parallel runtimes advance time independently and never race on it, which is what lets the timer-driven suites graduate to the parallel batch. It generalizes the seam the scheduler already proves (`scheduler.clj:80-82,127-134`).
+- **Rejected:** A test-only `with-redefs` seam on `Instant/now` — the JVM-global hazard RFC-016 removed (`1720a00`), which would reblock parallelism and violate runtime isolation.
 
 ### DELTA-Dtt-001.D2 One lane-quiescence primitive, off-lane completion layered on top
 
-- **Decision:** Add exactly one blocking `await-quiescent!` on the shared event lane; off-lane
-  subprocess completion is a separate, explicit signal layered above it.
-- **Rationale:** The three event-delivered subsystems share one worker (SPEC-004.C74), so one
-  seam covers on-lane settling for all of them, and it is a genuine runtime capability (graceful
-  shutdown / land gates can want it), not test-only. Keeping off-lane completion out of the
-  primitive keeps its contract honest: it must not report settled while a private-pool task is
-  still running.
-- **Rejected:** Per-spool completion callbacks (N seams instead of one) and status-polling only
-  (keeps the sleep-and-poll cost and load-sensitivity RFC-016.P7 catalogues).
+- **Decision:** Add exactly one blocking `await-quiescent!` on the shared event lane; off-lane subprocess completion is a separate, explicit signal layered above it.
+- **Rationale:** The three event-delivered subsystems share one worker (SPEC-004.C74), so one seam covers on-lane settling for all of them, and it is a genuine runtime capability (graceful shutdown / land gates can want it), not test-only. Keeping off-lane completion out of the primitive keeps its contract honest: it must not report settled while a private-pool task is still running.
+- **Rejected:** Per-spool completion callbacks (N seams instead of one) and status-polling only (keeps the sleep-and-poll cost and load-sensitivity RFC-016.P7 catalogues).
 
 ## DELTA-Dtt-001.P4 Open questions
 
-- **DELTA-Dtt-001.Q1:** None blocking promotion. The two plan-level mechanism choices
-  (advance/pump shape; off-lane completion shape) are fixed in the feature plan, not here.
+- **DELTA-Dtt-001.Q1:** None blocking promotion. The two plan-level mechanism choices (advance/pump shape; off-lane completion shape) are fixed in the feature plan, not here.

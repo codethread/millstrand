@@ -1,130 +1,45 @@
 # Discovery-tier factoring Proposal
 
-**Document ID:** `PROP-Dtf-001`
-**Last Updated:** 2026-07-20
-**Related RFCs:** [`RFC-Dtf-001`](../../rfcs/2026-07-20-discovery-tier-factoring.md) (deliberation, rejected alternatives, near-verbatim rationale)
-**Related root specs:** [`devflow/specs/cli.md`](../../specs/cli.md) — SPEC-002.C39 (primary delta), C34/C15/C40; SPEC-003.C64/C65; SPEC-004.C63e
-**Spec deltas:** [`specs/cli.delta.md`](specs/cli.delta.md) (DELTA-Dtf-001), [`specs/daemon-runtime.delta.md`](specs/daemon-runtime.delta.md) (DELTA-Dtf-002), [`specs/repl-api.delta.md`](specs/repl-api.delta.md) (DELTA-Dtf-003)
-**Decision notes:** card `tz0ki` — `5cxy8` (D1–D7), `h67ok` (D8–D13), `gu8kf` (A–E), `w6lho` (D14 batteries in scope); council synthesis `gk3d8`
+**Document ID:** `PROP-Dtf-001` **Last Updated:** 2026-07-20 **Related RFCs:** [`RFC-Dtf-001`](../../rfcs/2026-07-20-discovery-tier-factoring.md) (deliberation, rejected alternatives, near-verbatim rationale) **Related root specs:** [`devflow/specs/cli.md`](../../specs/cli.md) — SPEC-002.C39 (primary delta), C34/C15/C40; SPEC-003.C64/C65; SPEC-004.C63e **Spec deltas:** [`specs/cli.delta.md`](specs/cli.delta.md) (DELTA-Dtf-001), [`specs/daemon-runtime.delta.md`](specs/daemon-runtime.delta.md) (DELTA-Dtf-002), [`specs/repl-api.delta.md`](specs/repl-api.delta.md) (DELTA-Dtf-003) **Decision notes:** card `tz0ki` — `5cxy8` (D1–D7), `h67ok` (D8–D13), `gu8kf` (A–E), `w6lho` (D14 batteries in scope); council synthesis `gk3d8`
 
 ## PROP-Dtf-001.P1 Problem
 
-The three discovery tiers for the `agent` op — `help` (generated from arg-spec), `about`
-(authored manual), `prime` (authored orientation) — overlap and mis-file content. `about` and
-`help` both enumerate verbs, and `about` restates the `returns` shape the typed schema owns.
-`agent` (~20 interdependent verbs) is the worst offender: its `about` emits the whole verb tree,
-so learning one verb's flags means fetching everything. We want each kind of op-knowledge filed
-in exactly one tier, a single versioned help schema that is cheap to slice per verb, and an
-`about` that earns its keep instead of duplicating `help`. v1 proves this against **two op
-families** — `agent` (deep, ~20 interdependent verbs) and batteries (simple structural ops) —
-and ships the reference help transformer in batteries as a **forcing function**: if rendering the
-schema at op vs verb vs subverb level needs level-specific code gymnastics, the schema is wrong.
+The three discovery tiers for the `agent` op — `help` (generated from arg-spec), `about` (authored manual), `prime` (authored orientation) — overlap and mis-file content. `about` and `help` both enumerate verbs, and `about` restates the `returns` shape the typed schema owns. `agent` (~20 interdependent verbs) is the worst offender: its `about` emits the whole verb tree, so learning one verb's flags means fetching everything. We want each kind of op-knowledge filed in exactly one tier, a single versioned help schema that is cheap to slice per verb, and an `about` that earns its keep instead of duplicating `help`. v1 proves this against **two op families** — `agent` (deep, ~20 interdependent verbs) and batteries (simple structural ops) — and ships the reference help transformer in batteries as a **forcing function**: if rendering the schema at op vs verb vs subverb level needs level-specific code gymnastics, the schema is wrong.
 
 ## PROP-Dtf-001.P2 Goals
 
-- **PROP-Dtf-001.G1:** One canonical, versioned help schema driving both parsing and help; no
-  second "compact" schema; sliceable per verb.
-- **PROP-Dtf-001.G2:** Mechanical facts in `help`; cross-verb narrative in `about`; run-first
-  orientation in `prime` — each fact in one tier.
-- **PROP-Dtf-001.G3:** Authored churn stays cheap and reversible (prose); the machine contract
-  stays stable and promised (versioned schema a user can `jq` and script against).
+- **PROP-Dtf-001.G1:** One canonical, versioned help schema driving both parsing and help; no second "compact" schema; sliceable per verb.
+- **PROP-Dtf-001.G2:** Mechanical facts in `help`; cross-verb narrative in `about`; run-first orientation in `prime` — each fact in one tier.
+- **PROP-Dtf-001.G3:** Authored churn stays cheap and reversible (prose); the machine contract stays stable and promised (versioned schema a user can `jq` and script against).
 - **PROP-Dtf-001.G4:** The tiers become a uniform op design pattern without mandating boilerplate.
-- **PROP-Dtf-001.G5:** The help schema is **predictable and fractal** — op, verb, and subverb nodes
-  share one normalized shape, so the reference transformer is a single recursive renderer with no
-  per-level branches. Building that transformer over two op families (agent + batteries) is the
-  forcing function. v1 exercises flat roots and one-level verb trees (nothing nests deeper today);
-  arbitrary-depth recursion is a schema invariant covered by a synthetic nested-node renderer test,
-  not claimed as live-op validation.
+- **PROP-Dtf-001.G5:** The help schema is **predictable and fractal** — op, verb, and subverb nodes share one normalized shape, so the reference transformer is a single recursive renderer with no per-level branches. Building that transformer over two op families (agent + batteries) is the forcing function. v1 exercises flat roots and one-level verb trees (nothing nests deeper today); arbitrary-depth recursion is a schema invariant covered by a synthetic nested-node renderer test, not claimed as live-op validation.
 
 ## PROP-Dtf-001.P3 Non-goals
 
-- **PROP-Dtf-001.NG1:** Ops beyond `agent` and batteries — v1 covers those two op families; the
-  rest adopt the pattern as fast-follow.
-- **PROP-Dtf-001.NG2:** A per-invocation transform selector flag — dropped; only a config default
-  plus `--json` bypass.
-- **PROP-Dtf-001.NG3:** The version-stamp *mechanism* across mill/strand/core — the shared-version
-  *contract* is in scope; the mechanism may be a separate card.
-- **PROP-Dtf-001.NG4:** Any structure modelled *inside* `about` — structure is promoted *out* into
-  help/glossary, never frozen into `about`.
+- **PROP-Dtf-001.NG1:** Ops beyond `agent` and batteries — v1 covers those two op families; the rest adopt the pattern as fast-follow.
+- **PROP-Dtf-001.NG2:** A per-invocation transform selector flag — dropped; only a config default plus `--json` bypass.
+- **PROP-Dtf-001.NG3:** The version-stamp _mechanism_ across mill/strand/core — the shared-version _contract_ is in scope; the mechanism may be a separate card.
+- **PROP-Dtf-001.NG4:** Any structure modelled _inside_ `about` — structure is promoted _out_ into help/glossary, never frozen into `about`.
 
 ## PROP-Dtf-001.P4 Proposed scope
 
 The settled decisions (full rationale and rejected alternatives in RFC-Dtf-001):
 
-- **PROP-Dtf-001.S1 (help schema):** `strand help <op>` is verbose over one canonical, versioned
-  schema; `strand help <op> <verb>` slices it. No compact second schema. The schema is a
-  **normalized, fractal node shape**: op/verb/subverb nodes share the same shape (name, doc,
-  invocation, returns, use-when, notes, failure-modes, source, `children[]`), so slicing to a node
-  yields the same shape as the root. Building it is a level-aware **projection/normalization** over
-  today's registry data (which today renders the op envelope and its arg-spec separately, and
-  routes returns per subcommand); **root/envelope-only metadata** — provenance, `stream?`,
-  `deadline-class`, `hook-class`, raw-envelope status — legitimately lives on the root node only.
-  "No per-level branches" is the property of the *renderer over the normalized schema*, not of node
-  extraction.
-- **PROP-Dtf-001.S2 (rendering + reference transformer):** v1 introduces a **net-new**,
-  runtime-owned, reload-cleared `register-default-help-transform` registration API (no such hook
-  exists today; the op registry carries only doc/arg-spec/returns/stream?/deadline-class/hook-class).
-  A registered default renders help; `--json` is the sole opt-out to the raw schema (and the
-  raw-JSON floor when none is registered). The `-t` selector flag is not shipped; the transform
-  concept remains as config plumbing (transformer receives the canonical schema as stable input).
-  **Batteries *exports* the reference default transformer** — a single recursive renderer over the
-  normalized schema, the forcing function for G5 — but **trusted `init.clj`/REPL config elects to
-  register it**; it is *not* auto-registered from `batteries/install!`, so a fresh world keeps the
-  raw-JSON default (C-final).
-- **PROP-Dtf-001.S3 (`--help`):** valid only as the final token with no other flags, rewritten to
-  the `help` op (weaver-side, for help tokens *after* the first op token); otherwise a concise
-  redirect error. `strand --help` with no op is dispatcher help; `strand --help <op>` is invalid
-  (`--help` must trail). Making `strand --help <op>` an error requires a **Go dispatcher grammar
-  change** — today `dispatch.go` prints static help on any pre-op `--help` and ignores trailing
-  tokens; the weaver rewrite covers only post-op help. `--json` is leading-only within the help
-  surface.
-- **PROP-Dtf-001.S4 (glossary):** a shared named vocabulary of failure outcomes/concepts that
-  per-verb help references by name; help owns the enum. Distinct layer from `vocab-registry`
-  (stored-attribute vocabularies).
-- **PROP-Dtf-001.S5 (about):** prose in a `{"about": "..."}` envelope, anchored to the help gap
-  (cross-verb narrative help cannot derive), with a promotion rule: proven-recurring structure
-  graduates out into help/glossary, never modelled inside `about`. Absence returns a loud
-  `discovery/unavailable`.
-- **PROP-Dtf-001.S6 (prime):** a prose block declared on the op and read beside its implementation;
-  `{"prime": "..."}` envelope; run-first orientation.
-- **PROP-Dtf-001.S7 (pattern):** every op declares `{:arg-spec, :about (optional),
-  :prime (optional)}`; surfaced by builtin meta-verbs `about <op>` / `prime <op>` beside
-  `help <op>`. `:arg-spec` stays **optional for raw-envelope ops** (SPEC-004.C63a; `help.clj`
-  already renders `:raw-envelope true` ops) — the pattern must not break those. `help` nests to
-  the arg-spec's *declared subcommand depth* (one level today per SPEC-003.C64, which forbids
-  nested `:subcommands`); deeper help paths need a C64/C65 redesign and are out of v1 scope.
-  `about`/`prime` are arity-1 and redirect a verb path to `help`.
-- **PROP-Dtf-001.S8 (source pointer):** a skein-derived best-effort `source` (handler file:line)
-  resolved at help/meta **projection** — not at registration: `register-op!` stores an unresolved
-  fully-qualified symbol, so `source` is derived via `requiring-resolve` under
-  `with-spool-classloader` (catching resolution failures) and reading the resolved var's metadata.
-  No registry change. Wire contract: `source` is **always present**, `null` when the handler
-  cannot be resolved to a readable source file (var `:file`/`:line` metadata alone is not proof of
-  a readable file, so this is best-effort, not an AOT/jar/REPL inference).
-- **PROP-Dtf-001.S9 (invariant + versioning):** reword the "help is never hand-written" invariant to
-  "one declared, versioned schema, uniformly projected; renderings are transforms over it,"
-  reserving room for a future user-declared help adapter. The versioned promise is the machine
-  schema. "One shared version across mill/strand/core" means a shared release/build identity
-  **alongside** — not replacing or conflating — the existing independent `protocol_version`
-  wire-compat key (SPEC-002.C34); the version *mechanism* is out of scope (NG3) but must respect
-  that split, and align with in-flight v1-api work.
-- **PROP-Dtf-001.S10 (batteries in scope):** batteries (`skein.spools.batteries`, a separate
-  reference spool) is a v1 target alongside `agent`: its **flat** ops (`add`/`update`/`show`/
-  `list`/`ready`) and its **subcommand** ops (`query`/`pattern`/`spool`) adopt the pattern
-  (arg-spec drives help; optional `:about`/`:prime`), and it exports the reference transformer (S2).
-  Batteries alone spans flat roots and one-level verb trees; together with `agent`'s deep verb tree
-  it stresses the fractal renderer across the schema's live range.
+- **PROP-Dtf-001.S1 (help schema):** `strand help <op>` is verbose over one canonical, versioned schema; `strand help <op> <verb>` slices it. No compact second schema. The schema is a **normalized, fractal node shape**: op/verb/subverb nodes share the same shape (name, doc, invocation, returns, use-when, notes, failure-modes, source, `children[]`), so slicing to a node yields the same shape as the root. Building it is a level-aware **projection/normalization** over today's registry data (which today renders the op envelope and its arg-spec separately, and routes returns per subcommand); **root/envelope-only metadata** — provenance, `stream?`, `deadline-class`, `hook-class`, raw-envelope status — legitimately lives on the root node only. "No per-level branches" is the property of the _renderer over the normalized schema_, not of node extraction.
+- **PROP-Dtf-001.S2 (rendering + reference transformer):** v1 introduces a **net-new**, runtime-owned, reload-cleared `register-default-help-transform` registration API (no such hook exists today; the op registry carries only doc/arg-spec/returns/stream?/deadline-class/hook-class). A registered default renders help; `--json` is the sole opt-out to the raw schema (and the raw-JSON floor when none is registered). The `-t` selector flag is not shipped; the transform concept remains as config plumbing (transformer receives the canonical schema as stable input). **Batteries _exports_ the reference default transformer** — a single recursive renderer over the normalized schema, the forcing function for G5 — but **trusted `init.clj`/REPL config elects to register it**; it is _not_ auto-registered from `batteries/install!`, so a fresh world keeps the raw-JSON default (C-final).
+- **PROP-Dtf-001.S3 (`--help`):** valid only as the final token with no other flags, rewritten to the `help` op (weaver-side, for help tokens _after_ the first op token); otherwise a concise redirect error. `strand --help` with no op is dispatcher help; `strand --help <op>` is invalid (`--help` must trail). Making `strand --help <op>` an error requires a **Go dispatcher grammar change** — today `dispatch.go` prints static help on any pre-op `--help` and ignores trailing tokens; the weaver rewrite covers only post-op help. `--json` is leading-only within the help surface.
+- **PROP-Dtf-001.S4 (glossary):** a shared named vocabulary of failure outcomes/concepts that per-verb help references by name; help owns the enum. Distinct layer from `vocab-registry` (stored-attribute vocabularies).
+- **PROP-Dtf-001.S5 (about):** prose in a `{"about": "..."}` envelope, anchored to the help gap (cross-verb narrative help cannot derive), with a promotion rule: proven-recurring structure graduates out into help/glossary, never modelled inside `about`. Absence returns a loud `discovery/unavailable`.
+- **PROP-Dtf-001.S6 (prime):** a prose block declared on the op and read beside its implementation; `{"prime": "..."}` envelope; run-first orientation.
+- **PROP-Dtf-001.S7 (pattern):** every op declares `{:arg-spec, :about (optional), :prime (optional)}`; surfaced by builtin meta-verbs `about <op>` / `prime <op>` beside `help <op>`. `:arg-spec` stays **optional for raw-envelope ops** (SPEC-004.C63a; `help.clj` already renders `:raw-envelope true` ops) — the pattern must not break those. `help` nests to the arg-spec's _declared subcommand depth_ (one level today per SPEC-003.C64, which forbids nested `:subcommands`); deeper help paths need a C64/C65 redesign and are out of v1 scope. `about`/`prime` are arity-1 and redirect a verb path to `help`.
+- **PROP-Dtf-001.S8 (source pointer):** a skein-derived best-effort `source` (handler file:line) resolved at help/meta **projection** — not at registration: `register-op!` stores an unresolved fully-qualified symbol, so `source` is derived via `requiring-resolve` under `with-spool-classloader` (catching resolution failures) and reading the resolved var's metadata. No registry change. Wire contract: `source` is **always present**, `null` when the handler cannot be resolved to a readable source file (var `:file`/`:line` metadata alone is not proof of a readable file, so this is best-effort, not an AOT/jar/REPL inference).
+- **PROP-Dtf-001.S9 (invariant + versioning):** reword the "help is never hand-written" invariant to "one declared, versioned schema, uniformly projected; renderings are transforms over it," reserving room for a future user-declared help adapter. The versioned promise is the machine schema. "One shared version across mill/strand/core" means a shared release/build identity **alongside** — not replacing or conflating — the existing independent `protocol_version` wire-compat key (SPEC-002.C34); the version _mechanism_ is out of scope (NG3) but must respect that split, and align with in-flight v1-api work.
+- **PROP-Dtf-001.S10 (batteries in scope):** batteries (`skein.spools.batteries`, a separate reference spool) is a v1 target alongside `agent`: its **flat** ops (`add`/`update`/`show`/ `list`/`ready`) and its **subcommand** ops (`query`/`pattern`/`spool`) adopt the pattern (arg-spec drives help; optional `:about`/`:prime`), and it exports the reference transformer (S2). Batteries alone spans flat roots and one-level verb trees; together with `agent`'s deep verb tree it stresses the fractal renderer across the schema's live range.
 
 ## PROP-Dtf-001.P5 Open questions
 
-- **PROP-Dtf-001.Q1:** The canonical help-schema envelope — exact per-op / per-verb / glossary /
-  metadata fields (central spec artifact; drafted in the plan/spec stage).
-- **PROP-Dtf-001.Q2:** Glossary wire shape — top-level section vs per-op; whether help resolves
-  outcome definitions inline or on demand.
-- **PROP-Dtf-001.Q3:** Exact SPEC-002.C39 delta wording and the reconciliation across
-  SPEC-004.C63e (`<op> help` sole-token → trailing `--help`, retired in alpha), SPEC-004.C63a
-  (raw-envelope ops keep optional arg-spec), and SPEC-003.C64/C65 (one-level subcommand parsing
-  vs multi-level help paths — clarify or redesign).
+- **PROP-Dtf-001.Q1:** The canonical help-schema envelope — exact per-op / per-verb / glossary / metadata fields (central spec artifact; drafted in the plan/spec stage).
+- **PROP-Dtf-001.Q2:** Glossary wire shape — top-level section vs per-op; whether help resolves outcome definitions inline or on demand.
+- **PROP-Dtf-001.Q3:** Exact SPEC-002.C39 delta wording and the reconciliation across SPEC-004.C63e (`<op> help` sole-token → trailing `--help`, retired in alpha), SPEC-004.C63a (raw-envelope ops keep optional arg-spec), and SPEC-003.C64/C65 (one-level subcommand parsing vs multi-level help paths — clarify or redesign).
 - **PROP-Dtf-001.Q4:** TEN-006 wording adjustment (default is JSON; transforms are user choice).
-- **PROP-Dtf-001.Q5:** The Go dispatcher grammar change needed to make pre-op `strand --help <op>`
-  an error (S3), and whether that belongs in this feature or a paired CLI card.
+- **PROP-Dtf-001.Q5:** The Go dispatcher grammar change needed to make pre-op `strand --help <op>` an error (S3), and whether that belongs in this feature or a paired CLI card.

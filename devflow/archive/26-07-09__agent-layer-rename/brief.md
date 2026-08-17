@@ -15,7 +15,7 @@ Attribute namespaces name **concepts, not owners**. Names riding durable data or
 ### Namespaces, spool names, and frozen surfaces
 
 | Today | New |
-|---|---|
+| --- | --- |
 | `skein.spools.shuttle` | `skein.spools.agent-run` |
 | `skein.spools.agents` | `skein.spools.delegation` |
 | `skein.spools.treadle` | `skein.spools.executors.subagent` |
@@ -30,7 +30,7 @@ Every live attribute key gets its own row — no `same suffixes` shorthand. The 
 Run attributes (`skein.spools.agent-run`), `shuttle/…` → `agent-run/…`:
 
 | Today | New |
-|---|---|
+| --- | --- |
 | `shuttle/phase` | `agent-run/phase` |
 | `shuttle/harness` | `agent-run/harness` |
 | `shuttle/prompt` | `agent-run/prompt` |
@@ -64,43 +64,43 @@ Run attributes (`skein.spools.agent-run`), `shuttle/…` → `agent-run/…`:
 Boolean markers (renamed in F1, dropped or reworked in F2):
 
 | Today | New |
-|---|---|
+| --- | --- |
 | `shuttle/run` | `agent-run/run` (dropping it is a logic change deferred to F2, which owns behavior) |
 | `shuttle/serves` | `agent-run/serves` (boolean survives until F2's `serves` edge) |
 
 Review attributes (`skein.spools.delegation`), `shuttle/review-…` → `review/…`:
 
-| Today | New |
-|---|---|
-| `shuttle/review-target` | `review/target` |
-| `shuttle/review-pass` | `review/pass` |
-| `shuttle/review-roster` | `review/roster` |
-| `shuttle/review-focus` | `review/focus` |
+| Today                      | New                |
+| -------------------------- | ------------------ |
+| `shuttle/review-target`    | `review/target`    |
+| `shuttle/review-pass`      | `review/pass`      |
+| `shuttle/review-roster`    | `review/roster`    |
+| `shuttle/review-focus`     | `review/focus`     |
 | `shuttle/review-synthesis` | `review/synthesis` |
 
 Panel attributes, `shuttle/…` → `panel/…`:
 
-| Today | New |
-|---|---|
-| `shuttle/panel-seat` | `panel/seat` |
-| `shuttle/panel-turn` | `panel/turn` |
-| `shuttle/fresh-prompt` | `panel/fresh-prompt` |
-| `shuttle/role` | `panel/role` (panel-board role marker, value `"panel"`) |
+| Today                  | New                                                     |
+| ---------------------- | ------------------------------------------------------- |
+| `shuttle/panel-seat`   | `panel/seat`                                            |
+| `shuttle/panel-turn`   | `panel/turn`                                            |
+| `shuttle/fresh-prompt` | `panel/fresh-prompt`                                    |
+| `shuttle/role`         | `panel/role` (panel-board role marker, value `"panel"`) |
 
 Note attributes, `shuttle/…` → `note/…`:
 
-| Today | New |
-|---|---|
-| `shuttle/note-for` | `note/for` |
-| `shuttle/note` | `note/text` |
-| `shuttle/note-by` | `note/by` |
-| `shuttle/round` | `note/round` |
-| `shuttle/at` | `note/at` |
+| Today              | New          |
+| ------------------ | ------------ |
+| `shuttle/note-for` | `note/for`   |
+| `shuttle/note`     | `note/text`  |
+| `shuttle/note-by`  | `note/by`    |
+| `shuttle/round`    | `note/round` |
+| `shuttle/at`       | `note/at`    |
 
 Gate attributes (`skein.spools.executors.subagent`), `treadle/…` → `gate/…`:
 
 | Today | New |
-|---|---|
+| --- | --- |
 | `treadle/error` | `gate/error` (on gate) |
 | `treadle/delivered` | `gate/delivered` (on run) |
 | `treadle/delivery-blocked` | `gate/delivery-blocked` (on run) |
@@ -112,15 +112,15 @@ Gate attributes (`skein.spools.executors.subagent`), `treadle/…` → `gate/…
 Workflow gate-outcome string:
 
 | Today | New |
-|---|---|
+| --- | --- |
 | `workflow/notes` | `workflow/outcome-notes` (gate-outcome string; removes the name collision with note records) |
 
 Event-type keywords — not durable attributes, so the cutover script never touches them; they carry the `shuttle/`/`treadle/` prefix and follow the namespace rename (via `events/register-handler!`), listed here so the source sweep is exhaustive:
 
-| Today | New |
-|---|---|
+| Today             | New                 |
+| ----------------- | ------------------- |
 | `:shuttle/engine` | `:agent-run/engine` |
-| `:treadle/engine` | `:gate/engine` |
+| `:treadle/engine` | `:gate/engine`      |
 
 Spool dir moves: `spools/shuttle` → `spools/agent-run`, `spools/agents` → `spools/delegation` (treadle source joins an `executors/` grouping within its current spool root); doc triads follow. **Distribution tiers are unchanged**: namespace family ≠ distribution tier — `executors.shell` (reed) stays on the shipped classpath, `executors.subagent` (treadle) stays approved-local-root. `scripts/shuttle-dash` is **in scope** (its data layer reads the renamed attrs and breaks at cutover otherwise); dir renames to `scripts/agent-dash` with the `make dash` reference. `mkdocs.yml` hardcoded doc paths follow the doc moves. Untouched: `skein`/`strand`/`weaver`/`mill`, harness/alias/backend terms, seat names, kanban/roster/devflow vocabularies, `devflow/archive/*` (historical record).
 
@@ -128,7 +128,7 @@ Spool dir moves: `spools/shuttle` → `spools/agent-run`, `spools/agents` → `s
 
 - **No behavior change.** Same tests pass modulo renamed symbols/attrs; any behavioral fix discovered is carded, not folded in.
 - **Atomic landing**: spool sources + tests + `.skein` config (init/config/workflows/harnesses/attention/reviewers/nvd_scan) + bench + chime recipes + docs (`spools/*`, `docs/`, `devflow/specs` alpha-surface) + `make api-docs` regen in one landing.
-- **Cutover is part of Done-when**: one-shot rewrite script for **active** strands' attrs, rehearsed against a *copy* of the canonical world's SQLite in a disposable world; documented cutover plan (quiet board → script → weaver restart → smoke via `agent status`/`stalled-gates`/`kanban board`). The canonical weaver restart itself requires explicit user sign-off — hard stop.
+- **Cutover is part of Done-when**: one-shot rewrite script for **active** strands' attrs, rehearsed against a _copy_ of the canonical world's SQLite in a disposable world; documented cutover plan (quiet board → script → weaver restart → smoke via `agent status`/`stalled-gates`/`kanban board`). The canonical weaver restart itself requires explicit user sign-off — hard stop.
 - No dual-read compat shims (TEN-000@1).
 - Blocked for implementation by the in-flight tiered-validation-v2 queue and `vk8aa` (shared doc/test files); design stages may proceed.
 

@@ -52,10 +52,10 @@ You sit at the edges: describe outcomes, decide checkpoints, read the board.
 - State the outcome you want and let the coordinator drive. The conventions (card claiming, devflow, delegation, review) live in AGENTS.md and the workflow briefs, so you should not need to restate them. By default the session still stops at every human checkpoint; the `bonkai` skill (`.agents/skills/bonkai`) is the opt-in authority grant that lets it decide checkpoints and sign off on your behalf for AFK runs.
 - Human decisions come back as HITL checkpoints, which agents may not answer for you. After the one-time copy above, bind how you are notified in the active workspace's gitignored overlay, `$workspace/init.local.clj`:
 
-  ```clojure
-  (require '[millhouse.spools.chime :as chime])
-  (chime/set-notifier! {:argv ["cc-notify"]})   ; anything with the `cmd <title>` + body-on-stdin shape
-  ```
+    ```clojure
+    (require '[millhouse.spools.chime :as chime])
+    (chime/set-notifier! {:argv ["cc-notify"]})   ; anything with the `cmd <title>` + body-on-stdin shape
+    ```
 
 - Watch progress with `make dash` (interactive kanban board), `strand --workspace "$workspace" kanban board`, `strand --workspace "$workspace" branches [branch]`, and `strand --workspace "$workspace" workflow ready <run-id>`. For an ASCII board: `printf "(do (require '[millstrand.api.current.alpha :as current] '[millhouse.spools.kanban :as kanban]) (kanban/print-board! (current/runtime)))\n" | mill weaver repl --workspace "$workspace" --stdin`.
 - `strand --workspace "$workspace" agent harnesses` lists the model seats and their roles; the routing policy comments sit beside the shared alias definitions in Codethread's agents root.

@@ -34,7 +34,7 @@ The project shipped as a "todo" graph but has grown (per [PRD-001](../prd/runtim
 Naming explored three axes: the product brand, the stored-unit word, and the daemon word. Earlier candidates failed on real, checked collisions.
 
 | ID | Summary | Pros | Cons |
-| ------------ | ------- | ---- | ---- |
+| --- | --- | --- | --- |
 | RFC-006.O1 | Keep status-quo mixed naming (`todo.*` code, `atom.*` libs, `task` unit) | No work | Incoherent; "todo" is inaccurate; bakes confusion into more specs/libs |
 | RFC-006.O2 | Unit/product `atom(s)`, daemon `reactor` | Neutral primitive; coherent chemistry vocab | `atom` collides head-on with `clojure.core/atom`; bare-symbol shadowing is a constant code-readability tax |
 | RFC-006.O3 | Product `Strands`, unit `strand`, daemon `weaver` | Organic; strands connect to strands; clean Clojure namespace | **Product** collides with AWS **Strands Agents** (dominant open-source agent SDK, same domain), defeating searchability (G4) |
@@ -47,14 +47,14 @@ Naming explored three axes: the product brand, the stored-unit word, and the dae
 
 - **RFC-006.REC2:** Canonical vocabulary mapping:
 
-  | Concept | New name | Was |
-  | ------- | -------- | --- |
-  | Product / brand | **Skein** | atom / todo |
-  | Clojure namespace root / `src/` root / world dirs | **`skein`** | `todo` / `atom` |
-  | Long-lived daemon / runtime engine | **weaver** | daemon |
-  | Public CLI binary | **`strand`** | `todo` |
-  | The durable stored unit (a noun) | **strand** | task |
-  | Typed, directed edge | **edge** (literal; created via `--edge`) | edge |
+    | Concept | New name | Was |
+    | --- | --- | --- |
+    | Product / brand | **Skein** | atom / todo |
+    | Clojure namespace root / `src/` root / world dirs | **`skein`** | `todo` / `atom` |
+    | Long-lived daemon / runtime engine | **weaver** | daemon |
+    | Public CLI binary | **`strand`** | `todo` |
+    | The durable stored unit (a noun) | **strand** | task |
+    | Typed, directed edge | **edge** (literal; created via `--edge`) | edge |
 
 The connected-subgraph concept previously sketched as "molecule" is dropped; do not force a metaphor for derived structure. Connected subgraphs remain ordinary results of `skein.graph.alpha`, unnamed at the contract level. Edge types (`depends-on`, `related-to`, `parent-of`, `supersedes`) are unchanged.
 

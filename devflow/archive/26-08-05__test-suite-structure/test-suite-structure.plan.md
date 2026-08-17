@@ -1,13 +1,6 @@
 # Test suite structure plan
 
-**Document ID:** `PLAN-Tst-001`
-**Feature:** `test-suite-structure`
-**Proposal:** [proposal.md](./proposal.md)
-**RFCs:** [Library author testing](../../archive/26-07-03__library-author-testing-support/rfcs/2026-06-26-library-author-testing.md), [Test concurrency](../../rfcs/2026-07-03-test-concurrency.md)
-**Root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
-**Feature specs:** [Testing contract](../../specs/testing.md), [Weaver Runtime delta](./specs/daemon-runtime.delta.md)
-**Status:** Shipped
-**Last Updated:** 2026-08-05
+**Document ID:** `PLAN-Tst-001` **Feature:** `test-suite-structure` **Proposal:** [proposal.md](./proposal.md) **RFCs:** [Library author testing](../../archive/26-07-03__library-author-testing-support/rfcs/2026-06-26-library-author-testing.md), [Test concurrency](../../rfcs/2026-07-03-test-concurrency.md) **Root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md) **Feature specs:** [Testing contract](../../specs/testing.md), [Weaver Runtime delta](./specs/daemon-runtime.delta.md) **Status:** Shipped **Last Updated:** 2026-08-05
 
 ## PLAN-Tst-001.P1 Goal and scope
 

@@ -28,7 +28,7 @@ This delta names one new piece of trusted-config runtime spool state — agent-r
 ### DELTA-Foc-001.D3 No SPEC-004 scheduling-clause delta
 
 - **Decision:** The sliding concurrency window at agent-run's `claim!` seam changes no SPEC-004 scheduling clause; only C95's state enumeration is touched.
-- **Rationale:** Agent-run's run-admission scheduling is userland engine behavior, not a root-spec contract (SPEC-005.C4); the window is back-pressure layered *after* `weaver/ready` and preserves the readiness-is-the-only-scheduler contract the agent-run README owns (PROP-Foc-001.C4/NG3). The durable scheduler (SPEC-004.C97–C102a) is untouched — the window arms no timer, stores no queue, and is derived live from the in-flight count each scan.
+- **Rationale:** Agent-run's run-admission scheduling is userland engine behavior, not a root-spec contract (SPEC-005.C4); the window is back-pressure layered _after_ `weaver/ready` and preserves the readiness-is-the-only-scheduler contract the agent-run README owns (PROP-Foc-001.C4/NG3). The durable scheduler (SPEC-004.C97–C102a) is untouched — the window arms no timer, stores no queue, and is derived live from the in-flight count each scan.
 - **Rejected:** Adding a scheduling clause to SPEC-004 — it would pull userland engine mechanics into the root spec against the tier boundary.
 
 ## DELTA-Foc-001.P4 Open questions

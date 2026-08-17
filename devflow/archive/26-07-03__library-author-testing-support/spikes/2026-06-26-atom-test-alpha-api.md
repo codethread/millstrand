@@ -37,8 +37,8 @@ Evaluate:
 ## Suggested experiment
 
 1. Sketch two APIs:
-   - `with-daemon-world [ctx opts] ...`
-   - `(daemon-world-fixture opts)` for `use-fixtures`
+    - `with-daemon-world [ctx opts] ...`
+    - `(daemon-world-fixture opts)` for `use-fixtures`
 2. Implement the smaller one locally or as pseudocode.
 3. Apply it to one existing daemon-world library test.
 4. Record friction and missing pieces.

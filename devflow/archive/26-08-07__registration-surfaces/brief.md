@@ -10,7 +10,7 @@ The registry model underneath is sound (layered owner partitions; REPL registrat
 
 - **Override asymmetry**: only ops have a blessed cross-owner override (`replace-op!`). A REPL attempt to iterate on a module-owned query/pattern/hook/handler fails with "requires explicit override intent" and no blessed verb can supply that intent. Capability sets differ across the five kinds with no stated rationale (ops: replace/no unregister; hooks/events: unregister/no replace; queries/patterns: neither).
 - **Misleading naming**: `defquery!`/`defpattern!` are registration fns that define no Var; the `def*!` pattern doesn't generalize (ops use `register-op!`; hooks/handlers have no terse form). One `!` separates two things different in every way that matters.
-- **Duplicated terse tier**: ~19 identically named fns in `skein.repl` and `skein.userland.alpha`, with `load-queries!` meaning *file path* in one and *EDN map* in the other.
+- **Duplicated terse tier**: ~19 identically named fns in `skein.repl` and `skein.userland.alpha`, with `load-queries!` meaning _file path_ in one and _EDN map_ in the other.
 - **Misleading docstrings**: "duplicate names replace prior entries" is same-owner-only; cross-owner throws.
 - **Spec/source contradiction**: SPEC-003.C17f says lifecycle forms outside the selected module source fail; the source makes them passive like every other authoring form.
 - **Shared-weaver hazard**: `userland/bind!` mutates a process-global atom that beats ambient resolution — one session can silently redirect every other session's calls.
@@ -27,7 +27,7 @@ The registry model underneath is sound (layered owner partitions; REPL registrat
 
 - Authoring forms stay the only module publication path; passivity outside collection stays **silent** (a warning would couple authoring to ambient state and spam `reload-code!`); the remedy is docs plus consistently named live verbs.
 - Registration primitives stay in `skein.api.*.alpha` with the explicit runtime first argument — code (dynamic registrars like guild, tests, init.clj, the socket bridge) calls them; they are not REPL-only.
-- Queries stay value-registered (data, not symbol indirection): the registry entry *is* the behavior, so `query explain` can never go stale. Fn-backed kinds keep late-binding symbol resolution — redefining a handler fn at the REPL is the sanctioned hot loop.
+- Queries stay value-registered (data, not symbol indirection): the registry entry _is_ the behavior, so `query explain` can never go stale. Fn-backed kinds keep late-binding symbol resolution — redefining a handler fn at the REPL is the sanctioned hot loop.
 - The layered owner model is untouched: `:defaults < :spools < :workspace < :direct`; workspace modules mask spool ops declaratively via `defop {:override? true}`; same-layer (spool-vs-spool) collisions stay hard failures.
 - Promotion order is a documented discipline: an intent-less direct entry blocks a later module publication of the same name (refresh fails loudly) — retract or record intent first.
 - TEN-000@1 covers every rename/removal; no compatibility aliases.

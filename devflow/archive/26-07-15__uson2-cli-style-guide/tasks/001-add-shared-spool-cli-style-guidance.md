@@ -1,11 +1,6 @@
 # Task 1: Add shared-spool CLI style guidance
 
-**Document ID:** `TASK-Ucs-001`
-**Configuration identification:** Document IDs are ordered as document type,
-short name, sequential id, then optional version. Omit `@1`; append `@2`, `@3`,
-etc. only when a new version supersedes an externally referenced document.
-Prefix every nested point ID with the full document ID so references are
-globally grepable.
+**Document ID:** `TASK-Ucs-001` **Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable.
 
 ## TASK-Ucs-001.P1 Scope
 
@@ -13,23 +8,17 @@ Type: AFK
 
 Execution seat: `sol-high` (agent-facing documentation policy).
 
-Add the approved advisory CLI style section beside the discovery section in
-`docs/spools/writing-shared-spools.md`. This task owns only that file.
+Add the approved advisory CLI style section beside the discovery section in `docs/spools/writing-shared-spools.md`. This task owns only that file.
 
 Commit policy: commit only this task's owned change on the current feature branch. Use a HEREDOC commit message. Do not amend or include unrelated changes.
 
 ## TASK-Ucs-001.P2 Must implement exactly
 
 - **TASK-Ucs-001.MI1:** State the role-based verb sets from `PROP-Ucs-001.S1`: entity lifecycle, workflow steps, and processes.
-- **TASK-Ucs-001.MI2:** State the shared flag vocabulary: `--by`;
-  attribute-named `--owner`, `--branch`, `--worktree`, and `--feature`;
-  seconds-first unit-suffixed durations such as `--timeout-secs`; and
-  `--outcome` for closing state.
+- **TASK-Ucs-001.MI2:** State the shared flag vocabulary: `--by`; attribute-named `--owner`, `--branch`, `--worktree`, and `--feature`; seconds-first unit-suffixed durations such as `--timeout-secs`; and `--outcome` for closing state.
 - **TASK-Ucs-001.MI3:** Recommend `list` for live filterable work and plural nouns such as `harnesses`, `suites`, or `backends` for fixed catalogs.
 - **TASK-Ucs-001.MI4:** Recommend one op with declared subcommands for a cohesive multi-verb domain while keeping single-purpose projections and config-registered ops flat.
-- **TASK-Ucs-001.MI5:** Make payload-reference support the sole MUST: every
-  text-bearing flag or positional uses the declared parser so whole-value
-  `:stdin` and `:payload/<name>` references resolve.
+- **TASK-Ucs-001.MI5:** Make payload-reference support the sole MUST: every text-bearing flag or positional uses the declared parser so whole-value `:stdin` and `:payload/<name>` references resolve.
 - **TASK-Ucs-001.MI6:** Mark naming advice as advisory and fix-on-touch. Do not prescribe rename-only churn or compatibility aliases.
 - **TASK-Ucs-001.MI7:** Link to the authoritative discovery-tier section in `docs/reference.md`; do not restate `help`, `about`, or `prime`.
 - **TASK-Ucs-001.MI8:** Apply the repository docs-style procedure to the new prose.

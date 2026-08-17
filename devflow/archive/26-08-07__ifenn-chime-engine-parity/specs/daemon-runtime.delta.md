@@ -1,11 +1,6 @@
 # Daemon runtime delta for chime engine parity
 
-**Document ID:** `DELTA-Chp-001`
-**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
-**Feature:** [../proposal.md](../proposal.md)
-**Status:** Merged
-**Last Updated:** 2026-07-23
-**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `DELTA-Dwr-001` for v1 and `DELTA-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `DELTA-Chp-001.P1`, so references are globally grepable and do not clash across documents.
+**Document ID:** `DELTA-Chp-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-23 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `DELTA-Dwr-001` for v1 and `DELTA-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `DELTA-Chp-001.P1`, so references are globally grepable and do not clash across documents.
 
 ## DELTA-Chp-001.P1 Summary
 

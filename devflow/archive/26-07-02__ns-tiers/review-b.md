@@ -8,12 +8,12 @@ Reviewed the uncommitted working tree against `devflow/feat/ns-tiers/proposal.md
 
 - `PATH=/opt/homebrew/opt/openjdk/bin:$PATH clojure -M:test` completed with `Ran 284 tests containing 1642 assertions. 0 failures, 0 errors.` **However, the run printed uncaught background-thread exceptions from shuttle tests** (`Exception in thread "shuttle-run-*" clojure.lang.ExceptionInfo: No active Skein weaver runtime {}`), so I do not consider this fully green.
 - `(cd cli && go test ./...)` passed:
-  - `ok skein-strand-cli 17.573s`
-  - `ok skein-strand-cli/cmd/mill (cached)`
-  - `? skein-strand-cli/cmd/strand [no test files]`
-  - `ok skein-strand-cli/internal/client (cached)`
-  - `ok skein-strand-cli/internal/command (cached)`
-  - `ok skein-strand-cli/internal/config (cached)`
+    - `ok skein-strand-cli 17.573s`
+    - `ok skein-strand-cli/cmd/mill (cached)`
+    - `? skein-strand-cli/cmd/strand [no test files]`
+    - `ok skein-strand-cli/internal/client (cached)`
+    - `ok skein-strand-cli/internal/command (cached)`
+    - `ok skein-strand-cli/internal/config (cached)`
 - `git status --short` after validation showed only source/doc/config/test changes already present in the working tree plus this review file; I did not see generated SQLite/runtime metadata artifacts.
 
 ## Findings

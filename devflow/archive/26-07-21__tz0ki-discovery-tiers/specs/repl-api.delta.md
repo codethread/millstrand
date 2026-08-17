@@ -1,87 +1,29 @@
 # REPL API delta for discovery-tier factoring
 
-**Document ID:** `DELTA-Dtf-003`
-**Root spec:** [repl-api.md](../../../specs/repl-api.md) (SPEC-003)
-**Feature:** [../proposal.md](../proposal.md)
-**Related:** [RFC-Dtf-001](../../../rfcs/2026-07-20-discovery-tier-factoring.md); DELTA-Dtf-001 (cli), DELTA-Dtf-002 (daemon-runtime)
-**Status:** Merged
-**Last Updated:** 2026-07-21
+**Document ID:** `DELTA-Dtf-003` **Root spec:** [repl-api.md](../../../specs/repl-api.md) (SPEC-003) **Feature:** [../proposal.md](../proposal.md) **Related:** [RFC-Dtf-001](../../../rfcs/2026-07-20-discovery-tier-factoring.md); DELTA-Dtf-001 (cli), DELTA-Dtf-002 (daemon-runtime) **Status:** Merged **Last Updated:** 2026-07-21
 
 ## DELTA-Dtf-003.P1 Summary
 
-Defines how the canonical help envelope (DELTA-Dtf-001.CC1) and its fractal node (DELTA-Dtf-001.CC2)
-are **projected** from existing arg-spec (SPEC-003.C64/C65) and return-shape (SPEC-003.C60b)
-declarations, fixes the authoring seam for per-node annotations as a closed validated sub-map on the
-arg-spec node, clarifies that help **paths** may nest to the arg-spec's declared subcommand depth
-independently of parse routing, and pins the arity of `about`/`prime`. This delta owns the projection
-and authoring mechanics; the wire contract is DELTA-Dtf-001 and the runtime machinery is DELTA-Dtf-002.
+Defines how the canonical help envelope (DELTA-Dtf-001.CC1) and its fractal node (DELTA-Dtf-001.CC2) are **projected** from existing arg-spec (SPEC-003.C64/C65) and return-shape (SPEC-003.C60b) declarations, fixes the authoring seam for per-node annotations as a closed validated sub-map on the arg-spec node, clarifies that help **paths** may nest to the arg-spec's declared subcommand depth independently of parse routing, and pins the arity of `about`/`prime`. This delta owns the projection and authoring mechanics; the wire contract is DELTA-Dtf-001 and the runtime machinery is DELTA-Dtf-002.
 
 ## DELTA-Dtf-003.P2 Contract changes
 
-- **DELTA-Dtf-003.CC1 (envelope/node projection):** The help envelope is built by a **level-aware
-  projection**. Op-wide facts — `provenance`, `stream?`, `deadline-class`, `hook-class`,
-  `raw-envelope`, and the resolved `source` — are lifted into the response envelope's `operation`
-  and `source` (DELTA-Dtf-001.CC1), **not** onto the recursive node. The node is normalized from the
-  arg-spec `explain` rendering (SPEC-003.C64/C65) and the per-case return-shape `explain`
-  (SPEC-003.C60b) into the uniform shape (DELTA-Dtf-001.CC2): a flat op yields a root node with empty
-  `children` and `invocation.mode "declared"` carrying its flags/positionals; a subcommand op yields a
-  root node with empty `invocation` flags/positionals and one child node per declared subcommand, each
-  the **same shape** with its own flags/positionals and routed return case; a raw-envelope op yields a
-  root node with `invocation.mode "raw-envelope"`. "No per-level branches" constrains the reference
-  **renderer** (one recursive function over the uniform node), not this projection.
+- **DELTA-Dtf-003.CC1 (envelope/node projection):** The help envelope is built by a **level-aware projection**. Op-wide facts — `provenance`, `stream?`, `deadline-class`, `hook-class`, `raw-envelope`, and the resolved `source` — are lifted into the response envelope's `operation` and `source` (DELTA-Dtf-001.CC1), **not** onto the recursive node. The node is normalized from the arg-spec `explain` rendering (SPEC-003.C64/C65) and the per-case return-shape `explain` (SPEC-003.C60b) into the uniform shape (DELTA-Dtf-001.CC2): a flat op yields a root node with empty `children` and `invocation.mode "declared"` carrying its flags/positionals; a subcommand op yields a root node with empty `invocation` flags/positionals and one child node per declared subcommand, each the **same shape** with its own flags/positionals and routed return case; a raw-envelope op yields a root node with `invocation.mode "raw-envelope"`. "No per-level branches" constrains the reference **renderer** (one recursive function over the uniform node), not this projection.
 
-- **DELTA-Dtf-003.CC2 (per-node annotations — closed sub-map on the arg-spec node):** `use-when`,
-  `notes`, and `failure-modes` are authored as a **closed, validated annotation sub-map on each
-  arg-spec node** (the op's flat arg-spec, or each subcommand's nested spec; a root-level equivalent
-  carries annotations for raw-envelope ops that declare no arg-spec) — **not** a separate path-keyed
-  registry that could drift from arg-spec names. `use-when`/`notes` are string arrays; `failure-modes`
-  is an array of glossary outcome **names**. Validation splits across two seams, both at
-  **registration**: the arg-spec **structural validator** (`skein.api.cli`, SPEC-003.C64/C63d)
-  validates the sub-map's shape — closed keys, arrays of **non-blank** strings (consistent with the
-  non-blank `:about`/`:prime` rule, DELTA-Dtf-002.CC4) — with no runtime dependency; the
-  **unconditional glossary-ref existence** check runs at `register-op!`/`replace-op!` (SPEC-004.C63d),
-  which has the runtime glossary, and every `failure-modes` name must reference an already-registered
-  glossary outcome (DELTA-Dtf-002.CC5/CC7), failing loudly if absent. This existence rule imposes a
-  **load-order contract**: glossary outcomes are registered (from the owning spool's `install!`, or
-  trusted config) before the ops that reference them; `reload!` re-runs config in the same order
-  (SPEC-004.C46), and builtin ops register their outcomes before themselves. The projection (CC1) folds each node's annotation sub-map into the node's
-  `use-when`, `notes`, `failure-modes`; these are distinct from `about` prose (DELTA-Dtf-002.CC4),
-  which stays cross-verb narrative and never restates a node-derivable fact.
+- **DELTA-Dtf-003.CC2 (per-node annotations — closed sub-map on the arg-spec node):** `use-when`, `notes`, and `failure-modes` are authored as a **closed, validated annotation sub-map on each arg-spec node** (the op's flat arg-spec, or each subcommand's nested spec; a root-level equivalent carries annotations for raw-envelope ops that declare no arg-spec) — **not** a separate path-keyed registry that could drift from arg-spec names. `use-when`/`notes` are string arrays; `failure-modes` is an array of glossary outcome **names**. Validation splits across two seams, both at **registration**: the arg-spec **structural validator** (`skein.api.cli`, SPEC-003.C64/C63d) validates the sub-map's shape — closed keys, arrays of **non-blank** strings (consistent with the non-blank `:about`/`:prime` rule, DELTA-Dtf-002.CC4) — with no runtime dependency; the **unconditional glossary-ref existence** check runs at `register-op!`/`replace-op!` (SPEC-004.C63d), which has the runtime glossary, and every `failure-modes` name must reference an already-registered glossary outcome (DELTA-Dtf-002.CC5/CC7), failing loudly if absent. This existence rule imposes a **load-order contract**: glossary outcomes are registered (from the owning spool's `install!`, or trusted config) before the ops that reference them; `reload!` re-runs config in the same order (SPEC-004.C46), and builtin ops register their outcomes before themselves. The projection (CC1) folds each node's annotation sub-map into the node's `use-when`, `notes`, `failure-modes`; these are distinct from `about` prose (DELTA-Dtf-002.CC4), which stays cross-verb narrative and never restates a node-derivable fact.
 
-- **DELTA-Dtf-003.CC3 (help paths vs parse depth):** Help **paths** may nest to the arg-spec's
-  **declared subcommand depth**, independently of parse routing. Today that depth is **one level**
-  (SPEC-003.C64 forbids nested `:subcommands`; SPEC-003.C65 routes on the first token), so `strand
-  help <op> <verb>` is the deepest live path. Deeper help paths require a C64/C65 redesign and are out
-  of v1 scope. Arbitrary-depth `children[]` recursion is a schema **invariant**, proven by a synthetic
-  nested-node renderer test (`skein.test.alpha`), **not** claimed as live-op validation — no live op
-  nests deeper than one level (`validation.clj` rejects nested `:subcommands`). This clarifies, and
-  does not relax, SPEC-003.C64/C65.
+- **DELTA-Dtf-003.CC3 (help paths vs parse depth):** Help **paths** may nest to the arg-spec's **declared subcommand depth**, independently of parse routing. Today that depth is **one level** (SPEC-003.C64 forbids nested `:subcommands`; SPEC-003.C65 routes on the first token), so `strand help <op> <verb>` is the deepest live path. Deeper help paths require a C64/C65 redesign and are out of v1 scope. Arbitrary-depth `children[]` recursion is a schema **invariant**, proven by a synthetic nested-node renderer test (`skein.test.alpha`), **not** claimed as live-op validation — no live op nests deeper than one level (`validation.clj` rejects nested `:subcommands`). This clarifies, and does not relax, SPEC-003.C64/C65.
 
-- **DELTA-Dtf-003.CC4 (`about`/`prime` are arity-1):** Only `help` nests on the verb axis (its content
-  *is* the verb tree). `about` and `prime` are arity-1 op-level meta-verbs: a verb path (`strand about
-  agent delegate`) fails loudly with a redirect to `help agent delegate`. The `:about`/`:prime` prose
-  is op-declared metadata (DELTA-Dtf-002.CC4), not sliceable.
+- **DELTA-Dtf-003.CC4 (`about`/`prime` are arity-1):** Only `help` nests on the verb axis (its content _is_ the verb tree). `about` and `prime` are arity-1 op-level meta-verbs: a verb path (`strand about agent delegate`) fails loudly with a redirect to `help agent delegate`. The `:about`/`:prime` prose is op-declared metadata (DELTA-Dtf-002.CC4), not sliceable.
 
 ## DELTA-Dtf-003.P3 Design decisions
 
 ### DELTA-Dtf-003.D1 One uniform node; op-wide facts and annotations kept off the recursion
 
-- **Decision:** The single load-bearing shape is the **uniform node** (DELTA-Dtf-001.CC2) consumed by
-  one recursive renderer. Op-wide facts move to the response envelope (CC1); authored annotations live
-  in a closed sub-map colocated with each arg-spec node (CC2). The projection stays level-aware, but
-  every node it emits is identical in shape, so the renderer never branches on level.
-- **Rationale:** Building the batteries reference transformer (DELTA-Dtf-002 / PROP-Dtf-001.S2) over
-  two op families — batteries' flat and one-level-subcommand ops plus `agent`'s deep verb tree — is
-  the forcing function: if rendering op vs verb needs level-specific code, the schema is wrong. Keeping
-  op-wide provenance/source and annotations off the recursion is what makes the node genuinely
-  uniform and prevents false per-verb provenance. Colocating annotations with the arg-spec node (vs a
-  path-keyed registry) prevents drift from verb names.
-- **Rejected:** A per-level node shape (op node ≠ verb node) that forces renderer branches
-  (RFC-Dtf-001.O1/O10); a separate path-keyed annotation registry (drifts from arg-spec names);
-  repeating op-wide `source`/provenance on every node (implies false per-verb provenance, bloats
-  output).
+- **Decision:** The single load-bearing shape is the **uniform node** (DELTA-Dtf-001.CC2) consumed by one recursive renderer. Op-wide facts move to the response envelope (CC1); authored annotations live in a closed sub-map colocated with each arg-spec node (CC2). The projection stays level-aware, but every node it emits is identical in shape, so the renderer never branches on level.
+- **Rationale:** Building the batteries reference transformer (DELTA-Dtf-002 / PROP-Dtf-001.S2) over two op families — batteries' flat and one-level-subcommand ops plus `agent`'s deep verb tree — is the forcing function: if rendering op vs verb needs level-specific code, the schema is wrong. Keeping op-wide provenance/source and annotations off the recursion is what makes the node genuinely uniform and prevents false per-verb provenance. Colocating annotations with the arg-spec node (vs a path-keyed registry) prevents drift from verb names.
+- **Rejected:** A per-level node shape (op node ≠ verb node) that forces renderer branches (RFC-Dtf-001.O1/O10); a separate path-keyed annotation registry (drifts from arg-spec names); repeating op-wide `source`/provenance on every node (implies false per-verb provenance, bloats output).
 
 ## DELTA-Dtf-003.P4 Open questions
 
-_None — the projection (CC1), annotation authoring seam (CC2), and depth contract (CC3) are settled;
-remaining sequencing is a plan-stage concern._
+_None — the projection (CC1), annotation authoring seam (CC2), and depth contract (CC3) are settled; remaining sequencing is a plan-stage concern._

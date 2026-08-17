@@ -3,6 +3,7 @@ Implement PLAN-Pnl-001.PH3: the blackboard prompt protocol library (A6). FILE SC
 FIRST: apply the FINDINGS INPUT PROTOCOL below for tag [agent-panels/PH2 review] — but ONLY entries touching files in YOUR scope; report anything else as skipped-out-of-scope.
 
 Work:
+
 - Extract one namespace-internal set of prompt fragment fns shared by the (future) panel compiler and the presets: seat identity ("seat k of N, turn r of R"), post-with-tag instructions, read-the-board instructions, independence directive (review-style), deliberation directive (read peers previous turn, rebut/refine).
 - Where review! prompt text is reproduced through fragments, it must be BYTE-COMPATIBLE: the frozen tests in PLAN-Pnl-001.V2 (review-spawns-independent-reviewers, review-consumes-workspace-default-contract, defroster-validates-and-lists-rosters, roster-review-fans-out-declared-reviewers, roster-review-specs-are-the-single-prompt-source, roster-review-fails-loudly) must pass UNMODIFIED. Do not restructure review!/council! themselves yet — later tasks own that.
 - Fragments must support BOTH prompt forms per plan A6: full-brief and short continuation (used only when a resume is genuinely in effect).
@@ -11,6 +12,7 @@ Work:
 Tests: fragment-level coverage is fine but behavior coverage via the frozen tests is the gate; add targeted tests only where a fragment encodes a decision (e.g. continuation form content).
 
 HOUSE RULES (from PLAN-Pnl-001.TC2/TC3, plan file: devflow/feat/agent-panels/agent-panels.plan.md — READ THE PLAN FIRST, especially your phase section and the A-items it cites):
+
 - Never commit. Never close your own task strand. Record progress with strand update <task-id> --attr progress=...
 - TEN-003: fail loudly with ex-info + data; no silent fallbacks or sensible defaults.
 - Every changed ns keeps its docstring accurate. Spool state via runtime/spool-state only; ambient (rt) style matches these spools. Comments describe current code, never the change.

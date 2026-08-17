@@ -1,9 +1,6 @@
 # Spool Activation Lifecycle ADR Proposal
 
-**Document ID:** `PROP-Sal-001`
-**Last Updated:** 2026-07-23
-**Related RFCs:** None
-**Related root specs:** [SPEC-003 repl-api](../../specs/repl-api.md) (C23, C23a), [SPEC-004 daemon-runtime](../../specs/daemon-runtime.md) (C74a)
+**Document ID:** `PROP-Sal-001` **Last Updated:** 2026-07-23 **Related RFCs:** None **Related root specs:** [SPEC-003 repl-api](../../specs/repl-api.md) (C23, C23a), [SPEC-004 daemon-runtime](../../specs/daemon-runtime.md) (C74a)
 
 ## PROP-Sal-001.P1 Problem
 

@@ -1,21 +1,16 @@
 # Strand workflow
 
-Use the `strand` CLI to plan and track multi-step work as a small explicit DAG of strands.
-If `strand` fails because it cannot reach a weaver, run `mill weaver start`.
+Use the `strand` CLI to plan and track multi-step work as a small explicit DAG of strands. If `strand` fails because it cannot reach a weaver, run `mill weaver start`.
 
 ## When to use strands
 
 - Skip strands for one small direct action.
-- Create a strand plan for multi-step work, dependencies, validation, review, or
-  when the user explicitly asks to use/manage strands.
-- Keep plans small: usually 2-6 strands. Do not create a strand for every tiny
-  sub-step.
+- Create a strand plan for multi-step work, dependencies, validation, review, or when the user explicitly asks to use/manage strands.
+- Keep plans small: usually 2-6 strands. Do not create a strand for every tiny sub-step.
 
 ## Discover the surface, don't assume it
 
-Each workspace assembles its own `strand` command surface from config and spools, so the ops
-available here may not match any other repo. Three tiers answer every "how do I find out?"
-question:
+Each workspace assembles its own `strand` command surface from config and spools, so the ops available here may not match any other repo. Three tiers answer every "how do I find out?" question:
 
 ```sh
 strand help              # every registered op; strand help <op> for exact invocation
@@ -23,34 +18,24 @@ strand about <op>        # an op's manual: semantics, conventions, attribute con
 strand prime <op>        # an area's working discipline, when the op ships one
 ```
 
-Start from `strand help`. When an op's meaning goes beyond its flags (a board, a delegation
-surface, a lifecycle), read its `about`; before working inside such an area, read its `prime`.
-Repo conventions name the ops and queries to lead with, and they win over anything generic
-here.
+Start from `strand help`. When an op's meaning goes beyond its flags (a board, a delegation surface, a lifecycle), read its `about`; before working inside such an area, read its `prime`. Repo conventions name the ops and queries to lead with, and they win over anything generic here.
 
-Fresh workspaces activate the batteries spool, so `add`, `update`, `list`, `ready`, and `show`
-are normally present — verify with `strand help` rather than assuming.
+Fresh workspaces activate the batteries spool, so `add`, `update`, `list`, `ready`, and `show` are normally present — verify with `strand help` rather than assuming.
 
 ## Body attribute convention
 
-Use `body` for useful issue-style context: problem, scope, acceptance criteria, constraints,
-relevant files, and validation expectations.
+Use `body` for useful issue-style context: problem, scope, acceptance criteria, constraints, relevant files, and validation expectations.
 
 - Titles alone are acceptable for personal or short-lived to-do tracking.
 - Any strand another agent may pick up needs a clear descriptive `body`.
-- For multi-line bodies, attach the text as a payload and reference it:
-  `strand --payload body=<path> add "<title>" --attr body=:payload/body` (from a
-  file) or `printf '%s' "<text>" | strand --stdin add "<title>" --attr body=:stdin`.
+- For multi-line bodies, attach the text as a payload and reference it: `strand --payload body=<path> add "<title>" --attr body=:payload/body` (from a file) or `printf '%s' "<text>" | strand --stdin add "<title>" --attr body=:stdin`.
 
 ## Standard loop
 
-1. Check the surface first. If `strand help` lists a `pattern` op, prefer a registered weave
-   pattern over hand-authored graphs: `strand pattern list`, then
-   `strand pattern explain <name>` for the live contract.
+1. Check the surface first. If `strand help` lists a `pattern` op, prefer a registered weave pattern over hand-authored graphs: `strand pattern list`, then `strand pattern explain <name>` for the live contract.
 2. Create or update the plan graph with the best-fitting pattern, or minimal raw commands.
 3. Add `body` context to any strand another agent may pick up.
-4. Run `strand ready` and pick from ready work, not the full list. Prefer a repo-curated
-   ready query when one is registered: `strand ready --query <name>`.
+4. Run `strand ready` and pick from ready work, not the full list. Prefer a repo-curated ready query when one is registered: `strand ready --query <name>`.
 5. Respect attribute conventions the repo's spools declare — for example, a ready strand carrying `hitl=true` means stop and ask the user before doing it. `strand about agent` documents how interactive tasks use that convention.
 6. Complete one ready strand or one tightly related pair, then run relevant validation.
 7. If new work is discovered, add and wire it before closing the current loop.
@@ -59,8 +44,7 @@ relevant files, and validation expectations.
 
 ## Workspaces
 
-Without a flag, `strand` targets the repo's `.millstrand` or `.ms` world. Select another explicitly for
-disposable or non-default worlds:
+Without a flag, `strand` targets the repo's `.millstrand` or `.ms` world. Select another explicitly for disposable or non-default worlds:
 
 ```sh
 strand --workspace <dir> ready
@@ -71,13 +55,8 @@ strand --workspace <dir> update <id> --state closed
 
 Before reporting success:
 
-- `strand ready` matches the expected next work, or is empty because all planned
-  work is closed.
-- Completed strands are closed; newly discovered work is represented by active
-  strands; dependencies reflect actual blocking relationships.
+- `strand ready` matches the expected next work, or is empty because all planned work is closed.
+- Completed strands are closed; newly discovered work is represented by active strands; dependencies reflect actual blocking relationships.
 - Relevant checks pass.
 
-Branching, delegation, review, and landing discipline are repo policy, not strand core: take
-them from repo conventions and from the `about`/`prime` surfaces of the ops the repo
-registers. Building on `.millstrand` itself — config, spools, the source docs — is covered by
-`mill prime millstrand`; day-to-day tracking does not need it.
+Branching, delegation, review, and landing discipline are repo policy, not strand core: take them from repo conventions and from the `about`/`prime` surfaces of the ops the repo registers. Building on `.millstrand` itself — config, spools, the source docs — is covered by `mill prime millstrand`; day-to-day tracking does not need it.

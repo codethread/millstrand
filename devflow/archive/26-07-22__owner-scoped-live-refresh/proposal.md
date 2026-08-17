@@ -1,11 +1,6 @@
 # Owner-scoped live refresh proposal
 
-**Document ID:** `PROP-Olr-001`
-**Last Updated:** 2026-07-20
-**Related RFCs:** None
-**Related root specs:** [REPL API](../../specs/repl-api.md) (SPEC-003), [Weaver Runtime](../../specs/daemon-runtime.md) (SPEC-004), [Alpha Surface](../../specs/alpha-surface.md) (SPEC-005)
-**Feature deltas:** [REPL API](./specs/repl-api.delta.md), [Weaver Runtime](./specs/daemon-runtime.delta.md), [Alpha Surface](./specs/alpha-surface.delta.md)
-**Related issues:** kanban cards `tsofs` and `uxc5f`
+**Document ID:** `PROP-Olr-001` **Last Updated:** 2026-07-20 **Related RFCs:** None **Related root specs:** [REPL API](../../specs/repl-api.md) (SPEC-003), [Weaver Runtime](../../specs/daemon-runtime.md) (SPEC-004), [Alpha Surface](../../specs/alpha-surface.md) (SPEC-005) **Feature deltas:** [REPL API](./specs/repl-api.delta.md), [Weaver Runtime](./specs/daemon-runtime.delta.md), [Alpha Surface](./specs/alpha-surface.delta.md) **Related issues:** kanban cards `tsofs` and `uxc5f`
 
 ## PROP-Olr-001.P1 Problem
 

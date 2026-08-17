@@ -1,8 +1,6 @@
 # Task 1: large-attr load harness in the test/ tier + structural smoke (PH1 / S1)
 
-**Document ID:** `TASK-LargeAttrScaling-001`
-**Slice:** `PLAN-LargeAttrScaling-001.PH1` Harness (S1)  **Harness:** build (opus)  **Type:** AFK
-**Branch:** `large-attr-scaling`  **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
+**Document ID:** `TASK-LargeAttrScaling-001` **Slice:** `PLAN-LargeAttrScaling-001.PH1` Harness (S1) **Harness:** build (opus) **Type:** AFK **Branch:** `large-attr-scaling` **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
 
 Read first: `devflow/feat/large-attr-scaling/large-attr-scaling.plan.md` (`PLAN-LargeAttrScaling-001`, esp. `A1`–`A6`, `AA1`, `AA2`, `PH1`, `TC2`, `TC3`, `R1`–`R4`, `V1`) and `devflow/feat/large-attr-scaling/proposal.md` (`PROP-LargeAttrScaling-001.F1`, `F2`, `S1`, `Q1`, `NG2`, `NG3`). Read the shipped code the harness measures — do not plan against imagined structure (`TC1`): `src/skein/core/db.clj` attribute paths (`assembled-attributes-sql`, `attribute-json-by-strand-id` `:340-357`, `strand-row-by-id` `:371-375`, the 1024-byte floor `attribute-value-sql` `:333-338`, `all-strands-lean` `:1261-1295`, `ready-strands-lean` `:1341-1408`) and `spools/text-search/src/skein/spools/text_search.clj` (`LIKE`, `:110-119`, `:139-157`). Lift, don't rewrite, the proven gate-reproduction + write-amp methodology already in `dev/skein/eav_benchmark.clj` (`ns skein.eav-benchmark`, committed on `main` at `3d1a99e`) — `TC2`.
 
@@ -10,9 +8,10 @@ Read first: `devflow/feat/large-attr-scaling/large-attr-scaling.plan.md` (`PLAN-
 
 Type: AFK
 
-Build the durable large-attr load harness in the `test/` tier by generalizing the shipped EAV migration-gate harness, and add the fast structural smoke that is the per-slice cold gate. Two measurement families, one harness (`A2`): (a) gate reproduction `BG1`–`BG4` on paired synthetic fixtures in hand-SQL (kept intact — the document column is gone from shipped code, so this family stays a document-vs-EAV comparison); (b) the `F2` residual-path family measuring the *absolute* cost of the real read paths through shipped `skein.core.db` / `skein.spools.text-search` code. **This slice changes no shipped `skein.core.*` storage code (`NG2`, `R5`) and adds no public CLI or agent surface (`NG3`).**
+Build the durable large-attr load harness in the `test/` tier by generalizing the shipped EAV migration-gate harness, and add the fast structural smoke that is the per-slice cold gate. Two measurement families, one harness (`A2`): (a) gate reproduction `BG1`–`BG4` on paired synthetic fixtures in hand-SQL (kept intact — the document column is gone from shipped code, so this family stays a document-vs-EAV comparison); (b) the `F2` residual-path family measuring the _absolute_ cost of the real read paths through shipped `skein.core.db` / `skein.spools.text-search` code. **This slice changes no shipped `skein.core.*` storage code (`NG2`, `R5`) and adds no public CLI or agent surface (`NG3`).**
 
 **Owned files:**
+
 - `dev/skein/eav_benchmark.clj` → `test/skein/large_attr_benchmark.clj` (`ns skein.large-attr-benchmark`): relocate + generalize; **delete the old `dev/` path** (`git mv`; no Makefile/CI/devflow reference to it exists, safe to move — `AA1`, `DN1`).
 - `test/skein/large_attr_benchmark_test.clj` (`ns skein.large-attr-benchmark-test`): the fast structural smoke `deftest` (`AA2`).
 
@@ -28,11 +27,11 @@ Build the durable large-attr load harness in the `test/` tier by generalizing th
 ## TASK-LargeAttrScaling-001.P3 Done when
 
 - **TASK-LargeAttrScaling-001.DW1:** Cold focused gate green (`PLAN-LargeAttrScaling-001.V1`):
-  ```sh
-  cd /Users/ct/dev/projects/skein-src__large-attr-scaling
-  PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:test skein.large-attr-benchmark-test
-  ```
-  Warm (`make test-warm`) is for iteration only, never the gate.
+    ```sh
+    cd /Users/ct/dev/projects/skein-src__large-attr-scaling
+    PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:test skein.large-attr-benchmark-test
+    ```
+    Warm (`make test-warm`) is for iteration only, never the gate.
 - **TASK-LargeAttrScaling-001.DW2:** `make fmt-check lint reflect-check` clean (zero findings).
 - **TASK-LargeAttrScaling-001.DW3:** No `dev/skein/eav_benchmark.clj` remains (`grep -rln 'skein.eav-benchmark' src dev test spools cli` empty; old path deleted). Scope the check to code trees only — the old ns symbol legitimately remains in devflow task/plan/proposal prose, so do not grep `devflow/`.
 - **TASK-LargeAttrScaling-001.DW4:** `git status --short` shows no generated SQLite / `-wal` / `-shm` / bench scratch (`V7`).

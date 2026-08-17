@@ -1,10 +1,6 @@
 # Consumer testing contract proposal
 
-**Document ID:** `PROP-Tst-001`
-**Status:** Approved
-**Approved:** 2026-08-05
-**Related RFCs:** [Library author testing](../../archive/26-07-03__library-author-testing-support/rfcs/2026-06-26-library-author-testing.md), [Test concurrency](../../rfcs/2026-07-03-test-concurrency.md)
-**Related root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
+**Document ID:** `PROP-Tst-001` **Status:** Approved **Approved:** 2026-08-05 **Related RFCs:** [Library author testing](../../archive/26-07-03__library-author-testing-support/rfcs/2026-06-26-library-author-testing.md), [Test concurrency](../../rfcs/2026-07-03-test-concurrency.md) **Related root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
 
 Once approved this document is frozen. It records the intent agreed at sign-off, not what was later built. Implementation change belongs in the staged spec, the plan, and code.
 

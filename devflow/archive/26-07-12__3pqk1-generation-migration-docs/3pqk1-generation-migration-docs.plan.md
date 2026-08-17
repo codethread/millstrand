@@ -1,13 +1,6 @@
 # Generation migration docs Plan
 
-**Document ID:** `PLAN-Gmd-001`
-**Feature:** `3pqk1-generation-migration-docs`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** design record strand `5bbrd` (point 7 one-time restart; `lwp6n` rider (b) drain-or-retry)
-**Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) SPEC-004.C44c–C44f
-**Feature specs:** None
-**Status:** Reviewed
-**Last Updated:** 2026-07-12
+**Document ID:** `PLAN-Gmd-001` **Feature:** `3pqk1-generation-migration-docs` **Proposal:** [proposal.md](./proposal.md) **RFC:** design record strand `5bbrd` (point 7 one-time restart; `lwp6n` rider (b) drain-or-retry) **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) SPEC-004.C44c–C44f **Feature specs:** None **Status:** Reviewed **Last Updated:** 2026-07-12
 
 ## PLAN-Gmd-001.P1 Goal and scope
 

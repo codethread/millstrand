@@ -1,10 +1,6 @@
 # REPL API delta for runtime-owned Clock
 
-**Document ID:** `DELTA-Clp-Repl-001`
-**Root spec:** [repl-api.md](../../../specs/repl-api.md) (`SPEC-003`)
-**Feature:** [../proposal.md](../proposal.md) (`PROP-Clp-001`)
-**Status:** Merged
-**Last Updated:** 2026-07-20
+**Document ID:** `DELTA-Clp-Repl-001` **Root spec:** [repl-api.md](../../../specs/repl-api.md) (`SPEC-003`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Clp-001`) **Status:** Merged **Last Updated:** 2026-07-20
 
 ## DELTA-Clp-Repl-001.P1 Summary
 

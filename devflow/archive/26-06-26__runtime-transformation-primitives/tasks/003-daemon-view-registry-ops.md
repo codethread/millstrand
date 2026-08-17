@@ -19,11 +19,11 @@ Expose the DB primitives through daemon semantic operations and add the daemon-l
 - **TASK-003.I1:** Add daemon runtime state for a view registry atom.
 - **TASK-003.I2:** Add daemon API operations for query ids, tasks by ids, ancestor root ids, and subgraph. Query ids must support both ad hoc query definitions and registered query names. Normalize task rows at the daemon API boundary.
 - **TASK-003.I3:** Add daemon API operations for view registry:
-  - register view by simple name + fully qualified function symbol;
-  - replace duplicate registrations for reload workflows;
-  - list/introspect serializable entries;
-  - resolve missing names loudly;
-  - invoke the resolved daemon-side function with `{:params params}`.
+    - register view by simple name + fully qualified function symbol;
+    - replace duplicate registrations for reload workflows;
+    - list/introspect serializable entries;
+    - resolve missing names loudly;
+    - invoke the resolved daemon-side function with `{:params params}`.
 - **TASK-003.I4:** Add corresponding trusted nREPL client routing in `todo.client` `api-symbols`. Every new daemon op used by connected helpers must be explicitly allowlisted there.
 - **TASK-003.I5:** Do not add any new JSON socket operations or Go CLI command surface in this task. Confirm `src/todo/daemon/socket.clj` allowlist remains unchanged.
 

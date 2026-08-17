@@ -1,383 +1,124 @@
 # Unify spool classpath Plan
 
-**Document ID:** `PLAN-usc-001`
-**Feature:** `unify-spool-classpath`
-**Proposal:** [proposal.md](./proposal.md) (`PROP-usc-001`)
-**RFC:** none
-**Root specs:** [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`),
-[repl-api.md](../../specs/repl-api.md) (`SPEC-003`),
-[daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`)
-**Feature specs:** [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`DELTA-usc-as-001`),
-[specs/repl-api.delta.md](./specs/repl-api.delta.md) (`DELTA-usc-repl-001`),
-[specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-usc-dr-001`)
-**Contract:** [proposal.md](./proposal.md) clauses `PROP-usc-001.C1`–`C8` — the accepted design contract
-(card `nbeu8`); this plan sequences it and never widens it.
-**Status:** Reviewed
-**Last Updated:** 2026-07-11
+**Document ID:** `PLAN-usc-001` **Feature:** `unify-spool-classpath` **Proposal:** [proposal.md](./proposal.md) (`PROP-usc-001`) **RFC:** none **Root specs:** [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [repl-api.md](../../specs/repl-api.md) (`SPEC-003`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs:** [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`DELTA-usc-as-001`), [specs/repl-api.delta.md](./specs/repl-api.delta.md) (`DELTA-usc-repl-001`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-usc-dr-001`) **Contract:** [proposal.md](./proposal.md) clauses `PROP-usc-001.C1`–`C8` — the accepted design contract (card `nbeu8`); this plan sequences it and never widens it. **Status:** Reviewed **Last Updated:** 2026-07-11
 
 ## PLAN-usc-001.P1 Goal and scope
 
-Remove the arbitrary two-mechanism split in how spools load. Today everything under `spools/src/`
-ships on the weaver classpath (`deps.edn :paths ["src" "spools/src" "dev"]`) and a guardless
-`runtime/use!` `:ns` silently classpath-loads it through `load-synced-namespace!`'s `require`
-fallback, while per-spool roots load opt-in through `spools.edn` → `runtime/sync!` →
-`:spools`-guarded `use!`. This feature unifies on the opt-in model: **every spool moves to its own
-per-spool root behind a `spools.edn` coordinate and a `:spools`-guarded activation**, `spools/src`
-disappears from `:paths`, and `batteries` is the **single documented classpath exception** — the
-base command surface a fresh `{:spools {}}` world needs at zero config, kept on the source classpath
-and loaded by an explicit `require`. The authoring libraries stop pretending to be spools:
-`skein.spools.format` is deleted in favour of the already-blessed `skein.api.format.alpha`, and
-`skein.spools.util` is promoted to a blessed `skein.api.spool.alpha` home (`PROP-usc-001.C1`), so no
-blessed `skein.api.*` namespace requires a `skein.spools.*` namespace. The `require` fallback is
-removed so a guardless `use!` `:ns` fails loudly (`PROP-usc-001.C4`). TEN-000@1 applies: no migration
-shims — every in-repo consumer (activation, test roots, doc-gen paths, docs, specs) is updated in the
-same change.
+Remove the arbitrary two-mechanism split in how spools load. Today everything under `spools/src/` ships on the weaver classpath (`deps.edn :paths ["src" "spools/src" "dev"]`) and a guardless `runtime/use!` `:ns` silently classpath-loads it through `load-synced-namespace!`'s `require` fallback, while per-spool roots load opt-in through `spools.edn` → `runtime/sync!` → `:spools`-guarded `use!`. This feature unifies on the opt-in model: **every spool moves to its own per-spool root behind a `spools.edn` coordinate and a `:spools`-guarded activation**, `spools/src` disappears from `:paths`, and `batteries` is the **single documented classpath exception** — the base command surface a fresh `{:spools {}}` world needs at zero config, kept on the source classpath and loaded by an explicit `require`. The authoring libraries stop pretending to be spools: `skein.spools.format` is deleted in favour of the already-blessed `skein.api.format.alpha`, and `skein.spools.util` is promoted to a blessed `skein.api.spool.alpha` home (`PROP-usc-001.C1`), so no blessed `skein.api.*` namespace requires a `skein.spools.*` namespace. The `require` fallback is removed so a guardless `use!` `:ns` fails loudly (`PROP-usc-001.C4`). TEN-000@1 applies: no migration shims — every in-repo consumer (activation, test roots, doc-gen paths, docs, specs) is updated in the same change.
 
 ## PLAN-usc-001.P2 Approach
 
-- **PLAN-usc-001.A1 — Keep the tree green per slice, classpath-last.** The invariant is that after
-  every slice `clojure -M:test <touched-ns...>` and `make fmt-check lint reflect-check` pass. The
-  ordering that preserves it: relocate `util`/`format` to the base classpath first (everyone can
-  still reach them while `spools/src` still holds the rest, PH1); move the other spools to per-spool
-  roots one at a time while `spools/src` stays on `:paths` (each moved spool is still reachable, just
-  now also from its new root, PH2); only after every non-batteries spool is off `spools/src` do we
-  remove `spools/src` from `:paths`, move `batteries` to its own root on base `:paths`, and delete the
-  loader fallback (PH4) — so the fallback removal cannot strand a still-classpath spool.
+- **PLAN-usc-001.A1 — Keep the tree green per slice, classpath-last.** The invariant is that after every slice `clojure -M:test <touched-ns...>` and `make fmt-check lint reflect-check` pass. The ordering that preserves it: relocate `util`/`format` to the base classpath first (everyone can still reach them while `spools/src` still holds the rest, PH1); move the other spools to per-spool roots one at a time while `spools/src` stays on `:paths` (each moved spool is still reachable, just now also from its new root, PH2); only after every non-batteries spool is off `spools/src` do we remove `spools/src` from `:paths`, move `batteries` to its own root on base `:paths`, and delete the loader fallback (PH4) — so the fallback removal cannot strand a still-classpath spool.
 
-- **PLAN-usc-001.A2 — Move root and every consent edge for that root together (`PROP-usc-001.C8`).**
-  A per-spool slice (PH2) does the `git mv` of the source to `spools/<name>/src`, adds the `deps.edn`
-  `:test`/`:reflect-check`/`:format`/`:lint` roots, repoints that spool's
-  `scripts/generate_api_docs.clj :source` entry, and adds the `.skein/spools.edn` coordinate. It then
-  adds **every consent edge that names the just-moved coordinate, in the same slice**: the `:spools`
-  guard on that spool's own `.skein/init.clj` activation (for activated spools), *and* the moved
-  coordinate on the `:spools` guard of any `:file` module whose `ns` form requires it — `:config`
-  requires `carder`/`loom`/`workflow`, `:workflows` requires `loom`/`workflow` (P4-derived lists in
-  A3/PH3). So no intermediate slice ever leaves a moved root on `spools.edn` without its explicit
-  consent edge on every module that depends on it — the accepted `PROP-usc-001.C8` sequencing, which
-  the plan conforms to. `carder` is the one moved coordinate with **no** own activation (P3): it is a
-  config-consumed library spool, so its only consent edge is the `:config` guard, added in carder's
-  move slice.
+- **PLAN-usc-001.A2 — Move root and every consent edge for that root together (`PROP-usc-001.C8`).** A per-spool slice (PH2) does the `git mv` of the source to `spools/<name>/src`, adds the `deps.edn` `:test`/`:reflect-check`/`:format`/`:lint` roots, repoints that spool's `scripts/generate_api_docs.clj :source` entry, and adds the `.skein/spools.edn` coordinate. It then adds **every consent edge that names the just-moved coordinate, in the same slice**: the `:spools` guard on that spool's own `.skein/init.clj` activation (for activated spools), _and_ the moved coordinate on the `:spools` guard of any `:file` module whose `ns` form requires it — `:config` requires `carder`/`loom`/`workflow`, `:workflows` requires `loom`/`workflow` (P4-derived lists in A3/PH3). So no intermediate slice ever leaves a moved root on `spools.edn` without its explicit consent edge on every module that depends on it — the accepted `PROP-usc-001.C8` sequencing, which the plan conforms to. `carder` is the one moved coordinate with **no** own activation (P3): it is a config-consumed library spool, so its only consent edge is the `:config` guard, added in carder's move slice.
 
-- **PLAN-usc-001.A3 — The residual cross-cutting sweep is already-opt-in modules only; assert it.**
-  A synced root resolves through the `add-libs` spool classloader whether or not the `use!` declares
-  `:spools` (today `attention.clj` requires the opt-in `agent-run` with no guard and loads fine), so
-  the consent guard is hygiene, not resolution. After PH2 has folded every *moved*-spool consent edge
-  into its move slice (A2), PH3 is the residual sweep: the `:file` modules whose spool requires are
-  **already opt-in** and unaffected by any move — `attention.clj` (`skein.spools.agent-run`,
-  `skein.macros.rules`), `harnesses.clj` (`skein.spools.delegation`, `skein.spools.agent-run`),
-  `nvd_scan.clj` (`skein.spools.cron`) — plus the already-opt-in coordinates on `:config`/`:workflows`
-  (`skein.macros/macros`, `skein.spools/agent-run`, `codethread/devflow`, `skein.spools/delegation`),
-  flipping `:config` to `:required? true`, and the guard-wiring assertion gate (`PROP-usc-001.R1`/`.V`).
-  This is the one place a miss ships silently (a green load never proves consent is wired), so the
-  assertion gate — not load success — is the acceptance signal, and it must land in the same slice as
-  the guards it checks.
+- **PLAN-usc-001.A3 — The residual cross-cutting sweep is already-opt-in modules only; assert it.** A synced root resolves through the `add-libs` spool classloader whether or not the `use!` declares `:spools` (today `attention.clj` requires the opt-in `agent-run` with no guard and loads fine), so the consent guard is hygiene, not resolution. After PH2 has folded every _moved_-spool consent edge into its move slice (A2), PH3 is the residual sweep: the `:file` modules whose spool requires are **already opt-in** and unaffected by any move — `attention.clj` (`skein.spools.agent-run`, `skein.macros.rules`), `harnesses.clj` (`skein.spools.delegation`, `skein.spools.agent-run`), `nvd_scan.clj` (`skein.spools.cron`) — plus the already-opt-in coordinates on `:config`/`:workflows` (`skein.macros/macros`, `skein.spools/agent-run`, `codethread/devflow`, `skein.spools/delegation`), flipping `:config` to `:required? true`, and the guard-wiring assertion gate (`PROP-usc-001.R1`/`.V`). This is the one place a miss ships silently (a green load never proves consent is wired), so the assertion gate — not load success — is the acceptance signal, and it must land in the same slice as the guards it checks.
 
-- **PLAN-usc-001.A4 — Harness tier per slice.** Mechanical `git mv` + config-list edits (PH2 moves,
-  PH5 docs) are `grunt`/`patch-gpt` work. The loader/bootstrap slice (PH4: fallback deletion, explicit
-  require, `bootstrap.go`, smoke/integration needles) and the consent-sweep + assertion-gate slice
-  (PH3) and the `util` promotion (PH1, blessed-tier compat commitment touching `vocab/alpha`) carry
-  real design load and are `build` tier.
+- **PLAN-usc-001.A4 — Harness tier per slice.** Mechanical `git mv` + config-list edits (PH2 moves, PH5 docs) are `grunt`/`patch-gpt` work. The loader/bootstrap slice (PH4: fallback deletion, explicit require, `bootstrap.go`, smoke/integration needles) and the consent-sweep + assertion-gate slice (PH3) and the `util` promotion (PH1, blessed-tier compat commitment touching `vocab/alpha`) carry real design load and are `build` tier.
 
 ## PLAN-usc-001.P3 Affected areas
 
-| ID                 | Area                                              | Expected change                                                                                                                         |
-| ------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| PLAN-usc-001.AA1   | `src/skein/api/spool/alpha.clj` (new)             | `skein.spools.util` promoted here as a blessed authoring-helper namespace; freezes `fail!`/`reject-unknown-keys!`/`require-valid!`/`attr-key->str`/`attr-get`/`poll-until-deadline!` (`DELTA-usc-as-001.CC1`) |
-| PLAN-usc-001.AA2   | `src/skein/api/vocab/alpha.clj`                   | `:require` repointed from `skein.spools.util` to `skein.api.spool.alpha`; the tier inversion (`vocab/alpha.clj:22`) removed              |
-| PLAN-usc-001.AA3   | `spools/src/skein/spools/`                        | `format.clj` deleted; `util.clj` moved to `src/`; the remaining spools `git mv`'d to `spools/<name>/src` (batteries → `spools/batteries/src`) |
-| PLAN-usc-001.AA4   | `deps.edn`                                         | `:paths` drops `spools/src`, gains `spools/batteries/src`; `:test`/`:reflect-check` `:extra-paths` and `:format`/`:lint` args re-list the new roots (`PROP-usc-001.C5`) |
-| PLAN-usc-001.AA5   | `src/skein/core/weaver/spool_sync.clj`            | `load-synced-namespace!` `require` fallback deleted; its docstring updated to drop the fallback description (`PROP-usc-001.C4`/`.C7`)    |
-| PLAN-usc-001.AA6   | `.skein/init.clj`, `.skein/spools.edn`            | coordinates for the six moved spools (`workflow`, `ephemeral`, `roster`, `loom`, `carder`, `text-search`); `:spools` guards on the five **activated** ones' `use!`s (`carder` has no activation — its consent edge is the `:config` guard, P3); explicit `(require 'skein.spools.batteries)`; the `:config` `use!` gains its guard + `:required? true`; the `:workflows`, `:attention`, `:harnesses`, `:nvd-scan` `use!`s gain their guards; the `executors.shell` "classpath-shipped" comment corrected |
-| PLAN-usc-001.AA7   | `.skein/config.clj`, `workflows.clj`, `attention.clj`, `harnesses.clj`, `nvd_scan.clj` | these `ns` forms' `skein.spools.*`/`skein.macros.*` requires are the source of truth for the guard lists in AA6 (`PROP-usc-001.C6`) — the guards live on the `init.clj` `use!` entries, not in these files; `workflows.clj:18` util require repointed to `skein.api.spool.alpha` |
-| PLAN-usc-001.AA8   | `cli/internal/config/bootstrap.go`, `cli/integration_test.go` | `DefaultInitCLJ` gains the explicit-require needle; integration bootstrap assertions updated for it (`{:spools {}}` seed unchanged)      |
-| PLAN-usc-001.AA9   | `dev/skein/smoke.clj`                             | clean/dirty bootstrap needles updated for the explicit require; `{:spools {}}` assertion unchanged                                       |
-| PLAN-usc-001.AA10  | `scripts/generate_api_docs.clj`                   | every hardcoded `spools/src/...` `:source` repointed to the moved per-spool root (`generate_api_docs.clj:7-19`)                          |
-| PLAN-usc-001.AA11  | `test/skein/config_test.clj`, `test/skein/test_runner.clj`, `test/skein/api/spool_test.clj` (renamed from `test/skein/spools/util_test.clj`) | moved coordinates added to the `spools.edn`-building/activation-shape assertions; `test_runner.clj:18` `parallel-namespaces` entry renamed `skein.spools.util-test` → `skein.api.spool-test` (P6); moved-spool test roots on the new `:extra-paths`     |
-| PLAN-usc-001.AA12  | docs                                              | `spools/README.md` restructure, `docs/writing-shared-spools.md`, `docs/skein.md`, `docs/library-authoring.md`, `docs/getting-started.md` (`PROP-usc-001.C7`) |
-| PLAN-usc-001.AA13  | root specs (promotion targets)                    | `alpha-surface.md`, `repl-api.md`, `daemon-runtime.md` per the three feature deltas — merged at feature promotion, not in the build slices |
+| ID | Area | Expected change |
+| --- | --- | --- |
+| PLAN-usc-001.AA1 | `src/skein/api/spool/alpha.clj` (new) | `skein.spools.util` promoted here as a blessed authoring-helper namespace; freezes `fail!`/`reject-unknown-keys!`/`require-valid!`/`attr-key->str`/`attr-get`/`poll-until-deadline!` (`DELTA-usc-as-001.CC1`) |
+| PLAN-usc-001.AA2 | `src/skein/api/vocab/alpha.clj` | `:require` repointed from `skein.spools.util` to `skein.api.spool.alpha`; the tier inversion (`vocab/alpha.clj:22`) removed |
+| PLAN-usc-001.AA3 | `spools/src/skein/spools/` | `format.clj` deleted; `util.clj` moved to `src/`; the remaining spools `git mv`'d to `spools/<name>/src` (batteries → `spools/batteries/src`) |
+| PLAN-usc-001.AA4 | `deps.edn` | `:paths` drops `spools/src`, gains `spools/batteries/src`; `:test`/`:reflect-check` `:extra-paths` and `:format`/`:lint` args re-list the new roots (`PROP-usc-001.C5`) |
+| PLAN-usc-001.AA5 | `src/skein/core/weaver/spool_sync.clj` | `load-synced-namespace!` `require` fallback deleted; its docstring updated to drop the fallback description (`PROP-usc-001.C4`/`.C7`) |
+| PLAN-usc-001.AA6 | `.skein/init.clj`, `.skein/spools.edn` | coordinates for the six moved spools (`workflow`, `ephemeral`, `roster`, `loom`, `carder`, `text-search`); `:spools` guards on the five **activated** ones' `use!`s (`carder` has no activation — its consent edge is the `:config` guard, P3); explicit `(require 'skein.spools.batteries)`; the `:config` `use!` gains its guard + `:required? true`; the `:workflows`, `:attention`, `:harnesses`, `:nvd-scan` `use!`s gain their guards; the `executors.shell` "classpath-shipped" comment corrected |
+| PLAN-usc-001.AA7 | `.skein/config.clj`, `workflows.clj`, `attention.clj`, `harnesses.clj`, `nvd_scan.clj` | these `ns` forms' `skein.spools.*`/`skein.macros.*` requires are the source of truth for the guard lists in AA6 (`PROP-usc-001.C6`) — the guards live on the `init.clj` `use!` entries, not in these files; `workflows.clj:18` util require repointed to `skein.api.spool.alpha` |
+| PLAN-usc-001.AA8 | `cli/internal/config/bootstrap.go`, `cli/integration_test.go` | `DefaultInitCLJ` gains the explicit-require needle; integration bootstrap assertions updated for it (`{:spools {}}` seed unchanged) |
+| PLAN-usc-001.AA9 | `dev/skein/smoke.clj` | clean/dirty bootstrap needles updated for the explicit require; `{:spools {}}` assertion unchanged |
+| PLAN-usc-001.AA10 | `scripts/generate_api_docs.clj` | every hardcoded `spools/src/...` `:source` repointed to the moved per-spool root (`generate_api_docs.clj:7-19`) |
+| PLAN-usc-001.AA11 | `test/skein/config_test.clj`, `test/skein/test_runner.clj`, `test/skein/api/spool_test.clj` (renamed from `test/skein/spools/util_test.clj`) | moved coordinates added to the `spools.edn`-building/activation-shape assertions; `test_runner.clj:18` `parallel-namespaces` entry renamed `skein.spools.util-test` → `skein.api.spool-test` (P6); moved-spool test roots on the new `:extra-paths` |
+| PLAN-usc-001.AA12 | docs | `spools/README.md` restructure, `docs/writing-shared-spools.md`, `docs/skein.md`, `docs/library-authoring.md`, `docs/getting-started.md` (`PROP-usc-001.C7`) |
+| PLAN-usc-001.AA13 | root specs (promotion targets) | `alpha-surface.md`, `repl-api.md`, `daemon-runtime.md` per the three feature deltas — merged at feature promotion, not in the build slices |
 
 ## PLAN-usc-001.P4 Contract and migration impact
 
-- **PLAN-usc-001.CM1:** Three durable contract changes, staged in the feature deltas: the alpha
-  contract line is redrawn (`DELTA-usc-as-001` — reference spools in-contract as opt-in, `batteries`
-  the one classpath exception, `util` promoted to blessed `skein.api.spool.alpha`, `format` deleted);
-  the `use!` `:ns` loader loses its `require` fallback and fails loud (`DELTA-usc-repl-001`); the
-  source classpath is documented to ship exactly **one spool** — `batteries` — while otherwise
-  carrying the ordinary src/dev tiers (`skein.core.*`, `skein.api.*`, `skein.repl`, dev tooling)
-  and no other `skein.spools.*` (`DELTA-usc-dr-001`, new `SPEC-004.C50a`). No coordinate grammar, sync outcome, or storage
-  change (`SPEC-004.C41`/`.C42`/`.C43` reaffirmed). No migration/backfill: TEN-000@1, every in-repo
-  consumer updated in-change.
+- **PLAN-usc-001.CM1:** Three durable contract changes, staged in the feature deltas: the alpha contract line is redrawn (`DELTA-usc-as-001` — reference spools in-contract as opt-in, `batteries` the one classpath exception, `util` promoted to blessed `skein.api.spool.alpha`, `format` deleted); the `use!` `:ns` loader loses its `require` fallback and fails loud (`DELTA-usc-repl-001`); the source classpath is documented to ship exactly **one spool** — `batteries` — while otherwise carrying the ordinary src/dev tiers (`skein.core.*`, `skein.api.*`, `skein.repl`, dev tooling) and no other `skein.spools.*` (`DELTA-usc-dr-001`, new `SPEC-004.C50a`). No coordinate grammar, sync outcome, or storage change (`SPEC-004.C41`/`.C42`/`.C43` reaffirmed). No migration/backfill: TEN-000@1, every in-repo consumer updated in-change.
 
 ## PLAN-usc-001.P5 Implementation phases
 
 ### PLAN-usc-001.PH1 Relocate the authoring libraries (`util`/`format`) — build
 
-Outcome: `util`/`format` leave the `skein.spools.*` family; no blessed `skein.api.*` namespace
-requires a `skein.spools.*` namespace; the tree is green with `spools/src` still holding every other
-spool.
+Outcome: `util`/`format` leave the `skein.spools.*` family; no blessed `skein.api.*` namespace requires a `skein.spools.*` namespace; the tree is green with `spools/src` still holding every other spool.
 
-- **Slice 1a — promote `util`.** Move `spools/src/skein/spools/util.clj` to
-  `src/skein/api/spool/alpha.clj` as `skein.api.spool.alpha` (blessed authoring-helper home,
-  `DELTA-usc-as-001.CC1`). Repoint its requirers (proposal: 22, incl. `src/skein/api/vocab/alpha.clj`,
-  `.skein/workflows.clj:18`, every per-spool root, and every classpath spool) from `skein.spools.util`
-  to `skein.api.spool.alpha`. Enumerate the requirers with `grep -rln 'skein.spools.util'` at slice
-  start (do not trust the count — verify). **Rename the test with the promoted code (P6):** `git mv
-  test/skein/spools/util_test.clj test/skein/api/spool_test.clj`, change its `ns` from
-  `skein.spools.util-test` to `skein.api.spool-test` (and its internal `require` of the moved ns), and
-  rename the `test_runner.clj:18` `parallel-namespaces` entry `skein.spools.util-test` →
-  `skein.api.spool-test` in the same slice, so the Done-when command names a namespace that exists at
-  slice completion. Harness: `build`.
-  Done-when: `clojure -M:test skein.api.spool-test skein.vocab-test skein.spools.workflow-test
-  skein.spools.batteries-test skein.spools.carder-test skein.spools.loom-test
-  skein.spools.text-search-test skein.spools.bobbin-test skein.spools.selvage-test skein.guild-test
-  skein.roster-test skein.delegation-test skein.kanban-test skein.chime-test skein.cron-test
-  skein.spools.executors.shell-test skein.executors.subagent-test` green (the test namespaces of every
-  root the repoint touches — re-derive from the slice-start grep and extend if it finds more), plus
-  `make fmt-check lint reflect-check`.
-- **Slice 1b — delete `format`.** Repoint the six callers (proposal: `agent-run`, `bench`,
-  `delegation`, `kanban`, `roster`, `workflow`; verify with `grep -rln 'skein.spools.format'`) from
-  `skein.spools.format` to `skein.api.format.alpha`, then delete
-  `spools/src/skein/spools/format.clj`. Harness: `grunt` (mechanical repoint) with a `build` check on
-  the delete. Done-when: `clojure -M:test skein.agent-run-test skein.bench-test skein.delegation-test
-  skein.kanban-test skein.roster-test skein.spools.workflow-test` green + fmt/lint/reflect. (The `:format`/`:lint` alias args still name `spools/src`; they keep working here and
-  are re-listed in PH2/PH4.)
+- **Slice 1a — promote `util`.** Move `spools/src/skein/spools/util.clj` to `src/skein/api/spool/alpha.clj` as `skein.api.spool.alpha` (blessed authoring-helper home, `DELTA-usc-as-001.CC1`). Repoint its requirers (proposal: 22, incl. `src/skein/api/vocab/alpha.clj`, `.skein/workflows.clj:18`, every per-spool root, and every classpath spool) from `skein.spools.util` to `skein.api.spool.alpha`. Enumerate the requirers with `grep -rln 'skein.spools.util'` at slice start (do not trust the count — verify). **Rename the test with the promoted code (P6):** `git mv test/skein/spools/util_test.clj test/skein/api/spool_test.clj`, change its `ns` from `skein.spools.util-test` to `skein.api.spool-test` (and its internal `require` of the moved ns), and rename the `test_runner.clj:18` `parallel-namespaces` entry `skein.spools.util-test` → `skein.api.spool-test` in the same slice, so the Done-when command names a namespace that exists at slice completion. Harness: `build`. Done-when: `clojure -M:test skein.api.spool-test skein.vocab-test skein.spools.workflow-test skein.spools.batteries-test skein.spools.carder-test skein.spools.loom-test skein.spools.text-search-test skein.spools.bobbin-test skein.spools.selvage-test skein.guild-test skein.roster-test skein.delegation-test skein.kanban-test skein.chime-test skein.cron-test skein.spools.executors.shell-test skein.executors.subagent-test` green (the test namespaces of every root the repoint touches — re-derive from the slice-start grep and extend if it finds more), plus `make fmt-check lint reflect-check`.
+- **Slice 1b — delete `format`.** Repoint the six callers (proposal: `agent-run`, `bench`, `delegation`, `kanban`, `roster`, `workflow`; verify with `grep -rln 'skein.spools.format'`) from `skein.spools.format` to `skein.api.format.alpha`, then delete `spools/src/skein/spools/format.clj`. Harness: `grunt` (mechanical repoint) with a `build` check on the delete. Done-when: `clojure -M:test skein.agent-run-test skein.bench-test skein.delegation-test skein.kanban-test skein.roster-test skein.spools.workflow-test` green + fmt/lint/reflect. (The `:format`/`:lint` alias args still name `spools/src`; they keep working here and are re-listed in PH2/PH4.)
 
 ### PLAN-usc-001.PH2 Move each spool to a per-spool root + fold in its consent edges — grunt/patch-gpt
 
-Outcome: every non-`batteries` spool lives at `spools/<name>/src`, off the classpath but reachable via
-its coordinate; `.skein` still activates the five activated moved spools and still consumes `carder`
-via `:config`; every moved coordinate carries its full consent edges the moment it moves (A2/
-`PROP-usc-001.C8`) — no intermediate slice leaves a moved root on `spools.edn` without a guard; `spools/src`
-still on `:paths` (removed in PH4). One slice per spool keeps each within a worker context window.
+Outcome: every non-`batteries` spool lives at `spools/<name>/src`, off the classpath but reachable via its coordinate; `.skein` still activates the five activated moved spools and still consumes `carder` via `:config`; every moved coordinate carries its full consent edges the moment it moves (A2/ `PROP-usc-001.C8`) — no intermediate slice leaves a moved root on `spools.edn` without a guard; `spools/src` still on `:paths` (removed in PH4). One slice per spool keeps each within a worker context window.
 
-There are three slice shapes. In all three, `config_test` gets the moved coordinate in the same slice
-(AA11), so the per-slice Done-when is `clojure -M:test <test-ns> skein.config-test` green
-+ `make fmt-check lint reflect-check`, with `<test-ns>` from this mapping (all verified in
-`test_runner.clj:14-18`): `workflow` → `skein.spools.workflow-test skein.spools.executors.shell-test`;
-`roster` → `skein.roster-test`; `loom` → `skein.spools.loom-test`; `text-search` →
-`skein.spools.text-search-test`; `carder` → `skein.spools.carder-test`; `ephemeral` has **no dedicated
-test namespace** — its slice gates on `skein.spools-test skein.config-test` (`spools_test.clj:14`
-requires `skein.spools.ephemeral` directly and asserts its ns-requires at `:303`) + fmt/lint/reflect.
+There are three slice shapes. In all three, `config_test` gets the moved coordinate in the same slice (AA11), so the per-slice Done-when is `clojure -M:test <test-ns> skein.config-test` green
+
+- `make fmt-check lint reflect-check`, with `<test-ns>` from this mapping (all verified in `test_runner.clj:14-18`): `workflow` → `skein.spools.workflow-test skein.spools.executors.shell-test`; `roster` → `skein.roster-test`; `loom` → `skein.spools.loom-test`; `text-search` → `skein.spools.text-search-test`; `carder` → `skein.spools.carder-test`; `ephemeral` has **no dedicated test namespace** — its slice gates on `skein.spools-test skein.config-test` (`spools_test.clj:14` requires `skein.spools.ephemeral` directly and asserts its ns-requires at `:303`) + fmt/lint/reflect.
 
 **Common move steps (all shapes):**
-  1. `git mv spools/src/skein/spools/<name>.clj spools/<name>/src/skein/spools/<name>.clj` (workflow
-     also moves `executors/shell.clj` into the workflow root; the ns path is unchanged).
-  2. Add `spools/<name>/src` to `deps.edn` `:test` `:extra-paths`, `:reflect-check` `:extra-paths`,
-     and the `:format`/`:format/fix`/`:lint/clj-kondo`/`:lint/splint` arg lists (`PROP-usc-001.C5`).
-  3. Repoint `scripts/generate_api_docs.clj`'s `:source` for that spool from `spools/src/...` to the
-     new root (`generate_api_docs.clj:7-19`).
 
-Per **activated** spool slice — `workflow` (+ fold `executors/shell` into `spools/workflow/src/skein/spools/executors/shell.clj`), `ephemeral`, `roster`, `loom`, `text-search`:
-  4. Add the `.skein/spools.edn` coordinate `skein.spools/<name> {:local/root "../spools/<name>"}`
-     (resolved against config-dir per `SPEC-004.C42`, matching the existing `../spools/*` siblings).
-  5. Add the `:spools ['skein.spools/<name>]` guard to that spool's own `:skein/spools-<key>` `use!`
-     in `.skein/init.clj`, preserving its `:after` edges verbatim. For `workflow`, also guard
-     `:skein/spools-reed` (the shell executor) with `:spools ['skein.spools/workflow]` and keep
-     `:after [:skein/spools-workflow]`; correct the `.skein/init.clj:24` comment that calls the shell
-     executor "a classpath-shipped spool."
-  6. **Fold in the `:file`-module consent edges this move creates (A2/`PROP-usc-001.C8`):** for `loom`
-     and `workflow`, append the moved coordinate to the `:spools` guard of the `:config` `use!` and the
-     `:workflows` `use!` in `.skein/init.clj` (both modules' `ns` forms require these two — see PH3's
-     derived lists), **creating the guard vector on the first such move**. The `:config` `:required?
-     true` flip and its already-opt-in coordinates land in PH3 (A3); the guard added here lists only the
-     moved coordinate(s) so far, which is safe because the coordinate is approved in this same slice
-     (step 4) and `spools/src` is still on `:paths`. `ephemeral`/`roster`/`text-search` are required by
-     no `:file` module, so their move creates no `:config`/`:workflows` edge.
-  Harness: `grunt`/`patch-gpt`.
+1. `git mv spools/src/skein/spools/<name>.clj spools/<name>/src/skein/spools/<name>.clj` (workflow also moves `executors/shell.clj` into the workflow root; the ns path is unchanged).
+2. Add `spools/<name>/src` to `deps.edn` `:test` `:extra-paths`, `:reflect-check` `:extra-paths`, and the `:format`/`:format/fix`/`:lint/clj-kondo`/`:lint/splint` arg lists (`PROP-usc-001.C5`).
+3. Repoint `scripts/generate_api_docs.clj`'s `:source` for that spool from `spools/src/...` to the new root (`generate_api_docs.clj:7-19`).
 
-Per **config-consumed library** spool slice — `carder` (`PROP-usc-001.C3`, P3): `carder` is **not** an
-activated spool (`.skein/init.clj` has no `:skein/spools-carder` `use!`); it enters the runtime purely as
-a library required by `config.clj:21` (powering the `carder-report` op). Do the common move steps, then:
-  4. Add the `.skein/spools.edn` coordinate `skein.spools/carder {:local/root "../spools/carder"}`.
-  5. **No own activation** — do not add a `:skein/spools-carder` `use!` (it would be dead consent).
-     `carder`'s only consent edge is the `:config` guard: append `'skein.spools/carder` to the `:config`
-     `use!`'s `:spools` vector in `.skein/init.clj` (creating it if this is the first of
-     `carder`/`loom`/`workflow` to move). The `:required? true` flip stays in PH3.
-  Harness: `grunt`/`patch-gpt`.
+Per **activated** spool slice — `workflow` (+ fold `executors/shell` into `spools/workflow/src/skein/spools/executors/shell.clj`), `ephemeral`, `roster`, `loom`, `text-search`: 4. Add the `.skein/spools.edn` coordinate `skein.spools/<name> {:local/root "../spools/<name>"}` (resolved against config-dir per `SPEC-004.C42`, matching the existing `../spools/*` siblings). 5. Add the `:spools ['skein.spools/<name>]` guard to that spool's own `:skein/spools-<key>` `use!` in `.skein/init.clj`, preserving its `:after` edges verbatim. For `workflow`, also guard `:skein/spools-reed` (the shell executor) with `:spools ['skein.spools/workflow]` and keep `:after [:skein/spools-workflow]`; correct the `.skein/init.clj:24` comment that calls the shell executor "a classpath-shipped spool." 6. **Fold in the `:file`-module consent edges this move creates (A2/`PROP-usc-001.C8`):** for `loom` and `workflow`, append the moved coordinate to the `:spools` guard of the `:config` `use!` and the `:workflows` `use!` in `.skein/init.clj` (both modules' `ns` forms require these two — see PH3's derived lists), **creating the guard vector on the first such move**. The `:config` `:required?      true` flip and its already-opt-in coordinates land in PH3 (A3); the guard added here lists only the moved coordinate(s) so far, which is safe because the coordinate is approved in this same slice (step 4) and `spools/src` is still on `:paths`. `ephemeral`/`roster`/`text-search` are required by no `:file` module, so their move creates no `:config`/`:workflows` edge. Harness: `grunt`/`patch-gpt`.
 
-Per **reference** spool slice — `bobbin`, `guild`, `selvage` (unactivated, `PROP-usc-001.C3`/`.Q5`):
-  `git mv` to `spools/<name>/src`, add the `:test`/`:reflect-check`/`:format`/`:lint` roots and the
-  `generate_api_docs.clj :source` repoint **only** — no `spools.edn` coordinate, no `.skein/init.clj`
-  activation (adding one would be dead consent). Their test namespaces (`skein.spools.bobbin-test`,
-  `skein.guild-test`, `skein.spools.selvage-test`) resolve from the new roots on `:test`
-  `:extra-paths`. Harness: `grunt`. Done-when: `clojure -M:test` naming that spool's test namespace
-  from the list above (`skein.spools.bobbin-test` / `skein.guild-test` / `skein.spools.selvage-test`)
-  green + fmt/lint/reflect.
+Per **config-consumed library** spool slice — `carder` (`PROP-usc-001.C3`, P3): `carder` is **not** an activated spool (`.skein/init.clj` has no `:skein/spools-carder` `use!`); it enters the runtime purely as a library required by `config.clj:21` (powering the `carder-report` op). Do the common move steps, then: 4. Add the `.skein/spools.edn` coordinate `skein.spools/carder {:local/root "../spools/carder"}`. 5. **No own activation** — do not add a `:skein/spools-carder` `use!` (it would be dead consent). `carder`'s only consent edge is the `:config` guard: append `'skein.spools/carder` to the `:config` `use!`'s `:spools` vector in `.skein/init.clj` (creating it if this is the first of `carder`/`loom`/`workflow` to move). The `:required? true` flip stays in PH3. Harness: `grunt`/`patch-gpt`.
+
+Per **reference** spool slice — `bobbin`, `guild`, `selvage` (unactivated, `PROP-usc-001.C3`/`.Q5`): `git mv` to `spools/<name>/src`, add the `:test`/`:reflect-check`/`:format`/`:lint` roots and the `generate_api_docs.clj :source` repoint **only** — no `spools.edn` coordinate, no `.skein/init.clj` activation (adding one would be dead consent). Their test namespaces (`skein.spools.bobbin-test`, `skein.guild-test`, `skein.spools.selvage-test`) resolve from the new roots on `:test` `:extra-paths`. Harness: `grunt`. Done-when: `clojure -M:test` naming that spool's test namespace from the list above (`skein.spools.bobbin-test` / `skein.guild-test` / `skein.spools.selvage-test`) green + fmt/lint/reflect.
 
 ### PLAN-usc-001.PH3 Residual already-opt-in consent sweep + `:config` `:required?` + guard-wiring assertion gate — build
 
-Outcome: with every *moved*-spool consent edge already folded into its PH2 move slice (A2), PH3 completes
-the guard lists with the **already-opt-in** coordinates (unaffected by any move), flips `:config` to
-`:required? true`, and adds the direct assertion gate that enforces the whole consent contract
-(`PROP-usc-001.C6`/`.R1`/`.V`). The guard lists below are **re-derived from the actual `ns` `:require`
-forms** and stated in full (P4); PH2 will already have added the moved-coordinate subset, so PH3 appends
-the remainder.
+Outcome: with every _moved_-spool consent edge already folded into its PH2 move slice (A2), PH3 completes the guard lists with the **already-opt-in** coordinates (unaffected by any move), flips `:config` to `:required? true`, and adds the direct assertion gate that enforces the whole consent contract (`PROP-usc-001.C6`/`.R1`/`.V`). The guard lists below are **re-derived from the actual `ns` `:require` forms** and stated in full (P4); PH2 will already have added the moved-coordinate subset, so PH3 appends the remainder.
 
-- **`:config`** (`.skein/init.clj:124-128`) — full derived list. `config.clj`'s `ns` requires
-  `skein.macros.ops`, `skein.macros.queries` (both → coordinate `skein.macros/macros`),
-  `skein.spools.carder` (→ `skein.spools/carder`), `skein.spools.devflow` (→ `codethread/devflow`),
-  `skein.spools.loom` (→ `skein.spools/loom`), `skein.spools.agent-run` (→ `skein.spools/agent-run`),
-  and `skein.spools.workflow` (→ `skein.spools/workflow`). Full guard:
-  `:spools ['skein.spools/carder 'skein.spools/loom 'skein.spools/workflow 'skein.spools/agent-run 'codethread/devflow 'skein.macros/macros]` **and `:required? true`**. PH2 folded in
-  `carder`/`loom`/`workflow` (the moved coordinates) as those spools moved; PH3 appends the
-  already-opt-in `skein.spools/agent-run`, `codethread/devflow`, and `skein.macros/macros` (**the one the
-  current plan text previously omitted**), and flips `:required? true` — a `:spools` guard on a
-  non-required module turns a missing approval into a silent skip, and skipping `:config` drops the
-  repo's entire op/query surface, which must fail loud (TEN-003).
-- **`:workflows`** (`.skein/init.clj:139`, already `:required? true`) — full derived list.
-  `workflows.clj`'s `ns` requires `skein.spools.delegation` (→ `skein.spools/delegation`),
-  `skein.spools.loom` (→ `skein.spools/loom`), and `skein.spools.workflow` (→ `skein.spools/workflow`)
-  (its `util` require at `:18` is a blessed `skein.api.spool.alpha` after PH1 — no guard). Full guard:
-  `:spools ['skein.spools/loom 'skein.spools/workflow 'skein.spools/delegation]`. PH2 folded in the
-  moved `loom`/`workflow`; PH3 appends the already-opt-in `skein.spools/delegation` (**previously
-  omitted**).
-- **Already-opt-in `:file` modules** — declare guards on their `use!` activations for the spools their
-  `ns` forms require (all already opt-in today and unaffected by any move; they load fine unguarded, A3 —
-  the guard makes the consent edge explicit data): `:attention` (`attention.clj` requires
-  `skein.macros.rules` + `skein.spools.agent-run` → `:spools ['skein.macros/macros 'skein.spools/agent-run]`),
-  `:harnesses` (`harnesses.clj` requires `skein.spools.delegation` + `skein.spools.agent-run` →
-  `:spools ['skein.spools/delegation 'skein.spools/agent-run]`), `:nvd-scan` (`nvd_scan.clj` requires
-  `skein.spools.cron` → `:spools ['skein.spools/cron]`).
-- **Guard-wiring assertion gate (P5).** Add a direct check (test in `test/skein/config_test.clj` or a
-  scripted sweep) that every `.skein/init.clj` `use!` whose module — `:ns` target or `:file` `ns` form —
-  requires a `skein.spools.*`/`skein.macros.*` namespace declares the matching `:spools` coordinates,
-  `batteries` excepted. **The assertion must resolve each required namespace to its coordinate through
-  the approved/synced root manifests — the `spools.edn` coordinates, each coordinate's `:local/root`
-  dir, and that root's `deps.edn :paths` (which namespaces the root actually provides) — never a name
-  heuristic.** A prefix rule (`skein.spools.X` → `skein.spools/X`) is wrong: `skein.spools.devflow`
-  resolves to `codethread/devflow`, and the folded `skein.spools.executors.shell` resolves to
-  `skein.spools/workflow` (its source lives in the `workflow` root, TC3), not `skein.spools/shell`; a
-  heuristic would false-fail on `devflow` and false-pass a real miss. Because a manifest-backed
-  assertion derives the required coordinates from each module's actual `ns` requires, it catches an
-  incomplete guard list as a red gate rather than a silent ship. Load success alone does not satisfy this
-  gate (`PROP-usc-001.R1`).
-  Harness: `build`. Done-when: `clojure -M:test skein.config-test` (incl. the new assertion) green +
-  fmt/lint/reflect; the `.skein` world still loads (smoke deferred to PH4).
+- **`:config`** (`.skein/init.clj:124-128`) — full derived list. `config.clj`'s `ns` requires `skein.macros.ops`, `skein.macros.queries` (both → coordinate `skein.macros/macros`), `skein.spools.carder` (→ `skein.spools/carder`), `skein.spools.devflow` (→ `codethread/devflow`), `skein.spools.loom` (→ `skein.spools/loom`), `skein.spools.agent-run` (→ `skein.spools/agent-run`), and `skein.spools.workflow` (→ `skein.spools/workflow`). Full guard: `:spools ['skein.spools/carder 'skein.spools/loom 'skein.spools/workflow 'skein.spools/agent-run 'codethread/devflow 'skein.macros/macros]` **and `:required? true`**. PH2 folded in `carder`/`loom`/`workflow` (the moved coordinates) as those spools moved; PH3 appends the already-opt-in `skein.spools/agent-run`, `codethread/devflow`, and `skein.macros/macros` (**the one the current plan text previously omitted**), and flips `:required? true` — a `:spools` guard on a non-required module turns a missing approval into a silent skip, and skipping `:config` drops the repo's entire op/query surface, which must fail loud (TEN-003).
+- **`:workflows`** (`.skein/init.clj:139`, already `:required? true`) — full derived list. `workflows.clj`'s `ns` requires `skein.spools.delegation` (→ `skein.spools/delegation`), `skein.spools.loom` (→ `skein.spools/loom`), and `skein.spools.workflow` (→ `skein.spools/workflow`) (its `util` require at `:18` is a blessed `skein.api.spool.alpha` after PH1 — no guard). Full guard: `:spools ['skein.spools/loom 'skein.spools/workflow 'skein.spools/delegation]`. PH2 folded in the moved `loom`/`workflow`; PH3 appends the already-opt-in `skein.spools/delegation` (**previously omitted**).
+- **Already-opt-in `:file` modules** — declare guards on their `use!` activations for the spools their `ns` forms require (all already opt-in today and unaffected by any move; they load fine unguarded, A3 — the guard makes the consent edge explicit data): `:attention` (`attention.clj` requires `skein.macros.rules` + `skein.spools.agent-run` → `:spools ['skein.macros/macros 'skein.spools/agent-run]`), `:harnesses` (`harnesses.clj` requires `skein.spools.delegation` + `skein.spools.agent-run` → `:spools ['skein.spools/delegation 'skein.spools/agent-run]`), `:nvd-scan` (`nvd_scan.clj` requires `skein.spools.cron` → `:spools ['skein.spools/cron]`).
+- **Guard-wiring assertion gate (P5).** Add a direct check (test in `test/skein/config_test.clj` or a scripted sweep) that every `.skein/init.clj` `use!` whose module — `:ns` target or `:file` `ns` form — requires a `skein.spools.*`/`skein.macros.*` namespace declares the matching `:spools` coordinates, `batteries` excepted. **The assertion must resolve each required namespace to its coordinate through the approved/synced root manifests — the `spools.edn` coordinates, each coordinate's `:local/root` dir, and that root's `deps.edn :paths` (which namespaces the root actually provides) — never a name heuristic.** A prefix rule (`skein.spools.X` → `skein.spools/X`) is wrong: `skein.spools.devflow` resolves to `codethread/devflow`, and the folded `skein.spools.executors.shell` resolves to `skein.spools/workflow` (its source lives in the `workflow` root, TC3), not `skein.spools/shell`; a heuristic would false-fail on `devflow` and false-pass a real miss. Because a manifest-backed assertion derives the required coordinates from each module's actual `ns` requires, it catches an incomplete guard list as a red gate rather than a silent ship. Load success alone does not satisfy this gate (`PROP-usc-001.R1`). Harness: `build`. Done-when: `clojure -M:test skein.config-test` (incl. the new assertion) green + fmt/lint/reflect; the `.skein` world still loads (smoke deferred to PH4).
 
 ### PLAN-usc-001.PH4 Batteries exception + fallback removal + bootstrap — build
 
-Outcome: `spools/src` is gone from `:paths`; `batteries` is the one classpath spool, loaded by an
-explicit require; the loader fallback is deleted; a fresh `mill init` world still gets its command
-surface. Lands last so fallback removal cannot strand a still-classpath spool.
+Outcome: `spools/src` is gone from `:paths`; `batteries` is the one classpath spool, loaded by an explicit require; the loader fallback is deleted; a fresh `mill init` world still gets its command surface. Lands last so fallback removal cannot strand a still-classpath spool.
 
-- `git mv spools/src/skein/spools/batteries.clj spools/batteries/src/skein/spools/batteries.clj`; add
-  `spools/batteries/src` to `deps.edn :paths` and to the `:format`/`:lint` arg lists; **remove
-  `spools/src` from `:paths`** (it is now empty of spools). Repoint the `batteries` entry in
-  `generate_api_docs.clj`.
-- Add `(require 'skein.spools.batteries)` above the `:skein/spools-batteries` `use!` in
-  `.skein/init.clj` and in `DefaultInitCLJ` (`bootstrap.go`); the batteries `use!` keeps **no**
-  `:spools` guard (documented exception). Because the ns is then already loaded,
-  `load-synced-namespace!` short-circuits at its `find-ns` guard and never reaches the fallback.
-- Delete the `(require ns-sym)` fallback branch in `load-synced-namespace!`
-  (`spool_sync.clj`, the `try`/`catch` around lines ~558-560) so a `:ns` with no synced source throws
-  the loud "Could not locate namespace source in synced spool roots" directly; update the
-  `load-synced-namespace!` docstring (`spool_sync.clj:544-549`) to drop the fallback description
-  (`DELTA-usc-repl-001.CC1`).
-- Update `dev/skein/smoke.clj` clean/dirty bootstrap needles and `cli/integration_test.go` bootstrap
-  assertions for the added explicit-require line; leave the clean-bootstrap `{:spools {}}` `spools.edn`
-  assertion unchanged (the point of the exception).
-  Harness: `build`. Done-when (this is the classpath-flip slice, so it earns the heavy tier): full
-  locked suite `flock -w 3600 /tmp/skein-test.lock clojure -M:test`, `(cd cli && go test ./...)`,
-  `clojure -M:smoke`, and a fresh `mill init` world in a disposable `mktemp -d` `--workspace`
-  confirming the batteries command surface loads with `{:spools {}}` — all green.
+- `git mv spools/src/skein/spools/batteries.clj spools/batteries/src/skein/spools/batteries.clj`; add `spools/batteries/src` to `deps.edn :paths` and to the `:format`/`:lint` arg lists; **remove `spools/src` from `:paths`** (it is now empty of spools). Repoint the `batteries` entry in `generate_api_docs.clj`.
+- Add `(require 'skein.spools.batteries)` above the `:skein/spools-batteries` `use!` in `.skein/init.clj` and in `DefaultInitCLJ` (`bootstrap.go`); the batteries `use!` keeps **no** `:spools` guard (documented exception). Because the ns is then already loaded, `load-synced-namespace!` short-circuits at its `find-ns` guard and never reaches the fallback.
+- Delete the `(require ns-sym)` fallback branch in `load-synced-namespace!` (`spool_sync.clj`, the `try`/`catch` around lines ~558-560) so a `:ns` with no synced source throws the loud "Could not locate namespace source in synced spool roots" directly; update the `load-synced-namespace!` docstring (`spool_sync.clj:544-549`) to drop the fallback description (`DELTA-usc-repl-001.CC1`).
+- Update `dev/skein/smoke.clj` clean/dirty bootstrap needles and `cli/integration_test.go` bootstrap assertions for the added explicit-require line; leave the clean-bootstrap `{:spools {}}` `spools.edn` assertion unchanged (the point of the exception). Harness: `build`. Done-when (this is the classpath-flip slice, so it earns the heavy tier): full locked suite `flock -w 3600 /tmp/skein-test.lock clojure -M:test`, `(cd cli && go test ./...)`, `clojure -M:smoke`, and a fresh `mill init` world in a disposable `mktemp -d` `--workspace` confirming the batteries command surface loads with `{:spools {}}` — all green.
 
 ### PLAN-usc-001.PH5 Docs, spec promotion, and api-docs regen — grunt/docs
 
-Outcome: docs describe one unified opt-in model with the single `batteries` exception; the three
-feature deltas are promoted into their root specs; generated api-docs are a clean regen.
+Outcome: docs describe one unified opt-in model with the single `batteries` exception; the three feature deltas are promoted into their root specs; generated api-docs are a clean regen.
 
-- Restructure `spools/README.md`: collapse the three index tables into one opt-in model, delete the
-  classpath premise and the classpath-vs-opt-in placement rule, move the reference spools into the
-  opt-in table with coordinates (keep the `text-search` `**(UNSAFE)**` note), add a **Classpath
-  exception: batteries** subsection with rationale, and note `util`/`format` left the family
-  (`PROP-usc-001.C7`).
-- Update `docs/writing-shared-spools.md` (narrow the shipped-classpath-prerequisite guidance),
-  `docs/skein.md` (opt-in `workflow` coordinate; `util`'s blessed home; drop the classpath-spool
-  tier), `docs/library-authoring.md` (authoring helpers are blessed `src/`; only `batteries` ships on
-  the classpath), and `docs/getting-started.md` (its generated `init.clj` snippet gains the explicit
-  require).
-- Promote the three feature deltas into `devflow/specs/alpha-surface.md` (SPEC-005.C2 + C3),
-  `devflow/specs/repl-api.md` (the `:ns` loader paragraph), and `devflow/specs/daemon-runtime.md`
-  (add `SPEC-004.C50a`); update `devflow/README.md` if index data changes.
-- `make api-docs` to regenerate `spools/*.api.md`/`docs/api/*.api.md` after the `generate_api_docs.clj`
-  paths were repointed (in PH2/PH4). Harness: `grunt`/`docs`. Done-when: `make fmt-check lint
-  reflect-check docs-check` at zero findings, `make api-docs` clean, and `git status --short` shows
-  only expected `*.api.md` changes and no generated SQLite/runtime artifacts.
+- Restructure `spools/README.md`: collapse the three index tables into one opt-in model, delete the classpath premise and the classpath-vs-opt-in placement rule, move the reference spools into the opt-in table with coordinates (keep the `text-search` `**(UNSAFE)**` note), add a **Classpath exception: batteries** subsection with rationale, and note `util`/`format` left the family (`PROP-usc-001.C7`).
+- Update `docs/writing-shared-spools.md` (narrow the shipped-classpath-prerequisite guidance), `docs/skein.md` (opt-in `workflow` coordinate; `util`'s blessed home; drop the classpath-spool tier), `docs/library-authoring.md` (authoring helpers are blessed `src/`; only `batteries` ships on the classpath), and `docs/getting-started.md` (its generated `init.clj` snippet gains the explicit require).
+- Promote the three feature deltas into `devflow/specs/alpha-surface.md` (SPEC-005.C2 + C3), `devflow/specs/repl-api.md` (the `:ns` loader paragraph), and `devflow/specs/daemon-runtime.md` (add `SPEC-004.C50a`); update `devflow/README.md` if index data changes.
+- `make api-docs` to regenerate `spools/*.api.md`/`docs/api/*.api.md` after the `generate_api_docs.clj` paths were repointed (in PH2/PH4). Harness: `grunt`/`docs`. Done-when: `make fmt-check lint reflect-check docs-check` at zero findings, `make api-docs` clean, and `git status --short` shows only expected `*.api.md` changes and no generated SQLite/runtime artifacts.
 
 ## PLAN-usc-001.P6 Validation strategy
 
-- **PLAN-usc-001.V1:** Per-slice cold focused gate — `clojure -M:test <touched-ns...>` naming the
-  namespaces the slice touched (never the warm REPL, which is not a gate). Each slice keeps the tree
-  green individually.
-- **PLAN-usc-001.V2:** Queue-acceptance/land gates only — `flock -w 3600 /tmp/skein-test.lock clojure
-  -M:test` (serialized full suite), `(cd cli && go test ./...)`, and `clojure -M:smoke`. PH4 runs all
-  three because it flips the classpath and bootstrap; earlier slices do not.
-- **PLAN-usc-001.V3:** Fresh-world smoke — a real `mill init` world in a disposable `mktemp -d`
-  `--workspace` boots with `{:spools {}}` and gets the batteries command surface (`PROP-usc-001.G5`,
-  brief acceptance).
-- **PLAN-usc-001.V4:** Guard-wiring assertion (PH3) — a direct test/scripted check that every consent
-  edge is declared, `batteries` excepted; load success never satisfies it (`PROP-usc-001.R1`). It
-  resolves each required `skein.spools.*`/`skein.macros.*` namespace to its coordinate through the
-  approved/synced root manifests (`spools.edn` coordinates + their `:local/root` dirs + `deps.edn
-  :paths`), never a name heuristic — so `skein.spools.devflow` → `codethread/devflow` and the folded
-  `skein.spools.executors.shell` → `skein.spools/workflow` resolve correctly (P5).
-- **PLAN-usc-001.V5:** Quality gates at zero findings — `make fmt-check lint reflect-check docs-check`,
-  with the PH2/PH4 alias re-listing so fmt/lint/reflect coverage never silently drops a moved spool
-  (`PROP-usc-001.R2`).
-- **PLAN-usc-001.V6:** `make api-docs` is a clean regen after `generate_api_docs.clj` follows the moved
-  roots; `git status --short` shows only expected `*.api.md` changes, `spools/src` gone from
-  `deps.edn :paths`, and no stray generated SQLite/runtime artifacts.
+- **PLAN-usc-001.V1:** Per-slice cold focused gate — `clojure -M:test <touched-ns...>` naming the namespaces the slice touched (never the warm REPL, which is not a gate). Each slice keeps the tree green individually.
+- **PLAN-usc-001.V2:** Queue-acceptance/land gates only — `flock -w 3600 /tmp/skein-test.lock clojure -M:test` (serialized full suite), `(cd cli && go test ./...)`, and `clojure -M:smoke`. PH4 runs all three because it flips the classpath and bootstrap; earlier slices do not.
+- **PLAN-usc-001.V3:** Fresh-world smoke — a real `mill init` world in a disposable `mktemp -d` `--workspace` boots with `{:spools {}}` and gets the batteries command surface (`PROP-usc-001.G5`, brief acceptance).
+- **PLAN-usc-001.V4:** Guard-wiring assertion (PH3) — a direct test/scripted check that every consent edge is declared, `batteries` excepted; load success never satisfies it (`PROP-usc-001.R1`). It resolves each required `skein.spools.*`/`skein.macros.*` namespace to its coordinate through the approved/synced root manifests (`spools.edn` coordinates + their `:local/root` dirs + `deps.edn :paths`), never a name heuristic — so `skein.spools.devflow` → `codethread/devflow` and the folded `skein.spools.executors.shell` → `skein.spools/workflow` resolve correctly (P5).
+- **PLAN-usc-001.V5:** Quality gates at zero findings — `make fmt-check lint reflect-check docs-check`, with the PH2/PH4 alias re-listing so fmt/lint/reflect coverage never silently drops a moved spool (`PROP-usc-001.R2`).
+- **PLAN-usc-001.V6:** `make api-docs` is a clean regen after `generate_api_docs.clj` follows the moved roots; `git status --short` shows only expected `*.api.md` changes, `spools/src` gone from `deps.edn :paths`, and no stray generated SQLite/runtime artifacts.
 
 ## PLAN-usc-001.P7 Risks and open questions
 
-- **PLAN-usc-001.R1 — hidden consent edges in `:file` modules.** `config.clj`/`workflows.clj` require
-  moved spools; a missing guard does not fail at load (synced roots resolve through the classloader
-  regardless), so a miss ships as a silent consent inconsistency invisible to any load-only test.
-  Mitigation: every moved-spool consent edge rides its PH2 move slice (A2), PH3 completes the residual
-  already-opt-in guards and flips `:config` `:required? true`, and the guard-wiring assertion gate (V4)
-  — resolving namespaces to coordinates through the synced root manifests, not a name heuristic —
-  checks wiring directly, not inferred from a green load.
-- **PLAN-usc-001.R2 — alias coverage silently dropping spools.** Removing `spools/src` from `:paths`
-  (PH4) drops the moved spools from `:format`/`:lint`/`:reflect-check` unless every root is re-listed.
-  Mitigation: the C5 lists are exhaustive against `test_runner.clj:15-18,31`, and every slice gate runs
-  all three quality commands (V5).
-- **PLAN-usc-001.R3 — fallback removal breaking a hidden classpath consumer.** Deleting the fallback
-  (PH4) breaks any `use!` `:ns` that silently relied on the classpath. Mitigation: PH4 lands only after
-  PH2 takes every non-batteries spool off `spools/src`; `batteries` loads by explicit require
-  (find-ns short-circuit); the guard-wiring assertion (V4) catches a guardless `:ns` for a moved spool.
-- **PLAN-usc-001.R4 — fresh-world regression.** A mis-modeled batteries exception would boot a fresh
-  world with no command surface. Mitigation: `{:spools {}}` stays valid and the batteries load path is
-  unchanged except the explicit require; smoke/integration assert the surface and V3 smoke-verifies a
-  real fresh world.
-- **PLAN-usc-001.R5 — devflow dual-pin drift.** The `deps.edn :test` ↔ `.skein/spools.edn` devflow
-  `:git/sha` pin is load-bearing for `config_test`. Mitigation: this feature does not touch it (NG
-  guard); `config_test`'s `devflow-spool-sha-pin-is-synced-...` keeps guarding it.
-- **PLAN-usc-001.Q1 — blessed home name.** `util`'s home is `skein.api.spool.alpha` (proposal
-  suggestion, adopted in `DELTA-usc-as-001`). If promotion review picks a different blessed
-  `skein.api.*.alpha` name, only the namespace token changes across PH1/AA1/AA2; the frozen helper set
-  is unaffected. Not a blocker for task generation.
+- **PLAN-usc-001.R1 — hidden consent edges in `:file` modules.** `config.clj`/`workflows.clj` require moved spools; a missing guard does not fail at load (synced roots resolve through the classloader regardless), so a miss ships as a silent consent inconsistency invisible to any load-only test. Mitigation: every moved-spool consent edge rides its PH2 move slice (A2), PH3 completes the residual already-opt-in guards and flips `:config` `:required? true`, and the guard-wiring assertion gate (V4) — resolving namespaces to coordinates through the synced root manifests, not a name heuristic — checks wiring directly, not inferred from a green load.
+- **PLAN-usc-001.R2 — alias coverage silently dropping spools.** Removing `spools/src` from `:paths` (PH4) drops the moved spools from `:format`/`:lint`/`:reflect-check` unless every root is re-listed. Mitigation: the C5 lists are exhaustive against `test_runner.clj:15-18,31`, and every slice gate runs all three quality commands (V5).
+- **PLAN-usc-001.R3 — fallback removal breaking a hidden classpath consumer.** Deleting the fallback (PH4) breaks any `use!` `:ns` that silently relied on the classpath. Mitigation: PH4 lands only after PH2 takes every non-batteries spool off `spools/src`; `batteries` loads by explicit require (find-ns short-circuit); the guard-wiring assertion (V4) catches a guardless `:ns` for a moved spool.
+- **PLAN-usc-001.R4 — fresh-world regression.** A mis-modeled batteries exception would boot a fresh world with no command surface. Mitigation: `{:spools {}}` stays valid and the batteries load path is unchanged except the explicit require; smoke/integration assert the surface and V3 smoke-verifies a real fresh world.
+- **PLAN-usc-001.R5 — devflow dual-pin drift.** The `deps.edn :test` ↔ `.skein/spools.edn` devflow `:git/sha` pin is load-bearing for `config_test`. Mitigation: this feature does not touch it (NG guard); `config_test`'s `devflow-spool-sha-pin-is-synced-...` keeps guarding it.
+- **PLAN-usc-001.Q1 — blessed home name.** `util`'s home is `skein.api.spool.alpha` (proposal suggestion, adopted in `DELTA-usc-as-001`). If promotion review picks a different blessed `skein.api.*.alpha` name, only the namespace token changes across PH1/AA1/AA2; the frozen helper set is unaffected. Not a blocker for task generation.
 
 ## PLAN-usc-001.P8 Task context
 
-- **PLAN-usc-001.TC1 — the design contract is the proposal.** `PROP-usc-001.C1`–`C8` are the accepted
-  decisions (Q1–Q6 resolved); do not relitigate them. The three feature deltas
-  (`DELTA-usc-as-001`/`-repl-001`/`-dr-001`) are the durable contract changes to promote in PH5.
-- **PLAN-usc-001.TC2 — guards are consent hygiene, not resolution.** A synced root resolves through the
-  `add-libs` spool classloader `sync!` populates, with or without a `:spools` guard on the `use!`.
-  Every load will look green even with a missing guard; the guard-wiring assertion (PH3/V4) is the only
-  thing that proves the consent edge — treat it as the acceptance signal for PH3, not a green world load.
-- **PLAN-usc-001.TC3 — the ns path never moves, only the root.** `skein.spools.<name>` stays
-  `skein.spools/<name>.clj`; a move changes only which `src` root holds the file and where the
-  `deps.edn`/`generate_api_docs.clj`/`spools.edn` entries point. `executors.shell` folds into the
-  `workflow` root (mirroring `executors.subagent`-in-`agent-run`) but keeps its own `:skein/spools-reed`
-  activation.
-- **PLAN-usc-001.TC4 — never restart the canonical weaver to pick up these changes.** Follow the
-  CLAUDE.md pickup ladder; config/init.clj changes need `runtime/reload!`, already-loaded Clojure
-  namespaces need a targeted `(require … :reload)` first. All test/smoke validation runs in disposable
-  `mktemp -d` `--workspace` worlds, never the canonical `.skein`.
-- **PLAN-usc-001.TC5 — verify grep counts at slice start.** The proposal cites "22 `util` requirers"
-  and "6 `format` callers"; re-run `grep -rln` in the worktree before editing rather than trusting the
-  count, since the tree changes as slices land.
+- **PLAN-usc-001.TC1 — the design contract is the proposal.** `PROP-usc-001.C1`–`C8` are the accepted decisions (Q1–Q6 resolved); do not relitigate them. The three feature deltas (`DELTA-usc-as-001`/`-repl-001`/`-dr-001`) are the durable contract changes to promote in PH5.
+- **PLAN-usc-001.TC2 — guards are consent hygiene, not resolution.** A synced root resolves through the `add-libs` spool classloader `sync!` populates, with or without a `:spools` guard on the `use!`. Every load will look green even with a missing guard; the guard-wiring assertion (PH3/V4) is the only thing that proves the consent edge — treat it as the acceptance signal for PH3, not a green world load.
+- **PLAN-usc-001.TC3 — the ns path never moves, only the root.** `skein.spools.<name>` stays `skein.spools/<name>.clj`; a move changes only which `src` root holds the file and where the `deps.edn`/`generate_api_docs.clj`/`spools.edn` entries point. `executors.shell` folds into the `workflow` root (mirroring `executors.subagent`-in-`agent-run`) but keeps its own `:skein/spools-reed` activation.
+- **PLAN-usc-001.TC4 — never restart the canonical weaver to pick up these changes.** Follow the CLAUDE.md pickup ladder; config/init.clj changes need `runtime/reload!`, already-loaded Clojure namespaces need a targeted `(require … :reload)` first. All test/smoke validation runs in disposable `mktemp -d` `--workspace` worlds, never the canonical `.skein`.
+- **PLAN-usc-001.TC5 — verify grep counts at slice start.** The proposal cites "22 `util` requirers" and "6 `format` callers"; re-run `grep -rln` in the worktree before editing rather than trusting the count, since the tree changes as slices land.
 
 ## PLAN-usc-001.P9 Developer Notes
 
@@ -385,33 +126,13 @@ Append notes here. Do not rewrite earlier notes.
 
 ### PLAN-usc-001.DN1 Plan drafted — 2026-07-11
 
-- Authored by run `0zwoh` (strand `d5a35`) alongside the three feature deltas. Grounded on verified
-  worktree sites: `deps.edn:1` `:paths`, `spool_sync.clj` `load-synced-namespace!` fallback+docstring,
-  `.skein/init.clj` activation order + the `executors.shell` "classpath-shipped" comment,
-  `src/skein/api/vocab/alpha.clj:22` util require, `.skein/workflows.clj:18` util require,
-  `scripts/generate_api_docs.clj:7-19` hardcoded `spools/src/...` sources, and the `:file`-module
-  requires in `config.clj`/`workflows.clj`/`attention.clj`/`harnesses.clj`/`nvd_scan.clj`. No
-  contradiction between the accepted proposal and the root specs was found; the daemon-runtime clause
-  is an addition (`SPEC-004.C50a`), not a change to C41/C42/C43.
-- Status left **Draft** — this plan has not yet been critiqued. A reviewer should set it Reviewed
-  before task generation (per the :plan guidance: a Draft plan must not be sliced into AFK tasks).
+- Authored by run `0zwoh` (strand `d5a35`) alongside the three feature deltas. Grounded on verified worktree sites: `deps.edn:1` `:paths`, `spool_sync.clj` `load-synced-namespace!` fallback+docstring, `.skein/init.clj` activation order + the `executors.shell` "classpath-shipped" comment, `src/skein/api/vocab/alpha.clj:22` util require, `.skein/workflows.clj:18` util require, `scripts/generate_api_docs.clj:7-19` hardcoded `spools/src/...` sources, and the `:file`-module requires in `config.clj`/`workflows.clj`/`attention.clj`/`harnesses.clj`/`nvd_scan.clj`. No contradiction between the accepted proposal and the root specs was found; the daemon-runtime clause is an addition (`SPEC-004.C50a`), not a change to C41/C42/C43.
+- Status left **Draft** — this plan has not yet been critiqued. A reviewer should set it Reviewed before task generation (per the :plan guidance: a Draft plan must not be sliced into AFK tasks).
 
 ### PLAN-usc-001.DN2 Task queue authored — 2026-07-11
 
 - Queue authored by run `23qr5` (strand `i4f7s`) as a faithful pour of PH1–PH5 into `tasks/index.yml`
-  + 15 per-task files (`TASK-usc-001`–`015`), all AFK. Shape is a **single sequential chain** (each
-  task `blocked_by` its predecessor): 001 promote `util`, 002 delete `format`, 003–011 the nine PH2
-  per-spool moves (workflow+shell, ephemeral, roster, loom, carder, text-search, bobbin, guild,
-  selvage), 012 the PH3 consent sweep + assertion gate, 013 the PH4 classpath flip, 014 the PH5
-  docs/spec/api-docs, 015 queue acceptance.
-- **PH2 is fully serialized, not parallel**, because every move slice touches the shared
-  `deps.edn`/`.skein/init.clj`/`.skein/spools.edn`/`test/skein/config_test.clj`/`scripts/generate_api_docs.clj`
-  files (A2 consent-edge folding lands on `init.clj`/`spools.edn`; the alias re-listing lands on
-  `deps.edn`). Move order matches `PROP-usc-001.C8`: `workflow` first so it **creates** the
-  `:config`/`:workflows` `:spools` guard vectors; `loom`/`carder` later **append** to them.
-- Harness tiers carried in each task-file header (index schema is fixed — no `harness`/`type` YAML
-  fields per :tasks guidance): `build` for 001/012/013/015, `grunt` (build check on the delete) for
-  002, `grunt`/`patch-gpt` for the PH2 moves, `grunt`/`docs` for 014.
-- Acceptance (015) is AFK, not HITL — the guidance requires HITL only for human decisions, and the
-  plan is Reviewed with the design decided; landing stays coordinator-only (worker stops at green
-  gates).
+    - 15 per-task files (`TASK-usc-001`–`015`), all AFK. Shape is a **single sequential chain** (each task `blocked_by` its predecessor): 001 promote `util`, 002 delete `format`, 003–011 the nine PH2 per-spool moves (workflow+shell, ephemeral, roster, loom, carder, text-search, bobbin, guild, selvage), 012 the PH3 consent sweep + assertion gate, 013 the PH4 classpath flip, 014 the PH5 docs/spec/api-docs, 015 queue acceptance.
+- **PH2 is fully serialized, not parallel**, because every move slice touches the shared `deps.edn`/`.skein/init.clj`/`.skein/spools.edn`/`test/skein/config_test.clj`/`scripts/generate_api_docs.clj` files (A2 consent-edge folding lands on `init.clj`/`spools.edn`; the alias re-listing lands on `deps.edn`). Move order matches `PROP-usc-001.C8`: `workflow` first so it **creates** the `:config`/`:workflows` `:spools` guard vectors; `loom`/`carder` later **append** to them.
+- Harness tiers carried in each task-file header (index schema is fixed — no `harness`/`type` YAML fields per :tasks guidance): `build` for 001/012/013/015, `grunt` (build check on the delete) for 002, `grunt`/`patch-gpt` for the PH2 moves, `grunt`/`docs` for 014.
+- Acceptance (015) is AFK, not HITL — the guidance requires HITL only for human decisions, and the plan is Reviewed with the design decided; landing stays coordinator-only (worker stops at green gates).

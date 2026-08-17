@@ -19,7 +19,7 @@ Deliver repo-first Skein configuration by making the CLI select the nearest pare
 ## PLAN-RepoFirstConfig-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | PLAN-RepoFirstConfig-001.AA1 | `cli/internal/config` | Replace implicit default-world resolution with repo `.skein` discovery when no `--config-dir` is supplied; keep explicit-world resolution. |
 | PLAN-RepoFirstConfig-001.AA2 | `cli/internal/command` / `cli/cmd/strand` | Update command wiring and `strand init` bootstrap behavior for Git-root `.skein` creation and fail-loud no-world errors. |
 | PLAN-RepoFirstConfig-001.AA3 | `src/skein/weaver.config` | Mirror selected-world resolution semantics needed by Clojure helper/client paths while preserving explicit config-dir construction. |

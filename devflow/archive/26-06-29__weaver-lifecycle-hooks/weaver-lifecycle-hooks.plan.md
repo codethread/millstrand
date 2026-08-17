@@ -21,7 +21,7 @@ Deliver the reviewed Weaver Lifecycle Hooks contracts as a weaver-owned, trusted
 ## WLH-PLAN-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | WLH-PLAN-001.AA1 | `src/skein/weaver/runtime.clj` | Add hook registry runtime state and clear it during startup/reload lifecycle. |
 | WLH-PLAN-001.AA2 | `src/skein/weaver/api.clj` | Add hook registration/introspection APIs, runner/error helpers, mutation integration, and reload clearing. |
 | WLH-PLAN-001.AA3 | `src/skein/hooks/alpha.clj` | New blessed helper namespace for trusted hook workflows. |

@@ -48,8 +48,7 @@ Use the local form only while developing. Release proof has two stages: `candida
 
 For a break, add a function name first, a sibling numbered root when the namespace model changes, or a new repository when the whole concept changes. Keep old contracts intact. The classification rule is: rejecting input the published contract accepted is breaking even when it improves validation; rejecting what the contract declared invalid is a fix.
 
-The full contract, family-entry shape, test tiers, and worked examples are in
-[Writing shared spools](../spools/writing-shared-spools.md).
+The full contract, family-entry shape, test tiers, and worked examples are in [Writing shared spools](../spools/writing-shared-spools.md).
 
 For personal config in a repository that does not commit Millstrand config, run `mill init --stealth`. It keeps the selected physical repo-local `.millstrand` or `.ms` marker, creates `.millstrand` when no marker exists, hides local files through Git's private exclude file, and prints the Codex instruction you may add yourself. The customisation guide above explains the local-spool convention for substantive personal config.
 

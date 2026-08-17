@@ -3,6 +3,7 @@ Implement PLAN-Pnl-001.PH5: presets + retry plumbing (A3, A7). FILE SCOPE: spool
 FIRST: apply the FINDINGS INPUT PROTOCOL below for tag [agent-panels/PH34 review].
 
 Work:
+
 - review! becomes a preset over roster->panel + panel machinery internally. THE GATE: every frozen test in PLAN-Pnl-001.V2 passes UNMODIFIED (signatures, return shapes, prompts, attrs, CLI flags, roster registry, --roster semantics, pass tags all preserved).
 - council! re-ships as a turn-as-run preset (plan A7): keeps topic/:members/:rounds scalar convenience (N identical seats), GAINS :seats [{:name :harness :brief?}] for per-seat harness/brief, LOSES the silent :claude default (no harness resolvable -> loud failure mirroring delegate), rounds become barrier turn rows via the panel compiler, the poll-loop prompt text is DELETED, synthesizer harness: council :synthesizer option or first seat. Return shape gains turn structure. CLI stays scalar-only (TEN-006: rich seats data is trusted-Clojure/inline-panel territory); document that in the about-doc council entry.
 - agent retry: --fresh flag (severs shuttle/resumes linkage, uses full-brief prompt); plain retry of a run with shuttle/error-class "resume" fails loudly instructing --fresh; retry otherwise preserves resume linkage (re-resumes the same predecessor).
@@ -11,6 +12,7 @@ Work:
 Tests: council rewrite (turn rows, per-seat harnesses, loud no-harness, poll-loop text absent from prompts); retry continuity matrix (preserve/sever/resume-classed guidance); frozen V2 suite green unmodified; full agents-test namespace green.
 
 HOUSE RULES (from PLAN-Pnl-001.TC2/TC3, plan file: devflow/feat/agent-panels/agent-panels.plan.md — READ THE PLAN FIRST, especially your phase section and the A-items it cites):
+
 - Never commit. Never close your own task strand. Record progress with strand update <task-id> --attr progress=...
 - TEN-003: fail loudly with ex-info + data; no silent fallbacks or sensible defaults.
 - Every changed ns keeps its docstring accurate. Spool state via runtime/spool-state only; ambient (rt) style matches these spools. Comments describe current code, never the change.

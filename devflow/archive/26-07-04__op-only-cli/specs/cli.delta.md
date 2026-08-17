@@ -25,7 +25,7 @@ This delta replaces the strand command surface wholesale (TEN-000@1, RFC-019). S
 ### Errors and discovery
 
 - **SPEC-002-D004.C11:** Unknown op names fail non-zero with the weaver's `op/not-found` domain error carrying available op names. No mill reachable, no running weaver, stale metadata, transport/identity failures, malformed payload flags, and hook rejections fail non-zero as today (SPEC-002.C14 error families retained where still applicable).
-- **SPEC-002-D004.C12:** Live *op* discovery is the core-registered `help` op (`strand help`, `strand help <op>`), which replaces `op help` and renders per-op arg-specs (SPEC-004-D003). Query and pattern registry introspection (the old `query list|explain` / `pattern list|explain`) become batteries-registered read ops (`strand query …`, `strand pattern …`) with the existing introspection payload contracts, so all discovery rides one mechanism: registered ops.
+- **SPEC-002-D004.C12:** Live _op_ discovery is the core-registered `help` op (`strand help`, `strand help <op>`), which replaces `op help` and renders per-op arg-specs (SPEC-004-D003). Query and pattern registry introspection (the old `query list|explain` / `pattern list|explain`) become batteries-registered read ops (`strand query …`, `strand pattern …`) with the existing introspection payload contracts, so all discovery rides one mechanism: registered ops.
 
 ## SPEC-002-D004.P2 Removed contracts
 

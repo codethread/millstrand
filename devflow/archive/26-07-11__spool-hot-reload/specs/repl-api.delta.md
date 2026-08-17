@@ -1,100 +1,29 @@
 # REPL API delta for spool-hot-reload
 
-**Document ID:** `DELTA-shr-001`
-**Root spec:** [repl-api.md](../../../specs/repl-api.md)
-**Feature:** [../proposal.md](../proposal.md)
-**Status:** Draft
-**Last Updated:** 2026-07-11
+**Document ID:** `DELTA-shr-001` **Root spec:** [repl-api.md](../../../specs/repl-api.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Draft **Last Updated:** 2026-07-11
 
 ## DELTA-shr-001.P1 Summary
 
-Adds one blessed verb — `skein.api.runtime.alpha/reload-spool!` — to the runtime spool-workspace
-helper surface (SPEC-003.P5). It makes an updated copy of an already-synced-and-loaded opt-in spool's
-source *live* in a running weaver: the operation neither `runtime/reload!` (which re-runs startup files
-but "does not unload already-loaded Clojure namespaces or vars", the `runtime/reload!` bullet in
-SPEC-003.P5) nor a bare `(require ns :reload)` (classloader-blind to per-spool synced roots) performs. This is accretion within
-the `runtime.alpha` subnamespace (SPEC-003.C19); no tier membership moves, so the Alpha Surface index
-(SPEC-005.C2) is unchanged (argued in the plan). Full design rationale is in PROP-shr-001; this delta
-states only the durable contract additions.
+Adds one blessed verb — `skein.api.runtime.alpha/reload-spool!` — to the runtime spool-workspace helper surface (SPEC-003.P5). It makes an updated copy of an already-synced-and-loaded opt-in spool's source _live_ in a running weaver: the operation neither `runtime/reload!` (which re-runs startup files but "does not unload already-loaded Clojure namespaces or vars", the `runtime/reload!` bullet in SPEC-003.P5) nor a bare `(require ns :reload)` (classloader-blind to per-spool synced roots) performs. This is accretion within the `runtime.alpha` subnamespace (SPEC-003.C19); no tier membership moves, so the Alpha Surface index (SPEC-005.C2) is unchanged (argued in the plan). Full design rationale is in PROP-shr-001; this delta states only the durable contract additions.
 
 ## DELTA-shr-001.P2 Contract changes
 
-- **DELTA-shr-001.CC1:** New helper in the SPEC-003.P5 list: `(runtime/reload-spool! runtime coord)`
-  takes the target runtime first (SPEC-003.C18) and `coord`, a `spools.edn` coordinate **symbol** (e.g.
-  `skein.spools/kanban`, `demo/lib`) — not a namespace, because a spool is many namespaces and sync
-  state is keyed by coordinate. It resolves the coordinate's synced root from approved-spool sync state,
-  discovers the namespace sources under that root's `deps.edn :paths` classpath dirs (the same
-  consented path set `sync!`/`use!` use), and `load-file`s them under the spool classloader in
-  dependency order, so the coordinate's latest synced source goes live. It returns a data-first map
-  naming the coordinate, its resolved canonical root, and the namespaces it reloaded (in reload order)
-  with their source files. The blessed fn is thin and delegates the mechanics to a core seam, matching
-  `sync!`→`sync-approved-spools` and `reload!`→`reload-config!`.
+- **DELTA-shr-001.CC1:** New helper in the SPEC-003.P5 list: `(runtime/reload-spool! runtime coord)` takes the target runtime first (SPEC-003.C18) and `coord`, a `spools.edn` coordinate **symbol** (e.g. `skein.spools/kanban`, `demo/lib`) — not a namespace, because a spool is many namespaces and sync state is keyed by coordinate. It resolves the coordinate's synced root from approved-spool sync state, discovers the namespace sources under that root's `deps.edn :paths` classpath dirs (the same consented path set `sync!`/`use!` use), and `load-file`s them under the spool classloader in dependency order, so the coordinate's latest synced source goes live. It returns a data-first map naming the coordinate, its resolved canonical root, and the namespaces it reloaded (in reload order) with their source files. The blessed fn is thin and delegates the mechanics to a core seam, matching `sync!`→`sync-approved-spools` and `reload!`→`reload-config!`.
 
-- **DELTA-shr-001.CC2:** `reload-spool!` fails loudly (TEN-003) on every unresolvable coordinate,
-  carrying a `:reason` keyword in ex-data drawn from the runtime's **existing** vocabulary — no parallel
-  words: `:not-approved` (coordinate not in approved config), `:not-synced` (approved but not synced),
-  `:sync-failed` (its sync did not succeed), `:missing-root` (synced but root absent on disk),
-  `:unreadable-root` (root present but not a readable directory), and `:no-namespaces` (root with no
-  namespace sources — a misconfigured root, surfaced rather than swallowed as an empty no-op). The
-  preconditions are checked in a fixed order: approved → sync status in the success set → root re-checked
-  on disk → namespace sources present. The synced-success gate reuses the same `#{:loaded
-  :already-available}` set the loader already treats as "root is on the classpath", so a root
-  `reload-spool!` accepts is exactly a root `use!` could have loaded. Because `reload-spool!` resolves the
-  root from post-sync state, a coordinate that synced cleanly can still have had its root replaced by a
-  file or its permissions stripped since; it re-checks the root on disk with the same
-  `exists`/`isDirectory`/`canRead` gate `sync-approved-spool!` uses — mapping to `:missing-root` vs
-  `:unreadable-root` — rather than falling through to a raw `load-file` exception carrying no `:reason`.
-  Three integrity reasons surface once the root is confirmed loadable, each carrying the same
-  `{:status :failed :reason … :coord …}` shape: `:source-escapes-root` (a source reached through a deeper
-  symlink canonicalizes outside its classpath dir — wrapped rather than a bare
-  `StringIndexOutOfBoundsException`), `:duplicate-namespace` (two sources under the root declare the same
-  namespace, naming both paths rather than silently dropping one), and `:circular-requires` (a circular
-  intra-root require, caught from `org.clojure/tools.namespace` and rethrown under this contract naming
-  the cycle rather than escaping as a raw `::circular-dependency` ex-info with no `:coord`).
+- **DELTA-shr-001.CC2:** `reload-spool!` fails loudly (TEN-003) on every unresolvable coordinate, carrying a `:reason` keyword in ex-data drawn from the runtime's **existing** vocabulary — no parallel words: `:not-approved` (coordinate not in approved config), `:not-synced` (approved but not synced), `:sync-failed` (its sync did not succeed), `:missing-root` (synced but root absent on disk), `:unreadable-root` (root present but not a readable directory), and `:no-namespaces` (root with no namespace sources — a misconfigured root, surfaced rather than swallowed as an empty no-op). The preconditions are checked in a fixed order: approved → sync status in the success set → root re-checked on disk → namespace sources present. The synced-success gate reuses the same `#{:loaded :already-available}` set the loader already treats as "root is on the classpath", so a root `reload-spool!` accepts is exactly a root `use!` could have loaded. Because `reload-spool!` resolves the root from post-sync state, a coordinate that synced cleanly can still have had its root replaced by a file or its permissions stripped since; it re-checks the root on disk with the same `exists`/`isDirectory`/`canRead` gate `sync-approved-spool!` uses — mapping to `:missing-root` vs `:unreadable-root` — rather than falling through to a raw `load-file` exception carrying no `:reason`. Three integrity reasons surface once the root is confirmed loadable, each carrying the same `{:status :failed :reason … :coord …}` shape: `:source-escapes-root` (a source reached through a deeper symlink canonicalizes outside its classpath dir — wrapped rather than a bare `StringIndexOutOfBoundsException`), `:duplicate-namespace` (two sources under the root declare the same namespace, naming both paths rather than silently dropping one), and `:circular-requires` (a circular intra-root require, caught from `org.clojure/tools.namespace` and rethrown under this contract naming the cycle rather than escaping as a raw `::circular-dependency` ex-info with no `:coord`).
 
-- **DELTA-shr-001.CC3:** `reload-spool!` reloads *code only* and leaves registry re-registration to the
-  caller — it does not call `reload!`, and `reload!` does not call it. The two are complementary halves
-  of a hot bump: `reload-spool!` makes namespace **code** live (the half `reload!` skips); `reload!`
-  re-runs startup files so `activate!`/`install!` re-registers ops/queries/handlers (the half
-  `reload-spool!` does not touch). The blessed code-bump sequence is `reload-spool! coord` then the
-  caller's own re-registration (a targeted re-`use!` of the spool's activation, or a full `reload!` when
-  the bump changes registrations across the config). `reload-spool!` adds no CLI op (hot-reload is a
-  trusted runtime/REPL workflow) and changes no `sync!`/`reload!`/`use!` semantics — it is a new sibling.
-  It does not unload namespaces a new revision removed (PROP-shr-001.NG2; a renamed namespace lingers
-  until restart). Redefinition is in-place var rebinding, not migration: a `defmulti` dispatch table
-  survives the reload (re-evaluating `defmulti` is a no-op, so methods on the prior table stay and a
-  changed dispatch signature is not picked up), a re-evaluated `defprotocol` mints a fresh interface so
-  instances built before the reload no longer `satisfies?`/`instance?` the new protocol, and any instance
-  or captured var from before the reload keeps its old definition. The docstring states this so operators
-  are warned about the specific stale-dispatch/stale-instance hazard, not just the no-unload caveat.
+- **DELTA-shr-001.CC3:** `reload-spool!` reloads _code only_ and leaves registry re-registration to the caller — it does not call `reload!`, and `reload!` does not call it. The two are complementary halves of a hot bump: `reload-spool!` makes namespace **code** live (the half `reload!` skips); `reload!` re-runs startup files so `activate!`/`install!` re-registers ops/queries/handlers (the half `reload-spool!` does not touch). The blessed code-bump sequence is `reload-spool! coord` then the caller's own re-registration (a targeted re-`use!` of the spool's activation, or a full `reload!` when the bump changes registrations across the config). `reload-spool!` adds no CLI op (hot-reload is a trusted runtime/REPL workflow) and changes no `sync!`/`reload!`/`use!` semantics — it is a new sibling. It does not unload namespaces a new revision removed (PROP-shr-001.NG2; a renamed namespace lingers until restart). Redefinition is in-place var rebinding, not migration: a `defmulti` dispatch table survives the reload (re-evaluating `defmulti` is a no-op, so methods on the prior table stay and a changed dispatch signature is not picked up), a re-evaluated `defprotocol` mints a fresh interface so instances built before the reload no longer `satisfies?`/`instance?` the new protocol, and any instance or captured var from before the reload keeps its old definition. The docstring states this so operators are warned about the specific stale-dispatch/stale-instance hazard, not just the no-unload caveat.
 
-- **DELTA-shr-001.CC4:** The SPEC-003.C17 enumeration of `runtime.alpha` helpers gains spool-code
-  hot-reload alongside the config/sync/use surface. The SPEC-003 reload paragraph (the `runtime/reload!`
-  bullet stating "Reload does not unload already-loaded Clojure namespaces or vars") gains a sentence
-  naming `reload-spool!` as the code-reload companion for synced spools, so the two verbs' division of
-  labour is documented where operators read about reload.
+- **DELTA-shr-001.CC4:** The SPEC-003.C17 enumeration of `runtime.alpha` helpers gains spool-code hot-reload alongside the config/sync/use surface. The SPEC-003 reload paragraph (the `runtime/reload!` bullet stating "Reload does not unload already-loaded Clojure namespaces or vars") gains a sentence naming `reload-spool!` as the code-reload companion for synced spools, so the two verbs' division of labour is documented where operators read about reload.
 
 ## DELTA-shr-001.P3 Design decisions
 
 ### DELTA-shr-001.D1 Coordinate identity, mechanism-agnostic contract
 
-- **Decision:** The contract is "given a coordinate symbol, make its latest synced source live"; the
-  load-file-under-`with-spool-classloader` mechanism is never named in the signature, docstring behavior,
-  or the return map's *meaning* (namespaces and files, which any loader can report).
-- **Rationale:** Keeps the verb forward-compatible with a future owned-classloader redesign (separate
-  card): the core seam's body can swap loaders while the blessed signature, failure vocabulary, and
-  dependency-ordered result stay fixed. Same core-owns-mechanics / alpha-owns-contract split that lets
-  `sync!` change its tools.deps internals without moving its contract.
-- **Rejected:** A namespace-keyed verb reusing the `use!` `:ns` loader shape — a spool is many
-  namespaces and its sync-state identity is the coordinate, so a namespace argument would push operators
-  to enumerate a spool's namespaces by hand (PROP-shr-001.DL1). Auto-composing `reload!` inside
-  `reload-spool!` — turns a one-spool code bump into a global registry teardown and makes the verb
-  un-composable (PROP-shr-001.DL2/C4).
+- **Decision:** The contract is "given a coordinate symbol, make its latest synced source live"; the load-file-under-`with-spool-classloader` mechanism is never named in the signature, docstring behavior, or the return map's _meaning_ (namespaces and files, which any loader can report).
+- **Rationale:** Keeps the verb forward-compatible with a future owned-classloader redesign (separate card): the core seam's body can swap loaders while the blessed signature, failure vocabulary, and dependency-ordered result stay fixed. Same core-owns-mechanics / alpha-owns-contract split that lets `sync!` change its tools.deps internals without moving its contract.
+- **Rejected:** A namespace-keyed verb reusing the `use!` `:ns` loader shape — a spool is many namespaces and its sync-state identity is the coordinate, so a namespace argument would push operators to enumerate a spool's namespaces by hand (PROP-shr-001.DL1). Auto-composing `reload!` inside `reload-spool!` — turns a one-spool code bump into a global registry teardown and makes the verb un-composable (PROP-shr-001.DL2/C4).
 
 ## DELTA-shr-001.P4 Open questions
 
-- **DELTA-shr-001.Q1:** None block promotion. The two spec-plan questions the proposal deferred are
-  resolved in the plan: `PROP-shr-001.Q2` (daemon-runtime.md cross-reference) resolved as *no change* —
-  daemon-runtime reaffirmed, not amended; `PROP-shr-001.Q1` (test-ns split) resolved in the plan's
-  validation strategy. On promotion, CC1–CC4 merge into repl-api.md (SPEC-003.P5 helper list,
-  SPEC-003.C17 enumeration, and the reload paragraph) and this delta is marked Merged.
+- **DELTA-shr-001.Q1:** None block promotion. The two spec-plan questions the proposal deferred are resolved in the plan: `PROP-shr-001.Q2` (daemon-runtime.md cross-reference) resolved as _no change_ — daemon-runtime reaffirmed, not amended; `PROP-shr-001.Q1` (test-ns split) resolved in the plan's validation strategy. On promotion, CC1–CC4 merge into repl-api.md (SPEC-003.P5 helper list, SPEC-003.C17 enumeration, and the reload paragraph) and this delta is marked Merged.

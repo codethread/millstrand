@@ -1,10 +1,6 @@
 # Workflow spool delta for defer-return
 
-**Document ID:** `DELTA-Dfr-001`
-**Contract doc:** [spools/workflow.md](../../../../spools/workflow.md)
-**Feature:** [../proposal.md](../proposal.md)
-**Status:** Merged
-**Last Updated:** 2026-07-26
+**Document ID:** `DELTA-Dfr-001` **Contract doc:** [spools/workflow.md](../../../../spools/workflow.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-26
 
 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `DELTA-Dfr-001` for v1 and `DELTA-Dfr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `DELTA-Dfr-001.P1` or `DELTA-Dfr-001@2.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
 

@@ -16,9 +16,9 @@ References:
 ## CDP-TASK-006.P2 Implementation notes
 
 - Merge durable contract changes into the root specs, preserving existing clause IDs and appending rather than renumbering:
-  - `devflow/specs/cli.md`: command tree, replacement SPEC-002.C13 text, new query introspection contracts, SPEC-002.C24 read-only list, help-symmetry language, SPEC-002.C22 weave↔batch framing, Deferred wording (CDP-DELTA-001).
-  - `devflow/specs/repl-api.md`: `query-explain` in the helper list plus its contract beside SPEC-003.C11 (CDP-DELTA-002).
-  - `devflow/specs/daemon-runtime.md`: SPEC-004.C16 API operations, SPEC-004.C26 allowlist, narrowed SPEC-004.C27, query introspection contracts under SPEC-004.P8, hook non-gating note, batch-engine framing (CDP-DELTA-003).
+    - `devflow/specs/cli.md`: command tree, replacement SPEC-002.C13 text, new query introspection contracts, SPEC-002.C24 read-only list, help-symmetry language, SPEC-002.C22 weave↔batch framing, Deferred wording (CDP-DELTA-001).
+    - `devflow/specs/repl-api.md`: `query-explain` in the helper list plus its contract beside SPEC-003.C11 (CDP-DELTA-002).
+    - `devflow/specs/daemon-runtime.md`: SPEC-004.C16 API operations, SPEC-004.C26 allowlist, narrowed SPEC-004.C27, query introspection contracts under SPEC-004.P8, hook non-gating note, batch-engine framing (CDP-DELTA-003).
 - Set each feature delta's Status to Merged and bump Last Updated on the touched root specs.
 - Update `devflow/README.md` if spec index descriptions or the active-features line for `cli-definition-parity` need it.
 - Confirm implementation matches the merged spec text before merging; fix text, not behavior, if wording drifted during implementation.

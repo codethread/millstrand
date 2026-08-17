@@ -12,11 +12,11 @@ Own the plan's full validation surface (PLAN-ArgspecSub-001.V1–V3): run every 
 
 - **TASK-ArgspecSub-004.MI1:** Run and record: `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:test`, `(cd cli && go test ./...)`, `PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -M:smoke`. All green; paste summaries into the task notes.
 - **TASK-ArgspecSub-004.MI2:** Real-usage smoke in an isolated world (never the user's default workspaces; follow CLAUDE.md "Agent operation quick reference": `make install`, fresh `mktemp -d` workspace + `XDG_STATE_HOME`, `mill init --workspace`, own mill + `mill weaver start --workspace`). Then verify and record actual output of:
-  - `strand --workspace "$ws" help query` — detail includes the subcommands rendering (`list`, `explain` with its `name` positional).
-  - `strand --workspace "$ws" query list` — works unchanged.
-  - `strand --workspace "$ws" query explain <some-name>` — works (or loud unknown-query error unchanged).
-  - `strand --workspace "$ws" query bogus` — structured parse-phase error carrying available subcommand names.
-  - `strand --workspace "$ws" query` — structured missing-subcommand error carrying available names.
+    - `strand --workspace "$ws" help query` — detail includes the subcommands rendering (`list`, `explain` with its `name` positional).
+    - `strand --workspace "$ws" query list` — works unchanged.
+    - `strand --workspace "$ws" query explain <some-name>` — works (or loud unknown-query error unchanged).
+    - `strand --workspace "$ws" query bogus` — structured parse-phase error carrying available subcommand names.
+    - `strand --workspace "$ws" query` — structured missing-subcommand error carrying available names.
 - **TASK-ArgspecSub-004.MI3:** Tear down: stop the disposable weaver/mill, remove temp dirs; `git status --short` in the worktree shows no generated artifacts.
 
 ## TASK-ArgspecSub-004.P3 Done when

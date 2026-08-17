@@ -1,11 +1,6 @@
 # Strand await proposal
 
-**Document ID:** `PROP-Sawt-001`
-**Status:** Approved
-**Approved:** 2026-08-03 — Q1 resolved as option (b): the ADR-001 gate is reinterpreted as not binding this design, which adds no condition grammar; the op is a mechanism with minimal surface composing over already-present selection APIs (rationale: ct at sign-off)
-**Related RFCs:** [`2026-06-24-task-query-dsl`](../../rfcs/2026-06-24-task-query-dsl.md)
-**Related root specs:** [`repl-api.md`](../../specs/repl-api.md), [`strand-model.md`](../../specs/strand-model.md) (P9 query grammar), [`daemon-runtime.md`](../../specs/daemon-runtime.md)
-**Related decisions:** [`ADR-001`](../../adrs/0001-thin-cli-over-generic-algebra.md) (P5 parks generic await); design notes with full session provenance in [`design-notes.md`](./design-notes.md)
+**Document ID:** `PROP-Sawt-001` **Status:** Approved **Approved:** 2026-08-03 — Q1 resolved as option (b): the ADR-001 gate is reinterpreted as not binding this design, which adds no condition grammar; the op is a mechanism with minimal surface composing over already-present selection APIs (rationale: ct at sign-off) **Related RFCs:** [`2026-06-24-task-query-dsl`](../../rfcs/2026-06-24-task-query-dsl.md) **Related root specs:** [`repl-api.md`](../../specs/repl-api.md), [`strand-model.md`](../../specs/strand-model.md) (P9 query grammar), [`daemon-runtime.md`](../../specs/daemon-runtime.md) **Related decisions:** [`ADR-001`](../../adrs/0001-thin-cli-over-generic-algebra.md) (P5 parks generic await); design notes with full session provenance in [`design-notes.md`](./design-notes.md)
 
 Once approved this document is frozen: it records the intent agreed at sign-off, not what was later built. Implementation change lives in the spec deltas, the plan, and code.
 
@@ -75,8 +70,15 @@ done
 Both outcomes return the same flat map at exit 0; `reason` distinguishes them, and an omitted bound is null. When a probe hits its limit, `count` reports the clamped observation — a timeout here with forty children still active says `count: 1`, "still nonempty", never forty:
 
 ```json
-{"operation": "await", "query": "children-active", "reason": "satisfied",
- "count": 0, "min_count": null, "max_count": 0, "elapsed_ms": 4012}
+{
+	"operation": "await",
+	"query": "children-active",
+	"reason": "satisfied",
+	"count": 0,
+	"min_count": null,
+	"max_count": 0,
+	"elapsed_ms": 4012
+}
 ```
 
 ## PROP-Sawt-001.P6 Open questions

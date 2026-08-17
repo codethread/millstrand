@@ -1,14 +1,6 @@
 # Chime Engine Parity Plan
 
-**Document ID:** `PLAN-Chp-001`
-**Feature:** `ifenn-chime-engine-parity`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** none
-**Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md)
-**Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md)
-**Status:** Reviewed
-**Last Updated:** 2026-07-23
-**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID, for example `PLAN-Chp-001.P1`.
+**Document ID:** `PLAN-Chp-001` **Feature:** `ifenn-chime-engine-parity` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) **Status:** Reviewed **Last Updated:** 2026-07-23 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID, for example `PLAN-Chp-001.P1`.
 
 ## PLAN-Chp-001.P1 Goal and scope
 
@@ -22,12 +14,12 @@ Move chime's engine registration (the `:chime/registration-barrier` pre-commit h
 
 ## PLAN-Chp-001.P3 Affected areas
 
-| ID                | Area                                       | Expected change                                             |
-| ----------------- | ------------------------------------------ | ----------------------------------------------------------- |
-| PLAN-Chp-001.AA1  | `spools/chime` (skein.spools.chime)        | `reconcile` gains status branching + engine registration    |
-| PLAN-Chp-001.AA2  | `test/skein/chime_test.clj`                | New module-path regression tests                            |
-| PLAN-Chp-001.AA3  | `devflow/specs/daemon-runtime.md`          | C74a rewritten for module activation                        |
-| PLAN-Chp-001.AA4  | `spools/chime.api.md`                      | Regenerated via `make api-docs` for the reconcile docstring |
+| ID | Area | Expected change |
+| --- | --- | --- |
+| PLAN-Chp-001.AA1 | `spools/chime` (skein.spools.chime) | `reconcile` gains status branching + engine registration |
+| PLAN-Chp-001.AA2 | `test/skein/chime_test.clj` | New module-path regression tests |
+| PLAN-Chp-001.AA3 | `devflow/specs/daemon-runtime.md` | C74a rewritten for module activation |
+| PLAN-Chp-001.AA4 | `spools/chime.api.md` | Regenerated via `make api-docs` for the reconcile docstring |
 
 ## PLAN-Chp-001.P4 Contract and migration impact
 

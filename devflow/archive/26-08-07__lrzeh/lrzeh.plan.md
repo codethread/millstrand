@@ -1,13 +1,6 @@
 # Workflow run context completion plan
 
-**Document ID:** `PLAN-Wrc-001`
-**Feature:** `lrzeh`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** None
-**Root specs:** `devflow/specs/repl-api.md` (context only)
-**Feature specs:** None
-**Status:** Reviewed
-**Last Updated:** 2026-07-26
+**Document ID:** `PLAN-Wrc-001` **Feature:** `lrzeh` **Proposal:** [proposal.md](./proposal.md) **RFC:** None **Root specs:** `devflow/specs/repl-api.md` (context only) **Feature specs:** None **Status:** Reviewed **Last Updated:** 2026-07-26
 
 ## PLAN-Wrc-001.P1 Goal and scope
 

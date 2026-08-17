@@ -1,11 +1,6 @@
 # Strand Model delta for xijst-edge-removal
 
-**Document ID:** `DELTA-Xer-001`
-**Root spec:** [strand-model.md](../../../specs/strand-model.md) (`SPEC-001`)
-**Feature:** [../proposal.md](../proposal.md) (`PROP-Xer-001`)
-**Status:** Merged
-**Last Updated:** 2026-07-21
-**Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version: `DELTA-Xer-001` for v1, `DELTA-Xer-001@2` for v2. Omit `@1`. Prefix every nested point ID with the full document ID (`DELTA-Xer-001.P1`) so references are globally grepable.
+**Document ID:** `DELTA-Xer-001` **Root spec:** [strand-model.md](../../../specs/strand-model.md) (`SPEC-001`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Xer-001`) **Status:** Merged **Last Updated:** 2026-07-21 **Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version: `DELTA-Xer-001` for v1, `DELTA-Xer-001@2` for v2. Omit `@1`. Prefix every nested point ID with the full document ID (`DELTA-Xer-001.P1`) so references are globally grepable.
 
 ## DELTA-Xer-001.P1 Summary
 
@@ -17,31 +12,31 @@ The change is source-visible through this one delta; `devflow/specs/alpha-surfac
 
 - **DELTA-Xer-001.CC1** (edit, `SPEC-001.P6`, the "Batch edge entries…" paragraph, current line 74): the edge grammar names both `:upsert` and `:remove`, fixes remove identity and its pre-bound-ref restriction, and states the fail-loud-on-absence and submitted-order rules. Token-level rewrite of the whole paragraph.
 
-  Old:
+    Old:
 
-  ```text
-  Batch edge entries are explicit operations addressed by local refs. The initial supported operation is `{:op :upsert ...}` with `:from`, `:to`, `:type`, and optional `:attributes`. Edge upsert inserts a missing edge or replaces attributes on an existing matching `(from, to, type)` edge. Edge upsert validates endpoint refs, target existence after create/update resolution, valid relation name, JSON object attributes, universal self-edge prohibition, declared-relation acyclicity, and that neither endpoint is burned in the same payload. Omitted edges do not imply deletion or replacement; unsupported edge operations fail loudly.
-  ```
+    ```text
+    Batch edge entries are explicit operations addressed by local refs. The initial supported operation is `{:op :upsert ...}` with `:from`, `:to`, `:type`, and optional `:attributes`. Edge upsert inserts a missing edge or replaces attributes on an existing matching `(from, to, type)` edge. Edge upsert validates endpoint refs, target existence after create/update resolution, valid relation name, JSON object attributes, universal self-edge prohibition, declared-relation acyclicity, and that neither endpoint is burned in the same payload. Omitted edges do not imply deletion or replacement; unsupported edge operations fail loudly.
+    ```
 
-  New:
+    New:
 
-  ```text
-  Batch edge entries are explicit operations addressed by local refs, one of two closed ops. `{:op :upsert ...}` carries `:from`, `:to`, `:type`, and optional `:attributes`; it inserts a missing edge or replaces attributes on an existing matching `(from, to, type)` edge, and either endpoint may be a ref created earlier in the same payload. `{:op :remove ...}` carries exactly `:from`, `:to`, and `:type` besides `:op` — no `:attributes`, no other keys — and deletes the exact `(from, to, type)` edge; both endpoints must be top-level pre-bound `:refs`, never a ref created earlier in the same payload. Edge attributes are neither a selector nor a precondition for removal. Every edge op validates endpoint refs, a valid relation name, and that neither endpoint is burned in the same payload; upsert additionally validates target existence after create/update resolution, JSON object attributes, universal self-edge prohibition, and declared-relation acyclicity, none of which a remove can violate because deleting a row only shrinks the edge set. A remove whose exact edge is absent — including a wrong direction or a wrong relation type — fails after a clean post-lock lookup with `ex-data` exactly `{:from submitted-from :to submitted-to :from-id resolved-from-id :to-id resolved-to-id :type submitted-type}` and rolls the whole batch back; absence is strict, never idempotent, with no ignore-missing flag. Edge ops execute in submitted `:edges` order inside the one batch transaction, so an ordered `:remove` then `:upsert` of one identity is a deterministic program. Omitted edges do not imply deletion or replacement; unsupported edge operations fail loudly.
-  ```
+    ```text
+    Batch edge entries are explicit operations addressed by local refs, one of two closed ops. `{:op :upsert ...}` carries `:from`, `:to`, `:type`, and optional `:attributes`; it inserts a missing edge or replaces attributes on an existing matching `(from, to, type)` edge, and either endpoint may be a ref created earlier in the same payload. `{:op :remove ...}` carries exactly `:from`, `:to`, and `:type` besides `:op` — no `:attributes`, no other keys — and deletes the exact `(from, to, type)` edge; both endpoints must be top-level pre-bound `:refs`, never a ref created earlier in the same payload. Edge attributes are neither a selector nor a precondition for removal. Every edge op validates endpoint refs, a valid relation name, and that neither endpoint is burned in the same payload; upsert additionally validates target existence after create/update resolution, JSON object attributes, universal self-edge prohibition, and declared-relation acyclicity, none of which a remove can violate because deleting a row only shrinks the edge set. A remove whose exact edge is absent — including a wrong direction or a wrong relation type — fails after a clean post-lock lookup with `ex-data` exactly `{:from submitted-from :to submitted-to :from-id resolved-from-id :to-id resolved-to-id :type submitted-type}` and rolls the whole batch back; absence is strict, never idempotent, with no ignore-missing flag. Edge ops execute in submitted `:edges` order inside the one batch transaction, so an ordered `:remove` then `:upsert` of one identity is a deterministic program. Omitted edges do not imply deletion or replacement; unsupported edge operations fail loudly.
+    ```
 
 - **DELTA-Xer-001.CC2** (edit, `SPEC-001.P6`, the "A batch result…" paragraph, current line 76): every edge outcome becomes the uniform before/after transition, and the result, hook, and event carry equal ordered transition vectors. Rewrite of the paragraph.
 
-  Old:
+    Old:
 
-  ```text
-  A batch result includes the final ref table and normalized summaries of created strands, updated before/after rows, burned ids with pre-delete rows, and edge outcomes.
-  ```
+    ```text
+    A batch result includes the final ref table and normalized summaries of created strands, updated before/after rows, burned ids with pre-delete rows, and edge outcomes.
+    ```
 
-  New:
+    New:
 
-  ```text
-  The public `skein.api.batch.alpha/apply!` result includes the final ref table and normalized summaries of created strands, updated before/after rows, burned ids with pre-delete rows, and edge outcomes. Each edge outcome is one transition with exactly `:op`, `:from`, `:to`, `:type`, `:before`, and `:after`: `:from` and `:to` are the submitted local refs and `:type` the submitted relation text. `:before` and `:after` are each either `nil` or a normalized edge row with exactly `:from_strand_id`, `:to_strand_id`, `:edge_type`, and a decoded-map `:attributes` — durable ids and the full attribute map, never storage JSON. `apply!` normalizes the storage-shaped core result before the hook, returned result, and event. An upsert carries the pre-image row (or `nil` when the edge is new) in `:before` and the written row in `:after`; a remove carries the removed row in `:before` and `nil` in `:after`. Outcomes stay aligned to submitted `:edges` order, and the result `:edges`, the pre-commit hook's `:batch/edge-ops`, and the `:batch/applied` event's `:batch/edges` are equal ordered vectors of these transitions, with no `:edge` alias.
-  ```
+    ```text
+    The public `skein.api.batch.alpha/apply!` result includes the final ref table and normalized summaries of created strands, updated before/after rows, burned ids with pre-delete rows, and edge outcomes. Each edge outcome is one transition with exactly `:op`, `:from`, `:to`, `:type`, `:before`, and `:after`: `:from` and `:to` are the submitted local refs and `:type` the submitted relation text. `:before` and `:after` are each either `nil` or a normalized edge row with exactly `:from_strand_id`, `:to_strand_id`, `:edge_type`, and a decoded-map `:attributes` — durable ids and the full attribute map, never storage JSON. `apply!` normalizes the storage-shaped core result before the hook, returned result, and event. An upsert carries the pre-image row (or `nil` when the edge is new) in `:before` and the written row in `:after`; a remove carries the removed row in `:before` and `nil` in `:after`. Outcomes stay aligned to submitted `:edges` order, and the result `:edges`, the pre-commit hook's `:batch/edge-ops`, and the `:batch/applied` event's `:batch/edges` are equal ordered vectors of these transitions, with no `:edge` alias.
+    ```
 
 ## DELTA-Xer-001.P3 Design decisions
 

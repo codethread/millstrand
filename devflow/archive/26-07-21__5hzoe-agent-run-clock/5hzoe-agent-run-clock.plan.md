@@ -1,13 +1,6 @@
 # Agent-run clock-aware awaiting plan
 
-**Document ID:** `PLAN-Arc-001`
-**Feature:** `5hzoe-agent-run-clock`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** None
-**Root specs:** [REPL API](../../specs/repl-api.md) (`SPEC-003.C17b`) and [Weaver Runtime](../../specs/daemon-runtime.md) (`SPEC-004.C1a`)
-**Feature specs:** None
-**Status:** Reviewed
-**Last Updated:** 2026-07-21
+**Document ID:** `PLAN-Arc-001` **Feature:** `5hzoe-agent-run-clock` **Proposal:** [proposal.md](./proposal.md) **RFC:** None **Root specs:** [REPL API](../../specs/repl-api.md) (`SPEC-003.C17b`) and [Weaver Runtime](../../specs/daemon-runtime.md) (`SPEC-004.C1a`) **Feature specs:** None **Status:** Reviewed **Last Updated:** 2026-07-21
 
 ## PLAN-Arc-001.P1 Goal and scope
 

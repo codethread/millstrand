@@ -10,12 +10,12 @@ Add a core boundary tenet for the daemon-core architecture: rich, Clojure-native
 
 - **TEN-D001.CC1:** Append a new tenet after the current `TEN-005` as `TEN-006`:
 
-  ```markdown
-  - **TEN-006**: The CLI is a thin JSON control surface; the daemon/REPL is the rich semantic surface.
-    - The scripted CLI should expose simple commands, string flags, JSON machine output, and named handles to daemon-owned behavior. It should not parse, author, or debug rich Clojure/EDN userland structures.
-    - Complex query definitions, runtime customization, inspection, and debugging belong in the trusted daemon config and REPL workflows. The CLI can invoke those capabilities by stable names and simple JSON-shaped params.
-    - The engine may translate between JSON wire data and Clojure-native/EDN data internally, but that translation is hidden behind daemon APIs.
-  ```
+    ```markdown
+    - **TEN-006**: The CLI is a thin JSON control surface; the daemon/REPL is the rich semantic surface.
+        - The scripted CLI should expose simple commands, string flags, JSON machine output, and named handles to daemon-owned behavior. It should not parse, author, or debug rich Clojure/EDN userland structures.
+        - Complex query definitions, runtime customization, inspection, and debugging belong in the trusted daemon config and REPL workflows. The CLI can invoke those capabilities by stable names and simple JSON-shaped params.
+        - The engine may translate between JSON wire data and Clojure-native/EDN data internally, but that translation is hidden behind daemon APIs.
+    ```
 
 - **TEN-D001.CC2:** Preserve existing tenet IDs during promotion. Do not renumber `TEN-005`; if another tenet claims `TEN-006` first, choose the next unused ID and update this delta before promotion.
 

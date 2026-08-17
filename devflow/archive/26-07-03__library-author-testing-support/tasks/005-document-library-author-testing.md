@@ -18,17 +18,17 @@ References:
 
 - Create `docs/library-authoring.md`.
 - Cover:
-  - recommended library repo shape
-  - `deps.edn` examples with Skein as a local-root test dependency
-  - pure Clojure tests
-  - author test-JVM tests requiring Skein namespaces
-  - weaver-world tests using `skein.test.alpha`
-  - classpath boundary between author test JVM and weaver JVM/library classloader
-  - `spools.edn`, `skein.api.runtime.alpha/sync!`, and `skein.api.runtime.alpha/use!` test workflow
-  - `:storage :sqlite-file` versus `:storage :sqlite-memory`
-  - short temp path guidance for Unix socket limits
-  - CI checkout/pinning against a selected Skein commit/tag
-  - publishing/versioning expectations via Git commits/tags without implying a package registry
+    - recommended library repo shape
+    - `deps.edn` examples with Skein as a local-root test dependency
+    - pure Clojure tests
+    - author test-JVM tests requiring Skein namespaces
+    - weaver-world tests using `skein.test.alpha`
+    - classpath boundary between author test JVM and weaver JVM/library classloader
+    - `spools.edn`, `skein.api.runtime.alpha/sync!`, and `skein.api.runtime.alpha/use!` test workflow
+    - `:storage :sqlite-file` versus `:storage :sqlite-memory`
+    - short temp path guidance for Unix socket limits
+    - CI checkout/pinning against a selected Skein commit/tag
+    - publishing/versioning expectations via Git commits/tags without implying a package registry
 - Include copyable examples but avoid duplicating full root specs.
 - Update `README.md` or `docs/getting-started.md` only if there is an existing docs index/entry point that should link to library authoring.
 

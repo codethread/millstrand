@@ -1,9 +1,6 @@
 # Cron on Scheduler Proposal
 
-**Document ID:** `PROP-cron-on-scheduler-001`
-**Last Updated:** 2026-07-10
-**Related RFCs:** [`RFC-009 Weaver Scheduler Primitive`](../../rfcs/2026-06-29-weaver-scheduler.md)
-**Related root specs:** [`SPEC-004 Weaver Runtime`](../../specs/daemon-runtime.md)
+**Document ID:** `PROP-cron-on-scheduler-001` **Last Updated:** 2026-07-10 **Related RFCs:** [`RFC-009 Weaver Scheduler Primitive`](../../rfcs/2026-06-29-weaver-scheduler.md) **Related root specs:** [`SPEC-004 Weaver Runtime`](../../specs/daemon-runtime.md)
 
 ## PROP-cron-on-scheduler-001.P1 Problem
 
@@ -17,18 +14,7 @@ The cost surfaces downstream and in operator ergonomics:
 - The weaver now has two timing substrates and two introspection surfaces for one concept. Operators must know whether a scheduled thing is a scheduler wake or a cron job to find and inspect its next fire.
 - Cron never adopted the primitive's at-least-once delivery framing, so job authors have no stated contract for duplicate tolerance.
 
-A latent primitive defect surfaced during plan review, exposed by cron as the
-first real consumer of the self-reschedule pattern. The scheduler retires
-a delivered wake by key alone (`retire-wake!` DELETEs `WHERE key = ?`), so when a
-fire-handler schedules its own next `cron/<id>` wake from inside the handler
-(same key, replace semantics — the pattern `SPEC-004.C101` explicitly allows), that
-freshly persisted replacement is deleted the instant the handler returns and the
-delivery completes — cadence dies after a single fire, and the failure path
-(`fail-wake!`) shares the defect. Retirement was simply never given the
-generation discipline `SPEC-004.C102` already applies to the delivery-attempt
-increment. This feature therefore folds in one narrow, spec-consistent fix to the
-primitive (see `.NG1`) so the self-reschedule cadence it depends on actually
-survives.
+A latent primitive defect surfaced during plan review, exposed by cron as the first real consumer of the self-reschedule pattern. The scheduler retires a delivered wake by key alone (`retire-wake!` DELETEs `WHERE key = ?`), so when a fire-handler schedules its own next `cron/<id>` wake from inside the handler (same key, replace semantics — the pattern `SPEC-004.C101` explicitly allows), that freshly persisted replacement is deleted the instant the handler returns and the delivery completes — cadence dies after a single fire, and the failure path (`fail-wake!`) shares the defect. Retirement was simply never given the generation discipline `SPEC-004.C102` already applies to the delivery-attempt increment. This feature therefore folds in one narrow, spec-consistent fix to the primitive (see `.NG1`) so the self-reschedule cadence it depends on actually survives.
 
 ## PROP-cron-on-scheduler-001.P2 Goals
 

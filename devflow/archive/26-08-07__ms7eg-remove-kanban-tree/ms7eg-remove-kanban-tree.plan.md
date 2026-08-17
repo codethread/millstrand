@@ -1,13 +1,6 @@
 # Remove the repo-local kanban tree projection plan
 
-**Document ID:** `PLAN-Ktr-001`
-**Feature:** `ms7eg-remove-kanban-tree`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** None
-**Root specs:** [`TEN-004` and `TEN-006`](../../TENETS.md), [ADR-001](../../adrs/0001-thin-cli-over-generic-algebra.md)
-**Feature specs:** None
-**Status:** Reviewed
-**Last Updated:** 2026-07-27
+**Document ID:** `PLAN-Ktr-001` **Feature:** `ms7eg-remove-kanban-tree` **Proposal:** [proposal.md](./proposal.md) **RFC:** None **Root specs:** [`TEN-004` and `TEN-006`](../../TENETS.md), [ADR-001](../../adrs/0001-thin-cli-over-generic-algebra.md) **Feature specs:** None **Status:** Reviewed **Last Updated:** 2026-07-27
 
 ## PLAN-Ktr-001.P1 Goal and scope
 

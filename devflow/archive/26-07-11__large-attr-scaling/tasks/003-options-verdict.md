@@ -1,10 +1,8 @@
 # Task 3: residual-options assessment + verdict (PH3 / S3)
 
-**Document ID:** `TASK-LargeAttrScaling-003`
-**Slice:** `PLAN-LargeAttrScaling-001.PH3` Residual-options assessment + verdict (S3)  **Harness:** build (opus)  **Type:** AFK
-**Branch:** `large-attr-scaling`  **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
+**Document ID:** `TASK-LargeAttrScaling-003` **Slice:** `PLAN-LargeAttrScaling-001.PH3` Residual-options assessment + verdict (S3) **Harness:** build (opus) **Type:** AFK **Branch:** `large-attr-scaling` **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
 
-Read first: `devflow/feat/large-attr-scaling/large-attr-scaling.plan.md` (`PLAN-LargeAttrScaling-001`, esp. `PH3`, `A7`, `TC5`, `Q4`) and `devflow/feat/large-attr-scaling/proposal.md` (`PROP-LargeAttrScaling-001.G3`, `S3`, `NG1`, `Q4`, and the settled storage in `PROP-EavAttrStorage-001.P1`). Read Task 2's numbers sections in `assessment-report.md` first — the assessment reasons over *those* numbers, nothing else.
+Read first: `devflow/feat/large-attr-scaling/large-attr-scaling.plan.md` (`PLAN-LargeAttrScaling-001`, esp. `PH3`, `A7`, `TC5`, `Q4`) and `devflow/feat/large-attr-scaling/proposal.md` (`PROP-LargeAttrScaling-001.G3`, `S3`, `NG1`, `Q4`, and the settled storage in `PROP-EavAttrStorage-001.P1`). Read Task 2's numbers sections in `assessment-report.md` first — the assessment reasons over _those_ numbers, nothing else.
 
 ## TASK-LargeAttrScaling-003.P1 Scope
 
@@ -13,6 +11,7 @@ Type: AFK
 Add the assessment + verdict sections to `assessment-report.md`, reasoning over the `S2` numbers Task 2 recorded. Judgment slice: bounded synthesis ending in exactly one concrete verdict. **No code, no harness, no storage change** (`NG2`).
 
 **Owned files:**
+
 - `devflow/feat/large-attr-scaling/assessment-report.md` — the assessment and verdict sections only. Do not touch Task 2's numbers sections except to reference them, and do not add the `## Re-running the harness` note (Task 4).
 
 ## TASK-LargeAttrScaling-003.P2 Must implement exactly
@@ -31,7 +30,7 @@ Add the assessment + verdict sections to `assessment-report.md`, reasoning over 
 
 ## TASK-LargeAttrScaling-003.P4 Out of scope
 
-- **TASK-LargeAttrScaling-003.OS1:** Building any recommended mitigation — the verdict *recommends*, it does not *build* (`NG2`, `R5`). Any change is a future feature with its own proposal.
+- **TASK-LargeAttrScaling-003.OS1:** Building any recommended mitigation — the verdict _recommends_, it does not _build_ (`NG2`, `R5`). Any change is a future feature with its own proposal.
 - **TASK-LargeAttrScaling-003.OS2:** Re-running or re-numbering the harness (Task 2 owns the numbers); the `## Re-running the harness` note and inert-gate sweep (Task 4).
 - **TASK-LargeAttrScaling-003.OS3:** Reopening the settled storage direction (`NG1`).
 

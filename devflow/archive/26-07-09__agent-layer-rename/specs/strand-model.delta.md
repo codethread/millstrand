@@ -10,23 +10,23 @@ This is the F1 mechanical-rename delta (no behavior change). The strand model's 
 
 - **SPEC-Alr-001.CC1** (edit, `SPEC-001.P4`, line 32): the namespace round-trip example renames `shuttle/*` → `agent-run/*`. Token swap only; the round-trip contract is unchanged.
 
-  Old:
+    Old:
 
-  ```text
-  Namespaced userland vocabularies such as `workflow/*` and `shuttle/*` therefore round-trip without collapsing distinct namespaces onto the same local name.
-  ```
+    ```text
+    Namespaced userland vocabularies such as `workflow/*` and `shuttle/*` therefore round-trip without collapsing distinct namespaces onto the same local name.
+    ```
 
-  New:
+    New:
 
-  ```text
-  Namespaced userland vocabularies such as `workflow/*` and `agent-run/*` therefore round-trip without collapsing distinct namespaces onto the same local name.
-  ```
+    ```text
+    Namespaced userland vocabularies such as `workflow/*` and `agent-run/*` therefore round-trip without collapsing distinct namespaces onto the same local name.
+    ```
 
 - **SPEC-Alr-001.CC2** (ADD, `SPEC-001.P4` Attributes): add the institutionalized naming rule as a new contract paragraph, inserted immediately after the paragraph ending `…collapsing distinct namespaces onto the same local name.` (line 32 as renamed by CC1). This is the naming rule from `brief.md` ("Naming rule (institutionalized by this feature)") and `PROP-Alr-001.G2`. Verbatim text to add:
 
-  > Attribute namespaces name concepts, not owners. A namespace segment identifies the concept the attribute describes (`agent-run/…`, `review/…`, `panel/…`, `note/…`, `gate/…`), never the spool that happens to write it; ownership is registered in the runtime, not encoded in the key. Names that ride durable strand data or worker prompts must be self-describing compound nouns a cold reader can decode from `strand show` alone; contributor-internalized names — namespaces, directories, local `:as` aliases — may stay short. Third-party spools qualify their attribute namespaces with a project prefix so they never collide with the core vocabulary.
+    > Attribute namespaces name concepts, not owners. A namespace segment identifies the concept the attribute describes (`agent-run/…`, `review/…`, `panel/…`, `note/…`, `gate/…`), never the spool that happens to write it; ownership is registered in the runtime, not encoded in the key. Names that ride durable strand data or worker prompts must be self-describing compound nouns a cold reader can decode from `strand show` alone; contributor-internalized names — namespaces, directories, local `:as` aliases — may stay short. Third-party spools qualify their attribute namespaces with a project prefix so they never collide with the core vocabulary.
 
-  Rationale for placement: `SPEC-001.P4` is the spec section that governs attribute keys and namespaces, so the attribute-namespace naming rule belongs here rather than scattered across spool docs.
+    Rationale for placement: `SPEC-001.P4` is the spec section that governs attribute keys and namespaces, so the attribute-namespace naming rule belongs here rather than scattered across spool docs.
 
 ## SPEC-Alr-001.P3 Flagged (out of scope for F1)
 

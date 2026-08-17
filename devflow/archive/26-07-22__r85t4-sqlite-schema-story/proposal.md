@@ -1,11 +1,6 @@
 # SQLite schema story proposal
 
-**Document ID:** `PROP-Sss-001`
-**Last Updated:** 2026-07-22
-**Related RFCs:** None
-**Related root specs:** [strand-model.md SPEC-001.P8](../../specs/strand-model.md), [daemon-runtime.md SPEC-004.C91b/C16b](../../specs/daemon-runtime.md)
-**Spec deltas:** [specs/strand-model.delta.md](specs/strand-model.delta.md) (`DELTA-Sss-001`), [specs/daemon-runtime.delta.md](specs/daemon-runtime.delta.md) (`DELTA-Sss-002`)
-**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
+**Document ID:** `PROP-Sss-001` **Last Updated:** 2026-07-22 **Related RFCs:** None **Related root specs:** [strand-model.md SPEC-001.P8](../../specs/strand-model.md), [daemon-runtime.md SPEC-004.C91b/C16b](../../specs/daemon-runtime.md) **Spec deltas:** [specs/strand-model.delta.md](specs/strand-model.delta.md) (`DELTA-Sss-001`), [specs/daemon-runtime.delta.md](specs/daemon-runtime.delta.md) (`DELTA-Sss-002`) **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
 
 ## PROP-Sss-001.P1 Problem
 
@@ -15,7 +10,7 @@ The on-disk `data/skein.sqlite` carries no version identity: no `PRAGMA user_ver
 
 The release `rapv5` will tighten TEN-000@1 into an alpha-to-alpha compatibility promise for `api.*`. Without a written schema story, the first release that ships a structural change bricks every existing coordination world (kanban/devflow/delegation/notes) while the API surface stays nominally stable. The skew is asymmetric today:
 
-- **New weaver, old db:** detected and thrown, but only for *known-past* shapes; the throw cannot tell the user which release can still read the data.
+- **New weaver, old db:** detected and thrown, but only for _known-past_ shapes; the throw cannot tell the user which release can still read the data.
 - **Old weaver, newer db:** undetectable in general. Structural introspection only rejects shapes the old binary knew to forbid, so an old weaver can open a future-schema world and misbehave silently, violating TEN-003.
 
 The repo has already used two forms of schema evolution. Additive tables (`acyclic_relations`, `scheduler_*`) flow into existing worlds silently via `CREATE TABLE IF NOT EXISTS` (attr-scaling delta CC9/CC10). The EAV cutover (`9e77780`) shipped a trusted, opt-in, parity-verified migrate op that was later struck from main (EAS-DELTA-003.D2). That break predates released users and happened while the schema was still changing rapidly, so it does not set the policy for released Skein. Once releases create user-owned worlds, every supported old generation needs a maintained forward path.
@@ -25,7 +20,7 @@ Schema history is hot: five DDL events landed in the repo's first 18 days. "Stru
 ## PROP-Sss-001.P2 Goals
 
 - **PROP-Sss-001.G1:** A written persistence-evolution contract in the root specs that `rapv5` can cite when it stamps the release: what may change silently, what constitutes a breaking schema change, and what a breaking change owes existing worlds.
-- **PROP-Sss-001.G2:** For generation-aware weavers, both skew directions fail loudly and diagnosably: a weaver opening a database from a *newer* schema generation must refuse it, and an older-generation failure must name the maintained forward-migration path. Binaries released before schema stamps are outside this guarantee because they cannot retroactively inspect `PRAGMA user_version`.
+- **PROP-Sss-001.G2:** For generation-aware weavers, both skew directions fail loudly and diagnosably: a weaver opening a database from a _newer_ schema generation must refuse it, and an older-generation failure must name the maintained forward-migration path. Binaries released before schema stamps are outside this guarantee because they cannot retroactively inspect `PRAGMA user_version`.
 - **PROP-Sss-001.G3:** Users of a released Skein generation can migrate forward through every later generation without checking out historical code or discarding their workspace. The maintained steps also provide a readable schema history in one dedicated place.
 - **PROP-Sss-001.G4:** The ladder stays behind the storage boundary: physical schema and migration mechanics remain implementation details, while the attribute map remains the contract under TEN-007.
 

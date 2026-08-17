@@ -21,7 +21,7 @@ Once task ids are database-owned, users cannot know durable ids before creation.
 ## RFC-001.P4 Options
 
 | ID | Summary | Pros | Cons |
-| -- | ------- | ---- | ---- |
+| --- | --- | --- | --- |
 | RFC-001.O1 | Require strictly sequential creation and linking | No new batch format | Verbose for DAG setup; callers must manually capture ids between steps |
 | RFC-001.O2 | Batch EDN shapes with temporary `:ref` aliases | Readable DAG input; refs disappear after creation; fits Clojure tooling | Requires parser and validation for duplicate/missing refs |
 | RFC-001.O3 | Let callers provide durable ids in batch mode | Simple dependency references | Reintroduces id collision and overwrite risks the id feature is fixing |

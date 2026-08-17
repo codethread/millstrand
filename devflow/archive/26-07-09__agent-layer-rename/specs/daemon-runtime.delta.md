@@ -10,17 +10,17 @@ This is the F1 mechanical-rename delta (no behavior change). The weaver-runtime 
 
 - **SPEC-Alr-003.CC1** (edit, `SPEC-004.C74b`, line 163): rename the off-lane-completion examples inside the parenthetical. `reed` → `the shell executor`; `a treadle gate's shuttle run` → `a subagent-executor gate's agent run`. The `:shell` backend value and `chime` are unrenamed and stay. The "gate" concept persists; only the executor noun (`treadle` → subagent executor) and the run noun (`shuttle` run → `agent-run`'s agent run) move.
 
-  Old fragment:
+    Old fragment:
 
-  ```text
-  …observes no off-lane completion a handler may have started (reed's `:shell` subprocess on a private worker pool, chime's per-dispatch notifier daemon threads, a treadle gate's shuttle run reaching a terminal state), which keep their own completion signal layered on top…
-  ```
+    ```text
+    …observes no off-lane completion a handler may have started (reed's `:shell` subprocess on a private worker pool, chime's per-dispatch notifier daemon threads, a treadle gate's shuttle run reaching a terminal state), which keep their own completion signal layered on top…
+    ```
 
-  New fragment:
+    New fragment:
 
-  ```text
-  …observes no off-lane completion a handler may have started (the shell executor's `:shell` subprocess on a private worker pool, chime's per-dispatch notifier daemon threads, a subagent-executor gate's agent run reaching a terminal state), which keep their own completion signal layered on top…
-  ```
+    ```text
+    …observes no off-lane completion a handler may have started (the shell executor's `:shell` subprocess on a private worker pool, chime's per-dispatch notifier daemon threads, a subagent-executor gate's agent run reaching a terminal state), which keep their own completion signal layered on top…
+    ```
 
 ## SPEC-Alr-003.P3 Flagged (out of scope for F1)
 

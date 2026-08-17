@@ -1,95 +1,27 @@
 # Strand model delta for notes-writer-task-tier
 
-**Document ID:** `DELTA-Nwt-001`
-**Root spec:** [strand-model.md](../../../specs/strand-model.md)
-**Feature:** [../proposal.md](../proposal.md)
-**Status:** Reviewed
-**Last Updated:** 2026-07-10
+**Document ID:** `DELTA-Nwt-001` **Root spec:** [strand-model.md](../../../specs/strand-model.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Reviewed **Last Updated:** 2026-07-10
 
 ## DELTA-Nwt-001.P1 Summary
 
-Accretes a notes *writer* value onto the blessed `skein.api.notes.alpha` surface
-(SPEC-001, SPEC-005.C2) beside the untouched `note!`/`notes` primitive: a writer
-carries a note target (or a thunk resolving one), a default decoration, and an
-author; it serializes to a plain-data ref that ships into subprocesses; and it
-renders through a single prompt fragment. Adds the open `note/kind` attribute
-vocabulary. Records two scope judgments — the CLI decoration passthrough and the
-kanban task tier — that this feature lands in spool docs, not the root specs.
+Accretes a notes _writer_ value onto the blessed `skein.api.notes.alpha` surface (SPEC-001, SPEC-005.C2) beside the untouched `note!`/`notes` primitive: a writer carries a note target (or a thunk resolving one), a default decoration, and an author; it serializes to a plain-data ref that ships into subprocesses; and it renders through a single prompt fragment. Adds the open `note/kind` attribute vocabulary. Records two scope judgments — the CLI decoration passthrough and the kanban task tier — that this feature lands in spool docs, not the root specs.
 
 ## DELTA-Nwt-001.P2 Contract changes
 
-- **DELTA-Nwt-001.C1 (writer value):** `skein.api.notes.alpha` accretes a writer
-  constructor `(writer runtime target-or-thunk {:keys [decoration by]})`
-  returning a writer value. `target-or-thunk` is a strand-id string or a 0-arg fn
-  returning one (the target may not exist at construction time). `:decoration` is
-  a map of string attr-key → string value defaulted onto every write; `:by` is
-  the default author. Construction validates these shapes and fails loudly.
-  `note!`/`notes` signatures are unchanged (SPEC-005.C2 accretion,
-  PROP-Nwt-001.NG2); the writer wraps `note!`, the low-level primitive.
+- **DELTA-Nwt-001.C1 (writer value):** `skein.api.notes.alpha` accretes a writer constructor `(writer runtime target-or-thunk {:keys [decoration by]})` returning a writer value. `target-or-thunk` is a strand-id string or a 0-arg fn returning one (the target may not exist at construction time). `:decoration` is a map of string attr-key → string value defaulted onto every write; `:by` is the default author. Construction validates these shapes and fails loudly. `note!`/`notes` signatures are unchanged (SPEC-005.C2 accretion, PROP-Nwt-001.NG2); the writer wraps `note!`, the low-level primitive.
 
-- **DELTA-Nwt-001.C2 (write!):** `(write! w text {:keys [decoration by round]})`
-  appends a note through `note!`. Per-call `:decoration` shallow-merges per key
-  OVER the writer default; per-call `:by` overrides the writer default; `:round`
-  passes through. A thunk target resolves at each `write!`; a missing or deleted
-  target fails loudly with the existing "Note target strand not found"
-  (SPEC-001.P5).
+- **DELTA-Nwt-001.C2 (write!):** `(write! w text {:keys [decoration by round]})` appends a note through `note!`. Per-call `:decoration` shallow-merges per key OVER the writer default; per-call `:by` overrides the writer default; `:round` passes through. A thunk target resolves at each `write!`; a missing or deleted target fails loudly with the existing "Note target strand not found" (SPEC-001.P5).
 
-- **DELTA-Nwt-001.C3 (writer-ref):** `(writer-ref w)` returns the plain-data ref
-  `{:target <resolved id> :decoration <merged map> :by <author>}`. A thunk
-  resolves exactly once, at ref time, and the ref freezes that id; refs ship into
-  subprocesses, so late rebinding across a process boundary is out of scope.
-  There is deliberately no `ref->writer`: the constructor already reconstructs —
-  `(writer runtime (:target ref) {:decoration (:decoration ref) :by (:by ref)})` —
-  and the surface is accretion-only, so no sugar ships without a named consumer.
-  Every surface consuming a ref or per-call `:decoration` validates the shape and
-  fails loudly naming the offending field; malformed refs never write silently.
+- **DELTA-Nwt-001.C3 (writer-ref):** `(writer-ref w)` returns the plain-data ref `{:target <resolved id> :decoration <merged map> :by <author>}`. A thunk resolves exactly once, at ref time, and the ref freezes that id; refs ship into subprocesses, so late rebinding across a process boundary is out of scope. There is deliberately no `ref->writer`: the constructor already reconstructs — `(writer runtime (:target ref) {:decoration (:decoration ref) :by (:by ref)})` — and the surface is accretion-only, so no sugar ships without a named consumer. Every surface consuming a ref or per-call `:decoration` validates the shape and fails loudly naming the offending field; malformed refs never write silently.
 
-- **DELTA-Nwt-001.C4 (single prompt renderer):** `(writer-ref->prompt ref)` is
-  the one renderer of the note-writing instruction fragment ("append notes with:
-  `<cmd> agent note <target> "<text>" --by <author> --attr k=v …`"). It is the
-  single source for that fragment; every prompt site that today hand-builds an
-  `agent note <id>` string converges on it. Routing is guidance, not enforcement
-  (TEN-002, PROP-Nwt-001.NG3): the writer shapes prompts and centralizes the
-  convention; a remote agent may still note any id it knows.
+- **DELTA-Nwt-001.C4 (single prompt renderer):** `(writer-ref->prompt ref)` is the one renderer of the note-writing instruction fragment ("append notes with: `<cmd> agent note <target> "<text>" --by <author> --attr k=v …`"). It is the single source for that fragment; every prompt site that today hand-builds an `agent note <id>` string converges on it. Routing is guidance, not enforcement (TEN-002, PROP-Nwt-001.NG3): the writer shapes prompts and centralizes the convention; a remote agent may still note any id it knows.
 
-- **DELTA-Nwt-001.C5 (non-goal — no ctx-dispatch routing):** The blessed writer
-  surface adds no ctx-dispatch routing. Route fns cannot render into a prompt and
-  would reintroduce the silent card-fallback failure mode (PROP-Nwt-001.NG1,
-  settled 2026-07-10); routing composition stays in trusted glue as plain
-  function composition.
+- **DELTA-Nwt-001.C5 (non-goal — no ctx-dispatch routing):** The blessed writer surface adds no ctx-dispatch routing. Route fns cannot render into a prompt and would reintroduce the silent card-fallback failure mode (PROP-Nwt-001.NG1, settled 2026-07-10); routing composition stays in trusted glue as plain function composition.
 
-- **DELTA-Nwt-001.C6 (note/kind vocabulary):** The blessed note shape
-  (SPEC-001.P5) accretes an optional `note/kind` decorating attribute, declared in
-  the vocab registry under the core `note` namespace as an open, guidance-only
-  set: `"activity"` (progress log), `"decision"` (durable choice and why),
-  `"review-dump"` (bulk findings), `"summary"` (run/session wrap-up). Views may
-  fold or filter by kind; an absent `note/kind` reads as `"activity"`. The set is
-  open — other values remain valid userland annotations.
+- **DELTA-Nwt-001.C6 (note/kind vocabulary):** The blessed note shape (SPEC-001.P5) accretes an optional `note/kind` decorating attribute, declared in the vocab registry under the core `note` namespace as an open, guidance-only set: `"activity"` (progress log), `"decision"` (durable choice and why), `"review-dump"` (bulk findings), `"summary"` (run/session wrap-up). Views may fold or filter by kind; an absent `note/kind` reads as `"activity"`. The set is open — other values remain valid userland annotations.
 
 ## DELTA-Nwt-001.P3 Out of root-spec scope (judgment calls)
 
-- **DELTA-Nwt-001.J1 (CLI decoration passthrough — spool, not cli.md):** The
-  load-bearing `--attr key=value` decoration flag on `strand note` and
-  `strand agent note` (repeatable, same convention as `add`/`update`; keys are
-  ordinary strand attrs on the note strand; `--by`/`--round` unchanged) is **not**
-  a cli.md (SPEC-002) contract change and gets **no `cli.delta.md`**. Per
-  SPEC-002.P1 and SPEC-002.C40 the dispatcher ships verbatim argv (SPEC-002.C30)
-  and per-command behavior is spool-op contract: `note` is a
-  `skein.spools.batteries` op (`spools/batteries.md`) and `agent note` is the
-  repo-local agent-run spool (SPEC-005.C4). The flag accretes on those spool
-  arg-specs and is recorded in their spool docs at implementation.
+- **DELTA-Nwt-001.J1 (CLI decoration passthrough — spool, not cli.md):** The load-bearing `--attr key=value` decoration flag on `strand note` and `strand agent note` (repeatable, same convention as `add`/`update`; keys are ordinary strand attrs on the note strand; `--by`/`--round` unchanged) is **not** a cli.md (SPEC-002) contract change and gets **no `cli.delta.md`**. Per SPEC-002.P1 and SPEC-002.C40 the dispatcher ships verbatim argv (SPEC-002.C30) and per-command behavior is spool-op contract: `note` is a `skein.spools.batteries` op (`spools/batteries.md`) and `agent note` is the repo-local agent-run spool (SPEC-005.C4). The flag accretes on those spool arg-specs and is recorded in their spool docs at implementation.
 
-- **DELTA-Nwt-001.J2 (kanban task tier — spool, not strand-model):** The
-  epic > feature > task tier is a kanban spool contract (`spools/kanban.md`,
-  SPEC-005.C4), not a strand-model change. Tasks are ordinary strands under a
-  feature card via `parent-of`, with attrs declared in the vocab registry, and
-  task status is DERIVED (never stored) from pure core graph + core attrs only —
-  `done` ⟸ `state=closed`; `blocked` ⟸ active with a `depends-on` target not
-  closed; `doing` ⟸ active, deps met, `owner` attr present; `ready` ⟸ active,
-  deps met, no owner — reading no delegation or agent-run vocabulary. This rests
-  entirely on existing strand-model primitives (SPEC-001.P2's "no core status",
-  P5 `parent-of`/`depends-on`, P7 readiness) and adds no core contract. The
-  authoring surface (`kanban task add`/`list` stamping declared attrs plus
-  `parent-of`, with bare `strand add` still valid), the card/board projection of
-  derived task statuses, and the `:implementation`/`:review` stage-key set are
-  kanban-spool and glue concerns recorded there at implementation.
+- **DELTA-Nwt-001.J2 (kanban task tier — spool, not strand-model):** The epic > feature > task tier is a kanban spool contract (`spools/kanban.md`, SPEC-005.C4), not a strand-model change. Tasks are ordinary strands under a feature card via `parent-of`, with attrs declared in the vocab registry, and task status is DERIVED (never stored) from pure core graph + core attrs only — `done` ⟸ `state=closed`; `blocked` ⟸ active with a `depends-on` target not closed; `doing` ⟸ active, deps met, `owner` attr present; `ready` ⟸ active, deps met, no owner — reading no delegation or agent-run vocabulary. This rests entirely on existing strand-model primitives (SPEC-001.P2's "no core status", P5 `parent-of`/`depends-on`, P7 readiness) and adds no core contract. The authoring surface (`kanban task add`/`list` stamping declared attrs plus `parent-of`, with bare `strand add` still valid), the card/board projection of derived task statuses, and the `:implementation`/`:review` stage-key set are kanban-spool and glue concerns recorded there at implementation.

@@ -10,72 +10,31 @@ The decision of whether a scan-first config surface earns grouping macros — no
 
 ## PROP-SkeinReadabilityMacros-001.P2 Goals
 
-- **PROP-SkeinReadabilityMacros-001.G1:** A reader scans one contiguous block per construct — definition, doc, and the
-  data driving its registration and generated help/conventions live together (RFC-020.G1).
-- **PROP-SkeinReadabilityMacros-001.G2:** Runtime semantics stay identical. The live coordination weaver loads these
-  files, so no registered op, query, rule, alias, or generated `help`/`about`/`devflow-conventions` string may change
-  (RFC-020.G2).
-- **PROP-SkeinReadabilityMacros-001.G3:** Handlers and rules stay real, fully-qualified `defn` vars a reader can jump to
-  and `require ... :reload` re-defines cleanly; fail-loud locality holds, with a malformed construct failing at the
-  construct's name, not deep in a shared loader (RFC-020.G3, RFC-020.G4; TEN-003).
-- **PROP-SkeinReadabilityMacros-001.G4:** Add only the surface that pays for itself — macros only for concerns with real
-  definition/usage drift (RFC-020.G5; TEN-004).
+- **PROP-SkeinReadabilityMacros-001.G1:** A reader scans one contiguous block per construct — definition, doc, and the data driving its registration and generated help/conventions live together (RFC-020.G1).
+- **PROP-SkeinReadabilityMacros-001.G2:** Runtime semantics stay identical. The live coordination weaver loads these files, so no registered op, query, rule, alias, or generated `help`/`about`/`devflow-conventions` string may change (RFC-020.G2).
+- **PROP-SkeinReadabilityMacros-001.G3:** Handlers and rules stay real, fully-qualified `defn` vars a reader can jump to and `require ... :reload` re-defines cleanly; fail-loud locality holds, with a malformed construct failing at the construct's name, not deep in a shared loader (RFC-020.G3, RFC-020.G4; TEN-003).
+- **PROP-SkeinReadabilityMacros-001.G4:** Add only the surface that pays for itself — macros only for concerns with real definition/usage drift (RFC-020.G5; TEN-004).
 
 ## PROP-SkeinReadabilityMacros-001.P3 Non-goals
 
-- **PROP-SkeinReadabilityMacros-001.NG1:** No semantic change. This is a data-preserving refactor; the registered
-  identity of every construct and every generated string is held byte-identical (RFC-020.REC4).
-- **PROP-SkeinReadabilityMacros-001.NG2:** No new CLI surface, op semantics, or arg-spec parser change. Generated `help`
-  stays derived from arg-specs, never hand-written (RFC-020.NG2; TEN-006).
-- **PROP-SkeinReadabilityMacros-001.NG3:** No change to `init.clj`'s `runtime/use!` activation model or its
-  explicit ordering comments. Macro registration still runs only inside each module's `install!`, after required spools
-  load (RFC-020.NG1).
-- **PROP-SkeinReadabilityMacros-001.NG4:** No promotion to a shipped `skein.api.*.alpha` contract. The macros stay
-  workspace-local config-tier spool code, committing to no accretion contract (RFC-020.NG3, RFC-020.REC3).
-- **PROP-SkeinReadabilityMacros-001.NG5:** No forced rewrite of the land workflow. RFC-012's `defworkflow` fusion stays
-  deferred until misregistration is actually observed (RFC-020.NG4).
-- **PROP-SkeinReadabilityMacros-001.NG6:** No macro coverage of `harnesses.clj`, `reviewers.clj`, or `nvd_scan.clj` —
-  already co-located, or dominated by domain logic and test seams that a macro would obscure (RFC-020.REC1).
+- **PROP-SkeinReadabilityMacros-001.NG1:** No semantic change. This is a data-preserving refactor; the registered identity of every construct and every generated string is held byte-identical (RFC-020.REC4).
+- **PROP-SkeinReadabilityMacros-001.NG2:** No new CLI surface, op semantics, or arg-spec parser change. Generated `help` stays derived from arg-specs, never hand-written (RFC-020.NG2; TEN-006).
+- **PROP-SkeinReadabilityMacros-001.NG3:** No change to `init.clj`'s `runtime/use!` activation model or its explicit ordering comments. Macro registration still runs only inside each module's `install!`, after required spools load (RFC-020.NG1).
+- **PROP-SkeinReadabilityMacros-001.NG4:** No promotion to a shipped `skein.api.*.alpha` contract. The macros stay workspace-local config-tier spool code, committing to no accretion contract (RFC-020.NG3, RFC-020.REC3).
+- **PROP-SkeinReadabilityMacros-001.NG5:** No forced rewrite of the land workflow. RFC-012's `defworkflow` fusion stays deferred until misregistration is actually observed (RFC-020.NG4).
+- **PROP-SkeinReadabilityMacros-001.NG6:** No macro coverage of `harnesses.clj`, `reviewers.clj`, or `nvd_scan.clj` — already co-located, or dominated by domain logic and test seams that a macro would obscure (RFC-020.REC1).
 
 ## PROP-SkeinReadabilityMacros-001.P4 Proposed scope
 
-- **PROP-SkeinReadabilityMacros-001.S1:** Ship three grouping macros beside `defpattern` in the workspace-local
-  `skein.macros/*` spool (`.skein/spools/macros`): `skein.macros.queries/defquery`, `skein.macros.ops/defop`, and
-  `skein.macros.rules/defrule`. Each mirrors `defpattern` — it expands to a real `defn`/`def` plus a namespace-keyed
-  `remember-*!`, and registers from the owning module's existing `install!` via `install-queries!` / `install-ops!` /
-  `install-rules!`. These are config-tier spool namespaces that `require` blessed `skein.api.*.alpha` registration APIs —
-  the correct tier direction, and pointedly not `skein.userland.alpha`, which is downstream-only and may not be required
-  by any `skein.*` namespace.
-- **PROP-SkeinReadabilityMacros-001.S2:** Convert `config.clj` to author its seven queries and its op family through
-  `defquery`/`defop`, one block per construct, and delete `register-query-map!` and the `install!` op vector in favour of
-  the `install-*!` calls. Convert `attention.clj` to author its rules through `defrule` and delete
-  `register-chime-rules!`. Beyond those two config files, the new spool namespaces under `.skein/spools/macros` (S1),
-  and an `init.clj` require/activation touch for the `:macros/*` module if loading needs it, no `.skein` file changes.
-- **PROP-SkeinReadabilityMacros-001.S3 (accepted RFC resolutions, carried into scope):** `defop` accepts either a named
-  arg-spec var or an inline arg-spec map, mirroring `defpattern`'s `:spec`/`:input` (RFC-020.Q1). `install-queries!`
-  derives the mechanical `:queries` name listing in `devflow-conventions` from the remembered entries, removing that name
-  repetition, while `:ops` stays hand-authored for editorial grouping (the recorded RFC-020.Q2 fallback; see
-  PLAN-Srm-001.DN1) and the hand-authored conventions prose stays authored (RFC-020.Q2). Remembering is per-namespace,
-  matching the `defpattern` precedent (RFC-020.Q3).
-- **PROP-SkeinReadabilityMacros-001.S4 (acceptance criteria):** The feature is done when the registered runtime surface
-  is provably unchanged. Three gates, all green:
-  - **Surface diff.** `strand devflow-conventions` output is byte-identical before and after, together with `strand help`,
-    `strand help <op>` for every op, each named query's rows, and a chime rule firing — captured on a disposable
-    `mktemp -d` world (guarded `${ws:?}`) pointed at the branch config, never the canonical world.
-  - **Disposable-world smoke.** `clojure -M:smoke` passes on the branch.
-  - **Full suite and quality gates.** `clojure -M:test` (under the `flock` suite lock) and
-    `make fmt-check lint reflect-check docs-check` pass at zero findings.
-- **PROP-SkeinReadabilityMacros-001.S5 (risks).** Real macros in a data-first codebase carry a small vocabulary cost and
-  one macroexpansion indirection between source and the emitted `register-*!` (accepted in RFC-020.O2 against the
-  scan-first goal; the macros are documented beside `defpattern` so the vocabulary is discoverable in one place). The
-  live-weaver load path is the material hazard: a subtle expansion change to registration timing or a fully-qualified
-  handler symbol would alter runtime identity, which S4's surface diff and the treadle-installs-last / config-before-workflows
-  load-order constraints are chosen to catch. If the macro indirection is later judged too costly against TEN-001,
-  RFC-020.O4 (one data vector plus a reducing `install-*!`, no macroexpansion) is the recorded data-first fallback that
-  still removes the boilerplate.
+- **PROP-SkeinReadabilityMacros-001.S1:** Ship three grouping macros beside `defpattern` in the workspace-local `skein.macros/*` spool (`.skein/spools/macros`): `skein.macros.queries/defquery`, `skein.macros.ops/defop`, and `skein.macros.rules/defrule`. Each mirrors `defpattern` — it expands to a real `defn`/`def` plus a namespace-keyed `remember-*!`, and registers from the owning module's existing `install!` via `install-queries!` / `install-ops!` / `install-rules!`. These are config-tier spool namespaces that `require` blessed `skein.api.*.alpha` registration APIs — the correct tier direction, and pointedly not `skein.userland.alpha`, which is downstream-only and may not be required by any `skein.*` namespace.
+- **PROP-SkeinReadabilityMacros-001.S2:** Convert `config.clj` to author its seven queries and its op family through `defquery`/`defop`, one block per construct, and delete `register-query-map!` and the `install!` op vector in favour of the `install-*!` calls. Convert `attention.clj` to author its rules through `defrule` and delete `register-chime-rules!`. Beyond those two config files, the new spool namespaces under `.skein/spools/macros` (S1), and an `init.clj` require/activation touch for the `:macros/*` module if loading needs it, no `.skein` file changes.
+- **PROP-SkeinReadabilityMacros-001.S3 (accepted RFC resolutions, carried into scope):** `defop` accepts either a named arg-spec var or an inline arg-spec map, mirroring `defpattern`'s `:spec`/`:input` (RFC-020.Q1). `install-queries!` derives the mechanical `:queries` name listing in `devflow-conventions` from the remembered entries, removing that name repetition, while `:ops` stays hand-authored for editorial grouping (the recorded RFC-020.Q2 fallback; see PLAN-Srm-001.DN1) and the hand-authored conventions prose stays authored (RFC-020.Q2). Remembering is per-namespace, matching the `defpattern` precedent (RFC-020.Q3).
+- **PROP-SkeinReadabilityMacros-001.S4 (acceptance criteria):** The feature is done when the registered runtime surface is provably unchanged. Three gates, all green:
+    - **Surface diff.** `strand devflow-conventions` output is byte-identical before and after, together with `strand help`, `strand help <op>` for every op, each named query's rows, and a chime rule firing — captured on a disposable `mktemp -d` world (guarded `${ws:?}`) pointed at the branch config, never the canonical world.
+    - **Disposable-world smoke.** `clojure -M:smoke` passes on the branch.
+    - **Full suite and quality gates.** `clojure -M:test` (under the `flock` suite lock) and `make fmt-check lint reflect-check docs-check` pass at zero findings.
+- **PROP-SkeinReadabilityMacros-001.S5 (risks).** Real macros in a data-first codebase carry a small vocabulary cost and one macroexpansion indirection between source and the emitted `register-*!` (accepted in RFC-020.O2 against the scan-first goal; the macros are documented beside `defpattern` so the vocabulary is discoverable in one place). The live-weaver load path is the material hazard: a subtle expansion change to registration timing or a fully-qualified handler symbol would alter runtime identity, which S4's surface diff and the treadle-installs-last / config-before-workflows load-order constraints are chosen to catch. If the macro indirection is later judged too costly against TEN-001, RFC-020.O4 (one data vector plus a reducing `install-*!`, no macroexpansion) is the recorded data-first fallback that still removes the boilerplate.
 
 ## PROP-SkeinReadabilityMacros-001.P5 Open questions
 
-- **PROP-SkeinReadabilityMacros-001.Q1:** None blocking. RFC-020's three open questions (Q1 arg-spec form, Q2 conventions
-  derivation, Q3 remembering scope) were resolved at acceptance and are carried into
-  PROP-SkeinReadabilityMacros-001.S3; the exact construct-by-construct slicing belongs to the feature plan, not here.
+- **PROP-SkeinReadabilityMacros-001.Q1:** None blocking. RFC-020's three open questions (Q1 arg-spec form, Q2 conventions derivation, Q3 remembering scope) were resolved at acceptance and are carried into PROP-SkeinReadabilityMacros-001.S3; the exact construct-by-construct slicing belongs to the feature plan, not here.

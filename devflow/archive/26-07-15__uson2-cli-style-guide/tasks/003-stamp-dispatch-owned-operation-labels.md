@@ -1,11 +1,6 @@
 # Task 3: Stamp dispatch-owned operation labels
 
-**Document ID:** `TASK-Ucs-003`
-**Configuration identification:** Document IDs are ordered as document type,
-short name, sequential id, then optional version. Omit `@1`; append `@2`, `@3`,
-etc. only when a new version supersedes an externally referenced document.
-Prefix every nested point ID with the full document ID so references are
-globally grepable.
+**Document ID:** `TASK-Ucs-003` **Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable.
 
 ## TASK-Ucs-003.P1 Scope
 
@@ -19,17 +14,12 @@ Commit policy: commit only this task's owned changes on the current feature bran
 
 ## TASK-Ucs-003.P2 Must implement exactly
 
-- **TASK-Ucs-003.MI1:** After the handler returns, when parsed args contain
-  `:subcommand` and the result is a map, derive
-  `"<op-name> <full-subcommand-path>"` from the canonical registered op name,
-  parsed subcommand, and parsed nested `:action` when present.
+- **TASK-Ucs-003.MI1:** After the handler returns, when parsed args contain `:subcommand` and the result is a map, derive `"<op-name> <full-subcommand-path>"` from the canonical registered op name, parsed subcommand, and parsed nested `:action` when present.
 - **TASK-Ucs-003.MI2:** Stamp an absent `:operation` key with the derived label. Use `contains?` so explicit nil is not treated as absence.
 - **TASK-Ucs-003.MI3:** Preserve an existing label only when it exactly equals the derived label.
 - **TASK-Ucs-003.MI4:** Fail loudly on every different existing value, including nil, and include expected and actual labels in exception data.
 - **TASK-Ucs-003.MI5:** Leave flat arg-spec ops, raw-envelope ops, non-map results, thrown failures, streaming emitted items, and the dispatch help alias unchanged.
-- **TASK-Ucs-003.MI6:** Add focused coverage for absent, equal, conflicting,
-  and explicit-nil labels, a two-level command path, and every excluded path
-  named in MI5.
+- **TASK-Ucs-003.MI6:** Add focused coverage for absent, equal, conflicting, and explicit-nil labels, a two-level command path, and every excluded path named in MI5.
 - **TASK-Ucs-003.MI7:** Update the public `op!` docstring only if needed to describe the new result boundary.
 
 ## TASK-Ucs-003.P3 Done when

@@ -1,14 +1,6 @@
 # Selectable authoring declarations plan
 
-**Document ID:** `PLAN-Sad-001`
-**Feature:** `selectable-authoring-declarations`
-**Proposal:** [proposal.md](./proposal.md)
-**RFCs:** [Spool authoring forms](../../rfcs/2026-07-28-spool-authoring-forms.md), [Lifecycle authoring forms](../../rfcs/2026-07-28-lifecycle-authoring-forms.md)
-**Root specs:** [REPL API](../../specs/repl-api.md), [Weaver runtime](../../specs/daemon-runtime.md), [Alpha surface](../../specs/alpha-surface.md)
-**Feature specs:** [REPL API delta](./specs/repl-api.delta.md), [Weaver runtime delta](./specs/daemon-runtime.delta.md), [Alpha surface delta](./specs/alpha-surface.delta.md)
-**Status:** Shipped
-**Last Updated:** 2026-08-14
-**Configuration identification:** `Sad` abbreviates selectable authoring declarations. A workspace scan found no earlier `PLAN-Sad` ID, so this feature takes `PLAN-Sad-001`. Nested IDs carry the complete document ID.
+**Document ID:** `PLAN-Sad-001` **Feature:** `selectable-authoring-declarations` **Proposal:** [proposal.md](./proposal.md) **RFCs:** [Spool authoring forms](../../rfcs/2026-07-28-spool-authoring-forms.md), [Lifecycle authoring forms](../../rfcs/2026-07-28-lifecycle-authoring-forms.md) **Root specs:** [REPL API](../../specs/repl-api.md), [Weaver runtime](../../specs/daemon-runtime.md), [Alpha surface](../../specs/alpha-surface.md) **Feature specs:** [REPL API delta](./specs/repl-api.delta.md), [Weaver runtime delta](./specs/daemon-runtime.delta.md), [Alpha surface delta](./specs/alpha-surface.delta.md) **Status:** Shipped **Last Updated:** 2026-08-14 **Configuration identification:** `Sad` abbreviates selectable authoring declarations. A workspace scan found no earlier `PLAN-Sad` ID, so this feature takes `PLAN-Sad-001`. Nested IDs carry the complete document ID.
 
 ## PLAN-Sad-001.P1 Goal and scope
 

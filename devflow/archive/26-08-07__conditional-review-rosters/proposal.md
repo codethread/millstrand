@@ -1,11 +1,6 @@
 # Conditional review rosters proposal
 
-**Document ID:** `PROP-Crr-001`
-**Status:** Approved
-**Approved:** 2026-08-05
-**Related RFCs:** None
-**Related root specs:** None
-**Design record:** Kanban cards `ts7mx`, `d5af5`, and `631d2`
+**Document ID:** `PROP-Crr-001` **Status:** Approved **Approved:** 2026-08-05 **Related RFCs:** None **Related root specs:** None **Design record:** Kanban cards `ts7mx`, `d5af5`, and `631d2`
 
 **Configuration identification:** `PROP-Crr-001` is the first proposal for conditional review rosters. Nested point IDs use the full document ID.
 

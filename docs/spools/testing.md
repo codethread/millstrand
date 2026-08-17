@@ -1,15 +1,8 @@
 # Testing your config and spools
 
-Everything you write against a workspace is testable, from a two-line `init.clj` registration to a
-spool you distribute. The cheapest tier is not a test at all: smoke a config change in a disposable
-world, as [customising your workspace](./customisation.md) shows. This page covers everything after
-that: putting a selected Millstrand checkout on your test classpath, the three testing tiers, and
-weaver-world integration tests with `millstrand.test.alpha`, whose fixtures (`:init`, `:spools-edn`,
-`:files`) exercise exactly the artifacts the customisation page has you writing.
+Everything you write against a workspace is testable, from a two-line `init.clj` registration to a spool you distribute. The cheapest tier is not a test at all: smoke a config change in a disposable world, as [customising your workspace](./customisation.md) shows. This page covers everything after that: putting a selected Millstrand checkout on your test classpath, the three testing tiers, and weaver-world integration tests with `millstrand.test.alpha`, whose fixtures (`:init`, `:spools-edn`, `:files`) exercise exactly the artifacts the customisation page has you writing.
 
-For how to structure a spool others will run, read [writing shared
-spools](./writing-shared-spools.md). For the runtime/spool model itself, read the [user
-reference](../reference.md).
+For how to structure a spool others will run, read [writing shared spools](./writing-shared-spools.md). For the runtime/spool model itself, read the [user reference](../reference.md).
 
 ## Repo shape
 
@@ -24,10 +17,7 @@ my-spool/
     my/spool_test.clj
 ```
 
-There is no package registry, installer, or lockfile. You publish with an annotated Git tag and its
-peeled commit sha. Consumers approve one Git family entry per repository in `spools.edn`; its
-`:roots` map selects the libraries available from that source. A shared local entry is one implicit
-root at `.` under the entry's symbol.
+There is no package registry, installer, or lockfile. You publish with an annotated Git tag and its peeled commit sha. Consumers approve one Git family entry per repository in `spools.edn`; its `:roots` map selects the libraries available from that source. A shared local entry is one implicit root at `.` under the entry's symbol.
 
 ## deps.edn: Millstrand as a local-root test dependency
 
@@ -47,8 +37,7 @@ Run tests with your preferred runner, e.g.:
 clojure -M:test -m my.test-runner
 ```
 
-The dependency name is arbitrary; `:local/root` is what matters. Keep the checkout path out of `src`
-paths — Millstrand is a dev/test dependency for your library code, and a runtime host for your spool.
+The dependency name is arbitrary; `:local/root` is what matters. Keep the checkout path out of `src` paths — Millstrand is a dev/test dependency for your library code, and a runtime host for your spool.
 
 The current alpha published form is a SHA-only Git pin, not a local override:
 
@@ -76,16 +65,11 @@ Most spool logic should be plain functions tested with ordinary `clojure.test`. 
 
 ### 2. Millstrand-namespace tests in your test JVM
 
-With the local-root alias, your test JVM can require Millstrand namespaces directly — useful for
-exercising pure helpers like query compilation or your own code that composes `millstrand.api.*.alpha`
-functions against an explicit runtime value.
+With the local-root alias, your test JVM can require Millstrand namespaces directly — useful for exercising pure helpers like query compilation or your own code that composes `millstrand.api.*.alpha` functions against an explicit runtime value.
 
 ### 3. Weaver-world integration tests with `millstrand.test.alpha`
 
-For behavior that only exists inside a running weaver — approved-root acquisition, module refresh,
-init.clj startup behavior, event handlers, ops — use `millstrand.test.alpha`. It starts a real,
-disposable, isolated weaver world in your test JVM and routes forms through the weaver's real nREPL
-transport:
+For behavior that only exists inside a running weaver — approved-root acquisition, module refresh, init.clj startup behavior, event handlers, ops — use `millstrand.test.alpha`. It starts a real, disposable, isolated weaver world in your test JVM and routes forms through the weaver's real nREPL transport:
 
 ```clojure
 (ns my.spool-test
@@ -124,10 +108,7 @@ Move tests that inspect `millstrand.core.*`, redefine core collaborators, resolv
 
 The conventions gate checks this boundary as `quality.api-tests`. It permits public fixtures and published spec oracles, but reports direct core implementation use, private core Var resolution, core collaborator redefinitions, and dependencies on integration megasuites.
 
-The context map contains orchestration facts only: `:config-dir`, `:state-dir`, `:data-dir`,
-`:db-path` (file storage only), `:storage`, `:source` (the Millstrand checkout on your classpath),
-`:runtime`, `:metadata`, and `:timeout-ms`. There are deliberately no strand/query wrappers,
-assertion helpers, or CLI subprocess helpers — exercise the real API forms.
+The context map contains orchestration facts only: `:config-dir`, `:state-dir`, `:data-dir`, `:db-path` (file storage only), `:storage`, `:source` (the Millstrand checkout on your classpath), `:runtime`, `:metadata`, and `:timeout-ms`. There are deliberately no strand/query wrappers, assertion helpers, or CLI subprocess helpers — exercise the real API forms.
 
 ## Testing authoring forms as data
 
@@ -153,16 +134,10 @@ Tests activate a spool exactly the way production does — `runtime/module!` nam
 
 Two evaluation contexts exist even though the test weaver runs in your test JVM process:
 
-- **Direct `require` in test code** uses your test JVM classpath (your library
-  plus the Millstrand checkout). This never proves the weaver can load your spool.
-- **Weaver-routed forms via `repl!`** evaluate inside the weaver runtime.
-  Spool code becomes visible there only through the real workflow: approve its
-  family and roots in `spools.edn`, then declare a module whose `:spools`
-  prerequisites name those roots.
+- **Direct `require` in test code** uses your test JVM classpath (your library plus the Millstrand checkout). This never proves the weaver can load your spool.
+- **Weaver-routed forms via `repl!`** evaluate inside the weaver runtime. Spool code becomes visible there only through the real workflow: approve its family and roots in `spools.edn`, then declare a module whose `:spools` prerequisites name those roots.
 
-A spool that passes tier-2 tests can still fail tier 3 — missing `deps.edn` paths in the spool root,
-load-order problems in the module source, or reliance on your test JVM classpath. Tier 3 exists to catch
-exactly that.
+A spool that passes tier-2 tests can still fail tier 3 — missing `deps.edn` paths in the spool root, load-order problems in the module source, or reliance on your test JVM classpath. Tier 3 exists to catch exactly that.
 
 The Millstrand checkout on that classpath carries the blessed `millstrand.api.*.alpha` namespaces, including the spool-authoring helpers `millstrand.api.spool.alpha` and `millstrand.api.format.alpha`. They are libraries, not spools. No spool ships on the production weaver classpath: batteries and every other reference spool load through the approved-root flow above. This repository's own `:test` alias deliberately adds batteries source to the test JVM classpath so its unit tests can require the namespace directly. That test-tooling artifact does not prove a weaver can load batteries; runtime tests still use its approved `{:millstrand/source-root "spools/batteries"}` coordinate and guarded module.
 
@@ -192,46 +167,25 @@ Write the spool fixture, approval, and module declaration into the generated wor
                    [:module/outcomes :demo/lib :status])))))
 ```
 
-To test your actual one-root library instead of an inline fixture, use its library symbol as the
-family key and point `:local/root` at the checkout (an absolute local root works in `:spools-edn`
-data). When the checkout comes from the test classpath rather than a fixed local path,
-`millstrand.test.alpha/spool-checkout-root` resolves the root from one of the spool's source resources
-and fails loudly if that resource is absent. Its one-argument form uses
-`clojure.java.io/resource`; tests for the resolver can pass a resource-loader function as the
-second argument.
+To test your actual one-root library instead of an inline fixture, use its library symbol as the family key and point `:local/root` at the checkout (an absolute local root works in `:spools-edn` data). When the checkout comes from the test classpath rather than a fixed local path, `millstrand.test.alpha/spool-checkout-root` resolves the root from one of the spool's source resources and fails loudly if that resource is absent. Its one-argument form uses `clojure.java.io/resource`; tests for the resolver can pass a resource-loader function as the second argument.
 
 Two runtime-local constraints matter:
 
-- Each weaver runtime has one spool `DynamicClassLoader` and its own acquired-root state. Separate
-  `with-weaver-world` calls may reuse the same library symbols in one test JVM; they do not share a
-  retained tools.deps resolution universe.
-- Within one runtime generation, refresh acquisition only adds source paths and Maven jars. Removing
-  or replacing an already-acquired root is a non-additive change: refresh records a pending
-  generation and refuses
-  the change. Do not delete fixture roots while their world is running. The helper stops the runtime
-  before deleting its default temporary root.
+- Each weaver runtime has one spool `DynamicClassLoader` and its own acquired-root state. Separate `with-weaver-world` calls may reuse the same library symbols in one test JVM; they do not share a retained tools.deps resolution universe.
+- Within one runtime generation, refresh acquisition only adds source paths and Maven jars. Removing or replacing an already-acquired root is a non-additive change: refresh records a pending generation and refuses the change. Do not delete fixture roots while their world is running. The helper stops the runtime before deleting its default temporary root.
 
 ## Storage selection
 
 `:storage` is explicit:
 
-- `:sqlite-file` (default) — the canonical user path: a real
-  `data/millstrand.sqlite` in the generated workspace. Use this when the test
-  should match normal weaver-world layout, metadata, and persistence.
-- `:sqlite-memory` — real Xerial SQLite held in memory for the weaver
-  lifetime. Nothing is written under `data/`; stopping the world destroys the
-  database. A single held connection serializes writes, which is fine at test
-  scale but is not production-like pooled storage.
+- `:sqlite-file` (default) — the canonical user path: a real `data/millstrand.sqlite` in the generated workspace. Use this when the test should match normal weaver-world layout, metadata, and persistence.
+- `:sqlite-memory` — real Xerial SQLite held in memory for the weaver lifetime. Nothing is written under `data/`; stopping the world destroys the database. A single held connection serializes writes, which is fine at test scale but is not production-like pooled storage.
 
-Both run the same schema and SQL code. Metadata/status report storage explicitly: file worlds have a
-`database_path`, memory worlds report `database_kind "sqlite-memory"` with a null path.
+Both run the same schema and SQL code. Metadata/status report storage explicitly: file worlds have a `database_path`, memory worlds report `database_kind "sqlite-memory"` with a null path.
 
 ## Temp paths and Unix sockets
 
-Each weaver world serves a Unix domain socket, and socket paths have a small platform limit (about
-104 bytes on macOS). The helper generates its worlds under a short `/tmp` root for this reason. If
-you pass an explicit `:root`, keep it short — deeply nested `target/...` build paths can make socket
-creation fail.
+Each weaver world serves a Unix domain socket, and socket paths have a small platform limit (about 104 bytes on macOS). The helper generates its worlds under a short `/tmp` root for this reason. If you pass an explicit `:root`, keep it short — deeply nested `target/...` build paths can make socket creation fail.
 
 ## CI
 
@@ -239,22 +193,18 @@ Check out both repos and pin Millstrand to a commit or tag:
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
-  - uses: actions/checkout@v4
-    with:
-      repository: your-org/millstrand-src
-      ref: <pinned-tag-or-sha>   # a release tag or full SHA you have verified
-      path: millstrand-src
-  - run: clojure -M:test -m my.test-runner
+    - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+      with:
+          repository: your-org/millstrand-src
+          ref: <pinned-tag-or-sha> # a release tag or full SHA you have verified
+          path: millstrand-src
+    - run: clojure -M:test -m my.test-runner
 ```
 
-Choose `ref` deliberately: a release tag or a full commit SHA that exists in the Millstrand repository
-you pin against. Millstrand publishes no implicit "latest", so an unverified value fails the checkout
-rather than floating.
+Choose `ref` deliberately: a release tag or a full commit SHA that exists in the Millstrand repository you pin against. Millstrand publishes no implicit "latest", so an unverified value fails the checkout rather than floating.
 
-Have the `:local/root` in `deps.edn` reference the checkout path used in CI (a relative `:local/root
-"millstrand-src"` next to your repo keeps local and CI layouts identical). Treat Millstrand version bumps like
-any dependency bump: update the pinned ref, run the suite.
+Have the `:local/root` in `deps.edn` reference the checkout path used in CI (a relative `:local/root "millstrand-src"` next to your repo keeps local and CI layouts identical). Treat Millstrand version bumps like any dependency bump: update the pinned ref, run the suite.
 
 ## What the helper will not do
 
@@ -262,7 +212,5 @@ any dependency bump: update the pinned ref, run the suite.
 
 - No strand/query/assertion wrappers — call real `millstrand.api.*.alpha` forms.
 - `collect-module-forms` inspects declarations as data, and `activate-module!` activates an already-classpath-visible namespace on a bare test runtime. Neither substitutes for approved-root acquisition or startup proof.
-- No Go CLI subprocess helpers or binary discovery — CLI behavior is covered
-  by the end-to-end workflow, not library tests.
-- Never touches your default `~/.config/millstrand` (or any user-owned) workspace;
-  worlds are generated and isolated by default.
+- No Go CLI subprocess helpers or binary discovery — CLI behavior is covered by the end-to-end workflow, not library tests.
+- Never touches your default `~/.config/millstrand` (or any user-owned) workspace; worlds are generated and isolated by default.

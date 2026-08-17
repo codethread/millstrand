@@ -1,13 +1,6 @@
 # Spool Activation Lifecycle ADR Plan
 
-**Document ID:** `PLAN-Sal-001`
-**Feature:** `rdrw9-adr-activation-lifecycle`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** none
-**Root specs:** [repl-api.md](../../specs/repl-api.md), [daemon-runtime.md](../../specs/daemon-runtime.md) (referenced, not changed)
-**Feature specs:** none (PROP-Sal-001.NG1)
-**Status:** Reviewed
-**Last Updated:** 2026-07-23
+**Document ID:** `PLAN-Sal-001` **Feature:** `rdrw9-adr-activation-lifecycle` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [repl-api.md](../../specs/repl-api.md), [daemon-runtime.md](../../specs/daemon-runtime.md) (referenced, not changed) **Feature specs:** none (PROP-Sal-001.NG1) **Status:** Reviewed **Last Updated:** 2026-07-23
 
 ## PLAN-Sal-001.P1 Goal and scope
 
@@ -19,10 +12,10 @@ Write and land ADR-003 (`devflow/adrs/0003-spool-activation-lifecycle.md`): the 
 
 ## PLAN-Sal-001.P3 Affected areas
 
-| ID                | Area                                             | Expected change |
-| ----------------- | ------------------------------------------------ | --------------- |
-| PLAN-Sal-001.AA1  | `devflow/adrs/0003-spool-activation-lifecycle.md` | New ADR         |
-| PLAN-Sal-001.AA2  | `devflow/feat/rdrw9-adr-activation-lifecycle/`   | Feature folder  |
+| ID               | Area                                              | Expected change |
+| ---------------- | ------------------------------------------------- | --------------- |
+| PLAN-Sal-001.AA1 | `devflow/adrs/0003-spool-activation-lifecycle.md` | New ADR         |
+| PLAN-Sal-001.AA2 | `devflow/feat/rdrw9-adr-activation-lifecycle/`    | Feature folder  |
 
 ## PLAN-Sal-001.P4 Contract and migration impact
 

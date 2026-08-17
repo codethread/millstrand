@@ -1,11 +1,6 @@
 # REPL API delta for selectable authoring declarations
 
-**Document ID:** `DELTA-Sad-001`
-**Root spec:** [repl-api.md](../../../specs/repl-api.md)
-**Feature:** [../proposal.md](../proposal.md)
-**Status:** Reviewed
-**Last Updated:** 2026-08-13
-**Configuration identification:** `Sad` abbreviates selectable authoring declarations. This is the first delta in that feature's ordered set, so it takes `DELTA-Sad-001`. Nested IDs carry the complete document ID.
+**Document ID:** `DELTA-Sad-001` **Root spec:** [repl-api.md](../../../specs/repl-api.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Reviewed **Last Updated:** 2026-08-13 **Configuration identification:** `Sad` abbreviates selectable authoring declarations. This is the first delta in that feature's ordered set, so it takes `DELTA-Sad-001`. Nested IDs carry the complete document ID.
 
 ## DELTA-Sad-001.P1 Summary
 
@@ -22,15 +17,16 @@ The authoring API separates declaration definition from module selection. Every 
 - **DELTA-Sad-001.CC7:** The built-in forms and generated domain forms share the descriptor, typed-selection, and return contracts. Workflow owns `workflow` and `executor` families, Chime owns `rule`, and Cron owns `job`. Cron's definition grammar becomes `(defjob name doc job)`, deriving the registry id as `(keyword name)`. Its bang form also accepts `(defjob! name doc use-options job)`, and its use form accepts the standard optional leading use-options map. Both Cron definition forms return the installed Var; standalone `use-job!` returns the selected Vars vector.
 - **DELTA-Sad-001.CC8:** Source search and clj-kondo see the same public vocabulary. Millstrand's export publishes four stable analyze-call hook entrypoints in `hooks.millstrand`: `defauthoring`, `defvalue`, `deffn`, and `use-vars`. `defauthoring` analyzes `(defauthoring noun [mode & user-bindings] & plan-body)` as definitions of the three generated macros and rejects a non-symbol noun or malformed builder binding vector. `defvalue` analyzes a value-backed inert or bang call as a `def` at its exact authored name while marking every remaining argument expression used. `deffn` analyzes a function-backed inert or bang call as a `defn` at its exact authored name, using the first argument vector after the docstring as the function argv and marking preceding option expressions used. `use-vars` marks the optional leading use-options map used and analyzes every remaining symbol as a Var reference without defining it. Millstrand maps every built-in form to the matching hook. A domain export maps its generated value or function family exactly as follows, choosing `defvalue` or `deffn` once for both definition forms:
 
-  ```clojure
-  {:hooks
-   {:analyze-call
-    {domain.api/defrule hooks.millstrand/deffn
-     domain.api/defrule! hooks.millstrand/deffn
-     domain.api/use-rule! hooks.millstrand/use-vars}}}
-  ```
+    ```clojure
+    {:hooks
+     {:analyze-call
+      {domain.api/defrule hooks.millstrand/deffn
+       domain.api/defrule! hooks.millstrand/deffn
+       domain.api/use-rule! hooks.millstrand/use-vars}}}
+    ```
 
-  A value-backed family uses the same three-entry map with `hooks.millstrand/defvalue` for its definition forms. The Millstrand export maps `millstrand.api.authoring.alpha/defauthoring` to `hooks.millstrand/defauthoring`, so the defining domain namespace also sees the generated macro Vars. Hook functions take clj-kondo's standard context map and return `{:node analyzed-node}`; malformed hook context fails loudly. No hook configuration, runtime lookup, generated per-family hook code, or fallback analyzer is part of the contract. The export does not enforce module-location policy in this delivery.
+    A value-backed family uses the same three-entry map with `hooks.millstrand/defvalue` for its definition forms. The Millstrand export maps `millstrand.api.authoring.alpha/defauthoring` to `hooks.millstrand/defauthoring`, so the defining domain namespace also sees the generated macro Vars. Hook functions take clj-kondo's standard context map and return `{:node analyzed-node}`; malformed hook context fails loudly. No hook configuration, runtime lookup, generated per-family hook code, or fallback analyzer is part of the contract. The export does not enforce module-location policy in this delivery.
+
 - **DELTA-Sad-001.CC9:** `millstrand.api.graph.alpha`, `patterns.alpha`, `events.alpha`, `hooks.alpha`, `weaver.alpha`, `registry.alpha`, `millstrand.repl`, and domain equivalents keep their direct `register/replace/unregister-*!` behavior. A use form is durable module selection, not an alias for direct runtime mutation.
 - **DELTA-Sad-001.CC10:** `millstrand.api.authoring.alpha` registers and documents the public clojure.spec sources `::declaration`, `::registry-use-options`, `::builder-bindings`, `::expansion-plan`, `::selection`, and `::selected-vars`. Descriptor installation and typed selection consult `::declaration`; registry selection consults `::registry-use-options`; `defauthoring` conforms its binding vector and returned plan with `::builder-bindings` and `::expansion-plan` during macro expansion; normalized data is checked with `::selection` before the existing collector seam; and standalone use-form returns are checked with `::selected-vars`. Each descriptor entry is also checked by its owning kind's existing entry spec before installation and selection. Exact-key checks, the plan rule tying `:name` to `:definition`, and cross-entry duplicate detection remain explicit checks because they are relational constraints. Public docstrings link the consulted spec names.
 - **DELTA-Sad-001.CC11:** Authoring rejections throw `ExceptionInfo` with a boundary-specific message and structured data. The data always identifies `:reason` and the offending `:form`, `:symbol`, or `:value`; it adds the expected family, kind, channel, protocol, allowed option keys, or grammar when that expectation applies. Source-ownership failures also include the available module, namespace, and file context. Tests assert these diagnostics at the macro-expansion, descriptor-installation, selection, and source-collection boundaries. The contract does not require interior functions to wrap or translate an already actionable authoring error.

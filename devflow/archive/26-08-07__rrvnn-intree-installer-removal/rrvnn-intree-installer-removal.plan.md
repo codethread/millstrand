@@ -18,15 +18,15 @@ Delete the 7 in-tree spool installers, bring every in-tree reconciler to explici
 
 ## PLAN-Itr-001.P3 Affected areas
 
-| ID               | Area                                                        | Expected change                                              |
-| ---------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| ID | Area | Expected change |
+| --- | --- | --- |
 | PLAN-Itr-001.AA1 | `spools/{batteries,workflow,guild,chime,cron,unsafe-text-search}/src`, `spools/workflow/src/.../executors/shell.clj` | Datums exported; installers deleted; C46b dispatch; guild setter |
-| PLAN-Itr-001.AA2 | `test/skein/spools/test_support.clj`                        | `activate-spool!` helper                                     |
+| PLAN-Itr-001.AA2 | `test/skein/spools/test_support.clj` | `activate-spool!` helper |
 | PLAN-Itr-001.AA3 | `test/skein/{cron,guild,chime}_test.clj`, `test/skein/spools/{batteries,workflow,unsafe_text_search}_test.clj`, `test/skein/spools/executors/shell_test.clj` | 28 call sites converted; installer-semantics tests re-targeted |
-| PLAN-Itr-001.AA4 | `test/skein/vocab_test.clj`, `nvd_scan_test.clj`, `config_test.clj` | Comment rewording only                                       |
-| PLAN-Itr-001.AA5 | New parity test ns/file                                     | init.clj ↔ datum triple parity (A6)                          |
-| PLAN-Itr-001.AA6 | `spools/*.api.md` (7), `spools/*.md` + cookbooks, `docs/spools/testing.md`, `docs/spools/writing-shared-spools.md` | Regenerated + prose sweep + P7 guidance move                 |
-| PLAN-Itr-001.AA7 | `.millstrand/init.clj`                                           | Comment updates only (NG4: literal maps stay)                |
+| PLAN-Itr-001.AA4 | `test/skein/vocab_test.clj`, `nvd_scan_test.clj`, `config_test.clj` | Comment rewording only |
+| PLAN-Itr-001.AA5 | New parity test ns/file | init.clj ↔ datum triple parity (A6) |
+| PLAN-Itr-001.AA6 | `spools/*.api.md` (7), `spools/*.md` + cookbooks, `docs/spools/testing.md`, `docs/spools/writing-shared-spools.md` | Regenerated + prose sweep + P7 guidance move |
+| PLAN-Itr-001.AA7 | `.millstrand/init.clj` | Comment updates only (NG4: literal maps stay) |
 
 ## PLAN-Itr-001.P4 Contract and migration impact
 

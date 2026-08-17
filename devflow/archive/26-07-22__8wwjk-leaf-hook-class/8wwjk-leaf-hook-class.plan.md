@@ -1,178 +1,54 @@
 # 8wwjk-leaf-hook-class plan
 
-**Document ID:** `PLAN-Lhc-001`
-**Status:** Reviewed
-**Last Updated:** 2026-07-22
-**Proposal:** [proposal.md](./proposal.md)
-**Spec deltas:** [repl-api](./specs/repl-api.delta.md), [daemon-runtime](./specs/daemon-runtime.delta.md), [cli](./specs/cli.delta.md)
+**Document ID:** `PLAN-Lhc-001` **Status:** Reviewed **Last Updated:** 2026-07-22 **Proposal:** [proposal.md](./proposal.md) **Spec deltas:** [repl-api](./specs/repl-api.delta.md), [daemon-runtime](./specs/daemon-runtime.delta.md), [cli](./specs/cli.delta.md)
 
 ## PLAN-Lhc-001.P1 Goal and scope
 
-Ship DELTA-Lhc-001/002/003: mandatory per-leaf `:hook-class`/`:deadline-class`,
-arity-N fractal subcommands, leaf-resolving hook gate and deadlines, per-node help
-classes, and the full owned-surface sweep (in-repo ops, publication-seam
-constructors, sibling spools with pin bumps). Breaking, one queue, no migration.
+Ship DELTA-Lhc-001/002/003: mandatory per-leaf `:hook-class`/`:deadline-class`, arity-N fractal subcommands, leaf-resolving hook gate and deadlines, per-node help classes, and the full owned-surface sweep (in-repo ops, publication-seam constructors, sibling spools with pin bumps). Breaking, one queue, no migration.
 
 ## PLAN-Lhc-001.P2 Approach
 
-One **design thin-slice first** (oracle seat): implement the fractal mechanism
-end-to-end — recursive structural validation with leaf-class rules, recursive
-parse routing with path-vector results, returns mirror-recursion, leaf-resolving
-socket gate and deadline lookup, per-node help projection with the schema-version
-bump — and apply it to exactly **one** op surface (batteries `spool`, folding
-`spool-status` in as a `status` read verb) plus a synthetic depth-3 grammar in the
-test namespace. The slice proves composition and the public contracts; it may
-amend the deltas only with evidence from the applied seam. Everything after it is
-mechanical and fans out to terra-med seats in file-disjoint slices, with sol-med
-as the standing cross-vendor reviewer for the oracle-authored slice.
+One **design thin-slice first** (oracle seat): implement the fractal mechanism end-to-end — recursive structural validation with leaf-class rules, recursive parse routing with path-vector results, returns mirror-recursion, leaf-resolving socket gate and deadline lookup, per-node help projection with the schema-version bump — and apply it to exactly **one** op surface (batteries `spool`, folding `spool-status` in as a `status` read verb) plus a synthetic depth-3 grammar in the test namespace. The slice proves composition and the public contracts; it may amend the deltas only with evidence from the applied seam. Everything after it is mechanical and fans out to terra-med seats in file-disjoint slices, with sol-med as the standing cross-vendor reviewer for the oracle-authored slice.
 
-Enforcement cannot flip before the sweep: runtime startup registers the
-`help`/`about`/`prime` builtins and publishes every batteries entry, so a
-validator that requires leaf classes on day one fails every boot and no phase
-gate can stay green. The queue therefore stages **mechanism first, flip after
-the sweep**: PH1 lands recursion + leaf-class support *accretively* (new shape
-accepted and preferred; old op-level classes and defaults still tolerated as
-intra-branch scaffolding), PH2 sweeps every in-repo registrant onto the new
-shape with green gates throughout, and PH3 is the **enforcement flip** — delete
-the defaults and the op-level tolerance, forbid non-leaf classes — landing
-atomically with nothing left to break in-repo. The scaffolding never ships as a
-contract: it exists only between PH1 and PH3 on this branch, and the flip is a
-Done-when gate of the queue, not an option. Sibling spools adopt post-flip
-against this checkout; `spool-suite-gate` is expected red from PH3 until the
-last pin bump, and green at acceptance.
+Enforcement cannot flip before the sweep: runtime startup registers the `help`/`about`/`prime` builtins and publishes every batteries entry, so a validator that requires leaf classes on day one fails every boot and no phase gate can stay green. The queue therefore stages **mechanism first, flip after the sweep**: PH1 lands recursion + leaf-class support _accretively_ (new shape accepted and preferred; old op-level classes and defaults still tolerated as intra-branch scaffolding), PH2 sweeps every in-repo registrant onto the new shape with green gates throughout, and PH3 is the **enforcement flip** — delete the defaults and the op-level tolerance, forbid non-leaf classes — landing atomically with nothing left to break in-repo. The scaffolding never ships as a contract: it exists only between PH1 and PH3 on this branch, and the flip is a Done-when gate of the queue, not an option. Sibling spools adopt post-flip against this checkout; `spool-suite-gate` is expected red from PH3 until the last pin bump, and green at acceptance.
 
 ## PLAN-Lhc-001.P3 Affected areas
 
-- `skein.api.cli` (`alpha`, `internal/validation`, `internal/help`): recursive
-  validator, parse, explain; leaf-class node metadata; reserved names per level.
-- `skein.api.weaver.internal.op-entry` + `skein.api.return-shape.alpha`: mandatory
-  leaf classes, no defaults, returns mirror-recursion, alignment checks.
-- `skein.core.weaver.socket`: leaf-resolving payload-hook gate and deadline
-  default; pre-hook loud unknown/missing-verb failures.
-- `skein.core.weaver.help`: node-key classes with per-kind null semantics,
-  verb-path slicing, catalog rule, schema-version bump; `skein.core.weaver.core-registry`:
-  publication entry validation seam.
-- `skein.api.weaver.alpha`: dispatch label from path vector (retire the `:action`
-  special-case); recursive annotation/glossary collection.
+- `skein.api.cli` (`alpha`, `internal/validation`, `internal/help`): recursive validator, parse, explain; leaf-class node metadata; reserved names per level.
+- `skein.api.weaver.internal.op-entry` + `skein.api.return-shape.alpha`: mandatory leaf classes, no defaults, returns mirror-recursion, alignment checks.
+- `skein.core.weaver.socket`: leaf-resolving payload-hook gate and deadline default; pre-hook loud unknown/missing-verb failures.
+- `skein.core.weaver.help`: node-key classes with per-kind null semantics, verb-path slicing, catalog rule, schema-version bump; `skein.core.weaver.core-registry`: publication entry validation seam.
+- `skein.api.weaver.alpha`: dispatch label from path vector (retire the `:action` special-case); recursive annotation/glossary collection.
 - `skein.test.alpha`: path-aware return selection; synthetic depth-N fixtures.
-- In-repo registrants: batteries (all ops + reference renderer), `help` builtin,
-  guild, text-search, `.skein/config.clj` ops, `.skein/workflows.clj`,
-  `.skein/spools/macros` `defop`, test fixtures, smoke suite.
-- Sibling spool repos (released by annotated tag, pinned in `.skein/spools.edn`):
-  `kanban.spool` (codethread/kanban, v6), `devflow.spool` (codethread/devflow,
-  v3), `agent-harness.spool` (ct.spools/agent-run, v11 — roots agent-run,
-  delegation, bench). In-repo local spools (workflow, text-search, chime, cron,
-  macros) belong to the in-repo sweep, not the fan-out.
-- Docs: root specs (delta promotion), `docs/reference.md`, spool authoring guide
-  CLI-style section, generated `*.api.md`.
-- Go CLI: verification only (pre-op help alias vs deeper paths); no code changes
-  expected.
+- In-repo registrants: batteries (all ops + reference renderer), `help` builtin, guild, text-search, `.skein/config.clj` ops, `.skein/workflows.clj`, `.skein/spools/macros` `defop`, test fixtures, smoke suite.
+- Sibling spool repos (released by annotated tag, pinned in `.skein/spools.edn`): `kanban.spool` (codethread/kanban, v6), `devflow.spool` (codethread/devflow, v3), `agent-harness.spool` (ct.spools/agent-run, v11 — roots agent-run, delegation, bench). In-repo local spools (workflow, text-search, chime, cron, macros) belong to the in-repo sweep, not the fan-out.
+- Docs: root specs (delta promotion), `docs/reference.md`, spool authoring guide CLI-style section, generated `*.api.md`.
+- Go CLI: verification only (pre-op help alias vs deeper paths); no code changes expected.
 
 ## PLAN-Lhc-001.P4 Implementation phases
 
-- **PLAN-Lhc-001.PH1 (design slice — oracle):** Accretive mechanism end-to-end
-  (recursive validator/parse/explain, node classes preferred with op-level
-  tolerance, returns mirror-recursion, leaf-resolving gate/deadline with
-  fallback, per-node help keys, canonical error context) + the one applied op
-  (batteries `spool` + `status` fold-in per DELTA-Lhc-001.CC8) + a synthetic
-  depth-3 fixture + focused cold tests. Deltas amended only with evidence from
-  the applied seam. Cross-vendor review (sol-med) gates the phase. Task manifest
-  names its exact source/test files; PH2 slices may not touch them.
-- **PLAN-Lhc-001.PH2 (in-repo sweep — terra-med, file-disjoint parallel):**
-  (a) batteries remaining ops + reference renderer + owner tests +
-  `spools/batteries.md`/`spools/README.md`; (b) system ops `help`/`about`/`prime`
-  (one registrar), guild, text-search, publication constructors, smoke;
-  (c) `.skein` config ops, `workflows.clj`, `defop` macro, test fixtures. Task
-  files carry exact file manifests and the positional-action migration matrix
-  (which grammars fold to real verbs, which stay positionals). Cold focused
-  suites green per slice.
-- **PLAN-Lhc-001.PH3 (enforcement flip — oracle or sol-med, single atomic
-  slice):** Delete defaults and op-level class tolerance; forbid non-leaf
-  classes and class keys beside an arg-spec; publication-seam validation goes
-  strict (canonical validator + glossary at reconcile). In-repo suites + smoke
-  green at the end of this slice; `spool-suite-gate` goes red here by design.
-- **PLAN-Lhc-001.PH4 (specs + docs — terra-med):** Promote deltas into root
-  specs, sweep `docs/reference.md` + authoring guide CLI-style section,
-  regenerate api docs, `make docs-check` green.
-- **PLAN-Lhc-001.PH5 (sibling spool fan-out — terra-med, one seat per repo):**
-  Per spool: adopt leaf classes (and real nesting where grammars used positional
-  actions — kanban `task` is the known case; each spool task enumerates its own
-  matrix), suite green against the feature checkout, annotated release tag
-  pushed. The pin bump in skein-src is a single coordinator-sequenced task after
-  all releases exist.
-- **PLAN-Lhc-001.PH6 (acceptance):** Full locked suite under the flock, Go tests,
-  smoke, `spool-suite-gate` green again, quality gates at zero; land via the
-  coordinator landing workflow.
+- **PLAN-Lhc-001.PH1 (design slice — oracle):** Accretive mechanism end-to-end (recursive validator/parse/explain, node classes preferred with op-level tolerance, returns mirror-recursion, leaf-resolving gate/deadline with fallback, per-node help keys, canonical error context) + the one applied op (batteries `spool` + `status` fold-in per DELTA-Lhc-001.CC8) + a synthetic depth-3 fixture + focused cold tests. Deltas amended only with evidence from the applied seam. Cross-vendor review (sol-med) gates the phase. Task manifest names its exact source/test files; PH2 slices may not touch them.
+- **PLAN-Lhc-001.PH2 (in-repo sweep — terra-med, file-disjoint parallel):** (a) batteries remaining ops + reference renderer + owner tests + `spools/batteries.md`/`spools/README.md`; (b) system ops `help`/`about`/`prime` (one registrar), guild, text-search, publication constructors, smoke; (c) `.skein` config ops, `workflows.clj`, `defop` macro, test fixtures. Task files carry exact file manifests and the positional-action migration matrix (which grammars fold to real verbs, which stay positionals). Cold focused suites green per slice.
+- **PLAN-Lhc-001.PH3 (enforcement flip — oracle or sol-med, single atomic slice):** Delete defaults and op-level class tolerance; forbid non-leaf classes and class keys beside an arg-spec; publication-seam validation goes strict (canonical validator + glossary at reconcile). In-repo suites + smoke green at the end of this slice; `spool-suite-gate` goes red here by design.
+- **PLAN-Lhc-001.PH4 (specs + docs — terra-med):** Promote deltas into root specs, sweep `docs/reference.md` + authoring guide CLI-style section, regenerate api docs, `make docs-check` green.
+- **PLAN-Lhc-001.PH5 (sibling spool fan-out — terra-med, one seat per repo):** Per spool: adopt leaf classes (and real nesting where grammars used positional actions — kanban `task` is the known case; each spool task enumerates its own matrix), suite green against the feature checkout, annotated release tag pushed. The pin bump in skein-src is a single coordinator-sequenced task after all releases exist.
+- **PLAN-Lhc-001.PH6 (acceptance):** Full locked suite under the flock, Go tests, smoke, `spool-suite-gate` green again, quality gates at zero; land via the coordinator landing workflow.
 
 ## PLAN-Lhc-001.P5 Validation strategy
 
-Per-slice: cold `clojure -M:test <owned namespaces>`. Phase gates: PH1 adds
-socket-level integration coverage for pre-hook verb failures and read-leaf hook
-skipping; PH2 keeps smoke green under the accretive mechanism; PH3 re-proves
-suites + smoke post-flip and is the phase where registration-failure coverage
-(missing leaf class, class beside arg-spec, interior class, empty subcommands)
-becomes assertive; PH5 runs each spool's own suite against this checkout.
-Acceptance: full locked suite, `(cd cli && go test ./...)`, `clojure -M:smoke`,
-`make spool-suite-gate`, `make fmt-check lint reflect-check docs-check`, clean
-`git status --short`. Disposable workspaces for every runtime experiment; the
-canonical `.skein` world is never touched by tests.
+Per-slice: cold `clojure -M:test <owned namespaces>`. Phase gates: PH1 adds socket-level integration coverage for pre-hook verb failures and read-leaf hook skipping; PH2 keeps smoke green under the accretive mechanism; PH3 re-proves suites + smoke post-flip and is the phase where registration-failure coverage (missing leaf class, class beside arg-spec, interior class, empty subcommands) becomes assertive; PH5 runs each spool's own suite against this checkout. Acceptance: full locked suite, `(cd cli && go test ./...)`, `clojure -M:smoke`, `make spool-suite-gate`, `make fmt-check lint reflect-check docs-check`, clean `git status --short`. Disposable workspaces for every runtime experiment; the canonical `.skein` world is never touched by tests.
 
 ## PLAN-Lhc-001.P6 Task context
 
-Workers receive: the three deltas as the binding contract; the decision notes
-(`77xab` supersedes `mnl04`); TEN-000@1/TEN-003 as the license for breaking, loud
-changes; the file-ownership boundaries above (sibling tasks never share files);
-and the rule that warm-REPL output satisfies no gate. Sibling-spool workers work
-in their spool's own repo checkout and must not touch skein-src beside the pin
-bump task, which is coordinator-sequenced after all spool releases exist.
+Workers receive: the three deltas as the binding contract; the decision notes (`77xab` supersedes `mnl04`); TEN-000@1/TEN-003 as the license for breaking, loud changes; the file-ownership boundaries above (sibling tasks never share files); and the rule that warm-REPL output satisfies no gate. Sibling-spool workers work in their spool's own repo checkout and must not touch skein-src beside the pin bump task, which is coordinator-sequenced after all spool releases exist.
 
 ## PLAN-Lhc-001.P7 Developer Notes
 
-- 2026-07-22 (coordinator, Task 4 verification): mill-supervisor-launched
-  weavers always run the canonical checkout's code (supervisor owns source
-  resolution), so a pre-merge worktree `.skein` config cannot be live-proven
-  through `mill weaver start` — canonical code NPEs on defop entries without
-  op-level classes, which is expected and not a branch defect. Branch-code
-  proof is the smoke suite + the defop-shaped help regression (ed1d2a0). After
-  landing, the canonical weaver needs the standard user-sanctioned refresh to
-  pick up the new `.skein` config.
+- 2026-07-22 (coordinator, Task 4 verification): mill-supervisor-launched weavers always run the canonical checkout's code (supervisor owns source resolution), so a pre-merge worktree `.skein` config cannot be live-proven through `mill weaver start` — canonical code NPEs on defop entries without op-level classes, which is expected and not a branch defect. Branch-code proof is the smoke suite + the defop-shaped help regression (ed1d2a0). After landing, the canonical weaver needs the standard user-sanctioned refresh to pick up the new `.skein` config.
 
-- 2026-07-22 (coordinator): task-queue review runs xogz3+6qg5z (notes 64ses,
-  qpf5g on strand kx90q) folded: devflow.spool dropped from the fan-out (v3
-  registers no CLI ops — pin stays v3); workflow/chime/cron register no CLI
-  ops; smoke owned by Task 1; guild constructor API requires caller-supplied
-  classes; test-registration sweep enumerated (Task 4 + Task 5 backstop);
-  :action-label grammars must migrate in-queue; sibling tasks get wiring +
-  compat-alarm ceremony; api-docs regenerated per task; queue renumbered to 9
-  tasks while still draft.
-- 2026-07-22 (coordinator): spec/plan review runs szlo1+nz2x6 (notes n59mo, mzijt
-  on strand exuix) folded: single-source class authoring, doc-only leaves, C63a/b
-  + C33 + C63b-deadline amendments, deep help-alias semantics, canonical error
-  context, publication validator/glossary seam, accretive-then-flip phase order,
-  about/prime registrar, catalog wording. Plan set Reviewed.
-- 2026-07-22 (coordinator): proposal review e8zr7 findings folded; note the
-  publication seam (`core-registry` entry spec is `map?` today) is a required
-  enforcement point, not an optional hardening.
-- Live-weaver caution: the canonical weaver keeps running pre-change code until
-  the user-sanctioned restart/refresh after landing; `.skein` config edits on
-  this branch are inert until merged. Never refresh or restart the canonical
-  weaver from this feature's tasks.
-- 2026-07-22 (t1-oracle, PH1): design slice landed (084e873..2cba54b). No delta
-  amendments — DELTA-Lhc-001/002/003 held as written at the applied seam. Two
-  boundary records for successor tasks:
-  (1) TASK-Lhc-001.OS2 exception, forced by DW1: the path-vector `:subcommand`
-  contract (CC3) breaks any handler that cases on the old scalar, so batteries
-  `query-op`/`pattern-op` received the minimal mechanical fix (dispatch on the
-  first path segment) to keep the owner tests and smoke green. Their grammars,
-  classes, and annotations were NOT swept — Task 2 still owns that. Guild,
-  text-search, and `.skein` registrants were left untouched and their handlers
-  case on the scalar shape: `test/skein/guild_test.clj` and the `.skein`
-  workflow ops are red against the new parse contract until PH2 sweeps them
-  (branch lands as one merge; per-slice gates are focused suites).
-  (2) Intra-branch scaffolding Task 5 must remove beside the class tolerance:
-  `skein.test.alpha/check-op-return!` coerces a legacy scalar `:subcommand`
-  context to a one-segment path, and `operation-label` still honors the parsed
-  nested `:action` (per MI6). The batteries `spool` registration row now passes
-  no op-level class (single-source leaf authoring) — the entry still assembles
-  the tolerated `:mutating` default, which the socket's leaf resolution
-  overrides per leaf; Task 5's flip deletes that default path.
+- 2026-07-22 (coordinator): task-queue review runs xogz3+6qg5z (notes 64ses, qpf5g on strand kx90q) folded: devflow.spool dropped from the fan-out (v3 registers no CLI ops — pin stays v3); workflow/chime/cron register no CLI ops; smoke owned by Task 1; guild constructor API requires caller-supplied classes; test-registration sweep enumerated (Task 4 + Task 5 backstop); :action-label grammars must migrate in-queue; sibling tasks get wiring + compat-alarm ceremony; api-docs regenerated per task; queue renumbered to 9 tasks while still draft.
+- 2026-07-22 (coordinator): spec/plan review runs szlo1+nz2x6 (notes n59mo, mzijt on strand exuix) folded: single-source class authoring, doc-only leaves, C63a/b
+    - C33 + C63b-deadline amendments, deep help-alias semantics, canonical error context, publication validator/glossary seam, accretive-then-flip phase order, about/prime registrar, catalog wording. Plan set Reviewed.
+- 2026-07-22 (coordinator): proposal review e8zr7 findings folded; note the publication seam (`core-registry` entry spec is `map?` today) is a required enforcement point, not an optional hardening.
+- Live-weaver caution: the canonical weaver keeps running pre-change code until the user-sanctioned restart/refresh after landing; `.skein` config edits on this branch are inert until merged. Never refresh or restart the canonical weaver from this feature's tasks.
+- 2026-07-22 (t1-oracle, PH1): design slice landed (084e873..2cba54b). No delta amendments — DELTA-Lhc-001/002/003 held as written at the applied seam. Two boundary records for successor tasks: (1) TASK-Lhc-001.OS2 exception, forced by DW1: the path-vector `:subcommand` contract (CC3) breaks any handler that cases on the old scalar, so batteries `query-op`/`pattern-op` received the minimal mechanical fix (dispatch on the first path segment) to keep the owner tests and smoke green. Their grammars, classes, and annotations were NOT swept — Task 2 still owns that. Guild, text-search, and `.skein` registrants were left untouched and their handlers case on the scalar shape: `test/skein/guild_test.clj` and the `.skein` workflow ops are red against the new parse contract until PH2 sweeps them (branch lands as one merge; per-slice gates are focused suites). (2) Intra-branch scaffolding Task 5 must remove beside the class tolerance: `skein.test.alpha/check-op-return!` coerces a legacy scalar `:subcommand` context to a one-segment path, and `operation-label` still honors the parsed nested `:action` (per MI6). The batteries `spool` registration row now passes no op-level class (single-source leaf authoring) — the entry still assembles the tolerated `:mutating` default, which the socket's leaf resolution overrides per leaf; Task 5's flip deletes that default path.

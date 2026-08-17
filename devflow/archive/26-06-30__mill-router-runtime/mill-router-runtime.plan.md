@@ -18,7 +18,7 @@ Deliver the alpha reset from direct per-world weaver sockets to a user-started G
 ## PLAN-MillRouterRuntime-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | PLAN-MillRouterRuntime-001.AA1 | `Makefile`, `cli/cmd` | Install both `strand` and new `mill` commands; adjust bootstrap/install targets. |
 | PLAN-MillRouterRuntime-001.AA2 | `cli/internal/config` | Replace direct repo `.skein/state` world paths with Git-root world identity and XDG mill/weaver state derivation. |
 | PLAN-MillRouterRuntime-001.AA3 | `cli/internal/command` | Make `strand` a mill client; remove direct weaver socket calls and mixed DB init from `strand init`. |

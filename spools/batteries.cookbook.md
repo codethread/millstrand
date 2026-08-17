@@ -1,14 +1,11 @@
 # Millstrand Batteries Spool — Cookbook
 
-Scripting recipes for the shipped `strand <op>` surface: how to compose the everyday ops — `add`, `update`, `show`, `supersede`, `burn`, `list`, `ready`, `subgraph`, `weave`, `query`, `pattern` — into shell pipelines that do real work, and *why* each shape is the right one.
+Scripting recipes for the shipped `strand <op>` surface: how to compose the everyday ops — `add`, `update`, `show`, `supersede`, `burn`, `list`, `ready`, `subgraph`, `weave`, `query`, `pattern` — into shell pipelines that do real work, and _why_ each shape is the right one.
 
 This is the **how/why** half of the batteries docs. The other two halves are:
 
-- [`batteries.md`](./batteries.md) — the **contract**: the per-op behavior
-  guarantees, the `BAT-` clauses, payload-reference rules, and the equivalence
-  map to the old public CLI. Read it for what each op promises.
-- [`batteries.api.md`](./batteries.api.md) — the **generated reference**: each
-  op's arg-spec (flags, positionals, types) produced from the source.
+- [`batteries.md`](./batteries.md) — the **contract**: the per-op behavior guarantees, the `BAT-` clauses, payload-reference rules, and the equivalence map to the old public CLI. Read it for what each op promises.
+- [`batteries.api.md`](./batteries.api.md) — the **generated reference**: each op's arg-spec (flags, positionals, types) produced from the source.
 
 Division of truth: exact flags and types live in the generated API doc; per-op guarantees live in the contract; the compositions and the reasoning live here. This cookbook never restates a flag table — it links to them. When a recipe needs the precise flag list, follow the link.
 
@@ -18,14 +15,12 @@ Every recipe has the same four parts, so you can skim to the one that matches yo
 
 1. **Situation** — the shape of problem you're staring at.
 2. **Composition** — which ops combine, and how.
-3. **Snippet** — a complete, runnable pipeline. `strand` is on `PATH`; a
-   workspace is selected (add `--workspace <dir>` if you don't want the default).
-4. **Why this shape** — the reasoning: why these ops, what the flags buy you, and
-   what the alternative would cost.
+3. **Snippet** — a complete, runnable pipeline. `strand` is on `PATH`; a workspace is selected (add `--workspace <dir>` if you don't want the default).
+4. **Why this shape** — the reasoning: why these ops, what the flags buy you, and what the alternative would cost.
 
 Each recipe cites the honest source it was distilled from — the batteries source, the test suite, or this repo's own `.millstrand` config — so you can read the load-bearing version.
 
-One thing to internalise before the recipes: `strand` splits its flags into two groups. **Op flags** (`--attr`, `--edge`, `--state`, `--query`, `--param`, `--pattern`, `--input`) come *after* the op name and are parsed by that op's arg-spec. **Dispatcher flags** (`--workspace`, `--stdin`, `--payload name=path`, `--dry-run`) select context and attach payloads, so they come *before* the op name. Put a dispatcher flag after the op and the op's parser rejects it as unknown.
+One thing to internalise before the recipes: `strand` splits its flags into two groups. **Op flags** (`--attr`, `--edge`, `--state`, `--query`, `--param`, `--pattern`, `--input`) come _after_ the op name and are parsed by that op's arg-spec. **Dispatcher flags** (`--workspace`, `--stdin`, `--payload name=path`, `--dry-run`) select context and attach payloads, so they come _before_ the op name. Put a dispatcher flag after the op and the op's parser rejects it as unknown.
 
 ---
 
@@ -52,20 +47,9 @@ strand ready
 
 **Why this shape.**
 
-- **`add` hands you the id in-band.** Every mutation returns the normalized
-  strand, so `add … | id` captures the generated id in the same step that
-  creates it — no second `list` to find "the one I just made". Chain these and a
-  whole graph falls out of a shell script.
-- **`ready` gates on *active* blockers only.** A `depends-on` edge to a `closed`
-  strand doesn't block; only an active dependency does. That is why the design
-  above is created `--state closed` — the docs strand is ready immediately.
-  Close the blocker and its dependents surface on the next `ready`. `supersede`
-  only unblocks a dependent when the replacement is *itself* already closed: it
-  rewires the `depends-on` edge onto the replacement, so an active replacement
-  just moves the block onto the new strand.
-- **Edges are directional and repeatable.** `--edge depends-on:<id>` adds one
-  outgoing edge; repeat the flag to fan a strand out over several dependencies.
-  A malformed spec (no `:`, empty terminal) fails loudly before the update lands.
+- **`add` hands you the id in-band.** Every mutation returns the normalized strand, so `add … | id` captures the generated id in the same step that creates it — no second `list` to find "the one I just made". Chain these and a whole graph falls out of a shell script.
+- **`ready` gates on _active_ blockers only.** A `depends-on` edge to a `closed` strand doesn't block; only an active dependency does. That is why the design above is created `--state closed` — the docs strand is ready immediately. Close the blocker and its dependents surface on the next `ready`. `supersede` only unblocks a dependent when the replacement is _itself_ already closed: it rewires the `depends-on` edge onto the replacement, so an active replacement just moves the block onto the new strand.
+- **Edges are directional and repeatable.** `--edge depends-on:<id>` adds one outgoing edge; repeat the flag to fan a strand out over several dependencies. A malformed spec (no `:`, empty terminal) fails loudly before the update lands.
 
 Honest source: the `add`/`update`/`ready` ops in `spools/src/millstrand/spools/batteries.clj`, verified against the `list-and-ready` test in `test/clojure/millstrand/spools/batteries_test.clj` and empirically in a disposable workspace (active dependency blocks `ready`; closing it unblocks the dependent).
 
@@ -90,20 +74,9 @@ printf '{"priority":3,"blocking":true,"owner":"queue"}' \
 
 **Why this shape.**
 
-- **Payloads are named, so one command can carry several.** The old
-  `--attr-file` / `--attr-stdin` / `--attributes-stdin` flags collapsed into one
-  idea: attach payloads on the dispatcher, reference them by name in argv. A file
-  goes in a `--payload` slot, a pipe fills the `stdin` slot, and each `:payload/x`
-  or `:stdin` token resolves against them. A reference to an unattached payload,
-  or an attached payload nothing references, both fail loudly.
-- **`--attr` keeps types out; `--attributes` keeps them.** `--attr` is a
-  string map — every value is text. When you need `priority` to stay the number
-  `3` or `blocking` to stay `true`, put it in the JSON object behind
-  `--attributes`. On a key collision `--attr` wins (highest precedence), so you
-  can override one field of a bulk object inline.
-- **The body lives in a file, not in your shell history.** Referencing
-  `body=:payload/brief` keeps a long, newline-heavy brief out of the argv
-  entirely, which is exactly what a delegation brief or generated markdown needs.
+- **Payloads are named, so one command can carry several.** The old `--attr-file` / `--attr-stdin` / `--attributes-stdin` flags collapsed into one idea: attach payloads on the dispatcher, reference them by name in argv. A file goes in a `--payload` slot, a pipe fills the `stdin` slot, and each `:payload/x` or `:stdin` token resolves against them. A reference to an unattached payload, or an attached payload nothing references, both fail loudly.
+- **`--attr` keeps types out; `--attributes` keeps them.** `--attr` is a string map — every value is text. When you need `priority` to stay the number `3` or `blocking` to stay `true`, put it in the JSON object behind `--attributes`. On a key collision `--attr` wins (highest precedence), so you can override one field of a bulk object inline.
+- **The body lives in a file, not in your shell history.** Referencing `body=:payload/brief` keeps a long, newline-heavy brief out of the argv entirely, which is exactly what a delegation brief or generated markdown needs.
 
 Honest source: the payload-reference rules in [`batteries.md`](./batteries.md) §BAT-C2/C16/C17, the `add-attr-precedence-and-payload-json-bulk` test in `test/clojure/millstrand/spools/batteries_test.clj`, and empirical runs of both forms in a disposable workspace.
 
@@ -111,7 +84,7 @@ Honest source: the payload-reference rules in [`batteries.md`](./batteries.md) �
 
 ## Recipe: Remove an attribute key with a typed JSON null
 
-**Situation.** A strand carries an attribute that no longer applies — a transient `gate/error`, a stale claim marker — and you want the key *gone*, not set to blank. `--attr key=` stores an empty string, which is data, not absence. Whether removal is even the right model — versus an enum value or a recorded outcome — is the [attribute-value modeling guidance](../docs/spools/writing-shared-spools.md#modeling-attribute-values-enums-absence-empty-history); this recipe is the mechanics once you've decided a key should go absent.
+**Situation.** A strand carries an attribute that no longer applies — a transient `gate/error`, a stale claim marker — and you want the key _gone_, not set to blank. `--attr key=` stores an empty string, which is data, not absence. Whether removal is even the right model — versus an enum value or a recorded outcome — is the [attribute-value modeling guidance](../docs/spools/writing-shared-spools.md#modeling-attribute-values-enums-absence-empty-history); this recipe is the mechanics once you've decided a key should go absent.
 
 **Composition.** `update` treats `--attributes` as a JSON Merge Patch. A JSON `null` value deletes the addressed key; other keys are left untouched. Keep raw `--attr` for the string writes you want on top.
 
@@ -150,14 +123,8 @@ strand --dry-run add "Preview me" --attr owner=agent
 
 **Why this shape.**
 
-- **It stops before the weaver, so it's safe on any op.** `--dry-run` renders the
-  envelope the bin *would* send — op name, verbatim argv, attached payloads,
-  resolved workspace and cwd — without opening a socket. Nothing is created, so
-  you can dry-run a `burn` or a `weave` with zero risk.
-- **It shows argv verbatim, which is where the parsing happens.** The dispatcher
-  ships argv untouched; the op's arg-spec parses it weaver-side. Seeing the exact
-  `argv` and `payloads` the envelope carries is the fastest way to catch a
-  misplaced dispatcher flag or an unattached payload before it fails for real.
+- **It stops before the weaver, so it's safe on any op.** `--dry-run` renders the envelope the bin _would_ send — op name, verbatim argv, attached payloads, resolved workspace and cwd — without opening a socket. Nothing is created, so you can dry-run a `burn` or a `weave` with zero risk.
+- **It shows argv verbatim, which is where the parsing happens.** The dispatcher ships argv untouched; the op's arg-spec parses it weaver-side. Seeing the exact `argv` and `payloads` the envelope carries is the fastest way to catch a misplaced dispatcher flag or an unattached payload before it fails for real.
 
 Honest source: the `--dry-run` dispatcher flag documented in [`cli.md`](../devflow/specs/cli.md), verified by running it against `add` in a disposable workspace (envelope printed, no strand created).
 
@@ -183,18 +150,9 @@ strand ready --query work         # same query, gated to the unblocked frontier
 
 **Why this shape.**
 
-- **`query explain` is the contract for a query you didn't write.** It returns the
-  declared `params`, the `referenced-params` the `where` clause actually uses, and
-  the compiled `where-form`, so you can see what a query selects and what it needs
-  before you run it. An unknown name fails loudly with the list of available
-  queries.
-- **`list` and `ready` consume the same query, with different gating.** `list
-  --query` returns every match; `ready --query` returns only the matches that are
-  active and unblocked. Reach for `ready` when you want actionable work, `list`
-  when you want the whole set.
-- **`--param` is checked against the query's declared names.** A `--param` whose
-  key isn't a declared parameter fails loudly, and `--param` without a `--query`
-  is rejected — you can't accidentally pass a value into nothing.
+- **`query explain` is the contract for a query you didn't write.** It returns the declared `params`, the `referenced-params` the `where` clause actually uses, and the compiled `where-form`, so you can see what a query selects and what it needs before you run it. An unknown name fails loudly with the list of available queries.
+- **`list` and `ready` consume the same query, with different gating.** `list --query` returns every match; `ready --query` returns only the matches that are active and unblocked. Reach for `ready` when you want actionable work, `list` when you want the whole set.
+- **`--param` is checked against the query's declared names.** A `--param` whose key isn't a declared parameter fails loudly, and `--param` without a `--query` is rejected — you can't accidentally pass a value into nothing.
 
 Honest source: the `query`/`list`/`ready` ops in `spools/src/millstrand/spools/batteries.clj`, the `list-and-ready-named-queries` and `query-list-and-explain-shapes` tests in `test/clojure/millstrand/spools/batteries_test.clj`, and the `work`/`run-active` queries this repo registers in [`.millstrand/ct/policy/config.clj`](../.millstrand/ct/policy/config.clj). Verified against a demo query registered in a disposable workspace.
 
@@ -282,22 +240,9 @@ printf '%s' '{
 
 **Why this shape.**
 
-- **`weave` is the one create-only op that speaks whole batches.** A pattern turns
-  a single JSON value into a set of strands *and* the edges between them in one
-  transaction. The returned `refs` map (pattern slot name → generated id) is how a
-  script keeps wiring after the batch lands — capture `refs.impl` to hang more
-  work off it.
-- **`pattern explain` before `weave` saves a round-trip.** The input is validated
-  against a `clojure.spec` contract; `explain` lists the required and optional
-  keys up front, so you shape the JSON right the first time instead of decoding a
-  `pattern/input-invalid` error. Empty, malformed, or trailing JSON all fail
-  loudly before any strand is created.
-- **`--input :stdin` needs the `--stdin` dispatcher flag.** The `:stdin` token is
-  a payload reference; the pipe only fills the slot if you attach it with
-  `--stdin` before the op. A small inline batch can skip the pipe entirely —
-  `--input '{"…":"…"}'` takes literal JSON — but for anything real, stdin keeps it
-  off the command line. Registering a pattern is a trusted config/REPL job and is
-  deliberately not part of this surface; `weave` only *applies* one.
+- **`weave` is the one create-only op that speaks whole batches.** A pattern turns a single JSON value into a set of strands _and_ the edges between them in one transaction. The returned `refs` map (pattern slot name → generated id) is how a script keeps wiring after the batch lands — capture `refs.impl` to hang more work off it.
+- **`pattern explain` before `weave` saves a round-trip.** The input is validated against a `clojure.spec` contract; `explain` lists the required and optional keys up front, so you shape the JSON right the first time instead of decoding a `pattern/input-invalid` error. Empty, malformed, or trailing JSON all fail loudly before any strand is created.
+- **`--input :stdin` needs the `--stdin` dispatcher flag.** The `:stdin` token is a payload reference; the pipe only fills the slot if you attach it with `--stdin` before the op. A small inline batch can skip the pipe entirely — `--input '{"…":"…"}'` takes literal JSON — but for anything real, stdin keeps it off the command line. Registering a pattern is a trusted config/REPL job and is deliberately not part of this surface; `weave` only _applies_ one.
 
 Honest source: the `weave`/`pattern` ops and their strict input parsing in `spools/src/millstrand/spools/batteries.clj`, the `weave-happy-path-and-json-value`, `weave-loud-input-paths`, and `pattern-list-and-explain-shapes` tests in `test/clojure/millstrand/spools/batteries_test.clj`, and this repo's `agent-plan` usage in [`CLAUDE.md`](../CLAUDE.md). Verified end to end against a demo pattern registered in a disposable workspace (stdin and inline JSON both returned `{:created :refs}`).
 
@@ -305,12 +250,9 @@ Honest source: the `weave`/`pattern` ops and their strict input parsing in `spoo
 
 ## Recipe: Burn temporary strands owned by one parent
 
-**Situation.** A task needs scratch strands while it runs, but those strands
-should disappear when the task finishes.
+**Situation.** A task needs scratch strands while it runs, but those strands should disappear when the task finishes.
 
-**Composition.** Mark each scratch strand at creation with a userland owner
-attribute such as `tmp/owner=<parent-id>`. Register a parameterized query for
-that attribute, then list and burn the matching ids when the parent finishes.
+**Composition.** Mark each scratch strand at creation with a userland owner attribute such as `tmp/owner=<parent-id>`. Register a parameterized query for that attribute, then list and burn the matching ids when the parent finishes.
 
 ```clojure
 ;; Register once in trusted config or the live weaver REPL.
@@ -334,14 +276,9 @@ strand list --query temporary-by-owner --param owner="$parent_id" \
   | while IFS= read -r tmp_id; do strand burn "$tmp_id"; done
 ```
 
-**Why this shape.** The attribute records ownership without adding a lifecycle
-rule to the engine. The query scopes cleanup to one parent, and `burn` removes
-only the disposable strands selected by that query. Keep decisions, results,
-and other durable work as ordinary strands or notes instead.
+**Why this shape.** The attribute records ownership without adding a lifecycle rule to the engine. The query scopes cleanup to one parent, and `burn` removes only the disposable strands selected by that query. Keep decisions, results, and other durable work as ordinary strands or notes instead.
 
-Honest source: the `add`, parameterized `list --query`, and `burn` ops in
-`spools/src/millstrand/spools/batteries.clj`, with their behavior covered by
-`test/clojure/millstrand/spools/batteries_test.clj`.
+Honest source: the `add`, parameterized `list --query`, and `burn` ops in `spools/src/millstrand/spools/batteries.clj`, with their behavior covered by `test/clojure/millstrand/spools/batteries_test.clj`.
 
 ---
 
@@ -349,7 +286,7 @@ Honest source: the `add`, parameterized `list --query`, and `burn` ops in
 
 **Situation.** A strand is finished, wrong, or replaced by a better version, and you need to take it out of the ready frontier without corrupting the graph. Three ops do different things here, and reaching for the wrong one loses history or strands dependents.
 
-**Composition.** `supersede` when a *replacement* exists and other strands depend on the old one; `update --state closed` when the work is simply done and you want it kept for history; `burn` only when a strand should never have existed.
+**Composition.** `supersede` when a _replacement_ exists and other strands depend on the old one; `update --state closed` when the work is simply done and you want it kept for history; `burn` only when a strand should never have existed.
 
 ```sh
 old=$(strand add "Plan v1" | id)
@@ -372,20 +309,9 @@ strand burn "$typo"                        # => {"burned":["<id>"],"count":1}
 
 **Why this shape.**
 
-- **`supersede` keeps the graph intact; a manual swap wouldn't.** It marks the old
-  strand `replaced`, moves every incoming `depends-on` edge onto the replacement,
-  and records a `supersedes` edge from new to old — all in one transaction. Do
-  that by hand with `update --edge` and `burn` and you'd orphan the dependents the
-  instant you removed the old strand.
-- **Close preserves history; burn destroys it.** `update --state closed` leaves
-  the strand and its edges in the graph — it drops off `ready` but stays queryable
-  with `list --state closed`, which is what you want for finished work you might
-  audit later. `burn` physically deletes the strand and its incident edges; the
-  only honest use is a strand that was created in error.
-- **`replaced` is not something you set by hand.** `update` accepts `active` and
-  `closed` only and refuses `replaced` — that lifecycle state belongs to
-  `supersede`, so the "this was replaced by X" relationship always carries the
-  edge that says by what.
+- **`supersede` keeps the graph intact; a manual swap wouldn't.** It marks the old strand `replaced`, moves every incoming `depends-on` edge onto the replacement, and records a `supersedes` edge from new to old — all in one transaction. Do that by hand with `update --edge` and `burn` and you'd orphan the dependents the instant you removed the old strand.
+- **Close preserves history; burn destroys it.** `update --state closed` leaves the strand and its edges in the graph — it drops off `ready` but stays queryable with `list --state closed`, which is what you want for finished work you might audit later. `burn` physically deletes the strand and its incident edges; the only honest use is a strand that was created in error.
+- **`replaced` is not something you set by hand.** `update` accepts `active` and `closed` only and refuses `replaced` — that lifecycle state belongs to `supersede`, so the "this was replaced by X" relationship always carries the edge that says by what.
 
 Honest source: the `supersede`/`burn`/`update` ops in `spools/src/millstrand/spools/batteries.clj`, the `show-supersede-burn` test in `test/clojure/millstrand/spools/batteries_test.clj`, and empirical runs in a disposable workspace (supersede rewired the dependent and marked the old `replaced`; burn returned `{:burned … :count 1}` and the strand was gone; close kept it in `list --state closed`).
 
@@ -393,11 +319,7 @@ Honest source: the `supersede`/`burn`/`update` ops in `spools/src/millstrand/spo
 
 ## See also
 
-- [`batteries.md`](./batteries.md) — the contract: every op's guarantees, the
-  payload-reference rules, and the equivalence map to the old public CLI.
-- [`batteries.api.md`](./batteries.api.md) — generated arg-specs (flags,
-  positionals, types) for every op above.
-- [`cli.md`](../devflow/specs/cli.md) — the dispatcher itself: how `strand`
-  assembles an invoke envelope, and the `--workspace` / `--stdin` / `--payload` /
-  `--dry-run` dispatcher flags.
+- [`batteries.md`](./batteries.md) — the contract: every op's guarantees, the payload-reference rules, and the equivalence map to the old public CLI.
+- [`batteries.api.md`](./batteries.api.md) — generated arg-specs (flags, positionals, types) for every op above.
+- [`cli.md`](../devflow/specs/cli.md) — the dispatcher itself: how `strand` assembles an invoke envelope, and the `--workspace` / `--stdin` / `--payload` / `--dry-run` dispatcher flags.
 - Workflow composition recipes are maintained by the workflow spool's publisher; the `weave` patterns remain part of the batteries surface.

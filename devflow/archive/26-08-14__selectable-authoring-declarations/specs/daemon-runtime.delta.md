@@ -1,11 +1,6 @@
 # Weaver runtime delta for selectable authoring declarations
 
-**Document ID:** `DELTA-Sad-002`
-**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
-**Feature:** [../proposal.md](../proposal.md)
-**Status:** Reviewed
-**Last Updated:** 2026-08-14
-**Configuration identification:** `Sad` abbreviates selectable authoring declarations. This is the second delta in that feature's ordered set, so it takes `DELTA-Sad-002`. Nested IDs carry the complete document ID.
+**Document ID:** `DELTA-Sad-002` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Reviewed **Last Updated:** 2026-08-14 **Configuration identification:** `Sad` abbreviates selectable authoring declarations. This is the second delta in that feature's ordered set, so it takes `DELTA-Sad-002`. Nested IDs carry the complete document ID.
 
 ## DELTA-Sad-002.P1 Summary
 

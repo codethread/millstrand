@@ -1,14 +1,6 @@
 # SQLite schema story Plan
 
-**Document ID:** `PLAN-Sss-001`
-**Feature:** `r85t4-sqlite-schema-story`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** none
-**Root specs:** [strand-model.md](../../specs/strand-model.md), [daemon-runtime.md](../../specs/daemon-runtime.md)
-**Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md)
-**Status:** Shipped
-**Last Updated:** 2026-07-22
-**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PLAN-Dwr-001` for v1 and `PLAN-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
+**Document ID:** `PLAN-Sss-001` **Feature:** `r85t4-sqlite-schema-story` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [strand-model.md](../../specs/strand-model.md), [daemon-runtime.md](../../specs/daemon-runtime.md) **Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) **Status:** Shipped **Last Updated:** 2026-07-22 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PLAN-Dwr-001` for v1 and `PLAN-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
 
 ## PLAN-Sss-001.P1 Goal and scope
 
@@ -17,16 +9,16 @@ Implement the persistence-evolution contract decided in `PROP-Sss-001` and stage
 ## PLAN-Sss-001.P2 Approach
 
 - **PLAN-Sss-001.A1:** All work lands in `skein.core.db` (per the repo persistence boundary). No API-surface, CLI, or spool changes: the stamp and gate sit entirely behind `init!`, which every storage entry point already funnels through. No migration namespace or step registry is created — the executable ladder home is deferred with `DELTA-Sss-002.Q1`, and the first generation bump owes the freeze of the generation-1 reference into the migration space it creates (`DELTA-Sss-002.CC3`).
-- **PLAN-Sss-001.A2 (canonical validator):** Rather than hand-maintaining introspection predicates per table (today's `ensure-current-schema!` approach, which only rejects known-past shapes), construct a fresh reference database in memory from `schema-sql` (the `:sqlite-memory` seam, `SPEC-004.C93`, already runs identical schema code), introspect both databases — `sqlite_master` plus `PRAGMA table_info`/`index_list`/`index_info`/`foreign_key_list` — into normalized shape maps, and compare. Comparison covers exact columns, order, declared types, nullability, defaults, primary keys, foreign keys, CHECK constraints, index columns/order/uniqueness, and partial-index predicates, for Skein-owned tables and indexes, rejecting extra columns on managed tables (`DELTA-Sss-002.CC2`). The validator takes two comparison modes: pre-DDL screening (every baseline object present and exact; only additive-since-baseline objects may be absent — `DELTA-Sss-002.CC2a`) and full (post-DDL acceptance). The additive set is an explicit validator parameter, empty in production at stamp introduction; tests exercise the additive branches by injecting a synthetic additive object with matching extra DDL, never by reclassifying a real baseline object. While `current-generation` is 1, the live `schema-sql` *is* the generation-1 reference; the reference-db construction makes the validator self-maintaining within a generation, and the first bump snapshots the outgoing reference per `DELTA-Sss-002.CC3`.
+- **PLAN-Sss-001.A2 (canonical validator):** Rather than hand-maintaining introspection predicates per table (today's `ensure-current-schema!` approach, which only rejects known-past shapes), construct a fresh reference database in memory from `schema-sql` (the `:sqlite-memory` seam, `SPEC-004.C93`, already runs identical schema code), introspect both databases — `sqlite_master` plus `PRAGMA table_info`/`index_list`/`index_info`/`foreign_key_list` — into normalized shape maps, and compare. Comparison covers exact columns, order, declared types, nullability, defaults, primary keys, foreign keys, CHECK constraints, index columns/order/uniqueness, and partial-index predicates, for Skein-owned tables and indexes, rejecting extra columns on managed tables (`DELTA-Sss-002.CC2`). The validator takes two comparison modes: pre-DDL screening (every baseline object present and exact; only additive-since-baseline objects may be absent — `DELTA-Sss-002.CC2a`) and full (post-DDL acceptance). The additive set is an explicit validator parameter, empty in production at stamp introduction; tests exercise the additive branches by injecting a synthetic additive object with matching extra DDL, never by reclassifying a real baseline object. While `current-generation` is 1, the live `schema-sql` _is_ the generation-1 reference; the reference-db construction makes the validator self-maintaining within a generation, and the first bump snapshots the outgoing reference per `DELTA-Sss-002.CC3`.
 - **PLAN-Sss-001.A3 (generation gate):** Classification is a pure decision function over `(found-generation, binary-generation, empty?)` returning bootstrap / adopt / proceed / refuse-newer / refuse-older, unit-testable across every branch including generations that cannot yet occur on disk. `init!` reads `user_version` before any DDL and routes: empty unstamped db → DDL, full validation, stamp; non-empty unstamped → pre-DDL screening, refuse untouched on mismatch, else DDL, full validation, stamp 1; at generation → pre-DDL screening (a missing baseline object refuses rather than being silently recreated), then DDL (fills additive objects), full validation; newer/older stamped → refuse untouched with found/expected in the error data, older naming the migration path. `current-generation` is a `skein.core.db` constant beside `schema-sql`. The existing legacy-shape throws (`ensure-current-schema!`) fold into the validator's mismatch reporting rather than surviving as a parallel mechanism.
 
 ## PLAN-Sss-001.P3 Affected areas
 
-| ID                  | Area                                | Expected change                                                              |
-| ------------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
-| PLAN-Sss-001.AA1    | `src/skein/core/db.clj`             | Generation gate + `current-generation` in `init!`; canonical validator replaces shape predicates |
-| PLAN-Sss-001.AA3    | `test/skein/core/`                  | Generation/adoption/skew coverage beside existing `db_test.clj` schema tests  |
-| PLAN-Sss-001.AA4    | `devflow/specs/`                    | Promote `DELTA-Sss-001`/`DELTA-Sss-002` into SPEC-001/SPEC-004 at finish      |
+| ID | Area | Expected change |
+| --- | --- | --- |
+| PLAN-Sss-001.AA1 | `src/skein/core/db.clj` | Generation gate + `current-generation` in `init!`; canonical validator replaces shape predicates |
+| PLAN-Sss-001.AA3 | `test/skein/core/` | Generation/adoption/skew coverage beside existing `db_test.clj` schema tests |
+| PLAN-Sss-001.AA4 | `devflow/specs/` | Promote `DELTA-Sss-001`/`DELTA-Sss-002` into SPEC-001/SPEC-004 at finish |
 
 ## PLAN-Sss-001.P4 Contract and migration impact
 

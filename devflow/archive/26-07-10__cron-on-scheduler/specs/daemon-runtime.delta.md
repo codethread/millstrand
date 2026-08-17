@@ -9,21 +9,13 @@ Extend the generation discipline that `SPEC-004.C102` already gives the delivery
 ## DELTA-cron-on-scheduler-runtime-001.P2 Contract changes
 
 - **DELTA-cron-on-scheduler-runtime-001.CC1:** Amend `SPEC-004.C102` to name retirement as the second generation-sensitive transition alongside the delivery-attempt increment, cross-referencing `SPEC-004.C102b`: the increment claims the exact delivered generation, and retirement releases that same generation, so a wake rescheduled in the delivery window is neither miscounted nor clobbered.
-- **DELTA-cron-on-scheduler-runtime-001.CC2:** Add `SPEC-004.C102b`: Wake retirement is generation-aware. When a delivered wake is completed or failed, the scheduler retires exactly the delivered generation — the wake identified by its key *and* the delivered wake instant — and records its history entry from the delivered row (the row read before handler invocation), never from whatever pending row currently holds the key. A same-key replacement armed during delivery (the `SPEC-004.C101`-blessed self-reschedule) is a distinct generation: retirement leaves it untouched — no delete, no arming disturbance — and the post-fire re-arm (`SPEC-004.C102`) governs it. If the delivered generation has already vanished or been superseded by retirement time, retirement removes no pending row but still records the delivered fire in history, so at-least-once delivery stays observable. User-initiated cancel-by-key is not a delivery retirement and stays key-based: it cancels whatever generation currently holds the key.
+- **DELTA-cron-on-scheduler-runtime-001.CC2:** Add `SPEC-004.C102b`: Wake retirement is generation-aware. When a delivered wake is completed or failed, the scheduler retires exactly the delivered generation — the wake identified by its key _and_ the delivered wake instant — and records its history entry from the delivered row (the row read before handler invocation), never from whatever pending row currently holds the key. A same-key replacement armed during delivery (the `SPEC-004.C101`-blessed self-reschedule) is a distinct generation: retirement leaves it untouched — no delete, no arming disturbance — and the post-fire re-arm (`SPEC-004.C102`) governs it. If the delivered generation has already vanished or been superseded by retirement time, retirement removes no pending row but still records the delivered fire in history, so at-least-once delivery stays observable. User-initiated cancel-by-key is not a delivery retirement and stays key-based: it cancels whatever generation currently holds the key.
 
 ## DELTA-cron-on-scheduler-runtime-001.P3 Design decisions
 
 ### DELTA-cron-on-scheduler-runtime-001.D1 Retire the delivered generation, not the key
 
-`SPEC-004.C102` already identifies a wake generation by its `(key, wake instant)`
-pair and scopes the delivery-attempt increment to exactly that generation.
-Retirement is the mirror transition and was the one place the key-only shortcut
-survived. Scoping the completing/failing delete to `(key, delivered wake
-instant)` — and sourcing the history row from the already-re-read delivered row
-rather than a fresh key lookup — closes the self-reschedule clobber without
-touching the wake model, storage layout, or API surface. The delivered row is
-available at retirement because due dispatch re-reads it before invoking the
-handler; retirement reuses that row rather than reading the key again.
+`SPEC-004.C102` already identifies a wake generation by its `(key, wake instant)` pair and scopes the delivery-attempt increment to exactly that generation. Retirement is the mirror transition and was the one place the key-only shortcut survived. Scoping the completing/failing delete to `(key, delivered wake instant)` — and sourcing the history row from the already-re-read delivered row rather than a fresh key lookup — closes the self-reschedule clobber without touching the wake model, storage layout, or API surface. The delivered row is available at retirement because due dispatch re-reads it before invoking the handler; retirement reuses that row rather than reading the key again.
 
 ### DELTA-cron-on-scheduler-runtime-001.D2 Cancel-by-key stays key-based
 

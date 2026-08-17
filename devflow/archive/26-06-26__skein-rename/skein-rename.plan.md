@@ -19,7 +19,7 @@ Ship the accepted Skein rename as one coherent product contract: public binary `
 ## SR-PLAN-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | SR-PLAN-001.AA1 | `src/todo` -> `src/skein` | Rename namespaces, API boundary, REPL helpers, client eval forms, query fields, specs, DB schema, readiness, and lifecycle behavior. |
 | SR-PLAN-001.AA2 | `src/atom` -> `src/skein` | Rename blessed alpha libraries to `skein.libs.alpha`, `skein.graph.alpha`, and `skein.views.alpha`; update internal requires. |
 | SR-PLAN-001.AA3 | `src/todo/db.clj` equivalent | Replace `tasks`/`task_edges` and `status`/`final_at` with `strands`/`strand_edges` and `active`/`inactive_at`/`ephemeral`; implement ephemeral delete-on-deactivate. |

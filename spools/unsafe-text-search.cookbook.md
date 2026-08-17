@@ -2,11 +2,8 @@
 
 Worked recipes for `millstrand.spools.unsafe-text-search`: how to grep your working memory when the query language can't. This is the **how** half of the docs. The others:
 
-- [`unsafe-text-search.md`](./unsafe-text-search.md) — the **contract**, and the **Unsafe
-  declaration** you should read first. It explains why this spool reaches past
-  the blessed `api.*` surface and what breakage you are accepting.
-- [`unsafe-text-search.api.md`](./unsafe-text-search.api.md) — the **generated reference**:
-  every public fn's signature and docstring.
+- [`unsafe-text-search.md`](./unsafe-text-search.md) — the **contract**, and the **Unsafe declaration** you should read first. It explains why this spool reaches past the blessed `api.*` surface and what breakage you are accepting.
+- [`unsafe-text-search.api.md`](./unsafe-text-search.api.md) — the **generated reference**: every public fn's signature and docstring.
 
 These recipes assume the op is active (`.millstrand/init.clj` activates it in this repo) so `strand search ...` works from the shell, and that a REPL example holds a runtime via `(require '[millstrand.spools.unsafe-text-search :as unsafe-text-search] '[millstrand.api.current.alpha :as current])` and `(def rt (current/runtime))`.
 

@@ -10,37 +10,37 @@
 - **Raw result:** [`results/results.edn`](./results/results.edn), written by the harness's own `-main` under `--out`.
 - **Invocation used:** the `:test` alias in `deps.edn` pins `:main-opts` to `["-m" "skein.test-runner"]`; `clojure -M` concatenates alias `:main-opts` with any CLI-supplied `-m`/args rather than letting the CLI `-m` replace it, so the documented one-liner `clojure -M:test -m skein.large-attr-benchmark ...` (from the task body and the harness's own usage string) resolves to `skein.test-runner`, which then rejects the trailing `-m skein.large-attr-benchmark --out ...` as unrecognized arguments. Ran with an equivalent classpath instead — same paths/deps/jvm-opts the `:test` alias provides, computed via `clojure -A:test -Spath` — invoking `skein.large-attr-benchmark/-main` directly:
 
-  ```sh
-  ws=$(mktemp -d)
-  cp=$(cd /Users/ct/dev/projects/skein-src__large-attr-scaling && PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -A:test -Spath)
-  PATH="/opt/homebrew/opt/openjdk/bin:$PATH" \
-    flock -w 3600 /tmp/skein-bench.lock \
-    env SKEIN_LARGE_ATTR_BENCH_FULL=1 clojure -Scp "$cp" -J--enable-native-access=ALL-UNNAMED -M -m skein.large-attr-benchmark --out "${ws:?}"
-  ```
+    ```sh
+    ws=$(mktemp -d)
+    cp=$(cd /Users/ct/dev/projects/skein-src__large-attr-scaling && PATH="/opt/homebrew/opt/openjdk/bin:$PATH" clojure -A:test -Spath)
+    PATH="/opt/homebrew/opt/openjdk/bin:$PATH" \
+      flock -w 3600 /tmp/skein-bench.lock \
+      env SKEIN_LARGE_ATTR_BENCH_FULL=1 clojure -Scp "$cp" -J--enable-native-access=ALL-UNNAMED -M -m skein.large-attr-benchmark --out "${ws:?}"
+    ```
 
-  Flagged to the coordinator (feature card `kbcjt`, note `p1n9e`) as a harness/doc issue during this run; fixed afterward by adding the `:large-attr-bench` alias to `deps.edn` and updating the harness's usage string — see "Re-running the harness" below for the working invocation.
+    Flagged to the coordinator (feature card `kbcjt`, note `p1n9e`) as a harness/doc issue during this run; fixed afterward by adding the `:large-attr-bench` alias to `deps.edn` and updating the harness's usage string — see "Re-running the harness" below for the working invocation.
 
 ## Seed profile (`A6`)
 
 The full-scale default profile from `default-options` in the harness, unmodified (`--seed`/`--n` left at defaults, which already match `A6`):
 
-| Knob | Value |
-| --- | --- |
-| `seed` | `1337` |
-| `n` (strand count) | `250000` |
-| `iterations` (timed reps per workload) | `5` |
-| `measure-timeout-secs` | `60` |
-| `list-size` | `500` |
-| `patch-size` | `200` |
-| `payload-every` | `50` |
-| `payload-bytes` | `65536` (64 KiB) |
-| `huge-payload-bytes` | `262144` (256 KiB) |
-| `near-floor-bytes` / `near-floor-every` | `1100` / `40` |
-| `mb-payload-bytes` / `mb-payload-count` | `1048576` (1 MiB) / `20` |
-| `archived-fraction` | `0.2` |
-| `corpus-hot-count` / `corpus-archived-count` | `100` / `40` |
-| `corpus-needle` | `ZZQNEEDLEQZZ` |
-| `point-read-sample` | `500` |
+| Knob                                         | Value                    |
+| -------------------------------------------- | ------------------------ |
+| `seed`                                       | `1337`                   |
+| `n` (strand count)                           | `250000`                 |
+| `iterations` (timed reps per workload)       | `5`                      |
+| `measure-timeout-secs`                       | `60`                     |
+| `list-size`                                  | `500`                    |
+| `patch-size`                                 | `200`                    |
+| `payload-every`                              | `50`                     |
+| `payload-bytes`                              | `65536` (64 KiB)         |
+| `huge-payload-bytes`                         | `262144` (256 KiB)       |
+| `near-floor-bytes` / `near-floor-every`      | `1100` / `40`            |
+| `mb-payload-bytes` / `mb-payload-count`      | `1048576` (1 MiB) / `20` |
+| `archived-fraction`                          | `0.2`                    |
+| `corpus-hot-count` / `corpus-archived-count` | `100` / `40`             |
+| `corpus-needle`                              | `ZZQNEEDLEQZZ`           |
+| `point-read-sample`                          | `500`                    |
 
 Measured row counts: `250000` strands, `50012` archived (≈20%), `16666` rows matching the filtered-scan predicate in both schemas, `62500` rows in the `ready` view in both schemas.
 
@@ -56,11 +56,7 @@ PATH="/opt/homebrew/opt/openjdk/bin:$PATH" \
   env SKEIN_LARGE_ATTR_BENCH_FULL=1 clojure -M:large-attr-bench --seed 1337 --n 250000 --out "${ws:?}"
 ```
 
-The `:large-attr-bench` alias runs `skein.large-attr-benchmark/-main` directly. This avoids the broken `clojure -M:test -m ...`
-form: `:test` already pins `:main-opts` to `skein.test-runner`, so trailing `-m skein.large-attr-benchmark` is treated as test-runner
-arguments. The default profile is already `--seed 1337 --n 250000`; the flags are shown here to make the pinned seed profile explicit.
-The harness writes raw EDN to `${ws:?}/results.edn`. Copy that file into `devflow/feat/large-attr-scaling/results/` only when updating the committed
-baseline report.
+The `:large-attr-bench` alias runs `skein.large-attr-benchmark/-main` directly. This avoids the broken `clojure -M:test -m ...` form: `:test` already pins `:main-opts` to `skein.test-runner`, so trailing `-m skein.large-attr-benchmark` is treated as test-runner arguments. The default profile is already `--seed 1337 --n 250000`; the flags are shown here to make the pinned seed profile explicit. The harness writes raw EDN to `${ws:?}/results.edn`. Copy that file into `devflow/feat/large-attr-scaling/results/` only when updating the committed baseline report.
 
 ## Gate reproduction (`BG1`–`BG4`)
 
@@ -75,14 +71,14 @@ All five informational gate-reproduction checks the harness computes came back `
 ```
 
 - **`BG1` write-amp** (target `≥5×` reduction on `≥16 KiB` payload patches, document-patch-bytes ÷ EAV-patch-bytes, median of 200 patched rows):
-  - 64 KiB payload bucket: `78280` → `32960` bytes, **`2.375×`**.
-  - 256 KiB payload bucket: `276040` → `32960` bytes, **`8.375×`**.
-  - Combined `≥16 KiB` bucket (the gated number): `177176` → `32960` bytes, **`5.375×`**.
-  - Payload-independence check (256 KiB EAV patch bytes ÷ payload-free EAV patch bytes, target `≤1.5×`): `32960` ÷ `32960`, **`1.0×`** — EAV patch cost is flat regardless of payload size.
-  - Payload-free rows: document `4120` bytes vs. EAV `32960` bytes median (accepted-slower case, per the harness's own `:accepted-small-row-cost` note — EAV patches carry a fixed page-granularity floor).
+    - 64 KiB payload bucket: `78280` → `32960` bytes, **`2.375×`**.
+    - 256 KiB payload bucket: `276040` → `32960` bytes, **`8.375×`**.
+    - Combined `≥16 KiB` bucket (the gated number): `177176` → `32960` bytes, **`5.375×`**.
+    - Payload-independence check (256 KiB EAV patch bytes ÷ payload-free EAV patch bytes, target `≤1.5×`): `32960` ÷ `32960`, **`1.0×`** — EAV patch cost is flat regardless of payload size.
+    - Payload-free rows: document `4120` bytes vs. EAV `32960` bytes median (accepted-slower case, per the harness's own `:accepted-small-row-cost` note — EAV patches carry a fixed page-granularity floor).
 - **`BG2` filtered scan + `ready`** (250k strands):
-  - Filtered scan median: document `209.84 ms` vs. EAV `180.98 ms` — EAV at or below the document envelope (target met).
-  - `ready` median: document `253.12 ms` vs. EAV `426.57 ms`, ratio **`1.685×`** (target `≤1.7×`, accepted baseline `1.69×` — reproduced within measurement noise).
+    - Filtered scan median: document `209.84 ms` vs. EAV `180.98 ms` — EAV at or below the document envelope (target met).
+    - `ready` median: document `253.12 ms` vs. EAV `426.57 ms`, ratio **`1.685×`** (target `≤1.7×`, accepted baseline `1.69×` — reproduced within measurement noise).
 - **`BG3` list-of-500 assembly:** document `2.006 ms` vs. EAV `2.951 ms` median, ratio **`1.472×`** (target `≤2×`).
 - **`BG4` serialization:** the run held `/tmp/skein-bench.lock` (`flock -w 3600`) for its full duration; no concurrent sibling contended the lock.
 

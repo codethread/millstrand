@@ -1,13 +1,6 @@
 # Defer-return Plan
 
-**Document ID:** `PLAN-Dfr-001`
-**Feature:** `defer-return`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** [Runtime-selected returning composition](../../rfcs/2026-07-26-runtime-selected-returning-composition.md)
-**Root specs:** None; the shipped workflow contract is `spools/workflow.md`.
-**Feature specs:** [Workflow spool delta](./specs/workflow-spool.delta.md)
-**Status:** Shipped
-**Last Updated:** 2026-07-26
+**Document ID:** `PLAN-Dfr-001` **Feature:** `defer-return` **Proposal:** [proposal.md](./proposal.md) **RFC:** [Runtime-selected returning composition](../../rfcs/2026-07-26-runtime-selected-returning-composition.md) **Root specs:** None; the shipped workflow contract is `spools/workflow.md`. **Feature specs:** [Workflow spool delta](./specs/workflow-spool.delta.md) **Status:** Shipped **Last Updated:** 2026-07-26
 
 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PLAN-Dfr-001` for v1 and `PLAN-Dfr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `PLAN-Dfr-001.P1` or `PLAN-Dfr-001@2.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
 
@@ -82,7 +75,7 @@ Outcome: the pinned-peer no-impact audit is recorded, the workflow contract and 
 
 ### PLAN-Dfr-001.DN2 Task 1, returning defer engine — 2026-07-26
 
-- Compile stamps `workflow/defer-path` on the *authored* steps, before procedure expansion, rather than at strand-build time. That is what makes the overwrite unconditional: a step spliced in from a nested compile arrives after the stamp and keeps the deeper ancestry it was given, so one rule covers both the forgery case and the nesting case without asking "is this value authored or engine-written?" at a point where the answer is unknowable.
+- Compile stamps `workflow/defer-path` on the _authored_ steps, before procedure expansion, rather than at strand-build time. That is what makes the overwrite unconditional: a step spliced in from a nested compile arrives after the stamp and keeps the deeper ancestry it was given, so one rule covers both the forgery case and the nesting case without asking "is this value authored or engine-written?" at a point where the answer is unknowable.
 - Defer targets moved from `:continue` to `:call` in `use-entrypoint`. `:continue` now belongs to authored checkpoint routing alone, which is what lets the land and story continuations keep their entrypoint unchanged while every runtime selection is judged as the inline procedure it now is.
 - Mutually-referencing defer definitions cannot both be staged at once: `validate-candidates!` judges the whole candidate registry, so an `A → B → A` fixture registers B as a plain callable first and repoints it after A lands. The A→B→A cycle test documents that sequence.
 - Task 1 leaves `skein.spools.workflow.cli` pointing at one `defer` verb so the module compiles and its declared grammar matches its handler, but the two CLI test suites still drive the removed `continue`/`dispatch` verbs and fail. That is Task 2's cutover, not a regression to chase here.
@@ -90,7 +83,7 @@ Outcome: the pinned-peer no-impact audit is recorded, the workflow contract and 
 ### PLAN-Dfr-001.DN3 Intent-review finding: durable cycle identity — 2026-07-26
 
 - The `defer-return-story` intent review (run `48nr2`, sol-med) returned CHANGES REQUIRED on one real defect, inherited from the dispatch implementation rather than introduced here: `fingerprint` digests `pr-str` of the definition, and a definition holding render or predicate functions prints with their JVM identity hashes. The same registered routine therefore fingerprints differently in a later weaver generation, and a fingerprint-only ancestry check would let an `A → B → A` cycle through whenever the second fill lands after a restart.
-- Resolved in `routing/same-routine?`: an ancestry entry matches a candidate when *either* the fingerprints match or both record the same definition symbol. The symbol is durable across generations and repoints; the fingerprint still covers anonymous definitions and two registry names resolving to one value. Matching on either strictly widens what the old check caught, so no previously-refused cycle becomes fillable.
+- Resolved in `routing/same-routine?`: an ancestry entry matches a candidate when _either_ the fingerprints match or both record the same definition symbol. The symbol is durable across generations and repoints; the fingerprint still covers anonymous definitions and two registry names resolving to one value. Matching on either strictly widens what the old check caught, so no previously-refused cycle becomes fillable.
 - `defer-cycles-survive-a-fingerprint-change-across-weaver-generations` locks it by rewriting the persisted path's digests while keeping its symbols — exactly what a restart persists. It fails against the fingerprint-only check.
 
 ### PLAN-Dfr-001.DN4 Module measurement for the story fold decision — 2026-07-26

@@ -17,20 +17,20 @@ Why it matters: [PROP-Dyc-001.P1](./proposal.md). What is contractual: [DELTA-Dy
 - **PLAN-Dyc-001.A3 (mirror `continue!` for the run-side plumbing):** Guard acquisition, live target resolution against the materialized allowlist, `:param-spec` validation before mutation, the fingerprint record, `frontier-stale` on a lost race, and the single-batch commit are all shapes `continue!` already implements in `internal/routing.clj`. `dispatch!` follows them; what differs is that it pours under the root instead of replacing it, and merges no caller params.
 - **PLAN-Dyc-001.A4 (role sets are the blast radius):** Role membership is where this feature fails silently, so every site is enumerated here and each is a review checklist item. Changes and deliberate no-changes both count.
 
-  | Site | Action |
-  | --- | --- |
-  | ready-frontier role spec, `workflow.clj:1475-1479` | **add** `"dispatch"` |
-  | ready-item projection branch, `workflow.clj:1502-1527` | **add** dispatch branch with allowlist fields |
-  | `workflow-work-roles`, `internal/query.clj:138` | **add** `"dispatch"` (blocks done) |
-  | cutover `closeable-roles`, `internal/routing.clj:23-29` | **add** `"dispatch"` (CC4b) |
-  | generic worker roles / `ordinary?`, `internal/runs.clj:34-60` | **add** dispatch role, **exclude** from `ordinary?` (CC4a) |
-  | `complete!` role guard, `workflow.clj:528-546` | **add** dispatch refusal (CC4a) |
-  | `advance!` role fallthrough, `workflow.clj:669-689` | **add** dispatch refusal (CC4a) |
-  | attention selection/exclusion/reason, `workflow.clj:1540-1551, 1962-1996` | **add** dispatch + `:dispatch` |
-  | discovery predicate/projection, `internal/discovery.clj:66-76` | **add** parallel dispatch predicate — do not broaden the defer one |
-  | raw-ready exclusion, `internal/query.clj:73` | **unchanged** — `#{"root" "procedure"}`; adding dispatch would hide actionable work |
-  | procedure cascade, `internal/routing.clj:73-100` | **unchanged** — `procedure`-only is the safety property (V2) |
-  | `history-event-roles`, `internal/query.clj:188-215` | **unchanged** — deliberate, per CC4c |
+    | Site | Action |
+    | --- | --- |
+    | ready-frontier role spec, `workflow.clj:1475-1479` | **add** `"dispatch"` |
+    | ready-item projection branch, `workflow.clj:1502-1527` | **add** dispatch branch with allowlist fields |
+    | `workflow-work-roles`, `internal/query.clj:138` | **add** `"dispatch"` (blocks done) |
+    | cutover `closeable-roles`, `internal/routing.clj:23-29` | **add** `"dispatch"` (CC4b) |
+    | generic worker roles / `ordinary?`, `internal/runs.clj:34-60` | **add** dispatch role, **exclude** from `ordinary?` (CC4a) |
+    | `complete!` role guard, `workflow.clj:528-546` | **add** dispatch refusal (CC4a) |
+    | `advance!` role fallthrough, `workflow.clj:669-689` | **add** dispatch refusal (CC4a) |
+    | attention selection/exclusion/reason, `workflow.clj:1540-1551, 1962-1996` | **add** dispatch + `:dispatch` |
+    | discovery predicate/projection, `internal/discovery.clj:66-76` | **add** parallel dispatch predicate — do not broaden the defer one |
+    | raw-ready exclusion, `internal/query.clj:73` | **unchanged** — `#{"root" "procedure"}`; adding dispatch would hide actionable work |
+    | procedure cascade, `internal/routing.clj:73-100` | **unchanged** — `procedure`-only is the safety property (V2) |
+    | `history-event-roles`, `internal/query.clj:188-215` | **unchanged** — deliberate, per CC4c |
 
 - **PLAN-Dyc-001.A5 (branch-local lineage over traversal):** Cycle rejection is a membership test against the `workflow/dispatch-path` written on **each dispatch strand** at pour, carrying the lexical ancestry enclosing it — including fixed-call callees it is nested inside. `dispatch!` reads the strand's own path, not the root's, and stamps the extended path onto the expansion's dispatch strands. Entries are definition fingerprints, so anonymous roots work. No graph walk, no new acyclic relation. See DELTA-Dyc-001.CC7/D4/D4a for why a root-wide accumulating path is unsound.
 - **PLAN-Dyc-001.A6 (the fill batch payload has a specific shape):** The target's compiled payload carries a synthetic root. `dispatch!` strips it, binds the run's current root as a top-level batch ref, re-parents every prefixed expansion strand under it with `parent-of`, patches the dispatch strand's role and attributes, and adds the join's `depends-on` edges to the expansion exits — all in one `batch/apply!`. Concatenating a compiled payload does not work; the helper contract and its parentage and ref-collision tests are PH3 deliverables.
@@ -86,7 +86,7 @@ Outcome: contract doc, both cookbook recipes, regenerated api docs, README defer
 - **PLAN-Dyc-001.V1:** `step a -> dispatch -> step c` runs in one molecule and `step c` becomes ready only after the expansion's exits close. This is the feature; without it nothing else matters.
 - **PLAN-Dyc-001.V2:** An unfilled dispatch survives a sibling completion. This is the failure mode RFC-Dyc-001.O3 would have shipped silently, so it gets a dedicated test naming the cascade rule.
 - **PLAN-Dyc-001.V3:** A run holding an unfilled dispatch is not done, and its root does not auto-close.
-- **PLAN-Dyc-001.V4:** Cycle rejection fires on `A -> dispatch -> A` and on a repoint back to an ancestor, and does *not* fire on a repoint to an unrelated definition.
+- **PLAN-Dyc-001.V4:** Cycle rejection fires on `A -> dispatch -> A` and on a repoint back to an ancestor, and does _not_ fire on a repoint to an unrelated definition.
 - **PLAN-Dyc-001.V5:** The target sees only its own defaults plus explicit fill params — a caller key with the same name does not reach it.
 - **PLAN-Dyc-001.V6:** The existing defer suite passes unchanged, and `defer`/`continue!`/checkpoint `:next` behavior is unmodified.
 - **PLAN-Dyc-001.V9:** No worker path closes a pending dispatch: `workflow complete` refuses it, `complete!` refuses it, `advance!` refuses it, and a `:next`/`:revise`/`continue!` cutover force-closes it rather than orphaning it.
@@ -96,10 +96,10 @@ Outcome: contract doc, both cookbook recipes, regenerated api docs, README defer
 
 ## PLAN-Dyc-001.P7 Risks and open questions
 
-- **PLAN-Dyc-001.R1 (a role set missed elsewhere):** Role membership fails silently, not loudly. Review of an earlier draft of this plan found three sites it had missed — `internal/runs.clj`, `complete!`/`advance!`, and the cutover close-role set — any of which would have let a worker close a pending hand-off or orphan one under an abandoned root. *Mitigation:* A4 now enumerates every site with its action, including the deliberate no-changes; each is a review checklist item, and V2/V3/V9 are the behavioral backstop.
-- **PLAN-Dyc-001.R2 (expansion helper extraction regresses fixed calls):** PH3 refactors `expand-call-step`'s internals. *Mitigation:* extract in PH3 with the existing call suite as the gate, and keep `expand-call-step`'s own signature and behavior byte-identical.
-- **PLAN-Dyc-001.R3 (`bind-defers` removal reaches further than grep showed):** *Mitigation:* `make spool-suite-gate` is a CI gate and runs the pinned external suites against this checkout; a missed consumer fails there rather than after release.
-- **PLAN-Dyc-001.R4 (fill under the root collides with root-ref collision checks):** `compile` refuses a step ref that collides with the root ref, and a run-time pour reuses that machinery against an already-populated subgraph. *Mitigation:* PH3 exercises a dispatch whose expansion step ids collide with existing sibling ids; prefixing by dispatch id is what makes them disjoint, and the test proves it.
+- **PLAN-Dyc-001.R1 (a role set missed elsewhere):** Role membership fails silently, not loudly. Review of an earlier draft of this plan found three sites it had missed — `internal/runs.clj`, `complete!`/`advance!`, and the cutover close-role set — any of which would have let a worker close a pending hand-off or orphan one under an abandoned root. _Mitigation:_ A4 now enumerates every site with its action, including the deliberate no-changes; each is a review checklist item, and V2/V3/V9 are the behavioral backstop.
+- **PLAN-Dyc-001.R2 (expansion helper extraction regresses fixed calls):** PH3 refactors `expand-call-step`'s internals. _Mitigation:_ extract in PH3 with the existing call suite as the gate, and keep `expand-call-step`'s own signature and behavior byte-identical.
+- **PLAN-Dyc-001.R3 (`bind-defers` removal reaches further than grep showed):** _Mitigation:_ `make spool-suite-gate` is a CI gate and runs the pinned external suites against this checkout; a missed consumer fails there rather than after release.
+- **PLAN-Dyc-001.R4 (fill under the root collides with root-ref collision checks):** `compile` refuses a step ref that collides with the root ref, and a run-time pour reuses that machinery against an already-populated subgraph. _Mitigation:_ PH3 exercises a dispatch whose expansion step ids collide with existing sibling ids; prefixing by dispatch id is what makes them disjoint, and the test proves it.
 - **PLAN-Dyc-001.Q1:** None blocking task generation.
 
 ## PLAN-Dyc-001.P8 Task context

@@ -1,39 +1,16 @@
 # Weaver Runtime delta for vocab-registry
 
-**Document ID:** `SPEC-Vr-004` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`)
-**Feature:** [../proposal.md](../proposal.md) (`PROP-Vr-001`) **Contract:** [../brief.md](../brief.md) **Status:** No
-change — kept for delta-set completeness **Last Updated:** 2026-07-10
+**Document ID:** `SPEC-Vr-004` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Vr-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
 
 ## SPEC-Vr-004.P1 Summary
 
-**No weaver-runtime contract change.** F4's backing store is runtime-owned per-runtime state acquired through
-`skein.api.runtime.alpha/spool-state` (`PROP-Vr-001.C2`), the sole accessor `SPEC-004.C95` already governs, versioned per
-the shape-drift discipline that clause already prescribes. The registry survives `reload!` like every other spool-state
-entry (`SPEC-004.C95`), and its declare-time behavior — same-owner idempotent replace, cross-owner loud failure
-(`PROP-Vr-001.C3`) — is ordinary module activation, not a new runtime primitive. So none of the registry, the seed, the
-`strand vocab` op, or the two consumers touches the weaver runtime, transports, or registries `SPEC-004` governs. This file
-records the disposition explicitly so the F4 delta set mirrors F3's per-root-spec coverage (`SPEC-Np-004`).
+**No weaver-runtime contract change.** F4's backing store is runtime-owned per-runtime state acquired through `skein.api.runtime.alpha/spool-state` (`PROP-Vr-001.C2`), the sole accessor `SPEC-004.C95` already governs, versioned per the shape-drift discipline that clause already prescribes. The registry survives `reload!` like every other spool-state entry (`SPEC-004.C95`), and its declare-time behavior — same-owner idempotent replace, cross-owner loud failure (`PROP-Vr-001.C3`) — is ordinary module activation, not a new runtime primitive. So none of the registry, the seed, the `strand vocab` op, or the two consumers touches the weaver runtime, transports, or registries `SPEC-004` governs. This file records the disposition explicitly so the F4 delta set mirrors F3's per-root-spec coverage (`SPEC-Np-004`).
 
 ## SPEC-Vr-004.P2 Contract changes
 
-- None. `SPEC-004.C95` describes the versioned spool-state mechanism generically and enumerates no per-consumer state:
-  spool-state survives `reload!`, a consumer whose map shape changed declares a `version` so a preserved shape-mismatched
-  value reinits rather than silently reusing. The registry is exactly such a consumer (versioned map, `PROP-Vr-001.C2`,
-  `R4`), so it *uses* `C95` and adds no runtime text. Unlike the scheduler (`SPEC-004.C97`), which earned a dedicated
-  clause because it holds shape-sensitive executors and timers, the registry holds only in-memory declaration maps — no
-  executors, no timers, no reload-armed resources — so it warrants no dedicated `SPEC-004` clause.
-- Reload re-registration is covered by the same generic mechanism. On `reload!` every owning spool's `install!` re-runs
-  against the surviving registry; a same-owner re-declaration is the idempotent replace (`PROP-Vr-001.C3`), so a reload
-  never self-collides — the C96 hazard of a value change leaving a world unusable does not arise, because the collision is
-  strictly cross-owner. A cross-owner claim is genuinely conflicting installed code and *should* abort loudly: `declare!`
-  throws, the declaring module's `install!` raises, and `use!` records a failed module-use outcome (`SPEC-004.C46`). This
-  is the feature's one hard edge (`PROP-Vr-001.C3`, `G5`), not the `SPEC-004.C96` preamble-consumer clash-replace path,
-  which governs a different reload-surviving consumer whose contract is to never abort startup.
+- None. `SPEC-004.C95` describes the versioned spool-state mechanism generically and enumerates no per-consumer state: spool-state survives `reload!`, a consumer whose map shape changed declares a `version` so a preserved shape-mismatched value reinits rather than silently reusing. The registry is exactly such a consumer (versioned map, `PROP-Vr-001.C2`, `R4`), so it _uses_ `C95` and adds no runtime text. Unlike the scheduler (`SPEC-004.C97`), which earned a dedicated clause because it holds shape-sensitive executors and timers, the registry holds only in-memory declaration maps — no executors, no timers, no reload-armed resources — so it warrants no dedicated `SPEC-004` clause.
+- Reload re-registration is covered by the same generic mechanism. On `reload!` every owning spool's `install!` re-runs against the surviving registry; a same-owner re-declaration is the idempotent replace (`PROP-Vr-001.C3`), so a reload never self-collides — the C96 hazard of a value change leaving a world unusable does not arise, because the collision is strictly cross-owner. A cross-owner claim is genuinely conflicting installed code and _should_ abort loudly: `declare!` throws, the declaring module's `install!` raises, and `use!` records a failed module-use outcome (`SPEC-004.C46`). This is the feature's one hard edge (`PROP-Vr-001.C3`, `G5`), not the `SPEC-004.C96` preamble-consumer clash-replace path, which governs a different reload-surviving consumer whose contract is to never abort startup.
 
 ## SPEC-Vr-004.P3 Flagged (out of scope for F4)
 
-- **SPEC-Vr-004.F1:** None. No storage-kind, weaver-status, transport, event, scheduler, hook, or CLI-operation-registry
-  contract moves. The registry introduces no new weaver-API operation: `declare!`/`declarations`/`declaration` are
-  domain-namespace functions on `skein.api.vocab.alpha` (`SPEC-005.C2`), not `skein.api.weaver.alpha` primitives, and they
-  read/write only the runtime's own spool-state through the `SPEC-004.C95` accessor. The `strand vocab` op registers
-  through the existing batteries `op-registrations` path (`SPEC-004.C63a`) with no new dispatcher or registry surface.
+- **SPEC-Vr-004.F1:** None. No storage-kind, weaver-status, transport, event, scheduler, hook, or CLI-operation-registry contract moves. The registry introduces no new weaver-API operation: `declare!`/`declarations`/`declaration` are domain-namespace functions on `skein.api.vocab.alpha` (`SPEC-005.C2`), not `skein.api.weaver.alpha` primitives, and they read/write only the runtime's own spool-state through the `SPEC-004.C95` accessor. The `strand vocab` op registers through the existing batteries `op-registrations` path (`SPEC-004.C63a`) with no new dispatcher or registry surface.

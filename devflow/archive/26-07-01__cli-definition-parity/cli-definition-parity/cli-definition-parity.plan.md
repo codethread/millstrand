@@ -17,7 +17,7 @@ Give registered named queries the same read-only CLI discoverability that patter
 ## CDP-PLAN-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | CDP-PLAN-001.AA1 | `src/skein/query.clj` | Add pure referenced-param discovery over query where expressions. |
 | CDP-PLAN-001.AA2 | `src/skein/weaver/api.clj` | Add `query-metadata` and `query-explain` introspection helpers beside the existing `queries` / `resolve-query` registry functions. |
 | CDP-PLAN-001.AA3 | `src/skein/weaver/socket.clj` | Allowlist, argument-shape validation, and dispatch for `query-list` / `query-explain`; payload-hook set unchanged. |

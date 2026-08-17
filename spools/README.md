@@ -1,12 +1,6 @@
 # Spools
 
-Spools are trusted, authorable Clojure loaded into the weaver. The `millstrand.spools.*` namespace family
-is reserved for exactly this kind of code (see the [REPL API spec](../devflow/specs/repl-api.md)).
-The agent family (`agent-run`, `executors.subagent`, `delegation`, `bench`) lives in
-[`codethread/agent-harness.spool`](https://github.com/codethread/agent-harness.spool) under
-`ct.spools.*`, the author-prefix convention for external spools.
-The spools in this directory ship with Millstrand as working references. Use them directly, copy them
-as starting points, or study them to author your own.
+Spools are trusted, authorable Clojure loaded into the weaver. The `millstrand.spools.*` namespace family is reserved for exactly this kind of code (see the [REPL API spec](../devflow/specs/repl-api.md)). The agent family (`agent-run`, `executors.subagent`, `delegation`, `bench`) lives in [`codethread/agent-harness.spool`](https://github.com/codethread/agent-harness.spool) under `ct.spools.*`, the author-prefix convention for external spools. The spools in this directory ship with Millstrand as working references. Use them directly, copy them as starting points, or study them to author your own.
 
 Every spool loads through one convention: an approved coordinate in `.millstrand/spools.edn` and a stable `runtime/module!` declaration guarded by its `:spools` roots. Full refresh resolves those roots, collects the module's selected authoring declarations, publishes its owner-complete contribution, and runs its lifecycle declarations. An inert `def<kind>` creates a reusable declaration Var, `use-<kind>!` selects declaration Vars for one module, and `def<kind>!` does both. Authoring forms are the durable path; explicit-runtime registration functions are the live code/test seam, and the in-process REPL supplies the same live verbs with the runtime implied. Evaluating an authoring form at a REPL validates it but publishes nothing. [Customising your workspace](../docs/spools/customisation.md) is the operational walkthrough; [Writing shared spools](../docs/spools/writing-shared-spools.md#author-contributions-with-kind-specific-forms) holds the complete selection contract.
 
@@ -32,24 +26,15 @@ Each `.millstrand/spools.edn` key names a family. A workspace-local family uses 
    :millstrand/min "v3"}}}
 ```
 
-Without `:roots`, a family supplies one root named by the family symbol at `"."`. Every root lib
-has one owner. Release markers are positive `vN` strings. `:requires` sets minimum release markers
-for other approved roots; `:millstrand/min` sets the minimum running Millstrand marker. A local development
-override names the family once with `:local/root` and an explicit `:claims "vN"`; it inherits the
-shared root map and compatibility floors.
+Without `:roots`, a family supplies one root named by the family symbol at `"."`. Every root lib has one owner. Release markers are positive `vN` strings. `:requires` sets minimum release markers for other approved roots; `:millstrand/min` sets the minimum running Millstrand marker. A local development override names the family once with `:local/root` and an explicit `:claims "vN"`; it inherits the shared root map and compatibility floors.
 
 ## Doc triad
 
 Each shipped spool's docs follow a three-file convention:
 
-- **`<spool>.md`** — the **contract**: hand-authored guarantees, run lifecycle,
-  and the attribute vocabulary. This is the load-bearing promise.
-- **`<spool>.cookbook.md`** — authored **composition recipes**: how to shape
-  real work out of the primitives, and *why* each shape is right. Present only
-  where the value is in composition.
-- **`<spool>.api.md`** — the **generated reference**: every public fn's
-  signature, arity, and docstring, produced from source. Never hand-edit these;
-  regenerate with `make api-docs`.
+- **`<spool>.md`** — the **contract**: hand-authored guarantees, run lifecycle, and the attribute vocabulary. This is the load-bearing promise.
+- **`<spool>.cookbook.md`** — authored **composition recipes**: how to shape real work out of the primitives, and _why_ each shape is right. Present only where the value is in composition.
+- **`<spool>.api.md`** — the **generated reference**: every public fn's signature, arity, and docstring, produced from source. Never hand-edit these; regenerate with `make api-docs`.
 
 Signatures live only in the generated API doc; contracts and cookbooks link to them rather than restating them.
 
@@ -58,13 +43,13 @@ Signatures live only in the generated API doc; contracts and cookbooks link to t
 The batteries and unsafe-text-search spools remain in this checkout under `spools/<name>/src`, off the production weaver classpath. Their `{:millstrand/source-root "spools/<name>"}` coordinates resolve against the mill-selected Millstrand checkout. Workflow, Chime, Cron, Kanban, and the gate executors are external Millhouse roots, pinned by this workspace at [`7c615bd1`](https://github.com/codethread/millhouse.spool/tree/7c615bd1032be0e443c36fa12e8c50143e8014ff). Their contracts live in that repository. For publishing a spool by git coordinate, SHA-pinned approval, README dependency/activation snippets, Maven-only spool-root dependencies, and local development overrides, see [Writing shared spools](../docs/spools/writing-shared-spools.md#publishing-a-shared-spool-with-git-distribution).
 
 | Spool | Coordinate (`.millstrand/spools.edn`) | Contract doc | Documentation | Purpose |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `millstrand.spools.unsafe-text-search` **(UNSAFE)** | `:millstrand/source-root "spools/unsafe-text-search"` | [unsafe-text-search.md](./unsafe-text-search.md) | [unsafe-text-search.api.md](./unsafe-text-search.api.md) · [cookbook](./unsafe-text-search.cookbook.md) | **UNSAFE reference spool** — requires `millstrand.core.db` and runs SQL against the physical tables to `LIKE`-search titles and attribute values, including archived rows the query language cannot see. Registers the `search` op. A maintained example of breaking the namespace-tier rules in the open, not a blessed path; read its [Unsafe declaration](./unsafe-text-search.md#unsafe-declaration) before activating. |
 | Millhouse workflow, Chime, Cron, Kanban, and gate executors | git, SHA-pinned `millhouse/spools` family | [Millhouse contracts][millhouse-docs] | [Millhouse documentation][millhouse-docs] | External domain spools consumed by this workspace. |
 | Agent harness (`agent-run`, `delegation`, subagent executor, `bench`) | git, SHA-pinned `ct.spools/agent-run` family | [Agent harness README](https://github.com/codethread/agent-harness.spool#readme) | [Agent harness README](https://github.com/codethread/agent-harness.spool#readme) | Coding-agent runs, delegation, workflow gate execution, and benchmarks. |
 | Devflow | git, SHA-pinned `codethread/devflow` family | [Devflow README](https://github.com/codethread/devflow.spool#readme) | [Devflow README](https://github.com/codethread/devflow.spool#readme) | Reference feature lifecycle built on the workflow engine. |
-| `millstrand.spools.dresser` | *(none approved in this repo)* | [Dresser README](https://github.com/codethread/dresser.spool#readme) | [Dresser README](https://github.com/codethread/dresser.spool#readme) | Brings a repo onto shared working conventions and surfaces convention upgrades later. |
-[millhouse-docs]: https://codethread.github.io/millhouse.spool/
+| `millstrand.spools.dresser` | _(none approved in this repo)_ | [Dresser README](https://github.com/codethread/dresser.spool#readme) | [Dresser README](https://github.com/codethread/dresser.spool#readme) | Brings a repo onto shared working conventions and surfaces convention upgrades later. |
+| [millhouse-docs]: https://codethread.github.io/millhouse.spool/ |
 
 ## External spool consumption
 
@@ -86,7 +71,7 @@ The override inherits the shared family's `:roots`, `:requires`, and `:millstran
 ## Shipped source-root: batteries
 
 | Spool | Coordinate (`.millstrand/spools.edn`) | Contract doc | API reference | Purpose |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `millstrand.spools.batteries` | `:millstrand/source-root "spools/batteries"` | [batteries.md](./batteries.md) | [batteries.api.md](./batteries.api.md) · [cookbook](./batteries.cookbook.md) | Shipped core strand command surface as registered ops: add/update/show/supersede/burn/list/ready/subgraph plus `weave`, the `query`/`pattern` registry reads, and `spool` verbs including the folded `spool status` read. Invocable arg-spec leaves declare their own hook and deadline classes. |
 
 `mill init` opts a workspace into batteries by seeding `millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}` and a module guarded by `:spools ['millstrand.spools/batteries]`. The relative coordinate is machine-independent: the running weaver resolves it against the mill-selected Millstrand checkout and persists no absolute source path. Deleting the seeded entry is the supported visible opt-out; a hand-written `{:spools {}}` world has no batteries ops. Batteries is not on the production weaver classpath, so it follows the same approval and activation path as every other spool.
@@ -104,5 +89,4 @@ The override inherits the shared family's `:roots`, `:requires`, and `:millstran
 
 - Strand **attributes are the extension surface**. Build your own conventions instead of waiting for engine fields, and give them new names only for new concepts ([the vocabulary rule](../docs/spools/writing-shared-spools.md#the-rules-for-shared-spools)).
 - A spool publishes owner-complete kind entries through contribution forms and owns runtime effects through lifecycle forms. See [Writing shared spools](../docs/spools/writing-shared-spools.md) for the authoring grammar and each contract doc for exact behavior.
-- To author and load your own spool from a workspace-local root, follow
-  [Authoring your own spool code](../docs/spools/customisation.md#workspace-modules-and-local-spools).
+- To author and load your own spool from a workspace-local root, follow [Authoring your own spool code](../docs/spools/customisation.md#workspace-modules-and-local-spools).

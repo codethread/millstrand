@@ -1,10 +1,6 @@
 # daemon-runtime delta for c5kss-sync-owns-resolution
 
-**Document ID:** `DELTA-Sor-001`
-**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
-**Feature:** [../proposal.md](../proposal.md)
-**Status:** Draft
-**Last Updated:** 2026-07-12
+**Document ID:** `DELTA-Sor-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Draft **Last Updated:** 2026-07-12
 
 ## DELTA-Sor-001.P1 Summary
 

@@ -1,11 +1,6 @@
 # Alpha surface delta for selectable authoring declarations
 
-**Document ID:** `DELTA-Sad-003`
-**Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md)
-**Feature:** [../proposal.md](../proposal.md)
-**Status:** Reviewed
-**Last Updated:** 2026-08-14
-**Configuration identification:** `Sad` abbreviates selectable authoring declarations. This is the third delta in that feature's ordered set, so it takes `DELTA-Sad-003`. Nested IDs carry the complete document ID.
+**Document ID:** `DELTA-Sad-003` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Reviewed **Last Updated:** 2026-08-14 **Configuration identification:** `Sad` abbreviates selectable authoring declarations. This is the third delta in that feature's ordered set, so it takes `DELTA-Sad-003`. Nested IDs carry the complete document ID.
 
 ## DELTA-Sad-003.P1 Summary
 

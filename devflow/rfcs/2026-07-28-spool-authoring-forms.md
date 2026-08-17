@@ -247,7 +247,7 @@ A spool's capability set should be derivable from its source declarations and ex
 ## RFC-Saf-001.P7 Options
 
 | ID | Summary | Advantages | Costs |
-| -- | ------- | ---------- | ----- |
+| --- | --- | --- | --- |
 | RFC-Saf-001.O1 | Keep `:contribute` as the canonical general form and treat authoring forms as optional convenience. | No migration; arbitrary callback logic remains possible; image mode already works. | Preserves two grammars, monolithic assembly, weak static discovery, and the impression that forms are secondary. Every new form must coexist indefinitely with raw maps. |
 | RFC-Saf-001.O2 | Improve authoring forms but retain `:contribute` as an escape hatch. | Most spools gain ergonomic forms while unusual spools retain full freedom. | The escape hatch becomes the permanent answer to every missing feature. Forms never become complete, tooling must inspect both paths, and runtime-dependent declaration logic remains part of the contract. |
 | RFC-Saf-001.O3 | Replace `:contribute` with a complete, replayable authoring-form protocol. | One grep-friendly extension grammar; local validation and documentation; equivalent publication semantics; extensible to future kinds; image declarations become inspectable data. | Requires parity work for overrides, image replay, generated entries, and kind bootstrapping; forces a breaking migration; rejects arbitrary runtime-dependent contribution callbacks. |

@@ -1,9 +1,6 @@
 # sync! Owns Resolution Proposal
 
-**Document ID:** `PROP-Sor-001`
-**Last Updated:** 2026-07-12
-**Related RFCs:** design record strand `5bbrd` (council-settled 2026-07-11; removal-default decided to majority 2026-07-12, note `s5ka8`); superseded preflight `PROP-srr-001` (card `pn7wh`, closed)
-**Related root specs:** [`devflow/specs/daemon-runtime.md`](../../specs/daemon-runtime.md)
+**Document ID:** `PROP-Sor-001` **Last Updated:** 2026-07-12 **Related RFCs:** design record strand `5bbrd` (council-settled 2026-07-11; removal-default decided to majority 2026-07-12, note `s5ka8`); superseded preflight `PROP-srr-001` (card `pn7wh`, closed) **Related root specs:** [`devflow/specs/daemon-runtime.md`](../../specs/daemon-runtime.md)
 
 This is **half 1** of the design in `5bbrd` — severable, unanimous, and hazard-free. The generation swap / cutover of already-loaded code (`w92pn`) and the Maven version-bump guard (`ypy3h`) are out of scope here.
 
@@ -11,7 +8,7 @@ This is **half 1** of the design in `5bbrd` — severable, unanimous, and hazard
 
 Spool `sync!` loads runtime dependencies through `clojure.repl.deps/add-libs`, which appends to the process-global `clojure.java.basis` for the JVM's lifetime. Three consequences follow from that shared, append-only state:
 
-- A deleted approved local root bricks *every* later `sync!`/`reload!` — `add-libs` re-canonicalizes the whole retained universe and fails on the absent coordinate, naming the stale retained lib rather than the spool being synced (the landed retained-root incident, papered over by the `pn7wh` preflight stub-dir remedy).
+- A deleted approved local root bricks _every_ later `sync!`/`reload!` — `add-libs` re-canonicalizes the whole retained universe and fails on the absent coordinate, naming the stale retained lib rather than the spool being synced (the landed retained-root incident, papered over by the `pn7wh` preflight stub-dir remedy).
 - All roots share one retained resolution universe, coupling unrelated spools across syncs.
 - The global mutation is the one axis that cannot be isolated per-runtime, forcing every sync-exercising test suite into serial subprocess JVM shards.
 
@@ -38,6 +35,6 @@ Spool `sync!` loads runtime dependencies through `clojure.repl.deps/add-libs`, w
 
 ## PROP-Sor-001.P5 Open questions
 
-- **PROP-Sor-001.Q1:** *(resolved — subprocess)* See PROP-Sor-001.S1.
-- **PROP-Sor-001.Q2:** *(resolved — fail-loud + `:mvn-overrides`)* See PROP-Sor-001.S3.
-- **PROP-Sor-001.Q3:** *(resolved — atomic resolution, per-root validation)* See PROP-Sor-001.S4; noted for landing as a behavior change.
+- **PROP-Sor-001.Q1:** _(resolved — subprocess)_ See PROP-Sor-001.S1.
+- **PROP-Sor-001.Q2:** _(resolved — fail-loud + `:mvn-overrides`)_ See PROP-Sor-001.S3.
+- **PROP-Sor-001.Q3:** _(resolved — atomic resolution, per-root validation)_ See PROP-Sor-001.S4; noted for landing as a behavior change.

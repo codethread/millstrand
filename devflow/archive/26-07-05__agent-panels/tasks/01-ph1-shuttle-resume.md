@@ -1,6 +1,7 @@
 Implement PLAN-Pnl-001.PH1: shuttle session continuation (A1). FILE SCOPE (exclusive): spools/shuttle/src/skein/spools/shuttle.clj and test/skein/shuttle_test.clj ONLY — do not touch agents.clj (retry plumbing is a later task).
 
 Work:
+
 - Harness defs accept an optional :resume key: a vector argv splice like ["--resume" :shuttle/session-id]; keyword placeholders resolve from the PREDECESSOR run attributes at launch; validate the key shape in defharness! (loudly, with the closed-key set updated).
 - spawn-run! accepts :resume <predecessor-run-id>. At spawn: resolve predecessor; require its shuttle/session-id (loud when missing); require the EXACT same harness/alias name as the predecessor (loud, error data carries both names); reject when another ACTIVE run already carries shuttle/resumes <predecessor> (one live continuation per session); reject :resume on interactive runs. Splice the resolved resume args into the argv BEFORE the prompt arg. Stamp shuttle/resumes <predecessor-run-id> on the new run and add a "resumes" annotation edge.
 - Resume-classed spawn failures stamp shuttle/error-class "resume" on the failed run so recovery can branch (see plan A1/A3).
@@ -9,6 +10,7 @@ Work:
 Tests (shuttle_test.clj): happy path with a fake harness whose parse captures a fabricated session id (claude-json-shaped output via sh is fine); resumed run argv contains the splice (assert via the run record/launcher inputs as existing tests do); provenance attr + edge present; failure matrix — harness without :resume, predecessor without session-id, harness name mismatch, concurrent active continuation, interactive + :resume; error-class stamping. All deterministic, sleep-free.
 
 HOUSE RULES (from PLAN-Pnl-001.TC2/TC3, plan file: devflow/feat/agent-panels/agent-panels.plan.md — READ THE PLAN FIRST, especially your phase section and the A-items it cites):
+
 - Never commit. Never close your own task strand. Record progress with strand update <task-id> --attr progress=...
 - TEN-003: fail loudly with ex-info + data; no silent fallbacks or sensible defaults.
 - Every changed ns keeps its docstring accurate. Spool state via runtime/spool-state only; ambient (rt) style matches these spools. Comments describe current code, never the change.

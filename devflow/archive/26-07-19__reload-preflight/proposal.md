@@ -1,9 +1,6 @@
 # Reload preflight proposal
 
-**Document ID:** `PROP-Rpf-001`
-**Last Updated:** 2026-07-19
-**Related RFCs:** None
-**Related root specs:** [Weaver Runtime](../../specs/daemon-runtime.md) (SPEC-004.C46, SPEC-004.C96, SPEC-004.C44c, SPEC-004.C44d, SPEC-004.C44a, SPEC-004.C44f)
+**Document ID:** `PROP-Rpf-001` **Last Updated:** 2026-07-19 **Related RFCs:** None **Related root specs:** [Weaver Runtime](../../specs/daemon-runtime.md) (SPEC-004.C46, SPEC-004.C96, SPEC-004.C44c, SPEC-004.C44d, SPEC-004.C44a, SPEC-004.C44f)
 
 ## PROP-Rpf-001.P1 Problem
 

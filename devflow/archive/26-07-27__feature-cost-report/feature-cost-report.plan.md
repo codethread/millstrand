@@ -1,13 +1,6 @@
 # Feature cost report plan
 
-**Document ID:** `PLAN-Fcr-001`
-**Feature:** `feature-cost-report`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** None
-**Root specs:** None
-**Feature specs:** None
-**Status:** Shipped
-**Last Updated:** 2026-07-27
+**Document ID:** `PLAN-Fcr-001` **Feature:** `feature-cost-report` **Proposal:** [proposal.md](./proposal.md) **RFC:** None **Root specs:** None **Feature specs:** None **Status:** Shipped **Last Updated:** 2026-07-27
 
 ## PLAN-Fcr-001.P1 Goal and scope
 

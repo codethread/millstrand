@@ -1,13 +1,6 @@
 # sync! Owns Resolution Plan
 
-**Document ID:** `PLAN-Sor-001`
-**Feature:** `c5kss-sync-owns-resolution`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** design record strand `5bbrd` (council-settled; removal-default note `s5ka8`)
-**Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md)
-**Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md)
-**Status:** Reviewed
-**Last Updated:** 2026-07-12
+**Document ID:** `PLAN-Sor-001` **Feature:** `c5kss-sync-owns-resolution` **Proposal:** [proposal.md](./proposal.md) **RFC:** design record strand `5bbrd` (council-settled; removal-default note `s5ka8`) **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) **Status:** Reviewed **Last Updated:** 2026-07-12
 
 ## PLAN-Sor-001.P1 Goal and scope
 
@@ -22,13 +15,13 @@ Replace `clojure.repl.deps/add-libs` and the process-global `clojure.java.basis`
 
 ## PLAN-Sor-001.P3 Affected areas
 
-| ID                 | Area                                        | Expected change                                                                 |
-| ------------------ | ------------------------------------------- | ------------------------------------------------------------------------------- |
-| PLAN-Sor-001.AA1   | `src/skein/core/weaver/spool_sync.clj`      | Resolver seam, two-phase sync, conflict/override, delete preflight + basis reqs |
-| PLAN-Sor-001.AA2   | `test/skein/spools_test.clj`                | Rewrite the two add-libs-mock tests + add conflict/override + status tests      |
-| PLAN-Sor-001.AA3   | `test/skein/runtime_deps_test.clj`          | Delete retained-root detector tests; retarget maven-spool test at the seam      |
-| PLAN-Sor-001.AA4   | `docs/writing-shared-spools.md`             | Rewrite retained-root caution to the stateless-resolution model                 |
-| PLAN-Sor-001.AA5   | `devflow/specs/daemon-runtime.md`           | Merge DELTA-Sor-001 at land-time promote-feature-specs                          |
+| ID | Area | Expected change |
+| --- | --- | --- |
+| PLAN-Sor-001.AA1 | `src/skein/core/weaver/spool_sync.clj` | Resolver seam, two-phase sync, conflict/override, delete preflight + basis reqs |
+| PLAN-Sor-001.AA2 | `test/skein/spools_test.clj` | Rewrite the two add-libs-mock tests + add conflict/override + status tests |
+| PLAN-Sor-001.AA3 | `test/skein/runtime_deps_test.clj` | Delete retained-root detector tests; retarget maven-spool test at the seam |
+| PLAN-Sor-001.AA4 | `docs/writing-shared-spools.md` | Rewrite retained-root caution to the stateless-resolution model |
+| PLAN-Sor-001.AA5 | `devflow/specs/daemon-runtime.md` | Merge DELTA-Sor-001 at land-time promote-feature-specs |
 
 ## PLAN-Sor-001.P4 Contract and migration impact
 
@@ -51,7 +44,7 @@ Outcome: `spool_sync.clj` resolves the approved Maven universe statelessly (seam
 
 ## PLAN-Sor-001.P8 Task context
 
-- **PLAN-Sor-001.TC1:** The whole change is one namespace (`spool_sync.clj`) plus its two test files and one doc — tightly coupled, not fan-out-friendly, so it ships as a single implementation slice by the opus sub-supervisor rather than parallel delegated tasks. Empirical resolver verification lives in the proposal-orient note; the seam contract is A1. The launch-libs read must fail loud when `clojure.basis` is absent *and* Maven deps exist (TEN-003).
+- **PLAN-Sor-001.TC1:** The whole change is one namespace (`spool_sync.clj`) plus its two test files and one doc — tightly coupled, not fan-out-friendly, so it ships as a single implementation slice by the opus sub-supervisor rather than parallel delegated tasks. Empirical resolver verification lives in the proposal-orient note; the seam contract is A1. The launch-libs read must fail loud when `clojure.basis` is absent _and_ Maven deps exist (TEN-003).
 
 ## PLAN-Sor-001.P9 Developer Notes
 

@@ -1,9 +1,6 @@
 # Deterministic Test Time Proposal
 
-**Document ID:** `PROP-Dtt-001`
-**Last Updated:** 2026-07-09
-**Related RFCs:** [Deterministic Test Time RFC-Dtt-001](../../rfcs/2026-07-09-deterministic-test-time.md) (the two-seam design decision), [Test Concurrency RFC-016](../../rfcs/2026-07-03-test-concurrency.md) (the serial islands this feature pays down)
-**Related root specs:** [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
+**Document ID:** `PROP-Dtt-001` **Last Updated:** 2026-07-09 **Related RFCs:** [Deterministic Test Time RFC-Dtt-001](../../rfcs/2026-07-09-deterministic-test-time.md) (the two-seam design decision), [Test Concurrency RFC-016](../../rfcs/2026-07-03-test-concurrency.md) (the serial islands this feature pays down) **Related root specs:** [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
 
 ## PROP-Dtt-001.P1 Problem
 

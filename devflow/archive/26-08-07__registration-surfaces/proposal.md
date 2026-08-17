@@ -1,12 +1,6 @@
 # Registration surfaces Proposal
 
-**Document ID:** `PROP-Rgs-001`
-**Status:** Approved
-**Approved:** 2026-07-31
-**Related RFCs:** [RFC-Saf-001: spool authoring forms](../../rfcs/2026-07-28-spool-authoring-forms.md), [lifecycle authoring forms](../../rfcs/2026-07-28-lifecycle-authoring-forms.md)
-**Related root specs:** [REPL API](../../specs/repl-api.md), [Alpha surface](../../specs/alpha-surface.md), [Weaver runtime](../../specs/daemon-runtime.md)
-**Related brief:** [brief.md](./brief.md)
-**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
+**Document ID:** `PROP-Rgs-001` **Status:** Approved **Approved:** 2026-07-31 **Related RFCs:** [RFC-Saf-001: spool authoring forms](../../rfcs/2026-07-28-spool-authoring-forms.md), [lifecycle authoring forms](../../rfcs/2026-07-28-lifecycle-authoring-forms.md) **Related root specs:** [REPL API](../../specs/repl-api.md), [Alpha surface](../../specs/alpha-surface.md), [Weaver runtime](../../specs/daemon-runtime.md) **Related brief:** [brief.md](./brief.md) **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
 
 Once approved this document is frozen: it records the intent agreed at sign-off, not what was later built. Implementation change lives in the spec deltas, the plan, and code.
 
@@ -20,15 +14,16 @@ The registry model underneath is sound: layered owner partitions (`:defaults < :
 
 - Only ops have a blessed cross-owner override (`replace-op!`). Iterating on a module-owned query, pattern, hook, or handler from the REPL fails with "requires explicit override intent", and no blessed verb can express that intent. Capability sets differ across the five sibling kinds with no stated rationale — three different capability sets across five sibling kinds:
 
-  | Kind | register | replace | unregister |
-  |---|---|---|---|
-  | ops | ✓ | ✓ | — |
-  | queries | ✓ | — | — |
-  | patterns | ✓ | — | — |
-  | hooks | ✓ | — | ✓ |
-  | events | ✓ | — | ✓ |
+    | Kind     | register | replace | unregister |
+    | -------- | -------- | ------- | ---------- |
+    | ops      | ✓        | ✓       | —          |
+    | queries  | ✓        | —       | —          |
+    | patterns | ✓        | —       | —          |
+    | hooks    | ✓        | —       | ✓          |
+    | events   | ✓        | —       | ✓          |
 
-  Unregister-then-reregister cannot substitute for replace: unregistering removes only the caller's own direct entry, the module entry resurfaces, and re-registering collides again.
+    Unregister-then-reregister cannot substitute for replace: unregistering removes only the caller's own direct entry, the module entry resurfaces, and re-registering collides again.
+
 - `defquery!`/`defpattern!` are misnamed: plain registration functions that define no Var, spelled as if they were REPL twins of the authoring macros. The pattern does not generalize across kinds.
 - Two terse tiers ship ~19 identically named functions, with `load-queries!` taking a file path in one and an EDN map in the other.
 - Docstrings overstate replacement ("duplicate names replace prior entries" is same-owner-only), SPEC-003.C17f contradicts the source on lifecycle-form passivity, and `userland/bind!` is a process-global mutable default that one shared-weaver session can use to silently redirect every other session's calls.
@@ -90,7 +85,7 @@ After S1–S4 the matrix is uniform — every kind supports `register / replace 
 `def*` therefore always reads "authoring form, module-owned, durable"; `register/replace/unregister-*!` always reads "live, direct-layer, weaver-lifetime". Which one to reach for:
 
 | I want to… | Reach for | Why |
-|---|---|---|
+| --- | --- | --- |
 | Ship a durable, discoverable op | `skein/defop` in module source, `refresh!` | Survives restart; owner-complete; contract validated at publication |
 | Try a brand-new op live | `register-op!` | Direct layer; loud on collision with any owner |
 | Iterate behavior under a stable contract (ops, patterns, hooks) | redefine the handler fn | These kinds are late-bound — the symbol resolves at invoke time, or the stored Var's current body runs |
@@ -98,7 +93,7 @@ After S1–S4 the matrix is uniform — every kind supports `register / replace 
 | End the experiment | `unregister-op!` | Retracts the shadow; the module original resurfaces |
 | Durably mask a spool's op in my workspace | `skein/defop {:override? true}` in a workspace module | `:workspace` layer outranks `:spools`; declarative and reviewable |
 
-The redefine-the-fn row is the only one that varies by kind. Ops resolve their handler symbol at invoke time and hooks invoke the stored Var, so both pick up a redefined body on the next call; patterns behave like ops. Queries have no function at all — the registered value *is* the behavior — so behavior- and contract-iteration collapse into `replace-query!`, and in exchange `query explain` can never go stale. Event handlers alone capture their function value at registration, so iterating one is the same one-call `replace-*!` loop. This proposal records these binding moments as existing behavior and does not change them.
+The redefine-the-fn row is the only one that varies by kind. Ops resolve their handler symbol at invoke time and hooks invoke the stored Var, so both pick up a redefined body on the next call; patterns behave like ops. Queries have no function at all — the registered value _is_ the behavior — so behavior- and contract-iteration collapse into `replace-query!`, and in exchange `query explain` can never go stale. Event handlers alone capture their function value at registration, so iterating one is the same one-call `replace-*!` loop. This proposal records these binding moments as existing behavior and does not change them.
 
 ## PROP-Rgs-001.P4b Reader questions the docs must pre-empt
 

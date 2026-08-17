@@ -96,13 +96,13 @@ mill weaver status --workspace .ms
 
 Default discovery beneath the canonical Git root follows this matrix:
 
-| Existing marker | Behavior |
-| --- | --- |
-| `.millstrand` only | select `.millstrand` |
-| `.ms` only | select `.ms` |
-| neither | `mill init` targets `.millstrand`; other commands say to initialize |
-| both | fail loudly and name both conflicting paths |
-| `.skein` only | fail with an alpha-cutover message; do not create a second world |
+| Existing marker    | Behavior                                                            |
+| ------------------ | ------------------------------------------------------------------- |
+| `.millstrand` only | select `.millstrand`                                                |
+| `.ms` only         | select `.ms`                                                        |
+| neither            | `mill init` targets `.millstrand`; other commands say to initialize |
+| both               | fail loudly and name both conflicting paths                         |
+| `.skein` only      | fail with an alpha-cutover message; do not create a second world    |
 
 An accepted marker that is not a directory also fails loudly. Explicit `--workspace` remains higher precedence and may name any directory; this is not legacy `.skein` discovery or a promise that old configuration will load.
 
@@ -280,11 +280,11 @@ SQLite stores generic strand data plus a few executable references. A copied wor
 
 ```json
 {
-  "workflow/definition": "skein.workspace.workflows.land/land",
-  "workflow/definition-name": "land",
-  "code/fn": "skein.workspace.review/run-review!",
-  "agent-run/cost-usd": 0.6281608,
-  "agent-run/tokens-total": 3102292
+	"workflow/definition": "skein.workspace.workflows.land/land",
+	"workflow/definition-name": "land",
+	"code/fn": "skein.workspace.review/run-review!",
+	"agent-run/cost-usd": 0.6281608,
+	"agent-run/tokens-total": 3102292
 }
 ```
 

@@ -7,13 +7,13 @@ Millstrand is a runtime for programming the constraints and loops around coding 
 - Always read `./devflow/TENETS.md`
 - When designing features, also read `./devflow/PHILOSOPHY.md` and `./devflow/UBIQUITOUS-LANGUAGE.md`
 
-| Path | What |
-| --- | --- |
-| `src/millstrand/` | Core runtime (`api`, `core`, `repl`) |
-| `spools/` | Shipped spools (batteries, workflow, …) |
-| `cli/` | Go CLIs (`strand`, `mill`) |
-| `tools/` | Repo tools (`kanban-tree`) |
-| `.millstrand/` | This repo's coordination workspace (board, workflows, harnesses) |
+| Path              | What                                                             |
+| ----------------- | ---------------------------------------------------------------- |
+| `src/millstrand/` | Core runtime (`api`, `core`, `repl`)                             |
+| `spools/`         | Shipped spools (batteries, workflow, …)                          |
+| `cli/`            | Go CLIs (`strand`, `mill`)                                       |
+| `tools/`          | Repo tools (`kanban-tree`)                                       |
+| `.millstrand/`    | This repo's coordination workspace (board, workflows, harnesses) |
 
 ## Working here
 
@@ -33,11 +33,11 @@ Millstrand is a runtime for programming the constraints and loops around coding 
 
 Farm work out as tracked agent runs (`strand agent …`); never harness-native subagents (recon-only). Load `strand prime agent` first. Multiple agents are valid, especially for recon.
 
-| Scenario | Seat |
-| --- | --- |
+| Scenario                                              | Seat        |
+| ----------------------------------------------------- | ----------- |
 | Mechanical tasks, testing loops, supervised iteration | `luna-high` |
-| Reviews against code during iterative development | `terra-med` |
-| Council / guidance on complex matters | `sol-high` |
+| Reviews against code during iterative development     | `terra-med` |
+| Council / guidance on complex matters                 | `sol-high`  |
 
 ## Agent loop
 
@@ -59,6 +59,7 @@ This repo uses Millstrand strands to track work. Orientation ships in the `mill`
 
 - `mill prime strand` — the day-to-day strand workflow; run it before multi-step work.
 - `mill prime millstrand` — read on demand, only when building on this repo's `.millstrand/` config or spools.
+
 <!-- /mill:millstrand-prime -->
 
 Wider questions: `strand guide "<question>"`.

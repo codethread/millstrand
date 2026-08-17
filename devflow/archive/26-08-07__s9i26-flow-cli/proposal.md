@@ -1,10 +1,6 @@
 # Live workflow registry and worker CLI proposal
 
-**Document ID:** `PROP-Wcd-001`
-**Last Updated:** 2026-07-29
-**Related RFCs:** None
-**Related root specs:** [CLI Surface](../../specs/cli.md), [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
-**Related spool contract:** [Workflow](../../../spools/workflow.md)
+**Document ID:** `PROP-Wcd-001` **Last Updated:** 2026-07-29 **Related RFCs:** None **Related root specs:** [CLI Surface](../../specs/cli.md), [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md) **Related spool contract:** [Workflow](../../../spools/workflow.md)
 
 > **Partial supersession, 2026-07-26:** [`PROP-Dfr-001`](../defer-return/proposal.md) supersedes the terminal-defer and `continue!` contract in S2, S4, S6, S7, S9, S15, and the related examples and acceptance notes. `defer` is now runtime-selected returning composition filled through `defer!` or `workflow defer`; only authored checkpoint routing retains the `:continue` entrypoint. The rest of this proposal remains the historical design record for the live registry and worker CLI.
 
@@ -52,6 +48,7 @@ Full topology projection is not a suitable worker discovery answer. A workflow m
 - **PROP-Wcd-001.S9 (one spec-first param model and JSON boundary):** Every workflow value may name a qualified-keyword `:param-spec` for its complete resolved params map and declare a separate `:defaults` map. Defaults are intentionally a partial overlay and therefore are not required to satisfy a whole-map spec that may require caller-supplied keys; publication validates their map shape and JSON compatibility, while every actual merged param map must satisfy `:param-spec` before compile or mutation. Clojure spec has no sound general partial-map validation operation, and deriving leaf rules would create a second schema interpreter that breaks on cross-field predicates, so v1 does not claim spec-aware validation of defaults in isolation. Start, named continuation, deferred continuation, and revision all resolve and validate the target before compiling. The existing registered-name checkpoint `:next` deliberately carries the current workflow context merged with choice input, after dropping stage-local overrides. A defer is the cross-spool isolation boundary: `continue!` passes no parent map and uses only target defaults plus explicit target params. The CLI accepts a JSON object and recursively keywordizes its object keys before merging defaults and validating; an unqualified JSON key such as `"feature"` therefore satisfies an `s/keys :req-un` entry, while `"acme.workflows/feature"` addresses a qualified `:req` key. Arrays become vectors and JSON scalars retain their ordinary Clojure values. Malformed JSON, a non-object top level, or a non-JSON-compatible default fails before mutation. Invalid params return the spec identity, current form graph, and `s/explain-str` as JSON text; raw `s/explain-data` remains available to trusted Clojure rather than acquiring a new generic wire normalizer in v1. Validation never silently substitutes `s/conform` output. Existing per-key `param` declarations remain a legacy compatibility form during migration rather than a second recommended authoring model.
 - **PROP-Wcd-001.S10 (live checkpoint input):** Checkpoint input uses the same whole-map spec contract rather than a required-key-only mini-schema. Pouring a checkpoint stores the input spec identity, doc, and printed spec-form graph with the immutable choice details so history records what the worker was shown. `choose!` resolves that identity again and validates against the current registered spec immediately before mutation. The stored form is historical guidance, not a semantic snapshot: redefining a nested spec or predicate Var may change validation while leaving an outer form unchanged. Invalid current input fails without mutation and returns the current form graph and `s/explain-str`; removal of the named spec fails with `workflow/input-spec-missing`. Named target definition, entrypoint, and param-spec resolution remains live and reports its own target-resolution or target-validation failure.
 - **PROP-Wcd-001.S11 (`s/form` documentation):** For a named workflow param spec or checkpoint input spec, discovery calls `clojure.spec.alpha/form` on the registered spec and emits its `pr-str` result. Because `s/keys` forms name rather than inline their key specs, `show` returns an ordered `spec-forms` graph. The root is first with relation `root`. For each recorded form, a data-only tree walk treats every qualified keyword value for which `s/get-spec` currently returns a spec as a candidate edge; newly found specs are visited in qualified-name order, emitted once, and labelled relation `keyword-reference`. The collector does not interpret spec operators, so this label is deliberately not a dependency claim: a keyword literal that also names a registered spec may add supplementary documentation. Discovery walks only returned form data and the process-global spec registry; it does not invoke validation predicates, constructors, or render functions. Each entry is `{"spec": <qualified-name>, "relation": "root"|"keyword-reference", "form": <printed-form>}`. These forms are exact recorded Clojure forms and v1 documentation, not an evaluable wire schema; named predicate symbols remain visible, while lexical or dynamically constructed forms may not be self-contained. Validation uses the original current spec. A JSON Schema-style projection is additive future work if observed usage requires it.
+
 > **PROP-Wcd-001.S11 delta (spec-projection, 2026-07-29):** The richer projection S11 reserved as future work ships as `skein.api.spec.alpha` (feature [spec-projection](../spec-projection/proposal.md), epic uruz0; TEN-000@1 sanctioned). The S11 printed-form graph survives unchanged in shape and name (`spec-forms`), lifted into the module; entries whose `form` is a resolvable predicate symbol accrete `doc` (first docstring line) and `private` from var metadata — metadata reads only, still no predicate invocation. Alongside it the module adds `contract`, a nested node tree interpreting `s/keys` (with `:req`/`:req-un` distinguishable via each key entry's `key`/`qualified`/`spec` fields), `coll-of`/`every`, `s/and` (first form as structural shape, remaining predicates as printed constraints), `s/or`, `s/nilable`, `s/map-of`, and `s/tuple`; any unrecognized operator or form emits `{"kind":"opaque","form": <printed>}` verbatim, and re-entering a spec already being expanded emits `{"kind":"ref","spec": <name>}` (cycle cut; sibling repeats re-expand). `template` renders a copyable JSON skeleton whose placeholders are `"<" ["optional "] (doc-first- line | printed-form) ">"`. Wire adoption: `workflow show` params and `require-conformant!` failures carry `spec`, `spec-forms`, `contract`, `template` (+ `explain` text on failures); the new `workflow choices` read verb projects the same fields live for a ready checkpoint's choice inputs, while pour-time storage keeps the S10/S11 printed graph only. `pattern explain` and weave-input failures speak the same fields, replacing the one-level `s/keys` summary. Authority for the exact node schema and grammar: the module docstrings (SPEC-003.C19a); deltas: [`DELTA-Spj-001..003`](../spec-projection/specs/). Card 7wdvg extends the workflow adoption with authored `:example`/`:param-docs` (construction-validated, merged into `workflow show`'s `contract`/`template`) and the module's `contract-template` accretion: [`DELTA-Spj-004`](../spec-projection/specs/authored-params.delta.md). The 5cysa rollout extends adoption to the CLI arg boundary: a flag or positional may declare `:spec`, and `strand help <op>` embeds the same `spec`/`spec-forms`/`contract`/`template` fields on that arg's help entry (SPEC-003.C70).
 
 - **PROP-Wcd-001.S12 (static workflow migration):** In-tree and repo-owned registered workflows move from constructor functions to static definition Vars. Param-dependent rendering remains data in titles, descriptions, and attributes; declarative conditions and loops remain valid. Constructor branches that select a routine become explicit checkpoints, calls, or user-bound deferred continuations. Mechanical collection expansion continues to use declared loops.
@@ -59,7 +56,7 @@ Full topology projection is not a suitable worker discovery answer. A workflow m
 - **PROP-Wcd-001.S14 (migration):** Delete `.millstrand/workflows.clj`'s generic `flow` op after the shipped adapter is active. Fold `workflow-runs` and `flow-await` into the shipped surface where they add no semantics. Remove `:notes` from `complete!` and the plain-step branch of `advance!`, stop writing `workflow/outcome-notes`, remove the special `:notes` projection from `run-history`, and update executors to record outcomes only through domain attributes. This is a forward API break with no data migration: existing strands, edges, and `workflow/outcome-notes` attribute rows remain untouched and readable as ordinary historical attributes. Removing embedded history from current repo `flow status` and `land status` is an intentional response-shape break. Review devflow and land wrappers individually: keep stages, guides, lane moves, merge locks, rollback, and evidence checks; remove wrappers that only rename engine operations. Every retained wrapper inherits engine vocabulary; in particular, `land next` does not survive as the name of a ready-frontier read.
 - **PROP-Wcd-001.S15 (contracts and surface accounting):** Update the workflow spool contract and generated API reference for every new public Clojure function and named spec; CLI and runtime root specs for every verb, flag, request, result, and reason; the alpha-surface index; the shared-spool CLI style rule for the narrow `ready` frontier projection and defer `continue` transfer exceptions; spool authoring guidance for `defworkflow`, entrypoints, specs, registration, and defer binding; and discovery manuals for `list`, `show`, `ready`, and `await`. Declared CLI arg specs cover `--workflow`, `--params`, `--entrypoint`, `--all`, `--step`, `--by`, `--attr`, `--attributes`, checkpoint input, actor, and target params, including stdin and payload-reference parsing for every text-bearing value. Focused tests exercise each of `defworkflow`, `workflow`, `defer`, `bind-defers`, `register-workflow!`, `unregister-workflow!`, `start!`, `complete!`, `choose!`, and `continue!`, including their owning shape specs and explainable invalid-input boundaries.
 
-  Integration tests additionally cover jointly staged cross-owner target and binding publication; atomic rejection and retention after invalid deletion by omission; structured unresolvable-Var failures during publication, discovery, and mutation; direct update/removal; entrypoint combinations and invalid registered-name composition; user-bound defer sets; terminal, direct-successor, conditional, loop, call, and enclosing-procedure defer topology; deferred continuation into an independently registered workflow; explicit target-param isolation for omitted, empty, conflicting, and parent-only keys; compatible live target replacement; removed, incompatible, and param-invalid replacement rejection; exact cutover outcome identity; concurrent `choose!` and `continue!` serialization, including structured `workflow/frontier-stale` retry guidance; normal compatible-item inference; gate non-inference; mixed-role and wrong-role selection; role-specific ambiguity with complete ready results; deterministic list and ready ordering; compact list items without param metadata; full-fidelity point `show`; full-fidelity workflow-owned choice projection; legacy constructor success, failure, malformed return, and show-only opacity markers; live name-based revision; failed-refresh Var behavior; recursive JSON-key conversion, documented string-key limitation, and spec validation on start/continue/next/revise; deterministic, cycle-safe `spec-forms` discovery through nested `s/keys`, collections, named predicates, and qualified keyword literals; no predicate execution during discovery; live checkpoint input validation after nested-spec and predicate redefinition; removal and loud rejection of `complete!`/`advance!` notes; CLI `--attr`/`--attributes` parity and precedence; executor outcome attributes; preservation of legacy outcome-note rows without special projection; wrapper vocabulary; `flow-await` replacement rather than duplication; and repo-config migration.
+    Integration tests additionally cover jointly staged cross-owner target and binding publication; atomic rejection and retention after invalid deletion by omission; structured unresolvable-Var failures during publication, discovery, and mutation; direct update/removal; entrypoint combinations and invalid registered-name composition; user-bound defer sets; terminal, direct-successor, conditional, loop, call, and enclosing-procedure defer topology; deferred continuation into an independently registered workflow; explicit target-param isolation for omitted, empty, conflicting, and parent-only keys; compatible live target replacement; removed, incompatible, and param-invalid replacement rejection; exact cutover outcome identity; concurrent `choose!` and `continue!` serialization, including structured `workflow/frontier-stale` retry guidance; normal compatible-item inference; gate non-inference; mixed-role and wrong-role selection; role-specific ambiguity with complete ready results; deterministic list and ready ordering; compact list items without param metadata; full-fidelity point `show`; full-fidelity workflow-owned choice projection; legacy constructor success, failure, malformed return, and show-only opacity markers; live name-based revision; failed-refresh Var behavior; recursive JSON-key conversion, documented string-key limitation, and spec validation on start/continue/next/revise; deterministic, cycle-safe `spec-forms` discovery through nested `s/keys`, collections, named predicates, and qualified keyword literals; no predicate execution during discovery; live checkpoint input validation after nested-spec and predicate redefinition; removal and loud rejection of `complete!`/`advance!` notes; CLI `--attr`/`--attributes` parity and precedence; executor outcome attributes; preservation of legacy outcome-note rows without special projection; wrapper vocabulary; `flow-await` replacement rather than duplication; and repo-config migration.
 
 ### PROP-Wcd-001.EX1 A worker discovers and starts a workflow
 
@@ -455,24 +452,24 @@ Discovery preserves the complete form without trying to infer the named predicat
 
 ```json
 {
-  "spec": "acme.workflows/fix-work-params",
-  "spec-forms": [
-    {
-      "spec": "acme.workflows/fix-work-params",
-      "relation": "root",
-      "form": "(clojure.spec.alpha/and (clojure.spec.alpha/keys :req-un [:acme.workflows/title] :opt-un [:acme.workflows/original-failing-commit]) acme.workflows/fix-title-has-original?)"
-    },
-    {
-      "spec": "acme.workflows/original-failing-commit",
-      "relation": "keyword-reference",
-      "form": "clojure.core/string?"
-    },
-    {
-      "spec": "acme.workflows/title",
-      "relation": "keyword-reference",
-      "form": "clojure.core/string?"
-    }
-  ]
+	"spec": "acme.workflows/fix-work-params",
+	"spec-forms": [
+		{
+			"spec": "acme.workflows/fix-work-params",
+			"relation": "root",
+			"form": "(clojure.spec.alpha/and (clojure.spec.alpha/keys :req-un [:acme.workflows/title] :opt-un [:acme.workflows/original-failing-commit]) acme.workflows/fix-title-has-original?)"
+		},
+		{
+			"spec": "acme.workflows/original-failing-commit",
+			"relation": "keyword-reference",
+			"form": "clojure.core/string?"
+		},
+		{
+			"spec": "acme.workflows/title",
+			"relation": "keyword-reference",
+			"form": "clojure.core/string?"
+		}
+	]
 }
 ```
 
@@ -659,34 +656,34 @@ $ strand workflow choose kanban-web-ui recommend-build \
 
 ```json
 {
-  "operation": "workflow choose",
-  "reason": "workflow/input-invalid",
-  "run-id": "kanban-web-ui",
-  "root": {"id": "root-7h2", "title": "Spike kanban-dashboard", "state": "active"},
-  "ready": [
-    {
-        "id": "step-p18",
-        "role": "checkpoint",
-        "title": "Choose what follows the spike"
-    }
-  ],
-  "done": false,
-  "input": {
-    "spec": "acme.workflows/build-recommendation",
-    "spec-forms": [
-      {
-        "spec": "acme.workflows/build-recommendation",
-        "relation": "root",
-        "form": "(clojure.spec.alpha/keys :req-un [:acme.workflows/scope])"
-      },
-      {
-        "spec": "acme.workflows/scope",
-        "relation": "keyword-reference",
-        "form": "clojure.core/int?"
-      }
-    ],
-    "explain": "{:scope \"Ship the compact queue\"} - failed: int? in: [:scope] at: [:scope] spec: :acme.workflows/scope"
-  }
+	"operation": "workflow choose",
+	"reason": "workflow/input-invalid",
+	"run-id": "kanban-web-ui",
+	"root": { "id": "root-7h2", "title": "Spike kanban-dashboard", "state": "active" },
+	"ready": [
+		{
+			"id": "step-p18",
+			"role": "checkpoint",
+			"title": "Choose what follows the spike"
+		}
+	],
+	"done": false,
+	"input": {
+		"spec": "acme.workflows/build-recommendation",
+		"spec-forms": [
+			{
+				"spec": "acme.workflows/build-recommendation",
+				"relation": "root",
+				"form": "(clojure.spec.alpha/keys :req-un [:acme.workflows/scope])"
+			},
+			{
+				"spec": "acme.workflows/scope",
+				"relation": "keyword-reference",
+				"form": "clojure.core/int?"
+			}
+		],
+		"explain": "{:scope \"Ship the compact queue\"} - failed: int? in: [:scope] at: [:scope] spec: :acme.workflows/scope"
+	}
 }
 ```
 

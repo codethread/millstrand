@@ -1,11 +1,6 @@
 # Defer as runtime-selected returning composition
 
-**Document ID:** `PROP-Dfr-001`
-**Status:** Implemented
-**Last Updated:** 2026-07-26
-**Related RFCs:** [`RFC-Dyc-001`](../../rfcs/2026-07-26-runtime-selected-returning-composition.md)
-**Related spool contract:** [Workflow](../../../spools/workflow.md)
-**Spec delta:** [Workflow spool delta](./specs/workflow-spool.delta.md)
+**Document ID:** `PROP-Dfr-001` **Status:** Implemented **Last Updated:** 2026-07-26 **Related RFCs:** [`RFC-Dyc-001`](../../rfcs/2026-07-26-runtime-selected-returning-composition.md) **Related spool contract:** [Workflow](../../../spools/workflow.md) **Spec delta:** [Workflow spool delta](./specs/workflow-spool.delta.md)
 
 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dfr-001` for v1 and `PROP-Dfr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `PROP-Dfr-001.P1` or `PROP-Dfr-001@2.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
 
@@ -17,11 +12,11 @@ The workflow spool has two runtime-selected hand-offs. `defer` closes the curren
 
 The distinction also obscures the small composition model the spool needs:
 
-| Construct | Target selection | Returns |
-| --- | --- | --- |
-| `call` | Authoring time | Yes |
-| `defer` | Run time | Yes |
-| checkpoint `:next` | Authoring time | No |
+| Construct          | Target selection | Returns |
+| ------------------ | ---------------- | ------- |
+| `call`             | Authoring time   | Yes     |
+| `defer`            | Run time         | Yes     |
+| checkpoint `:next` | Authoring time   | No      |
 
 A defer with dependents resumes them after the selected routine. A defer without dependents is still returning composition; the declaring root closes once the selected routine and any parallel sibling work finish. Tail position must not silently change its semantics.
 
@@ -57,7 +52,7 @@ A defer with dependents resumes them after the selected routine. A defer without
 - **PROP-Dfr-001.S11 (pending and fill invariants):** An unfilled defer is a ready workflow-work role distinct from `procedure`; it blocks done, cannot be closed by `complete!` or `advance!`, and is not eligible for procedure cascade. Filling it atomically prefixes every expansion ref with the defer id, parents every expansion strand beneath the current root, carries the defer's incoming dependencies onto target entries, rewrites the defer as a procedure join, and makes that join depend on every target exit. Procedure cascade remains procedure-only. A checkpoint `:next` or `:revise` cutover force-closes any sibling unfilled defer with the rest of the abandoned root.
 - **PROP-Dfr-001.S12 (coordinated cutover):** Zero live roots is a release precondition, not a permanent runtime feature. Before installing the breaking build, the operator quiesces every workflow producer and worker for each consuming workspace, including direct in-process callers, so no mutation can race the check. In this repository the proof is an empty `strand workflow-runs`; other consumers call `workflow/active-runs` through their existing operator surface or the release preflight. Any workflow run is finished or explicitly abandoned, and any bare root or wisp is burned or squashed. The user authorizes stopping the canonical weaver only after that proof.
 
-  The contract change is never picked up through live refresh. With producers still quiesced and the old weaver stopped, the operator installs the repository build and starts the new weaver. The audited peer pins remain unchanged. Producers resume only after startup and smoke checks succeed. This feature adds no compatibility alias, data migration, schema table, module grammar, admission lock, rollback path, or old-strand detector for the one-time cutover. If the release precondition is violated, behavior for an old strand under the new engine is undefined under TEN-000@1; no recovery or reinterpretation guarantee is made.
+    The contract change is never picked up through live refresh. With producers still quiesced and the old weaver stopped, the operator installs the repository build and starts the new weaver. The audited peer pins remain unchanged. Producers resume only after startup and smoke checks succeed. This feature adds no compatibility alias, data migration, schema table, module grammar, admission lock, rollback path, or old-strand detector for the one-time cutover. If the release precondition is violated, behavior for an old strand under the new engine is undefined under TEN-000@1; no recovery or reinterpretation guarantee is made.
 
 ## PROP-Dfr-001.P5 Open questions
 

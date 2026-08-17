@@ -1,14 +1,6 @@
 # Agent-layer vocabulary rename Plan
 
-**Document ID:** `PLAN-Alr-001`
-**Feature:** `agent-layer-rename`
-**Proposal:** [proposal.md](./proposal.md) (`PROP-Alr-001`)
-**RFC:** none (feature 1 of epic `kaans`; the mechanical rename precedes the behavior features)
-**Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`)
-**Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Alr-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Alr-002`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Alr-003`)
-**Contract:** [brief.md](./brief.md) — the exhaustive rename table is authoritative; this plan never restates it.
-**Status:** Shipped
-**Last Updated:** 2026-07-23
+**Document ID:** `PLAN-Alr-001` **Feature:** `agent-layer-rename` **Proposal:** [proposal.md](./proposal.md) (`PROP-Alr-001`) **RFC:** none (feature 1 of epic `kaans`; the mechanical rename precedes the behavior features) **Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`) **Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Alr-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Alr-002`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Alr-003`) **Contract:** [brief.md](./brief.md) — the exhaustive rename table is authoritative; this plan never restates it. **Status:** Shipped **Last Updated:** 2026-07-23
 
 ## PLAN-Alr-001.P1 Goal and scope
 
@@ -26,7 +18,7 @@ Apply the brief's rename table across the live tree — spool namespaces, spool 
 ## PLAN-Alr-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | PLAN-Alr-001.AA1 | `spools/shuttle/` → `spools/agent-run/` | Dir move; `skein.spools.shuttle` → `skein.spools.agent-run` ns + `agent-run/*` attrs. Also hosts the relocated subagent executor source. |
 | PLAN-Alr-001.AA2 | `spools/shuttle/src/.../treadle.clj` → `spools/agent-run/src/skein/spools/executors/subagent.clj` | `skein.spools.executors.subagent` ns + `gate/*` attrs (incl. `treadle/gate`→`gate/step`). First nested-segment spool ns. |
 | PLAN-Alr-001.AA3 | `spools/src/.../reed.clj` → `spools/src/skein/spools/executors/shell.clj` | `skein.spools.executors.shell` ns; stays classpath-shipped. |
@@ -120,18 +112,18 @@ Gate: `make build`; `flock -w 3600 /tmp/skein-test.lock clojure -M:test`; `(cd c
 - **PLAN-Alr-001.TC2:** Delegation seams. PH1 is serialized (ns moves are compile-coupled; they block everything). PH2 fans out by disjoint file family (agent-run / executors.subagent / delegation / workflow+consumers). PH3–PH4 fan out by disjoint concern (doc triad vs judgment prose vs mkdocs; `.skein` config vs dash vs bench/chime). Never place two mutators in the same file scope; serialize compile-coupled edits, parallelize disjoint ones. Build/worker delegates get one file family each.
 - **PLAN-Alr-001.TC3:** AFK task-queue sketch (tasks are authored in the tasks stage; counts are estimates for sizing the queue):
 
-  | Phase | Sketch | ~Tasks |
-  | ----- | ------ | -----: |
-  | PH0 | Rebase over tiered-test-validation + `vk8aa`; reconcile shard/suite state | 1 |
-  | PH1 | (a) `deps.edn`+`spools.edn`+`Makefile` path lockstep; (b) agent-run + executors/subagent dir/ns move; (c) delegation dir/ns move; (d) executors/shell move + suite-file renames + `test_runner` paths | 4 |
-  | PH2 | (a) `agent-run/*` run attrs+markers; (b) `gate/*` incl. `gate/step`; (c) `review/*`/`panel/*`/`note/*` split; (d) `workflow/outcome-notes` + workflow/consumer markers; (e) event-type kw rename | 5 |
-  | PH3 | (a) doc-triad `git mv` + link fixes; (b) judgment prose (README/quality-inventory/bench/chime/cli prime); (c) `mkdocs.yml` + `docs-check` pathspec; (d) `make api-docs` regen | 4 |
-  | PH4 | (a) `.skein` config sweep + disposable-world smoke; (b) `scripts/agent-dash` rename + attr strings + `make dash`; (c) bench/chime consumer reconcile | 3 |
-  | PH5 | Apply `SPEC-Alr-001`/`-002`/`-003` to root specs; mark deltas Merged | 1 |
-  | PH6 | (a) cutover script (per-key, active-only); (b) rehearsal recipe + ceremony doc | 2 |
-  | PH7 | Full locked suite + go + smoke + quality gates + DW1 grep acceptance | 1 |
+    | Phase | Sketch | ~Tasks |
+    | --- | --- | --: |
+    | PH0 | Rebase over tiered-test-validation + `vk8aa`; reconcile shard/suite state | 1 |
+    | PH1 | (a) `deps.edn`+`spools.edn`+`Makefile` path lockstep; (b) agent-run + executors/subagent dir/ns move; (c) delegation dir/ns move; (d) executors/shell move + suite-file renames + `test_runner` paths | 4 |
+    | PH2 | (a) `agent-run/*` run attrs+markers; (b) `gate/*` incl. `gate/step`; (c) `review/*`/`panel/*`/`note/*` split; (d) `workflow/outcome-notes` + workflow/consumer markers; (e) event-type kw rename | 5 |
+    | PH3 | (a) doc-triad `git mv` + link fixes; (b) judgment prose (README/quality-inventory/bench/chime/cli prime); (c) `mkdocs.yml` + `docs-check` pathspec; (d) `make api-docs` regen | 4 |
+    | PH4 | (a) `.skein` config sweep + disposable-world smoke; (b) `scripts/agent-dash` rename + attr strings + `make dash`; (c) bench/chime consumer reconcile | 3 |
+    | PH5 | Apply `SPEC-Alr-001`/`-002`/`-003` to root specs; mark deltas Merged | 1 |
+    | PH6 | (a) cutover script (per-key, active-only); (b) rehearsal recipe + ceremony doc | 2 |
+    | PH7 | Full locked suite + go + smoke + quality gates + DW1 grep acceptance | 1 |
 
-  Total: **~21 tasks**. PH0 and PH1 are strictly serial; PH2 tasks parallelize after PH1; PH6's cutover script and PH7's acceptance are coordinator-adjacent (the canonical cutover is coordinator-run after user sign-off, not a worker task).
+    Total: **~21 tasks**. PH0 and PH1 are strictly serial; PH2 tasks parallelize after PH1; PH6's cutover script and PH7's acceptance are coordinator-adjacent (the canonical cutover is coordinator-run after user sign-off, not a worker task).
 
 - **PLAN-Alr-001.TC4:** Cutover script specifics (PH6). Mapping source = brief rename table. Scope = **active** strands only (archived/inactive strands are memory, not authority — `PROP-Alr-001.C1`). Transform is explicitly per-key, never a generic prefix rule: `shuttle/*` run attrs → `agent-run/*`, `treadle/*` → `gate/*` (incl. `treadle/gate`→`gate/step`), review/panel/note families split per key, plus `workflow/notes`→`workflow/outcome-notes` and the `shuttle/handle.<key>` prefix rewrite. Markers are renamed, not dropped. Rehearsal = copy canonical `data/skein.sqlite` into a `mktemp -d` `--workspace` world (guard every expansion with `${ws:?}`; never the canonical world, never a shared scratch path), run the renamed code + script, confirm smoke. Ceremony ends at the user-signed weaver restart (hard stop) then the `PROP-Alr-001.C5` post-restart smoke.
 

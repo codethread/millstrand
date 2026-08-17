@@ -1,13 +1,6 @@
 # Reduce the land op plan
 
-**Document ID:** `PLAN-Rlo-001`
-**Feature:** `reduce-land-op`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** none
-**Root specs:** none; this is trusted repo configuration
-**Feature specs:** none
-**Status:** Reviewed
-**Last Updated:** 2026-07-27
+**Document ID:** `PLAN-Rlo-001` **Feature:** `reduce-land-op` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** none; this is trusted repo configuration **Feature specs:** none **Status:** Reviewed **Last Updated:** 2026-07-27
 
 ## PLAN-Rlo-001.P1 Goal and scope
 

@@ -1,9 +1,6 @@
 # Generation migration docs Proposal
 
-**Document ID:** `PROP-Gmd-001`
-**Last Updated:** 2026-07-12
-**Related RFCs:** design record strand `5bbrd` (point 7 one-time restart; `lwp6n` rider (b) drain-or-retry)
-**Related root specs:** [`devflow/specs/daemon-runtime.md`](../../specs/daemon-runtime.md) SPEC-004.C44c–C44f
+**Document ID:** `PROP-Gmd-001` **Last Updated:** 2026-07-12 **Related RFCs:** design record strand `5bbrd` (point 7 one-time restart; `lwp6n` rider (b) drain-or-retry) **Related root specs:** [`devflow/specs/daemon-runtime.md`](../../specs/daemon-runtime.md) SPEC-004.C44c–C44f
 
 This is the **docs half** of card `3pqk1`, closing out the `5bbrd` design after the `c5kss` stateless-resolution, `w92pn` diff-classification, and `ypy3h` version-bump epic landed. The one-time canonical-weaver restart itself is a human decision the coordinator handles; this feature only documents it.
 

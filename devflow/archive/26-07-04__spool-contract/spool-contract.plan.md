@@ -134,7 +134,6 @@ Append notes here. Do not rewrite earlier notes.
 - Re-verify run `gs2ka` confirmed those findings were resolved in the current proposal and spec deltas, with one minor drafting nit: daemon-runtime C94a.2/C94a.3 should clearly scope ignored top-level keys to keys other than rejected `:mvn/repos` / `:mvn/local-repo`.
 - Source pointers re-verified during planning: manifest machinery in `src/skein/api/weaver/alpha.clj` (`manifest-keys`, `normalize-manifest!`, `read-spool-manifest`, unmet-needs, provides-unloadable, coordinate-mismatch); `skip-use` currently throws only for manifest-derived reasons; dependency-consent asymmetry is in `reject-unapproved-tools-deps!` / `shared-source-local-spool?`; current add-libs call site is in sync.
 
-
 ### SC-PLAN-001.DN2 Plan review fixes — 2026-07-04
 
 - Plan reviewed by `txhd0` (build) and `cxrro` (review-gpt); synthesis note `uji8a` captured two P1s and four minor items.
@@ -151,4 +150,3 @@ Append notes here. Do not rewrite earlier notes.
 - Notable: the strengthened required use! immediately exposed config_test's missing skein.macros/macros approval (previously fail-quiet) — fixed by approving the workspace-local root in the fixture.
 - Known transient load flakes observed during full-suite runs (chime notifier stdin timing; one shard B subprocess exit); green standalone and on reruns; same class as the o3syz flake note.
 - Cut scope: none. RFC-018 archived with this feature as Rejected/mooted.
-

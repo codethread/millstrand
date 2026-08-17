@@ -1,10 +1,6 @@
 # Shell gate script files proposal
 
-**Document ID:** `PROP-Wgs-001`
-**Last Updated:** 2026-07-26
-**Related RFCs:** None
-**Related root specs:** None
-**Design record:** Kanban card `u77o8`
+**Document ID:** `PROP-Wgs-001` **Last Updated:** 2026-07-26 **Related RFCs:** None **Related root specs:** None **Design record:** Kanban card `u77o8`
 
 **Configuration identification:** `PROP-Wgs-001` is the first proposal for the shell gate script files feature. Nested point IDs use the full document ID.
 

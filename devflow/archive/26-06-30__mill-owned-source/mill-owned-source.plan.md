@@ -17,8 +17,8 @@ Deliver repository-scoped default weaver selection across linked Git worktrees a
 
 ## PLAN-MOS-001.P3 Affected areas
 
-| ID                 | Area                         | Expected change |
-| ------------------ | ---------------------------- | --------------- |
+| ID | Area | Expected change |
+| --- | --- | --- |
 | PLAN-MOS-001.AA1 | `cli/internal/config` | Repository-canonical world discovery, source-resolution helpers, config schema/bootstrap changes. |
 | PLAN-MOS-001.AA2 | `cli/cmd/mill` | Mill-owned source resolution for weaver lifecycle and helper REPL launch context. |
 | PLAN-MOS-001.AA3 | `cli/internal/command` | Stop reading source from config for `weaver repl`; route through mill context and preserve thin CLI behavior. |

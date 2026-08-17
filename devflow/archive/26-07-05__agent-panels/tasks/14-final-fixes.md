@@ -5,6 +5,7 @@ FIRST: apply the FINDINGS INPUT PROTOCOL below for tag [agent-panels/final revie
 After any code change: affected namespaces green via the -Sdeps recipe, and if you touched shuttle.clj or config.clj, ALSO re-run the frozen-floor command from task 12-ph7-validation step 5. Your final message: per-finding actioned/skipped table + test results.
 
 HOUSE RULES (from PLAN-Pnl-001.TC2/TC3, plan file: devflow/feat/agent-panels/agent-panels.plan.md — READ THE PLAN FIRST, especially your phase section and the A-items it cites):
+
 - Never commit. Never close your own task strand. Record progress with strand update <task-id> --attr progress=...
 - TEN-003: fail loudly with ex-info + data; no silent fallbacks or sensible defaults.
 - Every changed ns keeps its docstring accurate. Spool state via runtime/spool-state only; ambient (rt) style matches these spools. Comments describe current code, never the change.

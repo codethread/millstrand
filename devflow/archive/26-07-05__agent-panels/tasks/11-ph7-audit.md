@@ -1,6 +1,7 @@
 Implement PLAN-Pnl-001.PH7 (audit half): consumer alignment audit (proposal S6). FILE SCOPE: read everywhere; small aligning edits permitted ONLY in: spools/shuttle/src/skein/spools/treadle.clj docs/comments, spools/shuttle/treadle.md, .skein/reviewers.clj, .agents/skills/strand/SKILL.md, spools/*.md docs, scripts/shuttle-dash/ (display-only tweaks). Do NOT touch agents.clj/shuttle.clj code paths (frozen by prior reviews) — report needed code changes as [P1]/[P2] findings instead.
 
 Work: audit every existing consumer of the changed engine semantics for alignment or explicit non-impact, and write the report as a shell-safe note on d5af5 tagged [agent-panels/PH7 audit] (use the heredoc pattern: note_text=$(cat <<'NOTE' ... NOTE) then strand agent note d5af5 "$note_text" --by <run-id>) AND as your final message:
+
 - treadle: gate spawning vs resumable runs (does anything assume runs never carry resumes? recovery/reconcile! paths vs resumed runs and error-class),
 - shuttle reconcile!/crash recovery: a recovered run that was resumed — respawn semantics sane?
 - delegate-pipeline (config.clj) and agent delegate/status/ps: any display or skip-reason logic confused by resumes edges/attrs or panel-seat/turn attrs,
@@ -8,10 +9,10 @@ Work: audit every existing consumer of the changed engine semantics for alignmen
 - .skein/reviewers.clj + roster docs: still accurate,
 - smoke (skein.smoke): unaffected? confirm,
 - strand skill + kanban/devflow docs: statements falsified by the new semantics,
-- interactive runs: :resume rejection consistent with docs.
-For each: ALIGNED / IMPACTED(+what you changed) / NEEDS-CODE-CHANGE([P1]/[P2] finding, do not fix).
+- interactive runs: :resume rejection consistent with docs. For each: ALIGNED / IMPACTED(+what you changed) / NEEDS-CODE-CHANGE([P1]/[P2] finding, do not fix).
 
 HOUSE RULES (from PLAN-Pnl-001.TC2/TC3, plan file: devflow/feat/agent-panels/agent-panels.plan.md — READ THE PLAN FIRST, especially your phase section and the A-items it cites):
+
 - Never commit. Never close your own task strand. Record progress with strand update <task-id> --attr progress=...
 - TEN-003: fail loudly with ex-info + data; no silent fallbacks or sensible defaults.
 - Every changed ns keeps its docstring accurate. Spool state via runtime/spool-state only; ambient (rt) style matches these spools. Comments describe current code, never the change.

@@ -4,213 +4,63 @@
 
 ## PROP-ShellGates-001.P1 Problem
 
-Workflows have no mechanical done-signal. Every close of a poured workflow step is either a **human/agent assertion** — a `:self` step the driving agent completes, or a checkpoint choice — or a **subagent run's success**, which treadle records when its shuttle run closes with a non-blank result. Neither is a machine check of the *artifact*. There is no workflow equivalent of the CI primitive "run `test -s <file>` (or `make test`, or a schema check) and fail the run loudly if it fails."
+Workflows have no mechanical done-signal. Every close of a poured workflow step is either a **human/agent assertion** — a `:self` step the driving agent completes, or a checkpoint choice — or a **subagent run's success**, which treadle records when its shuttle run closes with a non-blank result. Neither is a machine check of the _artifact_. There is no workflow equivalent of the CI primitive "run `test -s <file>` (or `make test`, or a schema check) and fail the run loudly if it fails."
 
-This is a regression. The agents spool's plan-creation pattern accepts a per-task `validation` field — "list of commands that **prove** it," explicitly contrasted with `harness` which picks *who does the work* (agents README §3, §5). When a pipeline is expressed as an `agent-plan` graph, every task can carry its proof command. When the same pipeline is converted to a workflow, that line has nowhere to go: a gate's fields (`shuttle/harness`, `shuttle/prompt`, and the optional `shuttle/cwd`/`shuttle/max-attempts`) all describe the agent run — none carries a validation command — so the check gets demoted to **instruction prose on a human checkpoint** ("before presenting to the human, open every output file — never trust worker status alone, a gate can close on a hollow run"). The mechanical, durable, re-runnable check becomes a paragraph asking a person to look.
+This is a regression. The agents spool's plan-creation pattern accepts a per-task `validation` field — "list of commands that **prove** it," explicitly contrasted with `harness` which picks _who does the work_ (agents README §3, §5). When a pipeline is expressed as an `agent-plan` graph, every task can carry its proof command. When the same pipeline is converted to a workflow, that line has nowhere to go: a gate's fields (`shuttle/harness`, `shuttle/prompt`, and the optional `shuttle/cwd`/`shuttle/max-attempts`) all describe the agent run — none carries a validation command — so the check gets demoted to **instruction prose on a human checkpoint** ("before presenting to the human, open every output file — never trust worker status alone, a gate can close on a hollow run"). The mechanical, durable, re-runnable check becomes a paragraph asking a person to look.
 
 ### Evidence
 
 Two failure modes, both observed in the source workspace's research pipeline retro, motivate a check independent of run exit status:
 
-- **Hollow success.** A worker reports done and its gate closes, but the
-  artifact is missing or empty. Workers intermittently lost their `strand` CLI
-  and self-reported status was untrustworthy; the coordinator had to open every
-  file by hand. A `test -s` gate makes that verification mechanical and durable.
-- **The inverse.** A run *failed* (context overflow) *after* writing a complete
-  deliverable — run status says failed, the artifact is fine. Shuttle's own
-  blank-result rule (README §5) acknowledges this gap at the *run* level (an
-  exit-0 run with a blank result is `failed`, not `done`, because "the result is
-  the worker's report"), but nothing checks the *artifact*. A file/content check
-  distinguishes both cases from run exit status.
+- **Hollow success.** A worker reports done and its gate closes, but the artifact is missing or empty. Workers intermittently lost their `strand` CLI and self-reported status was untrustworthy; the coordinator had to open every file by hand. A `test -s` gate makes that verification mechanical and durable.
+- **The inverse.** A run _failed_ (context overflow) _after_ writing a complete deliverable — run status says failed, the artifact is fine. Shuttle's own blank-result rule (README §5) acknowledges this gap at the _run_ level (an exit-0 run with a blank result is `failed`, not `done`, because "the result is the worker's report"), but nothing checks the _artifact_. A file/content check distinguishes both cases from run exit status.
 
 ### The seam this slots into
 
 Two facts about the current code shape the recommendation and make a new gate executor the natural fit — the workflow engine itself needs zero changes.
 
-- **Gate `waiter` is a freeform actor hint with a pluggable executor registry.**
-  `(gate id title waiter …)` stamps `workflow/gate <waiter>`; the docs give
-  `:ci`, `:human`, `:subagent` as examples, and only `:subagent` has a consumer.
-  `workflow/register-executor!` keys a **stall predicate** by waiter name, so
-  `await!` stays silent (`:waiting`) on a healthy executor-owned gate and
-  surfaces `:stalled` when the predicate reports detail; a waiter with no
-  registered executor surfaces immediately as `:gate` — there is no silent
-  default (workflow.md §4). The `:ci` example in the docs is exactly this
-  proposal's use case, still with no fulfiller.
-- **Treadle is the precedent executor.** It registers a weaver event handler
-  that scans ready gates through the workflow surface and fulfils each, records
-  outcome and failure as durable attributes rather than throwing the scan away,
-  and *separately* registers its stall predicate via `register-executor!
-  :subagent`. Recovery is coordinator-owned: a stuck gate stays ready and
-  stamped. Treadle is the only namespace that knows both vocabularies, precisely
-  because the workflow engine never executes.
+- **Gate `waiter` is a freeform actor hint with a pluggable executor registry.** `(gate id title waiter …)` stamps `workflow/gate <waiter>`; the docs give `:ci`, `:human`, `:subagent` as examples, and only `:subagent` has a consumer. `workflow/register-executor!` keys a **stall predicate** by waiter name, so `await!` stays silent (`:waiting`) on a healthy executor-owned gate and surfaces `:stalled` when the predicate reports detail; a waiter with no registered executor surfaces immediately as `:gate` — there is no silent default (workflow.md §4). The `:ci` example in the docs is exactly this proposal's use case, still with no fulfiller.
+- **Treadle is the precedent executor.** It registers a weaver event handler that scans ready gates through the workflow surface and fulfils each, records outcome and failure as durable attributes rather than throwing the scan away, and _separately_ registers its stall predicate via `register-executor! :subagent`. Recovery is coordinator-owned: a stuck gate stays ready and stamped. Treadle is the only namespace that knows both vocabularies, precisely because the workflow engine never executes.
 
 ### Rejected alternatives (decision records)
 
-- **The `sh`-harness `:subagent` gate is blocked and the wrong shape.** The
-  obvious workaround — a `:subagent` gate on the shipped `sh` harness with the
-  validation script as the prompt — does not work and is wrong even if it did.
-  Treadle prefixes a prose preamble onto every gate prompt before launch; the
-  `sh` harness is `:prompt-via :arg` and runs its prompt as a script (it must be
-  — `sh -c`'s script is a required positional argument, so it can never read the
-  prompt from stdin, shuttle README §3), so the injected sentence runs as shell
-  and the harness dies with a syntax error. Even fixed, abusing an agent-run seam
-  for a deterministic command costs a shuttle run, records "harness output"
-  rather than "check result," and inherits attempts, preambles, session resume,
-  and the blank-result-is-failure rule — `test -s file` produces *no* stdout on
-  success, which shuttle would record as a failed run.
-- **Option B — a `workflow/validate` attribute on existing steps/gates, run at
-  close time — rejected.** It overloads gate-close semantics and forces *some*
-  execution engine to run commands at close time, reintroducing the execution
-  coupling the chosen shape avoids; and B's own "validate after a subagent gate
-  succeeds" case is already expressible as composition — a `:shell` gate that
-  `:depends-on` the `:subagent` gate, its own strand in the frontier, visible and
-  recoverable, with no new close-time hook (Less is More, TEN-004). The lost
-  agent-plan `validation` ergonomic can be restored later in the *pattern* layer
-  (`agent-plan`/`delegate-pipeline` pouring a trailing `:shell` gate per task)
-  with no engine or executor change; that is a follow-up, not this feature.
-- **Option C — fix only the treadle/`sh` collision and bless `sh` gates as the
-  idiom — rejected** (see NG6): it legitimizes the wrong shape.
+- **The `sh`-harness `:subagent` gate is blocked and the wrong shape.** The obvious workaround — a `:subagent` gate on the shipped `sh` harness with the validation script as the prompt — does not work and is wrong even if it did. Treadle prefixes a prose preamble onto every gate prompt before launch; the `sh` harness is `:prompt-via :arg` and runs its prompt as a script (it must be — `sh -c`'s script is a required positional argument, so it can never read the prompt from stdin, shuttle README §3), so the injected sentence runs as shell and the harness dies with a syntax error. Even fixed, abusing an agent-run seam for a deterministic command costs a shuttle run, records "harness output" rather than "check result," and inherits attempts, preambles, session resume, and the blank-result-is-failure rule — `test -s file` produces _no_ stdout on success, which shuttle would record as a failed run.
+- **Option B — a `workflow/validate` attribute on existing steps/gates, run at close time — rejected.** It overloads gate-close semantics and forces _some_ execution engine to run commands at close time, reintroducing the execution coupling the chosen shape avoids; and B's own "validate after a subagent gate succeeds" case is already expressible as composition — a `:shell` gate that `:depends-on` the `:subagent` gate, its own strand in the frontier, visible and recoverable, with no new close-time hook (Less is More, TEN-004). The lost agent-plan `validation` ergonomic can be restored later in the _pattern_ layer (`agent-plan`/`delegate-pipeline` pouring a trailing `:shell` gate per task) with no engine or executor change; that is a follow-up, not this feature.
+- **Option C — fix only the treadle/`sh` collision and bless `sh` gates as the idiom — rejected** (see NG6): it legitimizes the wrong shape.
 
 ### Corrections to the source framing
 
 Two source-proposal framings need correcting so the plan does not inherit them:
 
-1. The agent-plan `validation` field was **not** engine-enforced either. Agents
-   README §5 is explicit that the *coordinator re-runs* those commands at verify
-   time before closing a task. So the pre-conversion pipeline had a *recorded,
-   durable, structured* check that a human ran — not an automatic one. The
-   `:shell` gate is therefore strictly *more* mechanical than what was lost: the
-   executor runs the check, not the coordinator. That strengthens the case.
-2. The source lists reusing shuttle's process execution as a pro. The code shows
-   the opposite: shuttle's blank-result-is-failure rule, attempts, preambles, and
-   resume are all wrong for a deterministic check, and a silent successful check
-   (`test -s`, no stdout) would be recorded as a *failed* run. The executor must
-   run the process directly; that is a feature, not a cost.
+1. The agent-plan `validation` field was **not** engine-enforced either. Agents README §5 is explicit that the _coordinator re-runs_ those commands at verify time before closing a task. So the pre-conversion pipeline had a _recorded, durable, structured_ check that a human ran — not an automatic one. The `:shell` gate is therefore strictly _more_ mechanical than what was lost: the executor runs the check, not the coordinator. That strengthens the case.
+2. The source lists reusing shuttle's process execution as a pro. The code shows the opposite: shuttle's blank-result-is-failure rule, attempts, preambles, and resume are all wrong for a deterministic check, and a silent successful check (`test -s`, no stdout) would be recorded as a _failed_ run. The executor must run the process directly; that is a feature, not a cost.
 
 ## PROP-ShellGates-001.P2 Goals
 
-- **PROP-ShellGates-001.G1:** Restore a mechanical, durable, re-runnable check of
-  the *artifact* to workflows — a machine done-signal independent of run exit
-  status — closing the gap left when the agent-plan `validation` line had nowhere
-  to go in the workflow conversion.
-- **PROP-ShellGates-001.G2:** Deliver it without changing the workflow engine: a
-  new gate waiter fulfilled by a separate executor adapter (a treadle sibling),
-  preserving "the engine never executes; the driving agent interprets ready-step
-  data" (workflow.md §3), which is what keeps definitions forge-agnostic.
-- **PROP-ShellGates-001.G3:** Make a failed check a distinct, loud,
-  coordinator-visible state — unmistakably different from a failed agent run —
-  recoverable by fixing the artifact or argv and clearing the error, after which
-  the next scan re-runs the deterministic check and closes the gate (FAIL LOUDLY,
-  TEN-003).
-- **PROP-ShellGates-001.G4:** Keep deterministic checks out of the agent-run
-  seam: run the process directly, with no shuttle run and none of shuttle's
-  attempts, preambles, session resume, or blank-result semantics — every one of
-  which is wrong for a command.
+- **PROP-ShellGates-001.G1:** Restore a mechanical, durable, re-runnable check of the _artifact_ to workflows — a machine done-signal independent of run exit status — closing the gap left when the agent-plan `validation` line had nowhere to go in the workflow conversion.
+- **PROP-ShellGates-001.G2:** Deliver it without changing the workflow engine: a new gate waiter fulfilled by a separate executor adapter (a treadle sibling), preserving "the engine never executes; the driving agent interprets ready-step data" (workflow.md §3), which is what keeps definitions forge-agnostic.
+- **PROP-ShellGates-001.G3:** Make a failed check a distinct, loud, coordinator-visible state — unmistakably different from a failed agent run — recoverable by fixing the artifact or argv and clearing the error, after which the next scan re-runs the deterministic check and closes the gate (FAIL LOUDLY, TEN-003).
+- **PROP-ShellGates-001.G4:** Keep deterministic checks out of the agent-run seam: run the process directly, with no shuttle run and none of shuttle's attempts, preambles, session resume, or blank-result semantics — every one of which is wrong for a command.
 
 ## PROP-ShellGates-001.P3 Non-goals
 
-- **PROP-ShellGates-001.NG1:** No option B — no `workflow/validate` attribute on
-  arbitrary steps/gates run at close time. The validate-after-a-gate case is
-  composition (a `:shell` gate depending on the prior gate), not a new close-time
-  hook.
-- **PROP-ShellGates-001.NG2:** No general external-check family and no `:ci`
-  waiter or shared scaffolding (TEN-004). The executor registry *is* the
-  generalization point — a future `:ci` consumer registers its own executor and
-  event handler exactly as this spool and treadle do. `:ci` stays a documented
-  example with no consumer.
-- **PROP-ShellGates-001.NG3:** No named/registered-command registry for argv.
-  The trust boundary is the workflow definition (TEN-002, agents are trusted):
-  `shell/argv` is always produced by trusted definition code — the command and
-  its shape are authored in the definition's attribute fn, and pour-time params
-  supply only *data* elements (file paths, names) that the definition
-  interpolates into that vector. A definition that passes a whole
-  caller-supplied argv through from params has moved the trust boundary itself;
-  that is a definition-authoring error, not a supported shape. This is the same
-  split treadle already accepts for a `:subagent` gate's `shuttle/prompt`, and a
-  command registry would be new surface for no real safety gain when the
-  definition is trusted code.
-- **PROP-ShellGates-001.NG4:** No implicit shell wrapping. `shell/argv` is a JSON
-  array of strings executed directly; an author who wants shell features writes
-  `["sh" "-c" "…"]` explicitly, so there is no silent shell-injection surface
-  (TEN-003).
-- **PROP-ShellGates-001.NG5:** No unbounded output capture. Captured output on
-  gate attributes is bounded; a full `<gate-id>.shell.log` under the weaver state
-  dir is a noted future escape hatch, not built now (TEN-004).
-- **PROP-ShellGates-001.NG6:** No fix to the treadle/`sh`-harness preamble
-  collision, and no blessing of `sh`-harness `:subagent` gates as the validation
-  idiom. The `:shell` gate replaces that workaround, so the collision no longer
-  matters for the supported path; the treadle preamble stays correct for real
-  agent runs. One optional, independent hardening is flagged for the plan but not
-  owned here: treadle could reject an `sh`-harness `:subagent` gate loudly at
-  spawn instead of producing a confusing downstream shell error (TEN-003) — a
-  one-line guard that can ship separately.
-- **PROP-ShellGates-001.NG7:** No implementation strategy, phase breakdown,
-  migration mechanics, or detailed testing strategy/test matrix here — those
-  belong in the feature plan — see
-  [workflow-shell-gates.plan.md](./workflow-shell-gates.plan.md) for the
-  `shell/*` attribute contract table and the test matrix.
+- **PROP-ShellGates-001.NG1:** No option B — no `workflow/validate` attribute on arbitrary steps/gates run at close time. The validate-after-a-gate case is composition (a `:shell` gate depending on the prior gate), not a new close-time hook.
+- **PROP-ShellGates-001.NG2:** No general external-check family and no `:ci` waiter or shared scaffolding (TEN-004). The executor registry _is_ the generalization point — a future `:ci` consumer registers its own executor and event handler exactly as this spool and treadle do. `:ci` stays a documented example with no consumer.
+- **PROP-ShellGates-001.NG3:** No named/registered-command registry for argv. The trust boundary is the workflow definition (TEN-002, agents are trusted): `shell/argv` is always produced by trusted definition code — the command and its shape are authored in the definition's attribute fn, and pour-time params supply only _data_ elements (file paths, names) that the definition interpolates into that vector. A definition that passes a whole caller-supplied argv through from params has moved the trust boundary itself; that is a definition-authoring error, not a supported shape. This is the same split treadle already accepts for a `:subagent` gate's `shuttle/prompt`, and a command registry would be new surface for no real safety gain when the definition is trusted code.
+- **PROP-ShellGates-001.NG4:** No implicit shell wrapping. `shell/argv` is a JSON array of strings executed directly; an author who wants shell features writes `["sh" "-c" "…"]` explicitly, so there is no silent shell-injection surface (TEN-003).
+- **PROP-ShellGates-001.NG5:** No unbounded output capture. Captured output on gate attributes is bounded; a full `<gate-id>.shell.log` under the weaver state dir is a noted future escape hatch, not built now (TEN-004).
+- **PROP-ShellGates-001.NG6:** No fix to the treadle/`sh`-harness preamble collision, and no blessing of `sh`-harness `:subagent` gates as the validation idiom. The `:shell` gate replaces that workaround, so the collision no longer matters for the supported path; the treadle preamble stays correct for real agent runs. One optional, independent hardening is flagged for the plan but not owned here: treadle could reject an `sh`-harness `:subagent` gate loudly at spawn instead of producing a confusing downstream shell error (TEN-003) — a one-line guard that can ship separately.
+- **PROP-ShellGates-001.NG7:** No implementation strategy, phase breakdown, migration mechanics, or detailed testing strategy/test matrix here — those belong in the feature plan — see [workflow-shell-gates.plan.md](./workflow-shell-gates.plan.md) for the `shell/*` attribute contract table and the test matrix.
 
 ## PROP-ShellGates-001.P4 Proposed scope
 
-- **PROP-ShellGates-001.S1 (`:shell` waiter vocabulary):** A new `:shell` gate
-  waiter. A workflow author declares an ordinary gate whose waiter is `:shell`,
-  carrying argv, cwd, and timeout on its attributes. Being an ordinary strand, it
-  participates in readiness, `describe`, `run-history`, and bond/dep blocking like
-  any other gate; deterministic checks stop masquerading as agent runs.
-- **PROP-ShellGates-001.S2 (classpath executor spool as fulfiller):** A
-  reference/classpath spool (working name `skein.spools.shell-gate`, a sibling to
-  the workflow spool it serves) watches ready `:shell` gates, runs each command
-  **off the weaver event thread** on a spool-owned worker executor (runtime-owned
-  state via `skein.api.runtime.alpha/spool-state`, no module-level atoms, shut
-  down on runtime stop), and closes the gate via the ordinary workflow surface
-  (`complete!` `:by "shell"`, summary in `workflow/notes`) on exit 0. It registers
-  `register-executor! :shell` with a stall predicate over `shell/error` gates plus
-  a `stalled-shell-gates` named query, and adds no CLI op — inspection is `strand
-  show` and the workflow surface, exactly as treadle. It ships on the classpath
-  (not a local root) because it has no external-tool coupling — it runs processes
-  itself and depends only on the classpath workflow engine; the capability stays
-  opt-in, since a spool is inert until a world's `.skein` activates it.
-- **PROP-ShellGates-001.S3 (gate attribute surface — names, not code):** The
-  `shell/*` vocabulary on the gate strand (all plain JSON `TEXT`): `shell/argv`
-  (required JSON string array, executed without an implicit shell; missing / blank
-  / non-array fails loudly), `shell/cwd` and `shell/timeout-secs` (optional
-  inputs), and the recorded outcomes `shell/exit-code`, `shell/output` (bounded
-  tail), and `shell/error` (durable failure detail). The pass outcome rides the
-  ordinary workflow vocabulary — `workflow/outcome-by "shell"`, `workflow/notes` =
-  the short result summary; no new `workflow/*` attribute is introduced.
-- **PROP-ShellGates-001.S4 (loud, distinct failure state):** A failed check
-  (non-zero exit, timeout, spawn error, or invalid argv) does **not** close the
-  gate and does **not** masquerade as a failed shuttle run. It stamps a distinct
-  `shell/error` (with `shell/exit-code` and captured output) and leaves the gate
-  ready and stamped — the coordinator-visible stalled state. Because the check is
-  deterministic, a stamped `shell/error` is skipped until cleared (an expensive
-  `make test` runs once per deliberate request, not on every graph mutation),
-  and clearing it re-runs the check on the next scan.
-- **PROP-ShellGates-001.S5 (bounded output on gate attributes):** Exit code and a
-  bounded stdout+stderr tail live on the gate's attribute map — the attribute map
-  is the contract, machine-readable via `strand show`, and terse checks
-  (`test -s`, a `make test` tail) fit comfortably. Output is bounded on purpose
-  (large attribute payloads are a known cost, per the attr-scaling work); full
-  logs are the future file escape hatch, not built now.
-- **PROP-ShellGates-001.S6 (contract-doc obligations and tested contract):** It
-  ships with a new spool contract doc `spools/shell-gate.md` (+ `.cookbook.md` and
-  generated `.api.md`) in the style of `treadle.md`, a `spools/workflow.md`
-  §3/§9 note that a shipped `:shell` executor exists (mirroring the treadle note;
-  §4 executor-registry text is unchanged), a `spools/README.md` index row, and a
-  `devflow/specs/alpha-surface.md` spool-index entry, plus optional `.skein/init.clj`
-  activation and CLAUDE.md spool-list entry if this repo runs it live. Its
-  pass / fail / recovery / invalid-argv / timeout / isolation / composition
-  behaviour is a shipped, tested contract validated against a disposable
-  `skein.test.alpha` weaver world (never the canonical weaver); the concrete test
-  matrix is owned by the plan.
+- **PROP-ShellGates-001.S1 (`:shell` waiter vocabulary):** A new `:shell` gate waiter. A workflow author declares an ordinary gate whose waiter is `:shell`, carrying argv, cwd, and timeout on its attributes. Being an ordinary strand, it participates in readiness, `describe`, `run-history`, and bond/dep blocking like any other gate; deterministic checks stop masquerading as agent runs.
+- **PROP-ShellGates-001.S2 (classpath executor spool as fulfiller):** A reference/classpath spool (working name `skein.spools.shell-gate`, a sibling to the workflow spool it serves) watches ready `:shell` gates, runs each command **off the weaver event thread** on a spool-owned worker executor (runtime-owned state via `skein.api.runtime.alpha/spool-state`, no module-level atoms, shut down on runtime stop), and closes the gate via the ordinary workflow surface (`complete!` `:by "shell"`, summary in `workflow/notes`) on exit 0. It registers `register-executor! :shell` with a stall predicate over `shell/error` gates plus a `stalled-shell-gates` named query, and adds no CLI op — inspection is `strand show` and the workflow surface, exactly as treadle. It ships on the classpath (not a local root) because it has no external-tool coupling — it runs processes itself and depends only on the classpath workflow engine; the capability stays opt-in, since a spool is inert until a world's `.skein` activates it.
+- **PROP-ShellGates-001.S3 (gate attribute surface — names, not code):** The `shell/*` vocabulary on the gate strand (all plain JSON `TEXT`): `shell/argv` (required JSON string array, executed without an implicit shell; missing / blank / non-array fails loudly), `shell/cwd` and `shell/timeout-secs` (optional inputs), and the recorded outcomes `shell/exit-code`, `shell/output` (bounded tail), and `shell/error` (durable failure detail). The pass outcome rides the ordinary workflow vocabulary — `workflow/outcome-by "shell"`, `workflow/notes` = the short result summary; no new `workflow/*` attribute is introduced.
+- **PROP-ShellGates-001.S4 (loud, distinct failure state):** A failed check (non-zero exit, timeout, spawn error, or invalid argv) does **not** close the gate and does **not** masquerade as a failed shuttle run. It stamps a distinct `shell/error` (with `shell/exit-code` and captured output) and leaves the gate ready and stamped — the coordinator-visible stalled state. Because the check is deterministic, a stamped `shell/error` is skipped until cleared (an expensive `make test` runs once per deliberate request, not on every graph mutation), and clearing it re-runs the check on the next scan.
+- **PROP-ShellGates-001.S5 (bounded output on gate attributes):** Exit code and a bounded stdout+stderr tail live on the gate's attribute map — the attribute map is the contract, machine-readable via `strand show`, and terse checks (`test -s`, a `make test` tail) fit comfortably. Output is bounded on purpose (large attribute payloads are a known cost, per the attr-scaling work); full logs are the future file escape hatch, not built now.
+- **PROP-ShellGates-001.S6 (contract-doc obligations and tested contract):** It ships with a new spool contract doc `spools/shell-gate.md` (+ `.cookbook.md` and generated `.api.md`) in the style of `treadle.md`, a `spools/workflow.md` §3/§9 note that a shipped `:shell` executor exists (mirroring the treadle note; §4 executor-registry text is unchanged), a `spools/README.md` index row, and a `devflow/specs/alpha-surface.md` spool-index entry, plus optional `.skein/init.clj` activation and CLAUDE.md spool-list entry if this repo runs it live. Its pass / fail / recovery / invalid-argv / timeout / isolation / composition behaviour is a shipped, tested contract validated against a disposable `skein.test.alpha` weaver world (never the canonical weaver); the concrete test matrix is owned by the plan.
 
 ## PROP-ShellGates-001.P5 Open questions
 
-- **PROP-ShellGates-001.Q1:** Final spool name — `skein.spools.shell-gate` (the
-  working name) or a loom-themed rename (e.g. `reed`, the part that beats each
-  pick into a consistent checked position). Deferred to spec time; it changes no
-  design decision. Every substantive design question the source proposal left open
-  (trust boundary, failure semantics, whether to build a general `:ci` family,
-  where captured output lives) is **resolved** and recorded as decisions above —
-  NG3/NG4 (trust boundary), G3/S4 (failure semantics), NG2 (no `:ci` family), and
-  S5/NG5 (bounded output on gate attributes).
+- **PROP-ShellGates-001.Q1:** Final spool name — `skein.spools.shell-gate` (the working name) or a loom-themed rename (e.g. `reed`, the part that beats each pick into a consistent checked position). Deferred to spec time; it changes no design decision. Every substantive design question the source proposal left open (trust boundary, failure semantics, whether to build a general `:ci` family, where captured output lives) is **resolved** and recorded as decisions above — NG3/NG4 (trust boundary), G3/S4 (failure semantics), NG2 (no `:ci` family), and S5/NG5 (bounded output on gate attributes).

@@ -9,7 +9,7 @@ Skein is reactive. The weaver acts only on client requests and on post-commit ev
 Two shapes exist for time-driven behaviour, and only one is a real gap:
 
 - **Pull-based** needs nothing new. Store an absolute `wake-at` attribute on a strand and expose a view/query that treats it as due when `now >= wake-at`. Anything already polling `ready` or a view picks it up. This is the idiomatic skein answer and should remain the default recommendation.
-- **Push-based** is the gap. When *nothing* is polling, some component must proactively wake at a time and invoke trusted code. Today every workflow library that wants this must spawn its own JVM executor, invent its own `wake-at` convention and missed-fire policy, persist and re-arm across weaver restarts, and manage reload-safe teardown by hand. That is subtle (durability, crash windows, idempotency, double-arming on reload) and would be re-derived, divergently, per library.
+- **Push-based** is the gap. When _nothing_ is polling, some component must proactively wake at a time and invoke trusted code. Today every workflow library that wants this must spawn its own JVM executor, invent its own `wake-at` convention and missed-fire policy, persist and re-arm across weaver restarts, and manage reload-safe teardown by hand. That is subtle (durability, crash windows, idempotency, double-arming on reload) and would be re-derived, divergently, per library.
 
 The decision: should skein bless a weaver-owned scheduler so libraries share one durable-timer substrate, and if so, where is the core/userland boundary?
 
@@ -42,7 +42,7 @@ The decision: should skein bless a weaver-owned scheduler so libraries share one
 ## RFC-009.P5 Options
 
 | ID | Summary | Pros | Cons |
-| -- | ------- | ---- | ---- |
+| --- | --- | --- | --- |
 | RFC-009.O1 | Userland only; no core scheduler. Each library spawns its own executor. | Smallest core; nothing new to own; honours TEN-004 literally. | Every library re-derives durability, restart re-arm, reload teardown, and missed-fire policy — divergently and error-prone. Competing executors and `wake-at` conventions. No shared introspection. |
 | RFC-009.O2 | Full builtin scheduler with cron, recurrence, retries, and missed-fire policy. | Batteries included; one rich system. | Core inherits the entire time tar pit (DST, clock jumps, cron semantics, backpressure) permanently; defaults become breaking to change; large surface against TEN-004. |
 | RFC-009.O3 | Pull-only blessing: ship a standard "due" view/query helper, no push. | Tiny; zero new runtime state; trivially restart-safe. | Solves nothing for the no-poller case, which is the actual gap. |
@@ -55,18 +55,18 @@ The decision: should skein bless a weaver-owned scheduler so libraries share one
 - **RFC-009.REC3:** Keep pull-based `wake-at` + view as the documented default (RFC-009.PH1); the scheduler is the escape hatch for proactive wakeups, not the primary path.
 - **RFC-009.REC4:** Tentative helper shape, mirroring `skein.events.alpha`:
 
-  ```clojure
-  (require '[skein.scheduler.alpha :as sched])
+    ```clojure
+    (require '[skein.scheduler.alpha :as sched])
 
-  ;; durable wake; handler is a fully qualified symbol, not a closure
-  (sched/schedule! {:key :release-cooldown
-                    :wake-at <instant>
-                    :handler 'my.workflow/on-cooldown
-                    :payload {:strand id}})
+    ;; durable wake; handler is a fully qualified symbol, not a closure
+    (sched/schedule! {:key :release-cooldown
+                      :wake-at <instant>
+                      :handler 'my.workflow/on-cooldown
+                      :payload {:strand id}})
 
-  (sched/cancel! :release-cooldown)
-  (sched/scheduled)        ;; data-first pending entries + next wake
-  ```
+    (sched/cancel! :release-cooldown)
+    (sched/scheduled)        ;; data-first pending entries + next wake
+    ```
 
 Whether the durable record is a strand (with a scheduler attribute convention) or dedicated runtime storage is left to the proposal/spec (see RFC-009.Q1).
 

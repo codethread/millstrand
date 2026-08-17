@@ -4,7 +4,7 @@
 
 ## PROP-OpHelp-001.P1 Problem
 
-Even with subcommands declared as data (shipped `SPEC-003.C64/C65`), there is no help *invocation* convention: `strand kanban help`, `strand kanban -h`, and `strand kanban --help` all produce domain errors, and every multi-verb spool op must hand-roll (or forget) that translation. Separately, the Go CLI HTML-escapes error details (`<` for `<`) because `cli/internal/client/client.go` renders ex-data with `json.Marshal` default escaping, making usage strings unreadable — the user's original evidence showed both problems compounding. Finally, the motivating op (`kanban`) still registers raw-envelope with hand-rolled dispatch, so it benefits from none of the feature-1 primitive.
+Even with subcommands declared as data (shipped `SPEC-003.C64/C65`), there is no help _invocation_ convention: `strand kanban help`, `strand kanban -h`, and `strand kanban --help` all produce domain errors, and every multi-verb spool op must hand-roll (or forget) that translation. Separately, the Go CLI HTML-escapes error details (`<` for `<`) because `cli/internal/client/client.go` renders ex-data with `json.Marshal` default escaping, making usage strings unreadable — the user's original evidence showed both problems compounding. Finally, the motivating op (`kanban`) still registers raw-envelope with hand-rolled dispatch, so it benefits from none of the feature-1 primitive.
 
 ## PROP-OpHelp-001.P2 Goals
 

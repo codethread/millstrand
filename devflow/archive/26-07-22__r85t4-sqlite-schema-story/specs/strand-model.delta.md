@@ -1,16 +1,10 @@
 # Strand Model delta for r85t4-sqlite-schema-story
 
-**Document ID:** `DELTA-Sss-001`
-**Root spec:** [strand-model.md](../../../specs/strand-model.md) (`SPEC-001`)
-**Feature:** [../proposal.md](../proposal.md) (`PROP-Sss-001`)
-**Status:** Merged
-**Last Updated:** 2026-07-22
-**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `DELTA-Dwr-001` for v1 and `DELTA-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
+**Document ID:** `DELTA-Sss-001` **Root spec:** [strand-model.md](../../../specs/strand-model.md) (`SPEC-001`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Sss-001`) **Status:** Merged **Last Updated:** 2026-07-22 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `DELTA-Dwr-001` for v1 and `DELTA-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
 
 ## DELTA-Sss-001.P1 Summary
 
-SPEC-001.P8 Persistence gains the persistence-evolution contract decided by `PROP-Sss-001`: the physical schema is versioned by a
-**schema generation** stamped in SQLite's native `PRAGMA user_version`, the validated core schema is fixed within a generation, and the classes of change that may and may not flow into existing worlds silently are named explicitly. The weaver-side enforcement and migration mechanics land in `SPEC-004` (see `DELTA-Sss-002`); this delta owns the data-contract statements.
+SPEC-001.P8 Persistence gains the persistence-evolution contract decided by `PROP-Sss-001`: the physical schema is versioned by a **schema generation** stamped in SQLite's native `PRAGMA user_version`, the validated core schema is fixed within a generation, and the classes of change that may and may not flow into existing worlds silently are named explicitly. The weaver-side enforcement and migration mechanics land in `SPEC-004` (see `DELTA-Sss-002`); this delta owns the data-contract statements.
 
 ## DELTA-Sss-001.P2 Contract changes
 

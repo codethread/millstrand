@@ -1,13 +1,6 @@
 # Owner-scoped live refresh plan
 
-**Document ID:** `PLAN-Olr-001`
-**Feature:** `owner-scoped-live-refresh`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** none
-**Root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
-**Feature specs:** [REPL API delta](./specs/repl-api.delta.md), [Weaver Runtime delta](./specs/daemon-runtime.delta.md), [Alpha Surface delta](./specs/alpha-surface.delta.md)
-**Status:** Reviewed
-**Last Updated:** 2026-07-20
+**Document ID:** `PLAN-Olr-001` **Feature:** `owner-scoped-live-refresh` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md) **Feature specs:** [REPL API delta](./specs/repl-api.delta.md), [Weaver Runtime delta](./specs/daemon-runtime.delta.md), [Alpha Surface delta](./specs/alpha-surface.delta.md) **Status:** Reviewed **Last Updated:** 2026-07-20
 
 ## PLAN-Olr-001.P1 Goal and scope
 
@@ -143,25 +136,25 @@ No open question blocks task generation.
 - Owner suites against Skein `91bec8a`: agent-harness `clojure -M:test` and `clojure -M:format` passed (the runner has no aggregate count); kanban `clojure -M:test` passed 75 tests/427 assertions and `make fmt-check lint` passed; devflow `clojure -M:test` passed 23 tests/160 assertions. For every peer, the temporary `deps.edn` override made `clojure -A:test -Spath | tr ':' '\n' | grep skein-src` show only `/Users/ct/dev/projects/skein-src__feat--owner-scoped-live-refresh` paths; each `deps.edn` was restored.
 - Publisher commands, run only after HITL approval:
 
-  ```sh
-  cd /Users/ct/dev/projects/agent-harness.spool__feat--owner-scoped-live-refresh
-  git tag -a v10 ef6a92359749a9b9d11fb49938006512f60a6c51 -m "v10: owner-scoped live refresh"
-  git push origin ef6a92359749a9b9d11fb49938006512f60a6c51
-  git push origin v10
-  git rev-parse 'v10^{}'
+    ```sh
+    cd /Users/ct/dev/projects/agent-harness.spool__feat--owner-scoped-live-refresh
+    git tag -a v10 ef6a92359749a9b9d11fb49938006512f60a6c51 -m "v10: owner-scoped live refresh"
+    git push origin ef6a92359749a9b9d11fb49938006512f60a6c51
+    git push origin v10
+    git rev-parse 'v10^{}'
 
-  cd /Users/ct/dev/projects/kanban.spool__feat--owner-scoped-live-refresh
-  git tag -a v6 b13d256f0ad7f145dd73f070ec5efc9bcbcd1d48 -m "v6: owner-scoped live refresh"
-  git push origin b13d256f0ad7f145dd73f070ec5efc9bcbcd1d48
-  git push origin v6
-  git rev-parse 'v6^{}'
+    cd /Users/ct/dev/projects/kanban.spool__feat--owner-scoped-live-refresh
+    git tag -a v6 b13d256f0ad7f145dd73f070ec5efc9bcbcd1d48 -m "v6: owner-scoped live refresh"
+    git push origin b13d256f0ad7f145dd73f070ec5efc9bcbcd1d48
+    git push origin v6
+    git rev-parse 'v6^{}'
 
-  cd /Users/ct/dev/projects/devflow.spool__feat--owner-scoped-live-refresh
-  git tag -a v3 b966e540624a19c547093b6f2468fa3bb5d71103 -m "v3: owner-scoped live refresh"
-  git push origin b966e540624a19c547093b6f2468fa3bb5d71103
-  git push origin v3
-  git rev-parse 'v3^{}'
-  ```
+    cd /Users/ct/dev/projects/devflow.spool__feat--owner-scoped-live-refresh
+    git tag -a v3 b966e540624a19c547093b6f2468fa3bb5d71103 -m "v3: owner-scoped live refresh"
+    git push origin b966e540624a19c547093b6f2468fa3bb5d71103
+    git push origin v3
+    git rev-parse 'v3^{}'
+    ```
 
 - Consumer-pin plan only; do not edit it in this task: in `.skein/spools.edn`, change `ct.spools/agent-run` from `:git/tag "v9"` / SHA `befad44de36509cf3636242d14fc39bab35d85c2` to `v10` / the verified `v10^{}` SHA; `codethread/kanban` from `v5` / `e4bb7b64d600052cd32c3e3728231f7bba9ad67e` to `v6` / verified `v6^{}`; and `codethread/devflow` from `v2` / `1e65e1bc5ce43cbea462a33f51b24b669928ef4b` to `v3` / verified `v3^{}`. Keep all `:roots` mappings unchanged. Roll back by retaining or restoring the three old tag/SHA pairs; do not move old markers and do not restart a weaver for this preparation step.
 
@@ -212,19 +205,11 @@ No open question blocks task generation.
 
 ### PLAN-Olr-001.DN15 Workspace contribution macros (Task 10): 2026-07-22
 
-- `defop`, `defquery`, `defpattern`/`defp`, and `defrule` now collect complete
-  module contribution entries directly. The former remember/forget/install
-  registries and the workspace top-level forget choreography are gone; module
-  omission is therefore the one deletion path for file- and namespace-backed
-  sources.
+- `defop`, `defquery`, `defpattern`/`defp`, and `defrule` now collect complete module contribution entries directly. The former remember/forget/install registries and the workspace top-level forget choreography are gone; module omission is therefore the one deletion path for file- and namespace-backed sources.
 
 ### PLAN-Olr-001.DN16 Chime owner reconciliation (Task 8): 2026-07-22
 
-- Chime owns a versioned runtime registry kind for rules. Refresh publication
-  is followed by monitor-serialized baseline reconciliation before Chime swaps
-  its visible effective rules; removed rules clear seen entries and restored or
-  replaced rules begin from a fresh baseline. Attention is one module
-  contribution and its timestamp warning memory is bounded runtime state.
+- Chime owns a versioned runtime registry kind for rules. Refresh publication is followed by monitor-serialized baseline reconciliation before Chime swaps its visible effective rules; removed rules clear seen entries and restored or replaced rules begin from a fresh baseline. Attention is one module contribution and its timestamp warning memory is bounded runtime state.
 
 ### PLAN-Olr-001.DN1 Proposal review: 2026-07-20
 
@@ -266,7 +251,7 @@ User-approved amendments folded before checkpoint `nnv6c` release, derived from 
 
 ### PLAN-Olr-001.DN6 Dispatch snapshots and owner introspection (Task 25): 2026-07-22
 
-- Task 2's flat `:effective` projection atoms already gave the snapshot semantics for free: each atom holds an immutable persistent map that `refresh!` swaps wholesale (`reset!`), so one deref by a dispatch reader is one consistent effective snapshot, and a concurrent owner replacement is observed only by a later read. So the "move dispatch/invocation readers to immutable snapshots" half of this slice was mostly *proving* and *locking* an existing property, not rewriting readers. The event worker already derefs `@(:handler-registry …)` once per event (one owner set per dispatch, running each handler's captured `:fn-value`, CC10), `hooks-for-type` derefs once (and `sort-by` eagerly realizes it, so a hook that mutates the registry mid-fold cannot change the in-flight set), and `resolve-pattern`/`resolve-query` bind one deref. Only `resolve-op` derefed twice (lookup + not-found `:available`); tightened to one capture so the invocation and its diagnostic share one view. Added CC9/CC10 intent comments at each snapshot point.
+- Task 2's flat `:effective` projection atoms already gave the snapshot semantics for free: each atom holds an immutable persistent map that `refresh!` swaps wholesale (`reset!`), so one deref by a dispatch reader is one consistent effective snapshot, and a concurrent owner replacement is observed only by a later read. So the "move dispatch/invocation readers to immutable snapshots" half of this slice was mostly _proving_ and _locking_ an existing property, not rewriting readers. The event worker already derefs `@(:handler-registry …)` once per event (one owner set per dispatch, running each handler's captured `:fn-value`, CC10), `hooks-for-type` derefs once (and `sort-by` eagerly realizes it, so a hook that mutates the registry mid-fold cannot change the in-flight set), and `resolve-pattern`/`resolve-query` bind one deref. Only `resolve-op` derefed twice (lookup + not-found `:available`); tightened to one capture so the invocation and its diagnostic share one view. Added CC9/CC10 intent comments at each snapshot point.
 - Introspection (MI3) is one reusable `core-registry/explain` mirroring `registry.alpha/explain`: `{entry-key {:effective :shadowed :contenders}}` over the kernel `:provenance`, contenders ordered low-to-high, each naming `:owner`/`:layer`/`:override?`/`:effective?`/`:value`. It takes a `value-fn` (default identity) applied to every contender's stored value so a family strips its function objects; the generic core layer stays ignorant of what is sensitive. Public wrappers: `weaver.alpha/op-provenance` (no strip — op entries hold the handler symbol as data), `events.alpha/handler-provenance` and `hooks.alpha/hook-provenance` (both pass `#(dissoc % :fn-value)`, SPEC-004.C66). No introspection was added to graph/patterns: their kinds have no system owner and no function objects, DW2 gates only weaver/events/hooks/alpha, and DW1 names op/event/hook — the three families with a real owner/shadow story.
 - MI2/no-mixed-owner proofs (`skein.weaver-test`): an event whose first handler (sorted before the victim by key) removes the victim mid-dispatch still runs the victim, and only the next event sees the replacement; the same for a validation-hook fold; an op that replaces itself mid-invocation still answers as the resolved entry, with only the next call resolving the replacement; a 4-thread torn-read stress over an op flipped between two entries only ever observes whole entries. MI2: a failing-handler dispatch records a recent failure, and a later unrelated owner registration leaves that failure history intact (owner replacement is `put-entry!` only — it never touches the queue or `recent-failures`; only the reload path clears them).
 - api-docs: `make api-docs` regenerated `weaver`/`events`/`hooks` (new docstrings) **and** `graph`/`patterns` — the latter two were stale since Task 2 added a `core-registry` require without regenerating, which `make docs-check` (regenerate + `git diff --exit-code docs/api/*.api.md`) would have flagged. All five committed so that gate stays green.
@@ -318,7 +303,7 @@ User-approved amendments folded before checkpoint `nnv6c` release, derived from 
 ### PLAN-Olr-001.DN13 Workflow and shell executor conversion (Task 7): 2026-07-22
 
 - The workflow spool's two registries are now one runtime-owned `registry.alpha` handle held directly in `spool-state` (never nested, so the refresh kernel discovers it) with two declared kinds: `:skein.spools.workflow/constructor` (binding-moment `:route-transition`) and `:skein.spools.workflow/executor` (`:gate-evaluation`). Entries are qualified symbols only. `register-workflow!`/`register-executor!` read-modify-write the `:skein.owner/repl` partition at the `:direct` layer (restating override intent for every key, safe whether or not it shadows); module contributions publish owner-complete at the `:spools` layer, so a route or executor a refresh omits disappears by omission with no global reload.
-- Constructor symbols vs executor function values got the separate treatment the rider (`vovp1` finding 3) requires. Constructors resolve at each named transition; executor symbols resolve to a Var per gate evaluation (CC10 snapshot). A bare executor *function value* has no symbol — the unavoidable direct/REPL case (the pinned v7 subagent still passes `register-executor! :subagent gate-stalled?` as a value) — so it lives in a separate versioned resource map (`::executor-fns`), not as owner-partition declaration data (CC8). `executor-for` prefers the raw value, else resolves the effective symbol; a raw fn and a same-waiter symbol never coexist (each register drops the other).
+- Constructor symbols vs executor function values got the separate treatment the rider (`vovp1` finding 3) requires. Constructors resolve at each named transition; executor symbols resolve to a Var per gate evaluation (CC10 snapshot). A bare executor _function value_ has no symbol — the unavoidable direct/REPL case (the pinned v7 subagent still passes `register-executor! :subagent gate-stalled?` as a value) — so it lives in a separate versioned resource map (`::executor-fns`), not as owner-partition declaration data (CC8). `executor-for` prefers the raw value, else resolves the effective symbol; a raw fn and a same-waiter symbol never coexist (each register drops the other).
 - Module entry points: `skein.spools.workflow/{contribute,reconcile}` (contribute is `{}` and materializes the handle so a dependent module finds the kinds; reconcile seeds the `workflow/*` vocab) and `skein.spools.executors.shell/{contribute,reconcile}`. Shell contributes the `:shell` executor symbol and the `stalled-shell-gates` query owner-complete (`:queries` core kind, so removal is by omission — there is no `unregister-query!`); reconcile owns the non-declarative effects (vocab, event handler via `register-handler!`/`unregister-handler!`, worker pool, initial scan). Content-diff skip means reconcile only runs on a changed contribution, so no duplicate initial scan; the worker pool retains identity across refreshes and is closed at runtime stop. `install!` is retained as the eager pre-module entry (the canonical `.skein/init.clj` still activates via `use!`/`:call` until Task 11) and now registers the executor as a symbol.
 - Wiring for successors (Tasks 11/12/14/15): declare these as `:ns` modules with shell `:after [:skein/spools-workflow]` so the workflow handle is materialized before shell's contribution names its kinds. Conversion tests deliberately avoid the coordinator against the real `skein.spools.workflow`/`shell` namespaces — they are on the `:test` classpath and would trip the unledgered-residual backstop (rider R6) — so they exercise `contribute`/`reconcile` directly and drive owner-complete deletion/override through the handle via `registry.alpha`.
 - Gate results (cold, this worktree): `skein.spools.workflow-test` 86 tests/356 assertions and `skein.spools.executors.shell-test` 11 tests/79 assertions green. `make fmt-check lint reflect-check` clean (the pre-existing `chime_test.clj:412` kondo info is unrelated). `make api-docs` regenerated `spools/workflow.api.md` and `spools/executors/shell.api.md` (new public vars); committed so `make docs-check` stays green. `skein.config-test` runs in add-libs shard C and is pre-existingly red in this worktree (9 pass / 25 error, identical on the clean base `c6be72b`): every error is a fixture-time `:non-additive-sync-diff` from the `:test` classpath carrying spool sources unledgered (the F12 classpath-overlap condition, rider R6), not a regression from this slice. The full locked suite was not run.

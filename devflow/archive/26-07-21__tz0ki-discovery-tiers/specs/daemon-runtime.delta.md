@@ -1,157 +1,47 @@
 # Weaver Runtime delta for discovery-tier factoring
 
-**Document ID:** `DELTA-Dtf-002`
-**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (SPEC-004)
-**Feature:** [../proposal.md](../proposal.md)
-**Related:** [RFC-Dtf-001](../../../rfcs/2026-07-20-discovery-tier-factoring.md); DELTA-Dtf-001 (cli), DELTA-Dtf-003 (repl-api)
-**Status:** Merged
-**Last Updated:** 2026-07-21
+**Document ID:** `DELTA-Dtf-002` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (SPEC-004) **Feature:** [../proposal.md](../proposal.md) **Related:** [RFC-Dtf-001](../../../rfcs/2026-07-20-discovery-tier-factoring.md); DELTA-Dtf-001 (cli), DELTA-Dtf-003 (repl-api) **Status:** Merged **Last Updated:** 2026-07-21
 
 ## DELTA-Dtf-002.P1 Summary
 
-Adds the runtime-owned machinery behind the reworked discovery surface: a net-new default
-help-transform **slot**, a best-effort op-wide `source` pointer resolved at help/meta projection,
-an extension of op metadata with optional `:about`/`:prime` prose, a runtime-owned glossary of
-named failure outcomes, and the weaver-side `--help` rewrite that supersedes SPEC-004.C63e. The
-`help` op (SPEC-004.C63c) grows two builtin siblings, `about` and `prime`. Nothing here conflates
-the help-schema version or the shared release identity with the existing `protocol_version`
-wire-compat key.
+Adds the runtime-owned machinery behind the reworked discovery surface: a net-new default help-transform **slot**, a best-effort op-wide `source` pointer resolved at help/meta projection, an extension of op metadata with optional `:about`/`:prime` prose, a runtime-owned glossary of named failure outcomes, and the weaver-side `--help` rewrite that supersedes SPEC-004.C63e. The `help` op (SPEC-004.C63c) grows two builtin siblings, `about` and `prime`. Nothing here conflates the help-schema version or the shared release identity with the existing `protocol_version` wire-compat key.
 
 ## DELTA-Dtf-002.P2 Contract changes
 
-- **DELTA-Dtf-002.CC1 (`register-default-help-transform` — net-new at-most-one slot):** A net-new,
-  runtime-owned, **reload-cleared** slot holds **at most one** default help transform: a function
-  from the full canonical help response envelope (DELTA-Dtf-001.CC1) to rendered output. It follows
-  the op-registry lifecycle (SPEC-004.C63a/C63c/C46) — cleared and re-established across `reload!`,
-  not reload-surviving `spool-state` (SPEC-004.C95) — and is registered only by **trusted
-  `init.clj`/REPL config**. No spool `install!` auto-registers it, so a fresh world (batteries
-  absent, or present but not electing to register) keeps the raw-JSON default (DELTA-Dtf-001.CC4).
-  Contract:
-  - **Input** is the full envelope (never a bare node); the transform sees `schema-version` and may
-    render any depth.
-  - **Output** is the string the CLI relays verbatim (JSON or text — the transform's choice).
-  - **Failure propagates loudly** (TEN-003): a throwing transform surfaces a structured error naming
-    the transform; it never silently falls back. `--json` always bypasses the slot, so a broken
-    transform never bricks help.
-  - **Set is explicit and at-most-one:** registering when the slot is occupied fails loudly naming
-    both registrants unless the caller uses the explicit replace path; the slot is introspectable
-    (a read verb reports whether one is registered and its provenance).
-  - It applies to all `help` invocations only. `about`/`prime` output is not transformed (already
-    prose in a minimal envelope). The op-registry accepted-key set (CC4) is unchanged by this slot —
-    it is a separate registry, not an op-entry field.
+- **DELTA-Dtf-002.CC1 (`register-default-help-transform` — net-new at-most-one slot):** A net-new, runtime-owned, **reload-cleared** slot holds **at most one** default help transform: a function from the full canonical help response envelope (DELTA-Dtf-001.CC1) to rendered output. It follows the op-registry lifecycle (SPEC-004.C63a/C63c/C46) — cleared and re-established across `reload!`, not reload-surviving `spool-state` (SPEC-004.C95) — and is registered only by **trusted `init.clj`/REPL config**. No spool `install!` auto-registers it, so a fresh world (batteries absent, or present but not electing to register) keeps the raw-JSON default (DELTA-Dtf-001.CC4). Contract:
+    - **Input** is the full envelope (never a bare node); the transform sees `schema-version` and may render any depth.
+    - **Output** is the string the CLI relays verbatim (JSON or text — the transform's choice).
+    - **Failure propagates loudly** (TEN-003): a throwing transform surfaces a structured error naming the transform; it never silently falls back. `--json` always bypasses the slot, so a broken transform never bricks help.
+    - **Set is explicit and at-most-one:** registering when the slot is occupied fails loudly naming both registrants unless the caller uses the explicit replace path; the slot is introspectable (a read verb reports whether one is registered and its provenance).
+    - It applies to all `help` invocations only. `about`/`prime` output is not transformed (already prose in a minimal envelope). The op-registry accepted-key set (CC4) is unchanged by this slot — it is a separate registry, not an op-entry field.
 
-- **DELTA-Dtf-002.CC2 (op-wide `source` at projection, not registration):** `help`/`about`/`prime`
-  derive a best-effort op-wide `source` (handler `file:line`) at **projection** time, placed once in
-  the response envelope (DELTA-Dtf-001.CC1/CC7), never per verb. `register-op!` continues to store an
-  **unresolved** fully-qualified handler symbol (SPEC-004.C63a; provenance is the registering
-  namespace). Projection resolves the handler via `requiring-resolve` under `with-spool-classloader`,
-  then reads the resolved var's `:file`/`:line` and attempts to resolve a **readable on-disk path**.
-  Wire contract: `source` is **always present**, and is `null` in exactly these best-effort cases —
-  `requiring-resolve` fails, the resolved var carries no `:file`/`:line`, or `:file` does not resolve
-  to a readable file (AOT/jar/REPL/generated code) — else `{file, line}` with a canonical readable
-  file and positive line. Only these resolution failures yield `null`; unrelated projection errors
-  are **not** swallowed by the source catch and fail loudly. No `register-op!`/`op!` change required.
+- **DELTA-Dtf-002.CC2 (op-wide `source` at projection, not registration):** `help`/`about`/`prime` derive a best-effort op-wide `source` (handler `file:line`) at **projection** time, placed once in the response envelope (DELTA-Dtf-001.CC1/CC7), never per verb. `register-op!` continues to store an **unresolved** fully-qualified handler symbol (SPEC-004.C63a; provenance is the registering namespace). Projection resolves the handler via `requiring-resolve` under `with-spool-classloader`, then reads the resolved var's `:file`/`:line` and attempts to resolve a **readable on-disk path**. Wire contract: `source` is **always present**, and is `null` in exactly these best-effort cases — `requiring-resolve` fails, the resolved var carries no `:file`/`:line`, or `:file` does not resolve to a readable file (AOT/jar/REPL/generated code) — else `{file, line}` with a canonical readable file and positive line. Only these resolution failures yield `null`; unrelated projection errors are **not** swallowed by the source catch and fail loudly. No `register-op!`/`op!` change required.
 
-- **DELTA-Dtf-002.CC3 (weaver `--help` rewrite supersedes C63e):** The weaver rewrites a **trailing**
-  `--help`/`-h` **flag** token (final token, no other flags, no attached payloads) after the first op
-  token to the `help` op, for **all** ops — flat, subcommand, and raw-envelope — superseding
-  SPEC-004.C63e's subcommand-only sole-token alias. Only the flag forms `--help`/`-h` rewrite; the
-  **bare word** `help` (and `about`/`prime`) in verb position is **not** rewritten — it is the retired
-  `<op> help`/`<op> about`/`<op> prime` sugar (migration-only, retired in alpha, TEN-000@1), which
-  fails with the loud redirect to `strand help <op>` (DELTA-Dtf-001.CC5). **Exemption:** the retired-sugar
-  redirect is **suppressed when the op declares a real subcommand by that name** — so an op that still
-  declares an `about`/`prime` *subcommand* (a pre-adoption op like roster/land/kanban) routes `<op>
-  about`/`<op> prime` to that declared subcommand as normal. `help` is a reserved subcommand name
-  (SPEC-003.C65) and can never be declared, so bare `<op> help` always redirects. Note the meta-verbs
-  (CC6) read `:about`/`:prime` **op-metadata**, a *distinct* surface from a declared `about`/`prime`
-  subcommand: for an op that declares the subcommand but carries no metadata, `strand about <op>` returns
-  `discovery/unavailable` while `<op> about` still resolves — until that op migrates its subcommand to
-  op-metadata (fast-follow adoption; v1 adopts only agent + batteries). Like C63e, the flag rewrite
-  resolves **before lifecycle hook gating** (a read-class registry projection; the target op's
-  mutating-class hooks do not fire and the handler is never called). Any other argv shape flows
-  through normal parsing and its loud errors. `help`/`-h`/`--help` remain reserved subcommand names
-  (SPEC-003.C65), so the rewrite shadows nothing.
+- **DELTA-Dtf-002.CC3 (weaver `--help` rewrite supersedes C63e):** The weaver rewrites a **trailing** `--help`/`-h` **flag** token (final token, no other flags, no attached payloads) after the first op token to the `help` op, for **all** ops — flat, subcommand, and raw-envelope — superseding SPEC-004.C63e's subcommand-only sole-token alias. Only the flag forms `--help`/`-h` rewrite; the **bare word** `help` (and `about`/`prime`) in verb position is **not** rewritten — it is the retired `<op> help`/`<op> about`/`<op> prime` sugar (migration-only, retired in alpha, TEN-000@1), which fails with the loud redirect to `strand help <op>` (DELTA-Dtf-001.CC5). **Exemption:** the retired-sugar redirect is **suppressed when the op declares a real subcommand by that name** — so an op that still declares an `about`/`prime` _subcommand_ (a pre-adoption op like roster/land/kanban) routes `<op> about`/`<op> prime` to that declared subcommand as normal. `help` is a reserved subcommand name (SPEC-003.C65) and can never be declared, so bare `<op> help` always redirects. Note the meta-verbs (CC6) read `:about`/`:prime` **op-metadata**, a _distinct_ surface from a declared `about`/`prime` subcommand: for an op that declares the subcommand but carries no metadata, `strand about <op>` returns `discovery/unavailable` while `<op> about` still resolves — until that op migrates its subcommand to op-metadata (fast-follow adoption; v1 adopts only agent + batteries). Like C63e, the flag rewrite resolves **before lifecycle hook gating** (a read-class registry projection; the target op's mutating-class hooks do not fire and the handler is never called). Any other argv shape flows through normal parsing and its loud errors. `help`/`-h`/`--help` remain reserved subcommand names (SPEC-003.C65), so the rewrite shadows nothing.
 
-- **DELTA-Dtf-002.CC4 (op metadata gains optional `:about`/`:prime`; arg-spec stays optional):**
-  SPEC-004.C63a's accepted op-metadata key set gains two optional keys, `:about` and `:prime`, each a
-  **non-blank prose string** authored beside the op implementation, validated at registration
-  (blank/non-string fails loudly; unknown-key loud-failure otherwise unchanged). `:arg-spec` **stays
-  optional** for raw-envelope ops (SPEC-004.C63a; `help.clj` already renders `:raw-envelope true`
-  ops) — the tiers pattern must not require an arg-spec universally. The builtin `about`/`prime`
-  meta-verbs (CC6) project these fields; a missing field yields the loud `discovery/unavailable`
-  outcome (DELTA-Dtf-001.CC7). `source` for `about`/`prime` resolves as in CC2.
+- **DELTA-Dtf-002.CC4 (op metadata gains optional `:about`/`:prime`; arg-spec stays optional):** SPEC-004.C63a's accepted op-metadata key set gains two optional keys, `:about` and `:prime`, each a **non-blank prose string** authored beside the op implementation, validated at registration (blank/non-string fails loudly; unknown-key loud-failure otherwise unchanged). `:arg-spec` **stays optional** for raw-envelope ops (SPEC-004.C63a; `help.clj` already renders `:raw-envelope true` ops) — the tiers pattern must not require an arg-spec universally. The builtin `about`/`prime` meta-verbs (CC6) project these fields; a missing field yields the loud `discovery/unavailable` outcome (DELTA-Dtf-001.CC7). `source` for `about`/`prime` resolves as in CC2.
 
-- **DELTA-Dtf-002.CC5 (glossary — runtime-owned named failure outcomes; single definition):** A
-  net-new, runtime-owned, reload-cleared glossary registry maps a **qualified named failure outcome**
-  to a short canonical definition; `help` **owns the enum** and resolves it. Per-verb `failure-modes`
-  (DELTA-Dtf-001.CC2) carry outcome-name **references only** — never inline definitions. The help
-  projection puts **one** `glossary` map in the response envelope (DELTA-Dtf-001.CC1): the
-  referenced-term **closure** for the returned subtree (every outcome any node references, resolved
-  once to its definition). Defining once and referencing by name is what keeps lifecycle-failure
-  prose from drifting across verbs; a recursive renderer receives the envelope glossary as context
-  without per-level branching. Discipline: outcome names are **qualified and stable**;
-  `register-glossary-outcome!` fails loudly on any name collision naming both registrants, so a name
-  is never **silently** redefined (the anti-drift guarantee). A deliberate change goes through the
-  trusted `replace-glossary-outcome!` override (CC7, mirroring `replace-op!`, SPEC-004.C63a; TEN-002)
-  or, preferably, a new qualified name — authors reserve new names for genuinely different semantics.
-  The glossary is a **distinct layer** from the
-  `vocab-registry` (`skein.api.vocab.alpha`), a runtime-owned registry of stored-attribute
-  namespace/edge-type vocabularies; the glossary does not reuse vocab machinery. **v1 scopes the
-  glossary to failure outcomes only** — the sole reachable reference path (`failure-modes`);
-  general "concepts" have no typed reference in v1 and are deferred until a typed concept-ref exists
-  (DELTA-Dtf-002.Q1), rather than shipping unreachable untyped entries (TEN-004).
+- **DELTA-Dtf-002.CC5 (glossary — runtime-owned named failure outcomes; single definition):** A net-new, runtime-owned, reload-cleared glossary registry maps a **qualified named failure outcome** to a short canonical definition; `help` **owns the enum** and resolves it. Per-verb `failure-modes` (DELTA-Dtf-001.CC2) carry outcome-name **references only** — never inline definitions. The help projection puts **one** `glossary` map in the response envelope (DELTA-Dtf-001.CC1): the referenced-term **closure** for the returned subtree (every outcome any node references, resolved once to its definition). Defining once and referencing by name is what keeps lifecycle-failure prose from drifting across verbs; a recursive renderer receives the envelope glossary as context without per-level branching. Discipline: outcome names are **qualified and stable**; `register-glossary-outcome!` fails loudly on any name collision naming both registrants, so a name is never **silently** redefined (the anti-drift guarantee). A deliberate change goes through the trusted `replace-glossary-outcome!` override (CC7, mirroring `replace-op!`, SPEC-004.C63a; TEN-002) or, preferably, a new qualified name — authors reserve new names for genuinely different semantics. The glossary is a **distinct layer** from the `vocab-registry` (`skein.api.vocab.alpha`), a runtime-owned registry of stored-attribute namespace/edge-type vocabularies; the glossary does not reuse vocab machinery. **v1 scopes the glossary to failure outcomes only** — the sole reachable reference path (`failure-modes`); general "concepts" have no typed reference in v1 and are deferred until a typed concept-ref exists (DELTA-Dtf-002.Q1), rather than shipping unreachable untyped entries (TEN-004).
 
-- **DELTA-Dtf-002.CC6 (builtin `about`/`prime` ops beside `help`):** The weaver installs two builtin
-  read-class ops beside `help` (SPEC-004.C63c): `about` and `prime`, each a registry projection taking
-  one op-name positional and returning the CC4 prose in the DELTA-Dtf-001.CC7 envelope with `source`.
-  Both are registered through the public path, replaceable via `replace-op!`, maskable like any op, and
-  cleared/reinstalled by `reload!` alongside `help`.
+- **DELTA-Dtf-002.CC6 (builtin `about`/`prime` ops beside `help`):** The weaver installs two builtin read-class ops beside `help` (SPEC-004.C63c): `about` and `prime`, each a registry projection taking one op-name positional and returning the CC4 prose in the DELTA-Dtf-001.CC7 envelope with `source`. Both are registered through the public path, replaceable via `replace-op!`, maskable like any op, and cleared/reinstalled by `reload!` alongside `help`.
 
-- **DELTA-Dtf-002.CC7 (glossary registration surface + ownership):** The glossary registry exposes a
-  public runtime surface — `register-glossary-outcome!` (loud on name collision naming both
-  registrants), `replace-glossary-outcome!` (explicit override, requires the name to exist), and a
-  read/introspection projection — mirroring the op-registry style (SPEC-004.C63a) and cleared by
-  `reload!` before config re-runs. **Each owning spool registers its glossary outcomes from its own
-  `install!`, before registering the ops that reference them** (the load-order contract,
-  DELTA-Dtf-003.CC2), so a spool ships its shared outcomes portably; trusted `init.clj`/REPL config
-  may also register outcomes directly. This is the deliberate contrast with the default-transform
-  slot (CC1), which is config-election-only and never registered from `install!`. Builtin ops that
-  carry `failure-modes` register their outcomes before themselves during built-in installation. The
-  unconditional glossary-ref existence check runs at `register-op!`/`replace-op!` time (which has the
-  runtime glossary), not in the arg-spec structural validator (DELTA-Dtf-003.CC2).
+- **DELTA-Dtf-002.CC7 (glossary registration surface + ownership):** The glossary registry exposes a public runtime surface — `register-glossary-outcome!` (loud on name collision naming both registrants), `replace-glossary-outcome!` (explicit override, requires the name to exist), and a read/introspection projection — mirroring the op-registry style (SPEC-004.C63a) and cleared by `reload!` before config re-runs. **Each owning spool registers its glossary outcomes from its own `install!`, before registering the ops that reference them** (the load-order contract, DELTA-Dtf-003.CC2), so a spool ships its shared outcomes portably; trusted `init.clj`/REPL config may also register outcomes directly. This is the deliberate contrast with the default-transform slot (CC1), which is config-election-only and never registered from `install!`. Builtin ops that carry `failure-modes` register their outcomes before themselves during built-in installation. The unconditional glossary-ref existence check runs at `register-op!`/`replace-op!` time (which has the runtime glossary), not in the arg-spec structural validator (DELTA-Dtf-003.CC2).
 
 ## DELTA-Dtf-002.P3 Design decisions
 
 ### DELTA-Dtf-002.D1 The transform is a reload-cleared slot, not reload-surviving state
 
-- **Decision:** The default help transform is an at-most-one slot that clears on `reload!` and is
-  re-established by re-running config, exactly like the op registry (SPEC-004.C46/C63c), rather than
-  living in reload-surviving `spool-state` (SPEC-004.C95).
-- **Rationale:** The transform is trusted-config-declared rendering behavior, not a resource with
-  lifecycle (no executors/timers to preserve). Clearing on reload keeps config the single source of
-  truth and avoids `spool-state`'s version/migration ceremony. A fresh or reloaded world with no
-  registration falls back to the raw-JSON floor, the safe default (DELTA-Dtf-001.CC4).
-- **Rejected:** Auto-registering the batteries transformer from `install!` (a fresh world would
-  silently lose the JSON default); a per-op transform field (the transform is world-global); a
-  general multi-entry registry (at-most-one is a slot, not a registry).
+- **Decision:** The default help transform is an at-most-one slot that clears on `reload!` and is re-established by re-running config, exactly like the op registry (SPEC-004.C46/C63c), rather than living in reload-surviving `spool-state` (SPEC-004.C95).
+- **Rationale:** The transform is trusted-config-declared rendering behavior, not a resource with lifecycle (no executors/timers to preserve). Clearing on reload keeps config the single source of truth and avoids `spool-state`'s version/migration ceremony. A fresh or reloaded world with no registration falls back to the raw-JSON floor, the safe default (DELTA-Dtf-001.CC4).
+- **Rejected:** Auto-registering the batteries transformer from `install!` (a fresh world would silently lose the JSON default); a per-op transform field (the transform is world-global); a general multi-entry registry (at-most-one is a slot, not a registry).
 
 ### DELTA-Dtf-002.D2 Help-schema version and shared release identity both sit alongside `protocol_version`
 
-- **Decision:** The help-schema `schema-version` (DELTA-Dtf-001.D3) and the "one shared release/build
-  identity across mill/strand/core" are **two distinct concerns**, and both sit **alongside** —
-  never replacing or conflating — the independent `protocol_version` wire-compat key (SPEC-004.C23b,
-  SPEC-002.C34). The version-stamp **mechanism** for the shared release identity is out of scope
-  (PROP-Dtf-001.NG3) and may be a separate card; the help schema versions itself with its own
-  integer `schema-version`.
-- **Rationale:** `protocol_version` bumps only on a frame-level wire break; a help schema and a
-  release identity evolve on their own cadences. Conflating any two forces spurious bumps.
+- **Decision:** The help-schema `schema-version` (DELTA-Dtf-001.D3) and the "one shared release/build identity across mill/strand/core" are **two distinct concerns**, and both sit **alongside** — never replacing or conflating — the independent `protocol_version` wire-compat key (SPEC-004.C23b, SPEC-002.C34). The version-stamp **mechanism** for the shared release identity is out of scope (PROP-Dtf-001.NG3) and may be a separate card; the help schema versions itself with its own integer `schema-version`.
+- **Rationale:** `protocol_version` bumps only on a frame-level wire break; a help schema and a release identity evolve on their own cadences. Conflating any two forces spurious bumps.
 - **Rejected:** Reusing `protocol_version` or the shared release version as the help-schema version.
 
 ## DELTA-Dtf-002.P4 Open questions
 
-- **DELTA-Dtf-002.Q1 (glossary concepts — deferred):** Whether/when to extend the glossary beyond
-  failure outcomes to typed "concepts" with an explicit concept-reference field. Deferred out of v1
-  (CC5); revisit when a reachable typed concept-ref is proposed.
-- **DELTA-Dtf-002.Q2 (glossary registration surface):** RESOLVED at plan stage — its own public
-  `register-glossary-outcome!`/`replace-glossary-outcome!`/introspection surface owned by the runtime,
-  registered from each owning spool's `install!` before its ops (DELTA-Dtf-002.CC7).
+- **DELTA-Dtf-002.Q1 (glossary concepts — deferred):** Whether/when to extend the glossary beyond failure outcomes to typed "concepts" with an explicit concept-reference field. Deferred out of v1 (CC5); revisit when a reachable typed concept-ref is proposed.
+- **DELTA-Dtf-002.Q2 (glossary registration surface):** RESOLVED at plan stage — its own public `register-glossary-outcome!`/`replace-glossary-outcome!`/introspection surface owned by the runtime, registered from each owning spool's `install!` before its ops (DELTA-Dtf-002.CC7).

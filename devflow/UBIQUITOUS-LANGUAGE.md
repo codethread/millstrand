@@ -119,7 +119,7 @@ Three tiers answer every "how do I find out" question, and the distinction is lo
 | **Root spec** | A canonical behavior contract in `devflow/specs/`, and the authority for shipped behavior. | Doc, design doc, RFC, spec bare |
 | **Spec clause** | An addressable point within a root spec, cited as `SPEC-004.C8a`. | Section, requirement, rule, ticket |
 | **RFC** | A proposal for work that then ships, in `devflow/rfcs/`. | Proposal (the devflow stage), design doc, ADR |
-| **ADR** | A decision reached and recorded in `devflow/adrs/`, including a decision to hold a tenet and deliberately *not* build something. | RFC, decision doc, postmortem |
+| **ADR** | A decision reached and recorded in `devflow/adrs/`, including a decision to hold a tenet and deliberately _not_ build something. | RFC, decision doc, postmortem |
 | **feat folder** | `devflow/feat/<name>`, holding planned-but-unbuilt work. It moves to `devflow/archive/` once its spec deltas merge. | Feature, branch, project folder |
 | **Doc triad** | The three-file convention per shipped spool: `<spool>.md` is the contract, `<spool>.cookbook.md` is composition recipes, `<spool>.api.md` is generated from docstrings. | Docs, the spool docs |
 
@@ -129,7 +129,7 @@ Workflow terminology (molecule, wisp, pour, bond, squash) belongs to the [extern
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **Workflow definition** | A reusable template expressed as Clojure data. The definition *is* the template; there is no separate proto storage. | Template, proto, schema, workflow bare |
+| **Workflow definition** | A reusable template expressed as Clojure data. The definition _is_ the template; there is no separate proto storage. | Template, proto, schema, workflow bare |
 | **Run** | One execution of a definition, keyed by `workflow/run-id`. | Agent run, instance, execution, job |
 | **Molecule** | A materialized workflow graph, persisted as ordinary strands and edges. | Graph, subgraph, plan, workflow |
 | **Wisp** | The ephemeral counterpart to a molecule. | Molecule, temp graph, scratch run |

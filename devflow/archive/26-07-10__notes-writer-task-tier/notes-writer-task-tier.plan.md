@@ -1,81 +1,32 @@
 # Notes-writer + kanban task tier Plan
 
-**Document ID:** `PLAN-Nwt-001`
-**Feature:** `notes-writer-task-tier`
-**Proposal:** [./proposal.md](./proposal.md) (`PROP-Nwt-001`)
-**RFC:** None
-**Root specs:** [../../specs/strand-model.md](../../specs/strand-model.md) (`SPEC-001`)
-**Feature specs:** [./specs/strand-model.delta.md](./specs/strand-model.delta.md) (`DELTA-Nwt-001`, clauses `C1`–`C6`, `J1`, `J2`)
-**Status:** Reviewed
-**Last Updated:** 2026-07-10
+**Document ID:** `PLAN-Nwt-001` **Feature:** `notes-writer-task-tier` **Proposal:** [./proposal.md](./proposal.md) (`PROP-Nwt-001`) **RFC:** None **Root specs:** [../../specs/strand-model.md](../../specs/strand-model.md) (`SPEC-001`) **Feature specs:** [./specs/strand-model.delta.md](./specs/strand-model.delta.md) (`DELTA-Nwt-001`, clauses `C1`–`C6`, `J1`, `J2`) **Status:** Reviewed **Last Updated:** 2026-07-10
 
 ## PLAN-Nwt-001.P1 Goal and scope
 
-Give notes a structural home. A notes *writer* value in `skein.api.notes.alpha` — carrying a target (or a
-thunk), a default decoration, and an author — becomes the one seam a composition site redirects note targets
-through, so noise stops accreting wherever an emitter happened to point (`PROP-Nwt-001.G1`, `DELTA-Nwt-001.C1`–`C5`).
-The writer serializes to a plain-data ref that ships into subprocesses, and a single renderer turns that ref into
-the "append notes with …" instruction fragment the five concrete-target *write* sites converge on
-(`DELTA-Nwt-001.C4`; the read-side `read-the-board` fragment and the target-less generic note guidance
-stay inline per `PLAN-Nwt-001.R2` and change-review-758179fb finding 3). Because remote writers are LLMs driving the CLI, the note ops accrete a `--attr key=value`
-decoration passthrough (`PROP-Nwt-001.S2`, `DELTA-Nwt-001.J1`) — the load-bearing boundary a writer-ref crosses.
+Give notes a structural home. A notes _writer_ value in `skein.api.notes.alpha` — carrying a target (or a thunk), a default decoration, and an author — becomes the one seam a composition site redirects note targets through, so noise stops accreting wherever an emitter happened to point (`PROP-Nwt-001.G1`, `DELTA-Nwt-001.C1`–`C5`). The writer serializes to a plain-data ref that ships into subprocesses, and a single renderer turns that ref into the "append notes with …" instruction fragment the five concrete-target _write_ sites converge on (`DELTA-Nwt-001.C4`; the read-side `read-the-board` fragment and the target-less generic note guidance stay inline per `PLAN-Nwt-001.R2` and change-review-758179fb finding 3). Because remote writers are LLMs driving the CLI, the note ops accrete a `--attr key=value` decoration passthrough (`PROP-Nwt-001.S2`, `DELTA-Nwt-001.J1`) — the load-bearing boundary a writer-ref crosses.
 
-On the tracking side, kanban gains a task tier (epic > feature > task) whose four statuses are *derived* from the
-pure strand graph plus core attrs only — `done` ⟸ closed, `blocked` ⟸ active with an unmet dep, `doing` ⟸ active
-with deps met and an owner, `ready` ⟸ active with deps met and no owner — reading no delegation or agent-run
-vocabulary (`PROP-Nwt-001.G2`, `DELTA-Nwt-001.J2`). Tasks are the replacement resume point, so the
-preemption-fragile handover primitive retires: the note-as-you-go *discipline* moves — with the same force — into
-worker contracts, kanban `prime`, and the land-workflow abort text, while the primitive and every surface that
-projects `kanban/handover` are removed (`PROP-Nwt-001.G3`, `S4`). The kanban surface is purged of
-devflow/agent-plan/delegation names in favour of "execution strands" so it stays implementation-agnostic
-(`PROP-Nwt-001.G4`, `S5`), and the stage→writer wiring convention (`:implementation`/`:review`) lands in the
-composition sites — this repo's coordination guidance, not kanban or devflow (`PROP-Nwt-001.G5`).
+On the tracking side, kanban gains a task tier (epic > feature > task) whose four statuses are _derived_ from the pure strand graph plus core attrs only — `done` ⟸ closed, `blocked` ⟸ active with an unmet dep, `doing` ⟸ active with deps met and an owner, `ready` ⟸ active with deps met and no owner — reading no delegation or agent-run vocabulary (`PROP-Nwt-001.G2`, `DELTA-Nwt-001.J2`). Tasks are the replacement resume point, so the preemption-fragile handover primitive retires: the note-as-you-go _discipline_ moves — with the same force — into worker contracts, kanban `prime`, and the land-workflow abort text, while the primitive and every surface that projects `kanban/handover` are removed (`PROP-Nwt-001.G3`, `S4`). The kanban surface is purged of devflow/agent-plan/delegation names in favour of "execution strands" so it stays implementation-agnostic (`PROP-Nwt-001.G4`, `S5`), and the stage→writer wiring convention (`:implementation`/`:review`) lands in the composition sites — this repo's coordination guidance, not kanban or devflow (`PROP-Nwt-001.G5`).
 
-Deliberately not built (`PROP-Nwt-001.NG1`–`NG5`): no ctx-dispatch routing (a route fn cannot render into a
-prompt and would reintroduce the silent card-fallback), no change to `note!`/`notes` signatures (accretion only,
-`DELTA-Nwt-001.C1`), no routing enforcement (guidance per TEN-002), no historical note rewrite (surfaces stop
-*projecting* handover decoration; the immutable data stays), and no structured-findings schema (`note/kind` gives
-findings a home, not a shape).
+Deliberately not built (`PROP-Nwt-001.NG1`–`NG5`): no ctx-dispatch routing (a route fn cannot render into a prompt and would reintroduce the silent card-fallback), no change to `note!`/`notes` signatures (accretion only, `DELTA-Nwt-001.C1`), no routing enforcement (guidance per TEN-002), no historical note rewrite (surfaces stop _projecting_ handover decoration; the immutable data stays), and no structured-findings schema (`note/kind` gives findings a home, not a shape).
 
 ## PLAN-Nwt-001.P2 Approach
 
-- **PLAN-Nwt-001.A1 — keystone first, everything hangs off the writer.** PH1 lands the writer value, its ref,
-  the single prompt renderer, and the CLI `--attr` passthrough before any consumer needs them. The kanban task
-  tier (PH2) consumes writer-refs; handover retirement (PH3) presupposes tasks as the resume point; the prompt-site
-  absorption (PH5) presupposes `writer-ref->prompt`. This is the same ordered dependency the card records
-  (ORDERED ITEMS 1→5), so the phases are a mostly-serial spine with parallelism *inside* a phase, not across.
-- **PLAN-Nwt-001.A2 — accretion, never mutation, on the blessed surface.** `skein.api.notes.alpha` is blessed
-  alpha (SPEC-005.C2, `PROP-Nwt-001.NG2`): `note!`/`notes` are untouched; the writer *wraps* `note!`. `note!`
-  already folds any non-`:by`/`:round` opt into decorating attrs (`notes/alpha.clj:66`), so the writer needs no
-  primitive change — it composes over the existing merge. Likewise the agent-run `note!`/`notes` wrappers
-  (`agent_run.clj:2219-2235`) already pass opts through; the gap is purely the CLI verb parse (`--attr`).
-- **PLAN-Nwt-001.A3 — derive task status, never store it.** Stored status drifts exactly the way handover did
-  (`DELTA-Nwt-001.J2`). Task status is a pure function of `state=closed`, the `depends-on` frontier, and the
-  `owner` attr — no `status=implemented`, no `agent-run/phase`. The litmus: delete delegation and agent-run,
-  the derivation still computes. The same `depends-on` edges that compute `blocked`/`ready` are the concurrency
-  DAG, so no second structure is introduced.
-- **PLAN-Nwt-001.A4 — retire the primitive, keep the discipline.** Handover retirement is a *removal* plus a
-  *re-homing of the words*: the removal inventory (`PLAN-Nwt-001.AA*`) strips projection everywhere; the same
-  "note as you go / resume from structure" force lands in the worker contract, kanban `prime`, and the
-  land-abort instruction. The degenerate no-notes resume still yields the doing-task's body, deps, and lane —
-  strictly more than a missing handover.
-- **PLAN-Nwt-001.A5 — separation is a grep, not a vibe.** `PROP-Nwt-001.S5`: after PH4, `rg -i
-  'devflow|agent-plan|delegation' spools/kanban*` returns only the allowed phrase "execution strands". The
-  kanban namespace names one methodology nowhere; the stage→writer coupling lives solely in the composition
-  site (PH5), the same dependency inversion kanban already applies to devflow.
-- **PLAN-Nwt-001.A6 — one file, one owner within a phase.** Where a phase touches disjoint files (PH1's
-  `notes/alpha.clj` vs `batteries.clj` vs `delegation.clj`; PH3's doc set) those are parallel-safe slices; where
-  it touches one large file across concerns (kanban's task tier and handover removal both edit `kanban.clj`) the
-  slices serialize on that file — PH2 and PH3 must not both hold `kanban.clj` open concurrently.
+- **PLAN-Nwt-001.A1 — keystone first, everything hangs off the writer.** PH1 lands the writer value, its ref, the single prompt renderer, and the CLI `--attr` passthrough before any consumer needs them. The kanban task tier (PH2) consumes writer-refs; handover retirement (PH3) presupposes tasks as the resume point; the prompt-site absorption (PH5) presupposes `writer-ref->prompt`. This is the same ordered dependency the card records (ORDERED ITEMS 1→5), so the phases are a mostly-serial spine with parallelism _inside_ a phase, not across.
+- **PLAN-Nwt-001.A2 — accretion, never mutation, on the blessed surface.** `skein.api.notes.alpha` is blessed alpha (SPEC-005.C2, `PROP-Nwt-001.NG2`): `note!`/`notes` are untouched; the writer _wraps_ `note!`. `note!` already folds any non-`:by`/`:round` opt into decorating attrs (`notes/alpha.clj:66`), so the writer needs no primitive change — it composes over the existing merge. Likewise the agent-run `note!`/`notes` wrappers (`agent_run.clj:2219-2235`) already pass opts through; the gap is purely the CLI verb parse (`--attr`).
+- **PLAN-Nwt-001.A3 — derive task status, never store it.** Stored status drifts exactly the way handover did (`DELTA-Nwt-001.J2`). Task status is a pure function of `state=closed`, the `depends-on` frontier, and the `owner` attr — no `status=implemented`, no `agent-run/phase`. The litmus: delete delegation and agent-run, the derivation still computes. The same `depends-on` edges that compute `blocked`/`ready` are the concurrency DAG, so no second structure is introduced.
+- **PLAN-Nwt-001.A4 — retire the primitive, keep the discipline.** Handover retirement is a _removal_ plus a _re-homing of the words_: the removal inventory (`PLAN-Nwt-001.AA*`) strips projection everywhere; the same "note as you go / resume from structure" force lands in the worker contract, kanban `prime`, and the land-abort instruction. The degenerate no-notes resume still yields the doing-task's body, deps, and lane — strictly more than a missing handover.
+- **PLAN-Nwt-001.A5 — separation is a grep, not a vibe.** `PROP-Nwt-001.S5`: after PH4, `rg -i 'devflow|agent-plan|delegation' spools/kanban*` returns only the allowed phrase "execution strands". The kanban namespace names one methodology nowhere; the stage→writer coupling lives solely in the composition site (PH5), the same dependency inversion kanban already applies to devflow.
+- **PLAN-Nwt-001.A6 — one file, one owner within a phase.** Where a phase touches disjoint files (PH1's `notes/alpha.clj` vs `batteries.clj` vs `delegation.clj`; PH3's doc set) those are parallel-safe slices; where it touches one large file across concerns (kanban's task tier and handover removal both edit `kanban.clj`) the slices serialize on that file — PH2 and PH3 must not both hold `kanban.clj` open concurrently.
 
 ## PLAN-Nwt-001.P3 Affected areas
 
 | ID | Area | Expected change |
-| -- | ---- | --------------- |
+| --- | --- | --- |
 | PLAN-Nwt-001.AA1 | `src/skein/api/notes/alpha.clj` | Accrete `writer`/`write!`/`writer-ref`/`writer-ref->prompt` beside the untouched `note!`/`notes` (`DELTA-Nwt-001.C1`–`C4`); no `ref->writer` — the constructor reconstructs from a ref. Validate target-or-thunk, decoration, and author shapes loudly at construction, and per-call `:decoration`/consumed refs loudly at use, naming the offending field; cover the negative cases in tests. |
 | PLAN-Nwt-001.AA2 | `src/skein/api/vocab/alpha.clj` | Add `"note/kind"` to the core `note-namespace-declaration` `:keys` (`:103`); the open value set (`activity`/`decision`/`review-dump`/`summary`, absent ⟹ `activity`) is documented, not enum-enforced (`DELTA-Nwt-001.C6`). |
 | PLAN-Nwt-001.AA3 | `spools/src/skein/spools/batteries.clj` | Add an `:attr {:type :map}` flag to `note-arg-spec` (`:465`) and thread it as decoration into `note-op` (`:334`), mirroring `add-arg-spec`'s `:attr` (`DELTA-Nwt-001.J1`). |
-| PLAN-Nwt-001.AA4 | `spools/delegation/src/skein/spools/delegation.clj` | `op-note` (`:1649`) parses repeatable `--attr key=value` into decoration; the four delegation-side hand-built `agent note <id>` *write* fragments (worker contract `:101`, `post-with-tag` `:945-958` as used by `review-prompt` `:1010-1020`, `review-synthesis-prompt` `:1037-1053`, `panel-synthesis-prompt` `:1289`) converge on `writer-ref->prompt`; the read-side `read-the-board` fragment (`:926-943`) stays inline (`PLAN-Nwt-001.R2`); the pass `[tag]` graduates from text prefix to a decoration attr. |
+| PLAN-Nwt-001.AA4 | `spools/delegation/src/skein/spools/delegation.clj` | `op-note` (`:1649`) parses repeatable `--attr key=value` into decoration; the four delegation-side hand-built `agent note <id>` _write_ fragments (worker contract `:101`, `post-with-tag` `:945-958` as used by `review-prompt` `:1010-1020`, `review-synthesis-prompt` `:1037-1053`, `panel-synthesis-prompt` `:1289`) converge on `writer-ref->prompt`; the read-side `read-the-board` fragment (`:926-943`) stays inline (`PLAN-Nwt-001.R2`); the pass `[tag]` graduates from text prefix to a decoration attr. |
 | PLAN-Nwt-001.AA5 | `spools/agent-run/src/skein/spools/agent_run.clj` | The interactive completion-contract note line renders through `writer-ref->prompt` when `for-id` exists (`:818`); the target-less headless guidance (`:789`) and no-`for-id` branch stay hand-written (a writer-ref needs one resolved target); `note!`/`notes` wrappers (`:2219-2235`) are unchanged (they already pass opts through). |
 | PLAN-Nwt-001.AA6 | `spools/kanban/src/skein/spools/kanban.clj` | Add `task add`/`task list` subcommands stamping declared task attrs + `parent-of` (+ optional `depends-on`); add pure-graph derived-status computation; add a tasks projection to `card-view` and a doing-task line to the board claimed/in_review lanes; declare task-tier vocab in `install!` (`:859`). Remove the handover primitive and every projection (see AA7). Purge devflow/agent-plan/delegation names → "execution strands" (ns docstring `:13-14`, `about` `:669-672`, `prime` `:722-723,736-737`). |
 | PLAN-Nwt-001.AA7 | `spools/kanban/src/skein/spools/kanban.clj` (handover removal inventory, verified 2026-07-10) | Remove `handover-attr` (`:34`), `--handover` in `note!` (`:327-349`), `card-view` `:latest-handover` join (`:441`), `latest-handover-for` (`:488-494`), board handover join (`:551-560`), `handover-line` + `board-str` uses (`:597-638`), `about`/`prime` `:handover-contract` + handover vocab rows + `:notes-and-handovers` (`:664,673-677,742-753`), and the `note` arg-spec `--handover` flag (`:809`). |
@@ -89,276 +40,118 @@ findings a home, not a shape).
 
 ## PLAN-Nwt-001.P4 Contract and migration impact
 
-- **PLAN-Nwt-001.CM1 — accretive alpha, no signature break.** Every writer function is *new* on
-  `skein.api.notes.alpha`; `note!`/`notes` are byte-identical after this feature (`DELTA-Nwt-001.C1`,
-  `PROP-Nwt-001.NG2`). No consumer of the existing primitive changes call shape. The writer is consumed ~95% as
-  serialized data rendered into prompts and only marginally as a called function (the design's grounding for a
-  data-first value over a ctx-dispatch port, `DELTA-Nwt-001.C5`).
-- **PLAN-Nwt-001.CM2 — CLI surface accretes, so go + smoke gate.** `strand note --attr` (batteries),
-  `strand agent note --attr` (delegation), and `strand kanban task add|list` change arg-specs, so
-  `(cd cli && go test ./...)` and `clojure -M:smoke` are required gates, not optional (`PROP-Nwt-001.S2`,
-  `DELTA-Nwt-001.J1`). Per `DELTA-Nwt-001.J1` this is spool-op contract (`spools/batteries.md`, agent-run spool),
-  **not** a `cli.md`/SPEC-002 change — the dispatcher already ships verbatim argv — so there is no `cli.delta.md`.
-- **PLAN-Nwt-001.CM3 — no strand-model or alpha-surface delta promotion.** `DELTA-Nwt-001.J2` records that the
-  task tier rests entirely on existing strand-model primitives (SPEC-001.P2 "no core status", P5
-  `parent-of`/`depends-on`, P7 readiness) and adds no core contract; it is a kanban-spool contract recorded in
-  `spools/kanban.md`. The only durable-spec touch is `DELTA-Nwt-001` itself flipping Draft→Merged at acceptance;
-  the root `strand-model.md` is unchanged.
-- **PLAN-Nwt-001.CM4 — data migration is projection-only.** Historical kanban/handover notes keep their
-  `kanban/handover` decorating attr (immutable, harmless); the surfaces simply stop *projecting* it
-  (`PROP-Nwt-001.NG4`). No rewrite script, no ceremony, no weaver restart on data grounds. The one operational
-  hazard is **resume-path cutover** (`PLAN-Nwt-001.CM5`).
-- **PLAN-Nwt-001.CM5 — pre-merge resume-path cutover (coordinator action).** Any card whose live resume path is
-  its latest handover must gain an equivalent task/note resume point *before* the surfaces drop handover
-  projection. As of 2026-07-10 that is cards `3tgaj` and `1x2zz`. This is a coordinator step gated on the merge,
-  not a worker task, and is called out again in `PLAN-Nwt-001.P5` PH3 and `PLAN-Nwt-001.R3`.
+- **PLAN-Nwt-001.CM1 — accretive alpha, no signature break.** Every writer function is _new_ on `skein.api.notes.alpha`; `note!`/`notes` are byte-identical after this feature (`DELTA-Nwt-001.C1`, `PROP-Nwt-001.NG2`). No consumer of the existing primitive changes call shape. The writer is consumed ~95% as serialized data rendered into prompts and only marginally as a called function (the design's grounding for a data-first value over a ctx-dispatch port, `DELTA-Nwt-001.C5`).
+- **PLAN-Nwt-001.CM2 — CLI surface accretes, so go + smoke gate.** `strand note --attr` (batteries), `strand agent note --attr` (delegation), and `strand kanban task add|list` change arg-specs, so `(cd cli && go test ./...)` and `clojure -M:smoke` are required gates, not optional (`PROP-Nwt-001.S2`, `DELTA-Nwt-001.J1`). Per `DELTA-Nwt-001.J1` this is spool-op contract (`spools/batteries.md`, agent-run spool), **not** a `cli.md`/SPEC-002 change — the dispatcher already ships verbatim argv — so there is no `cli.delta.md`.
+- **PLAN-Nwt-001.CM3 — no strand-model or alpha-surface delta promotion.** `DELTA-Nwt-001.J2` records that the task tier rests entirely on existing strand-model primitives (SPEC-001.P2 "no core status", P5 `parent-of`/`depends-on`, P7 readiness) and adds no core contract; it is a kanban-spool contract recorded in `spools/kanban.md`. The only durable-spec touch is `DELTA-Nwt-001` itself flipping Draft→Merged at acceptance; the root `strand-model.md` is unchanged.
+- **PLAN-Nwt-001.CM4 — data migration is projection-only.** Historical kanban/handover notes keep their `kanban/handover` decorating attr (immutable, harmless); the surfaces simply stop _projecting_ it (`PROP-Nwt-001.NG4`). No rewrite script, no ceremony, no weaver restart on data grounds. The one operational hazard is **resume-path cutover** (`PLAN-Nwt-001.CM5`).
+- **PLAN-Nwt-001.CM5 — pre-merge resume-path cutover (coordinator action).** Any card whose live resume path is its latest handover must gain an equivalent task/note resume point _before_ the surfaces drop handover projection. As of 2026-07-10 that is cards `3tgaj` and `1x2zz`. This is a coordinator step gated on the merge, not a worker task, and is called out again in `PLAN-Nwt-001.P5` PH3 and `PLAN-Nwt-001.R3`.
 
 ## PLAN-Nwt-001.P5 Implementation phases
 
-Each phase names its owned files, its dependency, its validation gate, and its Done-when. Phases are the mostly-serial
-keystone spine (`PLAN-Nwt-001.A1`); parallel fan-out lives *inside* a phase on disjoint files. Per-task decomposition is
-the next stage's work, not this plan's.
+Each phase names its owned files, its dependency, its validation gate, and its Done-when. Phases are the mostly-serial keystone spine (`PLAN-Nwt-001.A1`); parallel fan-out lives _inside_ a phase on disjoint files. Per-task decomposition is the next stage's work, not this plan's.
 
 ### PLAN-Nwt-001.PH1 — writer surface + CLI decoration passthrough + `note/kind` vocab (keystone)
 
-- **Owned files:** `src/skein/api/notes/alpha.clj`, `src/skein/api/vocab/alpha.clj`,
-  `spools/src/skein/spools/batteries.clj`, `spools/delegation/src/skein/spools/delegation.clj` (op-note only),
-  plus their tests. Disjoint enough to fan out after the writer functions exist.
+- **Owned files:** `src/skein/api/notes/alpha.clj`, `src/skein/api/vocab/alpha.clj`, `spools/src/skein/spools/batteries.clj`, `spools/delegation/src/skein/spools/delegation.clj` (op-note only), plus their tests. Disjoint enough to fan out after the writer functions exist.
 - **Depends-on:** none (lands first; everything hangs off it).
-- **Change:** accrete the writer value family on `skein.api.notes.alpha` per `DELTA-Nwt-001.C1`–`C5` —
-  `(writer runtime target-or-thunk {:keys [decoration by]})`, `(write! w text opts)` (per-call decoration
-  shallow-merges per key OVER the writer default; `:by` overrides; `:round` passes through), `(writer-ref w)`
-  (resolve the thunk exactly once, freeze `{:target :decoration :by}`), and
-  `(writer-ref->prompt ref)` as the single renderer of the `agent note <target> "<text>" --by <by> --attr k=v`
-  fragment. No `ref->writer` ships — the constructor reconstructs from a ref, and accretion-only surface adds
-  no sugar without a named consumer. Malformed refs and per-call decoration maps fail loudly naming the field;
-  tests cover the negative cases. Add `"note/kind"` to the core `note` vocab declaration (`DELTA-Nwt-001.C6`). Add `--attr`
-  decoration passthrough to the batteries `note` op and the delegation `agent note` op (repeatable `key=value`,
-  same convention as `add`/`update`). Emitting spools *take* writers and never choose their own targets.
-  The stage-keyed map itself ships as **guidance only** in this feature — no code here implements a stage
-  lookup, so "fail loudly on a missing key, never a silent card fallback" is the documented convention the
-  future glue site must honour (recorded in the PH5 coordination text), not a testable gate in this queue
-  (change-review-758179fb finding 4).
-- **Validation:** cold `clojure -M:test skein.notes-test skein.spools.batteries-test skein.delegation-test`
-  (adjust to the actual namespaces the writer/batteries/delegation tests live in); vocab declaration present via
-  the vocab reader; `(cd cli && go test ./...)` + `clojure -M:smoke` because the note arg-specs change.
-- **Done-when:** `writer`/`write!`/`writer-ref`/`writer-ref->prompt` live beside the untouched
-  `note!`/`notes`; `write!` merges per-call decoration over the writer default; `writer-ref` resolves a thunk
-  once; `writer-ref->prompt` is the sole renderer of the note-writing fragment; `strand note --attr` and
-  `strand agent note --attr` round-trip decoration onto the note strand; `note/kind` is declared; focused +
-  go + smoke green.
+- **Change:** accrete the writer value family on `skein.api.notes.alpha` per `DELTA-Nwt-001.C1`–`C5` — `(writer runtime target-or-thunk {:keys [decoration by]})`, `(write! w text opts)` (per-call decoration shallow-merges per key OVER the writer default; `:by` overrides; `:round` passes through), `(writer-ref w)` (resolve the thunk exactly once, freeze `{:target :decoration :by}`), and `(writer-ref->prompt ref)` as the single renderer of the `agent note <target> "<text>" --by <by> --attr k=v` fragment. No `ref->writer` ships — the constructor reconstructs from a ref, and accretion-only surface adds no sugar without a named consumer. Malformed refs and per-call decoration maps fail loudly naming the field; tests cover the negative cases. Add `"note/kind"` to the core `note` vocab declaration (`DELTA-Nwt-001.C6`). Add `--attr` decoration passthrough to the batteries `note` op and the delegation `agent note` op (repeatable `key=value`, same convention as `add`/`update`). Emitting spools _take_ writers and never choose their own targets. The stage-keyed map itself ships as **guidance only** in this feature — no code here implements a stage lookup, so "fail loudly on a missing key, never a silent card fallback" is the documented convention the future glue site must honour (recorded in the PH5 coordination text), not a testable gate in this queue (change-review-758179fb finding 4).
+- **Validation:** cold `clojure -M:test skein.notes-test skein.spools.batteries-test skein.delegation-test` (adjust to the actual namespaces the writer/batteries/delegation tests live in); vocab declaration present via the vocab reader; `(cd cli && go test ./...)` + `clojure -M:smoke` because the note arg-specs change.
+- **Done-when:** `writer`/`write!`/`writer-ref`/`writer-ref->prompt` live beside the untouched `note!`/`notes`; `write!` merges per-call decoration over the writer default; `writer-ref` resolves a thunk once; `writer-ref->prompt` is the sole renderer of the note-writing fragment; `strand note --attr` and `strand agent note --attr` round-trip decoration onto the note strand; `note/kind` is declared; focused + go + smoke green.
 
 ### PLAN-Nwt-001.PH2 — kanban task tier (`task add`/`list`, derived status, projections, vocab)
 
 - **Owned files:** `spools/kanban/src/skein/spools/kanban.clj`, `test/skein/kanban_test.clj`.
-- **Depends-on:** none — PH2 is pure task-graph work with no writer call sites and may run in parallel with PH1
-  on disjoint files. (Tasks are the *targets* writers route to; the wiring that injects writer-refs is PH5's
-  glue concern, not PH2's.)
-- **Change:** add `kanban task add` (stamp declared task attrs + a `parent-of` edge under the feature card, plus
-  optional `depends-on` edges — the same edges that are the concurrency DAG) and `kanban task list`. Compute the
-  four derived statuses from pure graph + core attrs only (`done` ⟸ `state=closed`; `blocked` ⟸ active with a
-  `depends-on` target not closed; `doing` ⟸ active, deps closed, `owner` present; `ready` ⟸ active, deps closed,
-  no `owner`) — reading no delegation/agent-run vocabulary. Project a tasks lane in `card-view` and surface the
-  doing-task title on the board claimed/in_review lanes. Declare the task-tier attrs in the `install!` vocab
-  declaration (`kanban.clj:859`).
-- **Validation:** cold `clojure -M:test skein.kanban-test`; `(cd cli && go test ./...)` + `clojure -M:smoke`
-  (the `task` subcommand changes the kanban arg-spec).
-- **Done-when:** `task add`/`list` create and project tasks; the four statuses derive purely from graph + core
-  attrs with no other-spool vocabulary read; `card-view` shows the tasks lane and the board shows the doing-task
-  title; task-tier vocab declared; focused + go + smoke green.
+- **Depends-on:** none — PH2 is pure task-graph work with no writer call sites and may run in parallel with PH1 on disjoint files. (Tasks are the _targets_ writers route to; the wiring that injects writer-refs is PH5's glue concern, not PH2's.)
+- **Change:** add `kanban task add` (stamp declared task attrs + a `parent-of` edge under the feature card, plus optional `depends-on` edges — the same edges that are the concurrency DAG) and `kanban task list`. Compute the four derived statuses from pure graph + core attrs only (`done` ⟸ `state=closed`; `blocked` ⟸ active with a `depends-on` target not closed; `doing` ⟸ active, deps closed, `owner` present; `ready` ⟸ active, deps closed, no `owner`) — reading no delegation/agent-run vocabulary. Project a tasks lane in `card-view` and surface the doing-task title on the board claimed/in_review lanes. Declare the task-tier attrs in the `install!` vocab declaration (`kanban.clj:859`).
+- **Validation:** cold `clojure -M:test skein.kanban-test`; `(cd cli && go test ./...)` + `clojure -M:smoke` (the `task` subcommand changes the kanban arg-spec).
+- **Done-when:** `task add`/`list` create and project tasks; the four statuses derive purely from graph + core attrs with no other-spool vocabulary read; `card-view` shows the tasks lane and the board shows the doing-task title; task-tier vocab declared; focused + go + smoke green.
 
 ### PLAN-Nwt-001.PH3 — handover retirement (removal inventory + re-homed discipline)
 
-- **Owned files:** `spools/kanban/src/skein/spools/kanban.clj`, `test/skein/kanban_test.clj`, `.skein/config.clj`,
-  `test/skein/config_test.clj`, `.skein/workflows.clj`, `CLAUDE.md`, `AGENTS.md`, and the handover prose in
-  `spools/kanban.md`/`spools/kanban.cookbook.md`/`spools/ephemeral.cookbook.md`.
-- **Depends-on:** PH2 (tasks are the replacement resume point; retiring handover before the tier exists would
-  leave a gap). Serializes with PH2 on `kanban.clj` — never held open concurrently (`PLAN-Nwt-001.A6`).
-- **Change:** apply the full verified removal inventory (`PLAN-Nwt-001.AA7`, `AA8`, `AA10`, `AA11`, `AA13`).
-  Re-home the discipline with equal force: worker contracts, kanban `prime`, and the land-abort instruction say
-  "note as you go; resume from the doing-task + its latest note" rather than "leave a handover before stopping".
-  Historical `kanban/handover` attrs are left immutable and simply unprojected (`PROP-Nwt-001.NG4`).
-- **Pre-merge coordinator step (`PLAN-Nwt-001.CM5`):** cards `3tgaj` and `1x2zz` (any card whose resume path is
-  its latest handover as of cutover) get an equivalent task/note resume point **before** the projection drops.
-  This is a coordinator action gated on the merge, flagged here and in `PLAN-Nwt-001.R3` — not a worker task.
-- **Validation:** cold `clojure -M:test skein.kanban-test skein.config-test`; `make docs-check` at zero findings
-  for the prose edits.
-- **Done-when:** no `kanban/handover` projection remains in code, tests, `.skein` config/workflow text, repo
-  agent docs, or the kanban docs/cookbooks; the note-as-you-go discipline is stated with equal force in the
-  worker contract, `prime`, and land-abort; the resume-path cutover for `3tgaj`/`1x2zz` is recorded as a
-  pre-merge coordinator gate; focused + docs-check green.
+- **Owned files:** `spools/kanban/src/skein/spools/kanban.clj`, `test/skein/kanban_test.clj`, `.skein/config.clj`, `test/skein/config_test.clj`, `.skein/workflows.clj`, `CLAUDE.md`, `AGENTS.md`, and the handover prose in `spools/kanban.md`/`spools/kanban.cookbook.md`/`spools/ephemeral.cookbook.md`.
+- **Depends-on:** PH2 (tasks are the replacement resume point; retiring handover before the tier exists would leave a gap). Serializes with PH2 on `kanban.clj` — never held open concurrently (`PLAN-Nwt-001.A6`).
+- **Change:** apply the full verified removal inventory (`PLAN-Nwt-001.AA7`, `AA8`, `AA10`, `AA11`, `AA13`). Re-home the discipline with equal force: worker contracts, kanban `prime`, and the land-abort instruction say "note as you go; resume from the doing-task + its latest note" rather than "leave a handover before stopping". Historical `kanban/handover` attrs are left immutable and simply unprojected (`PROP-Nwt-001.NG4`).
+- **Pre-merge coordinator step (`PLAN-Nwt-001.CM5`):** cards `3tgaj` and `1x2zz` (any card whose resume path is its latest handover as of cutover) get an equivalent task/note resume point **before** the projection drops. This is a coordinator action gated on the merge, flagged here and in `PLAN-Nwt-001.R3` — not a worker task.
+- **Validation:** cold `clojure -M:test skein.kanban-test skein.config-test`; `make docs-check` at zero findings for the prose edits.
+- **Done-when:** no `kanban/handover` projection remains in code, tests, `.skein` config/workflow text, repo agent docs, or the kanban docs/cookbooks; the note-as-you-go discipline is stated with equal force in the worker contract, `prime`, and land-abort; the resume-path cutover for `3tgaj`/`1x2zz` is recorded as a pre-merge coordinator gate; focused + docs-check green.
 
 ### PLAN-Nwt-001.PH4 — devflow purge from the kanban surface
 
-- **Owned files:** `spools/kanban/src/skein/spools/kanban.clj` (docstrings/`about`/`prime`), `spools/kanban.md`,
-  `spools/kanban.cookbook.md`.
-- **Depends-on:** PH3 (same-file serialization on `kanban.clj`; the purge is a coherent second pass once the
-  handover surfaces are gone). Doc files may fan out in parallel with the code edit if held disjoint.
-- **Change:** replace every devflow/agent-plan/delegation name in the kanban namespace with "execution strands"
-  (ns docstring `:13-14`, `about` `:convention` `:669-672`, `prime` working-agreement/pick-up text
-  `:722-723,736-737`; `kanban.md:11,45`; cookbook mentions). Litmus: delete devflow, kanban text is untouched.
-- **Validation:** `rg -i 'devflow|agent-plan|delegation' spools/kanban*` returns only the allowed phrase
-  "execution strands"; `make docs-check` at zero findings; cold `clojure -M:test skein.kanban-test` (docstring
-  edits do not change behavior but keep the suite honest).
+- **Owned files:** `spools/kanban/src/skein/spools/kanban.clj` (docstrings/`about`/`prime`), `spools/kanban.md`, `spools/kanban.cookbook.md`.
+- **Depends-on:** PH3 (same-file serialization on `kanban.clj`; the purge is a coherent second pass once the handover surfaces are gone). Doc files may fan out in parallel with the code edit if held disjoint.
+- **Change:** replace every devflow/agent-plan/delegation name in the kanban namespace with "execution strands" (ns docstring `:13-14`, `about` `:convention` `:669-672`, `prime` working-agreement/pick-up text `:722-723,736-737`; `kanban.md:11,45`; cookbook mentions). Litmus: delete devflow, kanban text is untouched.
+- **Validation:** `rg -i 'devflow|agent-plan|delegation' spools/kanban*` returns only the allowed phrase "execution strands"; `make docs-check` at zero findings; cold `clojure -M:test skein.kanban-test` (docstring edits do not change behavior but keep the suite honest).
 - **Done-when:** no methodology name survives in the kanban namespace or docs; the grep is clean; docs-check green.
 
 ### PLAN-Nwt-001.PH5 — glue + prompt-site absorption + api-docs regen
 
-- **Owned files:** `spools/delegation/src/skein/spools/delegation.clj` (prompt fragments),
-  `spools/agent-run/src/skein/spools/agent_run.clj` (preambles), `CLAUDE.md`/`AGENTS.md` (coordination text),
-  the `*.api.md` regen, and any remaining `spools/kanban.md`/cookbook task-tier prose.
-- **Depends-on:** PH1 (`writer-ref->prompt` must exist) and PH2/PH3 (the coordination guidance references the
-  task tier and the retired handover). `delegation.clj` and `agent_run.clj` are disjoint files and fan out.
-- **Change:** converge the five concrete-target `agent note <id>` *write* sites on `writer-ref->prompt`
-  (`PLAN-Nwt-001.AA4`, `AA5`): delegation worker contract (`:101`), `post-with-tag` (`:945-958`, serving
-  `review-prompt` `:1010-1020`), `review-synthesis-prompt` (`:1037-1053`), `panel-synthesis-prompt` (`:1289`);
-  agent-run interactive completion contract when `for-id` exists (`:818`). The read-side `read-the-board`
-  fragment (`:926-943`) and the target-less generic lines — the headless preamble guidance (`:789`) and the
-  no-`for-id` branch — stay inline: `writer-ref->prompt` requires one resolved target
-  (`PLAN-Nwt-001.R2`; change-review-758179fb finding 3). The review/panel pass tag graduates from a `[tag]` text prefix to a decoration attr threaded through
-  the writer-ref (`PLAN-Nwt-001.R1`). Add the stage-keyed writer wiring guidance to the coordination text:
-  "track through kanban; correlate each kanban task to a devflow phase; build one writer per devflow stage
-  (`:implementation`/`:review`) targeting the right kanban task; thread the writer-refs into delegated runs at
-  spawn." The stage→writer map lives here in the composition site, not in kanban or devflow. Regenerate
-  `make api-docs`.
-- **Validation:** cold `clojure -M:test` on the delegation and agent-run namespaces touched; `(cd cli && go test
-  ./...)` + `clojure -M:smoke`; `make fmt-check lint reflect-check docs-check` at zero findings; `make api-docs`
-  clean; `git status --short` clear of generated SQLite/runtime artifacts.
-- **Done-when:** `writer-ref->prompt` is the single source of the note-writing fragment (no hand-built
-  `agent note <id>` string remains in the five concrete-target write sites); the pass tag is a decoration attr; the stage-keyed writer
-  convention is documented in the composition site only; api-docs regenerated; all P6 gates green.
+- **Owned files:** `spools/delegation/src/skein/spools/delegation.clj` (prompt fragments), `spools/agent-run/src/skein/spools/agent_run.clj` (preambles), `CLAUDE.md`/`AGENTS.md` (coordination text), the `*.api.md` regen, and any remaining `spools/kanban.md`/cookbook task-tier prose.
+- **Depends-on:** PH1 (`writer-ref->prompt` must exist) and PH2/PH3 (the coordination guidance references the task tier and the retired handover). `delegation.clj` and `agent_run.clj` are disjoint files and fan out.
+- **Change:** converge the five concrete-target `agent note <id>` _write_ sites on `writer-ref->prompt` (`PLAN-Nwt-001.AA4`, `AA5`): delegation worker contract (`:101`), `post-with-tag` (`:945-958`, serving `review-prompt` `:1010-1020`), `review-synthesis-prompt` (`:1037-1053`), `panel-synthesis-prompt` (`:1289`); agent-run interactive completion contract when `for-id` exists (`:818`). The read-side `read-the-board` fragment (`:926-943`) and the target-less generic lines — the headless preamble guidance (`:789`) and the no-`for-id` branch — stay inline: `writer-ref->prompt` requires one resolved target (`PLAN-Nwt-001.R2`; change-review-758179fb finding 3). The review/panel pass tag graduates from a `[tag]` text prefix to a decoration attr threaded through the writer-ref (`PLAN-Nwt-001.R1`). Add the stage-keyed writer wiring guidance to the coordination text: "track through kanban; correlate each kanban task to a devflow phase; build one writer per devflow stage (`:implementation`/`:review`) targeting the right kanban task; thread the writer-refs into delegated runs at spawn." The stage→writer map lives here in the composition site, not in kanban or devflow. Regenerate `make api-docs`.
+- **Validation:** cold `clojure -M:test` on the delegation and agent-run namespaces touched; `(cd cli && go test ./...)` + `clojure -M:smoke`; `make fmt-check lint reflect-check docs-check` at zero findings; `make api-docs` clean; `git status --short` clear of generated SQLite/runtime artifacts.
+- **Done-when:** `writer-ref->prompt` is the single source of the note-writing fragment (no hand-built `agent note <id>` string remains in the five concrete-target write sites); the pass tag is a decoration attr; the stage-keyed writer convention is documented in the composition site only; api-docs regenerated; all P6 gates green.
 
 ## PLAN-Nwt-001.P6 Validation strategy
 
-- **PLAN-Nwt-001.V1 — per-slice cold focused gate.** Each phase gates on a cold `clojure -M:test <touched-ns…>`
-  naming only the namespaces it touched (`skein.notes-test`, `skein.spools.batteries-test`,
-  `skein.delegation-test`, `skein.kanban-test`, `skein.config-test`, plus the agent-run namespace at PH5).
-  Warm REPL runs iterate but never gate (repo test-tier discipline). The full locked suite runs at queue
-  acceptance and at land, not per phase.
-- **PLAN-Nwt-001.V2 — CLI surface gate.** Because the note ops accrete `--attr` and kanban accretes the `task`
-  subcommand (`PLAN-Nwt-001.CM2`), `(cd cli && go test ./...)` and `clojure -M:smoke` gate every phase that
-  changes an arg-spec (PH1, PH2, PH5).
-- **PLAN-Nwt-001.V3 — quality + docs gates.** `make fmt-check lint reflect-check docs-check` held at zero
-  findings; `make api-docs` regenerated after docstring edits (PH5) with `git status --short` showing only the
-  expected `*.api.md` changes and no generated SQLite/runtime artifacts.
-- **PLAN-Nwt-001.V4 — vocab and separation proofs.** New task-tier attrs and `note/kind` appear in the vocab
-  registry read (`strand vocab`); `rg -i 'devflow|agent-plan|delegation' spools/kanban*` returns only "execution
-  strands" (`PLAN-Nwt-001.A5`).
-- **PLAN-Nwt-001.V5 — writer round-trip proof.** A note written through a writer-ref's rendered CLI fragment
-  (`strand agent note … --attr k=v`) is read back with its decoration intact, proving the load-bearing CLI
-  passthrough closes the process boundary the ref exists for (`DELTA-Nwt-001.J1`).
+- **PLAN-Nwt-001.V1 — per-slice cold focused gate.** Each phase gates on a cold `clojure -M:test <touched-ns…>` naming only the namespaces it touched (`skein.notes-test`, `skein.spools.batteries-test`, `skein.delegation-test`, `skein.kanban-test`, `skein.config-test`, plus the agent-run namespace at PH5). Warm REPL runs iterate but never gate (repo test-tier discipline). The full locked suite runs at queue acceptance and at land, not per phase.
+- **PLAN-Nwt-001.V2 — CLI surface gate.** Because the note ops accrete `--attr` and kanban accretes the `task` subcommand (`PLAN-Nwt-001.CM2`), `(cd cli && go test ./...)` and `clojure -M:smoke` gate every phase that changes an arg-spec (PH1, PH2, PH5).
+- **PLAN-Nwt-001.V3 — quality + docs gates.** `make fmt-check lint reflect-check docs-check` held at zero findings; `make api-docs` regenerated after docstring edits (PH5) with `git status --short` showing only the expected `*.api.md` changes and no generated SQLite/runtime artifacts.
+- **PLAN-Nwt-001.V4 — vocab and separation proofs.** New task-tier attrs and `note/kind` appear in the vocab registry read (`strand vocab`); `rg -i 'devflow|agent-plan|delegation' spools/kanban*` returns only "execution strands" (`PLAN-Nwt-001.A5`).
+- **PLAN-Nwt-001.V5 — writer round-trip proof.** A note written through a writer-ref's rendered CLI fragment (`strand agent note … --attr k=v`) is read back with its decoration intact, proving the load-bearing CLI passthrough closes the process boundary the ref exists for (`DELTA-Nwt-001.J1`).
 
 ## PLAN-Nwt-001.P7 Risks and open questions
 
-- **PLAN-Nwt-001.R1 — frozen roster prompts pin exact text (CONFIRMED).** `delegation.clj:983-986` states the
-  review prompt "reproduces the `read-the-board` and `post-with-tag` fragments byte-for-byte (the frozen roster
-  tests are the compatibility proof)", and `delegation_test.clj:370-374` asserts the pass `[tag]` appears
-  literally in reviewer and synthesis prompt text. Absorbing those sites into `writer-ref->prompt` and graduating
-  the tag to a decoration attr **will** move that frozen text. Approach: change the fragment and the frozen-test
-  assertions in lockstep within PH5 (the tag becomes `--attr <review-pass-key>=<id>`, and the synthesis prompt's
-  "reviewers prefixed their notes with [tag]" becomes "reviewers decorated their notes with …"); revise the
-  byte-for-byte comment at `:983-986` to describe the new single-renderer source of truth. This is the tightest
-  compat surface in the feature; treat the delegation tests as a hard gate, not incidental.
-- **PLAN-Nwt-001.R2 — `read-the-board` is a read fragment, not a write fragment.** `writer-ref->prompt` renders
-  the *write* instruction ("append notes with …"). The `read-the-board` fragment (`:926-943`) renders a *read*
-  (`agent notes <board>`). It is co-located with `post-with-tag` in the absorbed set, but the writer-ref renderer
-  cannot own a read instruction. Judgment (see `PLAN-Nwt-001.DN1`): `writer-ref->prompt` absorbs only the write
-  fragments; the read-board instruction stays inline (or gains a small sibling renderer) — it is not forced
-  through the writer surface.
-- **PLAN-Nwt-001.R3 — resume-path cutover is a live-data hazard.** Dropping handover projection before cards
-  `3tgaj`/`1x2zz` have a task/note resume point would strand an in-flight card (`PLAN-Nwt-001.CM5`). Mitigation:
-  the pre-merge coordinator step in PH3; the merge does not proceed until those cards carry an equivalent resume
-  point. Verify the card set is still `3tgaj`/`1x2zz` at merge time — the board accrues cards continuously.
-- **PLAN-Nwt-001.R4 — no `.skein/CLAUDE.md` exists.** The card places the stage-keyed writer guidance in
-  ".skein/CLAUDE.md coordination text", but that file does not exist; the composition-site coordination text is
-  the repo-root `CLAUDE.md` "Coordination: the canonical .skein world" section (mirrored in `AGENTS.md`).
-  Judgment: land the guidance there. If a `.skein/CLAUDE.md` is later introduced this can move without contract
-  impact — it is glue, not a spool surface.
-- **PLAN-Nwt-001.R5 — `note/kind` default-absent semantics.** An absent `note/kind` reads as `"activity"`
-  (`DELTA-Nwt-001.C6`); the set is open and guidance-only, so no view may *reject* an unknown kind. Any folding
-  or filtering by kind treats absence as activity and passes unknown values through untouched — never a hard
-  enumeration.
-- **PLAN-Nwt-001.R6 — concurrent siblings on kanban tests.** Sibling agents running `skein.kanban-test`
-  concurrently share the full-suite timing budget and flake; the derived-status tests build their own
-  `depends-on` DAG in a disposable world and must not assume board-wide isolation. Keep task-tier tests
-  self-contained (mint their own cards/tasks) and gate the full suite under the shared `flock` lock only.
-- **PLAN-Nwt-001.R7 — nested kanban subcommands.** `task add`/`task list` is a two-level subcommand under the
-  flat `kanban` arg-spec (`kanban.clj:775`). Confirm the arg-spec `:subcommands` machinery supports nesting (the
-  landed argspec-subcommands feature); if it does not, `task` dispatches to a sub-arg-spec inside `kanban-op`.
-  Never hand-write usage strings — declare `:subcommands`.
-- **PLAN-Nwt-001.Q1 — resolved open questions.** `PROP-Nwt-001.Q1` (task authoring surface) and `Q2` (stage-key
-  set) are resolved in-contract (`DELTA-Nwt-001.J2`): `kanban task add`/`list` stamping declared attrs +
-  `parent-of` with bare `strand add` still valid; the glue wires `:implementation`/`:review`, a names-only enum
-  extensible in glue without spool changes. No open question blocks task generation.
+- **PLAN-Nwt-001.R1 — frozen roster prompts pin exact text (CONFIRMED).** `delegation.clj:983-986` states the review prompt "reproduces the `read-the-board` and `post-with-tag` fragments byte-for-byte (the frozen roster tests are the compatibility proof)", and `delegation_test.clj:370-374` asserts the pass `[tag]` appears literally in reviewer and synthesis prompt text. Absorbing those sites into `writer-ref->prompt` and graduating the tag to a decoration attr **will** move that frozen text. Approach: change the fragment and the frozen-test assertions in lockstep within PH5 (the tag becomes `--attr <review-pass-key>=<id>`, and the synthesis prompt's "reviewers prefixed their notes with [tag]" becomes "reviewers decorated their notes with …"); revise the byte-for-byte comment at `:983-986` to describe the new single-renderer source of truth. This is the tightest compat surface in the feature; treat the delegation tests as a hard gate, not incidental.
+- **PLAN-Nwt-001.R2 — `read-the-board` is a read fragment, not a write fragment.** `writer-ref->prompt` renders the _write_ instruction ("append notes with …"). The `read-the-board` fragment (`:926-943`) renders a _read_ (`agent notes <board>`). It is co-located with `post-with-tag` in the absorbed set, but the writer-ref renderer cannot own a read instruction. Judgment (see `PLAN-Nwt-001.DN1`): `writer-ref->prompt` absorbs only the write fragments; the read-board instruction stays inline (or gains a small sibling renderer) — it is not forced through the writer surface.
+- **PLAN-Nwt-001.R3 — resume-path cutover is a live-data hazard.** Dropping handover projection before cards `3tgaj`/`1x2zz` have a task/note resume point would strand an in-flight card (`PLAN-Nwt-001.CM5`). Mitigation: the pre-merge coordinator step in PH3; the merge does not proceed until those cards carry an equivalent resume point. Verify the card set is still `3tgaj`/`1x2zz` at merge time — the board accrues cards continuously.
+- **PLAN-Nwt-001.R4 — no `.skein/CLAUDE.md` exists.** The card places the stage-keyed writer guidance in ".skein/CLAUDE.md coordination text", but that file does not exist; the composition-site coordination text is the repo-root `CLAUDE.md` "Coordination: the canonical .skein world" section (mirrored in `AGENTS.md`). Judgment: land the guidance there. If a `.skein/CLAUDE.md` is later introduced this can move without contract impact — it is glue, not a spool surface.
+- **PLAN-Nwt-001.R5 — `note/kind` default-absent semantics.** An absent `note/kind` reads as `"activity"` (`DELTA-Nwt-001.C6`); the set is open and guidance-only, so no view may _reject_ an unknown kind. Any folding or filtering by kind treats absence as activity and passes unknown values through untouched — never a hard enumeration.
+- **PLAN-Nwt-001.R6 — concurrent siblings on kanban tests.** Sibling agents running `skein.kanban-test` concurrently share the full-suite timing budget and flake; the derived-status tests build their own `depends-on` DAG in a disposable world and must not assume board-wide isolation. Keep task-tier tests self-contained (mint their own cards/tasks) and gate the full suite under the shared `flock` lock only.
+- **PLAN-Nwt-001.R7 — nested kanban subcommands.** `task add`/`task list` is a two-level subcommand under the flat `kanban` arg-spec (`kanban.clj:775`). Confirm the arg-spec `:subcommands` machinery supports nesting (the landed argspec-subcommands feature); if it does not, `task` dispatches to a sub-arg-spec inside `kanban-op`. Never hand-write usage strings — declare `:subcommands`.
+- **PLAN-Nwt-001.Q1 — resolved open questions.** `PROP-Nwt-001.Q1` (task authoring surface) and `Q2` (stage-key set) are resolved in-contract (`DELTA-Nwt-001.J2`): `kanban task add`/`list` stamping declared attrs + `parent-of` with bare `strand add` still valid; the glue wires `:implementation`/`:review`, a names-only enum extensible in glue without spool changes. No open question blocks task generation.
 
 ## PLAN-Nwt-001.P8 Task context
 
-- **PLAN-Nwt-001.TC1 — the contract is the single source of truth.** `PROP-Nwt-001` goals/scope and
-  `DELTA-Nwt-001.C1`–`C6`/`J1`/`J2` are authoritative for every call site; each phase cites the clause and the
-  verified line refs. A change not in a clause is out of scope. The design is settled (2026-07-10 review): the
-  writer is a data-first value, not a ctx-dispatch port — do not reopen it.
-- **PLAN-Nwt-001.TC2 — phase seams for delegation.** PH1 is the serial keystone; PH2 is serial after PH1
-  (writer consumption); PH3 serializes after PH2 on `kanban.clj`; PH4 serializes after PH3 on `kanban.clj`; PH5
-  fans out on `delegation.clj` + `agent_run.clj` (disjoint) after PH1/PH2/PH3. Within PH1 the writer namespace
-  lands first, then batteries/delegation `--attr` and the vocab edit fan out on disjoint files. Two workers never
-  hold `kanban.clj` open at once (`PLAN-Nwt-001.A6`).
+- **PLAN-Nwt-001.TC1 — the contract is the single source of truth.** `PROP-Nwt-001` goals/scope and `DELTA-Nwt-001.C1`–`C6`/`J1`/`J2` are authoritative for every call site; each phase cites the clause and the verified line refs. A change not in a clause is out of scope. The design is settled (2026-07-10 review): the writer is a data-first value, not a ctx-dispatch port — do not reopen it.
+- **PLAN-Nwt-001.TC2 — phase seams for delegation.** PH1 is the serial keystone; PH2 is serial after PH1 (writer consumption); PH3 serializes after PH2 on `kanban.clj`; PH4 serializes after PH3 on `kanban.clj`; PH5 fans out on `delegation.clj` + `agent_run.clj` (disjoint) after PH1/PH2/PH3. Within PH1 the writer namespace lands first, then batteries/delegation `--attr` and the vocab edit fan out on disjoint files. Two workers never hold `kanban.clj` open at once (`PLAN-Nwt-001.A6`).
 - **PLAN-Nwt-001.TC3 — phase → task sketch (one phase is several tasks; counts settle next stage).**
 
-  | Phase | Sketch | Depends-on |
-  | ----- | ------ | ---------- |
-  | PH1 | writer value + ref + prompt renderer; `--attr` on note ops; `note/kind` vocab | — |
-  | PH2 | kanban `task add`/`list` + derived status + projections + task vocab | — (parallel with PH1) |
-  | PH3 | handover removal inventory + re-homed discipline + resume-path cutover (coordinator) | PH2 |
-  | PH4 | devflow-name purge from kanban surface | PH3 |
-  | PH5 | five concrete-target write sites → `writer-ref->prompt`; stage-keyed glue guidance; api-docs regen | PH1, PH2, PH3 |
+    | Phase | Sketch | Depends-on |
+    | --- | --- | --- |
+    | PH1 | writer value + ref + prompt renderer; `--attr` on note ops; `note/kind` vocab | — |
+    | PH2 | kanban `task add`/`list` + derived status + projections + task vocab | — (parallel with PH1) |
+    | PH3 | handover removal inventory + re-homed discipline + resume-path cutover (coordinator) | PH2 |
+    | PH4 | devflow-name purge from kanban surface | PH3 |
+    | PH5 | five concrete-target write sites → `writer-ref->prompt`; stage-keyed glue guidance; api-docs regen | PH1, PH2, PH3 |
 
-- **PLAN-Nwt-001.TC4 — the coordinator carries the non-worker steps.** The `3tgaj`/`1x2zz` resume-path cutover
-  (`PLAN-Nwt-001.CM5`) is a pre-merge coordinator gate, never a worker task. The full locked suite, go tests, and
-  smoke run at queue acceptance and land, not per phase.
-- **PLAN-Nwt-001.TC5 — reading map.** Card `7rxko` (scope + verified inventory) → `PROP-Nwt-001` (goals/scope) →
-  `DELTA-Nwt-001` C-clauses (the contract; single source per TC1) → this plan's phases PH1–PH5 (sequencing) →
-  next-stage `TASK-Nwt-*` files (execution contracts). Vocabulary (strands, edges, notes, spools, writers) is
-  defined in `docs/skein.md` and the spool docs, not re-derived here; every point ID is a grepable anchor.
+- **PLAN-Nwt-001.TC4 — the coordinator carries the non-worker steps.** The `3tgaj`/`1x2zz` resume-path cutover (`PLAN-Nwt-001.CM5`) is a pre-merge coordinator gate, never a worker task. The full locked suite, go tests, and smoke run at queue acceptance and land, not per phase.
+- **PLAN-Nwt-001.TC5 — reading map.** Card `7rxko` (scope + verified inventory) → `PROP-Nwt-001` (goals/scope) → `DELTA-Nwt-001` C-clauses (the contract; single source per TC1) → this plan's phases PH1–PH5 (sequencing) → next-stage `TASK-Nwt-*` files (execution contracts). Vocabulary (strands, edges, notes, spools, writers) is defined in `docs/skein.md` and the spool docs, not re-derived here; every point ID is a grepable anchor.
 
-- **PLAN-Nwt-001.TC6 — task queue authored (2026-07-10, `tasks/`).** The queue cuts the five phases into
-  13 slices (`tasks/index.yml`, `TASK-Nwt-001`–`013`), each independently cold-test verifiable and small
-  enough for one agent run; dependencies flow only through `blocked_by`, no cycles. AFK is the default; the
-  single HITL slice is the coordinator resume-path cutover. Slice → phase → dependency:
+- **PLAN-Nwt-001.TC6 — task queue authored (2026-07-10, `tasks/`).** The queue cuts the five phases into 13 slices (`tasks/index.yml`, `TASK-Nwt-001`–`013`), each independently cold-test verifiable and small enough for one agent run; dependencies flow only through `blocked_by`, no cycles. AFK is the default; the single HITL slice is the coordinator resume-path cutover. Slice → phase → dependency:
 
-  | # | Slice | Phase | Type | `blocked_by` |
-  | - | ----- | ----- | ---- | ------------ |
-  | 1 | notes writer value/ref/`writer-ref->prompt` (+ negative tests, no `ref->writer`) | PH1a | AFK | — |
-  | 2 | batteries `note --attr` + `note/kind` vocab key | PH1b | AFK | — |
-  | 3 | delegation `agent note --attr` (op-note parse only) | PH1c | AFK | — |
-  | 4 | kanban `task add`/`list` + pure-graph derived status + task vocab | PH2a | AFK | — |
-  | 5 | kanban `card-view` tasks lane + board doing-task line | PH2b | AFK | 4 |
-  | 6 | handover removal in `kanban.clj` + tests + re-homed `prime`/`about` | PH3a | AFK | 5 |
-  | 7 | handover prose/config removal (.skein, CLAUDE/AGENTS, kanban docs) + config-test | PH3b | AFK | 5 |
-  | 8 | [HITL] resume-path cutover `3tgaj`/`1x2zz` (coordinator gate) | PH3 | HITL | 6, 7 |
-  | 9 | devflow-name purge from kanban surface | PH4 | AFK | 6, 7 |
-  | 10 | delegation write fragments → `writer-ref->prompt`; `[tag]`→attr; frozen-test lockstep | PH5a | AFK | 1, 3 |
-  | 11 | agent-run preambles → `writer-ref->prompt` | PH5b | AFK | 1 |
-  | 12 | stage-keyed writer glue (CLAUDE/AGENTS) + kanban.md task-tier prose + `make api-docs` | PH5c | AFK | 1–7, 9, 10, 11 |
-  | 13 | full-suite queue acceptance (flock + go + smoke + quality + separation/round-trip proofs) | acceptance | AFK | 1–7, 9, 10, 11, 12 |
+    | # | Slice | Phase | Type | `blocked_by` |
+    | --- | --- | --- | --- | --- |
+    | 1 | notes writer value/ref/`writer-ref->prompt` (+ negative tests, no `ref->writer`) | PH1a | AFK | — |
+    | 2 | batteries `note --attr` + `note/kind` vocab key | PH1b | AFK | — |
+    | 3 | delegation `agent note --attr` (op-note parse only) | PH1c | AFK | — |
+    | 4 | kanban `task add`/`list` + pure-graph derived status + task vocab | PH2a | AFK | — |
+    | 5 | kanban `card-view` tasks lane + board doing-task line | PH2b | AFK | 4 |
+    | 6 | handover removal in `kanban.clj` + tests + re-homed `prime`/`about` | PH3a | AFK | 5 |
+    | 7 | handover prose/config removal (.skein, CLAUDE/AGENTS, kanban docs) + config-test | PH3b | AFK | 5 |
+    | 8 | [HITL] resume-path cutover `3tgaj`/`1x2zz` (coordinator gate) | PH3 | HITL | 6, 7 |
+    | 9 | devflow-name purge from kanban surface | PH4 | AFK | 6, 7 |
+    | 10 | delegation write fragments → `writer-ref->prompt`; `[tag]`→attr; frozen-test lockstep | PH5a | AFK | 1, 3 |
+    | 11 | agent-run preambles → `writer-ref->prompt` | PH5b | AFK | 1 |
+    | 12 | stage-keyed writer glue (CLAUDE/AGENTS) + kanban.md task-tier prose + `make api-docs` | PH5c | AFK | 1–7, 9, 10, 11 |
+    | 13 | full-suite queue acceptance (flock + go + smoke + quality + separation/round-trip proofs) | acceptance | AFK | 1–7, 9, 10, 11, 12 |
 
 - **PLAN-Nwt-001.TC7 — slicing judgment calls (queue stage).**
-  - **PH1 (b)/(c) are independent of (a).** The `--attr` verb parses (Tasks 2/3) and the `note/kind` vocab
-    key do not consume the writer fns, so they are `blocked_by: []` and fan out with Task 1, per the phase
-    guidance — only the prompt-site absorption (Tasks 10/11) consumes `writer-ref->prompt`.
-  - **`kanban.clj` is a strict same-file chain 4→5→6→9.** PH2a/PH2b/PH3a/PH4 all edit `kanban.clj`; they
-    serialize (`PLAN-Nwt-001.A6`), never two workers at once. PH3b (Task 7) is disjoint doc/config files, so
-    it runs parallel to PH3a (both gated on Task 5).
-  - **PH5a kept alone and gated on Task 3.** Task 10 is the riskiest slice (frozen roster prompts,
-    `PLAN-Nwt-001.R1`); it renders `--attr` fragments and edits `delegation.clj`, so it is `blocked_by` both
-    Task 1 (the renderer) and Task 3 (the op-note `--attr` parse in the same file) — the fragment text,
-    tag-as-attr graduation, and `delegation_test.clj:370-374` assertions move in one lockstep slice.
-  - **HITL cutover gated on the removal slices, not the acceptance gate.** Task 8 is a coordinator pre-merge
-    decision (`PLAN-Nwt-001.CM5`, `R3`); it is `blocked_by [6, 7]` (the surfaces that drop projection) and
-    runs beside — not before — the full-suite acceptance (Task 13). The card set is re-verified at merge.
-  - **Doc/glue tail (Task 12) blocks on everything it documents** so `make api-docs` regenerates over final
-    docstrings and the CLAUDE/AGENTS/kanban.md prose edits do not race Tasks 7/9 on the same files.
-  - **`.skein/CLAUDE.md` does not exist (`PLAN-Nwt-001.R4`):** the stage-keyed writer guidance lands in the
-    repo-root `CLAUDE.md`/`AGENTS.md` coordination section, flagged in Task 12.
+    - **PH1 (b)/(c) are independent of (a).** The `--attr` verb parses (Tasks 2/3) and the `note/kind` vocab key do not consume the writer fns, so they are `blocked_by: []` and fan out with Task 1, per the phase guidance — only the prompt-site absorption (Tasks 10/11) consumes `writer-ref->prompt`.
+    - **`kanban.clj` is a strict same-file chain 4→5→6→9.** PH2a/PH2b/PH3a/PH4 all edit `kanban.clj`; they serialize (`PLAN-Nwt-001.A6`), never two workers at once. PH3b (Task 7) is disjoint doc/config files, so it runs parallel to PH3a (both gated on Task 5).
+    - **PH5a kept alone and gated on Task 3.** Task 10 is the riskiest slice (frozen roster prompts, `PLAN-Nwt-001.R1`); it renders `--attr` fragments and edits `delegation.clj`, so it is `blocked_by` both Task 1 (the renderer) and Task 3 (the op-note `--attr` parse in the same file) — the fragment text, tag-as-attr graduation, and `delegation_test.clj:370-374` assertions move in one lockstep slice.
+    - **HITL cutover gated on the removal slices, not the acceptance gate.** Task 8 is a coordinator pre-merge decision (`PLAN-Nwt-001.CM5`, `R3`); it is `blocked_by [6, 7]` (the surfaces that drop projection) and runs beside — not before — the full-suite acceptance (Task 13). The card set is re-verified at merge.
+    - **Doc/glue tail (Task 12) blocks on everything it documents** so `make api-docs` regenerates over final docstrings and the CLAUDE/AGENTS/kanban.md prose edits do not race Tasks 7/9 on the same files.
+    - **`.skein/CLAUDE.md` does not exist (`PLAN-Nwt-001.R4`):** the stage-keyed writer guidance lands in the repo-root `CLAUDE.md`/`AGENTS.md` coordination section, flagged in Task 12.
 
 ## PLAN-Nwt-001.P9 Developer Notes
 
@@ -368,28 +161,10 @@ Append notes here. Do not rewrite earlier notes.
 
 Judgment calls made while planning against the verified code (not imagined):
 
-- **Frozen roster prompts are the real risk (P7.R1).** `delegation.clj:983-986` explicitly freezes the
-  `read-the-board`/`post-with-tag` fragments byte-for-byte, and `delegation_test.clj:370-374` asserts the pass
-  `[tag]` in prompt text. The plan commits to moving the fragment, the tag-as-attr graduation, and the
-  frozen-test assertions together in PH5, and to revising the byte-for-byte comment. This is the one place a
-  worker could break a distant test without noticing.
-- **`read-the-board` stays a read fragment (P7.R2).** The card lists it in the absorbed set, but
-  `writer-ref->prompt` renders only the *write* instruction. I scoped the renderer to write fragments and left
-  the read-board instruction inline rather than forcing a read through the writer surface — flagged so the
-  next-stage task author does not try to make `writer-ref->prompt` own a `agent notes` string.
-- **`.skein/CLAUDE.md` does not exist (P7.R4).** The card and task both name it as the home for stage-keyed
-  writer guidance. I planned the guidance into the repo-root `CLAUDE.md`/`AGENTS.md` coordination section (the
-  actual composition-site coordination text) and flagged the discrepancy rather than inventing a new file.
-- **The writer needs no `note!` change (A2).** `notes/alpha.clj:66` already folds non-`:by`/`:round` opts into
-  decorating attrs, and `agent_run.clj:2219-2235` already passes opts through, so the only real CLI work is the
-  `--attr` parse in the two verb ops. The writer composes over the existing primitive.
-- **`note/kind` is a `:keys` addition, not an enum.** The vocab registry declares attribute *namespaces* with a
-  `:keys` advisory list (`vocab/alpha.clj:97-104`); the C6 value set (`activity`/`decision`/`review-dump`/
-  `summary`) is documentation-and-guidance, so it lands in `spools/kanban.md`/`docs`, not as a registry-enforced
-  enum. Absent ⟹ `activity`, open set (P7.R5).
-- **Task tier serializes on `kanban.clj` (A6, TC2).** PH2 (task tier), PH3 (handover removal), and PH4 (devflow
-  purge) all edit `kanban.clj`; they must run as an ordered same-file chain, never concurrent workers. Only PH1
-  (disjoint namespaces) and PH5 (`delegation.clj` ∥ `agent_run.clj`) have intra-phase parallelism.
-- **Nested subcommand support is a pre-flight check (P7.R7).** `task add`/`list` is two-level under a flat
-  `kanban` arg-spec; confirm `:subcommands` nesting before authoring, per the discovery convention (never
-  hand-write dispatch).
+- **Frozen roster prompts are the real risk (P7.R1).** `delegation.clj:983-986` explicitly freezes the `read-the-board`/`post-with-tag` fragments byte-for-byte, and `delegation_test.clj:370-374` asserts the pass `[tag]` in prompt text. The plan commits to moving the fragment, the tag-as-attr graduation, and the frozen-test assertions together in PH5, and to revising the byte-for-byte comment. This is the one place a worker could break a distant test without noticing.
+- **`read-the-board` stays a read fragment (P7.R2).** The card lists it in the absorbed set, but `writer-ref->prompt` renders only the _write_ instruction. I scoped the renderer to write fragments and left the read-board instruction inline rather than forcing a read through the writer surface — flagged so the next-stage task author does not try to make `writer-ref->prompt` own a `agent notes` string.
+- **`.skein/CLAUDE.md` does not exist (P7.R4).** The card and task both name it as the home for stage-keyed writer guidance. I planned the guidance into the repo-root `CLAUDE.md`/`AGENTS.md` coordination section (the actual composition-site coordination text) and flagged the discrepancy rather than inventing a new file.
+- **The writer needs no `note!` change (A2).** `notes/alpha.clj:66` already folds non-`:by`/`:round` opts into decorating attrs, and `agent_run.clj:2219-2235` already passes opts through, so the only real CLI work is the `--attr` parse in the two verb ops. The writer composes over the existing primitive.
+- **`note/kind` is a `:keys` addition, not an enum.** The vocab registry declares attribute _namespaces_ with a `:keys` advisory list (`vocab/alpha.clj:97-104`); the C6 value set (`activity`/`decision`/`review-dump`/ `summary`) is documentation-and-guidance, so it lands in `spools/kanban.md`/`docs`, not as a registry-enforced enum. Absent ⟹ `activity`, open set (P7.R5).
+- **Task tier serializes on `kanban.clj` (A6, TC2).** PH2 (task tier), PH3 (handover removal), and PH4 (devflow purge) all edit `kanban.clj`; they must run as an ordered same-file chain, never concurrent workers. Only PH1 (disjoint namespaces) and PH5 (`delegation.clj` ∥ `agent_run.clj`) have intra-phase parallelism.
+- **Nested subcommand support is a pre-flight check (P7.R7).** `task add`/`list` is two-level under a flat `kanban` arg-spec; confirm `:subcommands` nesting before authoring, per the discovery convention (never hand-write dispatch).

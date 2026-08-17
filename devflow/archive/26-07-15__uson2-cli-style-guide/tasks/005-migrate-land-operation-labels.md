@@ -1,11 +1,6 @@
 # Task 5: Migrate land operation labels
 
-**Document ID:** `TASK-Ucs-005`
-**Configuration identification:** Document IDs are ordered as document type,
-short name, sequential id, then optional version. Omit `@1`; append `@2`, `@3`,
-etc. only when a new version supersedes an externally referenced document.
-Prefix every nested point ID with the full document ID so references are
-globally grepable.
+**Document ID:** `TASK-Ucs-005` **Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable.
 
 ## TASK-Ucs-005.P1 Scope
 
@@ -13,22 +8,15 @@ Type: AFK
 
 Execution seat: `sol-low`.
 
-Remove mismatching hand-written labels from land subcommand results so dispatch
-supplies `land <verb>`, while flat repo-config projections keep their handler
-labels. Owned files are `.skein/workflows.clj` and
-`test/skein/config_test.clj`.
+Remove mismatching hand-written labels from land subcommand results so dispatch supplies `land <verb>`, while flat repo-config projections keep their handler labels. Owned files are `.skein/workflows.clj` and `test/skein/config_test.clj`.
 
 Commit policy: commit only this task's owned changes on the current feature branch. Use a HEREDOC commit message. Do not amend or include unrelated changes.
 
 ## TASK-Ucs-005.P2 Must implement exactly
 
-- **TASK-Ucs-005.MI1:** Remove hand-written `land-start`, `land-next`,
-  `land-complete`, `land-choose`, `land-status`, and `land-break-lock` operation
-  labels from land subcommand result construction.
+- **TASK-Ucs-005.MI1:** Remove hand-written `land-start`, `land-next`, `land-complete`, `land-choose`, `land-status`, and `land-break-lock` operation labels from land subcommand result construction.
 - **TASK-Ucs-005.MI2:** Let registered-op dispatch supply `land start`, `land next`, `land complete`, `land choose`, `land status`, and `land break-lock`.
-- **TASK-Ucs-005.MI3:** Preserve the already-canonical `land about` handler
-  label. Equal-label tolerance keeps it valid; this slice removes only the
-  mismatching `land-*` labels assigned by the plan.
+- **TASK-Ucs-005.MI3:** Preserve the already-canonical `land about` handler label. Equal-label tolerance keeps it valid; this slice removes only the mismatching `land-*` labels assigned by the plan.
 - **TASK-Ucs-005.MI4:** Update all focused land operation-label assertions to the spaced canonical forms without changing workflow behavior.
 - **TASK-Ucs-005.MI5:** Preserve handler-owned labels on flat repo-config projections because they have no selected subcommand.
 

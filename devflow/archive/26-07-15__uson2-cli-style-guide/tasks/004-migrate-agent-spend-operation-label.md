@@ -1,11 +1,6 @@
 # Task 4: Migrate agent spend operation label
 
-**Document ID:** `TASK-Ucs-004`
-**Configuration identification:** Document IDs are ordered as document type,
-short name, sequential id, then optional version. Omit `@1`; append `@2`, `@3`,
-etc. only when a new version supersedes an externally referenced document.
-Prefix every nested point ID with the full document ID so references are
-globally grepable.
+**Document ID:** `TASK-Ucs-004` **Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable.
 
 ## TASK-Ucs-004.P1 Scope
 
@@ -13,11 +8,7 @@ Type: AFK
 
 Execution seat: `sol-low`.
 
-Remove the in-repo `agent spend` label mismatch so registered-op dispatch
-supplies `agent spend`, then update the direct and agent-run expectations. Owned
-files are `spools/agent-run/src/skein/spools/agent_run.clj`,
-`spools/delegation/src/skein/spools/delegation.clj`,
-`test/skein/delegation_test.clj`, and `test/skein/agent_run_test.clj`.
+Remove the in-repo `agent spend` label mismatch so registered-op dispatch supplies `agent spend`, then update the direct and agent-run expectations. Owned files are `spools/agent-run/src/skein/spools/agent_run.clj`, `spools/delegation/src/skein/spools/delegation.clj`, `test/skein/delegation_test.clj`, and `test/skein/agent_run_test.clj`.
 
 Commit policy: commit only this task's owned changes on the current feature branch. Use a HEREDOC commit message. Do not amend or include unrelated changes.
 
@@ -25,9 +16,7 @@ Commit policy: commit only this task's owned changes on the current feature bran
 
 - **TASK-Ucs-004.MI1:** Remove the hand-written `:operation "agent-spend"` from the spend result producer so dispatch owns the registered subcommand label.
 - **TASK-Ucs-004.MI2:** Update the spend docstring and delegation operation metadata to describe the canonical `agent spend` result without claiming the producer stamps it.
-- **TASK-Ucs-004.MI3:** Update focused delegation and agent-run assertions from
-  `agent-spend` to `agent spend`; preserve all report filters, totals, groups,
-  rows, and failure behavior.
+- **TASK-Ucs-004.MI3:** Update focused delegation and agent-run assertions from `agent-spend` to `agent spend`; preserve all report filters, totals, groups, rows, and failure behavior.
 - **TASK-Ucs-004.MI4:** Regenerate affected API docs only if public docstrings change.
 
 ## TASK-Ucs-004.P3 Done when

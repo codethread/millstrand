@@ -15,16 +15,16 @@ Ship ADR-003's two core changes: the reconcile applied/removed contract as norma
 
 ## PLAN-Cri-001.P3 Affected areas
 
-| ID               | Area                                          | Expected change                                        |
-| ---------------- | --------------------------------------------- | ------------------------------------------------------ |
-| PLAN-Cri-001.AA1 | `src/skein/core/weaver/module_graph.clj`      | `:load` key validation in the closed grammar           |
-| PLAN-Cri-001.AA2 | `src/skein/core/weaver/module_refresh.clj`    | Image branch in `evaluate-module`                      |
-| PLAN-Cri-001.AA3 | `src/skein/api/runtime/alpha.clj`             | `module!` docstring; `::module-declaration` `:load`    |
-| PLAN-Cri-001.AA4 | `devflow/specs/daemon-runtime.md`             | New C46b; C45/C46 grammar admission                    |
-| PLAN-Cri-001.AA5 | `devflow/specs/repl-api.md`                   | P5 helper prose + `:ns`-target paragraph gain `:load :image`; P6 example unchanged |
-| PLAN-Cri-001.AA6 | `test/skein/core/weaver/modules_test.clj`                  | Grammar, image-activation, reconcile-contract tests    |
-| PLAN-Cri-001.AA7 | `test/skein/api/runtime/alpha_test.clj`       | API-tier acceptance of the image declaration           |
-| PLAN-Cri-001.AA8 | `docs/api/runtime.api.md`                     | Regenerated via `make api-docs` (docstring change)     |
+| ID | Area | Expected change |
+| --- | --- | --- |
+| PLAN-Cri-001.AA1 | `src/skein/core/weaver/module_graph.clj` | `:load` key validation in the closed grammar |
+| PLAN-Cri-001.AA2 | `src/skein/core/weaver/module_refresh.clj` | Image branch in `evaluate-module` |
+| PLAN-Cri-001.AA3 | `src/skein/api/runtime/alpha.clj` | `module!` docstring; `::module-declaration` `:load` |
+| PLAN-Cri-001.AA4 | `devflow/specs/daemon-runtime.md` | New C46b; C45/C46 grammar admission |
+| PLAN-Cri-001.AA5 | `devflow/specs/repl-api.md` | P5 helper prose + `:ns`-target paragraph gain `:load :image`; P6 example unchanged |
+| PLAN-Cri-001.AA6 | `test/skein/core/weaver/modules_test.clj` | Grammar, image-activation, reconcile-contract tests |
+| PLAN-Cri-001.AA7 | `test/skein/api/runtime/alpha_test.clj` | API-tier acceptance of the image declaration |
+| PLAN-Cri-001.AA8 | `docs/api/runtime.api.md` | Regenerated via `make api-docs` (docstring change) |
 
 ## PLAN-Cri-001.P4 Contract and migration impact
 

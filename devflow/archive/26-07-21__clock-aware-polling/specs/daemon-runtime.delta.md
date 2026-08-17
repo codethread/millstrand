@@ -1,10 +1,6 @@
 # Weaver Runtime delta for runtime-owned Clock
 
-**Document ID:** `DELTA-Clp-Runtime-001`
-**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`)
-**Feature:** [../proposal.md](../proposal.md) (`PROP-Clp-001`)
-**Status:** Merged
-**Last Updated:** 2026-07-20
+**Document ID:** `DELTA-Clp-Runtime-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Clp-001`) **Status:** Merged **Last Updated:** 2026-07-20
 
 ## DELTA-Clp-Runtime-001.P1 Summary
 

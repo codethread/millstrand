@@ -1,13 +1,6 @@
 # Shell gate script files plan
 
-**Document ID:** `PLAN-Wgs-001`
-**Feature:** `wnwi9-shell-gate-scripts`
-**Proposal:** [proposal.md](./proposal.md)
-**RFC:** None
-**Root specs:** None
-**Feature specs:** None
-**Status:** Reviewed
-**Last Updated:** 2026-07-26
+**Document ID:** `PLAN-Wgs-001` **Feature:** `wnwi9-shell-gate-scripts` **Proposal:** [proposal.md](./proposal.md) **RFC:** None **Root specs:** None **Feature specs:** None **Status:** Reviewed **Last Updated:** 2026-07-26
 
 **Configuration identification:** `PLAN-Wgs-001` is the first plan for the shell gate script files feature. Nested point IDs use the full document ID.
 

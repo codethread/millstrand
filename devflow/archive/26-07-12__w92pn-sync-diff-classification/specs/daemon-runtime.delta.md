@@ -1,9 +1,6 @@
 # daemon-runtime delta for w92pn-sync-diff-classification
 
-**Document ID:** `DELTA-Sdc-001`
-**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
-**Status:** Draft
-**Last Updated:** 2026-07-12
+**Document ID:** `DELTA-Sdc-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) **Status:** Draft **Last Updated:** 2026-07-12
 
 ## DELTA-Sdc-001.P1 Summary
 

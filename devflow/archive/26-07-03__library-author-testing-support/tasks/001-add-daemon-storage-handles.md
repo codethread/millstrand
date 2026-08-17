@@ -18,11 +18,11 @@ References:
 - Runtime startup now supports concurrent unpublished runtimes (`:publish? false`, RFC-016); the storage handle is per-runtime state whose close lifecycle belongs to that runtime's `stop!`.
 - Keep existing `skein.core.db` schema/query functions using next.jdbc-compatible connectables.
 - Add a small internal storage representation with at least:
-  - storage kind
-  - storage label
-  - optional canonical DB path
-  - next.jdbc-compatible connectable
-  - optional close function/resource
+    - storage kind
+    - storage label
+    - optional canonical DB path
+    - next.jdbc-compatible connectable
+    - optional close function/resource
 - File-backed runtime startup should continue using the selected world's `data/skein.sqlite` unless a trusted caller supplies an explicit DB file.
 - `runtime/stop!` should close weaver-owned storage resources when present without breaking current file-backed tests.
 - Do not change public CLI behavior in this task.
