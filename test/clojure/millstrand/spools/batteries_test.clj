@@ -14,10 +14,8 @@
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.notes.alpha :as notes]
             [millstrand.api.patterns.alpha :as patterns]
-            [millstrand.api.relations.alpha :as relations]
             [millstrand.api.runtime.alpha :as runtime]
             [millstrand.api.runtime.glossary.alpha :as glossary]
-            [millstrand.api.vocab.alpha :as vocab]
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.core.specs :as specs]
             [millstrand.spools.batteries :as batteries]
@@ -97,7 +95,7 @@
     (fn [rt]
       (testing "all shipped ops are registered under batteries provenance"
         (doseq [op-name ['add 'update 'show 'supersede 'burn 'list 'ready 'await 'subgraph
-                         'weave 'query 'pattern 'note 'notes 'vocab 'spool]]
+                         'weave 'query 'pattern 'note 'notes 'spool]]
           (let [entry (op-entry rt op-name)]
             (is (some? entry) (str op-name " should be registered"))
             (is (= 'millstrand.spools.batteries (:provenance entry)))
@@ -117,8 +115,7 @@
                                       'subgraph :read
                                       'weave :mutating
                                       'note :mutating
-                                      'notes :read
-                                      'vocab :read}]
+                                      'notes :read}]
           (let [entry (op-entry rt op-name)]
             (is (= hook-class (get-in entry [:arg-spec :hook-class])))
             (is (= (if (= 'await op-name) :unbounded :standard)
@@ -225,7 +222,6 @@
         (check! 'pattern "list" (weaver/op! rt 'pattern ["list"]))
         (check! 'pattern "explain" (weaver/op! rt 'pattern ["explain" "task"]))
         (check! 'notes (weaver/op! rt 'notes [(:id first-row)]))
-        (check! 'vocab (weaver/op! rt 'vocab []))
         (check! 'spool "about" (weaver/op! rt 'spool ["about"]))
         (check! 'spool "add" (weaver/op! rt 'spool ["add" "https://example.invalid/demo.git"]))
         (check! 'spool "bump" (weaver/op! rt 'spool ["bump" "demo" "--latest" "tag"]))
@@ -1276,39 +1272,6 @@
         (testing "missing required id fails in the parser"
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required"
                                 (weaver/op! rt 'notes []))))))))
-
-(deftest vocab-lists-seed-declarations-string-keyed
-  (with-batteries
-    (fn [rt]
-      (let [rows (weaver/op! rt 'vocab [])]
-        (testing "output is an ordered, string-keyed array of every declaration"
-          (is (vector? rows))
-          (is (= (count (vocab/declarations rt)) (count rows)))
-          (is (= rows (sort-by (juxt #(get % "kind") #(get % "name")) rows)))
-          (is (every? #(every? string? (keys %)) rows)))
-        (testing "the fresh-world seed is present: reflected edges plus core note/*"
-          (let [edges (filter #(= "edge" (get % "kind")) rows)]
-            (is (= (set (map :relation relations/catalog))
-                   (set (map #(get % "name") edges))))
-            (is (every? #(= "millstrand/core" (get % "owner")) edges)))
-          (let [note (some #(when (and (= "attr-namespace" (get % "kind"))
-                                       (= "note" (get % "name")))
-                              %)
-                           rows)]
-            (is (some? note))
-            (is (= "millstrand.api.notes.alpha" (get note "owner")))
-            (is (= ["note/text" "note/at" "note/by" "note/round" "note/kind"] (get note "keys")))))
-        (testing "--kind narrows to one declaration kind"
-          (is (= (set (map :relation relations/catalog))
-                 (set (map #(get % "name") (weaver/op! rt 'vocab ["--kind" "edge"])))))
-          (is (every? #(= "attr-namespace" (get % "kind"))
-                      (weaver/op! rt 'vocab ["--kind" "attr-namespace"]))))
-        (testing "an invalid --kind fails loudly instead of returning empty"
-          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"attr-namespace or edge"
-                                (weaver/op! rt 'vocab ["--kind" "bogus"]))))
-        (testing "vocab help renders the generated --kind arg-spec"
-          (let [detail (weaver/op! rt 'help ["vocab"])]
-            (is (contains? (set (map :name (get-in detail [:node :invocation :flags]))) "kind"))))))))
 
 ;; --- reference help renderer + discovery-tier adoption ----------------------
 

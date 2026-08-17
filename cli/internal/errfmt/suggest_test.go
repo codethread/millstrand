@@ -17,7 +17,7 @@ var (
 		"about", "add", "agent", "bench", "bins", "burn", "guide", "harness", "help",
 		"kanban", "kanban-export", "land", "list", "note", "notes", "pattern", "prime",
 		"query", "ready", "search", "show", "spool", "subgraph", "supersede", "update",
-		"vocab", "weave", "workflow",
+		"weave", "workflow",
 	}
 	// src/millstrand/api/cli/alpha.clj:179,183 (missing/unknown subcommand) and
 	// src/millstrand/core/weaver/help.clj:388 (unknown help verb) both walk the same

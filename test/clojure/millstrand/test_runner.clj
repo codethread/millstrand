@@ -17,7 +17,7 @@
    'millstrand.core.weaver.core-registry-test
    ;; each test builds its own registries and unpublished runtimes — no shared state.
    'millstrand.api.registry.alpha-test
-   'millstrand.plugin-test 'millstrand.relations-test 'millstrand.notes-test 'millstrand.vocab-test
+   'millstrand.plugin-test 'millstrand.relations-test 'millstrand.notes-test
    'millstrand.spools.unsafe-text-search-test
    'millstrand.test.alpha-test 'millstrand.warm-test 'millstrand.api.cli.alpha-test
    'millstrand.source-file-test
@@ -52,10 +52,6 @@
    ;; large-attr load harness structural smoke: boots its own :publish? false
    ;; world and hand-SQL fixtures in temp dirs — no JVM-global or shared state.
    'millstrand.large-attr-benchmark-test
-   ;; one-shot cutover script (scripts/cutover): each test drives its own
-   ;; disposable weaver world and migrates it over a private datasource, so
-   ;; there is no JVM-global or shared-world state.
-   'millstrand.cutover.vocab-reset-test
    ;; each test drives its own unpublished runtime, so the event lane it awaits
    ;; is per-runtime with no JVM-global or shared-lane state — parallel-safe.
    'millstrand.events-quiescence-test

@@ -58,7 +58,6 @@
             [millstrand.api.runtime.glossary.alpha :as glossary]
             [millstrand.api.millstrand.alpha :as millstrand]
             [millstrand.api.spool.alpha :as spool]
-            [millstrand.api.vocab.alpha :as vocab]
             [millstrand.api.weaver.alpha :as weaver])
   (:import [java.io PushbackReader StringReader]
            [java.nio.file FileVisitResult Files LinkOption SimpleFileVisitor]
@@ -225,16 +224,6 @@
     (throw (ex-info "Read result limit must be a positive integer"
                     {:limit limit :explain (s/explain-str ::read-limit limit)})))
   limit)
-
-(defn- validate-vocab-kind
-  "Return the --kind value as its declaration-kind keyword, else fail loudly.
-  Reuses the vocab registry's own `:kind` enum as the allow-list."
-  [kind]
-  (let [k (keyword kind)]
-    (when-not (contains? vocab/declaration-kinds k)
-      (throw (ex-info "vocab --kind must be attr-namespace or edge"
-                      {:kind kind :allowed (mapv name (sort vocab/declaration-kinds))})))
-    k))
 
 (defn- read-limit-state [rt]
   (runtime-api/spool-state rt ::read-limit {:version read-limit-state-version}
@@ -1024,14 +1013,6 @@
                    :doc "Filter to notes from one review round."}}
    :positionals [{:name :id :type :string :required? true :doc "Target strand id."}]})
 
-(def ^:private vocab-arg-spec
-  {:op "vocab"
-   :doc "List the declared attribute-namespace and edge vocabulary."
-   :hook-class :read
-   :deadline-class :standard
-   :flags {:kind {:type :string
-                  :doc "Narrow to one declaration kind: attr-namespace or edge."}}})
-
 (def ^:private spool-arg-spec
   "The spool op's fractal node tree: every leaf declares both classes in the
   arg-spec (DELTA-Lhc-001.CC2 single-source authoring; no registration-opts
@@ -1168,14 +1149,6 @@
            :items {:type :map
                    :required {:id :string :note :string :at :string}
                    :optional {:by :string :round :integer}}}
-   'vocab {:type :collection
-           :items {:type :map
-                   :required {:kind :string :name :string :owner :string}
-                   :optional {:keys {:type :collection :items :string}
-                              :doc :string
-                              :family :string
-                              :direction :string
-                              :declared-acyclic? :boolean}}}
    'spool {:subcommands
            {"about" {:type :map
                      :required {:operation :string
@@ -1663,15 +1636,6 @@
   [ctx]
   (let [{:keys [id round]} (:op/args ctx)]
     (notes/notes (:op/runtime ctx) id {:round round})))
-
-(millstrand/defop! vocab
-  "List the runtime's vocabulary declarations, optionally narrowed to one kind."
-  (op-options 'vocab vocab-arg-spec)
-  [ctx]
-  (let [rt (:op/runtime ctx)
-        {:keys [kind]} (:op/args ctx)]
-    (json-safe-value
-     (vocab/declarations rt (when kind {:kind (validate-vocab-kind kind)})))))
 
 (millstrand/defop! spool
   "Dispatch validated `strand spool about|add|bump|status` inputs and results."

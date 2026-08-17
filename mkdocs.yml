@@ -97,7 +97,6 @@ nav:
       - millstrand.api.millstrand.alpha: docs/api/millstrand.api.md
       - millstrand.api.spec.alpha: docs/api/spec.api.md
       - millstrand.api.spool.alpha: docs/api/spool.api.md
-      - millstrand.api.vocab.alpha: docs/api/vocab.api.md
       - millstrand.api.weaver.alpha: docs/api/weaver.api.md
       - millstrand.test.alpha: docs/api/test.api.md
   - Bundled Spools:

@@ -52,7 +52,6 @@ Two conventions hold across the tier:
 
 | Namespace | Reach for it when |
 | --- | --- |
-| [`vocab`](./vocab.api.md) | Declaring the attribute namespaces and edge types your module owns, so the graph's vocabulary stays discoverable data. |
 | [`relations`](./relations.api.md) | Looking up the shipped relation catalog — advisory data, not a storage allowlist. |
 | [`format`](./format.api.md) | Authoring long prose as `|`-margin blocks (`fill`, `reflow`) instead of unreadable string literals. |
 | [`spool`](./spool.api.md) | Writing a spool and needing the shared authoring helpers: `fail!`, `reject-unknown-keys!`, `require-valid!`, attribute key/get coercion, and Clock-based polling. |

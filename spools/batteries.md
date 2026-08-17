@@ -10,7 +10,7 @@
 
 ## 1. Overview
 
-`millstrand.spools.batteries` is the shipped *core strand command surface*. It declares the everyday strand operations — `add`, `update`, `show`, `supersede`, `burn`, `note`, `list`, `ready`, `notes`, `subgraph`, the create-only `weave` op, and the read-only registry-introspection ops `query`, `pattern`, and `vocab` — through `millstrand.api.millstrand.alpha/defop!`. Each declaration carries an `:arg-spec` parsed by the blessed argv parser `millstrand.api.cli.alpha` (see [cli.md](../devflow/specs/cli.md) and [repl-api.md](../devflow/specs/repl-api.md)).
+`millstrand.spools.batteries` is the shipped *core strand command surface*. It declares the everyday strand operations — `add`, `update`, `show`, `supersede`, `burn`, `note`, `list`, `ready`, `notes`, `subgraph`, the create-only `weave` op, and the read-only registry-introspection ops `query` and `pattern` — through `millstrand.api.millstrand.alpha/defop!`. Each declaration carries an `:arg-spec` parsed by the blessed argv parser `millstrand.api.cli.alpha` (see [cli.md](../devflow/specs/cli.md) and [repl-api.md](../devflow/specs/repl-api.md)).
 
 These `defop!` declarations are the durable, owner-complete source for the command surface. Dynamic spool code and tests may use `millstrand.api.weaver.alpha/register-op!` with an explicit runtime for a live registration; an in-process `millstrand.repl` session uses the same verb with the runtime implied. A workspace that needs to mask a spool op durably uses `defop!` with `{:override? true}` in a workspace module. The coordinate that acquired the spool does not change those registry rules.
 
@@ -65,7 +65,7 @@ The contribution owns every op below plus its glossary outcomes. Each op carries
   - `weave --input :stdin` replaces reading raw stdin for `weave`.
 Loud rules (SPEC-003-D003.C2): a reference naming no attached payload fails `:missing-payload`; an
 attached payload that no reference consumed fails `:unused-payloads`.
-- **BAT-C3 (hook classes):** Each invocable arg-spec leaf declares `:hook-class` and `:deadline-class` for metadata-driven gating (SPEC-004-D003). The mutating leaves are `add`, `update`, `supersede`, `burn`, `note`, `weave`, and `spool add`/`spool bump`; the read leaves are `show`, `list`, `ready`, `await`, `notes`, `subgraph`, every `query` and `pattern` verb, `vocab`, and `spool about`/`spool status`. `await` uses `:deadline-class :unbounded`; every other batteries leaf uses `:deadline-class :standard`.
+- **BAT-C3 (hook classes):** Each invocable arg-spec leaf declares `:hook-class` and `:deadline-class` for metadata-driven gating (SPEC-004-D003). The mutating leaves are `add`, `update`, `supersede`, `burn`, `note`, `weave`, and `spool add`/`spool bump`; the read leaves are `show`, `list`, `ready`, `await`, `notes`, `subgraph`, every `query` and `pattern` verb, and `spool about`/`spool status`. `await` uses `:deadline-class :unbounded`; every other batteries leaf uses `:deadline-class :standard`.
   Mutating ops pass a request context
   `{:request/source :json-socket :request/operation <op-kw>}` so hooks and
   events observe the same data the old socket dispatch supplied.
@@ -296,22 +296,6 @@ metadata ordered by name. `explain <name>` returns input-spec guidance (`name`, 
 input spec, plus optional `doc`). Registry names are canonical strings (e.g. `"task"`). A
 missing/blank name on `explain` and unknown pattern names fail loudly. Pattern *registration* stays
 a trusted config/REPL workflow — never exposed here.
-
-#### `vocab` — BAT-C18 (vocabulary introspection)
-
-```
-strand vocab [--kind attr-namespace|edge]
-```
-
-Read-only introspection of the runtime vocabulary registry. `--kind` is optional; when present it must
-be `attr-namespace` or `edge`. Any other value fails loudly before an empty result can hide a typo.
-The handler delegates to `millstrand.api.vocab.alpha/declarations`, passing `{:kind :attr-namespace}` or
-`{:kind :edge}` when the flag is present.
-
-The result is one JSON array ordered like `declarations`: by declaration kind and then by declaration
-name. Each entry is a C1 declaration map, string-keyed at the wire boundary. Attribute namespace
-rows carry `kind`, `name`, `owner`, `doc`, and an advisory `keys` list. Edge rows carry `kind`, `name`,
-`owner`, `doc` plus the catalog-reflected `family`, `direction`, and `declared-acyclic?`.
 
 ### 3.3 Spool release coordinates — BAT-C24
 

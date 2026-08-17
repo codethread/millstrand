@@ -124,7 +124,7 @@ unpublished runtime or alongside a second runtime: it mutates the wrong world or
    out. An `acme/gate-sweeper` spool that drives workflow runs speaks
    `start`/`next`/`advance`, reads and writes `workflow/*` keys, and coins a
    name only for the sweeping policy the engine has no word for. Declare the
-   namespaces you own with `vocab/declare!` (see Namespace claims); write
+   namespaced attributes your spool needs; write
    inherited keys in the owner's namespace without declaring them. Bare
    (un-namespaced) keys such as `body` are pre-existing cross-spool
    convention, not a namespace to converge into: use them as found, and mint
@@ -243,12 +243,12 @@ full CLI contract, including precedence and the blank-is-data guarantee, is the
 [typed-null recipe](../../spools/batteries.cookbook.md) and the `update`
 contract in [`batteries.md`](../../spools/batteries.md).
 
-## Namespace claims
+## Attribute namespaces
 
-This section covers vocab and attribute namespaces, not Clojure source namespaces; see
+This section covers attribute namespaces, not Clojure source namespaces; see
 [Namespace tiers](#namespace-tiers-why-this-split-exists) for source naming.
 
-A shared spool declares each namespace it owns from a process-lifetime lifecycle seed with `vocab/declare!`, passing its stable module key as the `:owner`. Qualify those namespaces with a project prefix, such as
+A shared spool qualifies the attribute namespaces it introduces with a project prefix, such as
 `acme/priority`, so they do not collide with Millstrand core or with another author's spool. The prefix is an authoring convention, not a parser rule. The registry
 backs it with the duplicate-owner check: if two owners claim the same namespace, the declaration fails loudly instead of choosing one.
 
