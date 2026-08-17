@@ -1,4 +1,4 @@
-.PHONY: help build version-check kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check fmt fmt-check-clj fmt-check-go lint lint-go lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go kondo kondo-import kondo-import-root kondo-import-workspace kondo-import-batteries kondo-import-unsafe-text-search kondo-lint kondo-lint-root kondo-lint-workspace kondo-lint-batteries kondo-lint-unsafe-text-search check-clj-kondo clean-kondo test-warm test-warm-stop spool-suite-gate
+.PHONY: help build version-check kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check fmt fmt-markdown fmt-check-clj fmt-check-go fmt-check-markdown lint lint-go lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go kondo kondo-import kondo-import-root kondo-import-workspace kondo-import-batteries kondo-import-unsafe-text-search kondo-lint kondo-lint-root kondo-lint-workspace kondo-lint-batteries kondo-lint-unsafe-text-search check-clj-kondo clean-kondo test-warm test-warm-stop spool-suite-gate
 
 help:
 	@printf '%s\n' \
@@ -10,7 +10,8 @@ help:
 		'  make test-go            Run Go tests in every Go module' \
 		'  make test-restart-acceptance  Run built-binary restart and JVM-pool acceptance' \
 		'  make test-e2e           Run end-to-end CLI and REPL tests' \
-		'  make fmt-check          Check Clojure and Go formatting' \
+		'  make fmt-check          Check Clojure, Go, and Markdown formatting' \
+		'  make fmt-markdown       Format every tracked Markdown file with oxfmt' \
 		'  make lint               Run Kondo, Splint, convention, and Go linters' \
 		'  make kondo              Import dependency configs, then lint every Clojure root' \
 		'  make kondo-import       Refresh imported configs from each resolved classpath' \
@@ -113,14 +114,21 @@ docs-serve:
 fmt:
 	clojure -M:format/fix
 	bash scripts/go-quality format
+	$(MAKE) fmt-markdown
 
-fmt-check: fmt-check-clj fmt-check-go
+fmt-markdown:
+	bash scripts/format-markdown
+
+fmt-check: fmt-check-clj fmt-check-go fmt-check-markdown
 
 fmt-check-clj:
 	clojure -M:format
 
 fmt-check-go:
 	bash scripts/go-quality format-check
+
+fmt-check-markdown:
+	bash scripts/format-markdown --check
 
 test-go:
 	bash scripts/go-quality test
