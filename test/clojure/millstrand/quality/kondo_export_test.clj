@@ -10,7 +10,7 @@
 
 (def ^:private clj-kondo-version "2025.06.05")
 (def ^:private millhouse-url "https://github.com/codethread/millhouse.spool.git")
-(def ^:private millhouse-sha "b0ac2268685e53510df01dcd0cc533b8fd40a25d")
+(def ^:private millhouse-sha "7c615bd1032be0e443c36fa12e8c50143e8014ff")
 
 (def ^:private config-import-command
   ["sh" "-c"
