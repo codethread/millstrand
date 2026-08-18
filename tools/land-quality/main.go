@@ -16,15 +16,19 @@ import (
 )
 
 const (
-	defaultHeavyLimit = 2
-	stopGrace         = 3 * time.Second
+	defaultHeavyLimit  = 2
+	stopGrace          = 3 * time.Second
+	overallBaseline    = 154400 * time.Millisecond
+	overallHardTimeout = 15 * time.Minute
 )
 
 type check struct {
-	name  string
-	argv  []string
-	heavy bool
-	deps  []string
+	name     string
+	argv     []string
+	heavy    bool
+	deps     []string
+	baseline time.Duration
+	timeout  time.Duration
 }
 
 type result struct {
@@ -45,21 +49,23 @@ type runner struct {
 	logDir     string
 }
 
+// Baselines come from a clean 2026-08-18 local run on the reference 10-core
+// development host. growthBudget fixes every warning threshold at 110%; changing
+// a baseline therefore requires an explicit reviewed source change.
 var qualityChecks = []check{
-	{name: "clojure-test", argv: []string{"clojure", "-M:test"}, heavy: true},
-	{name: "go-test", argv: []string{"make", "test-go"}, heavy: true},
-	{name: "e2e", argv: []string{"make", "test-e2e"}, heavy: true},
-	{name: "spool-suites", argv: []string{"make", "spool-suite-gate"}, heavy: true},
-	{name: "format", argv: []string{"make", "fmt-check"}},
-	{name: "lint", argv: []string{"make", "lint"}, heavy: true},
-	{name: "reflection", argv: []string{"make", "reflect-check"}},
-	{name: "ci-config", argv: []string{"make", "ci-config-check"}},
-	{name: "identity", argv: []string{"make", "identity-check"}},
-	{name: "build", argv: []string{"make", "build"}},
-	{name: "acceptance-kanban", argv: []string{"test/shell/acceptance/millstrand-millhouse-kanban.sh"}, deps: []string{"build"}},
-	{name: "acceptance-docs", argv: []string{"test/shell/acceptance/millstrand-docs.sh"}, deps: []string{"build"}},
-	{name: "acceptance-neovim", argv: []string{"test/shell/acceptance/millstrand-neovim.sh"}, deps: []string{"build"}},
-	{name: "docs", argv: []string{"make", "docs-check"}},
+	{name: "clojure-test", argv: []string{"clojure", "-M:test"}, heavy: true, baseline: 129600 * time.Millisecond, timeout: 8 * time.Minute},
+	{name: "go-test", argv: []string{"make", "test-go"}, heavy: true, baseline: 59300 * time.Millisecond, timeout: 5 * time.Minute},
+	{name: "e2e", argv: []string{"make", "test-e2e"}, heavy: true, baseline: 92400 * time.Millisecond, timeout: 8 * time.Minute},
+	{name: "format", argv: []string{"make", "fmt-check"}, baseline: 29600 * time.Millisecond, timeout: 3 * time.Minute},
+	{name: "lint", argv: []string{"make", "lint"}, heavy: true, baseline: 24900 * time.Millisecond, timeout: 4 * time.Minute},
+	{name: "reflection", argv: []string{"make", "reflect-check"}, baseline: 19300 * time.Millisecond, timeout: 2 * time.Minute},
+	{name: "ci-config", argv: []string{"make", "ci-config-check"}, baseline: 100 * time.Millisecond, timeout: 30 * time.Second},
+	{name: "identity", argv: []string{"make", "identity-check"}, baseline: 11600 * time.Millisecond, timeout: 2 * time.Minute},
+	{name: "build", argv: []string{"make", "build"}, baseline: time.Second, timeout: 2 * time.Minute},
+	{name: "acceptance-kanban", argv: []string{"test/shell/acceptance/millstrand-millhouse-kanban.sh"}, deps: []string{"build"}, baseline: 46500 * time.Millisecond, timeout: 4 * time.Minute},
+	{name: "acceptance-docs", argv: []string{"test/shell/acceptance/millstrand-docs.sh"}, deps: []string{"build"}, baseline: 27300 * time.Millisecond, timeout: 3 * time.Minute},
+	{name: "acceptance-neovim", argv: []string{"test/shell/acceptance/millstrand-neovim.sh"}, deps: []string{"build"}, baseline: 1300 * time.Millisecond, timeout: 30 * time.Second},
+	{name: "docs", argv: []string{"make", "docs-check"}, baseline: 28900 * time.Millisecond, timeout: 3 * time.Minute},
 }
 
 func main() {
@@ -74,7 +80,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), overallHardTimeout)
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(signals)
@@ -89,9 +95,11 @@ func main() {
 	}()
 
 	r := runner{checks: qualityChecks, heavyLimit: limit, execute: executeCommand, out: os.Stdout, logDir: logDir}
+	started := time.Now()
 	results, runErr := r.run(ctx)
+	totalElapsed := time.Since(started)
 	cancel()
-	failed, summaryErr := printSummary(os.Stdout, results)
+	failed, summaryErr := printSummary(os.Stdout, results, totalElapsed)
 	runErr = errors.Join(runErr, summaryErr)
 	if failed == 0 && runErr == nil {
 		if err := os.RemoveAll(logDir); err != nil {
@@ -99,6 +107,9 @@ func main() {
 			os.Exit(1)
 		}
 		return
+	}
+	if errors.Is(runErr, context.DeadlineExceeded) {
+		fmt.Fprintf(os.Stderr, "[land-quality] overall timeout after %s\n", formatDuration(overallHardTimeout))
 	}
 	fmt.Fprintf(os.Stderr, "[land-quality] logs retained at %s\n", logDir)
 	select {
@@ -201,14 +212,27 @@ func (r runner) run(ctx context.Context) ([]result, error) {
 }
 
 func (r runner) runOne(ctx context.Context, c check, outcomes chan<- result) {
+	checkCtx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
 	started := time.Now()
 	logPath := filepath.Join(r.logDir, c.name+".log")
-	err := r.execute(ctx, c, logPath)
-	status := "PASS"
-	if err != nil {
-		status = "FAIL"
+	err := r.execute(checkCtx, c, logPath)
+	elapsed := time.Since(started)
+	status, err := classifyResult(c, elapsed, checkCtx.Err(), err)
+	outcomes <- result{check: c, status: status, elapsed: elapsed, logPath: logPath, err: err}
+}
+
+func classifyResult(c check, elapsed time.Duration, contextErr, executionErr error) (string, error) {
+	switch {
+	case errors.Is(contextErr, context.DeadlineExceeded):
+		return "TIMEOUT", errors.Join(fmt.Errorf("exceeded hard timeout %s", formatDuration(c.timeout)), executionErr)
+	case executionErr != nil:
+		return "FAIL", executionErr
+	case elapsed > growthBudget(c.baseline):
+		return "WARN", nil
+	default:
+		return "PASS", nil
 	}
-	outcomes <- result{check: c, status: status, elapsed: time.Since(started), logPath: logPath, err: err}
 }
 
 func executeCommand(ctx context.Context, c check, logPath string) error {
@@ -266,6 +290,9 @@ func validateChecks(checks []check) error {
 		if c.name == "" || len(c.argv) == 0 {
 			return fmt.Errorf("invalid check: %#v", c)
 		}
+		if c.baseline <= 0 || c.timeout <= growthBudget(c.baseline) {
+			return fmt.Errorf("check %q requires a positive baseline and a hard timeout above its 10%% growth budget", c.name)
+		}
 		if known[c.name] {
 			return fmt.Errorf("duplicate check %q", c.name)
 		}
@@ -311,7 +338,7 @@ func validateChecks(checks []check) error {
 
 func dependenciesPassed(c check, states map[string]string) bool {
 	for _, dep := range c.deps {
-		if states[dep] != "pass" {
+		if states[dep] != "pass" && states[dep] != "warn" {
 			return false
 		}
 	}
@@ -320,7 +347,7 @@ func dependenciesPassed(c check, states map[string]string) bool {
 
 func failedDependency(c check, states map[string]string) (string, bool) {
 	for _, dep := range c.deps {
-		if states[dep] == "fail" || states[dep] == "blocked" {
+		if states[dep] == "fail" || states[dep] == "timeout" || states[dep] == "blocked" {
 			return dep, true
 		}
 	}
@@ -342,54 +369,71 @@ func orderedResults(checks []check, completed map[string]result) []result {
 	return results
 }
 
-func printSummary(out io.Writer, results []result) (int, error) {
+func printSummary(out io.Writer, results []result, totalElapsed time.Duration) (int, error) {
 	if _, err := fmt.Fprintln(out, "\n[land-quality] SUMMARY"); err != nil {
 		return 0, err
 	}
-	passed, failed, blocked := 0, 0, 0
+	passed, warned, failed, timedOut, blocked := 0, 0, 0, 0, 0
 	for _, r := range results {
 		line := fmt.Sprintf("[land-quality] %-7s %-20s %s", r.status, r.check.name, formatDuration(r.elapsed))
 		switch r.status {
 		case "PASS":
 			passed++
+		case "WARN":
+			warned++
+			line += fmt.Sprintf(" budget=%s baseline=%s", formatDuration(growthBudget(r.check.baseline)), formatDuration(r.check.baseline))
 		case "FAIL":
 			failed++
 			line += " log=" + r.logPath
+		case "TIMEOUT":
+			timedOut++
+			line += " limit=" + formatDuration(r.check.timeout) + " log=" + r.logPath
 		case "BLOCKED":
 			blocked++
 			line += " reason=" + r.err.Error()
 		}
 		if _, err := fmt.Fprintln(out, line); err != nil {
-			return failed + blocked, err
+			return failed + timedOut + blocked, err
 		}
 	}
-	if _, err := fmt.Fprintf(out, "[land-quality] %d passed, %d failed, %d blocked\n", passed, failed, blocked); err != nil {
-		return failed + blocked, err
+	totalStatus := "PASS"
+	if totalElapsed > growthBudget(overallBaseline) {
+		totalStatus = "WARN"
+	}
+	if _, err := fmt.Fprintf(out, "[land-quality] %-7s total                %s budget=%s baseline=%s\n", totalStatus, formatDuration(totalElapsed), formatDuration(growthBudget(overallBaseline)), formatDuration(overallBaseline)); err != nil {
+		return failed + timedOut + blocked, err
+	}
+	if _, err := fmt.Fprintf(out, "[land-quality] %d passed, %d warned, %d failed, %d timed out, %d blocked\n", passed, warned, failed, timedOut, blocked); err != nil {
+		return failed + timedOut + blocked, err
 	}
 	for _, r := range results {
-		if r.status != "FAIL" {
+		if r.status != "FAIL" && r.status != "TIMEOUT" {
 			continue
 		}
-		if _, err := fmt.Fprintf(out, "\n[land-quality] FAILURE %s (%s)\n", r.check.name, r.logPath); err != nil {
-			return failed + blocked, err
+		if _, err := fmt.Fprintf(out, "\n[land-quality] %s %s (%s)\n", r.status, r.check.name, r.logPath); err != nil {
+			return failed + timedOut + blocked, err
 		}
 		if _, err := fmt.Fprintln(out, r.err); err != nil {
-			return failed + blocked, err
+			return failed + timedOut + blocked, err
 		}
 		content, err := os.ReadFile(r.logPath)
 		if err != nil {
-			return failed + blocked, fmt.Errorf("read failure log %s: %w", r.logPath, err)
+			return failed + timedOut + blocked, fmt.Errorf("read failure log %s: %w", r.logPath, err)
 		}
 		if _, err := out.Write(content); err != nil {
-			return failed + blocked, err
+			return failed + timedOut + blocked, err
 		}
 		if len(content) > 0 && content[len(content)-1] != '\n' {
 			if _, err := fmt.Fprintln(out); err != nil {
-				return failed + blocked, err
+				return failed + timedOut + blocked, err
 			}
 		}
 	}
-	return failed + blocked, nil
+	return failed + timedOut + blocked, nil
+}
+
+func growthBudget(baseline time.Duration) time.Duration {
+	return baseline + baseline/10
 }
 
 func formatDuration(d time.Duration) string {

@@ -19,11 +19,10 @@ Ordinary cold/warm suite runs do not take `--workspace`. Use disposable `--works
 | --- | --- |
 | Iterate a slice | `make test-warm NS="…"` — never Done-when |
 | Slice Done-when | `clojure -M:test <ns…>` |
-| Queue acceptance | `flock -w 3600 /tmp/millstrand-test.lock clojure -M:test`; `make test-go`; `make test-e2e`; `make spool-suite-gate`; `make fmt-check lint reflect-check docs-check` |
+| Queue acceptance | `flock -w 3600 /tmp/millstrand-test.lock clojure -M:test`; `make test-go`; `make test-e2e`; `make fmt-check lint reflect-check docs-check` |
 
 Notes:
 
 - `MILLSTRAND_TEST_AWAIT_SCALE` multiplies await budgets on slow hosts (CI sets 3).
-- `make spool-suite-gate` — `GITLIBS=<dir>` overrides the gitlibs cache.
 - After spool or `millstrand.api.*.alpha` docstring changes: `make api-docs`.
 - After validation, `git status --short` must not show generated SQLite or runtime metadata artifacts.

@@ -1,6 +1,5 @@
 # scope	pattern	reason
 # Every retained identity exception is anchored to one complete checked-in line.
-scripts/spool-suite-gate	^scripts/spool-suite-gate:[0-9]+:ln -s "\$src" "\$root/skein-src"$	Published external spool suites retain the historical skein-src sibling name for consumer checkouts.
 cli/internal/config/config_test.go	^cli/internal/config/config_test\.go:301:[[:blank:]][[:blank:]][[:blank:]]return os\.Mkdir\(filepath\.Join\(repo, "\.skein"\), 0o755\)$	Exact checked-in identity context for this line.
 cli/internal/config/config.go	^cli/internal/config/config\.go:17:[[:blank:]]LegacyWorkspace     = "\.skein"$	Exact checked-in identity context for this line.
 devflow/README.md	^devflow/README\.md:70:- `26-06-26__remove-legacy-clojure-cli` — shipped removal of the legacy `skein\.cli` Clojure CLI entrypoint, its tests, and stale spec references, leaving the Go `strand` binary as the sole scripted CLI\.$	Exact checked-in identity context for this line.
