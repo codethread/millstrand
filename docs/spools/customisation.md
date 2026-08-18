@@ -2,10 +2,7 @@
 
 Millstrand's core is deliberately small; most of what your workspace *means* lives in trusted Clojure code the weaver loads for you — named queries, weave patterns, event handlers, and ops. This page shows the path from a durable module source to live experiments and workspace-owned convenience helpers. Authoring forms in module source come first: they are the durable, owner-complete declarations. Explicit-runtime verbs are the code and test surface for live state, and `millstrand.repl` supplies the same verbs with the runtime implied for an interactive session. When a spool leaves your workspace, its code must keep the runtime explicit; the terse helper layer remains workspace-owned.
 
-If you have not met the weaver, workspaces, or the strand model yet, read the [tutorial](../tutorial.md) first;
-the [reference](../reference.md) covers the full command and runtime surface. Per-function API detail is
-deliberately absent from this page: the generated [alpha API reference](../api/README.md) documents every
-`millstrand.api.*.alpha` function, and this page only shows how the pieces compose.
+If you have not met the weaver, workspaces, or the strand model yet, read the [tutorial](../tutorial.md) first. The [reference](../reference.md) maps Millstrand's specifications, guides, and generated API documentation. Per-function API detail is deliberately absent from this page: the generated [alpha API reference](../api/README.md) documents every `millstrand.api.*.alpha` function, and this page only shows how the pieces compose.
 
 ## The files mill init gives you
 
