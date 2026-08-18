@@ -2,10 +2,7 @@
 
 Millstrand's core is deliberately small; most of what your workspace *means* lives in trusted Clojure code the weaver loads for you — named queries, weave patterns, event handlers, and ops. This page shows the path from a durable module source to live experiments and workspace-owned convenience helpers. Authoring forms in module source come first: they are the durable, owner-complete declarations. Explicit-runtime verbs are the code and test surface for live state, and `millstrand.repl` supplies the same verbs with the runtime implied for an interactive session. When a spool leaves your workspace, its code must keep the runtime explicit; the terse helper layer remains workspace-owned.
 
-If you have not met the weaver, workspaces, or the strand model yet, read the [tutorial](../tutorial.md) first;
-the [reference](../reference.md) covers the full command and runtime surface. Per-function API detail is
-deliberately absent from this page: the generated [alpha API reference](../api/README.md) documents every
-`millstrand.api.*.alpha` function, and this page only shows how the pieces compose.
+If you have not met the weaver, workspaces, or the strand model yet, read the [tutorial](../tutorial.md) first. The [reference](../reference.md) maps Millstrand's specifications, guides, and generated API documentation. Per-function API detail is deliberately absent from this page: the generated [alpha API reference](../api/README.md) documents every `millstrand.api.*.alpha` function, and this page only shows how the pieces compose.
 
 ## The files mill init gives you
 
@@ -145,12 +142,7 @@ The result names the root lib, canonical root, and namespaces in reload order, a
 publication or resource reconciliation; use a targeted refresh for the normal
 path.
 
-Some changes cannot load into a running weaver at all: removing an already-loaded root, repointing one at
-different source, or bumping a loaded Maven coordinate's version. Refresh refuses those changes and records a
-pending generation that takes effect at the next weaver restart. That restart is not free: replacing a weaver
-ends every agent run it is supervising, and restarting the canonical weaver requires explicit user sign-off.
-Treat a pending generation as a deliberate step, not a reflex; see the [reference](../reference.md) on weaver
-generations for the classification and the cutover semantics.
+Some changes cannot load into a running weaver at all: removing an already-loaded root, repointing one at different source, or bumping a loaded Maven coordinate's version. Refresh refuses those changes and records a pending generation that takes effect at the next weaver restart. That restart is not free: replacing a weaver ends every agent run it is supervising, and restarting the canonical weaver requires explicit user sign-off. Treat a pending generation as a deliberate step, not a reflex; the [Weaver Runtime specification](../../devflow/specs/daemon-runtime.md) defines the classification and cutover semantics in SPEC-004.C44c–C44f.
 
 ## REPL hygiene in a shared weaver
 
