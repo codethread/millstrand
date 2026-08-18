@@ -3,11 +3,11 @@
  :pins
  {codethread/devflow
   {:git/url "https://github.com/codethread/devflow.spool.git"
-   :git/sha "3a96415df0429c245191a22e66cc0bfc91524199"}
+   :git/sha "f3a74045296eba0394709a1feab46f5ca910e343"}
   millhouse/spools
   {:git/url "https://github.com/codethread/millhouse.spool.git"
-   :git/sha "b0ac2268685e53510df01dcd0cc533b8fd40a25d"}
+   :git/sha "7c615bd1032be0e443c36fa12e8c50143e8014ff"}
   ct.spools/agent-run
   {:git/url "https://github.com/codethread/agent-harness.spool.git"
-   :git/sha "1f06dfd046828f86c262537c190f854b87d90f6f"}}
+   :git/sha "c391ea7cb70f7a3ed756fe0099a2ce1366aa863b"}}
  :deferrals []}
