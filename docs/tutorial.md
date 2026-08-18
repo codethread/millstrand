@@ -22,9 +22,8 @@ Millstrand's own repository is written to be read by coding agents, and it ships
 `prime` orientation commands, and the specs behind every contract. If you already work with a coding
 agent, you can point it at a Millstrand checkout and ask questions as you go.
 
-- `mill prime millstrand` prints orientation for the Millstrand source, docs, and how to extend a `.millstrand` or `.ms` config. `mill prime strand` explains the strand planning-and-tracking workflow. Both run with no weaver.
-- `docs/reference.md`, the `spools/` contracts, and `devflow/specs/` hold the real
-  detail.
+- `mill prime millstrand` prints the absolute paths to the Millstrand source checkout and its canonical `docs/reference.md`. `mill prime strand` explains the strand planning-and-tracking workflow. Both run with no weaver.
+- Start with `docs/reference.md`; follow its links to the `spools/` contracts and `devflow/specs/` when you need their detail.
 
 An agent that has read that surface can answer "how do I model a review step?" or "what belongs in
 the CLI versus the REPL?" interactively. You can follow this guide without an agent; the agent is

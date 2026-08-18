@@ -8,11 +8,9 @@ import (
 	"strings"
 )
 
-// primeManifestPath is the one frozen path in the prime contract: every Millstrand
-// checkout ships a manifest here naming its prime topics, so an already
-// installed mill renders current orientation text from a newer checkout
-// instead of shipping stale embedded prose. The path itself must never move;
-// the manifest indirection exists so everything it points at still can.
+// primeManifestPath is the frozen index for authored prime topics such as
+// strand. The millstrand source/reference pointers live directly in this
+// binary and do not have a manifest topic.
 const primeManifestPath = "docs/prime/index.json"
 
 // primeManifestVersion is the manifest schema this mill understands. A future
@@ -25,11 +23,10 @@ type primeManifest struct {
 	Topics  map[string]string `json:"topics"`
 }
 
-// renderPrime resolves the Millstrand source, looks the topic up in the checkout's
-// prime manifest, and renders the file the manifest names. The rendering
-// contract is a single token: every {{.Source}} occurrence becomes the
-// resolved checkout path, and no other template construct is interpreted, so
-// any future implementation can reproduce it with a string substitution.
+// renderPrime resolves the Millstrand source. The millstrand topic returns its
+// source and canonical reference paths directly; authored topics are rendered
+// from the checkout's prime manifest. Authored rendering replaces every
+// {{.Source}} token and interprets no other template construct.
 func renderPrime(topic string) (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -38,6 +35,9 @@ func renderPrime(topic string) (string, error) {
 	source, err := resolveLaunchSource(cwd)
 	if err != nil {
 		return "", fmt.Errorf("mill prime %s cannot resolve the Millstrand source that hosts the docs from cwd %s: %w", topic, cwd, err)
+	}
+	if topic == "millstrand" {
+		return renderMillstrandPrime(source)
 	}
 	manifestPath := filepath.Join(source, filepath.FromSlash(primeManifestPath))
 	raw, err := os.ReadFile(manifestPath)
@@ -63,6 +63,18 @@ func renderPrime(topic string) (string, error) {
 		return "", fmt.Errorf("mill prime %s: reading manifest topic file %s: %w", topic, rel, err)
 	}
 	return strings.ReplaceAll(string(body), "{{.Source}}", source), nil
+}
+
+func renderMillstrandPrime(source string) (string, error) {
+	reference := filepath.Join(source, "docs", "reference.md")
+	info, err := os.Stat(reference)
+	if err != nil {
+		return "", fmt.Errorf("mill prime millstrand: canonical reference %s is unavailable: %w", reference, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("mill prime millstrand: canonical reference is not a regular file: %s", reference)
+	}
+	return fmt.Sprintf("Millstrand source: %s\nMillstrand reference: %s\n", source, reference), nil
 }
 
 func validatePrimeTopicPath(rel string) error {

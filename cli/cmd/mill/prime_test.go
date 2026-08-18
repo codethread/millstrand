@@ -61,16 +61,27 @@ func TestMillPrimeCommandHierarchy(t *testing.T) {
 	}
 }
 
-func TestRenderPrimeReadsManifestTopicsAndInterpolatesSource(t *testing.T) {
-	src := writeSourceFixture(t,
-		`{"version": 1, "topics": {"millstrand": "docs/prime/millstrand.md", "strand": "docs/prime/strand.md"}}`,
-		map[string]string{
-			"docs/prime/millstrand.md": "Source lives at {{.Source}} and again {{.Source}}.\n",
-			"docs/prime/strand.md":     "No token here.\n",
-		})
+func TestRenderMillstrandPrimePrintsSourceAndReferenceWithoutManifest(t *testing.T) {
+	src := writeSourceFixture(t, "", map[string]string{"docs/reference.md": "# Reference\n"})
 	t.Setenv("MILLSTRAND_SOURCE", src)
 
-	out, err := renderPrime("millstrand")
+	got, err := renderPrime("millstrand")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("Millstrand source: %s\nMillstrand reference: %s\n", src, filepath.Join(src, "docs", "reference.md"))
+	if got != want {
+		t.Fatalf("millstrand prime output = %q, want %q", got, want)
+	}
+}
+
+func TestRenderPrimeReadsManifestTopicAndInterpolatesSource(t *testing.T) {
+	src := writeSourceFixture(t,
+		`{"version": 1, "topics": {"strand": "docs/prime/strand.md"}}`,
+		map[string]string{"docs/prime/strand.md": "Source lives at {{.Source}} and again {{.Source}}.\n"})
+	t.Setenv("MILLSTRAND_SOURCE", src)
+
+	out, err := renderPrime("strand")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,15 +89,17 @@ func TestRenderPrimeReadsManifestTopicsAndInterpolatesSource(t *testing.T) {
 		t.Fatalf("expected both {{.Source}} tokens replaced with %q:\n%s", src, out)
 	}
 	if strings.Contains(out, "{{") {
-		t.Fatalf("millstrand prime left an unrendered token:\n%s", out)
+		t.Fatalf("strand prime left an unrendered token:\n%s", out)
 	}
+}
 
-	out, err = renderPrime("strand")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != "No token here.\n" {
-		t.Fatalf("strand prime altered a token-free file: %q", out)
+func TestRenderMillstrandPrimeFailsWithoutCanonicalReference(t *testing.T) {
+	src := writeSourceFixture(t, "", nil)
+	t.Setenv("MILLSTRAND_SOURCE", src)
+	reference := filepath.Join(src, "docs", "reference.md")
+
+	if _, err := renderPrime("millstrand"); err == nil || !strings.Contains(err.Error(), reference) {
+		t.Fatalf("expected missing-reference error naming %q, got: %v", reference, err)
 	}
 }
 
@@ -115,17 +128,17 @@ func TestRenderPrimeFailsWithoutManifest(t *testing.T) {
 	src := writeSourceFixture(t, "", nil)
 	t.Setenv("MILLSTRAND_SOURCE", src)
 	manifestPath := filepath.Join(src, filepath.FromSlash(primeManifestPath))
-	if _, err := renderPrime("millstrand"); err == nil || !strings.Contains(err.Error(), manifestPath) {
+	if _, err := renderPrime("strand"); err == nil || !strings.Contains(err.Error(), manifestPath) {
 		t.Fatalf("expected missing-manifest error naming %q, got: %v", manifestPath, err)
 	}
 }
 
 func TestRenderPrimeRejectsUnsupportedManifestVersion(t *testing.T) {
 	src := writeSourceFixture(t,
-		`{"version": 2, "topics": {"millstrand": "docs/prime/millstrand.md"}}`,
-		map[string]string{"docs/prime/millstrand.md": "future format\n"})
+		`{"version": 2, "topics": {"strand": "docs/prime/strand.md"}}`,
+		map[string]string{"docs/prime/strand.md": "future format\n"})
 	t.Setenv("MILLSTRAND_SOURCE", src)
-	_, err := renderPrime("millstrand")
+	_, err := renderPrime("strand")
 	if err == nil || !strings.Contains(err.Error(), "upgrade mill") {
 		t.Fatalf("expected loud version-mismatch error instructing an upgrade, got: %v", err)
 	}
@@ -133,8 +146,8 @@ func TestRenderPrimeRejectsUnsupportedManifestVersion(t *testing.T) {
 
 func TestRenderPrimeFailsOnUnknownTopic(t *testing.T) {
 	src := writeSourceFixture(t,
-		`{"version": 1, "topics": {"millstrand": "docs/prime/millstrand.md"}}`,
-		map[string]string{"docs/prime/millstrand.md": "ok\n"})
+		`{"version": 1, "topics": {"strand": "docs/prime/strand.md"}}`,
+		map[string]string{"docs/prime/strand.md": "ok\n"})
 	t.Setenv("MILLSTRAND_SOURCE", src)
 	manifestPath := filepath.Join(src, filepath.FromSlash(primeManifestPath))
 	if _, err := renderPrime("nope"); err == nil || !strings.Contains(err.Error(), manifestPath) || !strings.Contains(err.Error(), `"nope"`) {
@@ -154,13 +167,13 @@ func TestRenderPrimeRejectsInvalidManifestTopicPaths(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manifest := fmt.Sprintf(`{"version": 1, "topics": {"millstrand": %q}}`, tt.path)
+			manifest := fmt.Sprintf(`{"version": 1, "topics": {"strand": %q}}`, tt.path)
 			src := writeSourceFixture(t, manifest, nil)
 			t.Setenv("MILLSTRAND_SOURCE", src)
 			manifestPath := filepath.Join(src, filepath.FromSlash(primeManifestPath))
 
-			_, err := renderPrime("millstrand")
-			if err == nil || !strings.Contains(err.Error(), manifestPath) || !strings.Contains(err.Error(), `topic "millstrand"`) || !strings.Contains(err.Error(), fmt.Sprintf("%q", tt.path)) {
+			_, err := renderPrime("strand")
+			if err == nil || !strings.Contains(err.Error(), manifestPath) || !strings.Contains(err.Error(), `topic "strand"`) || !strings.Contains(err.Error(), fmt.Sprintf("%q", tt.path)) {
 				t.Fatalf("expected invalid-path error naming manifest %q, topic, and path %q; got: %v", manifestPath, tt.path, err)
 			}
 		})
@@ -170,10 +183,10 @@ func TestRenderPrimeRejectsInvalidManifestTopicPaths(t *testing.T) {
 func TestRenderPrimeUnreadableTopicNamesPath(t *testing.T) {
 	const rel = "docs/prime/missing.md"
 	src := writeSourceFixture(t,
-		`{"version": 1, "topics": {"millstrand": "docs/prime/missing.md"}}`, nil)
+		`{"version": 1, "topics": {"strand": "docs/prime/missing.md"}}`, nil)
 	t.Setenv("MILLSTRAND_SOURCE", src)
 
-	if _, err := renderPrime("millstrand"); err == nil || !strings.Contains(err.Error(), rel) {
+	if _, err := renderPrime("strand"); err == nil || !strings.Contains(err.Error(), rel) {
 		t.Fatalf("expected unreadable-topic error naming %q, got: %v", rel, err)
 	}
 }
@@ -203,10 +216,11 @@ func TestRepoPrimeManifestPointsAtRealFiles(t *testing.T) {
 	if len(manifest.Topics) == 0 {
 		t.Fatal("repo prime manifest declares no topics")
 	}
-	for _, topic := range []string{"millstrand", "strand"} {
-		if _, ok := manifest.Topics[topic]; !ok {
-			t.Fatalf("repo prime manifest does not declare required topic %q", topic)
-		}
+	if _, ok := manifest.Topics["strand"]; !ok {
+		t.Fatal("repo prime manifest does not declare required topic \"strand\"")
+	}
+	if _, ok := manifest.Topics["millstrand"]; ok {
+		t.Fatal("repo prime manifest must not declare Go-owned topic \"millstrand\"")
 	}
 	tokenRe := regexp.MustCompile(`\{\{[^}]*\}\}`)
 	for topic, rel := range manifest.Topics {

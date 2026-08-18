@@ -421,8 +421,8 @@
         bare (run-process! "Bare strand prints help" [strand-bin])
         version (run-process! "Go CLI version succeeds" [strand-bin "--version"])
         mill-root (run-process! "Go mill root help succeeds" [mill-bin "--help"])
-        ;; Run from outside the checkout so only MILLSTRAND_SOURCE can resolve the
-        ;; manifest the prime text is rendered from.
+        ;; Run from outside the checkout so only MILLSTRAND_SOURCE can resolve
+        ;; the source paths and the authored strand topic.
         millstrand-prime (run-process! "mill prime millstrand succeeds" (outside-repo-dir) nil
                                        [mill-bin "prime" "millstrand"])
         strand-prime (run-process! "mill prime strand succeeds" (outside-repo-dir) nil
@@ -438,8 +438,11 @@
     (assert-contains version "protocol_version" "Go CLI --version reports the protocol version")
     (doseq [needle ["init" "weaver" "start" "prime"]]
       (assert-contains mill-root needle "Go mill root help shows the lifecycle and orientation subcommands"))
-    (assert-contains millstrand-prime checkout-root
-                     "mill prime millstrand renders the manifest topic with the resolved source substituted")
+    (assert= (str "Millstrand source: " checkout-root "\n"
+                  "Millstrand reference: "
+                  (.normalize (.toPath (java.io.File. checkout-root "docs/reference.md"))) "\n")
+             millstrand-prime
+             "mill prime millstrand prints the source and canonical reference paths")
     (assert (clojure.string/includes? strand-prime "strand")
             (str "mill prime strand renders its manifest topic\n" strand-prime))
     (doseq [needle ["\"operation\":\"invoke\"" "\"name\":\"add\""]]
