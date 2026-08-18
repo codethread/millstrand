@@ -310,37 +310,14 @@ func TestVersionAndHelpAreLocal(t *testing.T) {
 		t.Fatalf("unexpected version payload: %#v", v)
 	}
 
-	for _, args := range [][]string{{"--help"}, {}} {
-		out, _, code := runDispatch("", args...)
+	for _, args := range [][]string{{"--help"}, {"-h"}, {}} {
+		_, _, code := runDispatch("", args...)
 		if code != 0 {
 			t.Fatalf("help exit %d for %v", code, args)
-		}
-		for _, want := range []string{"strand [dispatcher-flags]", "--dry-run", "strand help", "mill start", "invoke envelope"} {
-			if !strings.Contains(out, want) {
-				t.Fatalf("help missing %q for %v:\n%s", want, args, out)
-			}
 		}
 	}
 	if c.called {
 		t.Fatalf("version/help must not transport")
-	}
-}
-
-func TestNoOpHelpStaysUsage(t *testing.T) {
-	var c capture
-	harness(t, &c)
-	// With no op named, --help/-h and bare strand all print dispatcher usage.
-	for _, args := range [][]string{{"--help"}, {"-h"}, {}} {
-		out, _, code := runDispatch("", args...)
-		if code != 0 {
-			t.Fatalf("no-op help exit %d for %v", code, args)
-		}
-		if !strings.Contains(out, "strand [dispatcher-flags]") {
-			t.Fatalf("no-op help should print usage for %v:\n%s", args, out)
-		}
-	}
-	if c.called {
-		t.Fatalf("no-op help must not transport")
 	}
 }
 

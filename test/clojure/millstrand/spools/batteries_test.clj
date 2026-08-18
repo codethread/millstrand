@@ -143,6 +143,23 @@
                               [verb [(:hook-class leaf) (:deadline-class leaf)]]))
                        subcommands))))))))
 
+(deftest runbook-is-inert-until-a-workspace-elects-it
+  (with-batteries
+    (fn [rt]
+      (is (nil? (op-entry rt 'runbook))
+          "defop does not publish runbook with the batteries module")
+      (test-support/activate-spool!
+       rt :batteries-runbook 'millstrand.spools.batteries-runbook-select
+       :after [:millstrand/spools-batteries])
+      (let [entry (op-entry rt 'runbook)
+            result (weaver/op! rt 'runbook [])]
+        (is (some? entry))
+        (is (= :read (get-in entry [:arg-spec :hook-class])))
+        (is (= :standard (get-in entry [:arg-spec :deadline-class])))
+        (is (string? (:runbook result)))
+        (is (str/includes? (:runbook result) "When to use strands"))
+        (is (str/includes? (:runbook result) "strand ready"))))))
+
 (deftest activate-registers-exact-coordination-query-shapes
   (with-batteries
     (fn [rt]

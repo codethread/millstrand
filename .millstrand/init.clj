@@ -8,6 +8,7 @@
 ;; authoring forms. Declarations carry only a source target and world policy.
 ;;
 ;; File-per-concern map (each Clojure file is one module):
+;;   ct/runbook.clj               — elect Batteries' strand-tracking runbook
 ;;   ct/policy/config.clj         — named queries + shared validation helpers
 ;;   ct/workflows/               — workflow definitions, policy, and support
 ;;   workflows/scripts/          — standalone workflow shell scripts
@@ -34,6 +35,11 @@
 (runtime/module! runtime :millstrand/spools-batteries
                  {:ns 'millstrand.spools.batteries
                   :spools ['millstrand.spools/batteries]})
+(runtime/module! runtime :batteries-runbook
+                 {:file "ct/runbook.clj"
+                  :spools ['millstrand.spools/batteries]
+                  :after [:millstrand/spools-batteries]
+                  :required? true})
 
 ;; --- workflow engine + shell executor -------------------------------------
 ;; The engine's collected open-kind and lifecycle declarations own Workflow

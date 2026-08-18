@@ -19,6 +19,10 @@
   session. Evaluating an authoring form outside module collection defines its Var
   but publishes no op.
 
+  Batteries also defines an inert `runbook` op (`defop`, not `defop!`): the
+  opinionated strand-tracking loop, loaded from classpath markdown. A workspace
+  elects it with `millstrand/use-op!`.
+
   Production loading follows the ordinary approved-spool path. `mill init` seeds
   `millstrand.spools/batteries {:millstrand/source-root \"spools/batteries\"}` in
   `spools.edn`, and its startup module names that root in `:spools`. Deleting
@@ -45,6 +49,7 @@
   (:refer-clojure :exclude [await list update])
   (:require [clojure.data.json :as json]
             [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -1013,6 +1018,13 @@
                    :doc "Filter to notes from one review round."}}
    :positionals [{:name :id :type :string :required? true :doc "Target strand id."}]})
 
+(def ^:private runbook-arg-spec
+  {:op "runbook"
+   :doc "Show the batteries strand-tracking runbook."
+   :hook-class :read
+   :deadline-class :standard
+   :annotations {:use-when ["Loading the opinionated batteries loop: when to plan, body convention, ready, and close."]}})
+
 (def ^:private spool-arg-spec
   "The spool op's fractal node tree: every leaf declares both classes in the
   arg-spec (DELTA-Lhc-001.CC2 single-source authoring; no registration-opts
@@ -1165,7 +1177,8 @@
                                :compare-url [:nullable :string] :requirements :json}}
             "status" {:type :map
                       :required {:operation :string :families :json :requirements :json
-                                 :pending-generation :json :release-marker :json}}}}})
+                                 :pending-generation :json :release-marker :json}}}}
+   'runbook {:type :map :required {:runbook :string}}})
 
 ;; --- op-level about/prime prose ---------------------------------------------
 
@@ -1652,6 +1665,24 @@
     "status" (require-valid! ::spool-status-result
                              (assoc (spool-status (:op/runtime ctx)) :operation "spool status")
                              "spool status returned an invalid result")))
+
+(defn- slurp-runbook
+  "Return the batteries runbook markdown.
+
+  Fails loudly when the classpath resource is missing."
+  []
+  (let [resource (io/resource "millstrand/spools/runbook.md")]
+    (when-not resource
+      (throw (ex-info "Batteries runbook resource is missing"
+                      {:code "batteries/runbook-missing"
+                       :resource "millstrand/spools/runbook.md"})))
+    (slurp resource)))
+
+(millstrand/defop runbook
+  "Return the batteries strand-tracking runbook."
+  (op-options 'runbook runbook-arg-spec)
+  [_ctx]
+  {:runbook (slurp-runbook)})
 
 (s/def ::runtime some?)
 (s/def ::seed-context (s/keys :req-un [::runtime]))

@@ -14,6 +14,8 @@
 
 These `defop!` declarations are the durable, owner-complete source for the command surface. Dynamic spool code and tests may use `millstrand.api.weaver.alpha/register-op!` with an explicit runtime for a live registration; an in-process `millstrand.repl` session uses the same verb with the runtime implied. A workspace that needs to mask a spool op durably uses `defop!` with `{:override? true}` in a workspace module. The coordinate that acquired the spool does not change those registry rules.
 
+Batteries also defines an inert `runbook` op (`defop`, not `defop!`): the opinionated strand-tracking loop. A workspace elects it with `(millstrand/use-op! millstrand.spools.batteries/runbook)`. It is not part of the default batteries surface.
+
 Each op delegates to exactly the `millstrand.api.*.alpha` call the old JSON socket dispatch used — strand
 lifecycle in `millstrand.api.weaver.alpha`, queries and traversal in `millstrand.api.graph.alpha`, weave in
 `millstrand.api.patterns.alpha` — and returns the same JSON-safe shape, so the ops are drop-in reachable
