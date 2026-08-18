@@ -150,19 +150,19 @@ The correctness stance for this whole surface: failures are acceptable provided 
 
 - **PROP-Sbn-001.S7 (the plan and environment overlay):** `bins plan <name>` resolves a declaration without opening a process or holding a descriptor:
 
-    ```json
+    ```text
     {
-    	"operation": "bins plan",
-    	"bin": "kanban-dash",
-    	"runnable": false,
-    	"exec": {
-    		"path": "/Users/ct/.cache/skein/spools/603fa7b8…/bin/kanban-dash",
-    		"env": { "SKEIN_WORKSPACE": "/Users/ct/dev/projects/skein-src/.millstrand" }
-    	},
-    	"build": {
-    		"argv": ["bun", "install", "--cwd", "scripts/kanban-export", "--frozen-lockfile"],
-    		"cwd": "/Users/ct/.cache/skein/spools/603fa7b8…"
-    	}
+      "operation": "bins plan",
+      "bin": "kanban-dash",
+      "runnable": false,
+      "exec": {
+        "path": "/Users/ct/.cache/skein/spools/603fa7b8…/bin/kanban-dash",
+        "env": { "SKEIN_WORKSPACE": "/Users/ct/dev/projects/skein-src/.millstrand" }
+      },
+      "build": {
+        "argv": ["bun", "install", "--cwd", "scripts/kanban-export", "--frozen-lockfile"],
+        "cwd": "/Users/ct/.cache/skein/spools/603fa7b8…"
+      }
     }
     ```
 
