@@ -187,7 +187,7 @@ func TestRunnerWarnsAtMoreThanTenPercentGrowth(t *testing.T) {
 
 func TestRunnerTimesOutCheckAndBlocksDependent(t *testing.T) {
 	checks := []check{
-		{name: "slow", argv: []string{"slow"}, baseline: time.Millisecond, timeout: 10 * time.Millisecond},
+		{name: "slow", argv: []string{"slow"}, baseline: 100 * time.Millisecond, timeout: time.Second},
 		{name: "dependent", argv: []string{"dependent"}, deps: []string{"slow"}, baseline: time.Second, timeout: time.Minute},
 	}
 	exec := func(ctx context.Context, _ check, _ string) error {
@@ -212,7 +212,7 @@ func TestRunnerStopsAtOverallContextDeadline(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	results, err := (runner{checks: []check{c}, heavyLimit: 1, execute: exec, out: io.Discard, logDir: t.TempDir()}).run(ctx)
 	if !errors.Is(err, context.DeadlineExceeded) {
