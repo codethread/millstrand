@@ -1,6 +1,8 @@
 # Task 5: kanban card-view tasks lane + board doing-task line
 
-**Document ID:** `TASK-Nwt-005` **Slice:** `PLAN-Nwt-001.PH2` (task projections) · **Depends on:** Task 4 (consumes the derived-status fn; same-file serialization on `kanban.clj` — never held open concurrently, `PLAN-Nwt-001.A6`)
+**Document ID:** `TASK-Nwt-005`
+
+**Slice:** `PLAN-Nwt-001.PH2` (task projections) · **Depends on:** Task 4 (consumes the derived-status fn; same-file serialization on `kanban.clj` — never held open concurrently, `PLAN-Nwt-001.A6`)
 
 ## TASK-Nwt-005.P1 Scope
 

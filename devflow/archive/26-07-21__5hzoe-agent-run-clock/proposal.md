@@ -1,6 +1,10 @@
 # Agent-run clock-aware awaiting proposal
 
-**Document ID:** `PROP-Arc-001` **Last Updated:** 2026-07-21 **Related root specs:** [REPL API](../../specs/repl-api.md) (`SPEC-003.C17b`), [Weaver Runtime](../../specs/daemon-runtime.md) (`SPEC-004.C1a`), and [Alpha Surface](../../specs/alpha-surface.md) (`SPEC-005.C5a`)
+**Document ID:** `PROP-Arc-001`
+
+**Last Updated:** 2026-07-21
+
+**Related root specs:** [REPL API](../../specs/repl-api.md) (`SPEC-003.C17b`), [Weaver Runtime](../../specs/daemon-runtime.md) (`SPEC-004.C1a`), and [Alpha Surface](../../specs/alpha-surface.md) (`SPEC-005.C5a`)
 
 ## PROP-Arc-001.P1 Problem
 

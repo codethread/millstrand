@@ -1,6 +1,20 @@
 # sync! Owns Resolution Plan
 
-**Document ID:** `PLAN-Sor-001` **Feature:** `c5kss-sync-owns-resolution` **Proposal:** [proposal.md](./proposal.md) **RFC:** design record strand `5bbrd` (council-settled; removal-default note `s5ka8`) **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) **Status:** Reviewed **Last Updated:** 2026-07-12
+**Document ID:** `PLAN-Sor-001`
+
+**Feature:** `c5kss-sync-owns-resolution`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** design record strand `5bbrd` (council-settled; removal-default note `s5ka8`)
+
+**Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md)
+
+**Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-12
 
 ## PLAN-Sor-001.P1 Goal and scope
 

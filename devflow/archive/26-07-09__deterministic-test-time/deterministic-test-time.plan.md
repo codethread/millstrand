@@ -1,6 +1,20 @@
 # Deterministic Test Time Plan
 
-**Document ID:** `PLAN-Dtt-001` **Feature:** `deterministic-test-time` **Proposal:** [proposal.md](./proposal.md) **RFC:** [Deterministic Test Time RFC-Dtt-001](./rfcs/2026-07-09-deterministic-test-time.md) **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md), [repl-api.md](../../specs/repl-api.md), [alpha-surface.md](../../specs/alpha-surface.md) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md), [specs/repl-api.delta.md](./specs/repl-api.delta.md), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) **Status:** Shipped **Last Updated:** 2026-07-09
+**Document ID:** `PLAN-Dtt-001`
+
+**Feature:** `deterministic-test-time`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** [Deterministic Test Time RFC-Dtt-001](./rfcs/2026-07-09-deterministic-test-time.md)
+
+**Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md), [repl-api.md](../../specs/repl-api.md), [alpha-surface.md](../../specs/alpha-surface.md)
+
+**Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md), [specs/repl-api.delta.md](./specs/repl-api.delta.md), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md)
+
+**Status:** Shipped
+
+**Last Updated:** 2026-07-09
 
 ## PLAN-Dtt-001.P1 Goal and scope
 

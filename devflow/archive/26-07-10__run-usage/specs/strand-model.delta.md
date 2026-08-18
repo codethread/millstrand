@@ -1,6 +1,8 @@
 # Strand Model delta for run-usage
 
-**Document ID:** `SPEC-Ru-001` **Root spec:** [strand-model.md](../../../specs/strand-model.md) (`SPEC-001`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Ru-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
+**Document ID:** `SPEC-Ru-001` **Root spec:** [strand-model.md](../../../specs/strand-model.md) (`SPEC-001`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Ru-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
 
 ## SPEC-Ru-001.P1 Summary
 

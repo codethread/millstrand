@@ -1,6 +1,8 @@
 # Task 3: delegation agent-note --attr decoration passthrough (op-note parse)
 
-**Document ID:** `TASK-Nwt-003` **Slice:** `PLAN-Nwt-001.PH1` (CLI decoration) · **Depends on:** none (the `--attr` parse is independent of the writer fns; runs parallel to Tasks 1/2)
+**Document ID:** `TASK-Nwt-003`
+
+**Slice:** `PLAN-Nwt-001.PH1` (CLI decoration) · **Depends on:** none (the `--attr` parse is independent of the writer fns; runs parallel to Tasks 1/2)
 
 ## TASK-Nwt-003.P1 Scope
 

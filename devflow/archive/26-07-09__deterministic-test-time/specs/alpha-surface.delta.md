@@ -1,6 +1,14 @@
 # Alpha Surface delta for deterministic-test-time
 
-**Document ID:** `DELTA-Dtt-003` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-09
+**Document ID:** `DELTA-Dtt-003`
+
+**Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-09
 
 ## DELTA-Dtt-003.P1 Summary
 

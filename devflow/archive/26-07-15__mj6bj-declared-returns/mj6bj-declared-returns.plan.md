@@ -1,6 +1,16 @@
 # Declared op returns plan
 
-**Document ID:** `PLAN-Dcr-001` **Feature:** `mj6bj-declared-returns` **Proposal:** [proposal.md](./proposal.md) (`PROP-Dcr-001`) **RFC:** none **Root specs:** [cli.md](../../specs/cli.md), [daemon-runtime.md](../../specs/daemon-runtime.md), [repl-api.md](../../specs/repl-api.md), [alpha-surface.md](../../specs/alpha-surface.md) **Feature specs:** [specs/cli.delta.md](./specs/cli.delta.md), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md), [specs/repl-api.delta.md](./specs/repl-api.delta.md), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) **Status:** Shipped **Last Updated:** 2026-07-23
+**Document ID:** `PLAN-Dcr-001`
+
+**Feature:** `mj6bj-declared-returns`
+
+**Proposal:** [proposal.md](./proposal.md) (`PROP-Dcr-001`)
+
+**RFC:** none
+
+**Root specs:** [cli.md](../../specs/cli.md), [daemon-runtime.md](../../specs/daemon-runtime.md), [repl-api.md](../../specs/repl-api.md), [alpha-surface.md](../../specs/alpha-surface.md) **Feature specs:** [specs/cli.delta.md](./specs/cli.delta.md), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md), [specs/repl-api.delta.md](./specs/repl-api.delta.md), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) **Status:** Shipped
+
+**Last Updated:** 2026-07-23
 
 ## PLAN-Dcr-001.P1 Goal and scope
 

@@ -1,6 +1,14 @@
 # repl-api delta for 8wwjk-leaf-hook-class
 
-**Document ID:** `DELTA-Lhc-001` **Root spec:** [repl-api.md](../../../specs/repl-api.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-22
+**Document ID:** `DELTA-Lhc-001`
+
+**Root spec:** [repl-api.md](../../../specs/repl-api.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-22
 
 ## DELTA-Lhc-001.P1 Summary
 

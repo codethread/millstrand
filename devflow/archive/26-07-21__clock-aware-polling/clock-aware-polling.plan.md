@@ -1,6 +1,20 @@
 # Runtime-owned Clock and deterministic polling plan
 
-**Document ID:** `PLAN-Clp-001` **Feature:** `clock-aware-polling` (kanban `2g75m`) **Proposal:** [proposal.md](./proposal.md) **RFC:** [RFC-Dtt-001 Deterministic Test Time and Async Quiescence](../../archive/26-07-09__deterministic-test-time/rfcs/2026-07-09-deterministic-test-time.md) **Root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md) **Feature specs:** [REPL API delta](./specs/repl-api.delta.md), [Weaver Runtime delta](./specs/daemon-runtime.delta.md), [Alpha Surface delta](./specs/alpha-surface.delta.md) **Status:** Shipped **Last Updated:** 2026-07-20
+**Document ID:** `PLAN-Clp-001`
+
+**Feature:** `clock-aware-polling` (kanban `2g75m`)
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** [RFC-Dtt-001 Deterministic Test Time and Async Quiescence](../../archive/26-07-09__deterministic-test-time/rfcs/2026-07-09-deterministic-test-time.md)
+
+**Root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
+
+**Feature specs:** [REPL API delta](./specs/repl-api.delta.md), [Weaver Runtime delta](./specs/daemon-runtime.delta.md), [Alpha Surface delta](./specs/alpha-surface.delta.md)
+
+**Status:** Shipped
+
+**Last Updated:** 2026-07-20
 
 ## PLAN-Clp-001.P1 Goal and scope
 

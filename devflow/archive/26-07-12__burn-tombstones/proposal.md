@@ -1,6 +1,12 @@
 # Burn Tombstones Proposal
 
-**Document ID:** `PROP-Tomb-001` **Last Updated:** 2026-07-12 **Related RFCs:** None **Related root specs:** [SPEC-001 Strand Model](../../specs/strand-model.md)
+**Document ID:** `PROP-Tomb-001`
+
+**Last Updated:** 2026-07-12
+
+**Related RFCs:** None
+
+**Related root specs:** [SPEC-001 Strand Model](../../specs/strand-model.md)
 
 ## PROP-Tomb-001.P1 Problem
 

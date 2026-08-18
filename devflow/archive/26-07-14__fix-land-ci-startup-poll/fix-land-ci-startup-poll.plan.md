@@ -1,6 +1,20 @@
 # Land CI startup polling plan
 
-**Document ID:** `PLAN-Lcp-001` **Feature:** `fix-land-ci-startup-poll` **Proposal:** [proposal.md](./proposal.md) **RFC:** None **Root specs:** None **Feature specs:** None **Status:** Reviewed **Last Updated:** 2026-07-18
+**Document ID:** `PLAN-Lcp-001`
+
+**Feature:** `fix-land-ci-startup-poll`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** None
+
+**Root specs:** None
+
+**Feature specs:** None
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-18
 
 ## PLAN-Lcp-001.P1 Goal and scope
 

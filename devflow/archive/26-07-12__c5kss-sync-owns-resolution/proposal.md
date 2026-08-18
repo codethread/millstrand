@@ -1,6 +1,12 @@
 # sync! Owns Resolution Proposal
 
-**Document ID:** `PROP-Sor-001` **Last Updated:** 2026-07-12 **Related RFCs:** design record strand `5bbrd` (council-settled 2026-07-11; removal-default decided to majority 2026-07-12, note `s5ka8`); superseded preflight `PROP-srr-001` (card `pn7wh`, closed) **Related root specs:** [`devflow/specs/daemon-runtime.md`](../../specs/daemon-runtime.md)
+**Document ID:** `PROP-Sor-001`
+
+**Last Updated:** 2026-07-12
+
+**Related RFCs:** design record strand `5bbrd` (council-settled 2026-07-11; removal-default decided to majority 2026-07-12, note `s5ka8`); superseded preflight `PROP-srr-001` (card `pn7wh`, closed)
+
+**Related root specs:** [`devflow/specs/daemon-runtime.md`](../../specs/daemon-runtime.md)
 
 This is **half 1** of the design in `5bbrd` — severable, unanimous, and hazard-free. The generation swap / cutover of already-loaded code (`w92pn`) and the Maven version-bump guard (`ypy3h`) are out of scope here.
 

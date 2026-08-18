@@ -1,6 +1,18 @@
 # Agent-run engine primitives Plan
 
-**Document ID:** `PLAN-Aep-001` **Feature:** `agent-engine-primitives` **Proposal:** [proposal.md](./proposal.md) (`PROP-Aep-001`) **Predecessor:** `agent-layer-rename` (`PROP-Alr-001`, card `26o9g`), landed on `main` as `c79abb6`; F2 is card `ah5vu` of epic `kaans` **Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Aep-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Aep-002`, no change), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Aep-003`, `C92` staleness correction only — the gate-link conditional stays unfired, see `PLAN-Aep-001.CM4`) **Contract:** [proposal.md](./proposal.md) clauses `PROP-Aep-001.C1`–`C14` — the approved contract; this plan sequences it and never widens it. **Status:** Reviewed **Last Updated:** 2026-07-09
+**Document ID:** `PLAN-Aep-001`
+
+**Feature:** `agent-engine-primitives`
+
+**Proposal:** [proposal.md](./proposal.md) (`PROP-Aep-001`)
+
+**Predecessor:** `agent-layer-rename` (`PROP-Alr-001`, card `26o9g`), landed on `main` as `c79abb6`; F2 is card `ah5vu` of epic `kaans`
+
+**Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Aep-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Aep-002`, no change), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Aep-003`, `C92` staleness correction only — the gate-link conditional stays unfired, see `PLAN-Aep-001.CM4`) **Contract:** [proposal.md](./proposal.md) clauses `PROP-Aep-001.C1`–`C14` — the approved contract; this plan sequences it and never widens it.
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-09
 
 ## PLAN-Aep-001.P1 Goal and scope
 

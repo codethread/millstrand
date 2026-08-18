@@ -1,6 +1,12 @@
 # Deterministic Test Time and Async Quiescence
 
-**Document ID:** `RFC-Dtt-001` **Status:** Implemented **Date:** 2026-07-09 **Related:** [Test Concurrency RFC-016](../../../rfcs/2026-07-03-test-concurrency.md) (serial islands this RFC pays down), [Weaver Scheduler RFC-009](../../../rfcs/2026-06-29-weaver-scheduler.md), [Weaver Runtime spec](../../../specs/daemon-runtime.md), [Alpha Surface spec](../../../specs/alpha-surface.md), code: `src/skein/core/weaver/runtime.clj`, `src/skein/core/weaver/scheduler.clj`, `src/skein/api/events/alpha.clj`, `src/skein/api/runtime/alpha.clj`, `src/skein/test/alpha.clj`. Tenets: TEN-003 (FAIL LOUDLY), TEN-004 (Less is More).
+**Document ID:** `RFC-Dtt-001`
+
+**Status:** Implemented
+
+**Date:** 2026-07-09
+
+**Related:** [Test Concurrency RFC-016](../../../rfcs/2026-07-03-test-concurrency.md) (serial islands this RFC pays down), [Weaver Scheduler RFC-009](../../../rfcs/2026-06-29-weaver-scheduler.md), [Weaver Runtime spec](../../../specs/daemon-runtime.md), [Alpha Surface spec](../../../specs/alpha-surface.md), code: `src/skein/core/weaver/runtime.clj`, `src/skein/core/weaver/scheduler.clj`, `src/skein/api/events/alpha.clj`, `src/skein/api/runtime/alpha.clj`, `src/skein/test/alpha.clj`. Tenets: TEN-003 (FAIL LOUDLY), TEN-004 (Less is More).
 
 ## RFC-Dtt-001.P1 Problem
 

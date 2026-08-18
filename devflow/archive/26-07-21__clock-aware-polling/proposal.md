@@ -1,6 +1,16 @@
 # Runtime-owned Clock and deterministic polling proposal
 
-**Document ID:** `PROP-Clp-001` **Last Updated:** 2026-07-20 **Kanban:** source card `2g75m`; decision card `99utx` **Related RFCs:** [RFC-Dtt-001 Deterministic Test Time and Async Quiescence](../../archive/26-07-09__deterministic-test-time/rfcs/2026-07-09-deterministic-test-time.md) **Related root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md) **Spec deltas:** [REPL API](./specs/repl-api.delta.md), [Weaver Runtime](./specs/daemon-runtime.delta.md), [Alpha Surface](./specs/alpha-surface.delta.md)
+**Document ID:** `PROP-Clp-001`
+
+**Last Updated:** 2026-07-20
+
+**Kanban:** source card `2g75m`; decision card `99utx`
+
+**Related RFCs:** [RFC-Dtt-001 Deterministic Test Time and Async Quiescence](../../archive/26-07-09__deterministic-test-time/rfcs/2026-07-09-deterministic-test-time.md)
+
+**Related root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
+
+**Spec deltas:** [REPL API](./specs/repl-api.delta.md), [Weaver Runtime](./specs/daemon-runtime.delta.md), [Alpha Surface](./specs/alpha-surface.delta.md)
 
 ## PROP-Clp-001.P1 Problem
 

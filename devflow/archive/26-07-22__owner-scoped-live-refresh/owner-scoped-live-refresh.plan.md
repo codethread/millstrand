@@ -1,6 +1,20 @@
 # Owner-scoped live refresh plan
 
-**Document ID:** `PLAN-Olr-001` **Feature:** `owner-scoped-live-refresh` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md) **Feature specs:** [REPL API delta](./specs/repl-api.delta.md), [Weaver Runtime delta](./specs/daemon-runtime.delta.md), [Alpha Surface delta](./specs/alpha-surface.delta.md) **Status:** Reviewed **Last Updated:** 2026-07-20
+**Document ID:** `PLAN-Olr-001`
+
+**Feature:** `owner-scoped-live-refresh`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** [REPL API](../../specs/repl-api.md), [Weaver Runtime](../../specs/daemon-runtime.md), [Alpha Surface](../../specs/alpha-surface.md)
+
+**Feature specs:** [REPL API delta](./specs/repl-api.delta.md), [Weaver Runtime delta](./specs/daemon-runtime.delta.md), [Alpha Surface delta](./specs/alpha-surface.delta.md)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-20
 
 ## PLAN-Olr-001.P1 Goal and scope
 

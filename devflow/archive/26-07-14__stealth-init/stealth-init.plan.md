@@ -1,6 +1,20 @@
 # Stealth local workspace initialization plan
 
-**Document ID:** `PLAN-Si-001` **Feature:** `stealth-init` **Proposal:** [proposal.md](./proposal.md) **RFC:** None **Root specs:** [cli.md](../../specs/cli.md) **Feature specs:** [specs/cli.delta.md](./specs/cli.delta.md) **Status:** Reviewed **Last Updated:** 2026-07-14
+**Document ID:** `PLAN-Si-001`
+
+**Feature:** `stealth-init`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** None
+
+**Root specs:** [cli.md](../../specs/cli.md)
+
+**Feature specs:** [specs/cli.delta.md](./specs/cli.delta.md)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-14
 
 ## PLAN-Si-001.P1 Goal and scope
 

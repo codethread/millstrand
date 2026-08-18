@@ -1,6 +1,14 @@
 # Weaver Runtime delta for owner-scoped live refresh
 
-**Document ID:** `DELTA-OlrDrt-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-22
+**Document ID:** `DELTA-OlrDrt-001`
+
+**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-22
 
 ## DELTA-OlrDrt-001.P1 Summary
 

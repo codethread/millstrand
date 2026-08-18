@@ -1,6 +1,8 @@
 # agent-layer-rename — task queue & pour manifest
 
-**Feature:** `agent-layer-rename` (feature 1 of epic `kaans`) **Contract source of truth:** `../brief.md` rename table (never re-derived — `PLAN-Alr-001.TC1`), `PROP-Alr-001`, `PLAN-Alr-001` (as amended). Task docs are `TASK-Alr-001..022`; the machine index is `index.yml`.
+**Feature:** `agent-layer-rename` (feature 1 of epic `kaans`)
+
+**Contract source of truth:** `../brief.md` rename table (never re-derived — `PLAN-Alr-001.TC1`), `PROP-Alr-001`, `PLAN-Alr-001` (as amended). Task docs are `TASK-Alr-001..022`; the machine index is `index.yml`.
 
 This queue is derived exactly from `PLAN-Alr-001.P5`/`P8` (the 8-phase, token-class-sweep plan). It is **22 tasks**: the plan's ~21-task sketch plus one explicit `hitl` canonical-cutover task (TASK-Alr-022), which the coordinator runs with the user at the weaver restart — the plan folds that execution into PH6's coordinator note, but it is surfaced here as its own gated task.
 

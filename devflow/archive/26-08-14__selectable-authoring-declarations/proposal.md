@@ -1,6 +1,22 @@
 # Selectable authoring declarations proposal
 
-**Document ID:** `PROP-Sad-001` **Status:** Approved **Approved:** 2026-08-13 **Implementation reconciliation:** 2026-08-14 **Related RFCs:** [`RFC-Saf-001`](../../rfcs/2026-07-28-spool-authoring-forms.md), [`RFC-Laf-001`](../../rfcs/2026-07-28-lifecycle-authoring-forms.md) **Related proposals:** [`PROP-Auf-001`](../../archive/26-08-07__authoring-forms/proposal.md), [`PROP-Rgs-001`](../../archive/26-08-07__registration-surfaces/proposal.md) **Related root specs:** [`SPEC-003`](../../specs/repl-api.md), [`SPEC-004`](../../specs/daemon-runtime.md), [`SPEC-005`](../../specs/alpha-surface.md) **Related brief:** [brief.md](./brief.md) (epic `z2yhh`, intake card `j2dj2`) **Configuration identification:** `Sad` abbreviates selectable authoring declarations. A workspace-wide scan found no earlier `PROP-Sad` ID, so this feature takes `PROP-Sad-001`. Nested IDs carry the complete document ID.
+**Document ID:** `PROP-Sad-001`
+
+**Status:** Approved
+
+**Approved:** 2026-08-13
+
+**Implementation reconciliation:** 2026-08-14
+
+**Related RFCs:** [`RFC-Saf-001`](../../rfcs/2026-07-28-spool-authoring-forms.md), [`RFC-Laf-001`](../../rfcs/2026-07-28-lifecycle-authoring-forms.md)
+
+**Related proposals:** [`PROP-Auf-001`](../../archive/26-08-07__authoring-forms/proposal.md), [`PROP-Rgs-001`](../../archive/26-08-07__registration-surfaces/proposal.md)
+
+**Related root specs:** [`SPEC-003`](../../specs/repl-api.md), [`SPEC-004`](../../specs/daemon-runtime.md), [`SPEC-005`](../../specs/alpha-surface.md)
+
+**Related brief:** [brief.md](./brief.md) (epic `z2yhh`, intake card `j2dj2`)
+
+**Configuration identification:** `Sad` abbreviates selectable authoring declarations. A workspace-wide scan found no earlier `PROP-Sad` ID, so this feature takes `PROP-Sad-001`. Nested IDs carry the complete document ID.
 
 Once approved this document is frozen. It records the intent agreed at sign-off. Later implementation change belongs in spec deltas, the plan, and code.
 

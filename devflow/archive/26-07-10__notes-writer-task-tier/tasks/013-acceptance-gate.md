@@ -1,6 +1,8 @@
 # Task 13: full-suite queue acceptance gate
 
-**Document ID:** `TASK-Nwt-013` **Slice:** acceptance (queue-wide gate) · **Depends on:** all implementation/doc slices — Tasks 1–7, 9, 10, 11, 12 (Task 8 is the coordinator pre-merge HITL gate, run beside this, not before it)
+**Document ID:** `TASK-Nwt-013`
+
+**Slice:** acceptance (queue-wide gate) · **Depends on:** all implementation/doc slices — Tasks 1–7, 9, 10, 11, 12 (Task 8 is the coordinator pre-merge HITL gate, run beside this, not before it)
 
 ## TASK-Nwt-013.P1 Scope
 

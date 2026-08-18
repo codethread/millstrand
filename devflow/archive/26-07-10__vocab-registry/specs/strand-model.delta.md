@@ -1,6 +1,8 @@
 # Strand Model delta for vocab-registry
 
-**Document ID:** `SPEC-Vr-001` **Root spec:** [strand-model.md](../../../specs/strand-model.md) (`SPEC-001`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Vr-001`) **Contract:** [../brief.md](../brief.md) **Status:** Merged — applied at `PLAN-Vr-001.S9` **Last Updated:** 2026-07-10
+**Document ID:** `SPEC-Vr-001` **Root spec:** [strand-model.md](../../../specs/strand-model.md) (`SPEC-001`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Vr-001`) **Contract:** [../brief.md](../brief.md) **Status:** Merged — applied at `PLAN-Vr-001.S9` **Last Updated:** 2026-07-10
 
 ## SPEC-Vr-001.P1 Summary
 

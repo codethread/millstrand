@@ -1,6 +1,12 @@
 # Reload-spool fingerprint refresh proposal
 
-**Document ID:** `PROP-Rsf-001` **Last Updated:** 2026-07-19 **Related RFCs:** None **Related root specs:** [Weaver Runtime](../../specs/daemon-runtime.md) (SPEC-004.C46, SPEC-004.C44c, SPEC-004.C44d)
+**Document ID:** `PROP-Rsf-001`
+
+**Last Updated:** 2026-07-19
+
+**Related RFCs:** None
+
+**Related root specs:** [Weaver Runtime](../../specs/daemon-runtime.md) (SPEC-004.C46, SPEC-004.C44c, SPEC-004.C44d)
 
 ## PROP-Rsf-001.P1 Problem
 

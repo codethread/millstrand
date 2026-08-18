@@ -1,6 +1,14 @@
 # Harness/Alias Registry Split Proposal
 
-**Document ID:** `PROP-HarnessAliasRegistries-001` **Last Updated:** 2026-07-09 **Related RFCs:** None (no unresolved alternatives; the one open fork and its resolution rationale are recorded at NG1) **Related root specs:** None (spool-layer contract; strand-model / cli / repl-api / daemon-runtime untouched) **Related contracts:** [Shuttle spool](../../../spools/shuttle/README.md) (§3 Harness and alias registries), [Treadle spool](../../../spools/shuttle/treadle.md) (alias-registration ordering note), [Agents spool](../../../spools/agents/README.md) (harness/alias vocabulary)
+**Document ID:** `PROP-HarnessAliasRegistries-001`
+
+**Last Updated:** 2026-07-09
+
+**Related RFCs:** None (no unresolved alternatives; the one open fork and its resolution rationale are recorded at NG1)
+
+**Related root specs:** None (spool-layer contract; strand-model / cli / repl-api / daemon-runtime untouched)
+
+**Related contracts:** [Shuttle spool](../../../spools/shuttle/README.md) (§3 Harness and alias registries), [Treadle spool](../../../spools/shuttle/treadle.md) (alias-registration ordering note), [Agents spool](../../../spools/agents/README.md) (harness/alias vocabulary)
 
 ## PROP-HarnessAliasRegistries-001.P1 Problem
 

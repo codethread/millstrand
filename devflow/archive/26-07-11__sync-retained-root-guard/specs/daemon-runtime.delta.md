@@ -1,6 +1,16 @@
 # Weaver Runtime delta for sync-retained-root-guard
 
-**Document ID:** `DELTA-srr-dr-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`, amends the `.C43`/`.C44` sync-outcome area) **Feature:** [../proposal.md](../proposal.md) (`PROP-srr-001`) **Contract:** [../brief.md](../brief.md) **Status:** Draft **Last Updated:** 2026-07-11
+**Document ID:** `DELTA-srr-dr-001`
+
+**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`, amends the `.C43`/`.C44` sync-outcome area)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-srr-001`)
+
+**Contract:** [../brief.md](../brief.md)
+
+**Status:** Draft
+
+**Last Updated:** 2026-07-11
 
 ## DELTA-srr-dr-001.P1 Summary
 

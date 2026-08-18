@@ -1,6 +1,8 @@
 # Alpha Surface delta for agent-engine-primitives
 
-**Document ID:** `SPEC-Aep-002` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Aep-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-09
+**Document ID:** `SPEC-Aep-002` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Aep-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-09
 
 ## SPEC-Aep-002.P1 Summary
 

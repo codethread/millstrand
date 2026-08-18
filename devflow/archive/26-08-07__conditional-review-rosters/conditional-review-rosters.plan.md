@@ -1,6 +1,20 @@
 # Conditional review rosters plan
 
-**Document ID:** `PLAN-Crr-001` **Feature:** `conditional-review-rosters` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** none **Feature specs:** none **Status:** Reviewed **Last Updated:** 2026-08-05
+**Document ID:** `PLAN-Crr-001`
+
+**Feature:** `conditional-review-rosters`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** none
+
+**Feature specs:** none
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-08-05
 
 **Configuration identification:** `PLAN-Crr-001` is the first plan for conditional review rosters. Nested point IDs use the full document ID.
 

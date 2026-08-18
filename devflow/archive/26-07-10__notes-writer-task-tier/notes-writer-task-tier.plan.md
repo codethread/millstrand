@@ -1,6 +1,20 @@
 # Notes-writer + kanban task tier Plan
 
-**Document ID:** `PLAN-Nwt-001` **Feature:** `notes-writer-task-tier` **Proposal:** [./proposal.md](./proposal.md) (`PROP-Nwt-001`) **RFC:** None **Root specs:** [../../specs/strand-model.md](../../specs/strand-model.md) (`SPEC-001`) **Feature specs:** [./specs/strand-model.delta.md](./specs/strand-model.delta.md) (`DELTA-Nwt-001`, clauses `C1`–`C6`, `J1`, `J2`) **Status:** Reviewed **Last Updated:** 2026-07-10
+**Document ID:** `PLAN-Nwt-001`
+
+**Feature:** `notes-writer-task-tier`
+
+**Proposal:** [./proposal.md](./proposal.md) (`PROP-Nwt-001`)
+
+**RFC:** None
+
+**Root specs:** [../../specs/strand-model.md](../../specs/strand-model.md) (`SPEC-001`)
+
+**Feature specs:** [./specs/strand-model.delta.md](./specs/strand-model.delta.md) (`DELTA-Nwt-001`, clauses `C1`–`C6`, `J1`, `J2`)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-10
 
 ## PLAN-Nwt-001.P1 Goal and scope
 

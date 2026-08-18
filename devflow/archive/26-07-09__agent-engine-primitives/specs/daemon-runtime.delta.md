@@ -1,6 +1,8 @@
 # Weaver Runtime delta for agent-engine-primitives
 
-**Document ID:** `SPEC-Aep-003` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Aep-001`) **Status:** Merged **Last Updated:** 2026-07-09
+**Document ID:** `SPEC-Aep-003` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Aep-001`) **Status:** Merged **Last Updated:** 2026-07-09
 
 ## SPEC-Aep-003.P1 Summary
 

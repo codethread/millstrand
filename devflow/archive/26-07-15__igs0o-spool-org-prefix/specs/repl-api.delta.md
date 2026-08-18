@@ -1,6 +1,16 @@
 # REPL API delta for igs0o-spool-org-prefix
 
-**Document ID:** `DELTA-Sop-001` **Root spec:** [repl-api.md](../../../specs/repl-api.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-15 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `SPEC-Dwr-001` for v1 and `SPEC-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `DELTA-Sop-001.P1`, so references are globally grepable and do not clash across documents.
+**Document ID:** `DELTA-Sop-001`
+
+**Root spec:** [repl-api.md](../../../specs/repl-api.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-15
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `SPEC-Dwr-001` for v1 and `SPEC-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `DELTA-Sop-001.P1`, so references are globally grepable and do not clash across documents.
 
 ## DELTA-Sop-001.P1 Summary
 

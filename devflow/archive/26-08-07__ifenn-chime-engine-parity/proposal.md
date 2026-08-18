@@ -1,6 +1,12 @@
 # Chime Engine Parity Proposal
 
-**Document ID:** `PROP-Chp-001` **Last Updated:** 2026-07-23 **Related RFCs:** None **Related root specs:** [SPEC-004 daemon-runtime](../../specs/daemon-runtime.md) (C65, C74a, C76), [SPEC-003 repl-api](../../specs/repl-api.md)
+**Document ID:** `PROP-Chp-001`
+
+**Last Updated:** 2026-07-23
+
+**Related RFCs:** None
+
+**Related root specs:** [SPEC-004 daemon-runtime](../../specs/daemon-runtime.md) (C65, C74a, C76), [SPEC-003 repl-api](../../specs/repl-api.md)
 
 ## PROP-Chp-001.P1 Problem
 

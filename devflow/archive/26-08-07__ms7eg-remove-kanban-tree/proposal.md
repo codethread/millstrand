@@ -1,6 +1,12 @@
 # Remove the repo-local kanban tree projection
 
-**Document ID:** `PROP-Ktr-001` **Last Updated:** 2026-07-27 **Related RFCs:** None **Related root specs:** [`TEN-004` and `TEN-006`](../../TENETS.md), [ADR-001](../../adrs/0001-thin-cli-over-generic-algebra.md)
+**Document ID:** `PROP-Ktr-001`
+
+**Last Updated:** 2026-07-27
+
+**Related RFCs:** None
+
+**Related root specs:** [`TEN-004` and `TEN-006`](../../TENETS.md), [ADR-001](../../adrs/0001-thin-cli-over-generic-algebra.md)
 
 ## PROP-Ktr-001.P1 Problem
 

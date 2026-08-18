@@ -1,6 +1,12 @@
 # Org-prefix convention for external spool source namespaces Proposal
 
-**Document ID:** `PROP-Sop-001` **Last Updated:** 2026-07-15 **Related RFCs:** None **Related root specs:** [SPEC-003](../../specs/repl-api.md) (C19 namespace tiers)
+**Document ID:** `PROP-Sop-001`
+
+**Last Updated:** 2026-07-15
+
+**Related RFCs:** None
+
+**Related root specs:** [SPEC-003](../../specs/repl-api.md) (C19 namespace tiers)
 
 ## PROP-Sop-001.P1 Problem
 

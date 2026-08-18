@@ -1,6 +1,20 @@
 # Repo query catalogue plan
 
-**Document ID:** `PLAN-Rqc-001` **Feature:** `repo-query-catalogue` **Proposal:** [proposal.md](./proposal.md) **RFC:** None **Root specs:** [`repl-api.md`](../../specs/repl-api.md) **Feature specs:** None **Status:** Reviewed **Last Updated:** 2026-07-27
+**Document ID:** `PLAN-Rqc-001`
+
+**Feature:** `repo-query-catalogue`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** None
+
+**Root specs:** [`repl-api.md`](../../specs/repl-api.md)
+
+**Feature specs:** None
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-27
 
 ## PLAN-Rqc-001.P1 Goal and scope
 

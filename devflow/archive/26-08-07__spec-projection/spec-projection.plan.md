@@ -1,6 +1,22 @@
 # Spec projection Plan
 
-**Document ID:** `PLAN-Spj-001` **Feature:** `spec-projection` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [alpha-surface.md](../../specs/alpha-surface.md), [repl-api.md](../../specs/repl-api.md) **Feature specs:** [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md), [specs/repl-api.delta.md](./specs/repl-api.delta.md), [specs/workflow-spool.delta.md](./specs/workflow-spool.delta.md) **Status:** Reviewed **Last Updated:** 2026-07-29 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID.
+**Document ID:** `PLAN-Spj-001`
+
+**Feature:** `spec-projection`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** [alpha-surface.md](../../specs/alpha-surface.md), [repl-api.md](../../specs/repl-api.md)
+
+**Feature specs:** [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md), [specs/repl-api.delta.md](./specs/repl-api.delta.md), [specs/workflow-spool.delta.md](./specs/workflow-spool.delta.md)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-29
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID.
 
 ## PLAN-Spj-001.P1 Goal and scope
 

@@ -1,6 +1,14 @@
 # REPL API delta for spool-hot-reload
 
-**Document ID:** `DELTA-shr-001` **Root spec:** [repl-api.md](../../../specs/repl-api.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Draft **Last Updated:** 2026-07-11
+**Document ID:** `DELTA-shr-001`
+
+**Root spec:** [repl-api.md](../../../specs/repl-api.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Draft
+
+**Last Updated:** 2026-07-11
 
 ## DELTA-shr-001.P1 Summary
 

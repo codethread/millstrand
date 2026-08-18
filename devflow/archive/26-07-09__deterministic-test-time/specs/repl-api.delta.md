@@ -1,6 +1,14 @@
 # REPL API delta for deterministic-test-time
 
-**Document ID:** `DELTA-Dtt-002` **Root spec:** [repl-api.md](../../../specs/repl-api.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-09
+**Document ID:** `DELTA-Dtt-002`
+
+**Root spec:** [repl-api.md](../../../specs/repl-api.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-09
 
 ## DELTA-Dtt-002.P1 Summary
 

@@ -1,6 +1,8 @@
 # Kanban note documentation proposal
 
-**Document ID:** `PROP-KanbanNoteDocs-001` **Last Updated:** 2026-07-14 **Related RFCs:** None **Related root specs:** None
+**Document ID:** `PROP-KanbanNoteDocs-001` **Last Updated:** 2026-07-14
+
+**Related RFCs:** None **Related root specs:** None
 
 ## PROP-KanbanNoteDocs-001.P1 Problem
 

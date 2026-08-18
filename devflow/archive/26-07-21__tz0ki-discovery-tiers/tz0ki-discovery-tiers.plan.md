@@ -1,6 +1,20 @@
 # Discovery-tier factoring Plan
 
-**Document ID:** `PLAN-Dtf-001` **Feature:** `tz0ki-discovery-tiers` **Proposal:** [proposal.md](./proposal.md) **RFC:** [RFC-Dtf-001](../../rfcs/2026-07-20-discovery-tier-factoring.md) **Root specs:** [cli.md](../../specs/cli.md) (SPEC-002), [daemon-runtime.md](../../specs/daemon-runtime.md) (SPEC-004), [repl-api.md](../../specs/repl-api.md) (SPEC-003) **Feature specs:** [specs/cli.delta.md](./specs/cli.delta.md) (DELTA-Dtf-001), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (DELTA-Dtf-002), [specs/repl-api.delta.md](./specs/repl-api.delta.md) (DELTA-Dtf-003) **Status:** Reviewed **Last Updated:** 2026-07-20
+**Document ID:** `PLAN-Dtf-001`
+
+**Feature:** `tz0ki-discovery-tiers`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** [RFC-Dtf-001](../../rfcs/2026-07-20-discovery-tier-factoring.md)
+
+**Root specs:** [cli.md](../../specs/cli.md) (SPEC-002), [daemon-runtime.md](../../specs/daemon-runtime.md) (SPEC-004), [repl-api.md](../../specs/repl-api.md) (SPEC-003)
+
+**Feature specs:** [specs/cli.delta.md](./specs/cli.delta.md) (DELTA-Dtf-001), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (DELTA-Dtf-002), [specs/repl-api.delta.md](./specs/repl-api.delta.md) (DELTA-Dtf-003)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-20
 
 ## PLAN-Dtf-001.P1 Goal and scope
 

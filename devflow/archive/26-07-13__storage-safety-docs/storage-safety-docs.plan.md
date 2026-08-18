@@ -1,6 +1,20 @@
 # Storage-Safety Docs Sweep Plan
 
-**Document ID:** `PLAN-StorageDocs-001` **Feature:** `storage-safety-docs` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [strand-model.md](../../specs/strand-model.md) **Feature specs:** none **Status:** Reviewed **Last Updated:** 2026-07-13
+**Document ID:** `PLAN-StorageDocs-001`
+
+**Feature:** `storage-safety-docs`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** [strand-model.md](../../specs/strand-model.md)
+
+**Feature specs:** none
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-13
 
 ## PLAN-StorageDocs-001.P1 Goal and scope
 

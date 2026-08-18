@@ -1,6 +1,16 @@
 # Spool CLI style guide plan
 
-**Document ID:** `PLAN-Ucs-001` **Feature:** `uson2-cli-style-guide` **Proposal:** [proposal.md](./proposal.md) (`PROP-Ucs-001`) **RFC:** none **Root specs:** [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs:** [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`DELTA-Ucs-001`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-Ucs-002`) **Status:** Reviewed **Last Updated:** 2026-07-14
+**Document ID:** `PLAN-Ucs-001`
+
+**Feature:** `uson2-cli-style-guide`
+
+**Proposal:** [proposal.md](./proposal.md) (`PROP-Ucs-001`)
+
+**RFC:** none
+
+**Root specs:** [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs:** [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`DELTA-Ucs-001`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-Ucs-002`) **Status:** Reviewed
+
+**Last Updated:** 2026-07-14
 
 ## PLAN-Ucs-001.P1 Goal and scope
 

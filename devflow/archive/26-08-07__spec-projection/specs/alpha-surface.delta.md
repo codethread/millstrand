@@ -1,6 +1,16 @@
 # Alpha surface delta for spec-projection
 
-**Document ID:** `DELTA-Spj-001` **Root spec:** [alpha-surface.md](../../specs/alpha-surface.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-29 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID.
+**Document ID:** `DELTA-Spj-001`
+
+**Root spec:** [alpha-surface.md](../../specs/alpha-surface.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-29
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID.
 
 ## DELTA-Spj-001.P1 Summary
 

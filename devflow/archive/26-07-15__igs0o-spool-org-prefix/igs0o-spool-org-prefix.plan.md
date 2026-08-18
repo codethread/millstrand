@@ -1,6 +1,22 @@
 # Org-prefix convention for external spool source namespaces Plan
 
-**Document ID:** `PLAN-Sop-001` **Feature:** `igs0o-spool-org-prefix` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [repl-api.md](../../specs/repl-api.md) **Feature specs:** [specs/repl-api.delta.md](./specs/repl-api.delta.md) **Status:** Reviewed **Last Updated:** 2026-07-15 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PLAN-Dwr-001` for v1 and `PLAN-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `PLAN-Sop-001.P1`, so references are globally grepable and do not clash across documents.
+**Document ID:** `PLAN-Sop-001`
+
+**Feature:** `igs0o-spool-org-prefix`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** [repl-api.md](../../specs/repl-api.md)
+
+**Feature specs:** [specs/repl-api.delta.md](./specs/repl-api.delta.md)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-15
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PLAN-Dwr-001` for v1 and `PLAN-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `PLAN-Sop-001.P1`, so references are globally grepable and do not clash across documents.
 
 ## PLAN-Sop-001.P1 Goal and scope
 

@@ -1,6 +1,8 @@
 # Task 12: stage-keyed writer glue guidance + kanban.md task-tier prose + api-docs regen
 
-**Document ID:** `TASK-Nwt-012` **Slice:** `PLAN-Nwt-001.PH5` (glue + docs) · **Depends on:** everything it documents — Tasks 1–7, 9, 10, 11 (the writer surface, CLI passthrough, task tier, handover retirement, name purge, and the absorbed prompt sites must all exist before they can be documented and before `make api-docs` picks up the docstrings; serializes with Tasks 7/9 on `CLAUDE.md`/`AGENTS.md`/`kanban.md`)
+**Document ID:** `TASK-Nwt-012`
+
+**Slice:** `PLAN-Nwt-001.PH5` (glue + docs) · **Depends on:** everything it documents — Tasks 1–7, 9, 10, 11 (the writer surface, CLI passthrough, task tier, handover retirement, name purge, and the absorbed prompt sites must all exist before they can be documented and before `make api-docs` picks up the docstrings; serializes with Tasks 7/9 on `CLAUDE.md`/`AGENTS.md`/`kanban.md`)
 
 ## TASK-Nwt-012.P1 Scope
 

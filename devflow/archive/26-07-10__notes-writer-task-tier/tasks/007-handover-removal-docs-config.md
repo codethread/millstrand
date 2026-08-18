@@ -1,6 +1,8 @@
 # Task 7: handover prose/config removal + config-test lockstep
 
-**Document ID:** `TASK-Nwt-007` **Slice:** `PLAN-Nwt-001.PH3` (handover retirement — prose/config) · **Depends on:** Task 5 (the task tier must exist to describe the replacement resume point). Disjoint files from Task 6, so runs parallel to it.
+**Document ID:** `TASK-Nwt-007`
+
+**Slice:** `PLAN-Nwt-001.PH3` (handover retirement — prose/config) · **Depends on:** Task 5 (the task tier must exist to describe the replacement resume point). Disjoint files from Task 6, so runs parallel to it.
 
 ## TASK-Nwt-007.P1 Scope
 

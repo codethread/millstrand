@@ -1,6 +1,22 @@
 # Agent-layer vocabulary rename Plan
 
-**Document ID:** `PLAN-Alr-001` **Feature:** `agent-layer-rename` **Proposal:** [proposal.md](./proposal.md) (`PROP-Alr-001`) **RFC:** none (feature 1 of epic `kaans`; the mechanical rename precedes the behavior features) **Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`) **Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Alr-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Alr-002`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Alr-003`) **Contract:** [brief.md](./brief.md) — the exhaustive rename table is authoritative; this plan never restates it. **Status:** Shipped **Last Updated:** 2026-07-23
+**Document ID:** `PLAN-Alr-001`
+
+**Feature:** `agent-layer-rename`
+
+**Proposal:** [proposal.md](./proposal.md) (`PROP-Alr-001`)
+
+**RFC:** none (feature 1 of epic `kaans`; the mechanical rename precedes the behavior features)
+
+**Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`)
+
+**Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Alr-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Alr-002`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Alr-003`)
+
+**Contract:** [brief.md](./brief.md) — the exhaustive rename table is authoritative; this plan never restates it.
+
+**Status:** Shipped
+
+**Last Updated:** 2026-07-23
 
 ## PLAN-Alr-001.P1 Goal and scope
 

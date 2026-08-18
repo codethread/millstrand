@@ -1,6 +1,14 @@
 # Batteries as an ordinary spool via `:skein/source-root` coordinates Proposal
 
-**Document ID:** `PROP-Srs-001` **Last Updated:** 2026-07-23 **Related RFCs:** None (design settled with the user in the 2026-07-23 session; decision record is [brief.md](./brief.md) on card `u4a24`, revised after cross-vendor review runs zlo0t/b8o2k) **Related root specs:** [`daemon-runtime.md`](../../specs/daemon-runtime.md) (SPEC-004.C42, C44/C44c/C44f, C48@2, C49@2, C50/C50a, C94a), [`repl-api.md`](../../specs/repl-api.md) (SPEC-003.C63), [`cli.md`](../../specs/cli.md) (mill bootstrap surface), [`alpha-surface.md`](../../specs/alpha-surface.md) (spool index tier) **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `PROP-Dwr-001.P1` or `PROP-Dwr-001@2.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
+**Document ID:** `PROP-Srs-001`
+
+**Last Updated:** 2026-07-23
+
+**Related RFCs:** None (design settled with the user in the 2026-07-23 session; decision record is [brief.md](./brief.md) on card `u4a24`, revised after cross-vendor review runs zlo0t/b8o2k)
+
+**Related root specs:** [`daemon-runtime.md`](../../specs/daemon-runtime.md) (SPEC-004.C42, C44/C44c/C44f, C48@2, C49@2, C50/C50a, C94a), [`repl-api.md`](../../specs/repl-api.md) (SPEC-003.C63), [`cli.md`](../../specs/cli.md) (mill bootstrap surface), [`alpha-surface.md`](../../specs/alpha-surface.md) (spool index tier)
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `PROP-Dwr-001.P1` or `PROP-Dwr-001@2.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
 
 ## PROP-Srs-001.P1 Problem
 

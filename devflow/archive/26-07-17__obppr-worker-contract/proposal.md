@@ -1,6 +1,14 @@
 # Workspace-configurable worker contract Proposal
 
-**Document ID:** `PROP-Wct-001@2` **Last Updated:** 2026-07-17 **Related RFCs:** None **Related root specs:** [Weaver Runtime](../../specs/daemon-runtime.md) (SPEC-004.C96 reload tolerance of the preamble-extension seam) **Source:** https://github.com/codethread/skein/issues/81 (kanban card `obppr`)
+**Document ID:** `PROP-Wct-001@2`
+
+**Last Updated:** 2026-07-17
+
+**Related RFCs:** None
+
+**Related root specs:** [Weaver Runtime](../../specs/daemon-runtime.md) (SPEC-004.C96 reload tolerance of the preamble-extension seam)
+
+**Source:** https://github.com/codethread/skein/issues/81 (kanban card `obppr`)
 
 ## PROP-Wct-001@2.P1 Problem
 

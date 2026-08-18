@@ -1,6 +1,14 @@
 # 8wwjk-leaf-hook-class plan
 
-**Document ID:** `PLAN-Lhc-001` **Status:** Reviewed **Last Updated:** 2026-07-22 **Proposal:** [proposal.md](./proposal.md) **Spec deltas:** [repl-api](./specs/repl-api.delta.md), [daemon-runtime](./specs/daemon-runtime.delta.md), [cli](./specs/cli.delta.md)
+**Document ID:** `PLAN-Lhc-001`
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-22
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**Spec deltas:** [repl-api](./specs/repl-api.delta.md), [daemon-runtime](./specs/daemon-runtime.delta.md), [cli](./specs/cli.delta.md)
 
 ## PLAN-Lhc-001.P1 Goal and scope
 

@@ -1,6 +1,8 @@
 # Stealth local workspace initialization
 
-**Feature spec:** [specs/cli.delta.md](./specs/cli.delta.md) **Plan:** [stealth-init.plan.md](./stealth-init.plan.md)
+**Feature spec:** [specs/cli.delta.md](./specs/cli.delta.md)
+
+**Plan:** [stealth-init.plan.md](./stealth-init.plan.md)
 
 ## Problem
 

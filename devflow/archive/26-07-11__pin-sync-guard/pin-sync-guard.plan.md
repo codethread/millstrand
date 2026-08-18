@@ -1,6 +1,20 @@
 # Pin sync guard plan
 
-**Document ID:** `PLAN-Psg-001` **Feature:** `pin-sync-guard` **Proposal:** [proposal.md](./proposal.md) (`PROP-Psg-001`) **RFC:** none **Root specs:** none **Feature specs:** none (test-only guard; no durable contract change) **Status:** Reviewed **Last Updated:** 2026-07-11
+**Document ID:** `PLAN-Psg-001`
+
+**Feature:** `pin-sync-guard`
+
+**Proposal:** [proposal.md](./proposal.md) (`PROP-Psg-001`)
+
+**RFC:** none
+
+**Root specs:** none
+
+**Feature specs:** none (test-only guard; no durable contract change)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-11
 
 ## PLAN-Psg-001.P1 Goal and scope
 

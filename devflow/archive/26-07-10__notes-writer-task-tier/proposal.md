@@ -1,6 +1,12 @@
 # Notes-writer + kanban task tier Proposal
 
-**Document ID:** `PROP-Nwt-001` **Last Updated:** 2026-07-10 **Related RFCs:** None (prior feature context: [`devflow/feat/note-primitive/`](../26-07-10__note-primitive/) — the `notes` relation and `note!` this builds on) **Related root specs:** [`devflow/specs/strand-model.md`](../../specs/strand-model.md) (SPEC-001.P5 Edges — the `notes` relation); [`devflow/specs/alpha-surface.md`](../../specs/alpha-surface.md) (SPEC-005.C2, the blessed `skein.api.*.alpha` tier)
+**Document ID:** `PROP-Nwt-001`
+
+**Last Updated:** 2026-07-10
+
+**Related RFCs:** None (prior feature context: [`devflow/feat/note-primitive/`](../26-07-10__note-primitive/) — the `notes` relation and `note!` this builds on)
+
+**Related root specs:** [`devflow/specs/strand-model.md`](../../specs/strand-model.md) (SPEC-001.P5 Edges — the `notes` relation); [`devflow/specs/alpha-surface.md`](../../specs/alpha-surface.md) (SPEC-005.C2, the blessed `skein.api.*.alpha` tier)
 
 ## PROP-Nwt-001.P1 Problem
 

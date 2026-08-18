@@ -1,6 +1,14 @@
 # Alpha Surface delta for owner-scoped live refresh
 
-**Document ID:** `DELTA-OlrAlpha-001` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-22
+**Document ID:** `DELTA-OlrAlpha-001`
+
+**Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-22
 
 ## DELTA-OlrAlpha-001.P1 Summary
 

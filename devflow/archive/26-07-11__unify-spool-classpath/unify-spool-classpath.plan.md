@@ -1,6 +1,16 @@
 # Unify spool classpath Plan
 
-**Document ID:** `PLAN-usc-001` **Feature:** `unify-spool-classpath` **Proposal:** [proposal.md](./proposal.md) (`PROP-usc-001`) **RFC:** none **Root specs:** [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [repl-api.md](../../specs/repl-api.md) (`SPEC-003`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs:** [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`DELTA-usc-as-001`), [specs/repl-api.delta.md](./specs/repl-api.delta.md) (`DELTA-usc-repl-001`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-usc-dr-001`) **Contract:** [proposal.md](./proposal.md) clauses `PROP-usc-001.C1`–`C8` — the accepted design contract (card `nbeu8`); this plan sequences it and never widens it. **Status:** Reviewed **Last Updated:** 2026-07-11
+**Document ID:** `PLAN-usc-001`
+
+**Feature:** `unify-spool-classpath`
+
+**Proposal:** [proposal.md](./proposal.md) (`PROP-usc-001`)
+
+**RFC:** none
+
+**Root specs:** [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [repl-api.md](../../specs/repl-api.md) (`SPEC-003`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs:** [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`DELTA-usc-as-001`), [specs/repl-api.delta.md](./specs/repl-api.delta.md) (`DELTA-usc-repl-001`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-usc-dr-001`) **Contract:** [proposal.md](./proposal.md) clauses `PROP-usc-001.C1`–`C8` — the accepted design contract (card `nbeu8`); this plan sequences it and never widens it. **Status:** Reviewed
+
+**Last Updated:** 2026-07-11
 
 ## PLAN-usc-001.P1 Goal and scope
 

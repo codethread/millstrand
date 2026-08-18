@@ -1,6 +1,8 @@
 # CLI Surface delta for run-usage
 
-**Document ID:** `SPEC-Ru-003` **Root spec:** [cli.md](../../../specs/cli.md) (`SPEC-002`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Ru-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
+**Document ID:** `SPEC-Ru-003` **Root spec:** [cli.md](../../../specs/cli.md) (`SPEC-002`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Ru-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
 
 ## SPEC-Ru-003.P1 Summary
 

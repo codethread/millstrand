@@ -1,6 +1,12 @@
 # Cron on Scheduler Proposal
 
-**Document ID:** `PROP-cron-on-scheduler-001` **Last Updated:** 2026-07-10 **Related RFCs:** [`RFC-009 Weaver Scheduler Primitive`](../../rfcs/2026-06-29-weaver-scheduler.md) **Related root specs:** [`SPEC-004 Weaver Runtime`](../../specs/daemon-runtime.md)
+**Document ID:** `PROP-cron-on-scheduler-001`
+
+**Last Updated:** 2026-07-10
+
+**Related RFCs:** [`RFC-009 Weaver Scheduler Primitive`](../../rfcs/2026-06-29-weaver-scheduler.md)
+
+**Related root specs:** [`SPEC-004 Weaver Runtime`](../../specs/daemon-runtime.md)
 
 ## PROP-cron-on-scheduler-001.P1 Problem
 

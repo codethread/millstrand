@@ -1,6 +1,20 @@
 # spool-hot-reload Plan
 
-**Document ID:** `PLAN-shr-001` **Feature:** `spool-hot-reload` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [repl-api.md](../../specs/repl-api.md) (SPEC-003), [alpha-surface.md](../../specs/alpha-surface.md) (SPEC-005), [daemon-runtime.md](../../specs/daemon-runtime.md) (SPEC-004) **Feature specs:** [specs/repl-api.delta.md](./specs/repl-api.delta.md) (DELTA-shr-001) **Status:** Reviewed **Last Updated:** 2026-07-11
+**Document ID:** `PLAN-shr-001`
+
+**Feature:** `spool-hot-reload`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** [repl-api.md](../../specs/repl-api.md) (SPEC-003), [alpha-surface.md](../../specs/alpha-surface.md) (SPEC-005), [daemon-runtime.md](../../specs/daemon-runtime.md) (SPEC-004)
+
+**Feature specs:** [specs/repl-api.delta.md](./specs/repl-api.delta.md) (DELTA-shr-001)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-11
 
 ## PLAN-shr-001.P1 Goal and scope
 

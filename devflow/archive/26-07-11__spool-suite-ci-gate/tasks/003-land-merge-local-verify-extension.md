@@ -1,6 +1,8 @@
 # Task 3: Land merge-local-verify extension in .skein/workflows.clj
 
-**Document ID:** `TASK-ssc-003` **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `TASK-ssc-003` for v1 and `TASK-ssc-003@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `TASK-ssc-003.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
+**Document ID:** `TASK-ssc-003`
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `TASK-ssc-003` for v1 and `TASK-ssc-003@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `TASK-ssc-003.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
 
 ## TASK-ssc-003.P1 Scope
 

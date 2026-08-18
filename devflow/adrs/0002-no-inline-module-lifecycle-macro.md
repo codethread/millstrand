@@ -2,7 +2,15 @@
 
 > **Superseded for authoring on 2026-07-30 by PROP-Auf-001.** Contribution and lifecycle callbacks were removed after the selected source universe migrated to authoring forms. This ADR remains the historical record for why opaque inline callback bodies were rejected.
 
-**Document ID:** `ADR-002` **Status:** Rejected **Date:** 2026-07-23 **Upholds:** [`TEN-004`](../TENETS.md) (Less is More); [`TEN-003`](../TENETS.md) (FAIL LOUDLY); [`TEN-000@1`](../TENETS.md) (this is alpha software). **Related:** the module lifecycle surface `module!`/`refresh!`/`plan`/`status` in `skein.api.runtime.alpha` (DELTA-OlrRepl-001, DELTA-OlrDrt-001); the declaration grammar in `skein.core.weaver.module-graph/normalize-declaration`; the reconcile/contribute path in `skein.core.weaver.module-refresh`; the local-notifier convention in `.millstrand/init.local.clj` + `.millstrand/notifier_local.clj`; spool classloader semantics in `docs/spools/customisation.md`.
+**Document ID:** `ADR-002`
+
+**Status:** Rejected
+
+**Date:** 2026-07-23
+
+**Upholds:** [`TEN-004`](../TENETS.md) (Less is More); [`TEN-003`](../TENETS.md) (FAIL LOUDLY); [`TEN-000@1`](../TENETS.md) (this is alpha software).
+
+**Related:** the module lifecycle surface `module!`/`refresh!`/`plan`/`status` in `skein.api.runtime.alpha` (DELTA-OlrRepl-001, DELTA-OlrDrt-001); the declaration grammar in `skein.core.weaver.module-graph/normalize-declaration`; the reconcile/contribute path in `skein.core.weaver.module-refresh`; the local-notifier convention in `.millstrand/init.local.clj` + `.millstrand/notifier_local.clj`; spool classloader semantics in `docs/spools/customisation.md`.
 
 > This ADR records why we prototyped, verified, and then declined a `use-module` macro that would let a stable module's `:contribute`/`:reconcile` be authored inline at the declaration site instead of in a separate source file. The macro works; the reasons to keep it out are the edge cases it can't reach and the gotchas it would normalize. The exploration is preserved here so the choice is repeatable and a returning reader learns _why_ rather than re-running the spike.
 

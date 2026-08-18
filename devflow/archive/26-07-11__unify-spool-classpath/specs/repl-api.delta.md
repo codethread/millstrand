@@ -1,6 +1,16 @@
 # REPL API delta for unify-spool-classpath
 
-**Document ID:** `DELTA-usc-repl-001` **Root spec:** [repl-api.md](../../../specs/repl-api.md) (`SPEC-003`) **Feature:** [../proposal.md](../proposal.md) (`PROP-usc-001`) **Contract:** [../brief.md](../brief.md) **Status:** Merged **Last Updated:** 2026-07-11
+**Document ID:** `DELTA-usc-repl-001`
+
+**Root spec:** [repl-api.md](../../../specs/repl-api.md) (`SPEC-003`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-usc-001`)
+
+**Contract:** [../brief.md](../brief.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-11
 
 ## DELTA-usc-repl-001.P1 Summary
 

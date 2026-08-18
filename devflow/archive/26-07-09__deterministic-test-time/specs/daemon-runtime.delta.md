@@ -1,6 +1,14 @@
 # Weaver Runtime delta for deterministic-test-time
 
-**Document ID:** `DELTA-Dtt-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-09
+**Document ID:** `DELTA-Dtt-001`
+
+**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-09
 
 ## DELTA-Dtt-001.P1 Summary
 

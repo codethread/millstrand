@@ -1,6 +1,14 @@
 # REPL API delta for tiered-validation-v2
 
-**Document ID:** `DELTA-Ttv-001` **Root spec:** [repl-api.md](../../../specs/repl-api.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Draft **Last Updated:** 2026-07-09
+**Document ID:** `DELTA-Ttv-001`
+
+**Root spec:** [repl-api.md](../../../specs/repl-api.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Draft
+
+**Last Updated:** 2026-07-09
 
 ## DELTA-Ttv-001.P1 Summary
 

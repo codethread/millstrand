@@ -1,6 +1,12 @@
 # Land CI startup polling proposal
 
-**Document ID:** `PROP-Lcp-001` **Last Updated:** 2026-07-18 **Related RFCs:** None **Related root specs:** None; this is repo-local landing policy.
+**Document ID:** `PROP-Lcp-001`
+
+**Last Updated:** 2026-07-18
+
+**Related RFCs:** None
+
+**Related root specs:** None; this is repo-local landing policy.
 
 ## PROP-Lcp-001.P1 Problem
 

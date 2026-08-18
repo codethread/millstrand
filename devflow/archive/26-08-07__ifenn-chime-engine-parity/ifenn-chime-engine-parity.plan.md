@@ -1,6 +1,22 @@
 # Chime Engine Parity Plan
 
-**Document ID:** `PLAN-Chp-001` **Feature:** `ifenn-chime-engine-parity` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) **Status:** Reviewed **Last Updated:** 2026-07-23 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID, for example `PLAN-Chp-001.P1`.
+**Document ID:** `PLAN-Chp-001`
+
+**Feature:** `ifenn-chime-engine-parity`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md)
+
+**Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-23
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID, for example `PLAN-Chp-001.P1`.
 
 ## PLAN-Chp-001.P1 Goal and scope
 

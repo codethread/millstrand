@@ -1,6 +1,20 @@
 # Harness/Alias Registry Split Plan
 
-**Document ID:** `PLAN-HarnessAliasRegistries-001` **Feature:** `harness-alias-registries` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** none **Feature specs:** none **Status:** Reviewed **Last Updated:** 2026-07-09
+**Document ID:** `PLAN-HarnessAliasRegistries-001`
+
+**Feature:** `harness-alias-registries`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** none
+
+**Feature specs:** none
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-09
 
 ## PLAN-HarnessAliasRegistries-001.P1 Goal and scope
 

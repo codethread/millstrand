@@ -1,6 +1,8 @@
 # Alpha Surface delta for note-primitive
 
-**Document ID:** `SPEC-Np-002` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Np-001`) **Contract:** [../brief.md](../brief.md) **Status:** Merged **Last Updated:** 2026-07-10
+**Document ID:** `SPEC-Np-002` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Np-001`) **Contract:** [../brief.md](../brief.md) **Status:** Merged **Last Updated:** 2026-07-10
 
 ## SPEC-Np-002.P1 Summary
 

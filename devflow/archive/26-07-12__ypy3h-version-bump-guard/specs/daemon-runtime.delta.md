@@ -1,6 +1,12 @@
 # daemon-runtime delta for ypy3h-version-bump-guard
 
-**Document ID:** `DELTA-Vbg-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) **Status:** Draft **Last Updated:** 2026-07-12
+**Document ID:** `DELTA-Vbg-001`
+
+**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
+
+**Status:** Draft
+
+**Last Updated:** 2026-07-12
 
 ## DELTA-Vbg-001.P1 Summary
 

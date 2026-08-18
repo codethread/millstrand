@@ -1,6 +1,12 @@
 # Repo query catalogue proposal
 
-**Document ID:** `PROP-Rqc-001` **Last Updated:** 2026-07-27 **Related RFCs:** None **Related root specs:** [`devflow/specs/repl-api.md`](../../specs/repl-api.md)
+**Document ID:** `PROP-Rqc-001`
+
+**Last Updated:** 2026-07-27
+
+**Related RFCs:** None
+
+**Related root specs:** [`devflow/specs/repl-api.md`](../../specs/repl-api.md)
 
 ## PROP-Rqc-001.P1 Problem
 

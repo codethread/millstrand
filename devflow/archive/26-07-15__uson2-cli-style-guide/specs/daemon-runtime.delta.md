@@ -1,6 +1,14 @@
 # Weaver runtime delta for uson2-cli-style-guide
 
-**Document ID:** `DELTA-Ucs-002` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Ucs-001`) **Status:** Reviewed **Last Updated:** 2026-07-14
+**Document ID:** `DELTA-Ucs-002`
+
+**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Ucs-001`)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-14
 
 ## DELTA-Ucs-002.P1 Summary
 

@@ -1,6 +1,14 @@
 # Blessed note primitive Plan
 
-**Document ID:** `PLAN-Np-001` **Feature:** `note-primitive` **Proposal:** [proposal.md](./proposal.md) (`PROP-Np-001`) **Predecessors:** `agent-layer-rename` (`PROP-Alr-001`, card `26o9g`, landed `c79abb6`) and `agent-engine-primitives` (`PROP-Aep-001`, card `ah5vu`, landed `3b99997`; `serves` relation live); F3 is card `7azzl` of epic `kaans` **Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [cli.md](../../specs/cli.md) (`SPEC-002`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Np-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Np-002`), [specs/cli.delta.md](./specs/cli.delta.md) (`SPEC-Np-003`, no change), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Np-004`, no change) **Contract:** [proposal.md](./proposal.md) clauses `PROP-Np-001.C1`–`C14` — the approved contract; this plan sequences it and never widens it. **Status:** Reviewed **Last Updated:** 2026-07-10
+**Document ID:** `PLAN-Np-001`
+
+**Feature:** `note-primitive`
+
+**Proposal:** [proposal.md](./proposal.md) (`PROP-Np-001`)
+
+**Predecessors:** `agent-layer-rename` (`PROP-Alr-001`, card `26o9g`, landed `c79abb6`) and `agent-engine-primitives` (`PROP-Aep-001`, card `ah5vu`, landed `3b99997`; `serves` relation live); F3 is card `7azzl` of epic `kaans` **Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [cli.md](../../specs/cli.md) (`SPEC-002`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Np-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Np-002`), [specs/cli.delta.md](./specs/cli.delta.md) (`SPEC-Np-003`, no change), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Np-004`, no change) **Contract:** [proposal.md](./proposal.md) clauses `PROP-Np-001.C1`–`C14` — the approved contract; this plan sequences it and never widens it. **Status:** Reviewed
+
+**Last Updated:** 2026-07-10
 
 ## PLAN-Np-001.P1 Goal and scope
 

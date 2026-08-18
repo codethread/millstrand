@@ -2,7 +2,15 @@
 
 > **Superseded in part on 2026-07-30 by PROP-Auf-001.** The callback entry-point and reconciler parts are historical. Modules now collect contribution and lifecycle authoring forms, and image activation replays their retained declaration record.
 
-**Document ID:** `ADR-003` **Status:** Accepted **Date:** 2026-07-23 **Upholds:** [`TEN-000@1`](../TENETS.md) (alpha software: remove, never shim); [`TEN-003`](../TENETS.md) (FAIL LOUDLY); [`TEN-004`](../TENETS.md) (Less is More). **Related:** the owner-scoped-live-refresh design record — `PROP-Olr-001`, `DELTA-OlrRepl-001`, `DELTA-OlrDrt-001`, tasks 001–026 — archived at [`devflow/archive/26-07-22__owner-scoped-live-refresh/`](../archive/26-07-22__owner-scoped-live-refresh/); [SPEC-003 repl-api](../specs/repl-api.md) (C23, C23a); [SPEC-004 daemon-runtime](../specs/daemon-runtime.md) (C74a); [ADR-002](0002-no-inline-module-lifecycle-macro.md); [ADR-004](0004-def-spool-convention.md) (supersedes the P7 exported-base-declaration amendment and resolves the P9 image-mode revisit trigger); the chime engine parity fix (commit `2af05d7`, `PROP-Chp-001`); epic strand `waq0l`.
+**Document ID:** `ADR-003`
+
+**Status:** Accepted
+
+**Date:** 2026-07-23
+
+**Upholds:** [`TEN-000@1`](../TENETS.md) (alpha software: remove, never shim); [`TEN-003`](../TENETS.md) (FAIL LOUDLY); [`TEN-004`](../TENETS.md) (Less is More).
+
+**Related:** the owner-scoped-live-refresh design record — `PROP-Olr-001`, `DELTA-OlrRepl-001`, `DELTA-OlrDrt-001`, tasks 001–026 — archived at [`devflow/archive/26-07-22__owner-scoped-live-refresh/`](../archive/26-07-22__owner-scoped-live-refresh/); [SPEC-003 repl-api](../specs/repl-api.md) (C23, C23a); [SPEC-004 daemon-runtime](../specs/daemon-runtime.md) (C74a); [ADR-002](0002-no-inline-module-lifecycle-macro.md); [ADR-004](0004-def-spool-convention.md) (supersedes the P7 exported-base-declaration amendment and resolves the P9 image-mode revisit trigger); the chime engine parity fix (commit `2af05d7`, `PROP-Chp-001`); epic strand `waq0l`.
 
 > This ADR is the governing record for retiring the legacy imperative spool `install!` entry points. It transcribes the decisions the owner-scoped-live-refresh (OLR) record already made — so no later feature re-litigates them from an archive — and settles the four decision points the retirement adds: singleton engine registration (A), image-module activation (B), what the removal completes (C), and the reconcile contract (D).
 

@@ -1,6 +1,16 @@
 # Authored params documentation delta for spec-projection
 
-**Document ID:** `DELTA-Spj-004` **Contract doc:** [spools/workflow.md](../../../../spools/workflow.md) **Feature:** epic uruz0 card 7wdvg (defworkflow authored `:param-docs` and spec-validated `:example`) **Status:** Reviewed **Last Updated:** 2026-07-29 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID.
+**Document ID:** `DELTA-Spj-004`
+
+**Contract doc:** [spools/workflow.md](../../../../spools/workflow.md)
+
+**Feature:** epic uruz0 card 7wdvg (defworkflow authored `:param-docs` and spec-validated `:example`)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-29
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID.
 
 ## DELTA-Spj-004.P1 Summary
 

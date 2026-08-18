@@ -1,6 +1,14 @@
 # Alpha Surface delta for runtime-owned Clock
 
-**Document ID:** `DELTA-Clp-Alpha-001` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Clp-001`) **Status:** Merged **Last Updated:** 2026-07-20
+**Document ID:** `DELTA-Clp-Alpha-001`
+
+**Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Clp-001`)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-20
 
 ## DELTA-Clp-Alpha-001.P1 Summary
 

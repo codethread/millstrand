@@ -1,6 +1,16 @@
 # Kanban dashboard bin proposal
 
-**Document ID:** `PROP-Kdb-001` **Status:** Approved **Approved:** 2026-07-31 **Related RFCs:** None **Related root specs:** [CLI surface](../../specs/cli.md), [Alpha surface](../../specs/alpha-surface.md) **Related proposal:** [`PROP-Sbn-001`](../spool-bins/proposal.md), especially `PROP-Sbn-001.S10`; this proposal supersedes S10's `scripts/kanban-export` package and build-cwd detail
+**Document ID:** `PROP-Kdb-001`
+
+**Status:** Approved
+
+**Approved:** 2026-07-31
+
+**Related RFCs:** None
+
+**Related root specs:** [CLI surface](../../specs/cli.md), [Alpha surface](../../specs/alpha-surface.md)
+
+**Related proposal:** [`PROP-Sbn-001`](../spool-bins/proposal.md), especially `PROP-Sbn-001.S10`; this proposal supersedes S10's `scripts/kanban-export` package and build-cwd detail
 
 Once approved this document is frozen: it records the intent agreed at sign-off, not what was later built. Implementation change lives in the plan and code.
 

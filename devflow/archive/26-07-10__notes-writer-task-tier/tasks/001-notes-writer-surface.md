@@ -1,6 +1,8 @@
 # Task 1: notes writer value/ref/prompt renderer on skein.api.notes.alpha
 
-**Document ID:** `TASK-Nwt-001` **Slice:** `PLAN-Nwt-001.PH1` (writer family, keystone) · **Depends on:** none (lands first — everything hangs off it)
+**Document ID:** `TASK-Nwt-001`
+
+**Slice:** `PLAN-Nwt-001.PH1` (writer family, keystone) · **Depends on:** none (lands first — everything hangs off it)
 
 ## TASK-Nwt-001.P1 Scope
 

@@ -1,6 +1,8 @@
 # Task 4: kanban task add/list + pure-graph derived status + task-tier vocab
 
-**Document ID:** `TASK-Nwt-004` **Slice:** `PLAN-Nwt-001.PH2` (task tier core) · **Depends on:** none — pure task-graph work, no writer call sites; runs parallel to PH1 (Tasks 1–3). First holder of `kanban.clj` in the same-file chain 4→5→6→9 (`PLAN-Nwt-001.A6`, `TC2`).
+**Document ID:** `TASK-Nwt-004`
+
+**Slice:** `PLAN-Nwt-001.PH2` (task tier core) · **Depends on:** none — pure task-graph work, no writer call sites; runs parallel to PH1 (Tasks 1–3). First holder of `kanban.clj` in the same-file chain 4→5→6→9 (`PLAN-Nwt-001.A6`, `TC2`).
 
 ## TASK-Nwt-004.P1 Scope
 

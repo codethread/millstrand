@@ -1,6 +1,18 @@
 # Spool-shipped executables and the `mill bin` surface proposal
 
-**Document ID:** `PROP-Sbn-001` **Last Updated:** 2026-07-30 **Related RFCs:** None **Related root specs:** [CLI Surface](../../specs/cli.md), [Weaver Runtime](../../specs/daemon-runtime.md), [REPL API](../../specs/repl-api.md), [Alpha Surface](../../specs/alpha-surface.md) **Related proposals:** [`PROP-Auf-001`](../authoring-forms/proposal.md) (authoring forms) — the shipped contribution grammar this proposal declares bins in **Related spool contract:** [writing shared spools](../../../docs/spools/writing-shared-spools.md) **External prior art:** [`agent-harness.spool` harness MVP `PROP-Hmv-001`](https://github.com/codethread/agent-harness.spool/blob/27addcfc8725746b237ed84b7fd67a69add3046c/devflow/feat/azqfh-harness-mvp/proposal.md)
+**Document ID:** `PROP-Sbn-001`
+
+**Last Updated:** 2026-07-30
+
+**Related RFCs:** None
+
+**Related root specs:** [CLI Surface](../../specs/cli.md), [Weaver Runtime](../../specs/daemon-runtime.md), [REPL API](../../specs/repl-api.md), [Alpha Surface](../../specs/alpha-surface.md)
+
+**Related proposals:** [`PROP-Auf-001`](../authoring-forms/proposal.md) (authoring forms) — the shipped contribution grammar this proposal declares bins in
+
+**Related spool contract:** [writing shared spools](../../../docs/spools/writing-shared-spools.md)
+
+**External prior art:** [`agent-harness.spool` harness MVP `PROP-Hmv-001`](https://github.com/codethread/agent-harness.spool/blob/27addcfc8725746b237ed84b7fd67a69add3046c/devflow/feat/azqfh-harness-mvp/proposal.md)
 
 ## PROP-Sbn-001.P1 Problem
 

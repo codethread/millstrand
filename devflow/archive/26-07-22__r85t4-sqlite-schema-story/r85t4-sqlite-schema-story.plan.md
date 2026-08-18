@@ -1,6 +1,22 @@
 # SQLite schema story Plan
 
-**Document ID:** `PLAN-Sss-001` **Feature:** `r85t4-sqlite-schema-story` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [strand-model.md](../../specs/strand-model.md), [daemon-runtime.md](../../specs/daemon-runtime.md) **Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) **Status:** Shipped **Last Updated:** 2026-07-22 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PLAN-Dwr-001` for v1 and `PLAN-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
+**Document ID:** `PLAN-Sss-001`
+
+**Feature:** `r85t4-sqlite-schema-story`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** [strand-model.md](../../specs/strand-model.md), [daemon-runtime.md](../../specs/daemon-runtime.md)
+
+**Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md)
+
+**Status:** Shipped
+
+**Last Updated:** 2026-07-22
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PLAN-Dwr-001` for v1 and `PLAN-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
 
 ## PLAN-Sss-001.P1 Goal and scope
 

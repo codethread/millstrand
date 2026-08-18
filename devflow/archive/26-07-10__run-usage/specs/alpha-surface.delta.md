@@ -1,6 +1,8 @@
 # Alpha Surface delta for run-usage
 
-**Document ID:** `SPEC-Ru-002` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Ru-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
+**Document ID:** `SPEC-Ru-002` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Ru-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
 
 ## SPEC-Ru-002.P1 Summary
 

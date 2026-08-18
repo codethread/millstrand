@@ -1,6 +1,10 @@
 # Spec deltas for cron-on-scheduler
 
-**Feature:** `cron-on-scheduler` **Proposal:** [../proposal.md](../proposal.md) (`PROP-cron-on-scheduler-001`) **Decision:** One root spec delta — [`daemon-runtime.delta.md`](./daemon-runtime.delta.md) (`DELTA-cron-on-scheduler-runtime-001`), staging a `SPEC-004` amendment.
+**Feature:** `cron-on-scheduler`
+
+**Proposal:** [../proposal.md](../proposal.md) (`PROP-cron-on-scheduler-001`)
+
+**Decision:** One root spec delta — [`daemon-runtime.delta.md`](./daemon-runtime.delta.md) (`DELTA-cron-on-scheduler-runtime-001`), staging a `SPEC-004` amendment.
 
 ## What was checked
 

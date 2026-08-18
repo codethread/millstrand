@@ -1,6 +1,8 @@
 # Task 1: Retained-root detector and loud-failure preflight
 
-**Document ID:** `TASK-srr-001` **Configuration identification:** `TASK-srr-001` is v1; append `@2`, `@3` only on a superseding version. Prefix every nested point ID with the full document ID (`TASK-srr-001.MI1`).
+**Document ID:** `TASK-srr-001`
+
+**Configuration identification:** `TASK-srr-001` is v1; append `@2`, `@3` only on a superseding version. Prefix every nested point ID with the full document ID (`TASK-srr-001.MI1`).
 
 ## TASK-srr-001.P1 Scope
 

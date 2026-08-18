@@ -1,6 +1,16 @@
 # Strand Model delta for r85t4-sqlite-schema-story
 
-**Document ID:** `DELTA-Sss-001` **Root spec:** [strand-model.md](../../../specs/strand-model.md) (`SPEC-001`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Sss-001`) **Status:** Merged **Last Updated:** 2026-07-22 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `DELTA-Dwr-001` for v1 and `DELTA-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
+**Document ID:** `DELTA-Sss-001`
+
+**Root spec:** [strand-model.md](../../../specs/strand-model.md) (`SPEC-001`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Sss-001`)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-22
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `DELTA-Dwr-001` for v1 and `DELTA-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
 
 ## DELTA-Sss-001.P1 Summary
 

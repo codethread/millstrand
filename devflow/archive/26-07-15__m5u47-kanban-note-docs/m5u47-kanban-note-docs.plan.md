@@ -1,6 +1,20 @@
 # Kanban note documentation plan
 
-**Document ID:** `PLAN-Knd-001` **Feature:** `m5u47-kanban-note-docs` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** none; no-delta judgment in PLAN-Knd-001.CM2 **Feature specs:** none; the public contract belongs to `kanban.spool` **Status:** Implemented **Last Updated:** 2026-07-14
+**Document ID:** `PLAN-Knd-001`
+
+**Feature:** `m5u47-kanban-note-docs`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** none; no-delta judgment in PLAN-Knd-001.CM2
+
+**Feature specs:** none; the public contract belongs to `kanban.spool`
+
+**Status:** Implemented
+
+**Last Updated:** 2026-07-14
 
 ## PLAN-Knd-001.P1 Goal and scope
 

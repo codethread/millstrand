@@ -1,6 +1,20 @@
 # fanout-cap Plan
 
-**Document ID:** `PLAN-Foc-001` **Feature:** `fanout-cap` **Proposal:** [proposal.md](./proposal.md) (PROP-Foc-001) **RFC:** none **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) (SPEC-004) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (DELTA-Foc-001) **Status:** Reviewed **Last Updated:** 2026-07-14
+**Document ID:** `PLAN-Foc-001`
+
+**Feature:** `fanout-cap`
+
+**Proposal:** [proposal.md](./proposal.md) (PROP-Foc-001)
+
+**RFC:** none
+
+**Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) (SPEC-004)
+
+**Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (DELTA-Foc-001)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-14
 
 ## PLAN-Foc-001.P1 Goal and scope
 

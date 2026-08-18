@@ -1,6 +1,14 @@
 # cli delta for 8wwjk-leaf-hook-class
 
-**Document ID:** `DELTA-Lhc-003` **Root spec:** [cli.md](../../../specs/cli.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-22
+**Document ID:** `DELTA-Lhc-003`
+
+**Root spec:** [cli.md](../../../specs/cli.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-22
 
 ## DELTA-Lhc-003.P1 Summary
 

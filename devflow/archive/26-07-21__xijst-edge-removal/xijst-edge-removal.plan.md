@@ -1,6 +1,22 @@
 # Exact edge removal Plan
 
-**Document ID:** `PLAN-Xer-001` **Feature:** `xijst-edge-removal` **Proposal:** [proposal.md](./proposal.md) (`PROP-Xer-001`) **RFC:** none **Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`) **Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`DELTA-Xer-001`) **Status:** Reviewed **Last Updated:** 2026-07-21 **Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version: `PLAN-Xer-001` for v1, `PLAN-Xer-001@2` for v2. Omit `@1`. Prefix every nested point ID with the full document ID (`PLAN-Xer-001.P1`) so references are globally grepable.
+**Document ID:** `PLAN-Xer-001`
+
+**Feature:** `xijst-edge-removal`
+
+**Proposal:** [proposal.md](./proposal.md) (`PROP-Xer-001`)
+
+**RFC:** none
+
+**Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`)
+
+**Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`DELTA-Xer-001`)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-21
+
+**Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version: `PLAN-Xer-001` for v1, `PLAN-Xer-001@2` for v2. Omit `@1`. Prefix every nested point ID with the full document ID (`PLAN-Xer-001.P1`) so references are globally grepable.
 
 ## PLAN-Xer-001.P1 Goal and scope
 

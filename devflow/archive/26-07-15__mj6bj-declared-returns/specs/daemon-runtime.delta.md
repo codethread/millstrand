@@ -1,6 +1,16 @@
 # Weaver runtime delta for declared op returns
 
-**Document ID:** `DELTA-Dcr-dr-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Dcr-001`) **Contract:** [../brief.md](../brief.md) **Status:** Draft **Last Updated:** 2026-07-14
+**Document ID:** `DELTA-Dcr-dr-001`
+
+**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Dcr-001`)
+
+**Contract:** [../brief.md](../brief.md)
+
+**Status:** Draft
+
+**Last Updated:** 2026-07-14
 
 ## DELTA-Dcr-dr-001.P1 Summary
 

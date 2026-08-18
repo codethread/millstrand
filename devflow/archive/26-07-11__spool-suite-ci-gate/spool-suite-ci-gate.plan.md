@@ -1,6 +1,20 @@
 # Spool-suite CI gate Plan
 
-**Document ID:** `PLAN-ssc-001` **Feature:** `spool-suite-ci-gate` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** none <!-- CI/process infra; no root spec owns CI or land gates (see PLAN-ssc-001.CM1) --> **Feature specs:** none <!-- no durable domain contract changes; no-delta argument in PLAN-ssc-001.CM1 --> **Status:** Reviewed **Last Updated:** 2026-07-11
+**Document ID:** `PLAN-ssc-001`
+
+**Feature:** `spool-suite-ci-gate`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** none <!-- CI/process infra; no root spec owns CI or land gates (see PLAN-ssc-001.CM1) -->
+
+**Feature specs:** none <!-- no durable domain contract changes; no-delta argument in PLAN-ssc-001.CM1 -->
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-11
 
 ## PLAN-ssc-001.P1 Goal and scope
 

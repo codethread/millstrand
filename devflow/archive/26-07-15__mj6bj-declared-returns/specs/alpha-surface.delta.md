@@ -1,6 +1,16 @@
 # Alpha surface delta for declared op returns
 
-**Document ID:** `DELTA-Dcr-as-001` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Dcr-001`) **Contract:** [../brief.md](../brief.md) **Status:** Draft **Last Updated:** 2026-07-14
+**Document ID:** `DELTA-Dcr-as-001`
+
+**Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Dcr-001`)
+
+**Contract:** [../brief.md](../brief.md)
+
+**Status:** Draft
+
+**Last Updated:** 2026-07-14
 
 ## DELTA-Dcr-as-001.P1 Summary
 

@@ -1,6 +1,8 @@
 # Task 2: batteries note --attr passthrough + note/kind vocab key
 
-**Document ID:** `TASK-Nwt-002` **Slice:** `PLAN-Nwt-001.PH1` (CLI decoration + vocab) · **Depends on:** none (the `--attr` parse and the vocab key are independent of the writer fns; runs parallel to Tasks 1/3)
+**Document ID:** `TASK-Nwt-002`
+
+**Slice:** `PLAN-Nwt-001.PH1` (CLI decoration + vocab) · **Depends on:** none (the `--attr` parse and the vocab key are independent of the writer fns; runs parallel to Tasks 1/3)
 
 ## TASK-Nwt-002.P1 Scope
 

@@ -1,6 +1,16 @@
 # Spec projection Proposal
 
-**Document ID:** `PROP-Spj-001` **Status:** Approved **Approved:** 2026-07-29 **Related RFCs:** None **Related root specs:** [alpha-surface](../../specs/alpha-surface.md) (SPEC-005.C2), [repl-api](../../specs/repl-api.md) (SPEC-003.C19/C19a), [PROP-Wcd-001.S9–S11](../s9i26-flow-cli/proposal.md) (prior projection contract; takes the delta) **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID.
+**Document ID:** `PROP-Spj-001`
+
+**Status:** Approved
+
+**Approved:** 2026-07-29
+
+**Related RFCs:** None
+
+**Related root specs:** [alpha-surface](../../specs/alpha-surface.md) (SPEC-005.C2), [repl-api](../../specs/repl-api.md) (SPEC-003.C19/C19a), [PROP-Wcd-001.S9–S11](../s9i26-flow-cli/proposal.md) (prior projection contract; takes the delta)
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version. Prefix every nested point ID with the full document ID.
 
 Once approved this document is frozen: it records the intent agreed at sign-off, not what was later built. Implementation change lives in the spec deltas, the plan, and code.
 

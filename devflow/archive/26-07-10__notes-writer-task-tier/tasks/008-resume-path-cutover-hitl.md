@@ -1,6 +1,8 @@
 # Task 8: [HITL] pre-merge resume-path cutover for cards 3tgaj/1x2zz
 
-**Document ID:** `TASK-Nwt-008` **Slice:** `PLAN-Nwt-001.PH3` (coordinator gate) · **Depends on:** Tasks 6 and 7 (the surfaces that drop handover projection). Status: done (cutover done 2026-07-10: 3tgaj resumes from task 84m3n; 1x2zz audited clean).
+**Document ID:** `TASK-Nwt-008`
+
+**Slice:** `PLAN-Nwt-001.PH3` (coordinator gate) · **Depends on:** Tasks 6 and 7 (the surfaces that drop handover projection). Status: done (cutover done 2026-07-10: 3tgaj resumes from task 84m3n; 1x2zz audited clean).
 
 ## TASK-Nwt-008.P1 Scope
 

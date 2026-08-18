@@ -1,6 +1,14 @@
 # Strand model delta for notes-writer-task-tier
 
-**Document ID:** `DELTA-Nwt-001` **Root spec:** [strand-model.md](../../../specs/strand-model.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Reviewed **Last Updated:** 2026-07-10
+**Document ID:** `DELTA-Nwt-001`
+
+**Root spec:** [strand-model.md](../../../specs/strand-model.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-10
 
 ## DELTA-Nwt-001.P1 Summary
 

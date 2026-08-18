@@ -1,6 +1,14 @@
 # Weaver Runtime delta for reload-spool fingerprint refresh
 
-**Document ID:** `DELTA-Rsf-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Draft **Last Updated:** 2026-07-19
+**Document ID:** `DELTA-Rsf-001`
+
+**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Draft
+
+**Last Updated:** 2026-07-19
 
 ## DELTA-Rsf-001.P1 Summary
 

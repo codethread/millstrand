@@ -1,6 +1,12 @@
 # Mandatory per-leaf hook-class + arity-N fractal subcommands Proposal
 
-**Document ID:** `PROP-Lhc-001` **Last Updated:** 2026-07-22 **Related RFCs:** None (design settled in the 2026-07-22 session; decision notes `mnl04` and superseding `77xab` on card 8wwjk) **Related root specs:** [`repl-api.md`](../../specs/repl-api.md) (SPEC-003.C64/C65/C66/C68), [`daemon-runtime.md`](../../specs/daemon-runtime.md) (SPEC-004.C63a/C80), [`cli.md`](../../specs/cli.md) (SPEC-002.C44)
+**Document ID:** `PROP-Lhc-001`
+
+**Last Updated:** 2026-07-22
+
+**Related RFCs:** None (design settled in the 2026-07-22 session; decision notes `mnl04` and superseding `77xab` on card 8wwjk)
+
+**Related root specs:** [`repl-api.md`](../../specs/repl-api.md) (SPEC-003.C64/C65/C66/C68), [`daemon-runtime.md`](../../specs/daemon-runtime.md) (SPEC-004.C63a/C80), [`cli.md`](../../specs/cli.md) (SPEC-002.C44)
 
 ## PROP-Lhc-001.P1 Problem
 

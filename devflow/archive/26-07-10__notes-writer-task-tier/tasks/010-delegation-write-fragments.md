@@ -1,6 +1,8 @@
 # Task 10: delegation write fragments -> writer-ref->prompt (+ tag-as-attr + frozen-test lockstep)
 
-**Document ID:** `TASK-Nwt-010` **Slice:** `PLAN-Nwt-001.PH5` (prompt-site absorption — the riskiest slice, kept alone) · **Depends on:** Task 1 (`writer-ref->prompt` must exist) and Task 3 (op-note `--attr` parse; same file, serialized). Disjoint from `agent_run.clj` (Task 11), so those two fan out.
+**Document ID:** `TASK-Nwt-010`
+
+**Slice:** `PLAN-Nwt-001.PH5` (prompt-site absorption — the riskiest slice, kept alone) · **Depends on:** Task 1 (`writer-ref->prompt` must exist) and Task 3 (op-note `--attr` parse; same file, serialized). Disjoint from `agent_run.clj` (Task 11), so those two fan out.
 
 ## TASK-Nwt-010.P1 Scope
 

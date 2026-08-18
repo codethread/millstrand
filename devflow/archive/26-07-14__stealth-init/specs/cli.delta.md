@@ -1,6 +1,14 @@
 # CLI delta for stealth local workspace initialization
 
-**Document ID:** `DELTA-Si-001` **Root spec:** [cli.md](../../../specs/cli.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-14
+**Document ID:** `DELTA-Si-001`
+
+**Root spec:** [cli.md](../../../specs/cli.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-14
 
 ## DELTA-Si-001.P1 Summary
 

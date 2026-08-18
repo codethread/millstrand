@@ -1,6 +1,16 @@
 # Millstrand rename proposal
 
-**Document ID:** `PROP-Msr-001` **Status:** Approved **Approved:** 2026-08-05 (user sign-off) **Related RFCs:** [RFC-006: Rename to Skein](../../archive/26-06-26__skein-rename/rfcs/2026-06-26-skein-rename.md) (historical precedent; implemented and archived) **Related root specs:** [CLI surface](../../specs/cli.md), [weaver runtime](../../specs/daemon-runtime.md), [REPL API](../../specs/repl-api.md), [alpha surface](../../specs/alpha-surface.md), [strand model](../../specs/strand-model.md) **Related brief:** [brief.md](./brief.md)
+**Document ID:** `PROP-Msr-001`
+
+**Status:** Approved
+
+**Approved:** 2026-08-05 (user sign-off)
+
+**Related RFCs:** [RFC-006: Rename to Skein](../../archive/26-06-26__skein-rename/rfcs/2026-06-26-skein-rename.md) (historical precedent; implemented and archived)
+
+**Related root specs:** [CLI surface](../../specs/cli.md), [weaver runtime](../../specs/daemon-runtime.md), [REPL API](../../specs/repl-api.md), [alpha surface](../../specs/alpha-surface.md), [strand model](../../specs/strand-model.md)
+
+**Related brief:** [brief.md](./brief.md)
 
 Once approved this document is frozen. It records the intent agreed at sign-off, not what was later built. Implementation changes belong in spec deltas, the plan, and code.
 

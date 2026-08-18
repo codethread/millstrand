@@ -1,6 +1,16 @@
 # Discovery-tier factoring Proposal
 
-**Document ID:** `PROP-Dtf-001` **Last Updated:** 2026-07-20 **Related RFCs:** [`RFC-Dtf-001`](../../rfcs/2026-07-20-discovery-tier-factoring.md) (deliberation, rejected alternatives, near-verbatim rationale) **Related root specs:** [`devflow/specs/cli.md`](../../specs/cli.md) — SPEC-002.C39 (primary delta), C34/C15/C40; SPEC-003.C64/C65; SPEC-004.C63e **Spec deltas:** [`specs/cli.delta.md`](specs/cli.delta.md) (DELTA-Dtf-001), [`specs/daemon-runtime.delta.md`](specs/daemon-runtime.delta.md) (DELTA-Dtf-002), [`specs/repl-api.delta.md`](specs/repl-api.delta.md) (DELTA-Dtf-003) **Decision notes:** card `tz0ki` — `5cxy8` (D1–D7), `h67ok` (D8–D13), `gu8kf` (A–E), `w6lho` (D14 batteries in scope); council synthesis `gk3d8`
+**Document ID:** `PROP-Dtf-001`
+
+**Last Updated:** 2026-07-20
+
+**Related RFCs:** [`RFC-Dtf-001`](../../rfcs/2026-07-20-discovery-tier-factoring.md) (deliberation, rejected alternatives, near-verbatim rationale)
+
+**Related root specs:** [`devflow/specs/cli.md`](../../specs/cli.md) — SPEC-002.C39 (primary delta), C34/C15/C40; SPEC-003.C64/C65; SPEC-004.C63e
+
+**Spec deltas:** [`specs/cli.delta.md`](specs/cli.delta.md) (DELTA-Dtf-001), [`specs/daemon-runtime.delta.md`](specs/daemon-runtime.delta.md) (DELTA-Dtf-002), [`specs/repl-api.delta.md`](specs/repl-api.delta.md) (DELTA-Dtf-003)
+
+**Decision notes:** card `tz0ki` — `5cxy8` (D1–D7), `h67ok` (D8–D13), `gu8kf` (A–E), `w6lho` (D14 batteries in scope); council synthesis `gk3d8`
 
 ## PROP-Dtf-001.P1 Problem
 

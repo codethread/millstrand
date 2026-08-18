@@ -1,6 +1,8 @@
 # Task 9: devflow/agent-plan/delegation name purge from the kanban surface
 
-**Document ID:** `TASK-Nwt-009` **Slice:** `PLAN-Nwt-001.PH4` (devflow purge) · **Depends on:** Tasks 6 and 7 (same-file second pass on `kanban.clj` after handover removal; also serializes with Task 7 on `kanban.md`/cookbook, `PLAN-Nwt-001.A6`)
+**Document ID:** `TASK-Nwt-009`
+
+**Slice:** `PLAN-Nwt-001.PH4` (devflow purge) · **Depends on:** Tasks 6 and 7 (same-file second pass on `kanban.clj` after handover removal; also serializes with Task 7 on `kanban.md`/cookbook, `PLAN-Nwt-001.A6`)
 
 ## TASK-Nwt-009.P1 Scope
 

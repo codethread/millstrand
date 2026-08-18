@@ -1,6 +1,16 @@
 # Proposal: clj-kondo hook provenance and repository hygiene
 
-**Document ID:** `PROP-Khp-001` **Status:** Approved **Approved:** 2026-08-11 **Related RFCs:** None **Related root specs:** [`docs/spools/writing-shared-spools.md`](../../../docs/spools/writing-shared-spools.md) (consumer linting contract) **Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version. Nested point IDs use the full document ID.
+**Document ID:** `PROP-Khp-001`
+
+**Status:** Approved
+
+**Approved:** 2026-08-11
+
+**Related RFCs:** None
+
+**Related root specs:** [`docs/spools/writing-shared-spools.md`](../../../docs/spools/writing-shared-spools.md) (consumer linting contract)
+
+**Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version. Nested point IDs use the full document ID.
 
 Once approved this document is frozen. It records the agreed intent; implementation changes belong in the plan, spec deltas, and code.
 

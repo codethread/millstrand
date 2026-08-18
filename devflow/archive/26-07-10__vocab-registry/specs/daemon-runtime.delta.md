@@ -1,6 +1,8 @@
 # Weaver Runtime delta for vocab-registry
 
-**Document ID:** `SPEC-Vr-004` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Vr-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
+**Document ID:** `SPEC-Vr-004` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Vr-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
 
 ## SPEC-Vr-004.P1 Summary
 

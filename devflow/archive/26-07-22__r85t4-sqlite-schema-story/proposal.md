@@ -1,6 +1,16 @@
 # SQLite schema story proposal
 
-**Document ID:** `PROP-Sss-001` **Last Updated:** 2026-07-22 **Related RFCs:** None **Related root specs:** [strand-model.md SPEC-001.P8](../../specs/strand-model.md), [daemon-runtime.md SPEC-004.C91b/C16b](../../specs/daemon-runtime.md) **Spec deltas:** [specs/strand-model.delta.md](specs/strand-model.delta.md) (`DELTA-Sss-001`), [specs/daemon-runtime.delta.md](specs/daemon-runtime.delta.md) (`DELTA-Sss-002`) **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
+**Document ID:** `PROP-Sss-001`
+
+**Last Updated:** 2026-07-22
+
+**Related RFCs:** None
+
+**Related root specs:** [strand-model.md SPEC-001.P8](../../specs/strand-model.md), [daemon-runtime.md SPEC-004.C91b/C16b](../../specs/daemon-runtime.md)
+
+**Spec deltas:** [specs/strand-model.delta.md](specs/strand-model.delta.md) (`DELTA-Sss-001`), [specs/daemon-runtime.delta.md](specs/daemon-runtime.delta.md) (`DELTA-Sss-002`)
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
 
 ## PROP-Sss-001.P1 Problem
 

@@ -1,6 +1,16 @@
 # Land run PR context proposal
 
-**Document ID:** `PROP-Lrc-001` **Last Updated:** 2026-07-26 **Kanban card:** `9j332` **Related RFCs:** None **Related root specs:** None; this is repo-local land workflow policy. **Related features:** [`lrzeh`](../lrzeh/proposal.md) supplies generic context writes, [`wnwi9`](../wnwi9-shell-gate-scripts/proposal.md) supplies the file-backed merge script, and [`aqw10`](../aqw10-main-ci-code-gate/proposal.md) precedes this feature in the shared workflow and test files.
+**Document ID:** `PROP-Lrc-001`
+
+**Last Updated:** 2026-07-26
+
+**Kanban card:** `9j332`
+
+**Related RFCs:** None
+
+**Related root specs:** None; this is repo-local land workflow policy.
+
+**Related features:** [`lrzeh`](../lrzeh/proposal.md) supplies generic context writes, [`wnwi9`](../wnwi9-shell-gate-scripts/proposal.md) supplies the file-backed merge script, and [`aqw10`](../aqw10-main-ci-code-gate/proposal.md) precedes this feature in the shared workflow and test files.
 
 **Configuration identification:** This first version uses `PROP-Lrc-001`: document type, short name, and sequential id, with no `@1` suffix. A later externally referenced revision would append `@2`, `@3`, and so on. Nested point IDs carry the full document ID.
 

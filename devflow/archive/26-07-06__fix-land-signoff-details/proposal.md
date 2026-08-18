@@ -1,6 +1,12 @@
 # Land sign-off input discoverability proposal
 
-**Document ID:** `PROP-Lsd-001` **Last Updated:** 2026-07-18 **Related RFCs:** None **Related root specs:** `SPEC-002.C39a`
+**Document ID:** `PROP-Lsd-001`
+
+**Last Updated:** 2026-07-18
+
+**Related RFCs:** None
+
+**Related root specs:** `SPEC-002.C39a`
 
 ## PROP-Lsd-001.P1 Problem
 

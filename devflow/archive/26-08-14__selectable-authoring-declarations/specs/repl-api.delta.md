@@ -1,6 +1,16 @@
 # REPL API delta for selectable authoring declarations
 
-**Document ID:** `DELTA-Sad-001` **Root spec:** [repl-api.md](../../../specs/repl-api.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Reviewed **Last Updated:** 2026-08-13 **Configuration identification:** `Sad` abbreviates selectable authoring declarations. This is the first delta in that feature's ordered set, so it takes `DELTA-Sad-001`. Nested IDs carry the complete document ID.
+**Document ID:** `DELTA-Sad-001`
+
+**Root spec:** [repl-api.md](../../../specs/repl-api.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-08-13
+
+**Configuration identification:** `Sad` abbreviates selectable authoring declarations. This is the first delta in that feature's ordered set, so it takes `DELTA-Sad-001`. Nested IDs carry the complete document ID.
 
 ## DELTA-Sad-001.P1 Summary
 

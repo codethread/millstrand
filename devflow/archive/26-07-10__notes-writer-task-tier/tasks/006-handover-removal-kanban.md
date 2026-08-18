@@ -1,6 +1,8 @@
 # Task 6: handover removal in kanban.clj + tests + re-homed prime/about discipline
 
-**Document ID:** `TASK-Nwt-006` **Slice:** `PLAN-Nwt-001.PH3` (handover retirement — code) · **Depends on:** Task 5 (tasks are the replacement resume point; same-file serialization on `kanban.clj`, `PLAN-Nwt-001.A6`, `A4`)
+**Document ID:** `TASK-Nwt-006`
+
+**Slice:** `PLAN-Nwt-001.PH3` (handover retirement — code) · **Depends on:** Task 5 (tasks are the replacement resume point; same-file serialization on `kanban.clj`, `PLAN-Nwt-001.A6`, `A4`)
 
 ## TASK-Nwt-006.P1 Scope
 

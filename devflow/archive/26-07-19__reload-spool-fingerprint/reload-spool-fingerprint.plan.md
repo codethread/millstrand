@@ -1,6 +1,20 @@
 # Reload-spool fingerprint refresh plan
 
-**Document ID:** `PLAN-Rsf-001` **Feature:** `reload-spool-fingerprint` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) **Status:** Shipped **Last Updated:** 2026-07-23
+**Document ID:** `PLAN-Rsf-001`
+
+**Feature:** `reload-spool-fingerprint`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md)
+
+**Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md)
+
+**Status:** Shipped
+
+**Last Updated:** 2026-07-23
 
 ## PLAN-Rsf-001.P1 Goal and scope
 

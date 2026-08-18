@@ -1,6 +1,14 @@
 # Alpha surface delta for uson2-cli-style-guide
 
-**Document ID:** `DELTA-Ucs-001` **Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Ucs-001`) **Status:** Reviewed **Last Updated:** 2026-07-14
+**Document ID:** `DELTA-Ucs-001`
+
+**Root spec:** [alpha-surface.md](../../../specs/alpha-surface.md) (`SPEC-005`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Ucs-001`)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-14
 
 ## DELTA-Ucs-001.P1 Summary
 

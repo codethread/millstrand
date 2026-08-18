@@ -1,6 +1,20 @@
 # Defer-return Plan
 
-**Document ID:** `PLAN-Dfr-001` **Feature:** `defer-return` **Proposal:** [proposal.md](./proposal.md) **RFC:** [Runtime-selected returning composition](../../rfcs/2026-07-26-runtime-selected-returning-composition.md) **Root specs:** None; the shipped workflow contract is `spools/workflow.md`. **Feature specs:** [Workflow spool delta](./specs/workflow-spool.delta.md) **Status:** Shipped **Last Updated:** 2026-07-26
+**Document ID:** `PLAN-Dfr-001`
+
+**Feature:** `defer-return`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** [Runtime-selected returning composition](../../rfcs/2026-07-26-runtime-selected-returning-composition.md)
+
+**Root specs:** None; the shipped workflow contract is `spools/workflow.md`.
+
+**Feature specs:** [Workflow spool delta](./specs/workflow-spool.delta.md)
+
+**Status:** Shipped
+
+**Last Updated:** 2026-07-26
 
 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PLAN-Dfr-001` for v1 and `PLAN-Dfr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `PLAN-Dfr-001.P1` or `PLAN-Dfr-001@2.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
 

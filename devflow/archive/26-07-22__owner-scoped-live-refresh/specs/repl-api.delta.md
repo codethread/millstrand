@@ -1,6 +1,14 @@
 # REPL API delta for owner-scoped live refresh
 
-**Document ID:** `DELTA-OlrRepl-001` **Root spec:** [repl-api.md](../../../specs/repl-api.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged **Last Updated:** 2026-07-22
+**Document ID:** `DELTA-OlrRepl-001`
+
+**Root spec:** [repl-api.md](../../../specs/repl-api.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-22
 
 ## DELTA-OlrRepl-001.P1 Summary
 

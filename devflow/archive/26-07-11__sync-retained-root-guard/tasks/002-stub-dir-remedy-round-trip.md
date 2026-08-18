@@ -1,6 +1,8 @@
 # Task 2: Stub-dir remedy round-trip
 
-**Document ID:** `TASK-srr-002` **Configuration identification:** `TASK-srr-002` is v1; append `@2`, `@3` only on a superseding version. Prefix every nested point ID with the full document ID (`TASK-srr-002.MI1`).
+**Document ID:** `TASK-srr-002`
+
+**Configuration identification:** `TASK-srr-002` is v1; append `@2`, `@3` only on a superseding version. Prefix every nested point ID with the full document ID (`TASK-srr-002.MI1`).
 
 ## TASK-srr-002.P1 Scope
 

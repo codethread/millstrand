@@ -1,6 +1,12 @@
 # Immutable Keys Proposal
 
-**Document ID:** `PROP-Immut-001` **Last Updated:** 2026-07-12 **Related RFCs:** None **Related root specs:** [SPEC-001 Strand Model](../../specs/strand-model.md)
+**Document ID:** `PROP-Immut-001`
+
+**Last Updated:** 2026-07-12
+
+**Related RFCs:** None
+
+**Related root specs:** [SPEC-001 Strand Model](../../specs/strand-model.md)
 
 ## PROP-Immut-001.P1 Problem
 

@@ -1,6 +1,18 @@
 # Registration surfaces Proposal
 
-**Document ID:** `PROP-Rgs-001` **Status:** Approved **Approved:** 2026-07-31 **Related RFCs:** [RFC-Saf-001: spool authoring forms](../../rfcs/2026-07-28-spool-authoring-forms.md), [lifecycle authoring forms](../../rfcs/2026-07-28-lifecycle-authoring-forms.md) **Related root specs:** [REPL API](../../specs/repl-api.md), [Alpha surface](../../specs/alpha-surface.md), [Weaver runtime](../../specs/daemon-runtime.md) **Related brief:** [brief.md](./brief.md) **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
+**Document ID:** `PROP-Rgs-001`
+
+**Status:** Approved
+
+**Approved:** 2026-07-31
+
+**Related RFCs:** [RFC-Saf-001: spool authoring forms](../../rfcs/2026-07-28-spool-authoring-forms.md), [lifecycle authoring forms](../../rfcs/2026-07-28-lifecycle-authoring-forms.md)
+
+**Related root specs:** [REPL API](../../specs/repl-api.md), [Alpha surface](../../specs/alpha-surface.md), [Weaver runtime](../../specs/daemon-runtime.md)
+
+**Related brief:** [brief.md](./brief.md)
+
+**Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable and do not clash across documents.
 
 Once approved this document is frozen: it records the intent agreed at sign-off, not what was later built. Implementation change lives in the spec deltas, the plan, and code.
 

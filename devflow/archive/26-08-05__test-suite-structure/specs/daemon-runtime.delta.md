@@ -1,6 +1,14 @@
 # Weaver Runtime delta for the consumer testing contract
 
-**Document ID:** `DELTA-Tst-001` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) **Feature:** [../proposal.md](../proposal.md) **Status:** Merged into `SPEC-004.C74b` **Last Updated:** 2026-08-05
+**Document ID:** `DELTA-Tst-001`
+
+**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Status:** Merged into `SPEC-004.C74b`
+
+**Last Updated:** 2026-08-05
 
 ## DELTA-Tst-001.P1 Summary
 

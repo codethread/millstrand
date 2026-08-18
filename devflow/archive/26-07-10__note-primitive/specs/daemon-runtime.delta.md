@@ -1,6 +1,8 @@
 # Weaver Runtime delta for note-primitive
 
-**Document ID:** `SPEC-Np-004` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Np-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
+**Document ID:** `SPEC-Np-004` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Np-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
 
 ## SPEC-Np-004.P1 Summary
 

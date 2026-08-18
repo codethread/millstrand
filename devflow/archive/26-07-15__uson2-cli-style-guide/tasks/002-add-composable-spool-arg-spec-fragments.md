@@ -1,6 +1,8 @@
 # Task 2: Add composable spool arg-spec fragments
 
-**Document ID:** `TASK-Ucs-002` **Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable.
+**Document ID:** `TASK-Ucs-002`
+
+**Configuration identification:** Document IDs are ordered as document type, short name, sequential id, then optional version. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID so references are globally grepable.
 
 ## TASK-Ucs-002.P1 Scope
 

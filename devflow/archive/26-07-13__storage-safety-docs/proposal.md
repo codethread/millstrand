@@ -1,6 +1,14 @@
 # Storage-Safety Docs Sweep Proposal
 
-**Document ID:** `PROP-StorageDocs-001` **Last Updated:** 2026-07-13 **Related RFCs:** None **Related root specs:** [SPEC-001 Strand Model](../../specs/strand-model.md) **Related proposals:** [PROP-Tomb-001 Burn Tombstones](../26-07-12__burn-tombstones/proposal.md), [PROP-Immut-001 Immutable Keys](../26-07-13__immutable-keys/proposal.md)
+**Document ID:** `PROP-StorageDocs-001`
+
+**Last Updated:** 2026-07-13
+
+**Related RFCs:** None
+
+**Related root specs:** [SPEC-001 Strand Model](../../specs/strand-model.md)
+
+**Related proposals:** [PROP-Tomb-001 Burn Tombstones](../26-07-12__burn-tombstones/proposal.md), [PROP-Immut-001 Immutable Keys](../26-07-13__immutable-keys/proposal.md)
 
 ## PROP-StorageDocs-001.P1 Problem
 

@@ -1,6 +1,16 @@
 # REPL API delta for discovery-tier factoring
 
-**Document ID:** `DELTA-Dtf-003` **Root spec:** [repl-api.md](../../../specs/repl-api.md) (SPEC-003) **Feature:** [../proposal.md](../proposal.md) **Related:** [RFC-Dtf-001](../../../rfcs/2026-07-20-discovery-tier-factoring.md); DELTA-Dtf-001 (cli), DELTA-Dtf-002 (daemon-runtime) **Status:** Merged **Last Updated:** 2026-07-21
+**Document ID:** `DELTA-Dtf-003`
+
+**Root spec:** [repl-api.md](../../../specs/repl-api.md) (SPEC-003)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Related:** [RFC-Dtf-001](../../../rfcs/2026-07-20-discovery-tier-factoring.md); DELTA-Dtf-001 (cli), DELTA-Dtf-002 (daemon-runtime)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-21
 
 ## DELTA-Dtf-003.P1 Summary
 

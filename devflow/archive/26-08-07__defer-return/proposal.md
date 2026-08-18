@@ -1,6 +1,16 @@
 # Defer as runtime-selected returning composition
 
-**Document ID:** `PROP-Dfr-001` **Status:** Implemented **Last Updated:** 2026-07-26 **Related RFCs:** [`RFC-Dyc-001`](../../rfcs/2026-07-26-runtime-selected-returning-composition.md) **Related spool contract:** [Workflow](../../../spools/workflow.md) **Spec delta:** [Workflow spool delta](./specs/workflow-spool.delta.md)
+**Document ID:** `PROP-Dfr-001`
+
+**Status:** Implemented
+
+**Last Updated:** 2026-07-26
+
+**Related RFCs:** [`RFC-Dyc-001`](../../rfcs/2026-07-26-runtime-selected-returning-composition.md)
+
+**Related spool contract:** [Workflow](../../../spools/workflow.md)
+
+**Spec delta:** [Workflow spool delta](./specs/workflow-spool.delta.md)
 
 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dfr-001` for v1 and `PROP-Dfr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `PROP-Dfr-001.P1` or `PROP-Dfr-001@2.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
 

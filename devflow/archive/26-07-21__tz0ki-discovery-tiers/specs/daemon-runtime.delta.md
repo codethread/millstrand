@@ -1,6 +1,16 @@
 # Weaver Runtime delta for discovery-tier factoring
 
-**Document ID:** `DELTA-Dtf-002` **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (SPEC-004) **Feature:** [../proposal.md](../proposal.md) **Related:** [RFC-Dtf-001](../../../rfcs/2026-07-20-discovery-tier-factoring.md); DELTA-Dtf-001 (cli), DELTA-Dtf-003 (repl-api) **Status:** Merged **Last Updated:** 2026-07-21
+**Document ID:** `DELTA-Dtf-002`
+
+**Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (SPEC-004)
+
+**Feature:** [../proposal.md](../proposal.md)
+
+**Related:** [RFC-Dtf-001](../../../rfcs/2026-07-20-discovery-tier-factoring.md); DELTA-Dtf-001 (cli), DELTA-Dtf-003 (repl-api)
+
+**Status:** Merged
+
+**Last Updated:** 2026-07-21
 
 ## DELTA-Dtf-002.P1 Summary
 

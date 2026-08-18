@@ -1,6 +1,20 @@
 # Land sign-off input discoverability plan
 
-**Document ID:** `PLAN-Lsd-001` **Feature:** `fix-land-signoff-details` **Proposal:** [proposal.md](./proposal.md) **RFC:** None **Root specs:** `SPEC-002.C39a` **Feature specs:** None **Status:** Reviewed **Last Updated:** 2026-07-18
+**Document ID:** `PLAN-Lsd-001`
+
+**Feature:** `fix-land-signoff-details`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** None
+
+**Root specs:** `SPEC-002.C39a`
+
+**Feature specs:** None
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-18
 
 ## PLAN-Lsd-001.P1 Goal and scope
 

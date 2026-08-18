@@ -1,6 +1,14 @@
 # Keep the thin CLI; do not build a generic CLI algebra
 
-**Document ID:** `ADR-001` **Status:** Accepted **Date:** 2026-07-22 **Upholds:** [`TEN-006`](../TENETS.md) (CLI is a thin JSON control surface; the daemon/REPL is the rich semantic surface); [`TEN-004`](../TENETS.md) (Less is More); [`PHILOSOPHY.md`](../PHILOSOPHY.md) ("Do not grow the CLI into a parallel configuration or extension system"). **Related:** query DSL [`RFC-002`](../rfcs/2026-06-24-task-query-dsl.md); views cut [`b8vld-cut-views`](../feat/b8vld-cut-views/proposal.md) (user-approved 2026-07-18); shipped steering fix [`SPEC-005.C11`](../specs/alpha-surface.md) (vocabulary inheritance-first) and the frozen trained-vocab surface `SPEC-005.C10`; `SPEC-004.C32` (multi-tenant sandboxing parked out of contract). Reached in the design session `2096b939-2323-4921-97ac-fc3a32f85341` (2026-07-21), including a sol-high debate run (`4uwzd`) and cards `u10qr`/`2yic2`/`54qun`.
+**Document ID:** `ADR-001`
+
+**Status:** Accepted
+
+**Date:** 2026-07-22
+
+**Upholds:** [`TEN-006`](../TENETS.md) (CLI is a thin JSON control surface; the daemon/REPL is the rich semantic surface); [`TEN-004`](../TENETS.md) (Less is More); [`PHILOSOPHY.md`](../PHILOSOPHY.md) ("Do not grow the CLI into a parallel configuration or extension system").
+
+**Related:** query DSL [`RFC-002`](../rfcs/2026-06-24-task-query-dsl.md); views cut [`b8vld-cut-views`](../feat/b8vld-cut-views/proposal.md) (user-approved 2026-07-18); shipped steering fix [`SPEC-005.C11`](../specs/alpha-surface.md) (vocabulary inheritance-first) and the frozen trained-vocab surface `SPEC-005.C10`; `SPEC-004.C32` (multi-tenant sandboxing parked out of contract). Reached in the design session `2096b939-2323-4921-97ac-fc3a32f85341` (2026-07-21), including a sol-high debate run (`4uwzd`) and cards `u10qr`/`2yic2`/`54qun`.
 
 > This ADR records, near-verbatim, why we keep `TEN-006` — a thin CLI over a rich daemon/REPL — instead of elevating the CLI into a generic, composable algebra that every spool builds on. The decision closed a three-day design arc; the quotes below preserve the reasoning so it doesn't have to be re-run.
 

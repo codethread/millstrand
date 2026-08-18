@@ -1,6 +1,12 @@
 # Workflow run context completion proposal
 
-**Document ID:** `PROP-Wrc-001` **Last Updated:** 2026-07-26 **Related RFCs:** None **Related root specs:** `devflow/specs/repl-api.md` (`SPEC-003.C63f`, `SPEC-003.C63g`; context only, no spec delta)
+**Document ID:** `PROP-Wrc-001`
+
+**Last Updated:** 2026-07-26
+
+**Related RFCs:** None
+
+**Related root specs:** `devflow/specs/repl-api.md` (`SPEC-003.C63f`, `SPEC-003.C63g`; context only, no spec delta)
 
 ## PROP-Wrc-001.P1 Problem
 

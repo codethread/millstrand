@@ -1,6 +1,16 @@
 # CLI surface delta for declared op returns
 
-**Document ID:** `DELTA-Dcr-cli-001` **Root spec:** [cli.md](../../../specs/cli.md) (`SPEC-002`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Dcr-001`) **Contract:** [../brief.md](../brief.md) **Status:** Draft **Last Updated:** 2026-07-14
+**Document ID:** `DELTA-Dcr-cli-001`
+
+**Root spec:** [cli.md](../../../specs/cli.md) (`SPEC-002`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Dcr-001`)
+
+**Contract:** [../brief.md](../brief.md)
+
+**Status:** Draft
+
+**Last Updated:** 2026-07-14
 
 ## DELTA-Dcr-cli-001.P1 Summary
 

@@ -1,6 +1,20 @@
 # Cron on Scheduler Plan
 
-**Document ID:** `PLAN-cron-on-scheduler-001` **Feature:** `cron-on-scheduler` **Proposal:** [proposal.md](./proposal.md) (`PROP-cron-on-scheduler-001`) **RFC:** [RFC-009 Weaver Scheduler Primitive](../../rfcs/2026-06-29-weaver-scheduler.md) **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) (SPEC-004.P10d, consumed unchanged but for the generation-aware-retirement fix in `SPEC-004.C102`/new `.C102b`), [alpha-surface.md](../../specs/alpha-surface.md) (SPEC-005.C4, cron is userland) **Feature specs:** [specs/README.md](./specs/README.md), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-cron-on-scheduler-runtime-001`) **Status:** Reviewed **Last Updated:** 2026-07-10
+**Document ID:** `PLAN-cron-on-scheduler-001`
+
+**Feature:** `cron-on-scheduler`
+
+**Proposal:** [proposal.md](./proposal.md) (`PROP-cron-on-scheduler-001`)
+
+**RFC:** [RFC-009 Weaver Scheduler Primitive](../../rfcs/2026-06-29-weaver-scheduler.md)
+
+**Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) (SPEC-004.P10d, consumed unchanged but for the generation-aware-retirement fix in `SPEC-004.C102`/new `.C102b`), [alpha-surface.md](../../specs/alpha-surface.md) (SPEC-005.C4, cron is userland)
+
+**Feature specs:** [specs/README.md](./specs/README.md), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-cron-on-scheduler-runtime-001`)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-10
 
 ## PLAN-cron-on-scheduler-001.P1 Goal and scope
 

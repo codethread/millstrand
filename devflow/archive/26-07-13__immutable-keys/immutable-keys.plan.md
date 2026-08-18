@@ -1,6 +1,20 @@
 # Immutable Keys Plan
 
-**Document ID:** `PLAN-Immut-001` **Feature:** `immutable-keys` **Proposal:** [proposal.md](./proposal.md) **RFC:** none **Root specs:** [strand-model.md](../../specs/strand-model.md) **Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) **Status:** Reviewed **Last Updated:** 2026-07-12
+**Document ID:** `PLAN-Immut-001`
+
+**Feature:** `immutable-keys`
+
+**Proposal:** [proposal.md](./proposal.md)
+
+**RFC:** none
+
+**Root specs:** [strand-model.md](../../specs/strand-model.md)
+
+**Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md)
+
+**Status:** Reviewed
+
+**Last Updated:** 2026-07-12
 
 ## PLAN-Immut-001.P1 Goal and scope
 

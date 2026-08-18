@@ -1,6 +1,8 @@
 # Task 11: agent-run preambles -> writer-ref->prompt
 
-**Document ID:** `TASK-Nwt-011` **Slice:** `PLAN-Nwt-001.PH5` (prompt-site absorption) · **Depends on:** Task 1 (`writer-ref->prompt` must exist). Disjoint from `delegation.clj` (Task 10), so fans out in parallel.
+**Document ID:** `TASK-Nwt-011`
+
+**Slice:** `PLAN-Nwt-001.PH5` (prompt-site absorption) · **Depends on:** Task 1 (`writer-ref->prompt` must exist). Disjoint from `delegation.clj` (Task 10), so fans out in parallel.
 
 ## TASK-Nwt-011.P1 Scope
 

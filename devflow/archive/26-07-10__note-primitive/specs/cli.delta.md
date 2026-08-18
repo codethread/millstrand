@@ -1,6 +1,8 @@
 # CLI Surface delta for note-primitive
 
-**Document ID:** `SPEC-Np-003` **Root spec:** [cli.md](../../../specs/cli.md) (`SPEC-002`) **Feature:** [../proposal.md](../proposal.md) (`PROP-Np-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
+**Document ID:** `SPEC-Np-003` **Root spec:** [cli.md](../../../specs/cli.md) (`SPEC-002`)
+
+**Feature:** [../proposal.md](../proposal.md) (`PROP-Np-001`) **Contract:** [../brief.md](../brief.md) **Status:** No change — kept for delta-set completeness **Last Updated:** 2026-07-10
 
 ## SPEC-Np-003.P1 Summary
 

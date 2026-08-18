@@ -1,6 +1,20 @@
 # Authoring forms program proposal
 
-**Document ID:** `PROP-Auf-001` **Status:** Approved **Approved:** 2026-07-29 **Last Updated:** 2026-07-30 **Related RFCs:** [`RFC-Saf-001`](../../rfcs/2026-07-28-spool-authoring-forms.md) (spool authoring forms), [`RFC-Laf-001`](../../rfcs/2026-07-28-lifecycle-authoring-forms.md) (lifecycle authoring forms) — the source decision records this proposal merges and advances; kept unchanged as the intent history **Related decisions:** [ADR-002](../../adrs/0002-no-inline-module-lifecycle-macro.md) (rejected inline callback sugar), [ADR-003](../../adrs/0003-spool-activation-lifecycle.md) (one activation path and the reconcile contract), [ADR-004](../../adrs/0004-def-spool-convention.md) (`def spool` entry-point convention), [RFC-020: readability macros](../../rfcs/2026-07-08-skein-readability-macros.md) **Related root specs:** [`repl-api.md`](../../specs/repl-api.md) (C17c/C17d/C19), [`daemon-runtime.md`](../../specs/daemon-runtime.md) (C45/C46/C46b/C46c/C74a), [`alpha-surface.md`](../../specs/alpha-surface.md) **Related proposals:** [`PROP-Sld-001`](../spool-lifecycle-docs/proposal.md) (documents the surface this program removes), [`PROP-Dsp-001`](../uwnzl-def-spool-convention/proposal.md) (the `def spool` convention whose endpoint this supersedes), [`rrvnn`](../rrvnn-intree-installer-removal/proposal.md), [`9snqu`](../9snqu-siblings-rollout/proposal.md), [`rtnfv`](../rtnfv-consumer-cutover/proposal.md), [`fbr4m`](../fbr4m-core-reconcile-image/proposal.md), [`ifenn`](../ifenn-chime-engine-parity/proposal.md)
+**Document ID:** `PROP-Auf-001`
+
+**Status:** Approved
+
+**Approved:** 2026-07-29
+
+**Last Updated:** 2026-07-30
+
+**Related RFCs:** [`RFC-Saf-001`](../../rfcs/2026-07-28-spool-authoring-forms.md) (spool authoring forms), [`RFC-Laf-001`](../../rfcs/2026-07-28-lifecycle-authoring-forms.md) (lifecycle authoring forms) — the source decision records this proposal merges and advances; kept unchanged as the intent history
+
+**Related decisions:** [ADR-002](../../adrs/0002-no-inline-module-lifecycle-macro.md) (rejected inline callback sugar), [ADR-003](../../adrs/0003-spool-activation-lifecycle.md) (one activation path and the reconcile contract), [ADR-004](../../adrs/0004-def-spool-convention.md) (`def spool` entry-point convention), [RFC-020: readability macros](../../rfcs/2026-07-08-skein-readability-macros.md)
+
+**Related root specs:** [`repl-api.md`](../../specs/repl-api.md) (C17c/C17d/C19), [`daemon-runtime.md`](../../specs/daemon-runtime.md) (C45/C46/C46b/C46c/C74a), [`alpha-surface.md`](../../specs/alpha-surface.md)
+
+**Related proposals:** [`PROP-Sld-001`](../spool-lifecycle-docs/proposal.md) (documents the surface this program removes), [`PROP-Dsp-001`](../uwnzl-def-spool-convention/proposal.md) (the `def spool` convention whose endpoint this supersedes), [`rrvnn`](../rrvnn-intree-installer-removal/proposal.md), [`9snqu`](../9snqu-siblings-rollout/proposal.md), [`rtnfv`](../rtnfv-consumer-cutover/proposal.md), [`fbr4m`](../fbr4m-core-reconcile-image/proposal.md), [`ifenn`](../ifenn-chime-engine-parity/proposal.md)
 
 > One document by design: the user directed that this program have a single proposal to aid coordination. It merges the two source RFCs — which proposed the two halves of one change as separate documents and deferred to each other — and advances beyond them where the source audits and later rulings produced new data; P1 lists the departures. The source RFCs stay in `devflow/rfcs/`, unchanged, as the record of original intent.
 

@@ -1,6 +1,12 @@
 # Pin sync guard proposal
 
-**Document ID:** `PROP-Psg-001` **Last Updated:** 2026-07-11 **Related RFCs:** None **Related root specs:** None (test-only guard; ships no shipped-tree contract, changes only `test/skein/config_test.clj`)
+**Document ID:** `PROP-Psg-001`
+
+**Last Updated:** 2026-07-11
+
+**Related RFCs:** None
+
+**Related root specs:** None (test-only guard; ships no shipped-tree contract, changes only `test/skein/config_test.clj`)
 
 ## PROP-Psg-001.P1 Problem
 
