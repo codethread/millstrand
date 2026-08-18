@@ -75,12 +75,13 @@ func bootstrapWorld(cwd, configDir, source string, injectGuidance bool) (World, 
 const (
 	agentGuidanceMarker    = "<!-- mill:millstrand-prime -->"
 	agentGuidanceEndMarker = "<!-- /mill:millstrand-prime -->"
+	agentOrientation       = "Start with `strand --help`. Run `mill prime millstrand` when building on this repo's `.millstrand/` config, or working with millstrand spools, weaver or REPL."
 )
 
 const agentGuidanceSection = agentGuidanceMarker + `
 ## Millstrand / strand
 
-This repo uses Millstrand strands to track work. Start with ` + "`strand --help`" + `. Run ` + "`mill prime millstrand`" + ` when building on this repo's ` + "`.millstrand/`" + ` config, or working with millstrand spools, weaver or REPL.
+This repo uses Millstrand strands to track work. ` + agentOrientation + `
 ` + agentGuidanceEndMarker + `
 `
 

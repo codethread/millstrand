@@ -38,6 +38,9 @@ func TestBootstrapStealthWorldCreatesAndReusesOwnedBlocks(t *testing.T) {
 	if err := report.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	if got := report.CodexGuidance.SuggestedText; got != "This repository uses a local, gitignored .millstrand workspace. "+agentOrientation {
+		t.Fatalf("unexpected Codex guidance: %q", got)
+	}
 	if got := string(mustRead(t, report.GitExclude.Path)); !strings.Contains(got, stealthExcludeBlock) {
 		t.Fatalf("exclude missing owned block:\n%s", got)
 	}
