@@ -142,12 +142,7 @@ The result names the root lib, canonical root, and namespaces in reload order, a
 publication or resource reconciliation; use a targeted refresh for the normal
 path.
 
-Some changes cannot load into a running weaver at all: removing an already-loaded root, repointing one at
-different source, or bumping a loaded Maven coordinate's version. Refresh refuses those changes and records a
-pending generation that takes effect at the next weaver restart. That restart is not free: replacing a weaver
-ends every agent run it is supervising, and restarting the canonical weaver requires explicit user sign-off.
-Treat a pending generation as a deliberate step, not a reflex; see the [reference](../reference.md) on weaver
-generations for the classification and the cutover semantics.
+Some changes cannot load into a running weaver at all: removing an already-loaded root, repointing one at different source, or bumping a loaded Maven coordinate's version. Refresh refuses those changes and records a pending generation that takes effect at the next weaver restart. That restart is not free: replacing a weaver ends every agent run it is supervising, and restarting the canonical weaver requires explicit user sign-off. Treat a pending generation as a deliberate step, not a reflex; the [Weaver Runtime specification](../../devflow/specs/daemon-runtime.md) defines the classification and cutover semantics in SPEC-004.C44c–C44f.
 
 ## REPL hygiene in a shared weaver
 

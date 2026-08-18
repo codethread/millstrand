@@ -478,8 +478,7 @@ mill weaver stop --workspace "$workspace"
 
 ## Where to go next
 
-- [Millstrand user reference](./reference.md) — the complete model, CLI, weaver, REPL,
-  and workspace behavior, with a spec index at the end.
+- [Millstrand user reference](./reference.md) — the index to Millstrand's guides, generated API documentation, and specifications. Use the specifications for exact behavior.
 - [Shipped reference spools](../spools/README.md) — a workflow engine, a feature
   lifecycle, a kanban board, and more, as working code.
 - [Customising your workspace](./spools/customisation.md) — the full ladder from
