@@ -31,7 +31,7 @@ const (
 	StealthCodexManualRequired     = "manual-required"
 )
 
-const stealthCodexSuggestedText = "This repository uses a local, gitignored .millstrand workspace. Run `mill prime millstrand` and `mill prime strand` before working."
+const stealthCodexSuggestedText = "This repository uses a local, gitignored .millstrand workspace. Run `mill prime millstrand` and `strand --help` before working."
 
 type StealthFileAction struct {
 	Path   string `json:"path"`

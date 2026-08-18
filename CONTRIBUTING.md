@@ -66,7 +66,7 @@ Millstrand has one convention for "how do I find out?", in three escalating tier
 
 - **`help`** — generated from arg-spec data, never hand-written: `strand --workspace "$workspace" help [<op>]`.
 - **`about`** — the authored per-op manual, such as `strand --workspace "$workspace" about agent` and `strand --workspace "$workspace" about kanban`.
-- **`prime`** — run-first orientation: `mill prime millstrand`, `mill prime strand`, `strand --workspace "$workspace" kanban prime`.
+- **`prime`** — run-first orientation: `mill prime millstrand`, `strand --help`, `strand --workspace "$workspace" prime kanban`.
 
 ## Working by hand
 

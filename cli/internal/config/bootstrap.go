@@ -80,10 +80,7 @@ const (
 const agentGuidanceSection = agentGuidanceMarker + `
 ## Millstrand / strand
 
-This repo uses Millstrand strands to track work. Orientation ships in the ` + "`mill`" + ` CLI:
-
-- ` + "`mill prime strand`" + ` — see ` + "`strand --help`" + `.
-- ` + "`mill prime millstrand`" + ` — read on demand, only when building on this repo's ` + "`.millstrand/`" + ` config or spools.
+This repo uses Millstrand strands to track work. Start with ` + "`strand --help`" + `. Run ` + "`mill prime millstrand`" + ` when building on this repo's ` + "`.millstrand/`" + ` config or spools.
 ` + agentGuidanceEndMarker + `
 `
 

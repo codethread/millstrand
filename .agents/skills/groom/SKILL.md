@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # Groom the kanban backlog
 
-Groom the board: scan it with the read surface below, then act (or report) per the guidance at the bottom. Run `strand kanban prime` first if you have not this session — it carries the board discipline.
+Groom the board: scan it with the read surface below, then act (or report) per the guidance at the bottom. Run `strand prime kanban` first if you have not this session — it carries the board discipline.
 
 ## Knowledge
 

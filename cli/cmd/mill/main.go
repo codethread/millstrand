@@ -161,12 +161,11 @@ Environment:
 	weaver.AddCommand(repl)
 	root.AddCommand(weaver)
 
-	prime := &cobra.Command{Use: "prime", Short: "Print agent orientation"}
+	prime := &cobra.Command{Use: "prime", Short: "Print agent orientation", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Help()
+	}}
 	prime.AddCommand(&cobra.Command{Use: "millstrand", Short: "Print orientation for building on .millstrand: resolved source path and the docs to read", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		return runPrime("millstrand")
-	}})
-	prime.AddCommand(&cobra.Command{Use: "strand", Short: "Point at strand --help", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		return runPrime("strand")
+		return runMillstrandPrime()
 	}})
 	root.AddCommand(prime)
 	root.AddCommand(newBinCommand())
