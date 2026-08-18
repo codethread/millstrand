@@ -160,6 +160,10 @@
 (s/def ::spool-about-result
   (s/and (s/keys :req-un [::operation ::purpose ::commands ::conventions])
          #(exact-keys? #{:operation :purpose :commands :conventions} %)))
+(s/def ::runbook string?)
+(s/def ::runbook-result
+  (s/and (s/keys :req-un [::runbook])
+         #(exact-keys? #{:runbook} %)))
 
 (defn- exact-spool-args? [required optional args]
   (and (map? args)
@@ -1682,7 +1686,9 @@
   "Return the batteries strand-tracking runbook."
   (op-options 'runbook runbook-arg-spec)
   [_ctx]
-  {:runbook (slurp-runbook)})
+  (require-valid! ::runbook-result
+                  {:runbook (slurp-runbook)}
+                  "Batteries runbook returned an invalid result"))
 
 (s/def ::runtime some?)
 (s/def ::seed-context (s/keys :req-un [::runtime]))
