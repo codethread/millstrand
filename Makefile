@@ -1,4 +1,4 @@
-.PHONY: help build kanban-tree land-quality install dash api-docs test-go test-e2e docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
+.PHONY: help build kanban-tree land-quality install dash api-docs test-go test-e2e docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop
 
 help:
 	@printf '%s\n' \
@@ -15,7 +15,6 @@ help:
 		'  make ci-config-check    Verify CI invokes identity and documentation gates' \
 		'  make transition-check   Validate the temporary external publisher boundary' \
 		'  make docs-check         Regenerate and verify documentation' \
-		'  make spool-suite-gate   Run or report the pinned external spool gate' \
 		'  make install            Install globally stamped strand and mill binaries' \
 		'  make dash               Launch the kanban dashboard' \
 		'  make help               Show this command list'
@@ -166,11 +165,6 @@ security-report-go:
 # cold `clojure -M:test <ns...>` run is the slice gate (PLAN-Ttv-001.TC1).
 test-warm:
 	NS="$(NS)" bash scripts/test-warm
-
-# Run the pinned external spool suites against this checkout. The script reads
-# each pin from .millstrand/spools.edn and materializes an isolated sibling layout.
-spool-suite-gate:
-	bash scripts/spool-suite-gate
 
 # Reap the worktree's warm REPL by recorded PID (PID only, never `pkill -f`) and
 # remove the runtime files (PLAN-Ttv-001.R1). The land cleanup step calls this

@@ -110,27 +110,6 @@ jobs:
           cli: latest
       - run: make test-e2e
 
-  spool-suites:
-    name: Spool suites
-    needs: changes
-    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.clojure == 'true' || needs.changes.outputs.shared == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # Pinned sibling suites prove their tested Millstrand checkout descends
-          # from the Phase A floor, so this job needs the commit graph.
-          fetch-depth: 0
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: DeLaGuardo/setup-clojure@13.4
-        with:
-          cli: latest
-      - run: make spool-suite-gate
-
   clojure-format:
     name: Clojure format check
     needs: changes

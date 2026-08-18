@@ -32,10 +32,9 @@ Run commands from the repository root. Cold means starting a fresh test JVM; war
 | Focused cold slice | `clojure -M:test millstrand.relations-test` | One registered serial or parallel namespace, in-process. Pass the namespace names explicitly. |
 | Warm iteration | `make test-warm NS="millstrand.relations-test"` | Reuses or boots the worktree warm REPL and runs a focused slice without leaving the JVM. |
 | Stop warm iteration | `make test-warm-stop` | Stops the PID recorded in `.test-repl.pid` and removes the warm runtime files. |
-| Go suite | `make test-go` | Runs `go test ./...` in both `cli` and `tools/kanban-tree`. |
+| Go suite | `make test-go` | Runs `go test ./...` in `cli`, `tools/kanban-tree`, and `tools/land-quality`. |
 | Process/repository E2E | `make test-e2e` | Runs the `millstrand.e2e` entrypoint, including public CLI, live refresh, cutover, repository bootstrap, and REPL flows. |
 | Shell acceptance | `make build`, then `test/shell/acceptance/millstrand-core.sh` | Runs public built `bin/mill` and `bin/strand` against disposable worlds. The Kanban module script proves the pinned Millhouse source and retained image surface; the docs and Neovim scripts are `test/shell/acceptance/millstrand-docs.sh` and `test/shell/acceptance/millstrand-neovim.sh`. |
-| External spool suites | `make spool-suite-gate` | Runs the pinned Devflow, Millhouse Kanban, and agent-run consumer suites against this checkout. |
 
 The focused cold runner rejects add-libs shard members (`millstrand.spools-test`, `millstrand.runtime-deps-test`, and `millstrand.ct.config-ops-test`) and unknown namespaces. Run the full suite for those namespaces. `MILLSTRAND_TEST_AWAIT_SCALE=3` widens await budgets on slow hosts; it does not change the test tier.
 
@@ -91,13 +90,12 @@ The table is a locator, not a second contract. [SPEC-004.C44c](../devflow/specs/
 
 ## Merge gate and exclusions
 
-The tracked merge contract is [`.millstrand/land-quality.sh`](../.millstrand/land-quality.sh). It composes the full Clojure suite, `make test-go`, `make test-e2e`, `make spool-suite-gate`, formatting, lint, reflection, CI-config and identity checks, `make build`, the docs and Neovim shell acceptance scripts, and `make docs-check`. For a local slice, use the commands above; for queue acceptance use the locked Clojure command plus the quality targets:
+The tracked merge contract is [`.millstrand/land-quality.sh`](../.millstrand/land-quality.sh). It runs the repository-owned Go DAG, which composes the full Clojure suite, `make test-go`, `make test-e2e`, formatting, lint, reflection, CI-config and identity checks, `make build`, the docs and Neovim shell acceptance scripts, and `make docs-check`. Each check has a checked-in baseline; crossing 110% emits a warning, while its separate hard timeout fails the check. For a local slice, use the commands above; for queue acceptance use the locked Clojure command plus the quality targets:
 
 ```sh
 flock -w 3600 /tmp/millstrand-test.lock clojure -M:test
 make test-go
 make test-e2e
-make spool-suite-gate
 make fmt-check lint reflect-check docs-check
 git diff --check
 ```

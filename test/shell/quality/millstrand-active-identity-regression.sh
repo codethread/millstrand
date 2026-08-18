@@ -15,7 +15,6 @@ cp "$repo_root/scripts/quality/millstrand-identity-allowlist.tsv" \
   "$tmp_root/scripts/quality/millstrand-identity-allowlist.tsv"
 cp "$repo_root/mkdocs.yml" "$tmp_root/mkdocs.yml"
 cp "$repo_root/scripts/generate_api_docs.clj" "$tmp_root/scripts/generate_api_docs.clj"
-cp "$repo_root/scripts/spool-suite-gate" "$tmp_root/scripts/spool-suite-gate"
 cp "$repo_root/scripts/quality/reflect_check.clj" "$tmp_root/scripts/quality/reflect_check.clj"
 cp "$repo_root/devflow/README.md" "$tmp_root/devflow/README.md"
 cp "$repo_root/devflow/specs/daemon-runtime.md" "$tmp_root/devflow/specs/daemon-runtime.md"

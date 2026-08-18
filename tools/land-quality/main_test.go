@@ -12,12 +12,17 @@ import (
 	"time"
 )
 
-func TestQualityGraphKeepsFourteenChecksAndBuildDependencies(t *testing.T) {
-	if len(qualityChecks) != 14 {
-		t.Fatalf("quality graph has %d checks, want 14", len(qualityChecks))
+func TestQualityGraphKeepsThirteenChecksAndBuildDependencies(t *testing.T) {
+	if len(qualityChecks) != 13 {
+		t.Fatalf("quality graph has %d checks, want 13", len(qualityChecks))
 	}
 	if err := validateChecks(qualityChecks); err != nil {
 		t.Fatal(err)
+	}
+	for _, c := range qualityChecks {
+		if c.name == "spool-suites" || strings.Contains(strings.Join(c.argv, " "), "spool-suite-gate") {
+			t.Fatalf("external spool check remains in graph: %#v", c)
+		}
 	}
 	for _, name := range []string{"acceptance-kanban", "acceptance-docs", "acceptance-neovim"} {
 		var found *check
@@ -35,10 +40,10 @@ func TestQualityGraphKeepsFourteenChecksAndBuildDependencies(t *testing.T) {
 
 func TestRunnerBoundsHeavyChecksAndOverlapsLightChecks(t *testing.T) {
 	checks := []check{
-		{name: "heavy-a", argv: []string{"a"}, heavy: true},
-		{name: "heavy-b", argv: []string{"b"}, heavy: true},
-		{name: "heavy-c", argv: []string{"c"}, heavy: true},
-		{name: "light", argv: []string{"light"}},
+		{name: "heavy-a", argv: []string{"a"}, heavy: true, baseline: time.Second, timeout: time.Minute},
+		{name: "heavy-b", argv: []string{"b"}, heavy: true, baseline: time.Second, timeout: time.Minute},
+		{name: "heavy-c", argv: []string{"c"}, heavy: true, baseline: time.Second, timeout: time.Minute},
+		{name: "light", argv: []string{"light"}, baseline: time.Second, timeout: time.Minute},
 	}
 	var mu sync.Mutex
 	runningHeavy, maxHeavy := 0, 0
@@ -97,9 +102,9 @@ func TestRunnerBoundsHeavyChecksAndOverlapsLightChecks(t *testing.T) {
 
 func TestRunnerBlocksDependentsButFinishesIndependentChecks(t *testing.T) {
 	checks := []check{
-		{name: "failed", argv: []string{"failed"}},
-		{name: "blocked", argv: []string{"blocked"}, deps: []string{"failed"}},
-		{name: "independent", argv: []string{"independent"}},
+		{name: "failed", argv: []string{"failed"}, baseline: time.Second, timeout: time.Minute},
+		{name: "blocked", argv: []string{"blocked"}, deps: []string{"failed"}, baseline: time.Second, timeout: time.Minute},
+		{name: "independent", argv: []string{"independent"}, baseline: time.Second, timeout: time.Minute},
 	}
 	var mu sync.Mutex
 	executed := map[string]bool{}
@@ -130,7 +135,7 @@ func TestRunnerBlocksDependentsButFinishesIndependentChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	var summary bytes.Buffer
-	if _, err := printSummary(&summary, results); err != nil {
+	if _, err := printSummary(&summary, results, time.Second); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(summary.String(), "reason=prerequisite failed fail") {
@@ -142,15 +147,79 @@ func TestRunnerBlocksDependentsButFinishesIndependentChecks(t *testing.T) {
 }
 
 func TestValidateChecksRejectsUnknownDependenciesAndCycles(t *testing.T) {
-	if err := validateChecks([]check{{name: "a", argv: []string{"a"}, deps: []string{"missing"}}}); err == nil {
+	if err := validateChecks([]check{{name: "a", argv: []string{"a"}, deps: []string{"missing"}, baseline: time.Second, timeout: time.Minute}}); err == nil {
 		t.Fatal("unknown dependency accepted")
 	}
 	cycle := []check{
-		{name: "a", argv: []string{"a"}, deps: []string{"b"}},
-		{name: "b", argv: []string{"b"}, deps: []string{"a"}},
+		{name: "a", argv: []string{"a"}, deps: []string{"b"}, baseline: time.Second, timeout: time.Minute},
+		{name: "b", argv: []string{"b"}, deps: []string{"a"}, baseline: time.Second, timeout: time.Minute},
 	}
 	if err := validateChecks(cycle); err == nil {
 		t.Fatal("dependency cycle accepted")
+	}
+	invalidBudget := []check{{name: "a", argv: []string{"a"}, baseline: time.Second, timeout: 1100 * time.Millisecond}}
+	if err := validateChecks(invalidBudget); err == nil {
+		t.Fatal("hard timeout at the warning budget was accepted")
+	}
+}
+
+func TestRunnerWarnsAtMoreThanTenPercentGrowth(t *testing.T) {
+	c := check{name: "slow", argv: []string{"slow"}, baseline: 10 * time.Second, timeout: time.Minute}
+	status, err := classifyResult(c, 11*time.Second+time.Nanosecond, nil, nil)
+	if err != nil || status != "WARN" {
+		t.Fatalf("status = %s, err = %v; want WARN", status, err)
+	}
+	status, err = classifyResult(c, 11*time.Second, nil, nil)
+	if err != nil || status != "PASS" {
+		t.Fatalf("at-budget status = %s, err = %v; want PASS", status, err)
+	}
+	if got := growthBudget(10 * time.Second); got != 11*time.Second {
+		t.Fatalf("10%% growth budget = %s", got)
+	}
+	var summary bytes.Buffer
+	if _, err := printSummary(&summary, nil, growthBudget(overallBaseline)+time.Nanosecond); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(summary.String(), "WARN    total") {
+		t.Fatalf("overall growth warning missing:\n%s", summary.String())
+	}
+}
+
+func TestRunnerTimesOutCheckAndBlocksDependent(t *testing.T) {
+	checks := []check{
+		{name: "slow", argv: []string{"slow"}, baseline: time.Millisecond, timeout: 10 * time.Millisecond},
+		{name: "dependent", argv: []string{"dependent"}, deps: []string{"slow"}, baseline: time.Second, timeout: time.Minute},
+	}
+	exec := func(ctx context.Context, _ check, _ string) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	results, err := (runner{checks: checks, heavyLimit: 1, execute: exec, out: io.Discard, logDir: t.TempDir()}).run(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results[0].status != "TIMEOUT" || results[1].status != "BLOCKED" {
+		t.Fatalf("statuses = %s, %s", results[0].status, results[1].status)
+	}
+	if !strings.Contains(results[1].err.Error(), "prerequisite slow timeout") {
+		t.Fatalf("blocked reason = %q", results[1].err)
+	}
+}
+
+func TestRunnerStopsAtOverallContextDeadline(t *testing.T) {
+	c := check{name: "slow", argv: []string{"slow"}, baseline: time.Millisecond, timeout: time.Minute}
+	exec := func(ctx context.Context, _ check, _ string) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	results, err := (runner{checks: []check{c}, heavyLimit: 1, execute: exec, out: io.Discard, logDir: t.TempDir()}).run(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("run error = %v", err)
+	}
+	if results[0].status != "TIMEOUT" {
+		t.Fatalf("status = %s, want TIMEOUT", results[0].status)
 	}
 }
 
