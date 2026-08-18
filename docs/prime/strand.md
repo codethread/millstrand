@@ -77,7 +77,4 @@ Before reporting success:
   strands; dependencies reflect actual blocking relationships.
 - Relevant checks pass.
 
-Branching, delegation, review, and landing discipline are repo policy, not strand core: take
-them from repo conventions and from the `about`/`prime` surfaces of the ops the repo
-registers. When building on `.millstrand` itself, use `mill prime millstrand` to find the
-Millstrand source checkout and its canonical reference; day-to-day tracking does not need it.
+Branching, delegation, review, and landing discipline are repo policy, not strand core: take them from repo conventions and from the `about`/`prime` surfaces of the ops the repo registers. When building on `.millstrand` itself, use `mill prime millstrand` to find the Millstrand source checkout and its canonical reference; day-to-day tracking does not need it.
