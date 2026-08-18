@@ -1,6 +1,10 @@
 # Task 2: agent-run install! declares agent-run/* (agent_run.clj)
 
-**Document ID:** `TASK-Vr-002` **Slice:** `PLAN-Vr-001.S2a` **Harness:** build **Type:** AFK **Depends on:** TASK-Vr-001
+**Document ID:** `TASK-Vr-002`
+
+**Slice:** `PLAN-Vr-001.S2a` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Vr-001
 
 ## TASK-Vr-002.P1 Scope
 

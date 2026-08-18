@@ -10,7 +10,9 @@
 
 **Related brief:** [brief.md](./brief.md) (scope is the contract)
 
-**Related feature:** [`devflow/feat/unify-spool-classpath/`](../26-07-11__unify-spool-classpath/) — this gate was extracted from that work, which moved `skein.spools.workflow` off Skein's main classpath and thereby broke `devflow.spool`'s standalone suite. **Kanban:** card `yhqfh` (p2).
+**Related feature:** [`devflow/feat/unify-spool-classpath/`](../26-07-11__unify-spool-classpath/) — this gate was extracted from that work, which moved `skein.spools.workflow` off Skein's main classpath and thereby broke `devflow.spool`'s standalone suite.
+
+**Kanban:** card `yhqfh` (p2).
 
 **Configuration identification:** Document IDs must be ordered as document type, short name, sequential id, then optional version: `PROP-Dwr-001` for v1 and `PROP-Dwr-001@2` for v2. Omit `@1`; append `@2`, `@3`, etc. only when a new version supersedes an externally referenced document. Prefix every nested point ID with the full document ID, for example `PROP-Dwr-001.P1` or `PROP-Dwr-001@2.P1`, so references are globally grepable and do not clash across documents. If the next number or version is unclear, ask before creating the document.
 

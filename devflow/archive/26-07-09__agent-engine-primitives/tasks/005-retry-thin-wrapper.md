@@ -1,6 +1,10 @@
 # Task 5: op-retry as thin wrapper over the primitive (delegation.clj)
 
-**Document ID:** `TASK-Aep-005` **Slice:** `PLAN-Aep-001.S5` **Harness:** build **Type:** AFK **Depends on:** TASK-Aep-003 (the primitive), TASK-Aep-004 (same file — sequential after the serving rewrite)
+**Document ID:** `TASK-Aep-005`
+
+**Slice:** `PLAN-Aep-001.S5` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Aep-003 (the primitive), TASK-Aep-004 (same file — sequential after the serving rewrite)
 
 ## TASK-Aep-005.P1 Scope
 

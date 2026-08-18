@@ -1,6 +1,10 @@
 # Task 7: `gate/*` attribute sweep (incl. `treadle/gate`→`gate/step`)
 
-**Document ID:** `TASK-Alr-007` **Phase:** `PLAN-Alr-001.PH2` (b) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-005
+**Document ID:** `TASK-Alr-007`
+
+**Phase:** `PLAN-Alr-001.PH2` (b) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-005
 
 ## TASK-Alr-007.P1 Scope
 

@@ -1,6 +1,10 @@
 # Task 1: large-attr load harness in the test/ tier + structural smoke (PH1 / S1)
 
-**Document ID:** `TASK-LargeAttrScaling-001` **Slice:** `PLAN-LargeAttrScaling-001.PH1` Harness (S1) **Harness:** build (opus) **Type:** AFK **Branch:** `large-attr-scaling` **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
+**Document ID:** `TASK-LargeAttrScaling-001`
+
+**Slice:** `PLAN-LargeAttrScaling-001.PH1` Harness (S1) **Harness:** build (opus) **Type:** AFK
+
+**Branch:** `large-attr-scaling` **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
 
 Read first: `devflow/feat/large-attr-scaling/large-attr-scaling.plan.md` (`PLAN-LargeAttrScaling-001`, esp. `A1`–`A6`, `AA1`, `AA2`, `PH1`, `TC2`, `TC3`, `R1`–`R4`, `V1`) and `devflow/feat/large-attr-scaling/proposal.md` (`PROP-LargeAttrScaling-001.F1`, `F2`, `S1`, `Q1`, `NG2`, `NG3`). Read the shipped code the harness measures — do not plan against imagined structure (`TC1`): `src/skein/core/db.clj` attribute paths (`assembled-attributes-sql`, `attribute-json-by-strand-id` `:340-357`, `strand-row-by-id` `:371-375`, the 1024-byte floor `attribute-value-sql` `:333-338`, `all-strands-lean` `:1261-1295`, `ready-strands-lean` `:1341-1408`) and `spools/text-search/src/skein/spools/text_search.clj` (`LIKE`, `:110-119`, `:139-157`). Lift, don't rewrite, the proven gate-reproduction + write-amp methodology already in `dev/skein/eav_benchmark.clj` (`ns skein.eav-benchmark`, committed on `main` at `3d1a99e`) — `TC2`.
 

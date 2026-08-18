@@ -6,7 +6,15 @@
 
 **Proposal:** [proposal.md](./proposal.md) (`PROP-Vr-001`)
 
-**Predecessors:** `agent-engine-primitives` (`PROP-Aep-001`, card `ah5vu`, landed `3b99997`; `serves` relation live) and `note-primitive` (`PROP-Np-001`, card `7azzl`, landed `bd49eb2`; `notes` relation + `note/*` shape + `skein.api.notes.alpha` live); F4 is card `41pna` of epic `kaans` **Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [cli.md](../../specs/cli.md) (`SPEC-002`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Vr-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Vr-002`), [specs/cli.delta.md](./specs/cli.delta.md) (`SPEC-Vr-003`, no change), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Vr-004`, no change) **Contract:** [proposal.md](./proposal.md) clauses `PROP-Vr-001.C1`–`C13` — the approved contract; this plan sequences it and never widens it. **Status:** Reviewed
+**Predecessors:** `agent-engine-primitives` (`PROP-Aep-001`, card `ah5vu`, landed `3b99997`; `serves` relation live) and `note-primitive` (`PROP-Np-001`, card `7azzl`, landed `bd49eb2`; `notes` relation + `note/*` shape + `skein.api.notes.alpha` live); F4 is card `41pna` of epic `kaans`
+
+**Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [cli.md](../../specs/cli.md) (`SPEC-002`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`)
+
+**Feature specs:** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Vr-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Vr-002`), [specs/cli.delta.md](./specs/cli.delta.md) (`SPEC-Vr-003`, no change), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Vr-004`, no change)
+
+**Contract:** [proposal.md](./proposal.md) clauses `PROP-Vr-001.C1`–`C13` — the approved contract; this plan sequences it and never widens it.
+
+**Status:** Reviewed
 
 **Last Updated:** 2026-07-10
 

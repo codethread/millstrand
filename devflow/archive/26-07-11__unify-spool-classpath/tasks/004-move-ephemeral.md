@@ -1,6 +1,10 @@
 # Task 4: move ephemeral to per-spool root + coordinate + guard
 
-**Document ID:** `TASK-usc-004` **Slice:** `PLAN-usc-001.PH2` (ephemeral — activated spool) **Harness:** grunt/patch-gpt **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-004`
+
+**Slice:** `PLAN-usc-001.PH2` (ephemeral — activated spool) **Harness:** grunt/patch-gpt **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-004.P1 Scope
 

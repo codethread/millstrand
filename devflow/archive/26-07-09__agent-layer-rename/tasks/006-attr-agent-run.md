@@ -1,6 +1,10 @@
 # Task 6: `agent-run/*` run attributes + markers sweep
 
-**Document ID:** `TASK-Alr-006` **Phase:** `PLAN-Alr-001.PH2` (a) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-005
+**Document ID:** `TASK-Alr-006`
+
+**Phase:** `PLAN-Alr-001.PH2` (a) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-005
 
 ## TASK-Alr-006.P1 Scope
 

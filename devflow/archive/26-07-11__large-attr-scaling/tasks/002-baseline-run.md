@@ -1,6 +1,10 @@
 # Task 2: full-scale baseline run + numbers report (PH2 / S2)
 
-**Document ID:** `TASK-LargeAttrScaling-002` **Slice:** `PLAN-LargeAttrScaling-001.PH2` Baseline run + numbers (S2) **Harness:** grunt (sonnet) **Type:** AFK **Branch:** `large-attr-scaling` **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
+**Document ID:** `TASK-LargeAttrScaling-002`
+
+**Slice:** `PLAN-LargeAttrScaling-001.PH2` Baseline run + numbers (S2) **Harness:** grunt (sonnet) **Type:** AFK
+
+**Branch:** `large-attr-scaling` **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
 
 Read first: `devflow/feat/large-attr-scaling/large-attr-scaling.plan.md` (`PLAN-LargeAttrScaling-001`, esp. `PH2`, `A6` seed profile, `AA3`, `AA4`, `V3`, `V4`, `V7`) and `devflow/feat/large-attr-scaling/proposal.md` (`PROP-LargeAttrScaling-001.G2`, `S2`, `Q2`). Task 1's `test/skein/large_attr_benchmark.clj` is the tool; read its `-main` arg handling before running.
 

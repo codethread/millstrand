@@ -1,6 +1,10 @@
 # Task 7: move carder to per-spool root + coordinate + :config consent edge (no activation)
 
-**Document ID:** `TASK-usc-007` **Slice:** `PLAN-usc-001.PH2` (carder — config-consumed library spool) **Harness:** grunt/patch-gpt **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-007`
+
+**Slice:** `PLAN-usc-001.PH2` (carder — config-consumed library spool) **Harness:** grunt/patch-gpt **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-007.P1 Scope
 

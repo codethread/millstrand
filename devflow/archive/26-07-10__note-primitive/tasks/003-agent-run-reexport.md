@@ -1,6 +1,10 @@
 # Task 3: agent-run re-export + note/for drop + docstring (agent_run.clj)
 
-**Document ID:** `TASK-Np-003` **Slice:** `PLAN-Np-001.S3` **Harness:** build **Type:** AFK **Depends on:** TASK-Np-002
+**Document ID:** `TASK-Np-003`
+
+**Slice:** `PLAN-Np-001.S3` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Np-002
 
 ## TASK-Np-003.P1 Scope
 

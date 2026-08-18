@@ -1,6 +1,10 @@
 # Task 1: Window enforcement + ceiling config (PH1)
 
-**Document ID:** `TASK-Foc-001` **Slice:** `PLAN-Foc-001.PH1` **Type:** AFK **Depends on:** none
+**Document ID:** `TASK-Foc-001`
+
+**Slice:** `PLAN-Foc-001.PH1` **Type:** AFK
+
+**Depends on:** none
 
 ## TASK-Foc-001.P1 Scope
 

@@ -1,6 +1,10 @@
 # Task 14: `make api-docs` regen of the renamed outfiles
 
-**Document ID:** `TASK-Alr-014` **Phase:** `PLAN-Alr-001.PH3` (d) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-011
+**Document ID:** `TASK-Alr-014`
+
+**Phase:** `PLAN-Alr-001.PH3` (d) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-011
 
 ## TASK-Alr-014.P1 Scope
 

@@ -1,6 +1,10 @@
 # Task 9: subagent.md + cookbook (delete footgun prose, rewrite recovery)
 
-**Document ID:** `TASK-Aep-009` **Slice:** `PLAN-Aep-001.S9` **Harness:** worker **Type:** AFK **Depends on:** TASK-Aep-006
+**Document ID:** `TASK-Aep-009`
+
+**Slice:** `PLAN-Aep-001.S9` **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Aep-006
 
 ## TASK-Aep-009.P1 Scope
 

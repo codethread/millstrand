@@ -1,6 +1,10 @@
 # Task 12: acceptance / atomic-landing gate
 
-**Document ID:** `TASK-Np-012` **Slice:** `PLAN-Np-001.S12` **Harness:** build **Type:** AFK **Depends on:** TASK-Np-001..011
+**Document ID:** `TASK-Np-012`
+
+**Slice:** `PLAN-Np-001.S12` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Np-001..011
 
 ## TASK-Np-012.P1 Scope
 

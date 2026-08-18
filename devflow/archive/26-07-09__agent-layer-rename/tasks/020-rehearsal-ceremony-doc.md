@@ -1,6 +1,10 @@
 # Task 20: cutover rehearsal recipe + ceremony doc
 
-**Document ID:** `TASK-Alr-020` **Phase:** `PLAN-Alr-001.PH6` (b) **Harness:** worker **Type:** AFK **Depends on:** TASK-Alr-019
+**Document ID:** `TASK-Alr-020`
+
+**Phase:** `PLAN-Alr-001.PH6` (b) **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Alr-019
 
 ## TASK-Alr-020.P1 Scope
 

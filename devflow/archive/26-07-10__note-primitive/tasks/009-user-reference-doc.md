@@ -1,6 +1,10 @@
 # Task 9: docs/skein.md relation-list rewrite + note/notes gloss
 
-**Document ID:** `TASK-Np-009` **Slice:** `PLAN-Np-001.S9` **Harness:** worker **Type:** AFK **Depends on:** none (doc-only; lands with the set)
+**Document ID:** `TASK-Np-009`
+
+**Slice:** `PLAN-Np-001.S9` **Harness:** worker **Type:** AFK
+
+**Depends on:** none (doc-only; lands with the set)
 
 ## TASK-Np-009.P1 Scope
 

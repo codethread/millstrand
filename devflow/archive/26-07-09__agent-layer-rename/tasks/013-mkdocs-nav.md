@@ -1,6 +1,10 @@
 # Task 13: `mkdocs.yml` nav paths follow the doc moves
 
-**Document ID:** `TASK-Alr-013` **Phase:** `PLAN-Alr-001.PH3` (c) **Harness:** worker **Type:** AFK **Depends on:** TASK-Alr-011
+**Document ID:** `TASK-Alr-013`
+
+**Phase:** `PLAN-Alr-001.PH3` (c) **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Alr-011
 
 ## TASK-Alr-013.P1 Scope
 

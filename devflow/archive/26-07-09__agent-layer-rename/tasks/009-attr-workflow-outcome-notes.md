@@ -1,6 +1,10 @@
 # Task 9: `workflow/outcome-notes` + workflow-core marker sweep
 
-**Document ID:** `TASK-Alr-009` **Phase:** `PLAN-Alr-001.PH2` (d) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-006, TASK-Alr-007
+**Document ID:** `TASK-Alr-009`
+
+**Phase:** `PLAN-Alr-001.PH2` (d) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-006, TASK-Alr-007
 
 ## TASK-Alr-009.P1 Scope
 

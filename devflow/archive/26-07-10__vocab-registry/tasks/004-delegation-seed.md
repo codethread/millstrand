@@ -1,6 +1,10 @@
 # Task 4: delegation install! declares review/_, panel/_ (delegation.clj)
 
-**Document ID:** `TASK-Vr-004` **Slice:** `PLAN-Vr-001.S2c` **Harness:** build **Type:** AFK **Depends on:** TASK-Vr-001
+**Document ID:** `TASK-Vr-004`
+
+**Slice:** `PLAN-Vr-001.S2c` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Vr-001
 
 ## TASK-Vr-004.P1 Scope
 

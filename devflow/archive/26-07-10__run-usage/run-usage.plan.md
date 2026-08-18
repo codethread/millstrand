@@ -6,7 +6,15 @@
 
 **Proposal:** [proposal.md](./proposal.md) (`PROP-Ru-001`)
 
-**Predecessor:** `vocab-registry` (`PROP-Vr-001`, card `41pna`, landed `d9bc478`; the F4 registry this feature is the first to extend). F-Ru is card `2ms8c` of epic `kaans`, sequenced after F4 and parallel-safe with F5 (`2mp13`). **Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [cli.md](../../specs/cli.md) (`SPEC-002`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs (all no-change):** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Ru-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Ru-002`), [specs/cli.delta.md](./specs/cli.delta.md) (`SPEC-Ru-003`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Ru-004`) **Contract:** [proposal.md](./proposal.md) clauses `PROP-Ru-001.C1`–`C11` — the approved design contract; this plan sequences it and never widens it. **Status:** Reviewed
+**Predecessor:** `vocab-registry` (`PROP-Vr-001`, card `41pna`, landed `d9bc478`; the F4 registry this feature is the first to extend). F-Ru is card `2ms8c` of epic `kaans`, sequenced after F4 and parallel-safe with F5 (`2mp13`).
+
+**Root specs:** [strand-model.md](../../specs/strand-model.md) (`SPEC-001`), [cli.md](../../specs/cli.md) (`SPEC-002`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`)
+
+**Feature specs (all no-change):** [specs/strand-model.delta.md](./specs/strand-model.delta.md) (`SPEC-Ru-001`), [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`SPEC-Ru-002`), [specs/cli.delta.md](./specs/cli.delta.md) (`SPEC-Ru-003`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`SPEC-Ru-004`)
+
+**Contract:** [proposal.md](./proposal.md) clauses `PROP-Ru-001.C1`–`C11` — the approved design contract; this plan sequences it and never widens it.
+
+**Status:** Reviewed
 
 **Last Updated:** 2026-07-10
 

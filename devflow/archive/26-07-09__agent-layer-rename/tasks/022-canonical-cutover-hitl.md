@@ -1,6 +1,12 @@
 # Task 22: canonical-world cutover at user-signed weaver restart
 
-**Document ID:** `TASK-Alr-022` **Phase:** `PLAN-Alr-001.PH6` (canonical execution) **Harness:** — (coordinator, interactive) **Type:** HITL (`hitl: true`) **Depends on:** TASK-Alr-020, TASK-Alr-021
+**Document ID:** `TASK-Alr-022`
+
+**Phase:** `PLAN-Alr-001.PH6` (canonical execution) **Harness:** — (coordinator, interactive)
+
+**Type:** HITL (`hitl: true`)
+
+**Depends on:** TASK-Alr-020, TASK-Alr-021
 
 ## TASK-Alr-022.P1 Scope
 

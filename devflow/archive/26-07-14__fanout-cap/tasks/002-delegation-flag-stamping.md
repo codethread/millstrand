@@ -1,6 +1,10 @@
 # Task 2: Delegation `--max-concurrent` flag + group stamping (PH2)
 
-**Document ID:** `TASK-Foc-002` **Slice:** `PLAN-Foc-001.PH2` **Type:** AFK **Depends on:** TASK-Foc-001
+**Document ID:** `TASK-Foc-002`
+
+**Slice:** `PLAN-Foc-001.PH2` **Type:** AFK
+
+**Depends on:** TASK-Foc-001
 
 ## TASK-Foc-002.P1 Scope
 

@@ -1,6 +1,10 @@
 # Task 1: parse-layer usage capture, both formats (foundation)
 
-**Document ID:** `TASK-Ru-001` **Slice:** `PLAN-Ru-001.S1` **Harness:** build **Type:** AFK **Depends on:** none (lands first on the spine)
+**Document ID:** `TASK-Ru-001`
+
+**Slice:** `PLAN-Ru-001.S1` **Harness:** build **Type:** AFK
+
+**Depends on:** none (lands first on the spine)
 
 ## TASK-Ru-001.P1 Scope
 

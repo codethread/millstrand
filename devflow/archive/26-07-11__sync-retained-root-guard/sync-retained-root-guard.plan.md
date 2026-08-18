@@ -8,9 +8,13 @@
 
 **RFC:** none
 
-**Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`) **Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-srr-dr-001`)
+**Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`), [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`)
 
-**Contract:** [brief.md](./brief.md) — the accepted design contract (card `pn7wh`); this plan sequences it and never widens it. **Status:** Reviewed
+**Feature specs:** [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-srr-dr-001`)
+
+**Contract:** [brief.md](./brief.md) — the accepted design contract (card `pn7wh`); this plan sequences it and never widens it.
+
+**Status:** Reviewed
 
 **Last Updated:** 2026-07-11
 

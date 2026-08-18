@@ -1,6 +1,10 @@
 # Task 1: skein.api.vocab.alpha registry + core seed (foundation)
 
-**Document ID:** `TASK-Vr-001` **Slice:** `PLAN-Vr-001.S1` **Harness:** build **Type:** AFK **Depends on:** none (lands first)
+**Document ID:** `TASK-Vr-001`
+
+**Slice:** `PLAN-Vr-001.S1` **Harness:** build **Type:** AFK
+
+**Depends on:** none (lands first)
 
 ## TASK-Vr-001.P1 Scope
 

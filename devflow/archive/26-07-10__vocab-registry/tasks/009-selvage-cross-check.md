@@ -1,6 +1,10 @@
 # Task 9: selvage opt-in cross-check helper (selvage.clj)
 
-**Document ID:** `TASK-Vr-009` **Slice:** `PLAN-Vr-001.S4` **Harness:** build **Type:** AFK **Depends on:** TASK-Vr-001
+**Document ID:** `TASK-Vr-009`
+
+**Slice:** `PLAN-Vr-001.S4` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Vr-001
 
 ## TASK-Vr-009.P1 Scope
 

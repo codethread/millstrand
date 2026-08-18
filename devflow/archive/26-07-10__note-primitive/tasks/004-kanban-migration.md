@@ -1,6 +1,10 @@
 # Task 4: kanban migration (note!, card-subtree, compact-note, handovers) (kanban.clj)
 
-**Document ID:** `TASK-Np-004` **Slice:** `PLAN-Np-001.S4` **Harness:** build **Type:** AFK **Depends on:** TASK-Np-002
+**Document ID:** `TASK-Np-004`
+
+**Slice:** `PLAN-Np-001.S4` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Np-002
 
 ## TASK-Np-004.P1 Scope
 

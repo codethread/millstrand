@@ -1,6 +1,10 @@
 # Task 4: delegation serving rewrite (delegation.clj)
 
-**Document ID:** `TASK-Aep-004` **Slice:** `PLAN-Aep-001.S4` **Harness:** build **Type:** AFK **Depends on:** TASK-Aep-002 (needs the `serves` edge; disjoint file from Task 3, may run alongside it)
+**Document ID:** `TASK-Aep-004`
+
+**Slice:** `PLAN-Aep-001.S4` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Aep-002 (needs the `serves` edge; disjoint file from Task 3, may run alongside it)
 
 ## TASK-Aep-004.P1 Scope
 

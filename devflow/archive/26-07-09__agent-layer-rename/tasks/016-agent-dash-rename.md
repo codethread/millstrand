@@ -1,6 +1,10 @@
 # Task 16: `scripts/agent-dash` rename + attr strings + `make dash`
 
-**Document ID:** `TASK-Alr-016` **Phase:** `PLAN-Alr-001.PH4` (b) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008, TASK-Alr-009, TASK-Alr-010
+**Document ID:** `TASK-Alr-016`
+
+**Phase:** `PLAN-Alr-001.PH4` (b) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008, TASK-Alr-009, TASK-Alr-010
 
 ## TASK-Alr-016.P1 Scope
 

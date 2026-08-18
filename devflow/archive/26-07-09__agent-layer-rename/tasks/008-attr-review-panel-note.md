@@ -1,6 +1,10 @@
 # Task 8: `review/*` + `panel/*` + `note/*` per-key split
 
-**Document ID:** `TASK-Alr-008` **Phase:** `PLAN-Alr-001.PH2` (c) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-005
+**Document ID:** `TASK-Alr-008`
+
+**Phase:** `PLAN-Alr-001.PH2` (c) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-005
 
 ## TASK-Alr-008.P1 Scope
 

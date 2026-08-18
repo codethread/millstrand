@@ -1,6 +1,10 @@
 # Task 11: docs/writing-shared-spools.md third-party prefix convention
 
-**Document ID:** `TASK-Vr-011` **Slice:** `PLAN-Vr-001.S6` **Harness:** worker **Type:** AFK **Depends on:** none (doc-only; lands with the set)
+**Document ID:** `TASK-Vr-011`
+
+**Slice:** `PLAN-Vr-001.S6` **Harness:** worker **Type:** AFK
+
+**Depends on:** none (doc-only; lands with the set)
 
 ## TASK-Vr-011.P1 Scope
 

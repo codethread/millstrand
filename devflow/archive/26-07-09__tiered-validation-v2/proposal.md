@@ -4,7 +4,9 @@
 
 **Last Updated:** 2026-07-09
 
-**Related RFCs:** [RFC-016 Test Concurrency and Multi-Runtime JVM Support](../../rfcs/2026-07-03-test-concurrency.md), [RFC-Dtt-001 Deterministic Test Time and Async Quiescence](../../archive/26-07-09__deterministic-test-time/rfcs/2026-07-09-deterministic-test-time.md) **Related root specs:** None
+**Related RFCs:** [RFC-016 Test Concurrency and Multi-Runtime JVM Support](../../rfcs/2026-07-03-test-concurrency.md), [RFC-Dtt-001 Deterministic Test Time and Async Quiescence](../../archive/26-07-09__deterministic-test-time/rfcs/2026-07-09-deterministic-test-time.md)
+
+**Related root specs:** None
 
 ## PROP-Ttv-001.P1 Problem
 

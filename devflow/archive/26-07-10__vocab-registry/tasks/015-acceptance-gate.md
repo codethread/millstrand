@@ -1,6 +1,10 @@
 # Task 15: acceptance / atomic-landing gate
 
-**Document ID:** `TASK-Vr-015` **Slice:** `PLAN-Vr-001.S10` **Harness:** build **Type:** AFK **Depends on:** TASK-Vr-001..014
+**Document ID:** `TASK-Vr-015`
+
+**Slice:** `PLAN-Vr-001.S10` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Vr-001..014
 
 ## TASK-Vr-015.P1 Scope
 

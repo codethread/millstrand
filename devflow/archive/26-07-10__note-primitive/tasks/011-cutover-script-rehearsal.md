@@ -1,6 +1,10 @@
 # Task 11: cutover script + test + rehearsal on a copy
 
-**Document ID:** `TASK-Np-011` **Slice:** `PLAN-Np-001.S11` **Harness:** build **Type:** AFK **Depends on:** TASK-Np-001..006 (the script stamps the shape the new primitive reads)
+**Document ID:** `TASK-Np-011`
+
+**Slice:** `PLAN-Np-001.S11` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Np-001..006 (the script stamps the shape the new primitive reads)
 
 ## TASK-Np-011.P1 Scope
 

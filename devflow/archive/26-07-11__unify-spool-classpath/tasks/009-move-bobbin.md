@@ -1,6 +1,10 @@
 # Task 9: move bobbin reference spool to per-spool root (no coordinate/activation)
 
-**Document ID:** `TASK-usc-009` **Slice:** `PLAN-usc-001.PH2` (bobbin — never-activated reference spool) **Harness:** grunt **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-009`
+
+**Slice:** `PLAN-usc-001.PH2` (bobbin — never-activated reference spool) **Harness:** grunt **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-009.P1 Scope
 

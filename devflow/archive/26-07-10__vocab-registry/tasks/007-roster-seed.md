@@ -1,6 +1,10 @@
 # Task 7: roster install! declares roster/* (roster.clj)
 
-**Document ID:** `TASK-Vr-007` **Slice:** `PLAN-Vr-001.S2f` **Harness:** build **Type:** AFK **Depends on:** TASK-Vr-001
+**Document ID:** `TASK-Vr-007`
+
+**Slice:** `PLAN-Vr-001.S2f` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Vr-001
 
 ## TASK-Vr-007.P1 Scope
 

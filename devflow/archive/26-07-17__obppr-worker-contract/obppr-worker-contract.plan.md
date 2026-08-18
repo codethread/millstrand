@@ -10,7 +10,9 @@
 
 **Root specs:** [daemon-runtime.md](../../specs/daemon-runtime.md) (SPEC-004.C96 seam reload semantics, unchanged)
 
-**Feature specs:** none — agent-run and delegation are userland spools whose READMEs/docs are their own contracts (SPEC-005.C4 in [alpha-surface.md](../../specs/alpha-surface.md)), so the new slot is documented at that tier; SPEC-004.C96's set-once reload semantics stay accurate for the untouched extension seam **Status:** Reviewed
+**Feature specs:** none — agent-run and delegation are userland spools whose READMEs/docs are their own contracts (SPEC-005.C4 in [alpha-surface.md](../../specs/alpha-surface.md)), so the new slot is documented at that tier; SPEC-004.C96's set-once reload semantics stay accurate for the untouched extension seam
+
+**Status:** Reviewed
 
 **Last Updated:** 2026-07-17
 

@@ -1,6 +1,10 @@
 # Task 2: skein.api.notes.alpha primitive (note!/notes, edge-walking read)
 
-**Document ID:** `TASK-Np-002` **Slice:** `PLAN-Np-001.S2` **Harness:** build **Type:** AFK **Depends on:** TASK-Np-001 (the relation must be declared acyclic before the primitive writes/walks it as a declared relation)
+**Document ID:** `TASK-Np-002`
+
+**Slice:** `PLAN-Np-001.S2` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Np-001 (the relation must be declared acyclic before the primitive writes/walks it as a declared relation)
 
 ## TASK-Np-002.P1 Scope
 

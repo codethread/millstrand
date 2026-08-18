@@ -1,6 +1,10 @@
 # Task 21: acceptance / atomic-landing gate
 
-**Document ID:** `TASK-Alr-021` **Phase:** `PLAN-Alr-001.PH7` **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-011, TASK-Alr-012, TASK-Alr-013, TASK-Alr-014, TASK-Alr-015, TASK-Alr-016, TASK-Alr-017, TASK-Alr-018, TASK-Alr-019, TASK-Alr-020
+**Document ID:** `TASK-Alr-021`
+
+**Phase:** `PLAN-Alr-001.PH7` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-011, TASK-Alr-012, TASK-Alr-013, TASK-Alr-014, TASK-Alr-015, TASK-Alr-016, TASK-Alr-017, TASK-Alr-018, TASK-Alr-019, TASK-Alr-020
 
 ## TASK-Alr-021.P1 Scope
 

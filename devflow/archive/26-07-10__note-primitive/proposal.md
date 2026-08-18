@@ -1,6 +1,10 @@
 # Blessed note primitive: core notes relation, note/* shape, batteries surface
 
-**Document ID:** `PROP-Np-001` **Last Updated:** 2026-07-09 **Related brief:** [brief.md](./brief.md) (scope is the contract) **Related epic:** `kaans` (cards `ah5vu`, `7azzl`, `41pna`, `2mp13`); this is F3, card `7azzl` **Predecessors:** `agent-layer-rename` (`PROP-Alr-001`, card `26o9g`, landed `c79abb6`) and `agent-engine-primitives` (`PROP-Aep-001`, card `ah5vu`, landed `3b99997`; `serves` relation live) **Related root specs:** [Strand Model](../../specs/strand-model.md), [Alpha Surface](../../specs/alpha-surface.md), [CLI Surface](../../specs/cli.md) **Related sources:** `spools/agent-run/src/skein/spools/agent_run.clj`, `spools/delegation/src/skein/spools/delegation.clj`, `spools/kanban/src/skein/spools/kanban.clj`, `spools/src/skein/spools/batteries.clj`, `src/skein/api/relations/alpha.clj`, `src/skein/core/db.clj`
+**Document ID:** `PROP-Np-001` **Last Updated:** 2026-07-09 **Related brief:** [brief.md](./brief.md) (scope is the contract) **Related epic:** `kaans` (cards `ah5vu`, `7azzl`, `41pna`, `2mp13`); this is F3, card `7azzl`
+
+**Predecessors:** `agent-layer-rename` (`PROP-Alr-001`, card `26o9g`, landed `c79abb6`) and `agent-engine-primitives` (`PROP-Aep-001`, card `ah5vu`, landed `3b99997`; `serves` relation live) **Related root specs:** [Strand Model](../../specs/strand-model.md), [Alpha Surface](../../specs/alpha-surface.md), [CLI Surface](../../specs/cli.md)
+
+**Related sources:** `spools/agent-run/src/skein/spools/agent_run.clj`, `spools/delegation/src/skein/spools/delegation.clj`, `spools/kanban/src/skein/spools/kanban.clj`, `spools/src/skein/spools/batteries.clj`, `src/skein/api/relations/alpha.clj`, `src/skein/core/db.clj`
 
 **Reading context:** this proposal assumes the Skein vocabulary (strands, edges, relations, spools, batteries surface) defined in `docs/skein.md` and the spool READMEs, and the devflow document chain: brief (scope contract) → this proposal's C-clauses (design contract) → `PLAN-Np-001` slices (sequencing) → `TASK-Np-*` files (execution contracts). Every point ID is a grepable anchor. Line numbers are as verified in the `note-primitive` worktree (forked from `main@3b99997`).
 

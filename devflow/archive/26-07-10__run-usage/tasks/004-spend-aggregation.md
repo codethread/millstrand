@@ -1,6 +1,10 @@
 # Task 4: spend aggregation read fn (agent_run.clj)
 
-**Document ID:** `TASK-Ru-004` **Slice:** `PLAN-Ru-001.S4` **Harness:** build **Type:** AFK **Depends on:** TASK-Ru-003
+**Document ID:** `TASK-Ru-004`
+
+**Slice:** `PLAN-Ru-001.S4` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Ru-003
 
 ## TASK-Ru-004.P1 Scope
 

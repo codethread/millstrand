@@ -1,6 +1,10 @@
 # Task 11: move selvage reference spool to per-spool root (no coordinate/activation)
 
-**Document ID:** `TASK-usc-011` **Slice:** `PLAN-usc-001.PH2` (selvage — never-activated reference spool) **Harness:** grunt **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-011`
+
+**Slice:** `PLAN-usc-001.PH2` (selvage — never-activated reference spool) **Harness:** grunt **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-011.P1 Scope
 

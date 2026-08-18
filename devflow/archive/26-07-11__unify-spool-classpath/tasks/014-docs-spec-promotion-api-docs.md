@@ -1,6 +1,10 @@
 # Task 14: docs restructure + spec-delta promotion + api-docs regen
 
-**Document ID:** `TASK-usc-014` **Slice:** `PLAN-usc-001.PH5` **Harness:** grunt/docs **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-014`
+
+**Slice:** `PLAN-usc-001.PH5` **Harness:** grunt/docs **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-014.P1 Scope
 

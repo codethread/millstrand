@@ -1,6 +1,10 @@
 # Task 4: delegation dir/ns move
 
-**Document ID:** `TASK-Alr-004` **Phase:** `PLAN-Alr-001.PH1` (c) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-003
+**Document ID:** `TASK-Alr-004`
+
+**Phase:** `PLAN-Alr-001.PH1` (c) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-003
 
 ## TASK-Alr-004.P1 Scope
 

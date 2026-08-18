@@ -1,6 +1,10 @@
 # Task 6: workflow install! declares workflow/* (workflow.clj)
 
-**Document ID:** `TASK-Vr-006` **Slice:** `PLAN-Vr-001.S2e` **Harness:** build **Type:** AFK **Depends on:** TASK-Vr-001
+**Document ID:** `TASK-Vr-006`
+
+**Slice:** `PLAN-Vr-001.S2e` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Vr-001
 
 ## TASK-Vr-006.P1 Scope
 

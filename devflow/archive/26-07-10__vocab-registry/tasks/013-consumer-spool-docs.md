@@ -1,6 +1,10 @@
 # Task 13: spools/selvage.md + spools/carder.md surface entries
 
-**Document ID:** `TASK-Vr-013` **Slice:** `PLAN-Vr-001.S8` **Harness:** worker **Type:** AFK **Depends on:** TASK-Vr-009, TASK-Vr-010
+**Document ID:** `TASK-Vr-013`
+
+**Slice:** `PLAN-Vr-001.S8` **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Vr-009, TASK-Vr-010
 
 ## TASK-Vr-013.P1 Scope
 

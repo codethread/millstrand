@@ -1,6 +1,10 @@
 # Task 6: batteries note/notes ops + arg-specs (batteries.clj)
 
-**Document ID:** `TASK-Np-006` **Slice:** `PLAN-Np-001.S6` **Harness:** build **Type:** AFK **Depends on:** TASK-Np-002
+**Document ID:** `TASK-Np-006`
+
+**Slice:** `PLAN-Np-001.S6` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Np-002
 
 ## TASK-Np-006.P1 Scope
 

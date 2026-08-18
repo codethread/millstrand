@@ -1,6 +1,10 @@
 # Task 13: batteries classpath exception + require-fallback removal + bootstrap
 
-**Document ID:** `TASK-usc-013` **Slice:** `PLAN-usc-001.PH4` **Harness:** build **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-013`
+
+**Slice:** `PLAN-usc-001.PH4` **Harness:** build **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-013.P1 Scope
 

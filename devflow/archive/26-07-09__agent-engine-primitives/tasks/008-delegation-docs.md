@@ -1,6 +1,10 @@
 # Task 8: delegation README + cookbook (helpers carry no serves edge)
 
-**Document ID:** `TASK-Aep-008` **Slice:** `PLAN-Aep-001.S8` **Harness:** worker **Type:** AFK **Depends on:** TASK-Aep-004, TASK-Aep-005
+**Document ID:** `TASK-Aep-008`
+
+**Slice:** `PLAN-Aep-001.S8` **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Aep-004, TASK-Aep-005
 
 ## TASK-Aep-008.P1 Scope
 

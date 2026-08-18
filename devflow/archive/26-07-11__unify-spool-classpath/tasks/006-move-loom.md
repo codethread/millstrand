@@ -1,6 +1,10 @@
 # Task 6: move loom to per-spool root + coordinate + guard + fold config/workflows edges
 
-**Document ID:** `TASK-usc-006` **Slice:** `PLAN-usc-001.PH2` (loom — activated spool, `:file`-consumed) **Harness:** grunt/patch-gpt **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-006`
+
+**Slice:** `PLAN-usc-001.PH2` (loom — activated spool, `:file`-consumed) **Harness:** grunt/patch-gpt **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-006.P1 Scope
 

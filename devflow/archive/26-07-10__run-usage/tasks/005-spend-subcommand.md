@@ -1,6 +1,10 @@
 # Task 5: strand agent spend subcommand (delegation.clj)
 
-**Document ID:** `TASK-Ru-005` **Slice:** `PLAN-Ru-001.S5` **Harness:** build **Type:** AFK **Depends on:** TASK-Ru-004
+**Document ID:** `TASK-Ru-005`
+
+**Slice:** `PLAN-Ru-001.S5` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Ru-004
 
 ## TASK-Ru-005.P1 Scope
 

@@ -1,6 +1,10 @@
 # Task 1: Pre-flight rebase + shard/suite reconciliation
 
-**Document ID:** `TASK-Alr-001` **Phase:** `PLAN-Alr-001.PH0` **Harness:** build **Type:** AFK **Depends on:** none (root of the serial spine)
+**Document ID:** `TASK-Alr-001`
+
+**Phase:** `PLAN-Alr-001.PH0` **Harness:** build **Type:** AFK
+
+**Depends on:** none (root of the serial spine)
 
 ## TASK-Alr-001.P1 Scope
 

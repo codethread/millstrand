@@ -1,6 +1,10 @@
 # Task 3: agent-run + executors/subagent dir/ns move
 
-**Document ID:** `TASK-Alr-003` **Phase:** `PLAN-Alr-001.PH1` (b) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-002
+**Document ID:** `TASK-Alr-003`
+
+**Phase:** `PLAN-Alr-001.PH1` (b) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-002
 
 ## TASK-Alr-003.P1 Scope
 

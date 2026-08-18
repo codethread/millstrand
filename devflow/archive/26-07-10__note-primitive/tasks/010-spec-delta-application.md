@@ -1,6 +1,10 @@
 # Task 10: apply SPEC-Np-001/SPEC-Np-002 to root specs; mark deltas
 
-**Document ID:** `TASK-Np-010` **Slice:** `PLAN-Np-001.S10` **Harness:** worker **Type:** AFK **Depends on:** none (doc-only; lands with the set)
+**Document ID:** `TASK-Np-010`
+
+**Slice:** `PLAN-Np-001.S10` **Harness:** worker **Type:** AFK
+
+**Depends on:** none (doc-only; lands with the set)
 
 ## TASK-Np-010.P1 Scope
 

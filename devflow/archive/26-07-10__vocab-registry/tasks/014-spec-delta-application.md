@@ -1,6 +1,10 @@
 # Task 14: apply SPEC-Vr-001/SPEC-Vr-002 to root specs; mark deltas
 
-**Document ID:** `TASK-Vr-014` **Slice:** `PLAN-Vr-001.S9` **Harness:** worker **Type:** AFK **Depends on:** none (doc-only; lands with the set)
+**Document ID:** `TASK-Vr-014`
+
+**Slice:** `PLAN-Vr-001.S9` **Harness:** worker **Type:** AFK
+
+**Depends on:** none (doc-only; lands with the set)
 
 ## TASK-Vr-014.P1 Scope
 

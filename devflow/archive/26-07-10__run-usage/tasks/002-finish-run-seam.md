@@ -1,6 +1,10 @@
 # Task 2: finish-run! terminal-write seam (agent_run.clj)
 
-**Document ID:** `TASK-Ru-002` **Slice:** `PLAN-Ru-001.S2` **Harness:** build **Type:** AFK **Depends on:** TASK-Ru-001
+**Document ID:** `TASK-Ru-002`
+
+**Slice:** `PLAN-Ru-001.S2` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Ru-001
 
 ## TASK-Ru-002.P1 Scope
 

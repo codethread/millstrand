@@ -1,6 +1,10 @@
 # Task 15: queue acceptance — full suite + go + smoke + quality gates + fresh-world verify
 
-**Document ID:** `TASK-usc-015` **Slice:** queue acceptance (`PLAN-usc-001.P6` validation strategy) **Harness:** build **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-015`
+
+**Slice:** queue acceptance (`PLAN-usc-001.P6` validation strategy) **Harness:** build **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-015.P1 Scope
 

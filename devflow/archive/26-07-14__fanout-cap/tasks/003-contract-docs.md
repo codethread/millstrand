@@ -1,6 +1,10 @@
 # Task 3: Contract docs + api-docs regen (PH3)
 
-**Document ID:** `TASK-Foc-003` **Slice:** `PLAN-Foc-001.PH3` **Type:** AFK **Depends on:** TASK-Foc-002
+**Document ID:** `TASK-Foc-003`
+
+**Slice:** `PLAN-Foc-001.PH3` **Type:** AFK
+
+**Depends on:** TASK-Foc-002
 
 ## TASK-Foc-003.P1 Scope
 

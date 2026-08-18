@@ -1,6 +1,10 @@
 # Task 3: supersede-and-respawn! + lineage + resolution rule (agent_run.clj)
 
-**Document ID:** `TASK-Aep-003` **Slice:** `PLAN-Aep-001.S3` **Harness:** build **Type:** AFK **Depends on:** TASK-Aep-002 (same file — strictly sequential, never a parallel sibling)
+**Document ID:** `TASK-Aep-003`
+
+**Slice:** `PLAN-Aep-001.S3` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Aep-002 (same file — strictly sequential, never a parallel sibling)
 
 ## TASK-Aep-003.P1 Scope
 

@@ -1,6 +1,10 @@
 # Task 7: spools/batteries.md note/notes command contracts
 
-**Document ID:** `TASK-Np-007` **Slice:** `PLAN-Np-001.S7` **Harness:** worker **Type:** AFK **Depends on:** TASK-Np-006
+**Document ID:** `TASK-Np-007`
+
+**Slice:** `PLAN-Np-001.S7` **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Np-006
 
 ## TASK-Np-007.P1 Scope
 

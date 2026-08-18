@@ -1,6 +1,10 @@
 # Task 3: vocab declaration growth — usage-attrs (agent_run.clj)
 
-**Document ID:** `TASK-Ru-003` **Slice:** `PLAN-Ru-001.S3` **Harness:** build **Type:** AFK **Depends on:** TASK-Ru-002
+**Document ID:** `TASK-Ru-003`
+
+**Slice:** `PLAN-Ru-001.S3` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Ru-002
 
 ## TASK-Ru-003.P1 Scope
 

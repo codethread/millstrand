@@ -1,6 +1,10 @@
 # Task 7: agent-run README + cookbook (serves + lineage)
 
-**Document ID:** `TASK-Aep-007` **Slice:** `PLAN-Aep-001.S7` **Harness:** worker **Type:** AFK **Depends on:** TASK-Aep-002, TASK-Aep-003
+**Document ID:** `TASK-Aep-007`
+
+**Slice:** `PLAN-Aep-001.S7` **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Aep-002, TASK-Aep-003
 
 ## TASK-Aep-007.P1 Scope
 

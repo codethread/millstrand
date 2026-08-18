@@ -1,6 +1,10 @@
 # Task 1: promote util to blessed skein.api.spool.alpha (+test rename)
 
-**Document ID:** `TASK-usc-001` **Slice:** `PLAN-usc-001.PH1` Slice 1a **Harness:** build **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-001`
+
+**Slice:** `PLAN-usc-001.PH1` Slice 1a **Harness:** build **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-001.P1 Scope
 

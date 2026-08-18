@@ -1,6 +1,10 @@
 # Task 12: residual opt-in consent sweep + :config :required? + guard-wiring assertion gate
 
-**Document ID:** `TASK-usc-012` **Slice:** `PLAN-usc-001.PH3` **Harness:** build **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-012`
+
+**Slice:** `PLAN-usc-001.PH3` **Harness:** build **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-012.P1 Scope
 

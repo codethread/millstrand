@@ -1,6 +1,10 @@
 # Task 10: carder undeclared-namespace hygiene section (carder.clj)
 
-**Document ID:** `TASK-Vr-010` **Slice:** `PLAN-Vr-001.S5` **Harness:** build **Type:** AFK **Depends on:** TASK-Vr-001
+**Document ID:** `TASK-Vr-010`
+
+**Slice:** `PLAN-Vr-001.S5` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Vr-001
 
 ## TASK-Vr-010.P1 Scope
 

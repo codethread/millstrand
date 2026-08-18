@@ -1,6 +1,10 @@
 # Task 1: notes relation declaration (catalog + core acyclic set)
 
-**Document ID:** `TASK-Np-001` **Slice:** `PLAN-Np-001.S1` **Harness:** build **Type:** AFK **Depends on:** none (lands first)
+**Document ID:** `TASK-Np-001`
+
+**Slice:** `PLAN-Np-001.S1` **Harness:** build **Type:** AFK
+
+**Depends on:** none (lands first)
 
 ## TASK-Np-001.P1 Scope
 

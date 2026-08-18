@@ -1,6 +1,10 @@
 # Task 8: move text-search to per-spool root + coordinate + guard
 
-**Document ID:** `TASK-usc-008` **Slice:** `PLAN-usc-001.PH2` (text-search — activated spool) **Harness:** grunt/patch-gpt **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-008`
+
+**Slice:** `PLAN-usc-001.PH2` (text-search — activated spool) **Harness:** grunt/patch-gpt **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-008.P1 Scope
 

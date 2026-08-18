@@ -1,6 +1,10 @@
 # Task 1: serves relation declaration (catalog + core acyclic set)
 
-**Document ID:** `TASK-Aep-001` **Slice:** `PLAN-Aep-001.S1` **Harness:** build **Type:** AFK **Depends on:** none (lands first)
+**Document ID:** `TASK-Aep-001`
+
+**Slice:** `PLAN-Aep-001.S1` **Harness:** build **Type:** AFK
+
+**Depends on:** none (lands first)
 
 ## TASK-Aep-001.P1 Scope
 

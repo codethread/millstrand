@@ -1,6 +1,10 @@
 # Task 8: batteries strand vocab read op + arg-spec (batteries.clj)
 
-**Document ID:** `TASK-Vr-008` **Slice:** `PLAN-Vr-001.S3` **Harness:** build **Type:** AFK **Depends on:** TASK-Vr-001
+**Document ID:** `TASK-Vr-008`
+
+**Slice:** `PLAN-Vr-001.S3` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Vr-001
 
 ## TASK-Vr-008.P1 Scope
 

@@ -1,6 +1,10 @@
 # Task 11: cutover script + test + rehearsal on a copy
 
-**Document ID:** `TASK-Aep-011` **Slice:** `PLAN-Aep-001.S11` **Harness:** build **Type:** AFK **Depends on:** TASK-Aep-001..006 (the script stamps the shape the new engine reads)
+**Document ID:** `TASK-Aep-011`
+
+**Slice:** `PLAN-Aep-001.S11` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Aep-001..006 (the script stamps the shape the new engine reads)
 
 ## TASK-Aep-011.P1 Scope
 

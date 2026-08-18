@@ -1,6 +1,10 @@
 # Task 18: apply the three spec deltas to root specs
 
-**Document ID:** `TASK-Alr-018` **Phase:** `PLAN-Alr-001.PH5` **Harness:** worker **Type:** AFK **Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008, TASK-Alr-009, TASK-Alr-010
+**Document ID:** `TASK-Alr-018`
+
+**Phase:** `PLAN-Alr-001.PH5` **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008, TASK-Alr-009, TASK-Alr-010
 
 ## TASK-Alr-018.P1 Scope
 

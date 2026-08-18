@@ -1,6 +1,10 @@
 # Task 2: delete skein.spools.format, repoint 6 callers to api.format.alpha
 
-**Document ID:** `TASK-usc-002` **Slice:** `PLAN-usc-001.PH1` Slice 1b **Harness:** grunt (with a build check on the delete) **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-002`
+
+**Slice:** `PLAN-usc-001.PH1` Slice 1b **Harness:** grunt (with a build check on the delete) **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-002.P1 Scope
 

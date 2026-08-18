@@ -1,6 +1,12 @@
 # Task 13: canonical HISTORY rewrite + weaver restart (HITL, cu3wz)
 
-**Document ID:** `TASK-Np-013` **Slice:** `PLAN-Np-001.S13` (`PROP-Np-001.C10.3`, `C13.1`–`C13.3`) **Harness:** coordinator **Type:** HITL **Depends on:** TASK-Np-011 (rehearsed clean), TASK-Np-012 (and the branch landed on main via the land pipeline)
+**Document ID:** `TASK-Np-013`
+
+**Slice:** `PLAN-Np-001.S13` (`PROP-Np-001.C10.3`, `C13.1`–`C13.3`) **Harness:** coordinator
+
+**Type:** HITL
+
+**Depends on:** TASK-Np-011 (rehearsed clean), TASK-Np-012 (and the branch landed on main via the land pipeline)
 
 ## TASK-Np-013.P1 Scope
 

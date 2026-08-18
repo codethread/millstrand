@@ -1,6 +1,10 @@
 # Task 6: subagent executor rewire + stalled-gates + loom/flow-status
 
-**Document ID:** `TASK-Aep-006` **Slice:** `PLAN-Aep-001.S6` **Harness:** build **Type:** AFK **Depends on:** TASK-Aep-002, TASK-Aep-003 (disjoint files from Tasks 4/5 — may run alongside them)
+**Document ID:** `TASK-Aep-006`
+
+**Slice:** `PLAN-Aep-001.S6` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Aep-002, TASK-Aep-003 (disjoint files from Tasks 4/5 — may run alongside them)
 
 ## TASK-Aep-006.P1 Scope
 

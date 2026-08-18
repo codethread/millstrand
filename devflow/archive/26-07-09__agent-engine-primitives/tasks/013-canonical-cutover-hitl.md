@@ -1,6 +1,10 @@
 # Task 13: canonical cutover at user-signed weaver restart
 
-**Document ID:** `TASK-Aep-013` **Slice:** `PROP-Aep-001.C12.3`–`C12.5` **Harness:** coordinator **Type:** HITL **Depends on:** TASK-Aep-011, TASK-Aep-012 (and the branch landed on main via the land pipeline)
+**Document ID:** `TASK-Aep-013`
+
+**Slice:** `PROP-Aep-001.C12.3`–`C12.5` **Harness:** coordinator **Type:** HITL
+
+**Depends on:** TASK-Aep-011, TASK-Aep-012 (and the branch landed on main via the land pipeline)
 
 ## TASK-Aep-013.P1 Scope
 

@@ -1,6 +1,10 @@
 # Task 12: judgment prose sweep (README / quality-inventory / bench+chime docs / cli prime)
 
-**Document ID:** `TASK-Alr-012` **Phase:** `PLAN-Alr-001.PH3` (b) **Harness:** worker **Type:** AFK **Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008, TASK-Alr-009, TASK-Alr-010
+**Document ID:** `TASK-Alr-012`
+
+**Phase:** `PLAN-Alr-001.PH3` (b) **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008, TASK-Alr-009, TASK-Alr-010
 
 ## TASK-Alr-012.P1 Scope
 

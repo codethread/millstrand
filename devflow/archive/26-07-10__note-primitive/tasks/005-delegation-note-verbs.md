@@ -1,6 +1,10 @@
 # Task 5: delegation op-note/op-notes re-point (delegation.clj)
 
-**Document ID:** `TASK-Np-005` **Slice:** `PLAN-Np-001.S5` **Harness:** build **Type:** AFK **Depends on:** TASK-Np-002
+**Document ID:** `TASK-Np-005`
+
+**Slice:** `PLAN-Np-001.S5` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Np-002
 
 ## TASK-Np-005.P1 Scope
 

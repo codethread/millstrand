@@ -1,6 +1,10 @@
 # Task 19: one-shot cutover script (per-key, active-only)
 
-**Document ID:** `TASK-Alr-019` **Phase:** `PLAN-Alr-001.PH6` (a) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008, TASK-Alr-009, TASK-Alr-010
+**Document ID:** `TASK-Alr-019`
+
+**Phase:** `PLAN-Alr-001.PH6` (a) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008, TASK-Alr-009, TASK-Alr-010
 
 ## TASK-Alr-019.P1 Scope
 

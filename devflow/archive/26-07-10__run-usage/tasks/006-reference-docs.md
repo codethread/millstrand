@@ -1,6 +1,10 @@
 # Task 6: reference docs + api-docs regen — usage attrs, per-format capture, spend verb
 
-**Document ID:** `TASK-Ru-006` **Slice:** `PLAN-Ru-001.S6` **Harness:** worker **Type:** AFK **Depends on:** TASK-Ru-005
+**Document ID:** `TASK-Ru-006`
+
+**Slice:** `PLAN-Ru-001.S6` **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Ru-005
 
 ## TASK-Ru-006.P1 Scope
 

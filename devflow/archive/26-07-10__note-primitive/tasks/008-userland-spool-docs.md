@@ -1,6 +1,10 @@
 # Task 8: spools/kanban.md + spools/delegation/README.md note prose reconcile
 
-**Document ID:** `TASK-Np-008` **Slice:** `PLAN-Np-001.S8` **Harness:** worker **Type:** AFK **Depends on:** TASK-Np-004, TASK-Np-005
+**Document ID:** `TASK-Np-008`
+
+**Slice:** `PLAN-Np-001.S8` **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Np-004, TASK-Np-005
 
 ## TASK-Np-008.P1 Scope
 

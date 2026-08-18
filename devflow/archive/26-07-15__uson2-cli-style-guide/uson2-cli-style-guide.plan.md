@@ -8,7 +8,11 @@
 
 **RFC:** none
 
-**Root specs:** [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`) **Feature specs:** [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`DELTA-Ucs-001`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-Ucs-002`) **Status:** Reviewed
+**Root specs:** [alpha-surface.md](../../specs/alpha-surface.md) (`SPEC-005`), [daemon-runtime.md](../../specs/daemon-runtime.md) (`SPEC-004`)
+
+**Feature specs:** [specs/alpha-surface.delta.md](./specs/alpha-surface.delta.md) (`DELTA-Ucs-001`), [specs/daemon-runtime.delta.md](./specs/daemon-runtime.delta.md) (`DELTA-Ucs-002`)
+
+**Status:** Reviewed
 
 **Last Updated:** 2026-07-14
 

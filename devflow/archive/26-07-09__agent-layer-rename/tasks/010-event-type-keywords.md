@@ -1,6 +1,10 @@
 # Task 10: event-type keyword rename (`:agent-run/engine`, `:gate/engine`)
 
-**Document ID:** `TASK-Alr-010` **Phase:** `PLAN-Alr-001.PH2` (e) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-006, TASK-Alr-007
+**Document ID:** `TASK-Alr-010`
+
+**Phase:** `PLAN-Alr-001.PH2` (e) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-006, TASK-Alr-007
 
 ## TASK-Alr-010.P1 Scope
 

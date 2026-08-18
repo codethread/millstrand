@@ -1,6 +1,10 @@
 # Task 2: engine serves edge + read-side rewrite (agent_run.clj)
 
-**Document ID:** `TASK-Aep-002` **Slice:** `PLAN-Aep-001.S2` **Harness:** build **Type:** AFK **Depends on:** TASK-Aep-001
+**Document ID:** `TASK-Aep-002`
+
+**Slice:** `PLAN-Aep-001.S2` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Aep-001
 
 ## TASK-Aep-002.P1 Scope
 

@@ -1,6 +1,10 @@
 # Task 10: apply SPEC-Aep-001 to strand-model.md; mark deltas
 
-**Document ID:** `TASK-Aep-010` **Slice:** `PLAN-Aep-001.S10` **Harness:** worker **Type:** AFK **Depends on:** none (doc-only; lands with the set)
+**Document ID:** `TASK-Aep-010`
+
+**Slice:** `PLAN-Aep-001.S10` **Harness:** worker **Type:** AFK
+
+**Depends on:** none (doc-only; lands with the set)
 
 ## TASK-Aep-010.P1 Scope
 

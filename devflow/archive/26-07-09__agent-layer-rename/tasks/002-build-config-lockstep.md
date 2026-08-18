@@ -1,6 +1,10 @@
 # Task 2: Build-config lockstep (deps.edn + spools.edn + Makefile)
 
-**Document ID:** `TASK-Alr-002` **Phase:** `PLAN-Alr-001.PH1` (a) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-001
+**Document ID:** `TASK-Alr-002`
+
+**Phase:** `PLAN-Alr-001.PH1` (a) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-001
 
 ## TASK-Alr-002.P1 Scope
 

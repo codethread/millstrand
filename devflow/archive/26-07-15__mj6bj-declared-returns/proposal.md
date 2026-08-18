@@ -6,7 +6,9 @@
 
 **Related brief:** [brief.md](./brief.md)
 
-**Design record:** epic `3o7le`; synthesis card `1dw6d` (note `ce3gj`, counsel notes `r7i1f` and `ch0kz` on task `8kd6l`); superseded card `rre9j` **Related root specs:** [CLI surface](../../specs/cli.md), [Weaver runtime](../../specs/daemon-runtime.md), [REPL API](../../specs/repl-api.md), and [Alpha surface](../../specs/alpha-surface.md)
+**Design record:** epic `3o7le`; synthesis card `1dw6d` (note `ce3gj`, counsel notes `r7i1f` and `ch0kz` on task `8kd6l`); superseded card `rre9j`
+
+**Related root specs:** [CLI surface](../../specs/cli.md), [Weaver runtime](../../specs/daemon-runtime.md), [REPL API](../../specs/repl-api.md), and [Alpha surface](../../specs/alpha-surface.md)
 
 The ID scan covered live and ignored archive paths under `devflow/`. Existing proposal prefixes use their own sequence and all current sequences end in `001`; `PROP-Dcr-001` is the first ID under this prefix.
 

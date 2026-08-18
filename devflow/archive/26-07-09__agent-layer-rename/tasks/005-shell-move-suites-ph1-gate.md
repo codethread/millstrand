@@ -1,6 +1,10 @@
 # Task 5: executors/shell move + suite/test_runner reconcile + PH1-exit gate
 
-**Document ID:** `TASK-Alr-005` **Phase:** `PLAN-Alr-001.PH1` (d) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-004
+**Document ID:** `TASK-Alr-005`
+
+**Phase:** `PLAN-Alr-001.PH1` (d) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-004
 
 ## TASK-Alr-005.P1 Scope
 

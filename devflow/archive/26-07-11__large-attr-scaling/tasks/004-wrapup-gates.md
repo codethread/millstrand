@@ -1,6 +1,10 @@
 # Task 4: wrap-up — re-run note + inert-gate sweep + clean tree (PH4)
 
-**Document ID:** `TASK-LargeAttrScaling-004` **Slice:** `PLAN-LargeAttrScaling-001.PH4` Wrap-up and validation sweep **Harness:** patch-gpt **Type:** AFK **Branch:** `large-attr-scaling` **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
+**Document ID:** `TASK-LargeAttrScaling-004`
+
+**Slice:** `PLAN-LargeAttrScaling-001.PH4` Wrap-up and validation sweep **Harness:** patch-gpt **Type:** AFK
+
+**Branch:** `large-attr-scaling` **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
 
 Read first: `devflow/feat/large-attr-scaling/large-attr-scaling.plan.md` (`PLAN-LargeAttrScaling-001`, esp. `PH4`, `NG3`, `V5`, `V6`, `V7`) and the completed `assessment-report.md` (Tasks 2–3) so the re-run note matches the actual `T2` invocation.
 

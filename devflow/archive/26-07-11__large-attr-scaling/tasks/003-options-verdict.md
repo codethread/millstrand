@@ -1,6 +1,10 @@
 # Task 3: residual-options assessment + verdict (PH3 / S3)
 
-**Document ID:** `TASK-LargeAttrScaling-003` **Slice:** `PLAN-LargeAttrScaling-001.PH3` Residual-options assessment + verdict (S3) **Harness:** build (opus) **Type:** AFK **Branch:** `large-attr-scaling` **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
+**Document ID:** `TASK-LargeAttrScaling-003`
+
+**Slice:** `PLAN-LargeAttrScaling-001.PH3` Residual-options assessment + verdict (S3) **Harness:** build (opus) **Type:** AFK
+
+**Branch:** `large-attr-scaling` **Worktree:** `/Users/ct/dev/projects/skein-src__large-attr-scaling`
 
 Read first: `devflow/feat/large-attr-scaling/large-attr-scaling.plan.md` (`PLAN-LargeAttrScaling-001`, esp. `PH3`, `A7`, `TC5`, `Q4`) and `devflow/feat/large-attr-scaling/proposal.md` (`PROP-LargeAttrScaling-001.G3`, `S3`, `NG1`, `Q4`, and the settled storage in `PROP-EavAttrStorage-001.P1`). Read Task 2's numbers sections in `assessment-report.md` first — the assessment reasons over _those_ numbers, nothing else.
 

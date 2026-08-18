@@ -1,6 +1,10 @@
 # Task 11: doc-triad `git mv` + internal link fixes
 
-**Document ID:** `TASK-Alr-011` **Phase:** `PLAN-Alr-001.PH3` (a) **Harness:** worker **Type:** AFK **Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008, TASK-Alr-009, TASK-Alr-010
+**Document ID:** `TASK-Alr-011`
+
+**Phase:** `PLAN-Alr-001.PH3` (a) **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008, TASK-Alr-009, TASK-Alr-010
 
 ## TASK-Alr-011.P1 Scope
 

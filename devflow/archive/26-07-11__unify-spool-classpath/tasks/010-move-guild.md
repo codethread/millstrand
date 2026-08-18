@@ -1,6 +1,10 @@
 # Task 10: move guild reference spool to per-spool root (no coordinate/activation)
 
-**Document ID:** `TASK-usc-010` **Slice:** `PLAN-usc-001.PH2` (guild — never-activated reference spool) **Harness:** grunt **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-010`
+
+**Slice:** `PLAN-usc-001.PH2` (guild — never-activated reference spool) **Harness:** grunt **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-010.P1 Scope
 

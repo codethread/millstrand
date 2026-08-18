@@ -1,6 +1,10 @@
 # Task 12: spools/batteries.md strand vocab command contract
 
-**Document ID:** `TASK-Vr-012` **Slice:** `PLAN-Vr-001.S7` **Harness:** worker **Type:** AFK **Depends on:** TASK-Vr-008
+**Document ID:** `TASK-Vr-012`
+
+**Slice:** `PLAN-Vr-001.S7` **Harness:** worker **Type:** AFK
+
+**Depends on:** TASK-Vr-008
 
 ## TASK-Vr-012.P1 Scope
 

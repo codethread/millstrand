@@ -1,6 +1,10 @@
 # Task 3: subagent install! declares gate/* + residual survivor sweep (subagent.clj)
 
-**Document ID:** `TASK-Vr-003` **Slice:** `PLAN-Vr-001.S2b` **Harness:** build **Type:** AFK **Depends on:** TASK-Vr-001
+**Document ID:** `TASK-Vr-003`
+
+**Slice:** `PLAN-Vr-001.S2b` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Vr-001
 
 ## TASK-Vr-003.P1 Scope
 

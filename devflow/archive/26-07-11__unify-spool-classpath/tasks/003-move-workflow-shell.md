@@ -1,6 +1,10 @@
 # Task 3: move workflow (+executors/shell) to per-spool root + consent edges
 
-**Document ID:** `TASK-usc-003` **Slice:** `PLAN-usc-001.PH2` (workflow — activated spool, first mover) **Harness:** grunt/patch-gpt **Type:** AFK **Branch:** `unify-spool-classpath`
+**Document ID:** `TASK-usc-003`
+
+**Slice:** `PLAN-usc-001.PH2` (workflow — activated spool, first mover) **Harness:** grunt/patch-gpt **Type:** AFK
+
+**Branch:** `unify-spool-classpath`
 
 ## TASK-usc-003.P1 Scope
 

@@ -1,6 +1,10 @@
 # Task 7: acceptance / atomic-landing gate
 
-**Document ID:** `TASK-Ru-007` **Slice:** `PLAN-Ru-001.S7` **Harness:** build **Type:** AFK **Depends on:** TASK-Ru-001..006
+**Document ID:** `TASK-Ru-007`
+
+**Slice:** `PLAN-Ru-001.S7` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Ru-001..006
 
 ## TASK-Ru-007.P1 Scope
 

@@ -1,6 +1,10 @@
 # Task 5: kanban install! declares kanban/* (kanban.clj)
 
-**Document ID:** `TASK-Vr-005` **Slice:** `PLAN-Vr-001.S2d` **Harness:** build **Type:** AFK **Depends on:** TASK-Vr-001
+**Document ID:** `TASK-Vr-005`
+
+**Slice:** `PLAN-Vr-001.S2d` **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Vr-001
 
 ## TASK-Vr-005.P1 Scope
 

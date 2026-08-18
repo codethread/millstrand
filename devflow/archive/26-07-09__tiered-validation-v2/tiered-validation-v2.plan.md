@@ -6,7 +6,9 @@
 
 **Proposal:** [proposal.md](./proposal.md)
 
-**RFC:** none — no new RFC covers the tiered convention or the warm loop; the shipped seams this builds on carry [RFC-016](../../rfcs/2026-07-03-test-concurrency.md) and [RFC-Dtt-001](../../archive/26-07-09__deterministic-test-time/rfcs/2026-07-09-deterministic-test-time.md) **Root specs:** [REPL API](../../specs/repl-api.md) <!-- test.alpha vocabulary; SPEC-003.C28 -->
+**RFC:** none — no new RFC covers the tiered convention or the warm loop; the shipped seams this builds on carry [RFC-016](../../rfcs/2026-07-03-test-concurrency.md) and [RFC-Dtt-001](../../archive/26-07-09__deterministic-test-time/rfcs/2026-07-09-deterministic-test-time.md)
+
+**Root specs:** [REPL API](../../specs/repl-api.md) <!-- test.alpha vocabulary; SPEC-003.C28 -->
 
 **Feature specs:** [specs/repl-api.delta.md](./specs/repl-api.delta.md)
 

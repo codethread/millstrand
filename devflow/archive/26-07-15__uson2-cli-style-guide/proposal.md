@@ -6,7 +6,9 @@
 
 **Related brief:** [brief.md](./brief.md)
 
-**Related root specs:** [CLI surface](../../specs/cli.md), [Alpha surface](../../specs/alpha-surface.md) **Design record:** kanban card `1dw6d`; synthesis note `ce3gj`
+**Related root specs:** [CLI surface](../../specs/cli.md), [Alpha surface](../../specs/alpha-surface.md)
+
+**Design record:** kanban card `1dw6d`; synthesis note `ce3gj`
 
 **Citation key:** `kanban.spool@03707e5/<path>` cites the external kanban spool at the sha pinned in `deps.edn`/`.skein/spools.edn`; resolve it in the gitlibs cache at `~/.gitlibs/libs/io.github.codethread/kanban.spool/03707e525185cbd5685522a45c6e779b22ceb6b8/<path>` (fetch via `clojure -P -M:test` if absent).
 

@@ -1,6 +1,10 @@
 # Task 17: bench + chime consumer reconcile
 
-**Document ID:** `TASK-Alr-017` **Phase:** `PLAN-Alr-001.PH4` (c) **Harness:** build **Type:** AFK **Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008
+**Document ID:** `TASK-Alr-017`
+
+**Phase:** `PLAN-Alr-001.PH4` (c) **Harness:** build **Type:** AFK
+
+**Depends on:** TASK-Alr-006, TASK-Alr-007, TASK-Alr-008
 
 ## TASK-Alr-017.P1 Scope
 
