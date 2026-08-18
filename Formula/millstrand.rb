@@ -4,7 +4,7 @@ class Millstrand < Formula
   url "https://github.com/codethread/millstrand.git",
       branch:   "main",
       revision: "3fdcb5ed8b7382d3b7d9a4e025b0120201e73a8d"
-  version "0.3.0"
+  version "0.4.0"
 
   depends_on "go" => :build
   depends_on "clojure"
