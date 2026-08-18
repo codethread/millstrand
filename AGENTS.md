@@ -57,7 +57,7 @@ Load `strand prime agent` before delegating — run success never closes the ser
 
 This repo uses Millstrand strands to track work. Orientation ships in the `mill` CLI:
 
-- `mill prime strand` — the day-to-day strand workflow; run it before multi-step work.
+- `mill prime strand` — see `strand --help`.
 - `mill prime millstrand` — read on demand, only when building on this repo's `.millstrand/` config or spools.
 <!-- /mill:millstrand-prime -->
 

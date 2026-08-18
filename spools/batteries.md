@@ -14,6 +14,8 @@
 
 These `defop!` declarations are the durable, owner-complete source for the command surface. Dynamic spool code and tests may use `millstrand.api.weaver.alpha/register-op!` with an explicit runtime for a live registration; an in-process `millstrand.repl` session uses the same verb with the runtime implied. A workspace that needs to mask a spool op durably uses `defop!` with `{:override? true}` in a workspace module. The coordinate that acquired the spool does not change those registry rules.
 
+Batteries also defines an inert `runbook` op (`defop`, not `defop!`): the opinionated strand-tracking loop. A workspace elects it with `(millstrand/use-op! millstrand.spools.batteries/runbook)`. It is not part of the default batteries surface.
+
 Each op delegates to exactly the `millstrand.api.*.alpha` call the old JSON socket dispatch used — strand
 lifecycle in `millstrand.api.weaver.alpha`, queries and traversal in `millstrand.api.graph.alpha`, weave in
 `millstrand.api.patterns.alpha` — and returns the same JSON-safe shape, so the ops are drop-in reachable
@@ -65,7 +67,7 @@ The contribution owns every op below plus its glossary outcomes. Each op carries
   - `weave --input :stdin` replaces reading raw stdin for `weave`.
 Loud rules (SPEC-003-D003.C2): a reference naming no attached payload fails `:missing-payload`; an
 attached payload that no reference consumed fails `:unused-payloads`.
-- **BAT-C3 (hook classes):** Each invocable arg-spec leaf declares `:hook-class` and `:deadline-class` for metadata-driven gating (SPEC-004-D003). The mutating leaves are `add`, `update`, `supersede`, `burn`, `note`, `weave`, and `spool add`/`spool bump`; the read leaves are `show`, `list`, `ready`, `await`, `notes`, `subgraph`, every `query` and `pattern` verb, and `spool about`/`spool status`. `await` uses `:deadline-class :unbounded`; every other batteries leaf uses `:deadline-class :standard`.
+- **BAT-C3 (hook classes):** Each invocable arg-spec leaf declares `:hook-class` and `:deadline-class` for metadata-driven gating (SPEC-004-D003). The mutating leaves are `add`, `update`, `supersede`, `burn`, `note`, `weave`, and `spool add`/`spool bump`; the read leaves are `show`, `list`, `ready`, `await`, `notes`, `subgraph`, `runbook`, every `query` and `pattern` verb, and `spool about`/`spool status`. `await` uses `:deadline-class :unbounded`; every other batteries leaf uses `:deadline-class :standard`.
   Mutating ops pass a request context
   `{:request/source :json-socket :request/operation <op-kw>}` so hooks and
   events observe the same data the old socket dispatch supplied.
@@ -76,6 +78,10 @@ attached payload that no reference consumed fails `:unused-payloads`.
   `strand help <op>` for the live flat, subcommand, or stream-channel shape.
 
 ## 3. Op reference
+
+### `runbook`
+
+`strand runbook` returns `{"runbook": <markdown string>}` with the Batteries strand-tracking loop. Batteries defines this read op without registering it. A workspace makes it available by electing `millstrand.spools.batteries/runbook` with `millstrand/use-op!`. It uses the standard deadline class.
 
 ### 3.1 Mutations
 

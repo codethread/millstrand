@@ -342,48 +342,37 @@ func render(stderr io.Writer, e errfmt.Error) int {
 	return 1
 }
 
-const helpText = `strand [dispatcher-flags] <op-name> [args...]
+const helpText = `Usage:
+  strand [flags] <op> [args...]
 
-strand is a thin dispatcher: it resolves context, assembles one invoke envelope,
-and relays the weaver's NDJSON response. It has no builtin subcommands. Flag
-parsing stops at the first non-flag token; the op name and everything after it
-ship verbatim to the weaver, where the op's blessed parser interprets argv.
-
-Selection & context:
-  --workspace <dir>        explicit workspace selection (highest precedence)
-  --cwd <dir>              envelope cwd (default: process cwd)
-  --worktree-root <dir>    worktree root (default: derived from cwd)
-  --git-common-dir <dir>   git common dir (default: derived from cwd)
-
-Input:
-  --stdin                  read stdin to EOF into the "stdin" payload slot
-  --payload name=path      read a file into a named payload slot (repeatable)
-
-Transport:
-  --timeout <dur>          per-request deadline override (Go duration, e.g. 30s)
-
-Bin-only:
-  --dry-run                print the assembled invoke envelope; contacts nothing
+Flags:
+  --workspace <dir>        workspace directory
+  --cwd <dir>              working directory (default: process cwd)
+  --stdin                  read stdin into the stdin payload
+  --payload name=path      read a file into a named payload (repeatable)
+  --timeout <dur>          request deadline (e.g. 30s)
   --version                print bin and protocol version
-  --help                   print this help (bare "strand" prints it too)
+  -h, --help               print this help
 
-Environment:
-  MILLSTRAND_ERROR_FORMAT  error rendering: plain|pretty|json (default: pretty at
-                           a terminal, plain everywhere else). json writes the
-                           error envelope {type, code, message, details} as one
-                           line on stderr, for a caller composing over this CLI
-  NO_COLOR                 drop ANSI colour from the pretty rendering
+Operations:
+  Commands are registered by the workspace. ` + "`add`" + ` below is only an example.
 
-Invoke envelope (SPEC-002-D004.C6): the request frame carries protocol version,
-request id, and weaver id; the envelope {name, argv, payloads, cwd,
-worktree_root, git_common_dir, workspace, timeout?, is_tty, tty_col,
-client{pid,version}} rides as the operation arguments. Payload references (:stdin, :payload/<name>) are
-resolved weaver-side; the bin interprets no argv.
+  Load help, then prime, then about:
+    help     what you can type
+    prime    runbook for that command
+    about    detailed explanation
 
-Discover ops with the live registry:
-  strand help              list registered ops
-  strand help <op>         show an op's arguments
+  strand help                      list commands
+  strand help add                  flags and args
+  strand prime add                 runbook
+  strand about add                 detailed explanation
+  strand help --json add           same as help, as JSON
+  strand add --help                same as strand help add
 
-Remediation: ops route through the local mill. If none is running, start one:
-  mill start
+Examples:
+  printf 'notes' | strand --stdin add "Title" --attr body=:stdin
+  strand --payload body=notes.md add "Title" --attr body=:payload/body
+  strand --stdin add "Title" --attributes :stdin <<'EOF'
+{"priority":3}
+EOF
 `

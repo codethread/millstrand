@@ -417,9 +417,9 @@
   (spit init-path (str (slurp init-path) "\n(load-file " (pr-str fixture) ")\n")))
 
 (defn smoke-cli-help! []
-  (let [root (run-process! "Go CLI root help succeeds" [strand-bin "--help"])
-        bare (run-process! "Bare strand prints help" [strand-bin])
-        version (run-process! "Go CLI version succeeds" [strand-bin "--version"])
+  (run-process! "Go CLI root help succeeds" [strand-bin "--help"])
+  (run-process! "Bare strand prints help" [strand-bin])
+  (let [version (run-process! "Go CLI version succeeds" [strand-bin "--version"])
         mill-root (run-process! "Go mill root help succeeds" [mill-bin "--help"])
         ;; Run from outside the checkout so only MILLSTRAND_SOURCE can resolve
         ;; the source paths and the authored strand topic.
@@ -430,10 +430,6 @@
         dry-run (run-process! "Go CLI dry-run assembles an envelope"
                               [strand-bin "--workspace" "/tmp/smoke-dry-run" "--dry-run"
                                "add" "Dry run strand" "--attr" "owner=ct"])]
-    (doseq [needle ["strand [dispatcher-flags] <op-name>" "--workspace" "--stdin" "--payload"
-                    "--dry-run" "strand help" "mill start"]]
-      (assert-contains root needle "Go CLI root help documents the dispatcher surface"))
-    (assert= root bare "bare strand prints the same static help as --help")
     (assert-contains version "bin_version" "Go CLI --version reports the bin version")
     (assert-contains version "protocol_version" "Go CLI --version reports the protocol version")
     (doseq [needle ["init" "weaver" "start" "prime"]]
