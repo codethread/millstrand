@@ -49,7 +49,8 @@ The batteries and unsafe-text-search spools remain in this checkout under `spool
 | Agent harness (`agent-run`, `delegation`, subagent executor, `bench`) | git, SHA-pinned `ct.spools/agent-run` family | [Agent harness README](https://github.com/codethread/agent-harness.spool#readme) | [Agent harness README](https://github.com/codethread/agent-harness.spool#readme) | Coding-agent runs, delegation, workflow gate execution, and benchmarks. |
 | Devflow | git, SHA-pinned `codethread/devflow` family | [Devflow README](https://github.com/codethread/devflow.spool#readme) | [Devflow README](https://github.com/codethread/devflow.spool#readme) | Reference feature lifecycle built on the workflow engine. |
 | `millstrand.spools.dresser` | _(none approved in this repo)_ | [Dresser README](https://github.com/codethread/dresser.spool#readme) | [Dresser README](https://github.com/codethread/dresser.spool#readme) | Brings a repo onto shared working conventions and surfaces convention upgrades later. |
-| [millhouse-docs]: https://codethread.github.io/millhouse.spool/ |
+
+[millhouse-docs]: https://codethread.github.io/millhouse.spool/
 
 ## External spool consumption
 
