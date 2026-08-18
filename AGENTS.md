@@ -18,7 +18,7 @@ Millstrand is a runtime for programming the constraints and loops around coding 
 ## Working here
 
 - Always work via a registered workflow — `strand workflow list`, then `strand workflow show <name>`.
-- Always track work through a kanban card, in a worktree — `strand kanban prime`.
+- Always track work through a kanban card, in a worktree — `strand prime kanban`.
 - PRs go through the `land` workflow (`strand workflow show land`). Policy verbs live on the `land` op — load `strand prime land` / `strand help land` (not bare `workflow choose`/`complete` at those boundaries).
 
 ## Rules
@@ -57,8 +57,7 @@ Load `strand prime agent` before delegating — run success never closes the ser
 
 This repo uses Millstrand strands to track work. Orientation ships in the `mill` CLI:
 
-- `mill prime strand` — see `strand --help`.
-- `mill prime millstrand` — read on demand, only when building on this repo's `.millstrand/` config or spools.
+Start with `strand --help`. Run `mill prime millstrand` on demand when building on this repo's `.millstrand/` config or spools.
 <!-- /mill:millstrand-prime -->
 
 Wider questions: `strand guide "<question>"`.

@@ -422,11 +422,9 @@
   (let [version (run-process! "Go CLI version succeeds" [strand-bin "--version"])
         mill-root (run-process! "Go mill root help succeeds" [mill-bin "--help"])
         ;; Run from outside the checkout so only MILLSTRAND_SOURCE can resolve
-        ;; the source paths and the authored strand topic.
+        ;; the source paths.
         millstrand-prime (run-process! "mill prime millstrand succeeds" (outside-repo-dir) nil
                                        [mill-bin "prime" "millstrand"])
-        strand-prime (run-process! "mill prime strand succeeds" (outside-repo-dir) nil
-                                   [mill-bin "prime" "strand"])
         dry-run (run-process! "Go CLI dry-run assembles an envelope"
                               [strand-bin "--workspace" "/tmp/smoke-dry-run" "--dry-run"
                                "add" "Dry run strand" "--attr" "owner=ct"])]
@@ -439,8 +437,6 @@
                   (.normalize (.toPath (java.io.File. checkout-root "docs/reference.md"))) "\n")
              millstrand-prime
              "mill prime millstrand prints the source and canonical reference paths")
-    (assert (clojure.string/includes? strand-prime "strand")
-            (str "mill prime strand renders its manifest topic\n" strand-prime))
     (doseq [needle ["\"operation\":\"invoke\"" "\"name\":\"add\""]]
       (assert-contains dry-run needle "Go CLI --dry-run prints the assembled invoke envelope without contacting a weaver"))))
 
@@ -1841,7 +1837,7 @@
     (let [guidance (slurp (java.io.File. repo "AGENTS.md"))]
       (assert-contains guidance "<!-- mill:millstrand-prime -->"
                        "repo bootstrap injects the marker-guarded orientation block")
-      (doseq [needle ["mill prime strand" "mill prime millstrand" "<!-- /mill:millstrand-prime -->"]]
+      (doseq [needle ["strand --help" "mill prime millstrand" "<!-- /mill:millstrand-prime -->"]]
         (assert-contains guidance needle "repo bootstrap routes a cold agent at the prime commands"))
       (assert= 1 (count (re-seq #"<!-- mill:millstrand-prime -->" guidance))
                "repeated repo bootstrap does not duplicate the orientation block"))
