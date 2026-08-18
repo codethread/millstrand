@@ -1,7 +1,6 @@
 {
   "version": 1,
   "topics": {
-    "millstrand": "docs/prime/millstrand.md",
     "strand": "docs/prime/strand.md"
   }
 }
