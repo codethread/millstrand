@@ -59,5 +59,3 @@ This repo uses Millstrand strands to track work. Orientation ships in the `mill`
 
 Start with `strand --help`. Run `mill prime millstrand` on demand when building on this repo's `.millstrand/` config or spools.
 <!-- /mill:millstrand-prime -->
-
-Wider questions: `strand guide "<question>"`.

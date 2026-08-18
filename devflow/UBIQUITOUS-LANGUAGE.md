@@ -219,7 +219,7 @@ Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/
 - "Spool" means a repository, a **family** entry, and a **root** library. Retire bare "spool" wherever two of those are live in a sentence.
 - "Module" and "spool" were used interchangeably. A **spool** is code; a **module** is one activation declaration over it.
 - "Review" means the land **sign-off** step here, and a devflow step, a delegation preset, or a kanban lane elsewhere. Name the surface.
-- "Prime" means the discovery tier and the two `mill` orientation commands.
+- "Prime" means the discovery tier and the `mill prime millstrand` orientation command.
 - "Agent" means the `agent` op family, a spawned run, the **harness** behind it, and the **coordinator** reading the sentence. Use **harness** for the provider and a spool's own run term for the invocation.
 - "Gate" means a workflow step and a CI quality check in `make`. Only the first is a strand.
 - "Hook" was used for both **event handlers** and **lifecycle hooks**. Handlers are async and reactive; hooks are synchronous and may reject.
