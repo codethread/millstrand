@@ -41,7 +41,7 @@ mill init
 
 You do not need a running `mill` process for `mill init`. It is a local bootstrap command and never initializes the database or runs `git init` for you.
 
-Without `--workspace`, commands resolve the canonical Git repository root and select its `.millstrand` or `.ms` directory. Linked worktrees therefore share one default workspace. If both accepted markers exist, either is a file, or the legacy `.skein` marker exists, selection fails with remediation instead of guessing. Outside a supported Git worktree, no-flag selection also fails.
+Without `--workspace`, commands resolve the canonical Git repository root and select its `.millstrand` or `.ms` directory. Linked worktrees therefore share one default workspace. Conflicting, invalid, or unsupported legacy markers fail with remediation instead of being guessed or migrated. Outside a supported Git worktree, no-flag selection also fails.
 
 For personal use without tracked workspace files, run `mill init --stealth` instead. For an isolated experiment outside Git, select a directory explicitly on every command:
 
