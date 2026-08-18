@@ -1,9 +1,10 @@
-.PHONY: help build kanban-tree install dash api-docs test-go test-e2e docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
+.PHONY: help build kanban-tree land-quality install dash api-docs test-go test-e2e docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop spool-suite-gate
 
 help:
 	@printf '%s\n' \
 		'Millstrand development commands:' \
 		'  make build              Build repo-local strand, mill, and kanban-tree binaries' \
+		'  make land-quality       Build and run the local landing quality DAG' \
 		'  make test-go            Run Go tests in every Go module' \
 		'  make test-e2e           Run end-to-end CLI and REPL tests' \
 		'  make fmt-check          Check Clojure and Go formatting' \
@@ -22,6 +23,7 @@ GO_CLI := ./cli/cmd/strand
 MILL_CLI := ./cli/cmd/mill
 # kanban-tree is repo-local development tooling too, on the same terms.
 KANBAN_TREE_CLI := ./tools/kanban-tree
+LAND_QUALITY_CLI := ./tools/land-quality
 # BuildID falls back to the compiled-in "dev" when git is unavailable; it is
 # informational (skew attribution), so unlike InstalledSource it may degrade.
 BUILD_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
@@ -40,6 +42,11 @@ build: kanban-tree
 kanban-tree:
 	mkdir -p ./bin
 	go build -o ./bin/kanban-tree $(KANBAN_TREE_CLI)
+
+land-quality:
+	mkdir -p ./bin
+	go build -o ./bin/land-quality $(LAND_QUALITY_CLI)
+	./bin/land-quality
 
 # stamp the user's global binaries with the canonical checkout, not a worktree.
 install:
