@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -72,12 +75,7 @@ func TestRunnerBoundsHeavyChecksAndOverlapsLightChecks(t *testing.T) {
 
 	seen := map[string]bool{}
 	for len(seen) < 3 {
-		select {
-		case name := <-started:
-			seen[name] = true
-		case <-time.After(time.Second):
-			t.Fatal("initial checks did not overlap")
-		}
+		seen[<-started] = true
 	}
 	if !seen["light"] {
 		t.Fatalf("light check did not start beside heavy checks: %#v", seen)
@@ -123,6 +121,20 @@ func TestRunnerBlocksDependentsButFinishesIndependentChecks(t *testing.T) {
 		if results[i].status != want[i] {
 			t.Fatalf("result %d status = %s, want %s", i, results[i].status, want[i])
 		}
+	}
+	if got := results[1].err.Error(); got != "prerequisite failed fail" {
+		t.Fatalf("blocked reason = %q", got)
+	}
+	results[0].logPath = t.TempDir() + "/failed.log"
+	if err := os.WriteFile(results[0].logPath, []byte("boom\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var summary bytes.Buffer
+	if _, err := printSummary(&summary, results); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(summary.String(), "reason=prerequisite failed fail") {
+		t.Fatalf("summary omitted blocked reason:\n%s", summary.String())
 	}
 	if executed["blocked"] || !executed["independent"] {
 		t.Fatalf("unexpected execution set: %#v", executed)

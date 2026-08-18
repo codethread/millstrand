@@ -5,6 +5,7 @@ help:
 		'Millstrand development commands:' \
 		'  make build              Build repo-local strand, mill, and kanban-tree binaries' \
 		'  make land-quality       Build and run the local landing quality DAG' \
+		'    LAND_QUALITY_HEAVY_LIMIT=N sets its positive heavy-job cap (default 2)' \
 		'  make test-go            Run Go tests in every Go module' \
 		'  make test-e2e           Run end-to-end CLI and REPL tests' \
 		'  make fmt-check          Check Clojure and Go formatting' \

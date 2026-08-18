@@ -148,9 +148,13 @@ func (r runner) run(ctx context.Context) ([]result, error) {
 			if states[c.name] != "pending" {
 				continue
 			}
-			if dependencyFailed(c, states) {
+			if dependency, failed := failedDependency(c, states); failed {
 				states[c.name] = "blocked"
-				completed[c.name] = result{check: c, status: "BLOCKED", err: errors.New("prerequisite failed")}
+				completed[c.name] = result{
+					check:  c,
+					status: "BLOCKED",
+					err:    fmt.Errorf("prerequisite %s %s", dependency, strings.ToLower(states[dependency])),
+				}
 				progress = true
 				continue
 			}
@@ -220,27 +224,40 @@ func executeCommand(ctx context.Context, c check, logPath string) error {
 		return errors.Join(err, log.Close())
 	}
 	done := make(chan struct{})
+	watchDone := make(chan struct{})
+	killErrors := make(chan error, 2)
 	go func() {
+		defer close(watchDone)
 		select {
 		case <-ctx.Done():
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			if err := signalProcessGroup(cmd.Process.Pid, syscall.SIGTERM); err != nil {
+				killErrors <- err
+			}
 			timer := time.NewTimer(stopGrace)
 			defer timer.Stop()
 			select {
 			case <-done:
 			case <-timer.C:
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				if err := signalProcessGroup(cmd.Process.Pid, syscall.SIGKILL); err != nil {
+					killErrors <- err
+				}
 			}
 		case <-done:
 		}
 	}()
 	waitErr := cmd.Wait()
 	close(done)
+	<-watchDone
+	close(killErrors)
+	var killErr error
+	for err := range killErrors {
+		killErr = errors.Join(killErr, err)
+	}
 	closeErr := log.Close()
 	if waitErr != nil {
-		return errors.Join(fmt.Errorf("%s: %w", strings.Join(c.argv, " "), waitErr), closeErr)
+		return errors.Join(fmt.Errorf("%s: %w", strings.Join(c.argv, " "), waitErr), killErr, closeErr)
 	}
-	return closeErr
+	return errors.Join(killErr, closeErr)
 }
 
 func validateChecks(checks []check) error {
@@ -301,13 +318,20 @@ func dependenciesPassed(c check, states map[string]string) bool {
 	return true
 }
 
-func dependencyFailed(c check, states map[string]string) bool {
+func failedDependency(c check, states map[string]string) (string, bool) {
 	for _, dep := range c.deps {
 		if states[dep] == "fail" || states[dep] == "blocked" {
-			return true
+			return dep, true
 		}
 	}
-	return false
+	return "", false
+}
+
+func signalProcessGroup(pid int, signal syscall.Signal) error {
+	if err := syscall.Kill(-pid, signal); err != nil && !errors.Is(err, syscall.ESRCH) {
+		return fmt.Errorf("signal process group %d with %s: %w", pid, signal, err)
+	}
+	return nil
 }
 
 func orderedResults(checks []check, completed map[string]result) []result {
@@ -333,6 +357,7 @@ func printSummary(out io.Writer, results []result) (int, error) {
 			line += " log=" + r.logPath
 		case "BLOCKED":
 			blocked++
+			line += " reason=" + r.err.Error()
 		}
 		if _, err := fmt.Fprintln(out, line); err != nil {
 			return failed + blocked, err
