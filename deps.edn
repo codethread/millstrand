@@ -114,7 +114,7 @@
                        ".millstrand/ct/workflows/common.clj" ".millstrand/ct/workflows/land.clj"
                        ".millstrand/ct/workflows/story.clj"
                        ".millstrand/ct/workflows/explore.clj" ".millstrand/ct/workflows/fix.clj"
-                       ".millstrand/ct/workflows/land_policy.clj" ".millstrand/ct/agents/guide.clj"
+                       ".millstrand/ct/workflows/land_policy.clj"
                        ".millstrand/ct/agents/reviewers.clj" ".millstrand/ct/agents/delegation_contracts.clj"
                        ".millstrand/ct/notifications/attention.clj"
                        ".millstrand/ct/jobs/nvd_scan.clj"]}
@@ -124,7 +124,7 @@
                            ".millstrand/ct/workflows/common.clj" ".millstrand/ct/workflows/land.clj"
                            ".millstrand/ct/workflows/story.clj"
                            ".millstrand/ct/workflows/explore.clj" ".millstrand/ct/workflows/fix.clj"
-                           ".millstrand/ct/workflows/land_policy.clj" ".millstrand/ct/agents/guide.clj"
+                           ".millstrand/ct/workflows/land_policy.clj"
                            ".millstrand/ct/agents/reviewers.clj" ".millstrand/ct/agents/delegation_contracts.clj"
                            ".millstrand/ct/notifications/attention.clj"
                            ".millstrand/ct/jobs/nvd_scan.clj"]}

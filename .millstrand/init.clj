@@ -12,7 +12,6 @@
 ;;   ct/policy/config.clj         — named queries + shared validation helpers
 ;;   ct/workflows/               — workflow definitions, policy, and support
 ;;   workflows/scripts/          — standalone workflow shell scripts
-;;   ct/agents/guide.clj          — guide op: surface questions answered by a run
 ;;   ct/agents/reviewers.clj      — reviewer rosters
 ;;   ct/agents/delegation_contracts.clj — workspace task and review contracts
 ;;   ct/notifications/attention.clj — chime attention rules
@@ -158,13 +157,6 @@
                           :millstrand/spools-shuttle
                           :millstrand/spools-delegation
                           :devflow/kanban-adapter]
-                  :required? true})
-;; ct/agents/guide.clj publishes the `guide` op, which spawns its answer as an agent run on
-;; a shared Codethread seat, so it orders after the shared agents module.
-(runtime/module! runtime :guide
-                 {:file "ct/agents/guide.clj"
-                  :spools ['ct.spools/agent-run]
-                  :after [:millstrand/spools-shuttle :codethread/config]
                   :required? true})
 ;; The declarative reviewer roster stays a small git-reviewable data document,
 ;; collected as the workspace-owned partition of delegation's roster kind.

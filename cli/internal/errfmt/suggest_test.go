@@ -14,7 +14,7 @@ var (
 	// src/millstrand/api/weaver/alpha.clj:518 (unknown op) and :448 (missing
 	// replacement op) both send the registered op names.
 	opNames = []string{
-		"about", "add", "agent", "bench", "bins", "burn", "guide", "harness", "help",
+		"about", "add", "agent", "bench", "bins", "burn", "harness", "help",
 		"kanban", "kanban-export", "land", "list", "note", "notes", "pattern", "prime",
 		"query", "ready", "search", "show", "spool", "subgraph", "supersede", "update",
 		"weave", "workflow",
