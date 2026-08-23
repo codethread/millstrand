@@ -25,6 +25,10 @@ type server struct {
 	meta     client.MillMetadata
 	mu       sync.Mutex
 	children map[string]*weaverChild
+	// transitions is keyed by the selected config directory.  A transition is
+	// deliberately shared by all lifecycle callers for that workspace: the
+	// caller's timeout only bounds its wait on transition.done.
+	transitions map[string]*weaverTransition
 }
 
 type weaverChild struct {
@@ -32,6 +36,9 @@ type weaverChild struct {
 	world config.World
 	name  string
 	done  chan error
+	// generationID is Mill's opaque identity for this process generation.  It
+	// is not derived from a PID or from user configuration.
+	generationID string
 }
 
 var millLogOut io.Writer = os.Stdout
@@ -139,6 +146,14 @@ Environment:
 	start.Flags().String("name", "", "friendly name for this weaver (defaults to workspace basename)")
 	start.Flags().String("ready-timeout", "", "ready metadata wait budget (Go duration, default 5m)")
 	weaver.AddCommand(start)
+	restart := &cobra.Command{Use: "restart", Short: "Probe and replace the selected workspace's weaver through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		workspace, _ := cmd.Flags().GetString("workspace")
+		readyTimeout, _ := cmd.Flags().GetString("ready-timeout")
+		return runWeaverLifecycleWithReadyTimeout("weaver-restart", workspace, "", readyTimeout)
+	}}
+	restart.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
+	restart.Flags().String("ready-timeout", "", "ready metadata wait budget (Go duration, default 5m)")
+	weaver.AddCommand(restart)
 	status := &cobra.Command{Use: "status", Short: "Show selected workspace weaver status through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
 		return runWeaverLifecycle("weaver-status", workspace, "")
@@ -207,7 +222,7 @@ func start() error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() { <-sig; _ = listener.Close() }()
-	s := server{meta: meta, children: map[string]*weaverChild{}}
+	s := server{meta: meta, children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}}
 	defer s.stopAll()
 	for {
 		conn, err := listener.Accept()
@@ -279,6 +294,13 @@ func (s *server) handle(conn net.Conn) {
 		result, err := s.startWeaver(req.World)
 		if err != nil {
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start failed", err.Error()))
+			return
+		}
+		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})
+	case "weaver-restart":
+		result, err := s.restartWeaver(req.World)
+		if err != nil {
+			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-restart-failed", "weaver restart failed", err.Error()))
 			return
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})

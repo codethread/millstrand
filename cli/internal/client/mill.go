@@ -104,6 +104,15 @@ func millCallPayload(operation string, world MillWorldRequest, payload map[strin
 		} else {
 			deadline = defaultWeaverReadyTimeout + 5*time.Second
 		}
+	case "weaver-restart":
+		// Restart may spend the caller's budget probing and then waiting for
+		// replacement readiness.  The mill owns the shared transition; this
+		// socket deadline only bounds this caller.
+		if world.ReadyTimeoutMs > 0 {
+			deadline = time.Duration(world.ReadyTimeoutMs)*time.Millisecond + 5*time.Second
+		} else {
+			deadline = defaultWeaverReadyTimeout + 5*time.Second
+		}
 	case "weaver-stop":
 		// Stop signals the weaver and waits for its shutdown hook to clean up
 		// runtime metadata (supervised child or metadata-discovered pid), which

@@ -104,10 +104,23 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 	if req.ReadyTimeoutMs < 0 {
 		return nil, fmt.Errorf("invalid ready_timeout_ms %d: must be positive milliseconds, or omitted for the default", req.ReadyTimeoutMs)
 	}
+	if transition := s.lifecycleTransition(world.ConfigDir); transition != nil {
+		// A probe leaves the admitted old generation serving.  Starting during
+		// cutover joins the one shared replacement instead of launching a second
+		// child; failed state is retained for an explicit restart recovery.
+		if transition.state() == restartStateProbing {
+			return s.admittedGenerationStatus(world, transition), nil
+		}
+		return waitForLifecycleTransition(transition, readyTimeoutFor(req.ReadyTimeoutMs))
+	}
+	if record, ok := readRestartRecord(world); ok && record.State == restartStateFailed {
+		return record.status(world), nil
+	}
 	s.mu.Lock()
 	if child := s.children[world.ConfigDir]; child != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
 		status, stale := readStatus(world)
 		if status != nil && !stale {
+			status["generation_id"] = child.generationID
 			s.mu.Unlock()
 			return status, nil
 		}
@@ -165,9 +178,10 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 		}()
 		status := baseStatusWithName(world, "starting", child.name)
 		status["pid"] = child.cmd.Process.Pid
+		status["generation_id"] = child.generationID
 		return status, nil
 	}
-	registered := &weaverChild{cmd: cmd, world: world, name: name, done: done}
+	registered := &weaverChild{cmd: cmd, world: world, name: name, done: done, generationID: newOpaqueID("generation")}
 	s.children[world.ConfigDir] = registered
 	s.mu.Unlock()
 	go func() {
@@ -200,6 +214,7 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 		}
 		return nil, fmt.Errorf("%w; weaver log: %s", err, logPath)
 	}
+	status["generation_id"] = registered.generationID
 	millLogf("weaver started config_dir=%s state_dir=%s pid=%v", world.ConfigDir, world.StateDir, status["pid"])
 	return status, nil
 }
@@ -282,6 +297,21 @@ func (s *server) weaverStatusForWorld(world config.World) map[string]any {
 }
 
 func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
+	if transition := s.transitions[world.ConfigDir]; transition != nil {
+		switch transition.state() {
+		case restartStateProbing:
+			return s.admittedGenerationStatus(world, transition)
+		case restartStateRestarting:
+			status := baseStatusWithName(world, restartStateRestarting, "")
+			status["transition_id"] = transition.transitionID
+			return status
+		case restartStateFailed:
+			return transitionResultStatus(transition)
+		}
+	}
+	if record, ok := readRestartRecord(world); ok && record.State == restartStateFailed {
+		return record.status(world)
+	}
 	if status, stale := readStatus(world); status != nil {
 		if stale {
 			status["state"] = "stale"
@@ -292,6 +322,7 @@ func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
 		if child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
 			status := baseStatusWithName(world, "starting", child.name)
 			status["pid"] = child.cmd.Process.Pid
+			status["generation_id"] = child.generationID
 			return status
 		}
 		status := baseStatusWithName(world, "stopped", child.name)
@@ -385,7 +416,11 @@ func readStatus(world config.World) (map[string]any, bool) {
 		st["stale_reason"] = staleReason
 		return st, true
 	}
-	return statusFromMetadata(m, "running"), false
+	status := statusFromMetadata(m, "running")
+	if record, ok := readRestartRecord(world); ok && record.State == restartStateRunning {
+		mergeRestartRecordStatus(status, record)
+	}
+	return status, false
 }
 
 func readStatusFile(path string) (map[string]any, error) {
@@ -464,6 +499,8 @@ func samePath(a, b string) bool {
 
 func waitForReadyStatus(world config.World, pid int, done <-chan error, timeout time.Duration) (map[string]any, error) {
 	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		status, stale := readStatus(world)
 		if status != nil && !stale {
@@ -487,7 +524,7 @@ func waitForReadyStatus(world config.World, pid int, done <-chan error, timeout 
 			terminatePID(pid)
 			return nil, fmt.Errorf("weaver did not publish ready metadata before timeout")
 		}
-		time.Sleep(50 * time.Millisecond)
+		<-ticker.C
 	}
 }
 
