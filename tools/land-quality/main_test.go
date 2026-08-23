@@ -12,9 +12,9 @@ import (
 	"time"
 )
 
-func TestQualityGraphKeepsThirteenChecksAndBuildDependencies(t *testing.T) {
-	if len(qualityChecks) != 13 {
-		t.Fatalf("quality graph has %d checks, want 13", len(qualityChecks))
+func TestQualityGraphKeepsRestartAcceptanceAndBuildDependencies(t *testing.T) {
+	if len(qualityChecks) != 14 {
+		t.Fatalf("quality graph has %d checks, want 14", len(qualityChecks))
 	}
 	if err := validateChecks(qualityChecks); err != nil {
 		t.Fatal(err)
@@ -24,7 +24,7 @@ func TestQualityGraphKeepsThirteenChecksAndBuildDependencies(t *testing.T) {
 			t.Fatalf("external spool check remains in graph: %#v", c)
 		}
 	}
-	for _, name := range []string{"acceptance-kanban", "acceptance-docs", "acceptance-neovim"} {
+	for _, name := range []string{"restart-acceptance", "acceptance-kanban", "acceptance-docs", "acceptance-neovim"} {
 		var found *check
 		for i := range qualityChecks {
 			if qualityChecks[i].name == name {

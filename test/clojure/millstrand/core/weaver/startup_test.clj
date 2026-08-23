@@ -170,7 +170,8 @@
 (deftest fresh-runtime-probe-is-unpublished-and-cleans-success
   (let [world (temp-world)
         result (try
-                 (weaver-runtime/fresh-runtime-probe! world)
+                 (weaver-runtime/fresh-runtime-probe!
+                  world {:old-generation-baseline {:status :admitted :projection {}}})
                  (finally
                    (delete-tree! (io/file (:config-dir world) ".."))))]
     (is (true? (:success result)))
@@ -186,7 +187,9 @@
   (let [world (temp-world)
         rt (weaver-runtime/start! nil {:world world
                                        :probe? true
-                                       :storage :sqlite-memory})]
+                                       :storage :sqlite-memory
+                                       :old-generation-baseline
+                                       {:status :admitted :projection {}}})]
     (try
       (is (nil? @weaver-runtime/current-runtime))
       (is (nil? (metadata/read-metadata world)))

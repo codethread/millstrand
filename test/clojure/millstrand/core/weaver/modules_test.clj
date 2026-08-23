@@ -1401,7 +1401,7 @@
                  "{:file \"modules/missing.clj\"})\n"))
       (with-redefs [clojure.core/spit
                     (fn [file content & opts]
-                      (if (> (swap! diagnostic-writes inc) 6)
+                      (if (> (swap! diagnostic-writes inc) 9)
                         (throw (ex-info "diagnostic sink boom" {:file file}))
                         (apply original-spit file content opts)))]
         (let [result (weaver-runtime/fresh-runtime-probe!

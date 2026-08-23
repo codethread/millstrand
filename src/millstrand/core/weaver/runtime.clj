@@ -675,7 +675,10 @@
               (when port
                 (swap! nrepl-port-runtimes assoc port published-runtime))
               (when (publishes-ambient-runtime? publish? probe?)
-                (compare-and-set! current-runtime runtime published-runtime))
+                ;; The startup CAS admitted this generation to the ambient slot.
+                ;; Publish the final runtime snapshot so stop! and ambient
+                ;; callers observe the same generation.
+                (reset! current-runtime published-runtime))
               published-runtime)))
         (catch Throwable t
           (when port
@@ -685,7 +688,8 @@
           (stop-event-system! @runtime-state)
           (when-let [socket-runtime (:socket-runtime @runtime-state)]
             (socket/stop! socket-runtime))
-          (nrepl/stop-server server)
+          (when server
+            (nrepl/stop-server server))
            ;; Spool state may own executors started by config before metadata is
            ;; published. Close it on failed startup too, while storage remains
            ;; available, without masking the original startup exception.
@@ -897,7 +901,13 @@
   (close-storage! runtime)
   (when-let [port (get-in runtime [:metadata :endpoint :port])]
     (swap! nrepl-port-runtimes dissoc port))
-  (swap! current-runtime (fn [published] (when-not (= published runtime) published)))
+  ;; nREPL sessions can retain a later map snapshot for this generation. The
+  ;; immutable generation id, rather than whole-map equality, identifies which
+  ;; published runtime this stop owns without clearing a newer generation.
+  (swap! current-runtime
+         (fn [published]
+           (when-not (= (:generation-id published) (:generation-id runtime))
+             published)))
   (when-let [state-dir (get-in runtime [:metadata :state-dir])]
     (metadata/delete! {:state-dir state-dir}))
   {:stopped true})

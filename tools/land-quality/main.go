@@ -55,6 +55,7 @@ type runner struct {
 var qualityChecks = []check{
 	{name: "clojure-test", argv: []string{"clojure", "-M:test"}, heavy: true, baseline: 129600 * time.Millisecond, timeout: 8 * time.Minute},
 	{name: "go-test", argv: []string{"make", "test-go"}, heavy: true, baseline: 59300 * time.Millisecond, timeout: 5 * time.Minute},
+	{name: "restart-acceptance", argv: []string{"make", "test-restart-acceptance"}, heavy: true, deps: []string{"build"}, baseline: 260 * time.Second, timeout: 7 * time.Minute},
 	{name: "e2e", argv: []string{"make", "test-e2e"}, heavy: true, baseline: 92400 * time.Millisecond, timeout: 8 * time.Minute},
 	{name: "format", argv: []string{"make", "fmt-check"}, baseline: 29600 * time.Millisecond, timeout: 3 * time.Minute},
 	{name: "lint", argv: []string{"make", "lint"}, heavy: true, baseline: 24900 * time.Millisecond, timeout: 4 * time.Minute},
