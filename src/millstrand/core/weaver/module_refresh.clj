@@ -1033,6 +1033,35 @@
                                          [:effective :owners :provenance]))])))
         backends))
 
+(defn registry-projection
+  "Return a redacted effective registry projection for runtime diagnostics.
+
+  The projection is immutable plain data: executable values are represented by
+  their callable class, so a status response can carry an honest generation
+  baseline without exposing functions or registry implementation state."
+  [runtime]
+  (let [backends (publication/backends runtime)]
+    (candidate-projection backends (publication/candidates backends))))
+
+(defn- semantic-diff
+  "Describe the top-level registry changes between two projections."
+  [baseline candidate]
+  (let [baseline (or baseline {})
+        added (apply dissoc candidate (keys baseline))
+        removed (apply dissoc baseline (keys candidate))
+        changed (into (sorted-map)
+                      (keep (fn [kind-id]
+                              (let [before (get baseline kind-id)
+                                    after (get candidate kind-id)]
+                                (when-not (= before after)
+                                  [kind-id {:old before :new after}]))))
+                      (sort (set/intersection (set (keys baseline))
+                                              (set (keys candidate)))))]
+    {:old baseline
+     :new candidate
+     :changes {:added added :removed removed :changed changed}
+     :changed? (boolean (or (seq added) (seq removed) (seq changed)))}))
+
 (defn- plan-result
   "Assemble the dry-run intentions from staged candidates without publishing.
 
@@ -1195,6 +1224,7 @@
                             (if (or (:probe? opts) (seq graph) (seq old-graph))
                               (sync-roots! runtime)
                               (current-root-state runtime)))]
+          ^{:clj-kondo/ignore [:redundant-do]}
           (do
             (diagnostic! opts :spools/materialize :completed
                          (select-keys sync-result [:roots :sync :conflicts :remedies]))
@@ -1231,12 +1261,18 @@
                           _ (require-kind-declarations-staged! raw (:outcomes staged))
                           candidate-projection
                           (candidate-projection backends (:candidates staged))
+                          old-generation (or (:old-generation/baseline opts)
+                                             {:status :unavailable
+                                              :reason :not-supplied
+                                              :projection {}})
                           _ (diagnostic!
                              opts :candidate/staged :completed
                              {:candidate-registries candidate-projection
                               :old-generation/diff
-                              {:previous-generation :not-admitted
-                               :candidate-registries candidate-projection}})
+                              (assoc (semantic-diff (:projection old-generation)
+                                                    candidate-projection)
+                                     :baseline-status (:status old-generation)
+                                     :baseline-reason (:reason old-generation))})
                           _ (publication/validate-op-candidates! backends (:candidates staged))
                           _ (publication/validate-kind-candidates!
                              runtime backends (:candidates staged))

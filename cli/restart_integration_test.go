@@ -21,10 +21,11 @@ import (
 // commands. Each process identity is recorded when it is admitted so cleanup
 // can only signal a PID that this test started.
 type restartProcessHarness struct {
-	mill    *exec.Cmd
-	millBin string
-	source  string
-	pids    []int
+	mill      *exec.Cmd
+	millBin   string
+	strandBin string
+	source    string
+	pids      []int
 }
 
 func newRestartProcessHarness(t *testing.T) *restartProcessHarness {
@@ -40,7 +41,7 @@ func newRestartProcessHarness(t *testing.T) *restartProcessHarness {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(stateHome, "x"))
 	t.Setenv("MILLSTRAND_SOURCE", root)
 
-	h := &restartProcessHarness{millBin: filepath.Join(root, "bin", "mill"), source: root}
+	h := &restartProcessHarness{millBin: filepath.Join(root, "bin", "mill"), strandBin: filepath.Join(root, "bin", "strand"), source: root}
 	h.mill = exec.Command(h.millBin, "start")
 	stdout, err := h.mill.StdoutPipe()
 	if err != nil {
@@ -64,25 +65,61 @@ func newRestartProcessHarness(t *testing.T) *restartProcessHarness {
 	if !strings.Contains(scanner.Text(), "mill listening") {
 		t.Fatalf("mill exited before readiness (pid %d)", h.mill.Process.Pid)
 	}
-	t.Cleanup(h.cleanup)
+	t.Cleanup(func() { h.cleanup(t) })
 	return h
 }
 
-func (h *restartProcessHarness) cleanup() {
-	if h.mill != nil && h.mill.Process != nil && processExists(h.mill.Process.Pid) {
-		_ = h.mill.Process.Signal(os.Interrupt)
-		waitProcessExit(h.mill.Process.Pid, 5*time.Second)
+func (h *restartProcessHarness) cleanup(t *testing.T) {
+	t.Helper()
+	if h.mill != nil && h.mill.Process != nil {
+		pid := h.mill.Process.Pid
+		if processExists(pid) {
+			_ = h.mill.Process.Signal(os.Interrupt)
+			reapMill(t, h.mill, 5*time.Second)
+		} else {
+			_ = h.mill.Wait()
+		}
 	}
 	for _, pid := range h.pids {
-		if pid > 0 && processExists(pid) {
-			_ = syscall.Kill(pid, syscall.SIGTERM)
-			waitProcessExit(pid, 2*time.Second)
+		ensureProcessExit(t, pid, 2*time.Second)
+	}
+}
+
+func reapMill(t *testing.T, cmd *exec.Cmd, timeout time.Duration) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return
+	case <-timer.C:
+		pid := cmd.Process.Pid
+		t.Errorf("mill pid %d did not exit within %s; escalating PID-scoped SIGKILL", pid, timeout)
+		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			t.Errorf("PID-scoped SIGKILL failed for mill pid %d: %v", pid, err)
+		}
+		select {
+		case <-done:
+		case <-time.After(timeout):
+			t.Errorf("could not reap mill pid %d after SIGKILL", pid)
 		}
 	}
 }
 
 func (h *restartProcessHarness) run(args ...string) (string, error) {
 	cmd := exec.Command(h.millBin, args...)
+	cmd.Dir = h.source
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	err := cmd.Run()
+	return output.String(), err
+}
+
+func (h *restartProcessHarness) runStrand(args ...string) (string, error) {
+	cmd := exec.Command(h.strandBin, args...)
 	cmd.Dir = h.source
 	var output bytes.Buffer
 	cmd.Stdout = &output
@@ -187,6 +224,10 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 		if requiredPID(t, probing) != oldPID || requiredString(t, probing, "generation_id") != oldGeneration {
 			t.Fatalf("probe changed admitted identity: old=%#v probing=%#v", old, probing)
 		}
+		strandOutput, err := h.runStrand("--workspace", workspace, "help", "--json")
+		if err != nil || !strings.Contains(strandOutput, "schema-version") {
+			t.Fatalf("old generation did not serve public strand help during probe: %v\n%s", err, strandOutput)
+		}
 
 		startResult := h.startDuringProbe(t, workspace)
 		if requiredPID(t, startResult) != oldPID || requiredString(t, startResult, "generation_id") != oldGeneration {
@@ -224,7 +265,9 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 		}
 		h.pids = append(h.pids, requiredPID(t, final))
 		assertSuccessfulProbeDiagnostics(t, final)
-		waitProcessExit(oldPID, 10*time.Second)
+		if err := waitProcessExit(oldPID, 10*time.Second); err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	t.Run("invalid source and dependency probe retains diagnostics", func(t *testing.T) {
@@ -388,14 +431,15 @@ func assertProbeDiagnostics(t *testing.T, diagnostics []any, label string) {
 				t.Fatalf("%s module outcomes missing: %#v", label, entry)
 			}
 		}
-		if stage == "candidate/staged" {
+		if stage == "staged" {
 			projection, ok := data["candidate-registries"].(map[string]any)
 			if !ok || len(projection) == 0 {
 				t.Fatalf("%s owned candidate projection missing: %#v", label, entry)
 			}
-			if _, ok := data["old-generation/diff"].(map[string]any); !ok {
-				t.Fatalf("%s old-generation diff missing: %#v", label, entry)
-			}
+			assertOldGenerationDiff(t, data, label)
+		}
+		if stage == "plan" {
+			assertLifecyclePlan(t, entry, label)
 		}
 		if stage == "publication" || stage == "apply" || stage == "rearm" {
 			if entry["status"] != "skipped" {
@@ -403,7 +447,7 @@ func assertProbeDiagnostics(t *testing.T, diagnostics []any, label string) {
 			}
 		}
 	}
-	for _, stage := range []string{"materialize", "evaluate", "staged", "publication", "apply", "rearm", "failure"} {
+	for _, stage := range []string{"materialize", "evaluate", "staged", "publication", "apply", "rearm", "plan", "failure"} {
 		if !seen[stage] {
 			t.Fatalf("%s diagnostics missing stage %q: %v", label, stage, seen)
 		}
@@ -433,9 +477,10 @@ func assertSuccessfulProbeDiagnostics(t *testing.T, status map[string]any) {
 			if projection, ok := data["candidate-registries"].(map[string]any); !ok || len(projection) == 0 {
 				t.Fatalf("successful probe lost owned candidate projection: %#v", entry)
 			}
-			if _, ok := data["old-generation/diff"].(map[string]any); !ok {
-				t.Fatalf("successful probe lost old-generation diff: %#v", entry)
-			}
+			assertOldGenerationDiff(t, data, "successful probe")
+		}
+		if stage == "plan" {
+			assertLifecyclePlan(t, entry, "successful probe")
 		}
 		if stage == "publication" || stage == "apply" || stage == "rearm" {
 			if entry["status"] != "skipped" {
@@ -447,6 +492,55 @@ func assertSuccessfulProbeDiagnostics(t *testing.T, status map[string]any) {
 		if !seen[stage] {
 			t.Fatalf("successful probe diagnostics missing stage %q: %v", stage, seen)
 		}
+	}
+}
+
+func assertOldGenerationDiff(t *testing.T, data map[string]any, label string) {
+	t.Helper()
+	diff, ok := data["old-generation/diff"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s old-generation diff missing: %#v", label, data)
+	}
+	if diff["baseline-status"] != "admitted" {
+		t.Fatalf("%s old-generation baseline was not admitted: %#v", label, diff)
+	}
+	if _, ok := diff["old"].(map[string]any); !ok {
+		t.Fatalf("%s old-generation baseline projection missing: %#v", label, diff)
+	}
+	if _, ok := diff["new"].(map[string]any); !ok {
+		t.Fatalf("%s candidate projection missing from semantic diff: %#v", label, diff)
+	}
+	if _, ok := diff["changed?"].(bool); !ok {
+		t.Fatalf("%s semantic diff changed? flag is not boolean: %#v", label, diff)
+	}
+	changes, ok := diff["changes"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s semantic diff changes missing: %#v", label, diff)
+	}
+	for _, key := range []string{"added", "removed", "changed"} {
+		if _, ok := changes[key].(map[string]any); !ok {
+			t.Fatalf("%s semantic diff %s map missing: %#v", label, key, diff)
+		}
+	}
+}
+
+func assertLifecyclePlan(t *testing.T, entry map[string]any, label string) {
+	t.Helper()
+	data, ok := entry["data"].(map[string]any)
+	if !ok || len(data) == 0 {
+		t.Fatalf("%s lifecycle plan diagnostic has no payload: %#v", label, entry)
+	}
+	if entry["status"] == "completed" {
+		if _, ok := data["lifecycle/plan"].(map[string]any); !ok {
+			t.Fatalf("%s completed lifecycle plan is missing its plan payload: %#v", label, entry)
+		}
+		return
+	}
+	if entry["status"] != "skipped" || data["available?"] != false || data["reason"] == "" {
+		t.Fatalf("%s lifecycle plan was neither completed nor explicitly unavailable: %#v", label, entry)
+	}
+	if _, ok := data["plan"].(map[string]any); !ok {
+		t.Fatalf("%s unavailable lifecycle plan is missing its payload: %#v", label, entry)
 	}
 }
 
@@ -479,7 +573,10 @@ func waitForPath(t *testing.T, path string, timeout time.Duration) {
 	}
 }
 
-func waitProcessExit(pid int, timeout time.Duration) {
+func waitProcessExit(pid int, timeout time.Duration) error {
+	if pid <= 0 {
+		return fmt.Errorf("cannot wait for invalid pid %d", pid)
+	}
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	tick := time.NewTicker(5 * time.Millisecond)
@@ -487,9 +584,33 @@ func waitProcessExit(pid int, timeout time.Duration) {
 	for processExists(pid) {
 		select {
 		case <-deadline.C:
-			return
+			return fmt.Errorf("pid %d did not exit within %s", pid, timeout)
 		case <-tick.C:
 		}
+	}
+	return nil
+}
+
+func ensureProcessExit(t *testing.T, pid int, timeout time.Duration) {
+	t.Helper()
+	if pid <= 0 || !processExists(pid) {
+		return
+	}
+	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
+		t.Errorf("PID-scoped SIGTERM failed for pid %d: %v", pid, err)
+		return
+	}
+	if err := waitProcessExit(pid, timeout); err == nil {
+		return
+	} else {
+		t.Logf("graceful PID-scoped cleanup did not finish: %v; escalating SIGKILL to pid %d", err, pid)
+	}
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		t.Errorf("PID-scoped SIGKILL failed for pid %d: %v", pid, err)
+		return
+	}
+	if err := waitProcessExit(pid, timeout); err != nil {
+		t.Errorf("PID-scoped cleanup could not confirm pid %d exited after SIGKILL: %v", pid, err)
 	}
 }
 

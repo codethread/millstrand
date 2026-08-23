@@ -115,12 +115,32 @@ func decodeRestartProbe(data []byte) (restartProbeResult, error) {
 
 var probeRuntime = runFreshRuntimeProbe
 
-const freshRuntimeProbeExpression = `(require '[clojure.data.json :as json] '[millstrand.core.db :as db] '[millstrand.core.weaver.runtime :as runtime]) (let [result (runtime/fresh-runtime-probe! {:config-dir (System/getenv "MILLSTRAND_PROBE_CONFIG") :state-dir (System/getenv "MILLSTRAND_PROBE_STATE") :data-dir (System/getenv "MILLSTRAND_PROBE_DATA")}) stage->wire (fn [value] (if (keyword? value) (subs (str value) 1) value)) wire (-> (select-keys result [:success :stage :probe/workspace :source/workspace :completed :diagnostics :log]) (update :stage stage->wire) (update :completed #(mapv stage->wire %)))] (println (json/write-str wire :key-fn db/json-key)))`
+const freshRuntimeProbeExpression = `(require '[clojure.data.json :as json] '[millstrand.core.db :as db] '[millstrand.core.weaver.runtime :as runtime]) (let [baseline (json/read-str (System/getenv "MILLSTRAND_PROBE_BASELINE") :key-fn keyword) result (runtime/fresh-runtime-probe! {:config-dir (System/getenv "MILLSTRAND_PROBE_CONFIG") :state-dir (System/getenv "MILLSTRAND_PROBE_STATE") :data-dir (System/getenv "MILLSTRAND_PROBE_DATA")} {:old-generation-baseline baseline}) stage->wire (fn [value] (if (keyword? value) (subs (str value) 1) value)) wire (-> (select-keys result [:success :stage :probe/workspace :source/workspace :completed :diagnostics :log]) (update :stage stage->wire) (update :completed #(mapv stage->wire %)))] (println (json/write-str wire :key-fn db/json-key)))`
 
 func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult, error) {
+	status, stale := readStatus(world)
+	if status == nil || stale {
+		return restartProbeResult{}, errors.New("cannot establish admitted old-generation baseline")
+	}
+	identity, err := identityFromStatus(status)
+	if err != nil {
+		return restartProbeResult{}, fmt.Errorf("old-generation baseline identity is invalid: %w", err)
+	}
+	endpointStatus, err := runtimeStatus(identity)
+	if err != nil {
+		return restartProbeResult{}, fmt.Errorf("old-generation baseline status failed: %w", err)
+	}
+	projection, ok := endpointStatus["registry_projection"]
+	if !ok {
+		return restartProbeResult{}, errors.New("old-generation baseline status omitted registry_projection")
+	}
+	baseline, err := json.Marshal(map[string]any{"status": "admitted", "projection": projection})
+	if err != nil {
+		return restartProbeResult{}, fmt.Errorf("marshal old-generation baseline: %w", err)
+	}
 	cmd := exec.Command("clojure", "-M:millstrand", "-e", freshRuntimeProbeExpression)
 	cmd.Dir = source
-	cmd.Env = append(os.Environ(), "MILLSTRAND_PROBE_CONFIG="+world.ConfigDir, "MILLSTRAND_PROBE_STATE="+world.StateDir, "MILLSTRAND_PROBE_DATA="+world.DataDir)
+	cmd.Env = append(os.Environ(), "MILLSTRAND_PROBE_CONFIG="+world.ConfigDir, "MILLSTRAND_PROBE_STATE="+world.StateDir, "MILLSTRAND_PROBE_DATA="+world.DataDir, "MILLSTRAND_PROBE_BASELINE="+string(baseline))
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

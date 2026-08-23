@@ -214,6 +214,10 @@
      "weaver_id" (:nonce m)
      "socket_path" (:socket-path m)
      "started_at" (:started-at m)
+     "registry_projection"
+     ((requiring-resolve
+       'millstrand.core.weaver.module-refresh/registry-projection)
+      runtime)
      "nrepl" {"host" (get-in m [:endpoint :host]) "port" (get-in m [:endpoint :port])}}))
 
 (defn- api [sym]

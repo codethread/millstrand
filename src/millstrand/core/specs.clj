@@ -369,6 +369,7 @@
 (s/def :millstrand.weaver-start/release-marker ::release-marker-syntax)
 (s/def :millstrand.weaver-start/probe? boolean?)
 (s/def :millstrand.weaver-start/diagnostic! ifn?)
+(s/def :millstrand.weaver-start/old-generation-baseline map?)
 (s/def ::weaver-start-options
   (s/and (s/keys :opt-un [:millstrand.weaver-start/world
                           :millstrand.weaver-start/name
@@ -376,9 +377,10 @@
                           :millstrand.weaver-start/storage
                           :millstrand.weaver-start/release-marker
                           :millstrand.weaver-start/probe?
-                          :millstrand.weaver-start/diagnostic!])
+                          :millstrand.weaver-start/diagnostic!
+                          :millstrand.weaver-start/old-generation-baseline])
          #(every? #{:world :name :publish? :storage :release-marker :probe?
-                    :diagnostic!}
+                    :diagnostic! :old-generation-baseline}
                   (keys %))))
 
 (s/def ::add-command (s/cat :title ::title :opts (s/* string?)))

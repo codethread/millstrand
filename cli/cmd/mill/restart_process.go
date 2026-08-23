@@ -84,11 +84,16 @@ func verifyUnsupervisedIdentity(child *weaverChild, world config.World) error {
 }
 
 func verifyRuntimeEndpoint(identity weaverIdentity) error {
+	_, err := runtimeStatus(identity)
+	return err
+}
+
+func runtimeStatus(identity weaverIdentity) (map[string]any, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", identity.Socket)
 	if err != nil {
-		return fmt.Errorf("dial %s: %w", identity.Socket, err)
+		return nil, fmt.Errorf("dial %s: %w", identity.Socket, err)
 	}
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(time.Second))
@@ -102,7 +107,7 @@ func verifyRuntimeEndpoint(identity weaverIdentity) error {
 		"options":          map[string]any{},
 	}
 	if err := json.NewEncoder(conn).Encode(request); err != nil {
-		return fmt.Errorf("write status request: %w", err)
+		return nil, fmt.Errorf("write status request: %w", err)
 	}
 	var response struct {
 		ProtocolVersion int            `json:"protocol_version"`
@@ -112,16 +117,16 @@ func verifyRuntimeEndpoint(identity weaverIdentity) error {
 		Error           map[string]any `json:"error"`
 	}
 	if err := json.NewDecoder(conn).Decode(&response); err != nil {
-		return fmt.Errorf("decode status response: %w", err)
+		return nil, fmt.Errorf("decode status response: %w", err)
 	}
 	if response.ProtocolVersion != 3 || response.RequestID != requestID || !response.OK || response.Result == nil {
-		return errors.New("runtime status response is not a successful matching frame")
+		return nil, errors.New("runtime status response is not a successful matching frame")
 	}
 	if healthy, ok := response.Result["healthy"].(bool); !ok || !healthy {
-		return errors.New("runtime status is not healthy")
+		return nil, errors.New("runtime status is not healthy")
 	}
 	if endpointPID, err := jsonInt(response.Result["pid"]); err != nil || endpointPID != identity.PID {
-		return fmt.Errorf("runtime status pid mismatch: got %v expected %d", response.Result["pid"], identity.PID)
+		return nil, fmt.Errorf("runtime status pid mismatch: got %v expected %d", response.Result["pid"], identity.PID)
 	}
 	for key, expected := range map[string]string{
 		"weaver_id": identity.WeaverID, "started_at": identity.StartedAt,
@@ -129,10 +134,10 @@ func verifyRuntimeEndpoint(identity weaverIdentity) error {
 		"state_dir": identity.StateDir, "data_dir": identity.DataDir,
 	} {
 		if got, ok := response.Result[key].(string); !ok || got != expected {
-			return fmt.Errorf("runtime status %s mismatch: got %v expected %q", key, response.Result[key], expected)
+			return nil, fmt.Errorf("runtime status %s mismatch: got %v expected %q", key, response.Result[key], expected)
 		}
 	}
-	return nil
+	return response.Result, nil
 }
 
 func jsonInt(value any) (int, error) {

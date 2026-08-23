@@ -560,7 +560,8 @@
   (and publish? (not probe?)))
 
 (defn- start-with-options!
-  [db-file {:keys [world name publish? storage release-marker probe? diagnostic!]
+  [db-file {:keys [world name publish? storage release-marker probe? diagnostic!
+                   old-generation-baseline]
             :or {publish? true}}]
   (when (and (publishes-ambient-runtime? publish? probe?) @current-runtime)
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
@@ -655,7 +656,9 @@
           (let [refresh-result (refresh-modules! runtime (cond-> {:startup? true}
                                                            probe? (assoc :probe? true
                                                                          :dry-run? true
-                                                                         :diagnostic! diagnostic!)))
+                                                                         :diagnostic! diagnostic!
+                                                                         :old-generation/baseline
+                                                                         old-generation-baseline)))
                 runtime (assoc runtime :probe-result refresh-result)]
             (when-not (#{:applied :unchanged} (:status refresh-result))
               (throw (ex-info "Initial module refresh did not complete successfully"
@@ -751,6 +754,15 @@
                           [:scheduler/rearm :probe-mode]]]
     (report! {:stage stage :status :skipped :data {:reason reason}})))
 
+(defn- report-lifecycle-plan-unavailable!
+  "Record why a failed probe had no lifecycle plan to execute."
+  [report!]
+  (report! {:stage :lifecycle/plan
+            :status :skipped
+            :data {:available? false
+                   :reason :probe-failed-before-plan
+                   :plan {}}}))
+
 (defn fresh-runtime-probe!
   "Probe a fresh unpublished runtime generation from a selected world.
 
@@ -795,7 +807,12 @@
                                          :publish? false
                                          :storage :sqlite-memory
                                          :probe? true
-                                         :diagnostic! report!}))
+                                         :diagnostic! report!
+                                         :old-generation-baseline
+                                         (or (:old-generation-baseline opts)
+                                             {:status :unavailable
+                                              :reason :not-supplied
+                                              :projection {}})}))
              _ (report-probe-skipped! report!)
              result (assoc (or (:probe-result runtime) {})
                            :success true
@@ -825,6 +842,8 @@
            (report! {:stage :probe/failure
                      :status :failed
                      :data failure-context})
+           (when-not (some #(= :lifecycle/plan (:stage %)) @diagnostics)
+             (report-lifecycle-plan-unavailable! report!))
            (report-probe-skipped! report!)
            (assoc failure
                   :completed (mapv :stage @diagnostics)
