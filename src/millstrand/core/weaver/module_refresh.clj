@@ -1006,23 +1006,30 @@
     (report! {:stage stage :status status :data data})))
 
 (defn- projection-value [value]
-  (cond
-    (fn? value) {"callable" true "class" (.getName (class value))}
-    (or (nil? value) (string? value) (number? value) (boolean? value)) value
-    (or (keyword? value) (symbol? value)) (db/json-key value)
-    (map? value) (reduce-kv (fn [projection key nested]
-                              (let [json-key (db/json-key key)]
-                                (when (contains? projection json-key)
-                                  (fail! "Registry projection map keys collide after JSON canonicalization"
-                                         {:key key :canonical-key json-key}))
-                                (assoc projection json-key (projection-value nested))))
-                            (sorted-map)
-                            value)
-    (vector? value) (mapv projection-value value)
-    (set? value) (->> value (map projection-value) (sort-by pr-str) vec)
-    (sequential? value) (mapv projection-value value)
-    :else (fail! "Registry projection contains a value that cannot cross the status boundary"
-                 {:value value :class (str (class value))})))
+  (let [projection
+        (cond
+          (fn? value) {"callable" true "class" (.getName (class value))}
+          (or (nil? value) (string? value) (number? value) (boolean? value)) value
+          (or (keyword? value) (symbol? value)) (db/json-key value)
+          (map? value) (reduce-kv (fn [projection key nested]
+                                    (let [json-key (db/json-key key)]
+                                      (when (contains? projection json-key)
+                                        (fail! "Registry projection map keys collide after JSON canonicalization"
+                                               {:key key :canonical-key json-key}))
+                                      (assoc projection json-key (projection-value nested))))
+                                  (sorted-map)
+                                  value)
+          (vector? value) (mapv projection-value value)
+          (set? value) (->> value (map projection-value) (sort-by pr-str) vec)
+          (sequential? value) (mapv projection-value value)
+          :else (fail! "Registry projection contains a value that cannot cross the status boundary"
+                       {:value value :class (str (class value))}))]
+    (when-not (s/valid? :millstrand.registry-projection/value projection)
+      (fail! "Registry projection contains an invalid JSON value"
+             {:value projection
+              :explain (s/explain-data :millstrand.registry-projection/value
+                                       projection)}))
+    projection))
 
 (defn- candidate-projection
   "Return candidate registry data with executable values redacted.
@@ -1031,21 +1038,28 @@
   callables. The probe reports the complete registry projection while ensuring
   diagnostics never expose a function object."
   [backends candidates]
-  (into (sorted-map)
-        (map (fn [[kind-id {:keys [storage]}]]
-               (let [candidate (get candidates storage)]
-                 (when-not (and (some? candidate)
-                                (every? #(map? (get candidate %))
-                                        [:effective :owners :provenance]))
-                   (fail! "Registry candidate is incomplete for status projection"
-                          {:kind kind-id
-                           :storage storage
-                           :candidate candidate
-                           :required [:effective :owners :provenance]}))
-                 [(db/json-key kind-id)
-                  (projection-value (select-keys candidate
-                                                 [:effective :owners :provenance]))])))
-        backends))
+  (let [projection
+        (into (sorted-map)
+              (map (fn [[kind-id {:keys [storage]}]]
+                     (let [candidate (get candidates storage)]
+                       (when-not (and (some? candidate)
+                                      (every? #(map? (get candidate %))
+                                              [:effective :owners :provenance]))
+                         (fail! "Registry candidate is incomplete for status projection"
+                                {:kind kind-id
+                                 :storage storage
+                                 :candidate candidate
+                                 :required [:effective :owners :provenance]}))
+                       [(db/json-key kind-id)
+                        (projection-value (select-keys candidate
+                                                       [:effective :owners :provenance]))])))
+              backends)]
+    (when-not (s/valid? :millstrand.registry-projection/registry projection)
+      (fail! "Registry projection has an invalid status shape"
+             {:projection projection
+              :explain (s/explain-data :millstrand.registry-projection/registry
+                                       projection)}))
+    projection))
 
 #_{:clj-kondo/ignore [:unused-private-var]}
 (defn- registry-projection

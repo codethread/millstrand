@@ -1447,6 +1447,54 @@
     (is (false? (s/valid? :millstrand.registry-projection/value value))
         (pr-str value))))
 
+(deftest candidate-projection-rejects-malformed-json-values
+  (let [backends {:queries {:storage :queries}}]
+    (doseq [value [##NaN {"callable" false "class" "x"}]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"invalid JSON value"
+                            (@#'module-refresh/candidate-projection
+                             backends
+                             {:queries {:effective {"bad" value}
+                                        :owners {}
+                                        :provenance {}}}))
+          (pr-str value)))))
+
+(deftest fresh-runtime-probe-rejects-malformed-json-values-at-producer
+  (doseq [value [{:nested ##NaN} {"callable" false "class" "x"}]]
+    (let [world (temp-world)
+          workspace (:config-dir world)
+          suffix (str/replace (str (random-uuid)) "-" "")
+          source "modules/malformed-projection.clj"
+          ns-sym (symbol (str "test.module.malformed-projection-" suffix))
+          result (atom nil)]
+      (try
+        (module-source! workspace source ns-sym
+                        (str "(runtime/collect-module-entry! :ops \"bad\" "
+                             (pr-str value) ")"))
+        (spit (io/file workspace "init.clj")
+              (str "(require '[millstrand.api.current.alpha :as current] "
+                   "'[millstrand.api.runtime.alpha :as runtime])\n"
+                   "(runtime/module! (current/runtime) :malformed-projection "
+                   "{:file \"" source "\"})\n"))
+        (reset! result
+                (weaver-runtime/fresh-runtime-probe!
+                 world {:old-generation-baseline
+                        {:status :admitted :projection {}}}))
+        (is (false? (:success @result)) (pr-str @result))
+        (is (= :probe/failure (:stage @result)) (pr-str @result))
+        (is (some #(= "Registry projection contains an invalid JSON value"
+                      (get-in % [:data :message]))
+                  (:diagnostics @result))
+            (pr-str @result))
+        (is (not-any? #(and (= :candidate/staged (:stage %))
+                            (= :completed (:status %)))
+                      (:diagnostics @result))
+            (pr-str @result))
+        (finally
+          (when-let [probe-workspace (:probe/workspace @result)]
+            (delete-tree! (io/file probe-workspace)))
+          (delete-tree! (io/file workspace "..")))))))
+
 (deftest fresh-runtime-probe-requires-admitted-registry-baseline
   (let [world (temp-world)]
     (try
