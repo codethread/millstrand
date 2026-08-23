@@ -254,7 +254,7 @@ make install
 
 ## Why Clojure
 
-Clojure is an unusual choice in a modern agent stack. The weaver is a live Lisp image: a process you attach to, not a binary you restart to change behaviour.
+Clojure is an unusual choice in a modern agent stack. The weaver is a live Lisp image: a process you attach to, with refresh for ordinary source changes and Mill-owned replacement for a planned generation cutover.
 
 ```sh
 mill weaver repl

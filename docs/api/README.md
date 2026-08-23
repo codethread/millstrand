@@ -7,6 +7,8 @@ Two conventions hold across the tier:
 - **The runtime is explicit.** Every operational function takes the target weaver runtime as its first argument. Capture it once at a trusted entry point with `millstrand.api.current.alpha/runtime` and thread it through; nothing else reads ambient state.
 - **Registries are weaver-lifetime.** Queries, patterns, events, and hooks registered at a REPL vanish on restart. Register from startup-loaded code (`init.clj` or an installed spool) when they should survive.
 
+Native work that must continue while Mill replaces a Weaver uses the trusted `millstrand.api.process.alpha` custody surface. Mill retains process facts and output; the owning spool reconciles those facts with its durable records. The exact operations and interruption boundaries are in the [REPL API](../../devflow/specs/repl-api.md) and [Weaver Runtime](../../devflow/specs/daemon-runtime.md) root specs.
+
 ## Which namespace owns your concern
 
 ### Getting a runtime

@@ -142,7 +142,15 @@ The result names the root lib, canonical root, and namespaces in reload order, a
 publication or resource reconciliation; use a targeted refresh for the normal
 path.
 
-Some changes cannot load into a running weaver at all: removing an already-loaded root, repointing one at different source, or bumping a loaded Maven coordinate's version. Refresh refuses those changes and records a pending generation that takes effect at the next weaver restart. That restart is not free: replacing a weaver ends every agent run it is supervising, and restarting the canonical weaver requires explicit user sign-off. Treat a pending generation as a deliberate step, not a reflex; the [Weaver Runtime specification](../../devflow/specs/daemon-runtime.md) defines the classification and cutover semantics in SPEC-004.C44c–C44f.
+Some changes cannot load into a running weaver at all: removing an already-loaded root, repointing one at different source, or bumping a loaded Maven coordinate's version. Refresh refuses those changes and records a pending generation that takes effect at the next weaver restart. Use the Mill-owned transition when you are ready:
+
+```sh
+mill weaver restart --workspace "${workspace:?}"
+```
+
+Restart probes the fresh generation before stopping the old one. A failed probe leaves the old generation serving and retains diagnostics. After the cutover begins, the old generation does not return to service. Mill-routed requests that have not been sent wait for the replacement within their existing deadline; an accepted request is sent once and is never replayed. Direct REPL sessions see a disconnect and reconnect themselves.
+
+Restart continuity covers native children only when their owning spool uses `millstrand.api.process.alpha` and reconciles the retained process facts. Ordinary in-JVM callbacks remain interruptible, and domain spools decide how interruption changes their durable state. Restarting a shared weaver still requires explicit user sign-off; the [Weaver Runtime specification](../../devflow/specs/daemon-runtime.md) defines the probe, admission, custody, and interruption contracts in SPEC-004.C113–C123.
 
 ## REPL hygiene in a shared weaver
 
