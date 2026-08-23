@@ -109,7 +109,17 @@ test-go:
 # caller convergence over a gated probe. Keep it out of the normal Go suite,
 # but make its explicit land-quality invocation mandatory.
 test-restart-acceptance: build
-	cd cli && go test -tags=integration -count=1 -run '^TestDisposableWeaverRestartAcceptance$$' ./...
+	@output=$$(mktemp); \
+	trap 'rm -f "$$output"' EXIT; \
+	if ! (cd cli && go test -json -tags=integration -count=1 -run '^TestDisposableWeaverRestartAcceptance$$' ./...) >"$$output"; then \
+		cat "$$output"; \
+		exit 1; \
+	fi; \
+	cat "$$output"; \
+	if ! grep -F '"Action":"pass"' "$$output" | grep -F '"Test":"TestDisposableWeaverRestartAcceptance"' >/dev/null; then \
+		echo 'test-restart-acceptance: TestDisposableWeaverRestartAcceptance did not run and pass' >&2; \
+		exit 1; \
+	fi
 
 test-e2e:
 	clojure -M:e2e

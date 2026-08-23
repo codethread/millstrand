@@ -24,7 +24,16 @@ func TestQualityGraphKeepsRestartAcceptanceAndBuildDependencies(t *testing.T) {
 			t.Fatalf("external spool check remains in graph: %#v", c)
 		}
 	}
-	for _, name := range []string{"restart-acceptance", "acceptance-kanban", "acceptance-docs", "acceptance-neovim"} {
+	expected := map[string]struct {
+		argv  []string
+		heavy bool
+	}{
+		"restart-acceptance": {argv: []string{"make", "test-restart-acceptance"}, heavy: true},
+		"acceptance-kanban":  {argv: []string{"test/shell/acceptance/millstrand-millhouse-kanban.sh"}},
+		"acceptance-docs":    {argv: []string{"test/shell/acceptance/millstrand-docs.sh"}},
+		"acceptance-neovim":  {argv: []string{"test/shell/acceptance/millstrand-neovim.sh"}},
+	}
+	for name, want := range expected {
 		var found *check
 		for i := range qualityChecks {
 			if qualityChecks[i].name == name {
@@ -35,7 +44,22 @@ func TestQualityGraphKeepsRestartAcceptanceAndBuildDependencies(t *testing.T) {
 		if found == nil || len(found.deps) != 1 || found.deps[0] != "build" {
 			t.Fatalf("%s dependencies = %#v, want build", name, found)
 		}
+		if !equalStrings(found.argv, want.argv) || found.heavy != want.heavy {
+			t.Fatalf("%s command/heavy = %#v/%t, want %#v/%t", name, found.argv, found.heavy, want.argv, want.heavy)
+		}
 	}
+}
+
+func equalStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestRunnerBoundsHeavyChecksAndOverlapsLightChecks(t *testing.T) {

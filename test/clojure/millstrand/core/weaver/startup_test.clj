@@ -197,6 +197,50 @@
         (weaver-runtime/stop! rt)
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
+(deftest final-runtime-publication-requires-admitted-ownership
+  (let [candidate-world (temp-world)
+        replacement-world (temp-world)
+        published (promise)
+        release (promise)
+        original-publish! metadata/publish!
+        candidate
+        (future
+          (try
+            (with-redefs [metadata/publish!
+                          (fn [meta]
+                            (let [file (original-publish! meta)]
+                              (when (= (:state-dir candidate-world) (:state-dir meta))
+                                (deliver published true)
+                                @release)
+                              file))]
+              (weaver-runtime/start! nil {:world candidate-world}))
+            (catch Throwable t
+              t)))]
+    (try
+      (is (true? (deref published (test-support/await-budget-ms) false))
+          "candidate startup reaches final publication")
+      (let [admitted @weaver-runtime/current-runtime]
+        (is admitted "candidate generation is ambiently admitted")
+        (weaver-runtime/stop! admitted)
+        (let [replacement (weaver-runtime/start! nil {:world replacement-world})]
+          (try
+            (deliver release true)
+            (let [failure (deref candidate (test-support/await-budget-ms) ::timed-out)]
+              (is (not= ::timed-out failure) "candidate startup returns after release")
+              (is (instance? clojure.lang.ExceptionInfo failure))
+              (is (= :ambient-runtime-ownership-lost (:reason (ex-data failure))))
+              (is (= replacement @weaver-runtime/current-runtime))
+              (is (nil? (metadata/read-metadata candidate-world))))
+            (finally
+              (weaver-runtime/stop! replacement)))))
+      (finally
+        (deliver release true)
+        (when-let [runtime @weaver-runtime/current-runtime]
+          (weaver-runtime/stop! runtime))
+        (reset! weaver-runtime/current-runtime nil)
+        (delete-tree! (io/file (:config-dir candidate-world) ".."))
+        (delete-tree! (io/file (:config-dir replacement-world) ".."))))))
+
 (deftest unpublished-runtimes-coexist-with-isolated-storage-and-registries
   (let [world-a (temp-world)
         world-b (temp-world)

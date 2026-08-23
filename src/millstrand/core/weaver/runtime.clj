@@ -677,8 +677,21 @@
               (when (publishes-ambient-runtime? publish? probe?)
                 ;; The startup CAS admitted this generation to the ambient slot.
                 ;; Publish the final runtime snapshot so stop! and ambient
-                ;; callers observe the same generation.
-                (reset! current-runtime published-runtime))
+                ;; callers observe the same generation. A concurrent stop and
+                ;; replacement start may have withdrawn that admission; never
+                ;; resurrect or overwrite the replacement in that case.
+                (when-not
+                 (loop []
+                   (let [ambient @current-runtime]
+                     (cond
+                       (not= (:generation-id runtime) (:generation-id ambient)) false
+                       (compare-and-set! current-runtime ambient published-runtime) true
+                       :else (recur))))
+                  (throw (ex-info "Weaver runtime lost ambient publication ownership during startup"
+                                  {:reason :ambient-runtime-ownership-lost
+                                   :generation-id (:generation-id runtime)
+                                   :published-generation-id
+                                   (:generation-id @current-runtime)}))))
               published-runtime)))
         (catch Throwable t
           (when port
