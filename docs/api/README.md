@@ -7,6 +7,8 @@ Two conventions hold across the tier:
 - **The runtime is explicit.** Every operational function takes the target weaver runtime as its first argument. Capture it once at a trusted entry point with `millstrand.api.current.alpha/runtime` and thread it through; nothing else reads ambient state.
 - **Registries are weaver-lifetime.** Queries, patterns, events, and hooks registered at a REPL vanish on restart. Register from startup-loaded code (`init.clj` or an installed spool) when they should survive.
 
+Native work that must continue while Mill replaces a Weaver uses the trusted `millstrand.api.process.alpha` custody surface. Mill retains process facts and output; the owning spool reconciles those facts with its durable records. The exact operations and interruption boundaries are in the [REPL API](../../devflow/specs/repl-api.md) and [Weaver Runtime](../../devflow/specs/daemon-runtime.md) root specs.
+
 ## Which namespace owns your concern
 
 ### Getting a runtime
@@ -17,6 +19,12 @@ Two conventions hold across the tier:
 | [`runtime`](./runtime.api.md) | Module/config workflows: declare, plan, refresh, inspect status, reload code, read `spool-state`, and read the runtime clock. |
 | [`lifecycle`](./lifecycle.api.md) | Your module has live effects as well as registry entries: `defresource` for a paired open/close, `defseed` for one idempotent apply, `defreconcile` for repeated desired-state work. |
 | [`clock`](./clock.api.md) | Code needs one capability for current time and sleeping, including deterministic polling with a manual test Clock. |
+
+### Planned native process custody
+
+| Namespace | Reach for it when |
+| --- | --- |
+| `millstrand.api.process.alpha` | Planned surface for launching native work that must outlive Weaver replacement, then reading, cancelling, and reconciling its Mill-retained process facts. It is not shipped yet. |
 
 ### Strand data
 

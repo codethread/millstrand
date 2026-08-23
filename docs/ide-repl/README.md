@@ -102,6 +102,8 @@ Put behavior that should survive a restart in a module source file first:
   [:= [:attr :owner] "me"])
 ```
 
+The module source is what startup reloads in the replacement generation. A direct REPL registration belongs to the current generation and disappears when that generation ends. During `mill weaver restart`, reconnect the editor after the replacement is ready; Mill does not replay forms that were accepted by the old generation.
+
 Save the file as `$workspace/my-workspace.clj`. A workspace file module is loaded from the exact path relative to the selected workspace; the directory is not added to the classpath. Append this activation form to `$workspace/init.local.clj`; leave the generated `$workspace/init.clj` and its Batteries activation unchanged:
 
 ```clojure

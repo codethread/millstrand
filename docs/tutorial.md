@@ -294,7 +294,7 @@ Exit the REPL, then stop this workspace's weaver:
 mill weaver stop
 ```
 
-Stopping a weaver ends its process-local runtime state. The graph remains in SQLite, and durable modules are reconstructed when the next weaver starts. Do not restart a shared weaver casually: other users or agent runs may depend on that generation.
+Stopping a weaver ends its process-local runtime state. The graph remains in SQLite, and durable modules are reconstructed when the next weaver starts. For a planned replacement, use `mill weaver restart` after obtaining sign-off from other users of the shared weaver. Mill probes the replacement before cutover, waits unsent routed requests within their deadlines, and never replays an accepted request. Native work continues only when its owning spool uses the process-custody API; direct REPL sessions disconnect and reconnect to the new generation.
 
 ## Where to go next
 
