@@ -198,6 +198,40 @@
         (weaver-runtime/stop! rt)
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
+(deftest probe-preserves-live-metadata-preflight
+  (let [world (temp-world)
+        rt (weaver-runtime/start! nil {:world world :publish? false})]
+    (try
+      (let [failure (try
+                      (weaver-runtime/start! nil {:world world
+                                                  :probe? true
+                                                  :storage :sqlite-memory})
+                      (catch Throwable t t))]
+        (is (instance? clojure.lang.ExceptionInfo failure))
+        (is (= :metadata-present (:reason (ex-data failure))))
+        (is (= (:config-dir world) (:config-dir (ex-data failure)))))
+      (finally
+        (weaver-runtime/stop! rt)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest probe-preserves-orphaned-socket-preflight
+  (let [world (temp-world)]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/socket-file world) "orphan")
+      (let [failure (try
+                      (weaver-runtime/start! nil {:world world
+                                                  :probe? true
+                                                  :storage :sqlite-memory})
+                      (catch Throwable t t))]
+        (is (instance? clojure.lang.ExceptionInfo failure))
+        (is (= :orphaned-socket (:reason (ex-data failure))))
+        (is (= (.getPath (metadata/socket-file world))
+               (:socket-path (ex-data failure)))))
+      (finally
+        (metadata/delete! world)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
 (deftest final-runtime-publication-requires-admitted-ownership
   (let [world (temp-world)
         published (promise)
@@ -261,6 +295,7 @@
                       (weaver-runtime/start! nil {:world world :publish? false})
                       (catch Throwable t t))]
         (is (instance? clojure.lang.ExceptionInfo failure))
+        (is (= :metadata-present (:reason (ex-data failure))))
         (is (= "Weaver metadata already exists for weaver world"
                (ex-message failure)))
         (is (= (:config-dir world) (:config-dir (ex-data failure)))))
@@ -276,6 +311,50 @@
         (try
           (deref first (test-support/await-budget-ms) ::timed-out)
           (catch java.util.concurrent.CancellationException _))
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pre-publication-claim-rejects-deterministic-overlap
+  (let [world (temp-world)
+        first-claim (atom nil)
+        second-claim (atom nil)]
+    (try
+      (metadata/claim-pre-publication-artifacts! world first-claim)
+      (let [failure (try
+                      (metadata/claim-pre-publication-artifacts!
+                       world second-claim)
+                      (catch Throwable t t))]
+        (is (instance? clojure.lang.ExceptionInfo failure))
+        (is (= :pre-publication-claim-held (:reason (ex-data failure))))
+        (is (= (:state-dir world) (:state-dir (ex-data failure))))
+        (is (nil? @second-claim)))
+      (finally
+        (metadata/release-pre-publication-artifacts! world first-claim)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pre-publication-claim-canonicalizes-state-dir-aliases
+  (let [world (temp-world)
+        state-dir (io/file (:state-dir world))
+        root (.getParentFile state-dir)
+        alias-world (assoc world :state-dir (.getPath (io/file root "alias" ".." "state")))
+        symlink-file (io/file root "state-link")
+        symlink-world (assoc world :state-dir (.getPath symlink-file))
+        first-claim (atom nil)]
+    (try
+      (.mkdirs state-dir)
+      (java.nio.file.Files/createSymbolicLink (.toPath symlink-file)
+                                              (.toPath state-dir)
+                                              (make-array java.nio.file.attribute.FileAttribute 0))
+      (metadata/claim-pre-publication-artifacts! world first-claim)
+      (doseq [alias [alias-world symlink-world]]
+        (let [failure (try
+                        (metadata/claim-pre-publication-artifacts!
+                         alias (atom nil))
+                        (catch Throwable t t))]
+          (is (instance? clojure.lang.ExceptionInfo failure))
+          (is (= :pre-publication-claim-held (:reason (ex-data failure))))
+          (is (= (:state-dir alias) (:state-dir (ex-data failure))))))
+      (finally
+        (metadata/release-pre-publication-artifacts! world first-claim)
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
 (deftest startup-failure-cleans-only-its-published-metadata
@@ -450,7 +529,10 @@
       (spit (metadata/json-metadata-file world) "original")
       (spit (metadata/socket-file world) "successor socket")
       (metadata/claim-pre-publication-artifacts! world successor-claim)
-      (is (nil? (metadata/delete-owned! original world)))
+      (is (= {:status :blocked
+              :reason :blocked-by-successor-claim
+              :state-dir (:state-dir world)}
+             (metadata/delete-owned! original world)))
       (is (= original (metadata/read-metadata world)))
       (is (.exists (metadata/json-metadata-file world)))
       (is (.exists (metadata/socket-file world)))

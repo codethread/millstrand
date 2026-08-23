@@ -610,7 +610,11 @@
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
   (let [world (or world (weaver-config/world))
         resolved-release-marker (resolve-release-marker release-marker)]
-    (when-not probe?
+    (if probe?
+      ;; Probe worlds are normally disposable, but `:probe?` does not make an
+      ;; arbitrary caller-supplied world safe to reuse. Keep the same
+      ;; metadata/socket preflight before opening storage in either mode.
+      (metadata/validate-pre-publication-artifacts! world)
       (metadata/claim-pre-publication-artifacts! world pre-publication-claim))
     (try
       (.mkdirs (io/file (:state-dir world)))
@@ -709,6 +713,12 @@
               (let [published-runtime (if probe?
                                         runtime
                                         (let [metadata-file (metadata/publish! meta)]
+                                          ;; Release before the hook: publication's
+                                          ;; nonce now owns the artifacts, and a
+                                          ;; hook may stop or start this world.
+                                          ;; Keeping the pre-publication claim
+                                          ;; through that hook would make safe
+                                          ;; teardown conservatively skip deletion.
                                           (metadata/release-pre-publication-artifacts!
                                            world pre-publication-claim)
                                           (when *after-metadata-publish!*
@@ -970,6 +980,7 @@
   [runtime]
   (let [world {:state-dir (get-in runtime [:metadata :state-dir])}
         primary (atom nil)
+        artifacts (atom nil)
         attempt! (fn [step f]
                    (try
                      (f)
@@ -1003,10 +1014,13 @@
                           published))))
          ;; This remains last: discovery stays available until its endpoints
          ;; have been asked to close, and stale handles cannot unlink successors.
-    (attempt! :artifacts/delete #(metadata/delete-owned! (:metadata runtime) world))
+    (attempt! :artifacts/delete
+              #(reset! artifacts (metadata/delete-owned! (:metadata runtime) world)))
     (if-let [failure @primary]
       (throw failure)
-      {:stopped true})))
+      (cond-> {:stopped true}
+        (= :blocked-by-successor-claim (:reason @artifacts))
+        (assoc :artifacts @artifacts)))))
 
 (def ^:private main-arg-spec
   {:op :weaver-start

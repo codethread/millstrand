@@ -94,9 +94,10 @@
    ;; DynamicClassLoader and retained registry snapshots stay serial until
    ;; concurrent execution has an explicit proof.
    'millstrand.core.weaver.registry-snapshots-test
-   ;; Startup failure tests redefine scheduler, storage, and metadata Vars.
-   ;; `with-redefs` is JVM-global, so this namespace cannot share the parallel
-   ;; parent with runtime consumers.
+   ;; Startup tests park futures across a process-local artifact claim and
+   ;; redefine scheduler, storage, and metadata Vars. The claim map and
+   ;; `with-redefs` are JVM-global, so this namespace cannot share the
+   ;; parallel parent with runtime consumers.
    'millstrand.core.weaver.startup-test
    'millstrand.core.weaver.modules-test])
 

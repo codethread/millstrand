@@ -18,27 +18,34 @@
 
 (declare read-metadata socket-file stale-or-missing?)
 
+(defn- canonical-state-dir
+  "Return the filesystem identity used for process-local state-dir claims."
+  [world]
+  (.getPath (.getCanonicalFile (io/file (:state-dir world)))))
+
 (defn- release-pre-publication-claim-unlocked!
   [world claim]
-  (let [state-dir (:state-dir world)
+  (let [state-dir (canonical-state-dir world)
         token @claim]
     (when (and (some? token)
                (identical? token (get @pre-publication-claims state-dir)))
       (swap! pre-publication-claims dissoc state-dir))
     (reset! claim nil)))
 
-(defn- validate-pre-publication-artifacts!
+(defn validate-pre-publication-artifacts!
   "Fail loudly unless `world` has no live metadata or orphaned socket."
   [world]
   (let [existing (read-metadata world)
         ^java.io.File socket-file (socket-file world)]
     (when-not (stale-or-missing? existing)
       (throw (ex-info "Weaver metadata already exists for weaver world"
-                      {:config-dir (:config-dir world)
+                      {:reason :metadata-present
+                       :config-dir (:config-dir world)
                        :metadata existing})))
     (when (and (nil? existing) (.exists socket-file))
       (throw (ex-info "Weaver socket exists without metadata; cannot prove weaver world is stale"
-                      {:config-dir (:config-dir world)
+                      {:reason :orphaned-socket
+                       :config-dir (:config-dir world)
                        :socket-path (.getPath socket-file)})))))
 
 (defn claim-pre-publication-artifacts!
@@ -53,10 +60,11 @@
   `rollback-pre-publication-artifacts!`."
   [world claim]
   (locking artifact-monitor
-    (let [state-dir (:state-dir world)]
+    (let [state-dir (canonical-state-dir world)]
       (when (get @pre-publication-claims state-dir)
         (throw (ex-info "Weaver startup already owns the world socket before publication"
-                        {:state-dir state-dir})))
+                        {:reason :pre-publication-claim-held
+                         :state-dir (:state-dir world)})))
       (validate-pre-publication-artifacts! world)
       (let [token (Object.)]
         (swap! pre-publication-claims assoc state-dir token)
@@ -217,15 +225,23 @@
 (defn delete-owned!
   "Delete discovery artifacts still owned by `expected`.
 
-  Return true when the artifacts were removed. Teardown owns artifacts only
-  after its metadata has been published with the matching nonce."
+  Return true when the artifacts were removed, or a blocked result when a
+  successor startup currently holds the pre-publication claim. Teardown owns
+  artifacts only after its metadata has been published with the matching
+  nonce; a claim therefore suppresses deletion rather than making stale stop
+  destructive."
   [expected world]
   (locking artifact-monitor
-    (let [actual (read-metadata world)]
-      (when (and (nil? (get @pre-publication-claims (:state-dir world)))
-                 (current? expected actual))
-        (delete! world)
-        true))))
+    (let [actual (read-metadata world)
+          claim (get @pre-publication-claims (canonical-state-dir world))]
+      (cond
+        claim {:status :blocked
+               :reason :blocked-by-successor-claim
+               :state-dir (:state-dir world)}
+        (current? expected actual) (do
+                                     (delete! world)
+                                     true)
+        :else nil))))
 
 (defn rollback-pre-publication-artifacts!
   "Roll back artifacts owned by the active startup `claim`.
