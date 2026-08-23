@@ -218,21 +218,19 @@
       (let [admitted @weaver-runtime/current-runtime]
         (is admitted "candidate generation is ambiently admitted")
         (weaver-runtime/stop! admitted)
+        (deliver release true)
+        (let [failure (deref candidate (test-support/await-budget-ms) ::timed-out)]
+          (is (not= ::timed-out failure) "candidate startup returns after release")
+          (is (instance? clojure.lang.ExceptionInfo failure))
+          (is (= :ambient-runtime-ownership-lost (:reason (ex-data failure)))))
         (let [replacement (weaver-runtime/start! nil {:world world})]
-          (try
-            (deliver release true)
-            (let [failure (deref candidate (test-support/await-budget-ms) ::timed-out)]
-              (is (not= ::timed-out failure) "candidate startup returns after release")
-              (is (instance? clojure.lang.ExceptionInfo failure))
-              (is (= :ambient-runtime-ownership-lost (:reason (ex-data failure))))
-              (is (= (:generation-id replacement)
-                     (:generation-id @weaver-runtime/current-runtime)))
-              (is (= (:nonce (:metadata replacement))
-                     (:nonce (metadata/read-metadata world))))
-              (is (.exists (metadata/socket-file world)))
-              (is (true? (get (socket-request replacement "status" {}) "ok"))))
-            (finally
-              (weaver-runtime/stop! replacement)))))
+          (is (= (:generation-id replacement)
+                 (:generation-id @weaver-runtime/current-runtime)))
+          (is (= (:nonce (:metadata replacement))
+                 (:nonce (metadata/read-metadata world))))
+          (is (.exists (metadata/socket-file world)))
+          (is (true? (get (socket-request replacement "status" {}) "ok")))
+          (weaver-runtime/stop! replacement)))
       (finally
         (deliver release true)
         (when-not (future-done? candidate)
@@ -329,6 +327,33 @@
           (is (true? (get (socket-request replacement "status" {}) "ok")))
           (finally
             (weaver-runtime/stop! replacement))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pre-publication-cleanup-failure-is-suppressed-and-releases-its-claim
+  (let [world (temp-world)
+        claim-count (ns-resolve 'millstrand.core.weaver.metadata
+                                'pre-publication-claim-count)]
+    (try
+      (let [failure
+            (with-redefs [scheduler/rearm! (fn [_]
+                                             (throw (ex-info "rearm primary failure" {})))
+                          metadata/delete! (fn [_]
+                                             (throw (ex-info "artifact delete failure" {})))]
+              (try
+                (weaver-runtime/start! nil {:world world :publish? false})
+                (catch Throwable t t)))]
+        (is (= "rearm primary failure" (ex-message failure)))
+        (is (some #(and (= :artifacts/delete (:teardown/step (ex-data %)))
+                        (= "artifact delete failure" (some-> % ex-cause ex-message)))
+                  (.getSuppressed ^Throwable failure)))
+        (is (zero? (claim-count))))
+      (metadata/delete! world)
+      (let [runtime (weaver-runtime/start! nil {:world world :publish? false})]
+        (try
+          (is (zero? (claim-count)))
+          (finally
+            (weaver-runtime/stop! runtime))))
       (finally
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
@@ -490,7 +515,9 @@
         (is failure "expected startup failure")
         (is (= "Selected workspace startup file failed to load" (ex-message failure)))
         (is (some #(= "post spool boom" %) (throwable-messages failure)))
-        (is (some #(= "Spool state close hook failed" (ex-message %))
+        (is (some #(and (= :spool-state/close (:teardown/step (ex-data %)))
+                        (= "Spool state close hook failed"
+                           (some-> % ex-cause ex-message)))
                   (.getSuppressed failure))))
       (is (empty? (live-thread-names thread-prefix)))
       (is (nil? (metadata/read-metadata world)))

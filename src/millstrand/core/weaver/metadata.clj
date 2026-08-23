@@ -9,27 +9,40 @@
   (:import [java.lang ProcessHandle]
            [java.nio.file Files StandardCopyOption]
            [java.util.concurrent ConcurrentHashMap]
-           [java.util.function Function]
            [java.util UUID]))
 
 (def ^:private json-file-name "weaver.json")
 (def ^:private edn-file-name "weaver.edn")
 (def ^:private socket-file-name "weaver.sock")
-(def ^:private world-locks (ConcurrentHashMap.))
+(def ^:private pre-publication-claims (ConcurrentHashMap.))
 
-(defn with-world-lock
-  "Call `f` while holding this process's ownership lock for `world`.
+(defn- pre-publication-claim-count
+  "Return the number of active process-local startup socket claims."
+  []
+  (.size ^ConcurrentHashMap pre-publication-claims))
 
-  The lock serializes a same-world start or teardown around its discovery
-  artifacts. It is intentionally process-local: cross-process ownership stays
-  defined by the published metadata and operating-system socket bind."
+(defn with-pre-publication-socket-claim
+  "Call `f` with this process's temporary ownership claim for `world`.
+
+  The claim starts immediately before socket bind and is released after
+  publication or rollback. It never blocks teardown or runs userland under a
+  monitor. Cross-process ownership remains defined by the operating-system
+  socket bind and published metadata."
   [world f]
   (let [state-dir (:state-dir world)
-        lock (.computeIfAbsent ^ConcurrentHashMap world-locks state-dir
-                               (reify Function
-                                 (apply [_ _] (Object.))))]
-    (locking lock
-      (f))))
+        claim (Object.)]
+    (when (.putIfAbsent ^ConcurrentHashMap pre-publication-claims state-dir claim)
+      (throw (ex-info "Weaver startup already owns the world socket before publication"
+                      {:state-dir state-dir})))
+    (try
+      (f claim)
+      (finally
+        (.remove ^ConcurrentHashMap pre-publication-claims state-dir claim)))))
+
+(defn pre-publication-claim-owner?
+  "Return true when `claim` still owns `world`'s temporary startup claim."
+  [world claim]
+  (identical? claim (.get ^ConcurrentHashMap pre-publication-claims (:state-dir world))))
 
 (defn canonical-db-path
   "Return the canonical filesystem path for `db-file`."
@@ -160,26 +173,38 @@
 (defn delete!
   "Delete metadata and socket files for `world`."
   [world]
-  (.delete (metadata-file world))
-  (.delete (json-metadata-file world))
-  (.delete (socket-file world)))
+  (doseq [^java.io.File file [(metadata-file world)
+                              (json-metadata-file world)
+                              (socket-file world)]
+          :when (.exists file)]
+    (Files/delete (.toPath file)))
+  nil)
 
 (declare current?)
 
 (defn delete-owned!
   "Delete discovery artifacts still owned by `expected`.
 
-  Return true when the artifacts were removed. Before metadata publication,
-  absent metadata belongs to this locked startup attempt, so its socket and any
-  partially written metadata files are removed too. Metadata for a different
-  nonce is a newer generation and is left untouched."
+  Return true when the artifacts were removed. Teardown owns artifacts only
+  after its metadata has been published with the matching nonce."
   [expected world]
-  (with-world-lock
-    world
-    #(let [actual (read-metadata world)]
-       (when (or (nil? actual) (current? expected actual))
-         (delete! world)
-         true))))
+  (let [actual (read-metadata world)]
+    (when (current? expected actual)
+      (delete! world)
+      true)))
+
+(defn delete-pre-publication-owned!
+  "Roll back artifacts owned by the active startup `claim`.
+
+  Before publication, the claim authorizes deleting nil or partial metadata.
+  After publication, the generation nonce is the sole ownership proof. A
+  different nonce always belongs to another generation and is left intact."
+  [expected world claim]
+  (let [actual (read-metadata world)]
+    (when (or (current? expected actual)
+              (and (nil? actual) (pre-publication-claim-owner? world claim)))
+      (delete! world)
+      true)))
 
 (defn current?
   "Return true when `actual` is metadata published by `expected`.

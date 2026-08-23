@@ -372,28 +372,25 @@
 
 (defn- close-spool-state!
   "Close runtime-owned spool state resources before storage disappears."
-  ([runtime] (close-spool-state! runtime nil))
-  ([runtime startup-error]
-   (let [failures (atom [])]
-     (doseq [[key value] @(:spool-state runtime)
-             :let [close-fn (:close-fn value)]
-             :when close-fn]
-       (try
-         (close-fn)
-         (catch Throwable t
-           (let [close-error (ex-info "Spool state close hook failed"
-                                      {:spool-state/key key
-                                       :exception/message (ex-message t)}
-                                      t)]
-             (swap! failures conj close-error)
-             (when startup-error
-               (.addSuppressed ^Throwable startup-error close-error))))))
-     (when (and (nil? startup-error) (seq @failures))
-       (let [primary (first @failures)]
-         (doseq [failure (rest @failures)]
-           (.addSuppressed ^Throwable primary failure))
-         (throw primary))))
-   nil))
+  [runtime]
+  (let [failures (atom [])]
+    (doseq [[key value] @(:spool-state runtime)
+            :let [close-fn (:close-fn value)]
+            :when close-fn]
+      (try
+        (close-fn)
+        (catch Throwable t
+          (swap! failures conj
+                 (ex-info "Spool state close hook failed"
+                          {:spool-state/key key
+                           :exception/message (ex-message t)}
+                          t)))))
+    (when (seq @failures)
+      (let [primary (first @failures)]
+        (doseq [failure (rest @failures)]
+          (.addSuppressed ^Throwable primary failure))
+        (throw primary)))
+    nil))
 
 (defn- cleanup-step!
   "Run one teardown step, attaching a structured failure to `primary`.
@@ -607,7 +604,7 @@
 
 (defn- start-with-options-unlocked!
   [db-file {:keys [world name publish? storage release-marker probe? diagnostic!
-                   old-generation-baseline]
+                   old-generation-baseline pre-publication-claim]
             :or {publish? true}}]
   (when (and (publishes-ambient-runtime? publish? probe?) @current-runtime)
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
@@ -759,22 +756,27 @@
             ;; published. Close it while storage remains available, without
             ;; masking the original startup exception.
             (cleanup-step! t :module-lifecycle/close #(close-module-lifecycle! runtime))
-            (cleanup-step! t :spool-state/close #(close-spool-state! runtime t))
+            (cleanup-step! t :spool-state/close #(close-spool-state! runtime))
             (cleanup-step! t :storage/close #(close-storage! runtime))
             ;; Transports are down before discovery files disappear. This one
             ;; conditional operation covers an unpublished socket and a partial
             ;; metadata write without ever unlinking a newer generation.
             (cleanup-step! t :artifacts/delete
-                           #(when-not probe? (metadata/delete-owned! meta world)))
+                           #(when-not probe?
+                              (metadata/delete-pre-publication-owned!
+                               meta world pre-publication-claim)))
             (throw t)))))))
 
 (defn- start-with-options!
-  "Start one runtime while holding its process-local world ownership lock."
+  "Start one runtime with a temporary claim over its pre-publication socket."
   [db-file opts]
   (let [world (or (:world opts) (weaver-config/world))]
-    (metadata/with-world-lock
-      world
-      #(start-with-options-unlocked! db-file (assoc opts :world world)))))
+    (if (:probe? opts)
+      (start-with-options-unlocked! db-file (assoc opts :world world))
+      (metadata/with-pre-publication-socket-claim
+        world
+        #(start-with-options-unlocked!
+          db-file (assoc opts :world world :pre-publication-claim %))))))
 
 (defn start!
   "Start a weaver runtime for `db-file` and optional `world`.
@@ -965,47 +967,44 @@
   "Stop `runtime` without unlinking a newer generation's world artifacts."
   [runtime]
   (let [world {:state-dir (get-in runtime [:metadata :state-dir])}]
-    (metadata/with-world-lock
-      world
-      (fn []
-        (let [primary (atom nil)
-              attempt! (fn [step f]
-                         (try
-                           (f)
-                           (catch Throwable t
-                             (let [failure (ex-info "Weaver teardown step failed"
-                                                    {:teardown/step step
-                                                     :exception/message (ex-message t)}
-                                                    t)]
-                               (if-let [first-failure @primary]
-                                 (.addSuppressed ^Throwable first-failure failure)
-                                 (reset! primary failure))))))]
-          (attempt! :event-system/close #(stop-event-system! runtime))
-          (attempt! :socket/close #(when-let [socket-runtime (:socket-runtime runtime)]
-                                     (socket/close! socket-runtime)))
-          (attempt! :nrepl/close #(when-let [server (:server runtime)]
-                                    (nrepl/stop-server server)))
+    (let [primary (atom nil)
+          attempt! (fn [step f]
+                     (try
+                       (f)
+                       (catch Throwable t
+                         (let [failure (ex-info "Weaver teardown step failed"
+                                                {:teardown/step step
+                                                 :exception/message (ex-message t)}
+                                                t)]
+                           (if-let [first-failure @primary]
+                             (.addSuppressed ^Throwable first-failure failure)
+                             (reset! primary failure))))))]
+      (attempt! :event-system/close #(stop-event-system! runtime))
+      (attempt! :socket/close #(when-let [socket-runtime (:socket-runtime runtime)]
+                                 (socket/close! socket-runtime)))
+      (attempt! :nrepl/close #(when-let [server (:server runtime)]
+                                (nrepl/stop-server server)))
          ;; Spool resources close while storage is still available to their
          ;; schedulers and workers. A failed step never skips a later one.
-          (attempt! :module-lifecycle/close #(close-module-lifecycle! runtime))
-          (attempt! :spool-state/close #(close-spool-state! runtime))
-          (attempt! :storage/close #(close-storage! runtime))
-          (attempt! :nrepl/port-registration
-                    #(when-let [port (get-in runtime [:metadata :endpoint :port])]
-                       (swap! nrepl-port-runtimes
-                              dissoc-generation-nrepl-runtime port runtime)))
+      (attempt! :module-lifecycle/close #(close-module-lifecycle! runtime))
+      (attempt! :spool-state/close #(close-spool-state! runtime))
+      (attempt! :storage/close #(close-storage! runtime))
+      (attempt! :nrepl/port-registration
+                #(when-let [port (get-in runtime [:metadata :endpoint :port])]
+                   (swap! nrepl-port-runtimes
+                          dissoc-generation-nrepl-runtime port runtime)))
          ;; Generation identity, not map equality, owns the ambient slot.
-          (attempt! :ambient/publication
-                    #(swap! current-runtime
-                            (fn [published]
-                              (when-not (= (:generation-id published) (:generation-id runtime))
-                                published))))
+      (attempt! :ambient/publication
+                #(swap! current-runtime
+                        (fn [published]
+                          (when-not (= (:generation-id published) (:generation-id runtime))
+                            published))))
          ;; This remains last: discovery stays available until its endpoints
          ;; have been asked to close, and stale handles cannot unlink successors.
-          (attempt! :artifacts/delete #(metadata/delete-owned! (:metadata runtime) world))
-          (if-let [failure @primary]
-            (throw failure)
-            {:stopped true}))))))
+      (attempt! :artifacts/delete #(metadata/delete-owned! (:metadata runtime) world))
+      (if-let [failure @primary]
+        (throw failure)
+        {:stopped true}))))
 
 (def ^:private main-arg-spec
   {:op :weaver-start
