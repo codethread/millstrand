@@ -465,17 +465,16 @@
         (.delete file)
         (throw t)))))
 
-(defn stop!
-  "Stop a JSON socket server runtime.
+(defn close!
+  "Stop a JSON socket server runtime without unlinking its socket path."
+  [socket-runtime]
+  (when socket-runtime
+    (reset! (:running? socket-runtime) false)
+    (.close ^ServerSocketChannel (:server socket-runtime))))
 
-  With no second argument, remove its socket file. `remove-file?` lets a
-  losing generation close its own server without unlinking a replacement
-  generation's same-world socket path."
-  ([socket-runtime]
-   (stop! socket-runtime true))
-  ([socket-runtime remove-file?]
-   (when socket-runtime
-     (reset! (:running? socket-runtime) false)
-     (.close ^ServerSocketChannel (:server socket-runtime))
-     (when remove-file?
-       (.delete (io/file (:socket-path socket-runtime)))))))
+(defn stop!
+  "Stop a JSON socket server runtime and remove its socket file."
+  [socket-runtime]
+  (when socket-runtime
+    (close! socket-runtime)
+    (.delete (io/file (:socket-path socket-runtime)))))

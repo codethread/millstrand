@@ -236,10 +236,89 @@
         (deliver release true)
         (when-not (future-done? candidate)
           (future-cancel candidate))
-        (deref candidate (test-support/await-budget-ms) ::timed-out)
+        (try
+          (deref candidate (test-support/await-budget-ms) ::timed-out)
+          (catch java.util.concurrent.CancellationException _))
         (when-let [runtime @weaver-runtime/current-runtime]
           (weaver-runtime/stop! runtime))
         (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest startup-failure-cleans-only-its-published-metadata
+  (let [world (temp-world)]
+    (try
+      (binding [weaver-runtime/*after-metadata-publish!*
+                (fn [_]
+                  (throw (ex-info "fail after metadata publication" {})))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"fail after metadata publication"
+                              (weaver-runtime/start! nil {:world world :publish? false}))))
+      (is (nil? (metadata/read-metadata world)))
+      (is (false? (.exists (metadata/json-metadata-file world))))
+      (is (false? (.exists (metadata/socket-file world))))
+      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+        (try
+          (is (true? (get (socket-request replacement "status" {}) "ok")))
+          (finally
+            (weaver-runtime/stop! replacement))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest partial-metadata-publication-cleans-its-edn-artifact
+  (let [world (temp-world)]
+    (try
+      (with-redefs [metadata/publish!
+                    (fn [meta]
+                      (.mkdirs (io/file (:state-dir meta)))
+                      (spit (metadata/metadata-file meta) (pr-str meta))
+                      (throw (ex-info "json metadata publication failed" {})))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"json metadata publication failed"
+                              (weaver-runtime/start! nil {:world world :publish? false}))))
+      (is (nil? (metadata/read-metadata world)))
+      (is (false? (.exists (metadata/json-metadata-file world))))
+      (is (false? (.exists (metadata/socket-file world))))
+      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+        (try
+          (is (true? (get (socket-request replacement "status" {}) "ok")))
+          (finally
+            (weaver-runtime/stop! replacement))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-stop-preserves-a-same-world-replacement
+  (let [world (temp-world)
+        original (weaver-runtime/start! nil {:world world})]
+    (try
+      (weaver-runtime/stop! original)
+      (let [replacement (weaver-runtime/start! nil {:world world})]
+        (try
+          (weaver-runtime/stop! original)
+          (is (= (:generation-id replacement)
+                 (:generation-id @weaver-runtime/current-runtime)))
+          (is (= (:nonce (:metadata replacement))
+                 (:nonce (metadata/read-metadata world))))
+          (is (= (:nonce (:metadata replacement))
+                 (get (json/read-str (slurp (metadata/json-metadata-file world)))
+                      "weaver_id")))
+          (is (.exists (metadata/socket-file world)))
+          (is (true? (get (socket-request replacement "status" {}) "ok")))
+          (finally
+            (weaver-runtime/stop! replacement))))
+      (finally
+        (when-let [runtime @weaver-runtime/current-runtime]
+          (weaver-runtime/stop! runtime))
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-nrepl-port-removal-preserves-a-reused-port-registration
+  (let [remove-runtime (ns-resolve 'millstrand.core.weaver.runtime
+                                   'dissoc-generation-nrepl-runtime)
+        port 43123
+        original {:generation-id "original"}
+        replacement {:generation-id "replacement"}]
+    (is (= {port replacement}
+           (remove-runtime {port replacement} port original)))
+    (is (= {}
+           (remove-runtime {port original} port original)))))
 
 (deftest unpublished-runtimes-coexist-with-isolated-storage-and-registries
   (let [world-a (temp-world)

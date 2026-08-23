@@ -38,6 +38,12 @@
 (defonce ^:private nrepl-port-runtimes
   (atom {}))
 
+(defn- dissoc-generation-nrepl-runtime
+  [runtimes port runtime]
+  (if (= (:generation-id (get runtimes port)) (:generation-id runtime))
+    (dissoc runtimes port)
+    runtimes))
+
 (def event-queue-capacity
   "Maximum number of queued weaver events before enqueueing fails."
   1024)
@@ -566,9 +572,8 @@
 (defn- claim-final-publication!
   "Replace the admitted ambient snapshot with `published-runtime`.
 
-  Return a result containing either the claimed publication or the ambient
-  runtime that displaced this generation. Generation identity, rather than map
-  equality, owns the ambient slot."
+  Return a claim result: `:claimed?` and, on loss, the `:published-by` runtime.
+  Generation identity, rather than map equality, owns the ambient slot."
   [runtime published-runtime]
   (loop []
     (let [ambient @current-runtime]
@@ -661,8 +666,7 @@
                         :server server
                         :metadata meta}
           runtime-base (start-event-system! runtime-base (not probe?))
-          _ (reset! runtime-state runtime-base)
-          metadata-published? (atom false)]
+          _ (reset! runtime-state runtime-base)]
       (try
         (let [socket-runtime (when-not probe?
                                (socket/start! runtime-state (:socket-path meta)))
@@ -692,7 +696,6 @@
             (let [published-runtime (if probe?
                                       runtime
                                       (let [metadata-file (metadata/publish! meta)]
-                                        (reset! metadata-published? true)
                                         (when *after-metadata-publish!*
                                           (*after-metadata-publish!* meta))
                                         (assoc runtime :metadata-file metadata-file)))]
@@ -715,13 +718,10 @@
                                      (:generation-id published-by)})))))
               published-runtime)))
         (catch Throwable t
-          (let [runtime @runtime-state
-                owns-generation-artifacts?
-                (or probe?
-                    (not @metadata-published?)
-                    (metadata/delete-current! world meta))]
+          (let [runtime @runtime-state]
             (when port
-              (swap! nrepl-port-runtimes dissoc port))
+              (swap! nrepl-port-runtimes
+                     dissoc-generation-nrepl-runtime port runtime))
             (when (publishes-ambient-runtime? publish? probe?)
               (swap! current-runtime
                      (fn [published]
@@ -729,7 +729,7 @@
                          published))))
             (stop-event-system! runtime)
             (when-let [socket-runtime (:socket-runtime runtime)]
-              (socket/stop! socket-runtime owns-generation-artifacts?))
+              (socket/close! socket-runtime))
             (when server
               (nrepl/stop-server server))
            ;; Spool state may own executors started by config before metadata is
@@ -737,6 +737,12 @@
            ;; available, without masking the original startup exception.
             (close-spool-state! runtime t)
             (close-storage! runtime)
+            ;; Keep discovery files available until their transports are down.
+            ;; A failed publication may have written EDN before JSON failed;
+            ;; remove those artifacts only when this generation still owns them.
+            (when (and (not probe?)
+                       (metadata/current? meta (metadata/read-metadata world)))
+              (metadata/delete! world))
             (throw t)))))))
 
 (defn start!
@@ -925,11 +931,11 @@
   (:metadata runtime))
 
 (defn stop!
-  "Stop transports, event processing, storage, and metadata for `runtime`."
+  "Stop `runtime` without unlinking a newer generation's world artifacts."
   [runtime]
   (stop-event-system! runtime)
   (when-let [socket-runtime (:socket-runtime runtime)]
-    (socket/stop! socket-runtime))
+    (socket/close! socket-runtime))
   (when-let [server (:server runtime)]
     (nrepl/stop-server server))
   ;; Spool state closes before storage so runtime-owned schedulers/workers can
@@ -940,7 +946,8 @@
   ;; workers stop, so no in-flight weaver work can observe closed storage.
   (close-storage! runtime)
   (when-let [port (get-in runtime [:metadata :endpoint :port])]
-    (swap! nrepl-port-runtimes dissoc port))
+    (swap! nrepl-port-runtimes
+           dissoc-generation-nrepl-runtime port runtime))
   ;; nREPL sessions can retain a later map snapshot for this generation. The
   ;; immutable generation id, rather than whole-map equality, identifies which
   ;; published runtime this stop owns without clearing a newer generation.
@@ -948,8 +955,12 @@
          (fn [published]
            (when-not (= (:generation-id published) (:generation-id runtime))
              published)))
-  (when-let [state-dir (get-in runtime [:metadata :state-dir])]
-    (metadata/delete! {:state-dir state-dir}))
+  ;; Transports are closed before metadata disappears so clients can discover a
+  ;; live endpoint for the whole teardown window. A stale runtime handle must
+  ;; never remove its replacement's discovery files or socket path.
+  (let [world {:state-dir (get-in runtime [:metadata :state-dir])}]
+    (when (metadata/current? (:metadata runtime) (metadata/read-metadata world))
+      (metadata/delete! world)))
   {:stopped true})
 
 (def ^:private main-arg-spec
