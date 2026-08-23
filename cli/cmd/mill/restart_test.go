@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,6 +76,51 @@ func TestWaitForReadyStatusRejectsMismatchedLaunchedPID(t *testing.T) {
 	}
 }
 
+func TestLaunchReplacementRemovesChildAfterReadyPIDMismatch(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var launchedPID int
+	originalLaunch, originalReady := launchWeaver, waitForReplacementReadyStatus
+	t.Cleanup(func() { launchWeaver, waitForReplacementReadyStatus = originalLaunch, originalReady })
+	launchWeaver = func(source string, args []string, out, errOut io.Writer) (*exec.Cmd, error) {
+		cmd := exec.Command("sleep", "60")
+		if err := cmd.Start(); err != nil {
+			return nil, err
+		}
+		launchedPID = cmd.Process.Pid
+		return cmd, nil
+	}
+	waitForReplacementReadyStatus = func(world config.World, pid int, done <-chan error, timeout time.Duration) (map[string]any, error) {
+		return map[string]any{
+			"pid": pid + 1, "weaver_id": "replacement", "started_at": "2026-08-23T15:03:00Z",
+			"socket_path": filepath.Join(world.StateDir, "weaver.sock"), "config_dir": world.ConfigDir,
+			"state_dir": world.StateDir, "data_dir": world.DataDir,
+		}, nil
+	}
+	s := server{children: map[string]*weaverChild{}}
+	_, _, err = s.launchReplacement(source, world, "replacement", time.Second)
+	if err == nil || !strings.Contains(err.Error(), "does not match launched pid") {
+		t.Fatalf("expected replacement PID mismatch, got %v", err)
+	}
+	if _, ok := s.children[world.ConfigDir]; ok {
+		t.Fatal("replacement PID mismatch left stale supervision ownership")
+	}
+	if launchedPID == 0 || processAlive(launchedPID) {
+		if launchedPID != 0 {
+			terminatePID(launchedPID)
+			waitForPIDExit(launchedPID, time.Second)
+		}
+		if launchedPID == 0 || processAlive(launchedPID) {
+			t.Fatalf("replacement PID mismatch left child pid %d alive", launchedPID)
+		}
+	}
+}
+
 func TestRestartRefusesToSignalUnsupervisedProcessWithoutEndpointProof(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
 	source := tempSource(t)
@@ -105,6 +152,83 @@ func TestRestartRefusesToSignalUnsupervisedProcessWithoutEndpointProof(t *testin
 	}
 	if !processAlive(cmd.Process.Pid) {
 		t.Fatal("identity-proof failure signalled the unsupervised old process")
+	}
+}
+
+func serveIdentityEndpoint(t *testing.T, identity weaverIdentity, overrides map[string]any) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(identity.Socket), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Remove(identity.Socket)
+	listener, err := net.Listen("unix", identity.Socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = listener.Close()
+		_ = os.Remove(identity.Socket)
+	})
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func(conn net.Conn) {
+				defer func() { _ = conn.Close() }()
+				var request map[string]any
+				if err := json.NewDecoder(conn).Decode(&request); err != nil {
+					return
+				}
+				result := map[string]any{
+					"healthy": true, "pid": identity.PID, "weaver_id": identity.WeaverID,
+					"started_at": identity.StartedAt, "socket_path": identity.Socket,
+					"config_dir": identity.ConfigDir, "state_dir": identity.StateDir,
+					"data_dir": identity.DataDir,
+				}
+				for key, value := range overrides {
+					result[key] = value
+				}
+				response := map[string]any{
+					"protocol_version": 3, "request_id": request["request_id"],
+					"ok": true, "result": result,
+				}
+				_ = json.NewEncoder(conn).Encode(response)
+			}(conn)
+		}
+	}()
+}
+
+func shortStateHome(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "mill-state-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+func writeWeaverMetadataForIdentity(t *testing.T, world config.World, identity weaverIdentity, name string) {
+	t.Helper()
+	if err := os.MkdirAll(world.StateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	metadata := map[string]any{
+		"protocol_version": 3, "pid": identity.PID, "database_kind": "sqlite-file",
+		"database_label": world.DBPath, "database_path": world.DBPath,
+		"weaver_id": identity.WeaverID, "config_dir": identity.ConfigDir,
+		"state_dir": identity.StateDir, "data_dir": identity.DataDir, "name": name,
+		"socket_path": identity.Socket, "started_at": identity.StartedAt,
+		"nrepl": map[string]any{"host": "127.0.0.1", "port": 5555},
+	}
+	b, err := json.Marshal(metadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), b, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

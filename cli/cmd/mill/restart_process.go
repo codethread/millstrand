@@ -196,34 +196,31 @@ func (s *server) launchReplacement(source string, world config.World, requestedN
 		_ = logFile.Close()
 		done <- err
 	}()
-	status, err := waitForReadyStatus(world, cmd.Process.Pid, done, timeout)
+	status, err := waitForReplacementReadyStatus(world, cmd.Process.Pid, done, timeout)
 	if err != nil {
 		_, _ = terminateAndConfirm(child, 2*time.Second)
-		s.mu.Lock()
-		if s.children[world.ConfigDir] == child {
-			delete(s.children, world.ConfigDir)
-		}
-		s.mu.Unlock()
+		_ = s.releaseChild(world.ConfigDir, child)
 		return nil, nil, fmt.Errorf("replacement weaver failed readiness: %w; weaver log: %s", err, logPath)
 	}
 	identity, err := identityFromStatus(status)
 	if err != nil {
 		_, _ = terminateAndConfirm(child, 2*time.Second)
-		s.mu.Lock()
-		if s.children[world.ConfigDir] == child {
-			delete(s.children, world.ConfigDir)
-		}
-		s.mu.Unlock()
+		_ = s.releaseChild(world.ConfigDir, child)
 		return nil, nil, fmt.Errorf("replacement weaver identity is invalid: %w", err)
 	}
 	if identity.PID != cmd.Process.Pid {
 		_, _ = terminateAndConfirm(child, 2*time.Second)
+		_ = s.releaseChild(world.ConfigDir, child)
 		return nil, nil, fmt.Errorf("replacement weaver identity pid %d does not match launched pid %d", identity.PID, cmd.Process.Pid)
 	}
 	child.identity = identity
 	status["generation_id"] = child.generationID
 	return status, child, nil
 }
+
+// waitForReplacementReadyStatus is a seam for deterministic replacement
+// lifecycle tests; normal starts continue to call waitForReadyStatus directly.
+var waitForReplacementReadyStatus = waitForReadyStatus
 
 func stopRecordedGeneration(child *weaverChild, world config.World) error {
 	if child == nil || child.cmd == nil || child.cmd.Process == nil || child.cmd.Process.Pid <= 0 {

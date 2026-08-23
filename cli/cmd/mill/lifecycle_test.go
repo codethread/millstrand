@@ -448,7 +448,7 @@ func TestStopCleansStaleMetadata(t *testing.T) {
 }
 
 func TestStopSignalsNonSupervisedWeaverByPID(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	t.Setenv("XDG_STATE_HOME", shortStateHome(t))
 	source := tempSource(t)
 	cfg := tempConfig(t, source)
 	world, err := config.RuntimeWorld(cfg)
@@ -465,7 +465,13 @@ func TestStopSignalsNonSupervisedWeaverByPID(t *testing.T) {
 	reaped := make(chan struct{})
 	go func() { _, _ = cmd.Process.Wait(); close(reaped) }()
 	t.Cleanup(func() { _ = cmd.Process.Kill(); <-reaped })
-	writeWeaverMetadata(t, world, cmd.Process.Pid, "unsupervised-weaver")
+	identity := weaverIdentity{
+		PID: cmd.Process.Pid, WeaverID: "unsupervised-weaver", StartedAt: "2026-08-23T15:00:00Z",
+		Socket: filepath.Join(world.StateDir, "weaver.sock"), ConfigDir: world.ConfigDir,
+		StateDir: world.StateDir, DataDir: world.DataDir,
+	}
+	serveIdentityEndpoint(t, identity, nil)
+	writeWeaverMetadataForIdentity(t, world, identity, "unsupervised-weaver")
 
 	// No child handle: the weaver is metadata-discovered, so stop must signal it
 	// by pid (the socket stop op no longer exists) and then clean its metadata.
@@ -479,6 +485,69 @@ func TestStopSignalsNonSupervisedWeaverByPID(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(world.StateDir, "weaver.json")); !os.IsNotExist(err) {
 		t.Fatalf("unsupervised stop should remove weaver.json, stat err=%v", err)
+	}
+}
+
+func TestStopRefusesUnsupervisedWeaverWithoutEndpointProof(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", shortStateHome(t))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	reaped := make(chan struct{})
+	go func() { _, _ = cmd.Process.Wait(); close(reaped) }()
+	t.Cleanup(func() { _ = cmd.Process.Kill(); <-reaped })
+	identity := weaverIdentity{
+		PID: cmd.Process.Pid, WeaverID: "unsupervised-no-endpoint", StartedAt: "2026-08-23T15:01:00Z",
+		Socket: filepath.Join(world.StateDir, "weaver.sock"), ConfigDir: world.ConfigDir,
+		StateDir: world.StateDir, DataDir: world.DataDir,
+	}
+	writeWeaverMetadataForIdentity(t, world, identity, "unsupervised-no-endpoint")
+
+	s := server{children: map[string]*weaverChild{}}
+	if _, err := s.stopWeaver(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg}); err == nil || !strings.Contains(err.Error(), "endpoint identity failed") {
+		t.Fatalf("expected endpoint-proof failure, got %v", err)
+	}
+	if !processAlive(cmd.Process.Pid) {
+		t.Fatal("missing endpoint proof signalled the unsupervised process")
+	}
+}
+
+func TestStopRefusesUnsupervisedWeaverWithMismatchedEndpointProof(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", shortStateHome(t))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	reaped := make(chan struct{})
+	go func() { _, _ = cmd.Process.Wait(); close(reaped) }()
+	t.Cleanup(func() { _ = cmd.Process.Kill(); <-reaped })
+	identity := weaverIdentity{
+		PID: cmd.Process.Pid, WeaverID: "unsupervised-mismatch", StartedAt: "2026-08-23T15:02:00Z",
+		Socket: filepath.Join(world.StateDir, "weaver.sock"), ConfigDir: world.ConfigDir,
+		StateDir: world.StateDir, DataDir: world.DataDir,
+	}
+	serveIdentityEndpoint(t, identity, map[string]any{"pid": identity.PID + 1})
+	writeWeaverMetadataForIdentity(t, world, identity, "unsupervised-mismatch")
+
+	s := server{children: map[string]*weaverChild{}}
+	if _, err := s.stopWeaver(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg}); err == nil || !strings.Contains(err.Error(), "pid mismatch") {
+		t.Fatalf("expected endpoint identity mismatch, got %v", err)
+	}
+	if !processAlive(cmd.Process.Pid) {
+		t.Fatal("mismatched endpoint proof signalled the unsupervised process")
 	}
 }
 

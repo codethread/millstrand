@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -357,19 +358,29 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 				return baseStatus(world, "stopped"), nil
 			}
 			// A live weaver this mill does not supervise (e.g. started by a
-			// previous mill): the socket `stop` op no longer exists, so signal
-			// the pid and let the weaver's shutdown hook clean its own runtime
-			// metadata, then wait for that cleanup.
-			pid, ok := status["pid"].(int)
-			if !ok || pid <= 0 {
-				return nil, fmt.Errorf("selected workspace weaver metadata is missing a valid pid")
+			// previous mill): prove its metadata through the runtime endpoint
+			// before signalling only the recorded PID.
+			identity, err := identityFromStatus(status)
+			if err != nil {
+				return nil, fmt.Errorf("selected workspace weaver metadata identity is unusable: %w", err)
 			}
-			terminatePID(pid)
-			waitForPIDExit(pid, 5*time.Second)
-			cleanupWorldArtifacts(world)
+			process, err := os.FindProcess(identity.PID)
+			if err != nil {
+				return nil, fmt.Errorf("find recorded weaver pid %d: %w", identity.PID, err)
+			}
+			unsupervised := &weaverChild{
+				cmd:          &exec.Cmd{Process: process},
+				world:        world,
+				name:         fmt.Sprint(status["name"]),
+				identity:     identity,
+				unsupervised: true,
+			}
+			if err := stopRecordedGeneration(unsupervised, world); err != nil {
+				return nil, err
+			}
 			st := baseStatus(world, "stopped")
-			st["pid"] = pid
-			millLogf("weaver stopped (unsupervised) config_dir=%s state_dir=%s pid=%d", world.ConfigDir, world.StateDir, pid)
+			st["pid"] = identity.PID
+			millLogf("weaver stopped (unsupervised) config_dir=%s state_dir=%s pid=%d", world.ConfigDir, world.StateDir, identity.PID)
 			return st, nil
 		}
 		return baseStatus(world, "stopped"), nil
