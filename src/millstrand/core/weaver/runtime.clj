@@ -147,11 +147,11 @@
   ([runtime]
    (start-event-system! runtime true))
   ([runtime start-worker?]
-  (let [event-system (event-system-base)
-        runtime* (assoc runtime :event-system event-system)]
-    (when start-worker?
-      (run-event-worker! runtime* event-system))
-    runtime*)))
+   (let [event-system (event-system-base)
+         runtime* (assoc runtime :event-system event-system)]
+     (when start-worker?
+       (run-event-worker! runtime* event-system))
+     runtime*)))
 
 (defn- current-pid
   "Return the current OS process id."
@@ -647,9 +647,9 @@
             (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
           (install-built-in-ops! runtime)
           (let [refresh-result (refresh-modules! runtime (cond-> {:startup? true}
-                                                            probe? (assoc :probe? true
-                                                                          :dry-run? true
-                                                                          :diagnostic! diagnostic!)))
+                                                           probe? (assoc :probe? true
+                                                                         :dry-run? true
+                                                                         :diagnostic! diagnostic!)))
                 runtime (assoc runtime :probe-result refresh-result)]
             (when-not (#{:applied :unchanged} (:status refresh-result))
               (throw (ex-info "Initial module refresh did not complete successfully"
@@ -657,17 +657,17 @@
            ;; Arm the scheduler only after startup files finish loading, so
            ;; handlers supplied by approved spools/config resolve before any
            ;; durable pending wake is re-armed. Probe mode has no live scheduler.
-          (when-not probe?
-            (scheduler/rearm! runtime))
-          (let [published-runtime (if probe?
-                                    runtime
-                                    (assoc runtime :metadata-file (metadata/publish! meta)))]
-            (reset! runtime-state published-runtime)
-            (when port
-              (swap! nrepl-port-runtimes assoc port published-runtime))
-            (when publish?
-              (compare-and-set! current-runtime runtime published-runtime))
-            published-runtime)))
+            (when-not probe?
+              (scheduler/rearm! runtime))
+            (let [published-runtime (if probe?
+                                      runtime
+                                      (assoc runtime :metadata-file (metadata/publish! meta)))]
+              (reset! runtime-state published-runtime)
+              (when port
+                (swap! nrepl-port-runtimes assoc port published-runtime))
+              (when publish?
+                (compare-and-set! current-runtime runtime published-runtime))
+              published-runtime)))
         (catch Throwable t
           (when port
             (swap! nrepl-port-runtimes dissoc port))

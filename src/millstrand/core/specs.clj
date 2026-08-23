@@ -555,7 +555,7 @@
 (s/def :millstrand.core.mill-protocol/request
   (s/and map?
          #(= #{"protocol_version" "request_id" "weaver_id" "operation"
-              "arguments"}
+               "arguments"}
              (set (keys %)))
          #(s/valid? :millstrand.protocol/version (get % "protocol_version"))
          #(s/valid? :millstrand.protocol/request-id (get % "request_id"))
