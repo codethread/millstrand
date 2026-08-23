@@ -374,20 +374,41 @@
   "Close runtime-owned spool state resources before storage disappears."
   ([runtime] (close-spool-state! runtime nil))
   ([runtime startup-error]
-   (doseq [[key value] @(:spool-state runtime)
-           :let [close-fn (:close-fn value)]
-           :when close-fn]
-     (try
-       (close-fn)
-       (catch Throwable t
-         (let [close-error (ex-info "Spool state close hook failed"
-                                    {:spool-state/key key
-                                     :exception/message (ex-message t)}
-                                    t)]
-           (if startup-error
-             (.addSuppressed ^Throwable startup-error close-error)
-             (throw close-error))))))
+   (let [failures (atom [])]
+     (doseq [[key value] @(:spool-state runtime)
+             :let [close-fn (:close-fn value)]
+             :when close-fn]
+       (try
+         (close-fn)
+         (catch Throwable t
+           (let [close-error (ex-info "Spool state close hook failed"
+                                      {:spool-state/key key
+                                       :exception/message (ex-message t)}
+                                      t)]
+             (swap! failures conj close-error)
+             (when startup-error
+               (.addSuppressed ^Throwable startup-error close-error))))))
+     (when (and (nil? startup-error) (seq @failures))
+       (let [primary (first @failures)]
+         (doseq [failure (rest @failures)]
+           (.addSuppressed ^Throwable primary failure))
+         (throw primary))))
    nil))
+
+(defn- cleanup-step!
+  "Run one teardown step, attaching a structured failure to `primary`.
+
+  Cleanup is compensating work: every step gets a chance to run, while the
+  startup error remains the exception callers observe."
+  [^Throwable primary step f]
+  (try
+    (f)
+    (catch Throwable t
+      (.addSuppressed primary
+                      (ex-info "Weaver teardown step failed"
+                               {:teardown/step step
+                                :exception/message (ex-message t)}
+                               t)))))
 
 (defn- eval-runtime-form [form]
   (if-let [runtime (some-> nrepl-eval/*msg* ::runtime-state deref)]
@@ -584,7 +605,7 @@
         {:claimed? true}
         :else (recur)))))
 
-(defn- start-with-options!
+(defn- start-with-options-unlocked!
   [db-file {:keys [world name publish? storage release-marker probe? diagnostic!
                    old-generation-baseline]
             :or {publish? true}}]
@@ -719,31 +740,41 @@
               published-runtime)))
         (catch Throwable t
           (let [runtime @runtime-state]
-            (when port
-              (swap! nrepl-port-runtimes
-                     dissoc-generation-nrepl-runtime port runtime))
-            (when (publishes-ambient-runtime? publish? probe?)
-              (swap! current-runtime
-                     (fn [published]
-                       (when-not (= (:generation-id published) (:generation-id runtime))
-                         published))))
-            (stop-event-system! runtime)
-            (when-let [socket-runtime (:socket-runtime runtime)]
-              (socket/close! socket-runtime))
-            (when server
-              (nrepl/stop-server server))
-           ;; Spool state may own executors started by config before metadata is
-           ;; published. Close it on failed startup too, while storage remains
-           ;; available, without masking the original startup exception.
-            (close-spool-state! runtime t)
-            (close-storage! runtime)
-            ;; Keep discovery files available until their transports are down.
-            ;; A failed publication may have written EDN before JSON failed;
-            ;; remove those artifacts only when this generation still owns them.
-            (when (and (not probe?)
-                       (metadata/current? meta (metadata/read-metadata world)))
-              (metadata/delete! world))
+            (cleanup-step! t :nrepl/port-registration
+                           #(when port
+                              (swap! nrepl-port-runtimes
+                                     dissoc-generation-nrepl-runtime port runtime)))
+            (cleanup-step! t :ambient/publication
+                           #(when (publishes-ambient-runtime? publish? probe?)
+                              (swap! current-runtime
+                                     (fn [published]
+                                       (when-not (= (:generation-id published) (:generation-id runtime))
+                                         published)))))
+            (cleanup-step! t :event-system/close #(stop-event-system! runtime))
+            (cleanup-step! t :socket/close
+                           #(when-let [socket-runtime (:socket-runtime runtime)]
+                              (socket/close! socket-runtime)))
+            (cleanup-step! t :nrepl/close #(when server (nrepl/stop-server server)))
+            ;; Spool state may own executors started by config before metadata is
+            ;; published. Close it while storage remains available, without
+            ;; masking the original startup exception.
+            (cleanup-step! t :module-lifecycle/close #(close-module-lifecycle! runtime))
+            (cleanup-step! t :spool-state/close #(close-spool-state! runtime t))
+            (cleanup-step! t :storage/close #(close-storage! runtime))
+            ;; Transports are down before discovery files disappear. This one
+            ;; conditional operation covers an unpublished socket and a partial
+            ;; metadata write without ever unlinking a newer generation.
+            (cleanup-step! t :artifacts/delete
+                           #(when-not probe? (metadata/delete-owned! meta world)))
             (throw t)))))))
+
+(defn- start-with-options!
+  "Start one runtime while holding its process-local world ownership lock."
+  [db-file opts]
+  (let [world (or (:world opts) (weaver-config/world))]
+    (metadata/with-world-lock
+      world
+      #(start-with-options-unlocked! db-file (assoc opts :world world)))))
 
 (defn start!
   "Start a weaver runtime for `db-file` and optional `world`.
@@ -933,35 +964,48 @@
 (defn stop!
   "Stop `runtime` without unlinking a newer generation's world artifacts."
   [runtime]
-  (stop-event-system! runtime)
-  (when-let [socket-runtime (:socket-runtime runtime)]
-    (socket/close! socket-runtime))
-  (when-let [server (:server runtime)]
-    (nrepl/stop-server server))
-  ;; Spool state closes before storage so runtime-owned schedulers/workers can
-  ;; cancel or join their work while storage is still valid.
-  (close-module-lifecycle! runtime)
-  (close-spool-state! runtime)
-  ;; Storage closes only after transports, event dispatch, and spool-owned
-  ;; workers stop, so no in-flight weaver work can observe closed storage.
-  (close-storage! runtime)
-  (when-let [port (get-in runtime [:metadata :endpoint :port])]
-    (swap! nrepl-port-runtimes
-           dissoc-generation-nrepl-runtime port runtime))
-  ;; nREPL sessions can retain a later map snapshot for this generation. The
-  ;; immutable generation id, rather than whole-map equality, identifies which
-  ;; published runtime this stop owns without clearing a newer generation.
-  (swap! current-runtime
-         (fn [published]
-           (when-not (= (:generation-id published) (:generation-id runtime))
-             published)))
-  ;; Transports are closed before metadata disappears so clients can discover a
-  ;; live endpoint for the whole teardown window. A stale runtime handle must
-  ;; never remove its replacement's discovery files or socket path.
   (let [world {:state-dir (get-in runtime [:metadata :state-dir])}]
-    (when (metadata/current? (:metadata runtime) (metadata/read-metadata world))
-      (metadata/delete! world)))
-  {:stopped true})
+    (metadata/with-world-lock
+      world
+      (fn []
+        (let [primary (atom nil)
+              attempt! (fn [step f]
+                         (try
+                           (f)
+                           (catch Throwable t
+                             (let [failure (ex-info "Weaver teardown step failed"
+                                                    {:teardown/step step
+                                                     :exception/message (ex-message t)}
+                                                    t)]
+                               (if-let [first-failure @primary]
+                                 (.addSuppressed ^Throwable first-failure failure)
+                                 (reset! primary failure))))))]
+          (attempt! :event-system/close #(stop-event-system! runtime))
+          (attempt! :socket/close #(when-let [socket-runtime (:socket-runtime runtime)]
+                                     (socket/close! socket-runtime)))
+          (attempt! :nrepl/close #(when-let [server (:server runtime)]
+                                    (nrepl/stop-server server)))
+         ;; Spool resources close while storage is still available to their
+         ;; schedulers and workers. A failed step never skips a later one.
+          (attempt! :module-lifecycle/close #(close-module-lifecycle! runtime))
+          (attempt! :spool-state/close #(close-spool-state! runtime))
+          (attempt! :storage/close #(close-storage! runtime))
+          (attempt! :nrepl/port-registration
+                    #(when-let [port (get-in runtime [:metadata :endpoint :port])]
+                       (swap! nrepl-port-runtimes
+                              dissoc-generation-nrepl-runtime port runtime)))
+         ;; Generation identity, not map equality, owns the ambient slot.
+          (attempt! :ambient/publication
+                    #(swap! current-runtime
+                            (fn [published]
+                              (when-not (= (:generation-id published) (:generation-id runtime))
+                                published))))
+         ;; This remains last: discovery stays available until its endpoints
+         ;; have been asked to close, and stale handles cannot unlink successors.
+          (attempt! :artifacts/delete #(metadata/delete-owned! (:metadata runtime) world))
+          (if-let [failure @primary]
+            (throw failure)
+            {:stopped true}))))))
 
 (def ^:private main-arg-spec
   {:op :weaver-start

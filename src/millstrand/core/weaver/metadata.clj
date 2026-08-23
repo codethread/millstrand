@@ -8,11 +8,28 @@
             [millstrand.core.weaver.protocol :as protocol])
   (:import [java.lang ProcessHandle]
            [java.nio.file Files StandardCopyOption]
+           [java.util.concurrent ConcurrentHashMap]
+           [java.util.function Function]
            [java.util UUID]))
 
 (def ^:private json-file-name "weaver.json")
 (def ^:private edn-file-name "weaver.edn")
 (def ^:private socket-file-name "weaver.sock")
+(def ^:private world-locks (ConcurrentHashMap.))
+
+(defn with-world-lock
+  "Call `f` while holding this process's ownership lock for `world`.
+
+  The lock serializes a same-world start or teardown around its discovery
+  artifacts. It is intentionally process-local: cross-process ownership stays
+  defined by the published metadata and operating-system socket bind."
+  [world f]
+  (let [state-dir (:state-dir world)
+        lock (.computeIfAbsent ^ConcurrentHashMap world-locks state-dir
+                               (reify Function
+                                 (apply [_ _] (Object.))))]
+    (locking lock
+      (f))))
 
 (defn canonical-db-path
   "Return the canonical filesystem path for `db-file`."
@@ -147,6 +164,23 @@
   (.delete (json-metadata-file world))
   (.delete (socket-file world)))
 
+(declare current?)
+
+(defn delete-owned!
+  "Delete discovery artifacts still owned by `expected`.
+
+  Return true when the artifacts were removed. Before metadata publication,
+  absent metadata belongs to this locked startup attempt, so its socket and any
+  partially written metadata files are removed too. Metadata for a different
+  nonce is a newer generation and is left untouched."
+  [expected world]
+  (with-world-lock
+    world
+    #(let [actual (read-metadata world)]
+       (when (or (nil? actual) (current? expected actual))
+         (delete! world)
+         true))))
+
 (defn current?
   "Return true when `actual` is metadata published by `expected`.
 
@@ -154,7 +188,7 @@
   predicate before deleting generation-owned world artifacts."
   [expected actual]
   (let [nonce (:nonce expected)]
-    (and nonce (= nonce (:nonce actual)))))
+    (boolean (and nonce (= nonce (:nonce actual))))))
 
 (defn pid-alive?
   "Return true when `pid` identifies a live OS process."

@@ -471,10 +471,3 @@
   (when socket-runtime
     (reset! (:running? socket-runtime) false)
     (.close ^ServerSocketChannel (:server socket-runtime))))
-
-(defn stop!
-  "Stop a JSON socket server runtime and remove its socket file."
-  [socket-runtime]
-  (when socket-runtime
-    (close! socket-runtime)
-    (.delete (io/file (:socket-path socket-runtime)))))

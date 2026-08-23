@@ -12,6 +12,7 @@
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.runtime :as weaver-runtime]
+            [millstrand.core.weaver.scheduler :as scheduler]
             [millstrand.core.db :as db]
             [millstrand.core.db-test :as db-test]
             [millstrand.source-file :as source-file]
@@ -276,6 +277,52 @@
                               (weaver-runtime/start! nil {:world world :publish? false}))))
       (is (nil? (metadata/read-metadata world)))
       (is (false? (.exists (metadata/json-metadata-file world))))
+      (is (false? (.exists (metadata/socket-file world))))
+      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+        (try
+          (is (true? (get (socket-request replacement "status" {}) "ok")))
+          (finally
+            (weaver-runtime/stop! replacement))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pre-publication-rearm-failure-removes-its-socket-and-allows-restart
+  (let [world (temp-world)]
+    (try
+      (with-redefs [scheduler/rearm! (fn [_]
+                                       (throw (ex-info "rearm failed before publication" {})))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"rearm failed before publication"
+                              (weaver-runtime/start! nil {:world world :publish? false}))))
+      (is (nil? (metadata/read-metadata world)))
+      (is (false? (.exists (metadata/json-metadata-file world))))
+      (is (false? (.exists (metadata/socket-file world))))
+      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+        (try
+          (is (true? (get (socket-request replacement "status" {}) "ok")))
+          (finally
+            (weaver-runtime/stop! replacement))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pre-publication-failure-retains-primary-error-when-storage-close-fails
+  (let [world (temp-world)
+        close-storage (ns-resolve 'millstrand.core.weaver.runtime 'close-storage!)]
+    (try
+      (let [failure
+            (with-redefs-fn
+              {#'scheduler/rearm! (fn [_]
+                                    (throw (ex-info "rearm primary failure" {})))
+               close-storage (fn [_]
+                               (throw (ex-info "storage close failure" {})))}
+              #(try
+                 (weaver-runtime/start! nil {:world world :publish? false})
+                 (catch Throwable t t)))]
+        (is (instance? clojure.lang.ExceptionInfo failure))
+        (is (= "rearm primary failure" (ex-message failure)))
+        (is (some #(= :storage/close (:teardown/step (ex-data %)))
+                  (.getSuppressed ^Throwable failure))))
+      (is (nil? (metadata/read-metadata world)))
       (is (false? (.exists (metadata/socket-file world))))
       (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
         (try
