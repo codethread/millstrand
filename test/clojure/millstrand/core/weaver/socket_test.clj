@@ -544,7 +544,12 @@
       (let [status (socket-request rt "status" {})
             rejected (socket-request rt "queries" {})]
         (is (true? (get status "ok")))
-        (is (map? (get-in status ["result" "registry_projection"])))
+        (let [projection (get-in status ["result" "registry_projection"])]
+          (is (map? projection))
+          (is (every? string? (keys projection)))
+          (is (every? #(= #{"effective" "owners" "provenance"}
+                          (set (keys %)))
+                      (vals projection))))
         (is (= "protocol/operation-not-allowed" (get-in rejected ["error" "code"])))))))
 (deftest json-socket-invoke-dispatch
   (with-runtime

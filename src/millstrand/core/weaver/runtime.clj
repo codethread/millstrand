@@ -781,6 +781,13 @@
                           [:config-dir :state-dir :data-dir]))
      (throw (ex-info "Fresh runtime probe requires a selected world"
                      {:world world})))
+   (when-not (s/valid? :millstrand.weaver-start/old-generation-baseline
+                       (:old-generation-baseline opts))
+     (throw (ex-info "Fresh runtime probe requires an admitted old-generation baseline"
+                     {:baseline (:old-generation-baseline opts)
+                      :explain (s/explain-data
+                                :millstrand.weaver-start/old-generation-baseline
+                                (:old-generation-baseline opts))})))
    (let [probe-root (.toFile (Files/createTempDirectory
                               "millstrand-restart-probe-"
                               (make-array FileAttribute 0)))
@@ -809,10 +816,7 @@
                                          :probe? true
                                          :diagnostic! report!
                                          :old-generation-baseline
-                                         (or (:old-generation-baseline opts)
-                                             {:status :unavailable
-                                              :reason :not-supplied
-                                              :projection {}})}))
+                                         (:old-generation-baseline opts)}))
              _ (report-probe-skipped! report!)
              result (assoc (or (:probe-result runtime) {})
                            :success true

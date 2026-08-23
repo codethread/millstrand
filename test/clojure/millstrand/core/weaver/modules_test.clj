@@ -1375,7 +1375,8 @@
                  "'[millstrand.api.runtime.alpha :as runtime])\n"
                  "(runtime/module! (current/runtime) :missing/module "
                  "{:file \"modules/missing.clj\"})\n"))
-      (let [result (weaver-runtime/fresh-runtime-probe! world)]
+      (let [result (weaver-runtime/fresh-runtime-probe!
+                    world {:old-generation-baseline {:status :admitted :projection {}}})]
         (try
           (is (false? (:success result)))
           (is (= :probe/failure (:stage result)))
@@ -1386,3 +1387,17 @@
             (delete-tree! (io/file (:probe/workspace result))))))
       (finally
         (delete-tree! (io/file workspace ".."))))))
+
+(deftest fresh-runtime-probe-requires-admitted-registry-baseline
+  (let [world (temp-world)]
+    (try
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"requires an admitted old-generation baseline"
+                            (weaver-runtime/fresh-runtime-probe! world)))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"requires an admitted old-generation baseline"
+                            (weaver-runtime/fresh-runtime-probe!
+                             world {:old-generation-baseline
+                                    {:status :unavailable :projection {}}})))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))

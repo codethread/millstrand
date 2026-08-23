@@ -11,6 +11,7 @@
             [clojure.tools.reader :as reader]
             [clojure.tools.reader.reader-types :as reader-types]
             [millstrand.api.registry.alpha :as registry]
+            [millstrand.core.db :as db]
             [millstrand.core.format :as format]
             [millstrand.core.weaver.lifecycle-effects :as lifecycle-effects]
             [millstrand.core.weaver.module-graph :as module-graph]
@@ -997,26 +998,24 @@
        :classification/error (exception-data throwable)})))
 
 (defn- diagnostic!
-  "Append one probe diagnostic without allowing reporting to alter validation.
-
-  The probe owns the diagnostic sink. A sink failure is retained as diagnostic
-  data by its caller rather than becoming a substitute for the probe failure."
+  "Append one probe diagnostic through the caller-owned sink."
   [opts stage status data]
   (when-let [report! (:diagnostic! opts)]
-    (try
-      (report! {:stage stage :status status :data data})
-      (catch Throwable _ nil))))
+    (report! {:stage stage :status status :data data})))
 
 (defn- projection-value [value]
   (cond
-    (fn? value) {:callable true :class (.getName (class value))}
-    (map? value) (into (empty value)
-                       (map (fn [[key nested]] [key (projection-value nested)]))
+    (fn? value) {"callable" true "class" (.getName (class value))}
+    (or (nil? value) (string? value) (number? value) (boolean? value)) value
+    (or (keyword? value) (symbol? value)) (db/json-key value)
+    (map? value) (into (sorted-map)
+                       (map (fn [[key nested]] [(db/json-key key) (projection-value nested)]))
                        value)
     (vector? value) (mapv projection-value value)
-    (set? value) (set (map projection-value value))
-    (sequential? value) (doall (map projection-value value))
-    :else value))
+    (set? value) (mapv projection-value (sort-by pr-str value))
+    (sequential? value) (mapv projection-value value)
+    :else (fail! "Registry projection contains a value that cannot cross the status boundary"
+                 {:value value :class (str (class value))})))
 
 (defn- candidate-projection
   "Return candidate registry data with executable values redacted.
@@ -1028,26 +1027,32 @@
   (into (sorted-map)
         (keep (fn [[kind-id {:keys [storage]}]]
                 (when-let [candidate (get candidates storage)]
-                  [kind-id (projection-value
-                            (select-keys candidate
-                                         [:effective :owners :provenance]))])))
+                  [(db/json-key kind-id) (projection-value
+                                          {:effective (or (:effective candidate) {})
+                                           :owners (or (:owners candidate) {})
+                                           :provenance (or (:provenance candidate) {})})])))
         backends))
 
-(defn registry-projection
+#_{:clj-kondo/ignore [:unused-private-var]}
+(defn- registry-projection
   "Return a redacted effective registry projection for runtime diagnostics.
 
   The projection is immutable plain data: executable values are represented by
   their callable class, so a status response can carry an honest generation
   baseline without exposing functions or registry implementation state."
   [runtime]
-  (let [backends (publication/backends runtime)]
-    (candidate-projection backends (publication/candidates backends))))
+  (let [backends (publication/backends runtime)
+        projection (candidate-projection backends (publication/candidates backends))]
+    (when-not (s/valid? :millstrand.registry-projection/registry projection)
+      (fail! "Registry projection has an invalid status shape"
+             {:projection projection
+              :explain (s/explain-data :millstrand.registry-projection/registry projection)}))
+    projection))
 
 (defn- semantic-diff
   "Describe the top-level registry changes between two projections."
   [baseline candidate]
-  (let [baseline (or baseline {})
-        added (apply dissoc candidate (keys baseline))
+  (let [added (apply dissoc candidate (keys baseline))
         removed (apply dissoc baseline (keys candidate))
         changed (into (sorted-map)
                       (keep (fn [kind-id]
@@ -1224,130 +1229,135 @@
                             (if (or (:probe? opts) (seq graph) (seq old-graph))
                               (sync-roots! runtime)
                               (current-root-state runtime)))]
-          ^{:clj-kondo/ignore [:redundant-do]}
-          (do
-            (diagnostic! opts :spools/materialize :completed
-                         (select-keys sync-result [:roots :sync :conflicts :remedies]))
-            (if-let [fatal (:fatal sync-result)]
-              (if (:startup? opts)
-                (throw (ex-info "Initial module refresh could not synchronize approved roots"
-                                fatal))
-                (record-refused-result! runtime opts (refused-result mode fatal)))
-              (let [record-snapshots (atom {})]
-                (binding [*declaration-record-snapshots* record-snapshots]
-                  (try
-                    (let [previous-contributions (:contributions state)
-                          previous-sources (:contribution-sources state)
-                          raw (evaluate-affected runtime with-loader graph order
-                                                 (:roots sync-result)
-                                                 previous-contributions previous-sources)
-                          lifecycle-resolvers
-                          (resolve-lifecycle-callables! with-loader raw)
-                          _ (diagnostic!
-                             opts :module/evaluate
-                             (if (some #(= :failed (:status %)) (vals raw))
-                               :failed
-                               :completed)
-                             {:modules (select-keys raw order)
-                              :lifecycle/callables (keys lifecycle-resolvers)})
-                          staged-runtime (staging-runtime runtime)
-                          _ (realize-kind-declarations! staged-runtime raw)
-                          backends (publication/backends staged-runtime)
-                          base-candidates (reduce publication/remove-owner
-                                                  (publication/candidates backends)
-                                                  removed)
-                          staged (stage-publications runtime backends base-candidates graph order raw
-                                                     previous-contributions previous-sources)
-                          _ (require-kind-declarations-staged! raw (:outcomes staged))
-                          candidate-projection
-                          (candidate-projection backends (:candidates staged))
-                          old-generation (or (:old-generation/baseline opts)
-                                             {:status :unavailable
-                                              :reason :not-supplied
-                                              :projection {}})
-                          _ (diagnostic!
-                             opts :candidate/staged :completed
-                             {:candidate-registries candidate-projection
-                              :old-generation/diff
-                              (assoc (semantic-diff (:projection old-generation)
-                                                    candidate-projection)
-                                     :baseline-status (:status old-generation)
-                                     :baseline-reason (:reason old-generation))})
-                          _ (publication/validate-op-candidates! backends (:candidates staged))
-                          _ (publication/validate-kind-candidates!
-                             runtime backends (:candidates staged))
-                          _ (diagnostic! opts :candidate/validate :completed
-                                         {:candidate-registries candidate-projection})
-                          provisional (provisional-result mode (:roots sync-result)
-                                                          (:conflicts sync-result)
-                                                          (:remedies sync-result)
-                                                          (:shadows collection)
-                                                          (:outcomes staged)
-                                                          removed)]
+          (diagnostic! opts :spools/materialize :completed
+                       (select-keys sync-result [:roots :sync :conflicts :remedies]))
+          (if-let [fatal (:fatal sync-result)]
+            (if (:startup? opts)
+              (throw (ex-info "Initial module refresh could not synchronize approved roots"
+                              fatal))
+              (record-refused-result! runtime opts (refused-result mode fatal)))
+            (let [record-snapshots (atom {})]
+              (binding [*declaration-record-snapshots* record-snapshots]
+                (try
+                  (let [previous-contributions (:contributions state)
+                        previous-sources (:contribution-sources state)
+                        raw (evaluate-affected runtime with-loader graph order
+                                               (:roots sync-result)
+                                               previous-contributions previous-sources)
+                        lifecycle-resolvers
+                        (resolve-lifecycle-callables! with-loader raw)
+                        _ (diagnostic!
+                           opts :module/evaluate
+                           (if (some #(= :failed (:status %)) (vals raw))
+                             :failed
+                             :completed)
+                           {:modules (select-keys raw order)
+                            :lifecycle/callables (keys lifecycle-resolvers)})
+                        staged-runtime (staging-runtime runtime)
+                        _ (realize-kind-declarations! staged-runtime raw)
+                        backends (publication/backends staged-runtime)
+                        base-candidates (reduce publication/remove-owner
+                                                (publication/candidates backends)
+                                                removed)
+                        staged (stage-publications runtime backends base-candidates graph order raw
+                                                   previous-contributions previous-sources)
+                        _ (require-kind-declarations-staged! raw (:outcomes staged))
+                        candidate-projection
+                        (candidate-projection backends (:candidates staged))
+                        old-generation (:old-generation/baseline opts)
+                        _ (when (and (:probe? opts)
+                                     (not (s/valid? :millstrand.weaver-start/old-generation-baseline
+                                                    old-generation)))
+                            (fail! "Fresh probe requires an admitted old-generation baseline"
+                                   {:baseline old-generation
+                                    :explain (s/explain-data
+                                              :millstrand.weaver-start/old-generation-baseline
+                                              old-generation)}))
+                        _ (diagnostic!
+                           opts :candidate/staged :completed
+                           {:candidate-registries candidate-projection
+                            :old-generation/diff
+                            (assoc (semantic-diff (:projection old-generation)
+                                                  candidate-projection)
+                                   :baseline-status (:status old-generation))})
+                        _ (publication/validate-op-candidates! backends (:candidates staged))
+                        _ (publication/validate-kind-candidates!
+                           runtime backends (:candidates staged))
+                        _ (diagnostic! opts :candidate/validate :completed
+                                       {:candidate-registries candidate-projection})
+                        provisional (provisional-result mode (:roots sync-result)
+                                                        (:conflicts sync-result)
+                                                        (:remedies sync-result)
+                                                        (:shadows collection)
+                                                        (:outcomes staged)
+                                                        removed)]
                 ;; A dry-run stops here: it has collected, classified, staged and
                 ;; validated candidates but publishes nothing, reconciles nothing,
                 ;; and records no coordinator state (DELTA-OlrRepl-001.CC14).
-                      (if (:dry-run? opts)
-                        (let [result (plan-result runtime state sync-result staged provisional
-                                                  backends graph raw)]
-                          (diagnostic! opts :lifecycle/plan :completed
-                                       (select-keys result [:candidate-registries
-                                                            :lifecycle/plan
-                                                            :modules]))
-                          result)
-                        (let [live-backends (publication/backends runtime)
-                              live-candidates (publication/candidates live-backends)
-                              live-spool-state @(:spool-state runtime)
-                              _ (retain-staged-declarations! raw (:outcomes staged))
-                              changed-kinds (publication/publish!
-                                             runtime staged-runtime backends (:candidates staged))
-                              removal-order (->> (module-graph/dependency-order old-graph)
-                                                 reverse
-                                                 (filter removed))
-                              reconcile-order (vec (concat removal-order order))
-                              lifecycle-reconciled
-                              (reconcile-lifecycle
-                               runtime state graph raw
-                               provisional
-                               changed-kinds reconcile-order lifecycle-resolvers)
-                              _ (try
-                                  (publication/validate-op-glossary-refs!
-                                   runtime backends (:candidates staged))
-                                  (catch Throwable throwable
-                                    (publication/publish! live-backends live-candidates)
-                                    (restore-staged-registry-slots!
-                                     runtime live-spool-state staged-runtime)
-                                    (throw throwable)))
-                              contributions (apply dissoc (:contributions staged) removed)
-                              contribution-sources (apply dissoc (:source-stamps staged) removed)
-                              loaded-status (safe-loaded-status runtime)
-                              outcomes (:outcomes lifecycle-reconciled)
-                              state-outcomes (-> (:outcomes state)
-                                                 (merge outcomes)
-                                                 (#(apply dissoc % removed)))
-                              status (top-status graph outcomes (:roots sync-result) changed-kinds)
-                              result (assoc provisional
-                                            :status status
-                                            :modules outcomes
-                                            :residuals (:residuals loaded-status)
-                                            :conflicts (vec (concat (:conflicts provisional)
-                                                                    (:hard-conflicts loaded-status)))
-                                            :publication/kinds (vec (sort-by pr-str changed-kinds)))]
-                          (record-result! runtime collection contributions contribution-sources
-                                          (:resources state)
-                                          (:lifecycle-state lifecycle-reconciled) state-outcomes
-                                          (:roots sync-result) result))))
-                    (catch Throwable throwable
-                      (restore-declaration-records! @record-snapshots)
+                    (if (:dry-run? opts)
+                      (let [result (plan-result runtime state sync-result staged provisional
+                                                backends graph raw)]
+                        (diagnostic! opts :lifecycle/plan :completed
+                                     (select-keys result [:candidate-registries
+                                                          :lifecycle/plan
+                                                          :modules]))
+                        result)
+                      (let [live-backends (publication/backends runtime)
+                            live-candidates (publication/candidates live-backends)
+                            live-spool-state @(:spool-state runtime)
+                            _ (retain-staged-declarations! raw (:outcomes staged))
+                            changed-kinds (publication/publish!
+                                           runtime staged-runtime backends (:candidates staged))
+                            removal-order (->> (module-graph/dependency-order old-graph)
+                                               reverse
+                                               (filter removed))
+                            reconcile-order (vec (concat removal-order order))
+                            lifecycle-reconciled
+                            (reconcile-lifecycle
+                             runtime state graph raw
+                             provisional
+                             changed-kinds reconcile-order lifecycle-resolvers)
+                            _ (try
+                                (publication/validate-op-glossary-refs!
+                                 runtime backends (:candidates staged))
+                                (catch Throwable throwable
+                                  (publication/publish! live-backends live-candidates)
+                                  (restore-staged-registry-slots!
+                                   runtime live-spool-state staged-runtime)
+                                  (throw throwable)))
+                            contributions (apply dissoc (:contributions staged) removed)
+                            contribution-sources (apply dissoc (:source-stamps staged) removed)
+                            loaded-status (safe-loaded-status runtime)
+                            outcomes (:outcomes lifecycle-reconciled)
+                            state-outcomes (-> (:outcomes state)
+                                               (merge outcomes)
+                                               (#(apply dissoc % removed)))
+                            status (top-status graph outcomes (:roots sync-result) changed-kinds)
+                            result (assoc provisional
+                                          :status status
+                                          :modules outcomes
+                                          :residuals (:residuals loaded-status)
+                                          :conflicts (vec (concat (:conflicts provisional)
+                                                                  (:hard-conflicts loaded-status)))
+                                          :publication/kinds (vec (sort-by pr-str changed-kinds)))]
+                        (record-result! runtime collection contributions contribution-sources
+                                        (:resources state)
+                                        (:lifecycle-state lifecycle-reconciled) state-outcomes
+                                        (:roots sync-result) result))))
+                  (catch Throwable throwable
+                    (restore-declaration-records! @record-snapshots)
+                    (try
                       (diagnostic! opts :probe/failure :failed
                                    (exception-data throwable))
+                      (catch Throwable diagnostic-failure
+                        (.addSuppressed throwable diagnostic-failure)))
                     ;; Source loads may already have occurred, but no publication
                     ;; follows a coordinator-wide validation failure.
-                      (if (:startup? opts)
-                        (throw throwable)
-                        (record-refused-result!
-                         runtime opts
-                         (refused-result mode (exception-data throwable)))))))))))))))
+                    (if (:startup? opts)
+                      (throw throwable)
+                      (record-refused-result!
+                       runtime opts
+                       (refused-result mode (exception-data throwable))))))))))))))
 
 (defn module!
   "Stage a module during startup collection, otherwise declare and refresh it."

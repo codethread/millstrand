@@ -10,6 +10,7 @@
   (DELTA-Dtf-002.CC1). Weaver shutdown is signal-driven (C3); there is no socket
   `stop` operation."
   (:require [clojure.data.json :as json]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.java.io :as io]
             [millstrand.api.cli.alpha :as cli]
@@ -200,7 +201,14 @@
       :else (argument-error req))))
 
 (defn- status-result [runtime]
-  (let [m (:metadata runtime)]
+  (let [m (:metadata runtime)
+        projection ((requiring-resolve
+                     'millstrand.core.weaver.module-refresh/registry-projection)
+                    runtime)]
+    (when-not (s/valid? :millstrand.registry-projection/registry projection)
+      (throw (ex-info "Registry projection has an invalid socket status shape"
+                      {:projection projection
+                       :explain (s/explain-data :millstrand.registry-projection/registry projection)})))
     {"healthy" true
      "pid" (:pid m)
      "protocol_version" (:protocol-version m)
@@ -214,10 +222,7 @@
      "weaver_id" (:nonce m)
      "socket_path" (:socket-path m)
      "started_at" (:started-at m)
-     "registry_projection"
-     ((requiring-resolve
-       'millstrand.core.weaver.module-refresh/registry-projection)
-      runtime)
+     "registry_projection" projection
      "nrepl" {"host" (get-in m [:endpoint :host]) "port" (get-in m [:endpoint :port])}}))
 
 (defn- api [sym]

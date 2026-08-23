@@ -369,7 +369,34 @@
 (s/def :millstrand.weaver-start/release-marker ::release-marker-syntax)
 (s/def :millstrand.weaver-start/probe? boolean?)
 (s/def :millstrand.weaver-start/diagnostic! ifn?)
-(s/def :millstrand.weaver-start/old-generation-baseline map?)
+(defn- registry-projection-value?
+  "Return true for the closed, redacted JSON value grammar used by registry status."
+  [value]
+  (cond
+    (or (nil? value) (string? value) (number? value) (boolean? value)) true
+    (vector? value) (every? registry-projection-value? value)
+    (map? value) (or (and (= #{"callable" "class"} (set (keys value)))
+                          (true? (get value "callable"))
+                          (non-blank-string? (get value "class")))
+                     (and (every? string? (keys value))
+                          (every? registry-projection-value? (vals value))))
+    :else false))
+
+(s/def :millstrand.registry-projection/value registry-projection-value?)
+(s/def :millstrand.registry-projection/registry
+  (s/and map?
+         #(every? string? (keys %))
+         #(every? (fn [[_ value]]
+                    (and (map? value)
+                         (= #{"effective" "owners" "provenance"}
+                            (set (keys value)))
+                         (every? registry-projection-value? (vals value))))
+                  %)))
+(s/def :millstrand.weaver-start/old-generation-baseline
+  (s/and map?
+         #(= #{:status :projection} (set (keys %)))
+         #(= :admitted (:status %))
+         #(s/valid? :millstrand.registry-projection/registry (:projection %))))
 (s/def ::weaver-start-options
   (s/and (s/keys :opt-un [:millstrand.weaver-start/world
                           :millstrand.weaver-start/name
