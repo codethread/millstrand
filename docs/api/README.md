@@ -20,6 +20,12 @@ Native work that must continue while Mill replaces a Weaver uses the trusted `mi
 | [`lifecycle`](./lifecycle.api.md) | Your module has live effects as well as registry entries: `defresource` for a paired open/close, `defseed` for one idempotent apply, `defreconcile` for repeated desired-state work. |
 | [`clock`](./clock.api.md) | Code needs one capability for current time and sleeping, including deterministic polling with a manual test Clock. |
 
+### Native process custody
+
+| Namespace | Reach for it when |
+| --- | --- |
+| `millstrand.api.process.alpha` | Launching native work that must outlive Weaver replacement, then reading, cancelling, and reconciling its Mill-retained process facts. |
+
 ### Strand data
 
 | Namespace | Reach for it when |
