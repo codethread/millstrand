@@ -1376,10 +1376,13 @@
                  "(runtime/module! (current/runtime) :missing/module "
                  "{:file \"modules/missing.clj\"})\n"))
       (let [result (weaver-runtime/fresh-runtime-probe! world)]
-        (is (false? (:success result)))
-        (is (= :probe/failure (:stage result)))
-        (is (.isDirectory (io/file (:probe/workspace result))))
-        (is (.isFile (io/file (:log result))))
-        (is (some #(= :probe/failure (:stage %)) (:diagnostics result))))
+        (try
+          (is (false? (:success result)))
+          (is (= :probe/failure (:stage result)))
+          (is (.isDirectory (io/file (:probe/workspace result))))
+          (is (.isFile (io/file (:log result))))
+          (is (some #(= :probe/failure (:stage %)) (:diagnostics result)))
+          (finally
+            (delete-tree! (io/file (:probe/workspace result))))))
       (finally
         (delete-tree! (io/file workspace ".."))))))

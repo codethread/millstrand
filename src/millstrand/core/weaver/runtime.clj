@@ -554,10 +554,15 @@
                      :explain (s/explain-data ::specs/weaver-start-options opts)})))
   opts)
 
+(defn- publishes-ambient-runtime? [publish? probe?]
+  ;; Probe mode is a private candidate-runtime boundary. Its publication
+  ;; preference cannot cross into the process-wide ambient runtime.
+  (and publish? (not probe?)))
+
 (defn- start-with-options!
   [db-file {:keys [world name publish? storage release-marker probe? diagnostic!]
             :or {publish? true}}]
-  (when (and publish? @current-runtime)
+  (when (and (publishes-ambient-runtime? publish? probe?) @current-runtime)
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
   (let [world (or world (weaver-config/world))
         resolved-release-marker (resolve-release-marker release-marker)
@@ -643,7 +648,8 @@
           (reset! runtime-state runtime)
           (when port
             (swap! nrepl-port-runtimes assoc port runtime))
-          (when (and publish? (not (compare-and-set! current-runtime nil runtime)))
+          (when (and (publishes-ambient-runtime? publish? probe?)
+                     (not (compare-and-set! current-runtime nil runtime)))
             (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
           (install-built-in-ops! runtime)
           (let [refresh-result (refresh-modules! runtime (cond-> {:startup? true}
@@ -665,13 +671,13 @@
               (reset! runtime-state published-runtime)
               (when port
                 (swap! nrepl-port-runtimes assoc port published-runtime))
-              (when publish?
+              (when (publishes-ambient-runtime? publish? probe?)
                 (compare-and-set! current-runtime runtime published-runtime))
               published-runtime)))
         (catch Throwable t
           (when port
             (swap! nrepl-port-runtimes dissoc port))
-          (when publish?
+          (when (publishes-ambient-runtime? publish? probe?)
             (compare-and-set! current-runtime @runtime-state nil))
           (stop-event-system! @runtime-state)
           (when-let [socket-runtime (:socket-runtime @runtime-state)]
@@ -694,7 +700,9 @@
   Set `:publish? false` to start an unpublished runtime that can coexist with
   other runtimes in the same JVM. Trusted callers may select `:storage
   :sqlite-memory` for a weaver-lifetime in-memory database; file-backed SQLite
-  in the selected workspace remains the default. `:release-marker` explicitly
+  in the selected workspace remains the default. In probe mode, publication is
+  always disabled even when `:publish?` is omitted or true. `:release-marker`
+  explicitly
   claims the running source generation as a canonical `v<int>` marker; without
   a claim, startup uses an annotated marker tag on the source checkout's HEAD
   when one can be resolved. Options conform to

@@ -182,6 +182,18 @@
     (is (not (.exists (io/file (:state-dir world) "weaver.json"))))
     (is (not (.exists (io/file (:data-dir world) "millstrand.sqlite"))))))
 
+(deftest direct-probe-start-is-unpublished
+  (let [world (temp-world)
+        rt (weaver-runtime/start! nil {:world world
+                                       :probe? true
+                                       :storage :sqlite-memory})]
+    (try
+      (is (nil? @weaver-runtime/current-runtime))
+      (is (nil? (metadata/read-metadata world)))
+      (finally
+        (weaver-runtime/stop! rt)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
 (deftest unpublished-runtimes-coexist-with-isolated-storage-and-registries
   (let [world-a (temp-world)
         world-b (temp-world)
