@@ -90,6 +90,29 @@ func TestInvokeReportsStaleSelectedWorldWeaver(t *testing.T) {
 	}
 }
 
+func TestInvokeCancellationBeforeReplacementAdmissionSendsNoWeaverFrame(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	transition := &weaverTransition{world: world, transitionID: "transition", stateValue: restartStateRestarting, done: make(chan struct{})}
+	s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{world.ConfigDir: transition}}
+	clientConn, serverConn := net.Pipe()
+	req := client.MillRequest{ProtocolVersion: client.MillProtocolVersion, RequestID: "req-cancel", Operation: "invoke", World: client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg}, Payload: map[string]any{"name": "mutate"}}
+	done := make(chan struct{})
+	go func() {
+		s.handleInvoke(serverConn, req)
+		close(done)
+	}()
+	_ = clientConn.Close()
+	close(transition.done)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled invocation did not return")
+	}
+	_ = serverConn.Close()
+	// There is deliberately no Weaver socket: reaching relayInvoke after the
+	// caller closed would be a test failure in the admission path above.
+}
+
 // runInvoke drives handleInvoke over an in-memory pipe and returns the relayed
 // NDJSON frames.
 func runInvoke(t *testing.T, cfg string, envelope map[string]any) []map[string]any {

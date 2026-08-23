@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -113,6 +114,125 @@ func TestWeaverLifecycleWithFakeLauncher(t *testing.T) {
 	}
 	if strings.Contains(logText, "probe: child stdout line") {
 		t.Fatalf("weaver child output should not be forwarded to mill logs:\n%s", logText)
+	}
+}
+
+func TestAtomicStartClaimSerializesOverlappingStartsAndRestart(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	var launches int
+	var pids []int
+	originalLaunch, originalReady, originalProbe, originalClaim := launchWeaver, waitForReplacementReadyStatus, probeRuntime, startClaimInstalledFn
+	t.Cleanup(func() {
+		launchWeaver, waitForReplacementReadyStatus, probeRuntime, startClaimInstalledFn = originalLaunch, originalReady, originalProbe, originalClaim
+		for _, pid := range pids {
+			if processAlive(pid) {
+				terminatePID(pid)
+				waitForPIDExit(pid, time.Second)
+			}
+		}
+	})
+	launchWeaver = func(source string, args []string, out, errOut io.Writer) (*exec.Cmd, error) {
+		cmd := exec.Command("sleep", "60")
+		if err := cmd.Start(); err != nil {
+			return nil, err
+		}
+		mu.Lock()
+		launches++
+		pids = append(pids, cmd.Process.Pid)
+		first := launches == 1
+		mu.Unlock()
+		if first {
+			writeWeaverMetadata(t, world, cmd.Process.Pid, "initial")
+		}
+		return cmd, nil
+	}
+	waitForReplacementReadyStatus = func(world config.World, pid int, done <-chan error, timeout time.Duration) (map[string]any, error) {
+		return map[string]any{
+			"state": "running", "pid": pid, "weaver_id": "replacement", "generation_id": "replacement-generation",
+			"started_at": time.Now().UTC().Format(time.RFC3339Nano), "socket_path": filepath.Join(world.StateDir, "weaver.sock"),
+			"config_dir": world.ConfigDir, "state_dir": world.StateDir, "data_dir": world.DataDir,
+		}, nil
+	}
+	probeRuntime = func(string, config.World) (restartProbeResult, error) {
+		return restartProbeResult{Success: true, Stage: "probe/complete", ProbeWorkspace: "probe", SourceWorkspace: world.ConfigDir, Completed: []string{}, Diagnostics: []map[string]any{}, Log: "probe.log"}, nil
+	}
+	claimInstalled := make(chan struct{})
+	releaseClaim := make(chan struct{})
+	startClaimInstalledFn = func(string) {
+		close(claimInstalled)
+		<-releaseClaim
+	}
+	s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}, startClaims: map[string]chan struct{}{}}
+	req := client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg, ReadyTimeoutMs: 2_000}
+	firstDone := make(chan struct {
+		status map[string]any
+		err    error
+	}, 1)
+	go func() {
+		status, err := s.startWeaver(req)
+		firstDone <- struct {
+			status map[string]any
+			err    error
+		}{status, err}
+	}()
+	<-claimInstalled
+	secondDone := make(chan struct {
+		status map[string]any
+		err    error
+	}, 1)
+	go func() {
+		status, err := s.startWeaver(req)
+		secondDone <- struct {
+			status map[string]any
+			err    error
+		}{status, err}
+	}()
+	restartDone := make(chan struct {
+		status map[string]any
+		err    error
+	}, 1)
+	go func() {
+		status, err := s.restartWeaver(req)
+		restartDone <- struct {
+			status map[string]any
+			err    error
+		}{status, err}
+	}()
+	select {
+	case <-secondDone:
+		t.Fatal("overlapping start crossed the locked claim installation seam")
+	case <-restartDone:
+		t.Fatal("overlapping restart crossed the locked claim installation seam")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseClaim)
+	first := <-firstDone
+	second := <-secondDone
+	restarted := <-restartDone
+	for name, result := range map[string]struct {
+		status map[string]any
+		err    error
+	}{"first start": first, "second start": second, "restart": restarted} {
+		if result.err != nil {
+			t.Fatalf("%s failed: %v", name, result.err)
+		}
+		if result.status == nil || (result.status["state"] != "running" && result.status["state"] != "probing") {
+			t.Fatalf("%s did not return an admitted generation: %#v", name, result.status)
+		}
+	}
+	mu.Lock()
+	gotLaunches := launches
+	mu.Unlock()
+	if gotLaunches != 2 {
+		t.Fatalf("claim overlap launched more than one replacement: launches=%d", gotLaunches)
 	}
 }
 

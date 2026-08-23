@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -22,6 +23,8 @@ import (
 func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 	w := bufio.NewWriter(conn)
 	defer func() { _ = w.Flush() }()
+	callerCtx, stopCallerWatch := watchCallerConnection(conn)
+	defer stopCallerWatch()
 
 	world, err := resolveLifecycleWorld(req.World)
 	if err != nil {
@@ -31,11 +34,17 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 	var wrote bool
 	var relayErr error
 	for {
+		if err := callerCtx.Err(); err != nil {
+			return
+		}
 		s.mu.Lock()
 		status, transition, targetErr := s.admittedInvokeTargetLocked(world)
 		if transition != nil {
 			s.mu.Unlock()
-			if _, err := waitForLifecycleTransition(transition, readyTimeoutFor(envelopeTimeoutMs(req.Payload))); err != nil {
+			if _, err := waitForLifecycleTransitionContext(callerCtx, transition, readyTimeoutFor(envelopeTimeoutMs(req.Payload))); err != nil {
+				if callerCtx.Err() != nil {
+					return
+				}
 				writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/weaver-restart-failed", Message: "weaver restart did not admit an invocation", Details: map[string]any{"config_dir": world.ConfigDir, "detail": err.Error()}})
 				return
 			}
@@ -49,7 +58,7 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		socketPath, _ := status["socket_path"].(string)
 		weaverID, _ := status["weaver_id"].(string)
 		admissionOpen := true
-		wrote, relayErr = relayInvokeWithAdmission(socketPath, weaverID, req.Payload, envelopeTimeoutMs(req.Payload), w, func() {
+		wrote, relayErr = relayInvokeWithAdmission(callerCtx, socketPath, weaverID, req.Payload, envelopeTimeoutMs(req.Payload), w, func() {
 			s.mu.Unlock()
 			admissionOpen = false
 		})
@@ -66,18 +75,76 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 	}
 }
 
+// watchCallerConnection turns a client disconnect into cancellation for the
+// admission wait.  The mill request has already been decoded, so a read can
+// only observe a caller closing the connection or violating the one-request
+// protocol.  The short deadline keeps normal connected callers observable
+// without consuming a second request frame.
+func watchCallerConnection(conn net.Conn) (context.Context, func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		var probe [1]byte
+		for {
+			_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+			_, err := conn.Read(probe[:])
+			if err == nil || !isTimeout(err) {
+				cancel()
+				return
+			}
+			select {
+			case <-stop:
+				return
+			default:
+			}
+		}
+	}()
+	return ctx, func() {
+		close(stop)
+		_ = conn.SetReadDeadline(time.Now())
+		<-done
+		cancel()
+	}
+}
+
+func isTimeout(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func waitForLifecycleTransitionContext(ctx context.Context, t *weaverTransition, timeout time.Duration) (map[string]any, error) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-t.done:
+		return t.result, t.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-timer.C:
+		return nil, fmt.Errorf("weaver restart did not become ready before timeout")
+	}
+}
+
 func (s *server) admittedInvokeTargetLocked(world config.World) (map[string]any, *weaverTransition, *client.ResponseError) {
 	if transition := s.transitions[world.ConfigDir]; transition != nil {
 		switch transition.state() {
 		case restartStateProbing:
 			status, stale := readStatus(world)
 			if status != nil && !stale {
+				if err := validateAdmissionState(map[string]any{"state": "open", "generation_id": status["generation_id"]}); err != nil {
+					return nil, nil, &client.ResponseError{Type: "protocol", Code: "mill/admission-invalid", Message: "invalid open admission state", Details: map[string]any{"detail": err.Error()}}
+				}
 				return status, nil, nil
 			}
 			return nil, nil, &client.ResponseError{Type: "transport", Code: "mill/stale-selected-weaver", Message: "stale selected workspace weaver metadata", Details: map[string]any{"config_dir": world.ConfigDir, "stale_reason": status["stale_reason"]}}
 		case restartStateRestarting:
 			return nil, transition, nil
 		case restartStateFailed:
+			if err := validateAdmissionState(map[string]any{"state": "closed", "transition_id": transition.transitionID}); err != nil {
+				return nil, nil, &client.ResponseError{Type: "protocol", Code: "mill/admission-invalid", Message: "invalid closed admission state", Details: map[string]any{"detail": err.Error()}}
+			}
 			return nil, nil, &client.ResponseError{Type: "domain", Code: "mill/weaver-restart-failed", Message: "weaver restart failed; no generation is admitted", Details: map[string]any{"config_dir": world.ConfigDir, "transition_id": transition.transitionID, "failure": transition.result}}
 		}
 	}
@@ -87,6 +154,11 @@ func (s *server) admittedInvokeTargetLocked(world config.World) (map[string]any,
 	}
 	if stale {
 		return nil, nil, &client.ResponseError{Type: "transport", Code: "mill/stale-selected-weaver", Message: "stale selected workspace weaver metadata", Details: map[string]any{"config_dir": world.ConfigDir, "stale_reason": status["stale_reason"]}}
+	}
+	if generation, ok := status["generation_id"].(string); ok {
+		if err := validateAdmissionState(map[string]any{"state": "open", "generation_id": generation}); err != nil {
+			return nil, nil, &client.ResponseError{Type: "protocol", Code: "mill/admission-invalid", Message: "invalid open admission state", Details: map[string]any{"detail": err.Error()}}
+		}
 	}
 	return status, nil, nil
 }
@@ -98,9 +170,12 @@ func (s *server) admittedInvokeTargetLocked(world config.World) (map[string]any,
 // the whole response and holds no shared lock, so concurrent connections are
 // not starved. Returns whether any frame was written (so the caller only
 // synthesizes an error frame for a pre-relay failure) and the transport error.
-func relayInvokeWithAdmission(socketPath, weaverID string, envelope map[string]any, timeoutMs int64, w *bufio.Writer, admitted func()) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID string, envelope map[string]any, timeoutMs int64, w *bufio.Writer, admitted func()) (bool, error) {
+	ctx, cancel := context.WithTimeout(callerCtx, time.Second)
 	defer cancel()
+	if err := callerCtx.Err(); err != nil {
+		return false, err
+	}
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
 	if err != nil {
 		return false, fmt.Errorf("weaver socket unreachable: %w", err)
@@ -113,6 +188,9 @@ func relayInvokeWithAdmission(socketPath, weaverID string, envelope map[string]a
 		// Bounded single-result ops honour the envelope timeout; the deadline is
 		// cleared below once a stream header proves the response is unbounded.
 		_ = conn.SetDeadline(time.Now().Add(time.Duration(timeoutMs) * time.Millisecond))
+	}
+	if err := callerCtx.Err(); err != nil {
+		return false, err
 	}
 	if err := json.NewEncoder(conn).Encode(reqFrame); err != nil {
 		return false, fmt.Errorf("weaver socket write failed: %w", err)

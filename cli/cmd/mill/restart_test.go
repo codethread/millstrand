@@ -85,6 +85,30 @@ func TestDecodeRestartProbeUsesClosedBoundary(t *testing.T) {
 	}
 }
 
+func TestRestartRecordValidationRejectsUnknownAndStateDependentShapes(t *testing.T) {
+	world := config.World{StateDir: t.TempDir()}
+	tests := []struct {
+		name string
+		json string
+	}{
+		{"unknown field", `{"state":"failed","transition_id":"t","updated_at":"now","failure":{"stage":"launch","message":"x"},"extra":true}`},
+		{"failed missing failure", `{"state":"failed","transition_id":"t","updated_at":"now"}`},
+		{"running missing generation", `{"state":"running","transition_id":"t","updated_at":"now"}`},
+		{"probing missing generation", `{"state":"probing","transition_id":"t","updated_at":"now"}`},
+		{"failure unknown field", `{"state":"failed","transition_id":"t","updated_at":"now","failure":{"stage":"launch","message":"x","extra":true}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := os.WriteFile(restartRecordPath(world), []byte(tt.json), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok, err := readRestartRecordDetailed(world); err == nil || ok {
+				t.Fatalf("malformed restart record accepted: ok=%v err=%v", ok, err)
+			}
+		})
+	}
+}
+
 func replaceJSONField(value, old, new string) string {
 	return strings.Replace(value, old, new, 1)
 }
@@ -342,6 +366,55 @@ func TestRestartConvergesAndReplacesExactlyOnce(t *testing.T) {
 	if results[0]["generation_id"] == oldGeneration || results[1]["generation_id"] == oldGeneration || results[0]["generation_id"] != results[1]["generation_id"] {
 		t.Fatalf("replacement generation did not converge: old=%v results=%#v", oldGeneration, results)
 	}
+}
+
+func TestRestartRetriesFailedReplacementStartupWithoutOldGeneration(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := &restartProbeResult{Success: true, Stage: "probe/complete", ProbeWorkspace: "probe", SourceWorkspace: world.ConfigDir, Completed: []string{}, Diagnostics: []map[string]any{}, Log: "probe.log"}
+	if err := writeRestartRecord(world, restartRecord{State: restartStateFailed, TransitionID: "failed-transition", Probe: probe, Failure: &restartFailure{Stage: "launch", Message: "startup failed"}}); err != nil {
+		t.Fatal(err)
+	}
+	var launches, probes int
+	origLaunch, origProbe, origReady := launchWeaver, probeRuntime, waitForReplacementReadyStatus
+	t.Cleanup(func() {
+		launchWeaver, probeRuntime, waitForReplacementReadyStatus = origLaunch, origProbe, origReady
+	})
+	// launchReplacement invokes Start on the returned command, so it is still
+	// a real child and the readiness seam only supplies its published identity.
+	launchWeaver = func(source string, args []string, out, errOut io.Writer) (*exec.Cmd, error) {
+		cmd := exec.Command("sleep", "60")
+		if err := cmd.Start(); err != nil {
+			return nil, err
+		}
+		launches++
+		return cmd, nil
+	}
+	probeRuntime = func(string, config.World) (restartProbeResult, error) {
+		probes++
+		return restartProbeResult{}, errors.New("retry must not probe without an admitted old generation")
+	}
+	waitForReplacementReadyStatus = func(world config.World, pid int, done <-chan error, timeout time.Duration) (map[string]any, error) {
+		return map[string]any{
+			"state": "running", "pid": pid, "weaver_id": "replacement", "generation_id": "replacement-generation", "started_at": "2026-08-23T15:03:00Z",
+			"socket_path": filepath.Join(world.StateDir, "weaver.sock"), "config_dir": world.ConfigDir,
+			"state_dir": world.StateDir, "data_dir": world.DataDir,
+		}, nil
+	}
+	s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}}
+	result, err := s.restartWeaver(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg, ReadyTimeoutMs: 2_000})
+	if err != nil || result["state"] != restartStateRunning || result["generation_id"] != "replacement-generation" {
+		t.Fatalf("failed-startup retry did not converge: result=%#v err=%v", result, err)
+	}
+	if launches != 1 || probes != 0 {
+		t.Fatalf("retry launched/probed unexpectedly: launches=%d probes=%d", launches, probes)
+	}
+	s.stopAll()
 }
 
 func TestRestartWaitsForStartClaimWithoutPolling(t *testing.T) {

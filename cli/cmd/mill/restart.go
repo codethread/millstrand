@@ -36,8 +36,34 @@ func restartBoundaryStatus(world config.World, status map[string]any) map[string
 	return status
 }
 
+// restartResultProjection is the closed command result.  Process metadata,
+// probe detail, and log paths remain internal Mill status; they do not leak
+// into the restart envelope owned by the core restart spec.
+func restartResultProjection(status map[string]any) map[string]any {
+	projection := map[string]any{
+		"operation": "restart",
+		"workspace": status["workspace"],
+		"state":     status["state"],
+	}
+	for _, key := range []string{"generation_id", "transition_id", "diagnostics"} {
+		if value, ok := status[key]; ok {
+			projection[key] = value
+		}
+	}
+	return projection
+}
+
 func validateRestartResult(status map[string]any) error {
-	if status == nil || status["operation"] != "weaver-restart" {
+	if status == nil {
+		return errors.New("restart result must be an object")
+	}
+	allowed := map[string]bool{"operation": true, "workspace": true, "state": true, "generation_id": true, "transition_id": true, "diagnostics": true}
+	for key := range status {
+		if !allowed[key] {
+			return fmt.Errorf("restart result contains unknown field %q", key)
+		}
+	}
+	if status["operation"] != "restart" {
 		return errors.New("restart result missing operation")
 	}
 	workspace, ok := status["workspace"].(string)
@@ -48,19 +74,156 @@ func validateRestartResult(status map[string]any) error {
 	if !ok || state == "" {
 		return errors.New("restart result missing state")
 	}
-	if state == restartStateRunning {
-		generation, ok := status["generation_id"].(string)
-		if !ok || generation == "" {
-			return errors.New("running restart result missing generation_id")
+	if generation, present := status["generation_id"]; present {
+		if value, ok := generation.(string); !ok || value == "" {
+			return errors.New("restart result generation_id must be a non-empty string")
 		}
 	}
-	if state == restartStateFailed {
-		if _, ok := status["failure"]; !ok {
-			return errors.New("failed restart result missing failure diagnostics")
+	if transition, present := status["transition_id"]; present {
+		if value, ok := transition.(string); !ok || value == "" {
+			return errors.New("restart result transition_id must be a non-empty string")
 		}
-		diagnostics, ok := status["diagnostics"].([]map[string]any)
-		if !ok || len(diagnostics) == 0 {
+	}
+	if diagnostics, present := status["diagnostics"]; present {
+		rows, ok := diagnostics.([]map[string]any)
+		if !ok || len(rows) == 0 {
+			return errors.New("restart result diagnostics must be a non-empty array")
+		}
+		for index, row := range rows {
+			if err := validateRestartDiagnostic(row); err != nil {
+				return fmt.Errorf("restart result diagnostics[%d]: %w", index, err)
+			}
+		}
+	}
+	switch state {
+	case restartStateProbing:
+		if _, ok := status["generation_id"]; !ok {
+			return errors.New("probing restart result missing generation_id")
+		}
+		if _, ok := status["transition_id"]; !ok {
+			return errors.New("probing restart result missing transition_id")
+		}
+	case restartStateRestarting:
+		if _, ok := status["transition_id"]; !ok {
+			return errors.New("restarting result missing transition_id")
+		}
+	case restartStateRunning:
+		if _, ok := status["generation_id"]; !ok {
+			return errors.New("running restart result missing generation_id")
+		}
+		if _, ok := status["diagnostics"]; ok {
+			return errors.New("running restart result must not contain diagnostics")
+		}
+	case restartStateFailed:
+		if _, ok := status["diagnostics"]; !ok {
 			return errors.New("failed restart result missing diagnostics")
+		}
+	default:
+		return fmt.Errorf("restart result has unknown state %q", state)
+	}
+	return nil
+}
+
+func validateRestartDiagnostic(row map[string]any) error {
+	allowed := map[string]bool{"stage": true, "status": true, "data": true, "generation_id": true, "transition_id": true}
+	for key := range row {
+		if !allowed[key] {
+			return fmt.Errorf("diagnostic contains unknown field %q", key)
+		}
+	}
+	stage, ok := row["stage"].(string)
+	if !ok || stage == "" {
+		return errors.New("diagnostic stage must be a non-empty string")
+	}
+	status, ok := row["status"].(string)
+	if !ok || !map[string]bool{"completed": true, "failed": true, "skipped": true, "in-progress": true}[status] {
+		return errors.New("diagnostic status is invalid")
+	}
+	if data, ok := row["data"]; ok {
+		if _, ok := data.(map[string]any); !ok {
+			return errors.New("diagnostic data must be an object")
+		}
+	}
+	return nil
+}
+
+func validateMillStatusProjection(status map[string]any) error {
+	allowed := map[string]bool{"state": true, "workspace": true, "generation_id": true, "transition_id": true, "diagnostics": true}
+	for key := range status {
+		if !allowed[key] {
+			return fmt.Errorf("mill status projection contains unknown field %q", key)
+		}
+	}
+	if state, ok := status["state"].(string); !ok || !map[string]bool{restartStateProbing: true, restartStateRestarting: true, restartStateRunning: true, restartStateFailed: true}[state] {
+		return errors.New("mill status projection has invalid state")
+	}
+	workspace, ok := status["workspace"].(string)
+	if !ok || workspace == "" {
+		return errors.New("mill status projection missing workspace")
+	}
+	if state := status["state"].(string); state == restartStateRunning {
+		if generation, ok := status["generation_id"].(string); !ok || generation == "" {
+			return errors.New("running mill status projection missing generation_id")
+		}
+	}
+	if diagnostics, ok := status["diagnostics"]; ok {
+		rows, ok := diagnostics.([]map[string]any)
+		if !ok {
+			return errors.New("mill status projection diagnostics must be an array")
+		}
+		for index, row := range rows {
+			if err := validateRestartDiagnostic(row); err != nil {
+				return fmt.Errorf("mill status projection diagnostics[%d]: %w", index, err)
+			}
+		}
+	}
+	return nil
+}
+
+func millStatusProjection(status map[string]any) map[string]any {
+	state, _ := status["state"].(string)
+	if restartState, _ := status["restart_state"].(string); restartState != "" {
+		state = restartState
+	}
+	if !map[string]bool{restartStateProbing: true, restartStateRestarting: true, restartStateRunning: true, restartStateFailed: true}[state] {
+		return nil
+	}
+	projection := map[string]any{"state": state, "workspace": status["config_dir"]}
+	for _, key := range []string{"generation_id", "transition_id", "diagnostics"} {
+		if value, ok := status[key]; ok {
+			projection[key] = value
+		}
+	}
+	return projection
+}
+
+func validateAdmissionState(admission map[string]any) error {
+	allowed := map[string]bool{"state": true, "generation_id": true, "transition_id": true}
+	for key := range admission {
+		if !allowed[key] {
+			return fmt.Errorf("admission state contains unknown field %q", key)
+		}
+	}
+	state, ok := admission["state"].(string)
+	if !ok || (state != "open" && state != "closed") {
+		return errors.New("admission state has an invalid state")
+	}
+	if state == "open" {
+		generation, ok := admission["generation_id"].(string)
+		if !ok || generation == "" {
+			return errors.New("open admission state requires generation_id")
+		}
+		if _, ok := admission["transition_id"]; ok {
+			return errors.New("open admission state must not contain transition_id")
+		}
+	}
+	if state == "closed" {
+		transition, ok := admission["transition_id"].(string)
+		if !ok || transition == "" {
+			return errors.New("closed admission state requires transition_id")
+		}
+		if _, ok := admission["generation_id"]; ok {
+			return errors.New("closed admission state must not contain generation_id")
 		}
 	}
 	return nil
@@ -74,6 +237,10 @@ type weaverTransition struct {
 	stateValue   string
 	generationID string
 	probe        *restartProbeResult
+	// retryStartup records that a previous probe already completed and only
+	// replacement startup needs to be retried.  This is the recovery path after
+	// a cutover startup failure, when no old generation remains admitted.
+	retryStartup bool
 	result       map[string]any
 	err          error
 	done         chan struct{}
@@ -142,6 +309,12 @@ func (s *server) setTransitionState(t *weaverTransition, state string, probe *re
 	t.stateValue = state
 	if probe != nil {
 		copy := *probe
+		if copy.Completed == nil {
+			copy.Completed = []string{}
+		}
+		if copy.Diagnostics == nil {
+			copy.Diagnostics = []map[string]any{}
+		}
 		t.probe = &copy
 	}
 	t.mu.Unlock()
@@ -150,7 +323,14 @@ func (s *server) setTransitionState(t *weaverTransition, state string, probe *re
 		record.PreviousGeneration = t.old.generationID
 	}
 	if probe != nil {
-		record.Probe = probe
+		copy := *probe
+		if copy.Completed == nil {
+			copy.Completed = []string{}
+		}
+		if copy.Diagnostics == nil {
+			copy.Diagnostics = []map[string]any{}
+		}
+		record.Probe = &copy
 	} else {
 		record.Probe = t.probe
 	}
@@ -202,6 +382,23 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 		}
 	}
 	old := s.children[world.ConfigDir]
+	var retryProbe *restartProbeResult
+	if old == nil {
+		if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+			s.mu.Unlock()
+			return nil, recordErr
+		} else if ok && record.State == restartStateFailed {
+			// A failed replacement has already completed its disposable probe.
+			// Retry only the authoritative startup step; there is no admitted old
+			// generation to use as a new probe baseline.
+			if record.Probe == nil || !record.Probe.Success {
+				s.mu.Unlock()
+				return nil, errors.New("failed restart record has no successful replacement probe to retry")
+			}
+			copy := *record.Probe
+			retryProbe = &copy
+		}
+	}
 	if old == nil {
 		if status, stale := readStatus(world); status != nil && !stale {
 			pid, ok := status["pid"].(int)
@@ -220,15 +417,16 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 				return nil, fmt.Errorf("selected workspace weaver metadata identity is unusable: %w", identityErr)
 			}
 			old = &weaverChild{cmd: &exec.Cmd{Process: process}, world: world, name: fmt.Sprint(status["name"]), generationID: fmt.Sprint(status["generation_id"]), identity: identity, unsupervised: true}
-		} else if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
-			s.mu.Unlock()
-			return nil, recordErr
-		} else if !ok || record.State != restartStateFailed {
+		} else if retryProbe == nil {
 			s.mu.Unlock()
 			return nil, fmt.Errorf("no running weaver for selected workspace")
 		}
 	}
-	t := &weaverTransition{world: world, old: old, transitionID: newOpaqueID("transition"), stateValue: restartStateProbing, done: make(chan struct{})}
+	state := restartStateProbing
+	if retryProbe != nil {
+		state = restartStateRestarting
+	}
+	t := &weaverTransition{world: world, old: old, transitionID: newOpaqueID("transition"), stateValue: state, probe: retryProbe, retryStartup: retryProbe != nil, done: make(chan struct{})}
 	if t.old != nil && t.old.generationID == "" {
 		t.old.generationID = newOpaqueID("generation")
 	}
@@ -237,7 +435,7 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 	}
 	s.transitions[world.ConfigDir] = t
 	s.mu.Unlock()
-	if err := s.setTransitionState(t, restartStateProbing, nil, nil); err != nil {
+	if err := s.setTransitionState(t, state, retryProbe, nil); err != nil {
 		s.completeTransition(t, nil, err, true)
 		return nil, err
 	}
@@ -251,16 +449,25 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 		s.failRestart(t, "probe", err, "")
 		return
 	}
-	probe, err := probeRuntime(source, t.world)
-	if err != nil {
-		// Probe transport/shape failures are retained as diagnostics while the
-		// admitted old generation remains in service.
-		s.failProbe(t, nil, err)
-		return
-	}
-	if !probe.Success {
-		s.failProbe(t, &probe, fmt.Errorf("restart probe failed at %s", probe.Stage))
-		return
+	probe := restartProbeResult{}
+	if t.retryStartup {
+		if t.probe == nil || !t.probe.Success {
+			s.failRestart(t, "probe", errors.New("replacement retry has no successful probe"), "")
+			return
+		}
+		probe = *t.probe
+	} else {
+		probe, err = probeRuntime(source, t.world)
+		if err != nil {
+			// Probe transport/shape failures are retained as diagnostics while the
+			// admitted old generation remains in service.
+			s.failProbe(t, nil, err)
+			return
+		}
+		if !probe.Success {
+			s.failProbe(t, &probe, fmt.Errorf("restart probe failed at %s", probe.Stage))
+			return
+		}
 	}
 	if err := s.setTransitionState(t, restartStateRestarting, &probe, nil); err != nil {
 		s.failRestart(t, "state", err, probe.Log)

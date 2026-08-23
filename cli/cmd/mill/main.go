@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,6 +52,11 @@ type weaverChild struct {
 }
 
 var millLogOut io.Writer = os.Stdout
+
+// startClaimInstalledFn is a deterministic seam for overlap tests.  The
+// default hook is inert; production callers still hold s.mu while the claim is
+// installed and the hook is called.
+var startClaimInstalledFn = func(string) {}
 
 func millLogf(format string, args ...any) {
 	_, _ = fmt.Fprintf(millLogOut, format+"\n", args...)
@@ -248,8 +254,17 @@ func start() error {
 func (s *server) handle(conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 	var req client.MillRequest
-	if err := json.NewDecoder(conn).Decode(&req); err != nil {
+	reader := bufio.NewReader(conn)
+	if err := json.NewDecoder(reader).Decode(&req); err != nil {
 		_ = json.NewEncoder(conn).Encode(errorResponse("", "protocol", "mill/protocol", "malformed mill request", err.Error()))
+		return
+	}
+	// The request decoder is allowed to read past the JSON value. Drain the
+	// buffered framing whitespace before invoke starts its disconnect watcher;
+	// otherwise the watcher could mistake the request's trailing newline for a
+	// caller message and cancel a healthy invocation.
+	if err := drainRequestWhitespace(reader); err != nil {
+		_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/protocol", "malformed mill request", err.Error()))
 		return
 	}
 	if req.ProtocolVersion != client.MillProtocolVersion || req.RequestID == "" || req.MillID != s.meta.MillID {
@@ -312,6 +327,7 @@ func (s *server) handle(conn net.Conn) {
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-restart-failed", "weaver restart failed", err.Error()))
 			return
 		}
+		result = restartResultProjection(result)
 		if err := validateRestartResult(result); err != nil {
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/weaver-restart-invalid-result", "weaver restart returned an invalid result", err.Error()))
 			return
@@ -322,6 +338,12 @@ func (s *server) handle(conn net.Conn) {
 		if err != nil {
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-status-failed", "weaver status failed", err.Error()))
 			return
+		}
+		if projection := millStatusProjection(result); projection != nil {
+			if err := validateMillStatusProjection(projection); err != nil {
+				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/weaver-status-invalid-result", "weaver status returned an invalid projection", err.Error()))
+				return
+			}
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})
 	case "weaver-list":
@@ -353,6 +375,21 @@ func (s *server) handle(conn net.Conn) {
 	default:
 		_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/unknown-operation", "unknown mill operation", req.Operation))
 	}
+}
+
+func drainRequestWhitespace(reader *bufio.Reader) error {
+	for reader.Buffered() > 0 {
+		b, err := reader.ReadByte()
+		if err != nil {
+			return err
+		}
+		switch b {
+		case ' ', '\t', '\r', '\n':
+		default:
+			return fmt.Errorf("unexpected data after mill request")
+		}
+	}
+	return nil
 }
 
 func validateInitRequest(world client.MillWorldRequest) error {

@@ -113,6 +113,10 @@ func friendlyName(world config.World, requested string) (string, error) {
 }
 
 func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error) {
+	return s.startWeaverLoop(req)
+}
+
+func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, error) {
 	world, err := resolveLifecycleWorld(req)
 	if err != nil {
 		return nil, err
@@ -122,7 +126,7 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 	}
 	if claim := s.startClaim(world.ConfigDir); claim != nil {
 		<-claim
-		return s.startWeaver(req)
+		return s.startWeaverLoop(req)
 	}
 	if transition := s.lifecycleTransition(world.ConfigDir); transition != nil {
 		// A probe leaves the admitted old generation serving.  Starting during
@@ -136,9 +140,16 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
 		return nil, recordErr
 	} else if ok && record.State == restartStateFailed {
-		return record.status(world), nil
+		status := record.status(world)
+		status["operation"] = "start"
+		return status, nil
 	}
 	s.mu.Lock()
+	if claim := s.startClaims[world.ConfigDir]; claim != nil {
+		s.mu.Unlock()
+		<-claim
+		return s.startWeaverLoop(req)
+	}
 	if transition := s.transitions[world.ConfigDir]; transition != nil {
 		s.mu.Unlock()
 		if transition.state() == restartStateProbing {
@@ -172,6 +183,7 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 		s.startClaims = map[string]chan struct{}{}
 	}
 	s.startClaims[world.ConfigDir] = claim
+	startClaimInstalledFn(world.ConfigDir)
 	s.mu.Unlock()
 	defer s.releaseStartClaim(world.ConfigDir, claim)
 	source, err := resolveLaunchSource(req.CWD)

@@ -115,7 +115,7 @@ func decodeRestartProbe(data []byte) (restartProbeResult, error) {
 
 var probeRuntime = runFreshRuntimeProbe
 
-const freshRuntimeProbeExpression = `(require '[clojure.data.json :as json] '[millstrand.core.db :as db] '[millstrand.core.weaver.runtime :as runtime]) (let [wire-baseline (json/read-str (System/getenv "MILLSTRAND_PROBE_BASELINE")) baseline {:status (keyword (get wire-baseline "status")) :projection (get wire-baseline "projection")} result (runtime/fresh-runtime-probe! {:config-dir (System/getenv "MILLSTRAND_PROBE_CONFIG") :state-dir (System/getenv "MILLSTRAND_PROBE_STATE") :data-dir (System/getenv "MILLSTRAND_PROBE_DATA")} {:old-generation-baseline baseline}) stage->wire (fn [value] (if (keyword? value) (subs (str value) 1) value)) wire (-> (select-keys result [:success :stage :probe/workspace :source/workspace :completed :diagnostics :log]) (update :stage stage->wire) (update :completed #(mapv stage->wire %)))] (println (json/write-str wire :key-fn db/json-key)))`
+const freshRuntimeProbeExpression = `(require '[clojure.data.json :as json] '[millstrand.core.db :as db] '[millstrand.core.weaver.runtime :as runtime]) (let [wire-baseline (json/read-str (System/getenv "MILLSTRAND_PROBE_BASELINE")) baseline {:status (keyword (get wire-baseline "status")) :projection (get wire-baseline "projection")} result (runtime/fresh-runtime-probe! {:config-dir (System/getenv "MILLSTRAND_PROBE_CONFIG") :state-dir (System/getenv "MILLSTRAND_PROBE_STATE") :data-dir (System/getenv "MILLSTRAND_PROBE_DATA")} {:old-generation-baseline baseline}) stage->wire (fn [value] (if (keyword? value) (subs (str value) 1) value)) wire (-> (select-keys result [:success :stage :probe/workspace :source/workspace :completed :diagnostics :log]) (update :stage stage->wire) (update :completed #(mapv stage->wire %)))] (spit (System/getenv "MILLSTRAND_PROBE_RESULT") (json/write-str wire :key-fn db/json-key)))`
 
 func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult, error) {
 	status, stale := readStatus(world)
@@ -138,11 +138,24 @@ func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult
 	if err != nil {
 		return restartProbeResult{}, fmt.Errorf("marshal old-generation baseline: %w", err)
 	}
+	resultFile, err := os.CreateTemp("", "millstrand-probe-result-*.json")
+	if err != nil {
+		return restartProbeResult{}, fmt.Errorf("create restart probe result sink: %w", err)
+	}
+	resultPath := resultFile.Name()
+	if err := resultFile.Close(); err != nil {
+		_ = os.Remove(resultPath)
+		return restartProbeResult{}, fmt.Errorf("close restart probe result sink: %w", err)
+	}
+	defer func() { _ = os.Remove(resultPath) }()
 	cmd := exec.Command("clojure", "-M:millstrand", "-e", freshRuntimeProbeExpression)
 	cmd.Dir = source
-	cmd.Env = append(os.Environ(), "MILLSTRAND_PROBE_CONFIG="+world.ConfigDir, "MILLSTRAND_PROBE_STATE="+world.StateDir, "MILLSTRAND_PROBE_DATA="+world.DataDir, "MILLSTRAND_PROBE_BASELINE="+string(baseline))
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
+	cmd.Env = append(os.Environ(), "MILLSTRAND_PROBE_CONFIG="+world.ConfigDir, "MILLSTRAND_PROBE_STATE="+world.StateDir, "MILLSTRAND_PROBE_DATA="+world.DataDir, "MILLSTRAND_PROBE_BASELINE="+string(baseline), "MILLSTRAND_PROBE_RESULT="+resultPath)
+	var stderr bytes.Buffer
+	// User init/module code may write ordinary stdout.  The probe result has a
+	// dedicated file sink, so that output is diagnostic noise rather than a
+	// framing hazard or an unbounded buffer.
+	cmd.Stdout = io.Discard
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if stderr.Len() > 0 {
@@ -150,7 +163,14 @@ func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult
 		}
 		return restartProbeResult{}, fmt.Errorf("restart probe process failed: %w", err)
 	}
-	result, err := decodeRestartProbe(stdout.Bytes())
+	framed, readErr := os.ReadFile(resultPath)
+	if readErr != nil {
+		if stderr.Len() > 0 {
+			return restartProbeResult{}, fmt.Errorf("restart probe did not write framed result: %w; probe stderr: %s", readErr, strings.TrimSpace(stderr.String()))
+		}
+		return restartProbeResult{}, fmt.Errorf("restart probe did not write framed result: %w", readErr)
+	}
+	result, err := decodeRestartProbe(framed)
 	if err != nil {
 		if stderr.Len() > 0 {
 			return restartProbeResult{}, fmt.Errorf("%w; probe stderr: %s", err, strings.TrimSpace(stderr.String()))

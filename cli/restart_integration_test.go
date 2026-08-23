@@ -214,6 +214,16 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 		release := filepath.Join(shortTempDir(t), "probe-release")
 		h.initWorld(t, workspace)
 		appendProbeGate(t, filepath.Join(workspace, "init.clj"), started, release)
+		module := filepath.Join(workspace, "modules", "stdout.clj")
+		if err := os.MkdirAll(filepath.Dir(module), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(module, []byte("(ns restart.stdout)\n(println \"probe module stdout must not corrupt the framed result\")\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		appendInit(t, filepath.Join(workspace, "init.clj"), fmt.Sprintf(
+			"(millstrand.core.weaver.runtime/declare-module! millstrand.core.weaver.runtime/*runtime* :stdout/module {:file %s})\n",
+			clojureString("modules/stdout.clj")))
 		old := h.startExistingWorld(t, workspace)
 		oldPID, oldGeneration := requiredPID(t, old), requiredString(t, old, "generation_id")
 
@@ -253,6 +263,10 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 		secondResult := awaitProcessResult(t, second)
 		thirdResult := awaitProcessResult(t, third)
 		final := decodeObject(t, firstResult.output)
+		if err := validateRestartEnvelopeForAcceptance(final, "restart"); err != nil {
+			t.Fatal(err)
+		}
+		finalStatus := h.status(t, workspace)
 		for label, result := range map[string]processResult{"first": firstResult, "second": secondResult, "third": thirdResult} {
 			if result.err != nil {
 				t.Fatalf("%s restart caller failed: %v\n%s", label, result.err, result.output)
@@ -262,11 +276,11 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 				t.Fatalf("%s caller did not converge: %#v final=%#v", label, got, final)
 			}
 		}
-		if requiredString(t, final, "generation_id") == oldGeneration || requiredPID(t, final) == oldPID {
-			t.Fatalf("restart did not perform exactly one generation change: old=%#v final=%#v", old, final)
+		if requiredString(t, final, "generation_id") == oldGeneration || requiredPID(t, finalStatus) == oldPID {
+			t.Fatalf("restart did not perform exactly one generation change: old=%#v final=%#v", old, finalStatus)
 		}
-		h.pids = append(h.pids, requiredPID(t, final))
-		assertSuccessfulProbeDiagnostics(t, final)
+		h.pids = append(h.pids, requiredPID(t, finalStatus))
+		assertSuccessfulProbeDiagnostics(t, finalStatus)
 		if err := waitProcessExit(oldPID, 10*time.Second); err != nil {
 			t.Fatal(err)
 		}
@@ -284,7 +298,10 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 			t.Fatalf("invalid probe should retain old generation: %v\n%s", err, out)
 		}
 		status := decodeObject(t, out)
-		assertRetainedProbeFailure(t, status, oldPID, oldGeneration, "source/dependency")
+		if err := validateRestartEnvelopeForAcceptance(status, "restart"); err != nil {
+			t.Fatal(err)
+		}
+		assertRetainedProbeFailure(t, h.status(t, workspace), oldPID, oldGeneration, "source/dependency")
 	})
 
 	t.Run("invalid candidate registry probe retains diagnostics", func(t *testing.T) {
@@ -306,7 +323,10 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 			t.Fatalf("invalid candidate probe should retain old generation: %v\n%s", err, out)
 		}
 		status := decodeObject(t, out)
-		assertRetainedProbeFailure(t, status, oldPID, oldGeneration, "candidate-registry")
+		if err := validateRestartEnvelopeForAcceptance(status, "restart"); err != nil {
+			t.Fatal(err)
+		}
+		assertRetainedProbeFailure(t, h.status(t, workspace), oldPID, oldGeneration, "candidate-registry")
 	})
 
 	t.Run("replacement startup failure admits no generation", func(t *testing.T) {
@@ -325,16 +345,40 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 			t.Fatalf("replacement startup failure lost structured failed result: %v\n%s", err, out)
 		}
 		status := decodeObject(t, out)
-		if status["state"] != "failed" || status["pid"] != nil || status["generation_id"] != nil {
+		if err := validateRestartEnvelopeForAcceptance(status, "restart"); err != nil {
+			t.Fatal(err)
+		}
+		if status["state"] != "failed" || status["generation_id"] != nil {
 			t.Fatalf("failed replacement admitted a generation: %#v\ncommand=%s", status, out)
 		}
-		failure, ok := status["failure"].(map[string]any)
-		if !ok || failure["stage"] == "" || failure["message"] == "" || failure["log_path"] == "" {
+		diagnostics, ok := status["diagnostics"].([]any)
+		if !ok || len(diagnostics) == 0 {
+			t.Fatalf("replacement failure lost stage/message/log: %#v", status)
+		}
+		failureData, _ := diagnostics[0].(map[string]any)
+		data, _ := failureData["data"].(map[string]any)
+		if failureData["stage"] == "" || data["message"] == "" || data["log_path"] == "" {
 			t.Fatalf("replacement failure lost stage/message/log: %#v", status)
 		}
 		if processExists(oldPID) {
 			t.Fatalf("old generation remained alive after cutover failure: pid=%d", oldPID)
 		}
+		if err := os.Remove(failMarker); err != nil {
+			t.Fatal(err)
+		}
+		retryOut, retryErr := h.run("weaver", "restart", "--workspace", workspace)
+		if retryErr != nil {
+			t.Fatalf("failed replacement retry did not converge: %v\n%s", retryErr, retryOut)
+		}
+		retry := decodeObject(t, retryOut)
+		if err := validateRestartEnvelopeForAcceptance(retry, "restart"); err != nil {
+			t.Fatal(err)
+		}
+		if retry["state"] != "running" || requiredString(t, retry, "generation_id") == "" {
+			t.Fatalf("replacement retry did not admit exactly one generation: %#v", retry)
+		}
+		retryStatus := h.status(t, workspace)
+		h.pids = append(h.pids, requiredPID(t, retryStatus))
 	})
 }
 
@@ -355,6 +399,7 @@ func appendProbeGate(t *testing.T, initPath, started, release string) {
 	text := fmt.Sprintf(`
 (let [started %s release %s]
   (when (System/getenv "MILLSTRAND_PROBE_STATE")
+    (println "probe init stdout must not corrupt the framed result")
     (spit started "started")
     (while (not (.exists (java.io.File. release)))
       (Thread/yield))))
@@ -639,6 +684,19 @@ func decodeObject(t *testing.T, output string) map[string]any {
 		t.Fatalf("expected JSON object, got %q: %v", output, err)
 	}
 	return value
+}
+
+func validateRestartEnvelopeForAcceptance(value map[string]any, operation string) error {
+	allowed := map[string]bool{"operation": true, "workspace": true, "state": true, "generation_id": true, "transition_id": true, "diagnostics": true}
+	for key := range value {
+		if !allowed[key] {
+			return fmt.Errorf("restart envelope contains unknown key %q: %#v", key, value)
+		}
+	}
+	if value["operation"] != operation || value["workspace"] == "" || value["state"] == "" {
+		return fmt.Errorf("restart envelope missing identity fields: %#v", value)
+	}
+	return nil
 }
 
 func requiredString(t *testing.T, value map[string]any, key string) string {
