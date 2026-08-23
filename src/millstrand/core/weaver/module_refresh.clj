@@ -996,6 +996,43 @@
        :hard-conflicts []
        :classification/error (exception-data throwable)})))
 
+(defn- diagnostic!
+  "Append one probe diagnostic without allowing reporting to alter validation.
+
+  The probe owns the diagnostic sink. A sink failure is retained as diagnostic
+  data by its caller rather than becoming a substitute for the probe failure."
+  [opts stage status data]
+  (when-let [report! (:diagnostic! opts)]
+    (try
+      (report! {:stage stage :status status :data data})
+      (catch Throwable _ nil))))
+
+(defn- projection-value [value]
+  (cond
+    (fn? value) {:callable true :class (.getName (class value))}
+    (map? value) (into (empty value)
+                       (map (fn [[key nested]] [key (projection-value nested)]))
+                       value)
+    (vector? value) (mapv projection-value value)
+    (set? value) (set (map projection-value value))
+    (sequential? value) (doall (map projection-value value))
+    :else value))
+
+(defn- candidate-projection
+  "Return candidate registry data with executable values redacted.
+
+  Candidate snapshots are immutable plain data except for captured event
+  callables. The probe reports the complete registry projection while ensuring
+  diagnostics never expose a function object."
+  [backends candidates]
+  (into (sorted-map)
+        (keep (fn [[kind-id {:keys [storage]}]]
+                (when-let [candidate (get candidates storage)]
+                  [kind-id (projection-value
+                             (select-keys candidate
+                                          [:effective :owners :provenance]))])))
+        backends))
+
 (defn- plan-result
   "Assemble the dry-run intentions from staged candidates without publishing.
 
@@ -1018,7 +1055,12 @@
                planned)))
          (:modules provisional)
          raw)
-        status (top-status graph outcomes (:roots sync-result) changed-kinds)]
+        status (top-status graph outcomes (:roots sync-result) changed-kinds)
+        lifecycle-plan (into (sorted-map)
+                             (keep (fn [[module-key outcome]]
+                                     (when-let [plan (:lifecycle/plan outcome)]
+                                       [module-key plan])))
+                             outcomes)]
     (assoc provisional
            :status status
            :modules outcomes
@@ -1027,7 +1069,9 @@
            :residuals (:residuals loaded-status)
            :conflicts (vec (concat (:conflicts provisional)
                                    (:hard-conflicts loaded-status)))
-           :publication/kinds (vec (sort-by pr-str changed-kinds)))))
+           :publication/kinds (vec (sort-by pr-str changed-kinds))
+           :candidate-registries (candidate-projection backends (:candidates staged))
+           :lifecycle/plan lifecycle-plan)))
 
 (defn- record-result!
   [runtime collection contributions contribution-sources resources lifecycle-state
@@ -1146,12 +1190,15 @@
               order (module-graph/affected-modules graph selected)
               ;; An empty graph needs no acquisition pass. Any desired or current
               ;; module graph owns synchronization through this coordinator.
-              sync-result (if (:dry-run? opts)
+              sync-result (if (and (:dry-run? opts) (not (:probe? opts)))
                             (current-root-state runtime)
-                            (if (or (seq graph) (seq old-graph))
+                            (if (or (:probe? opts) (seq graph) (seq old-graph))
                               (sync-roots! runtime)
                               (current-root-state runtime)))]
-          (if-let [fatal (:fatal sync-result)]
+          (do
+            (diagnostic! opts :spools/materialize :completed
+                         (select-keys sync-result [:roots :sync :conflicts :remedies]))
+            (if-let [fatal (:fatal sync-result)]
             (if (:startup? opts)
               (throw (ex-info "Initial module refresh could not synchronize approved roots"
                               fatal))
@@ -1166,6 +1213,13 @@
                                                previous-contributions previous-sources)
                         lifecycle-resolvers
                         (resolve-lifecycle-callables! with-loader raw)
+                        _ (diagnostic!
+                           opts :module/evaluate
+                           (if (some #(= :failed (:status %)) (vals raw))
+                             :failed
+                             :completed)
+                           {:modules (select-keys raw order)
+                            :lifecycle/callables (keys lifecycle-resolvers)})
                         staged-runtime (staging-runtime runtime)
                         _ (realize-kind-declarations! staged-runtime raw)
                         backends (publication/backends staged-runtime)
@@ -1178,6 +1232,9 @@
                         _ (publication/validate-op-candidates! backends (:candidates staged))
                         _ (publication/validate-kind-candidates!
                            runtime backends (:candidates staged))
+                        _ (diagnostic! opts :candidate/validate :completed
+                                       {:candidate-registries
+                                        (candidate-projection backends (:candidates staged))})
                         provisional (provisional-result mode (:roots sync-result)
                                                         (:conflicts sync-result)
                                                         (:remedies sync-result)
@@ -1188,8 +1245,13 @@
                 ;; validated candidates but publishes nothing, reconciles nothing,
                 ;; and records no coordinator state (DELTA-OlrRepl-001.CC14).
                     (if (:dry-run? opts)
-                      (plan-result runtime state sync-result staged provisional
-                                   backends graph raw)
+                      (let [result (plan-result runtime state sync-result staged provisional
+                                                backends graph raw)]
+                        (diagnostic! opts :lifecycle/plan :completed
+                                     (select-keys result [:candidate-registries
+                                                          :lifecycle/plan
+                                                          :modules]))
+                        result)
                       (let [live-backends (publication/backends runtime)
                             live-candidates (publication/candidates live-backends)
                             live-spool-state @(:spool-state runtime)
@@ -1234,13 +1296,15 @@
                                         (:roots sync-result) result))))
                   (catch Throwable throwable
                     (restore-declaration-records! @record-snapshots)
+                    (diagnostic! opts :probe/failure :failed
+                                 (exception-data throwable))
                     ;; Source loads may already have occurred, but no publication
                     ;; follows a coordinator-wide validation failure.
                     (if (:startup? opts)
                       (throw throwable)
                       (record-refused-result!
                        runtime opts
-                       (refused-result mode (exception-data throwable))))))))))))))
+                       (refused-result mode (exception-data throwable)))))))))))))))
 
 (defn module!
   "Stage a module during startup collection, otherwise declare and refresh it."

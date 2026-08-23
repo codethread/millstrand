@@ -32,3 +32,48 @@
   (is (s/valid? ::specs/hook-transform-return {:hook/value {}}))
   (is (not (s/valid? ::specs/hook-transform-return nil)))
   (is (not (s/valid? ::specs/hook-transform-return {:value {}}))))
+
+(deftest restart-and-admission-contracts-are-closed
+  (is (s/valid? :millstrand.core.specs/restart-result
+                {:operation :restart
+                 :workspace "/tmp/world"
+                 :state :running
+                 :generation-id "generation-1"}))
+  (is (s/valid? :millstrand.core.specs/restart-result
+                {:operation :restart
+                 :workspace "/tmp/world"
+                 :state :failed
+                 :transition-id "transition-1"
+                 :diagnostics [{:stage "probe"
+                                :status :failed}]}))
+  (is (not (s/valid? :millstrand.core.specs/restart-result
+                     {:operation :restart
+                      :workspace "/tmp/world"
+                      :state :running
+                      :generation-id "generation-1"
+                      :unknown true})))
+  (is (s/valid? :millstrand.core.specs/admission-state
+                {:state :open :generation-id "generation-1"}))
+  (is (s/valid? :millstrand.core.specs/admission-state
+                {:state :closed :transition-id "transition-1"})))
+
+(deftest mill-protocol-envelopes-reject-unknown-wire-fields
+  (is (s/valid? :millstrand.core.mill-protocol/request
+                {"protocol_version" 1
+                 "request_id" "request-1"
+                 "weaver_id" "weaver-1"
+                 "operation" "process.get"
+                 "arguments" {"handle" "handle-1"}}))
+  (is (s/valid? :millstrand.core.mill-protocol/response
+                {"protocol_version" 1
+                 "request_id" "request-1"
+                 "ok" true
+                 "result" {}
+                 "error" nil}))
+  (is (not (s/valid? :millstrand.core.mill-protocol/request
+                     {"protocol_version" 1
+                      "request_id" "request-1"
+                      "weaver_id" "weaver-1"
+                      "operation" "process.get"
+                      "arguments" {}
+                      "options" {}}))))

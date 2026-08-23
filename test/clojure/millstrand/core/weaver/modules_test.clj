@@ -1365,3 +1365,21 @@
         (finally
           (when @rt (weaver-runtime/stop! @rt))
           (delete-tree! (io/file workspace "..")))))))
+
+(deftest failed-fresh-runtime-probe-retains-disposable-diagnostics
+  (let [world (temp-world)
+        workspace (:config-dir world)]
+    (try
+      (spit (io/file workspace "init.clj")
+            (str "(require '[millstrand.api.current.alpha :as current] "
+                 "'[millstrand.api.runtime.alpha :as runtime])\n"
+                 "(runtime/module! (current/runtime) :missing/module "
+                 "{:file \"modules/missing.clj\"})\n"))
+      (let [result (weaver-runtime/fresh-runtime-probe! world)]
+        (is (false? (:success result)))
+        (is (= :probe/failure (:stage result)))
+        (is (.isDirectory (io/file (:probe/workspace result))))
+        (is (.isFile (io/file (:log result))))
+        (is (some #(= :probe/failure (:stage %)) (:diagnostics result))))
+      (finally
+        (delete-tree! (io/file workspace ".."))))))

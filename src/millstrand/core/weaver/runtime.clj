@@ -16,7 +16,9 @@
             [millstrand.core.db :as db])
   (:import [java.lang ProcessHandle]
            [java.time Instant]
-           [java.util.concurrent ArrayBlockingQueue]))
+           [java.util.concurrent ArrayBlockingQueue]
+           [java.nio.file Files StandardCopyOption]
+           [java.nio.file.attribute FileAttribute]))
 
 (def ^:private loopback-host "127.0.0.1")
 (def ^:private reserved-release-marker-message
@@ -138,12 +140,18 @@
     nil))
 
 (defn start-event-system!
-  "Attach and start a fresh event system on `runtime`."
-  [runtime]
+  "Attach a fresh event system on `runtime`, optionally starting its worker.
+
+  Probe runtimes retain the registry backing needed for candidate validation but
+  deliberately do not start an event dispatch lane."
+  ([runtime]
+   (start-event-system! runtime true))
+  ([runtime start-worker?]
   (let [event-system (event-system-base)
         runtime* (assoc runtime :event-system event-system)]
-    (run-event-worker! runtime* event-system)
-    runtime*))
+    (when start-worker?
+      (run-event-worker! runtime* event-system))
+    runtime*)))
 
 (defn- current-pid
   "Return the current OS process id."
@@ -547,7 +555,7 @@
   opts)
 
 (defn- start-with-options!
-  [db-file {:keys [world name publish? storage release-marker]
+  [db-file {:keys [world name publish? storage release-marker probe? diagnostic!]
             :or {publish? true}}]
   (when (and publish? @current-runtime)
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
@@ -567,9 +575,10 @@
           ds (:connectable storage)
           _ (db/init! ds)
           runtime-state (atom nil)
-          server (nrepl/start-server :bind loopback-host :port 0
-                                     :handler (runtime-nrepl-handler runtime-state))
-          port (:port server)
+          server (when-not probe?
+                   (nrepl/start-server :bind loopback-host :port 0
+                                       :handler (runtime-nrepl-handler runtime-state)))
+          port (some-> server :port)
           nonce (metadata/new-nonce)
           meta (metadata/metadata-shape {:pid (current-pid)
                                          :host loopback-host
@@ -625,32 +634,43 @@
                                             (.getContextClassLoader (Thread/currentThread)))
                         :server server
                         :metadata meta}
-          runtime-base (start-event-system! runtime-base)
+          runtime-base (start-event-system! runtime-base (not probe?))
           _ (reset! runtime-state runtime-base)]
       (try
-        (let [socket-runtime (socket/start! runtime-state (:socket-path meta))
+        (let [socket-runtime (when-not probe?
+                               (socket/start! runtime-state (:socket-path meta)))
               runtime (assoc runtime-base :socket-runtime socket-runtime)]
           (reset! runtime-state runtime)
-          (swap! nrepl-port-runtimes assoc port runtime)
+          (when port
+            (swap! nrepl-port-runtimes assoc port runtime))
           (when (and publish? (not (compare-and-set! current-runtime nil runtime)))
             (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
           (install-built-in-ops! runtime)
-          (let [refresh-result (refresh-modules! runtime {:startup? true})]
+          (let [refresh-result (refresh-modules! runtime (cond-> {:startup? true}
+                                                            probe? (assoc :probe? true
+                                                                          :dry-run? true
+                                                                          :diagnostic! diagnostic!)))
+                runtime (assoc runtime :probe-result refresh-result)]
             (when-not (#{:applied :unchanged} (:status refresh-result))
               (throw (ex-info "Initial module refresh did not complete successfully"
-                              refresh-result))))
+                              refresh-result)))
            ;; Arm the scheduler only after startup files finish loading, so
            ;; handlers supplied by approved spools/config resolve before any
-           ;; durable pending wake is re-armed (DELTA-...-runtime-001.CC5).
-          (scheduler/rearm! runtime)
-          (let [published-runtime (assoc runtime :metadata-file (metadata/publish! meta))]
+           ;; durable pending wake is re-armed. Probe mode has no live scheduler.
+          (when-not probe?
+            (scheduler/rearm! runtime))
+          (let [published-runtime (if probe?
+                                    runtime
+                                    (assoc runtime :metadata-file (metadata/publish! meta)))]
             (reset! runtime-state published-runtime)
-            (swap! nrepl-port-runtimes assoc port published-runtime)
+            (when port
+              (swap! nrepl-port-runtimes assoc port published-runtime))
             (when publish?
               (compare-and-set! current-runtime runtime published-runtime))
-            published-runtime))
+            published-runtime)))
         (catch Throwable t
-          (swap! nrepl-port-runtimes dissoc port)
+          (when port
+            (swap! nrepl-port-runtimes dissoc port))
           (when publish?
             (compare-and-set! current-runtime @runtime-state nil))
           (stop-event-system! @runtime-state)
@@ -662,7 +682,8 @@
            ;; available, without masking the original startup exception.
           (close-spool-state! @runtime-state t)
           (close-storage! @runtime-state)
-          (metadata/delete! world)
+          (when-not probe?
+            (metadata/delete! world))
           (throw t))))))
 
 (defn start!
@@ -683,6 +704,112 @@
   ([db-file opts]
    (require-start-options! opts)
    (start-with-options! db-file opts)))
+
+(defn- copy-tree!
+  "Copy one selected config tree into a disposable probe workspace."
+  [source target]
+  (let [source (.getCanonicalFile (io/file source))
+        target (.getCanonicalFile (io/file target))
+        source-path (.toPath source)
+        target-path (.toPath target)]
+    (.mkdirs target)
+    (doseq [^java.io.File file (file-seq source)
+            :let [relative (.relativize source-path (.toPath file))
+                  destination (.resolve target-path relative)]]
+      (if (.isDirectory file)
+        (Files/createDirectories destination (make-array FileAttribute 0))
+        (do
+          (Files/createDirectories (.getParent destination)
+                                   (make-array FileAttribute 0))
+          (Files/copy (.toPath file) destination
+                      (into-array java.nio.file.CopyOption
+                                  [StandardCopyOption/REPLACE_EXISTING])))))
+    target))
+
+(defn- delete-tree!
+  "Delete the exact disposable probe tree after a successful probe."
+  [^java.io.File root]
+  (doseq [^java.io.File file (reverse (file-seq root))]
+    (when (.exists file)
+      (.delete file)))
+  nil)
+
+(defn fresh-runtime-probe!
+  "Probe a fresh unpublished runtime generation from a selected world.
+
+  The selected world's config is copied into a disposable workspace. The probe
+  uses in-memory storage and the effect-free module-refresh staging path. A
+  failed probe retains its workspace and append-only diagnostics for inspection;
+  a successful probe stops and removes the disposable workspace before return.
+  No ambient runtime, canonical metadata, scheduler, event lane, lifecycle
+  effect, or process custody operation is started by the probe."
+  ([world]
+   (fresh-runtime-probe! world {}))
+  ([world opts]
+   (when-not (and (map? world)
+                  (every? #(and (string? (get world %))
+                                (not (str/blank? (get world %))))
+                          [:config-dir :state-dir :data-dir]))
+     (throw (ex-info "Fresh runtime probe requires a selected world"
+                     {:world world})))
+   (let [probe-root (.toFile (Files/createTempDirectory
+                              "millstrand-restart-probe-"
+                              (make-array FileAttribute 0)))
+         probe-config (io/file probe-root "config")
+         probe-state (io/file probe-root "state")
+         probe-data (io/file probe-root "data")
+         probe-log (io/file probe-root "probe.edn")
+         probe-world (weaver-config/world (.getPath probe-config)
+                                          (.getPath probe-state)
+                                          (.getPath probe-data))
+         diagnostics (atom [])
+         report! (fn [entry]
+                   (let [entry (assoc entry :at (str (Instant/now)))]
+                     (swap! diagnostics conj entry)
+                     (spit probe-log (str (pr-str entry) "\n") :append true)))]
+     (try
+       (report! {:stage :config/read :status :completed
+                 :data {:source/workspace (:config-dir world)}})
+       (copy-tree! (:config-dir world) probe-config)
+       (report! {:stage :probe/workspace :status :completed
+                 :data {:workspace (.getPath probe-root)}})
+       (let [runtime (start! nil (merge opts
+                                        {:world probe-world
+                                         :publish? false
+                                         :storage :sqlite-memory
+                                         :probe? true
+                                         :diagnostic! report!}))
+             result (assoc (or (:probe-result runtime) {})
+                           :success true
+                           :stage :probe/complete
+                           :probe/workspace (.getPath probe-root)
+                           :source/workspace (:config-dir world)
+                           :completed (mapv :stage @diagnostics)
+                           :diagnostics @diagnostics
+                           :log (.getPath probe-log))]
+         (stop! runtime)
+         (delete-tree! probe-root)
+         result)
+       (catch Throwable throwable
+         (let [failure (merge {:success false
+                               :stage :probe/failure
+                               :probe/workspace (.getPath probe-root)
+                               :source/workspace (:config-dir world)
+                               :completed (mapv :stage @diagnostics)
+                               :diagnostics @diagnostics
+                               :log (.getPath probe-log)}
+                              (when (instance? clojure.lang.ExceptionInfo throwable)
+                                (ex-data throwable)))]
+           (report! {:stage :probe/failure
+                     :status :failed
+                     :data (select-keys failure [:error :reason :message])})
+           (assoc failure
+                  :completed (mapv :stage @diagnostics)
+                  :diagnostics @diagnostics)))))))
+
+(def ^{:doc "Probe a fresh unpublished runtime generation from a selected world."}
+  probe!
+  fresh-runtime-probe!)
 
 (defn status
   "Return the published metadata for `runtime`."

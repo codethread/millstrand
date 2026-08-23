@@ -167,6 +167,21 @@
       (finally
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
+(deftest fresh-runtime-probe-is-unpublished-and-cleans-success
+  (let [world (temp-world)
+        result (try
+                 (weaver-runtime/fresh-runtime-probe! world)
+                 (finally
+                   (delete-tree! (io/file (:config-dir world) ".."))))]
+    (is (true? (:success result)))
+    (is (= :probe/complete (:stage result)))
+    (is (seq (:candidate-registries result)))
+    (is (vector? (:diagnostics result)))
+    (is (not (.exists (io/file (:probe/workspace result)))))
+    (is (nil? @weaver-runtime/current-runtime))
+    (is (not (.exists (io/file (:state-dir world) "weaver.json"))))
+    (is (not (.exists (io/file (:data-dir world) "millstrand.sqlite"))))))
+
 (deftest unpublished-runtimes-coexist-with-isolated-storage-and-registries
   (let [world-a (temp-world)
         world-b (temp-world)
