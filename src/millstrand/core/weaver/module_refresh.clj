@@ -1229,12 +1229,19 @@
                           staged (stage-publications runtime backends base-candidates graph order raw
                                                      previous-contributions previous-sources)
                           _ (require-kind-declarations-staged! raw (:outcomes staged))
+                          candidate-projection
+                          (candidate-projection backends (:candidates staged))
+                          _ (diagnostic!
+                             opts :candidate/staged :completed
+                             {:candidate-registries candidate-projection
+                              :old-generation/diff
+                              {:previous-generation :not-admitted
+                               :candidate-registries candidate-projection}})
                           _ (publication/validate-op-candidates! backends (:candidates staged))
                           _ (publication/validate-kind-candidates!
                              runtime backends (:candidates staged))
                           _ (diagnostic! opts :candidate/validate :completed
-                                         {:candidate-registries
-                                          (candidate-projection backends (:candidates staged))})
+                                         {:candidate-registries candidate-projection})
                           provisional (provisional-result mode (:roots sync-result)
                                                           (:conflicts sync-result)
                                                           (:remedies sync-result)

@@ -723,13 +723,14 @@
     (.mkdirs target)
     (doseq [^java.io.File file (file-seq source)
             :let [relative (.relativize source-path (.toPath file))
-                  destination (.resolve target-path relative)]]
+                  ^java.nio.file.Path destination (.resolve target-path relative)]]
       (if (.isDirectory file)
         (Files/createDirectories destination (make-array FileAttribute 0))
         (do
           (Files/createDirectories (.getParent destination)
                                    (make-array FileAttribute 0))
           (Files/copy (.toPath file) destination
+                      ^"[Ljava.nio.file.CopyOption;"
                       (into-array java.nio.file.CopyOption
                                   [StandardCopyOption/REPLACE_EXISTING])))))
     target))
@@ -741,6 +742,14 @@
     (when (.exists file)
       (.delete file)))
   nil)
+
+(defn- report-probe-skipped!
+  "Record effects that probe mode deliberately leaves unexecuted."
+  [report!]
+  (doseq [[stage reason] [[:publication :probe-mode]
+                          [:lifecycle/apply :probe-mode]
+                          [:scheduler/rearm :probe-mode]]]
+    (report! {:stage stage :status :skipped :data {:reason reason}})))
 
 (defn fresh-runtime-probe!
   "Probe a fresh unpublished runtime generation from a selected world.
@@ -787,6 +796,7 @@
                                          :storage :sqlite-memory
                                          :probe? true
                                          :diagnostic! report!}))
+             _ (report-probe-skipped! report!)
              result (assoc (or (:probe-result runtime) {})
                            :success true
                            :stage :probe/complete
@@ -799,7 +809,11 @@
          (delete-tree! probe-root)
          result)
        (catch Throwable throwable
-         (let [failure (merge {:success false
+         (let [failure-context {:message (ex-message throwable)
+                                :class (str (class throwable))
+                                :data (when (instance? clojure.lang.ExceptionInfo throwable)
+                                        (ex-data throwable))}
+               failure (merge {:success false
                                :stage :probe/failure
                                :probe/workspace (.getPath probe-root)
                                :source/workspace (:config-dir world)
@@ -810,7 +824,8 @@
                                 (ex-data throwable)))]
            (report! {:stage :probe/failure
                      :status :failed
-                     :data (select-keys failure [:error :reason :message])})
+                     :data failure-context})
+           (report-probe-skipped! report!)
            (assoc failure
                   :completed (mapv :stage @diagnostics)
                   :diagnostics @diagnostics)))))))

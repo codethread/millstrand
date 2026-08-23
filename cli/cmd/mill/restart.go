@@ -227,6 +227,7 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 	t.generationID = child.generationID
 	status["generation_id"] = child.generationID
 	status["transition_id"] = t.transitionID
+	status["probe"] = probe
 	if err := s.setTransitionState(t, restartStateRunning, &probe, nil); err != nil {
 		s.failRestart(t, "state", err, weaverLogPath(t.world.StateDir))
 		return
@@ -238,6 +239,7 @@ func (s *server) failProbe(t *weaverTransition, probe *restartProbeResult, err e
 	_ = s.setTransitionState(t, restartStateRunning, probe, &restartFailure{Stage: "probe", Message: err.Error()})
 	status := s.admittedGenerationStatus(t.world, t)
 	status["probe_error"] = err.Error()
+	status["restart_state"] = restartStateRunning
 	s.completeTransition(t, status, nil, false)
 }
 
