@@ -30,6 +30,21 @@ func resolveLifecycleWorld(req client.MillWorldRequest) (config.World, error) {
 
 const defaultWeaverReadyTimeout = 5 * time.Minute
 
+func (s *server) startClaim(configDir string) chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.startClaims[configDir]
+}
+
+func (s *server) releaseStartClaim(configDir string, claim chan struct{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.startClaims[configDir] == claim {
+		delete(s.startClaims, configDir)
+		close(claim)
+	}
+}
+
 // sourceDiagOut receives launch-source warning diagnostics (e.g. a configured
 // installed source that has become unusable and is being bypassed). Defaults to
 // stderr so it never corrupts stdout doc/JSON output; overridable in tests.
@@ -105,6 +120,10 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 	if req.ReadyTimeoutMs < 0 {
 		return nil, fmt.Errorf("invalid ready_timeout_ms %d: must be positive milliseconds, or omitted for the default", req.ReadyTimeoutMs)
 	}
+	if claim := s.startClaim(world.ConfigDir); claim != nil {
+		<-claim
+		return s.startWeaver(req)
+	}
 	if transition := s.lifecycleTransition(world.ConfigDir); transition != nil {
 		// A probe leaves the admitted old generation serving.  Starting during
 		// cutover joins the one shared replacement instead of launching a second
@@ -114,10 +133,19 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 		}
 		return waitForLifecycleTransition(transition, readyTimeoutFor(req.ReadyTimeoutMs))
 	}
-	if record, ok := readRestartRecord(world); ok && record.State == restartStateFailed {
+	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+		return nil, recordErr
+	} else if ok && record.State == restartStateFailed {
 		return record.status(world), nil
 	}
 	s.mu.Lock()
+	if transition := s.transitions[world.ConfigDir]; transition != nil {
+		s.mu.Unlock()
+		if transition.state() == restartStateProbing {
+			return s.admittedGenerationStatus(world, transition), nil
+		}
+		return waitForLifecycleTransition(transition, readyTimeoutFor(req.ReadyTimeoutMs))
+	}
 	if child := s.children[world.ConfigDir]; child != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
 		status, stale := readStatus(world)
 		if status != nil && !stale {
@@ -139,7 +167,13 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 		}
 		return nil, fmt.Errorf("stale weaver metadata for selected workspace: %v", status["stale_reason"])
 	}
+	claim := make(chan struct{})
+	if s.startClaims == nil {
+		s.startClaims = map[string]chan struct{}{}
+	}
+	s.startClaims[world.ConfigDir] = claim
 	s.mu.Unlock()
+	defer s.releaseStartClaim(world.ConfigDir, claim)
 	source, err := resolveLaunchSource(req.CWD)
 	if err != nil {
 		return nil, err
@@ -223,6 +257,7 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 		return nil, fmt.Errorf("weaver ready metadata pid %d does not match launched pid %d", identity.PID, cmd.Process.Pid)
 	}
 	registered.identity = identity
+	registered.generationID = identity.GenerationID
 	status["generation_id"] = registered.generationID
 	millLogf("weaver started config_dir=%s state_dir=%s pid=%v", world.ConfigDir, world.StateDir, status["pid"])
 	return status, nil
@@ -318,6 +353,11 @@ func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
 			return transitionResultStatus(transition)
 		}
 	}
+	if _, _, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+		status := baseStatus(world, "stale")
+		status["stale_reason"] = recordErr.Error()
+		return status
+	}
 	if record, ok := readRestartRecord(world); ok && record.State == restartStateFailed {
 		return record.status(world)
 	}
@@ -344,6 +384,13 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 	world, err := resolveLifecycleWorld(req)
 	if err != nil {
 		return nil, err
+	}
+	if claim := s.startClaim(world.ConfigDir); claim != nil {
+		<-claim
+		return s.stopWeaver(req)
+	}
+	if transition := s.lifecycleTransition(world.ConfigDir); transition != nil {
+		return nil, fmt.Errorf("cannot stop selected workspace while weaver restart is %s", transition.state())
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -436,7 +483,11 @@ func readStatus(world config.World) (map[string]any, bool) {
 		return st, true
 	}
 	status := statusFromMetadata(m, "running")
-	if record, ok := readRestartRecord(world); ok && record.State == restartStateRunning {
+	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+		st := baseStatus(world, "stale")
+		st["stale_reason"] = recordErr.Error()
+		return st, true
+	} else if ok && record.State == restartStateRunning {
 		mergeRestartRecordStatus(status, record)
 	}
 	return status, false
@@ -475,6 +526,7 @@ func statusFromMetadata(m client.Metadata, state string) map[string]any {
 		"name":           m.Name,
 		"pid":            m.PID,
 		"weaver_id":      m.DaemonID,
+		"generation_id":  m.GenerationID,
 		"socket_path":    m.SocketPath,
 		"nrepl":          m.NREPL,
 		"started_at":     m.StartedAt,
@@ -483,7 +535,7 @@ func statusFromMetadata(m client.Metadata, state string) map[string]any {
 }
 
 func validateMetadata(world config.World, m client.Metadata) string {
-	if m.ProtocolVersion != client.ProtocolVersion || m.PID == 0 || m.DaemonID == "" || m.ConfigDir == "" || m.StateDir == "" || m.DataDir == "" || strings.TrimSpace(m.Name) == "" || m.SocketPath == "" || m.StartedAt == "" || m.NREPL.Host == "" || m.NREPL.Port == 0 {
+	if m.ProtocolVersion != client.ProtocolVersion || m.PID == 0 || m.DaemonID == "" || strings.TrimSpace(m.GenerationID) == "" || m.ConfigDir == "" || m.StateDir == "" || m.DataDir == "" || strings.TrimSpace(m.Name) == "" || m.SocketPath == "" || m.StartedAt == "" || m.NREPL.Host == "" || m.NREPL.Port == 0 {
 		return "malformed weaver metadata: missing required fields"
 	}
 	if err := client.ValidateStorageIdentity(m); err != nil {

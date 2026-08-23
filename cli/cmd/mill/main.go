@@ -25,6 +25,10 @@ type server struct {
 	meta     client.MillMetadata
 	mu       sync.Mutex
 	children map[string]*weaverChild
+	// startClaims close the check-to-registration window for a new child. A
+	// restart waits for the claim to resolve instead of racing a start that has
+	// not yet published its admitted generation.
+	startClaims map[string]chan struct{}
 	// transitions is keyed by the selected config directory.  A transition is
 	// deliberately shared by all lifecycle callers for that workspace: the
 	// caller's timeout only bounds its wait on transition.done.
@@ -227,7 +231,7 @@ func start() error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() { <-sig; _ = listener.Close() }()
-	s := server{meta: meta, children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}}
+	s := server{meta: meta, children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}, startClaims: map[string]chan struct{}{}}
 	defer s.stopAll()
 	for {
 		conn, err := listener.Accept()
@@ -306,6 +310,10 @@ func (s *server) handle(conn net.Conn) {
 		result, err := s.restartWeaver(req.World)
 		if err != nil {
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-restart-failed", "weaver restart failed", err.Error()))
+			return
+		}
+		if err := validateRestartResult(result); err != nil {
+			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/weaver-restart-invalid-result", "weaver restart returned an invalid result", err.Error()))
 			return
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})

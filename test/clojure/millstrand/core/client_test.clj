@@ -194,6 +194,7 @@
                                        :storage-label canonical
                                        :canonical-db-path canonical
                                        :nonce "unreachable"
+                                       :generation-id "generation-unreachable"
                                        :world world})]
     (try
       (metadata/publish! meta)

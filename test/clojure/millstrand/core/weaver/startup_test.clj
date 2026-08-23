@@ -99,6 +99,9 @@
         (is (= (:state-dir world) (:state-dir metadata)))
         (is (= (:data-dir world) (:data-dir metadata)))
         (is (= (:db-path world) (:canonical-db-path metadata)))
+        (is (string? (:generation-id metadata)))
+        (is (not (str/blank? (:generation-id metadata))))
+        (is (= (:generation-id metadata) (:generation-id rt)))
         (is (.isFile (io/file (:state-dir world) "weaver.edn")))
         (is (.isFile (io/file (:state-dir world) "weaver.json")))
         (is (.exists (io/file (:state-dir world) "weaver.sock")))
@@ -137,11 +140,14 @@
         (let [json-disk (json/read-str (slurp (metadata/json-metadata-file (:metadata rt))))]
           (is (= "sqlite-memory" (get json-disk "database_kind")))
           (is (= (get-in rt [:metadata :storage-label]) (get json-disk "database_label")))
+          (is (= (get-in rt [:metadata :generation-id]) (get json-disk "generation_id")))
           (is (contains? json-disk "database_path"))
           (is (nil? (get json-disk "database_path"))))
         (let [status (socket-request rt "status" {})]
           (is (true? (get status "ok")))
           (is (= "sqlite-memory" (get-in status ["result" "database_kind"])))
+          (is (= (:generation-id (:metadata rt))
+                 (get-in status ["result" "generation_id"])))
           (is (nil? (get-in status ["result" "database_path"])))))
       (let [strand (weaver/add! rt {:title "Mem strand" :attributes {:owner "mem"}})]
         (is (= [(:id strand)] (mapv :id (weaver/ready rt)))))
@@ -183,6 +189,23 @@
     (is (nil? @weaver-runtime/current-runtime))
     (is (not (.exists (io/file (:state-dir world) "weaver.json"))))
     (is (not (.exists (io/file (:data-dir world) "millstrand.sqlite"))))))
+
+(deftest successful-probe-cleanup-fails-loudly-with-path
+  (let [world (temp-world)]
+    (try
+      (with-redefs [weaver-runtime/delete-tree!
+                    (fn [root]
+                      (throw (ex-info "probe cleanup seam" {:probe/workspace
+                                                            (.getPath root)})))]
+        (let [result (weaver-runtime/fresh-runtime-probe!
+                      world {:old-generation-baseline
+                             {:status :admitted :projection {}}})]
+          (is (false? (:success result)))
+          (is (= :probe/failure (:stage result)))
+          (is (string? (:probe/workspace result)))
+          (is (re-find #"probe cleanup seam" (get-in result [:failure :message])))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
 
 (deftest direct-probe-start-is-unpublished
   (let [world (temp-world)
@@ -485,6 +508,31 @@
       (finally
         (metadata/delete! world)
         (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest rollback-uses-canonical-state-dir-for-aliases
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "millstrand-rollback-alias-"
+                       (make-array java.nio.file.attribute.FileAttribute 0)))
+        real-state (io/file root "real-state")
+        alias-state (io/file root "alias-state")
+        world {:config-dir (.getPath (io/file root "config"))
+               :state-dir (.getPath real-state)
+               :data-dir (.getPath (io/file root "data"))}
+        alias-world (assoc world :state-dir (.getPath alias-state))
+        claim (atom nil)]
+    (try
+      (.mkdirs real-state)
+      (java.nio.file.Files/createSymbolicLink (.toPath alias-state)
+                                              (.toPath real-state)
+                                              (make-array java.nio.file.attribute.FileAttribute 0))
+      (metadata/claim-pre-publication-artifacts! world claim)
+      (spit (metadata/socket-file alias-world) "partial")
+      (is (true? (metadata/rollback-pre-publication-artifacts!
+                  {} alias-world claim)))
+      (is (false? (.exists (metadata/socket-file world))))
+      (finally
+        (metadata/release-pre-publication-artifacts! world claim)
+        (delete-tree! root)))))
 
 (deftest rollback-without-claim-preserves-an-unpublished-successor
   (let [world (temp-world)

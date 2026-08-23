@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -15,6 +16,44 @@ import (
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
 )
+
+func TestFailedReplacementKeepsSupervisionUntilTerminationConfirmed(t *testing.T) {
+	world := config.World{ConfigDir: t.TempDir(), StateDir: t.TempDir(), DataDir: t.TempDir()}
+	for _, tt := range []struct {
+		name string
+		stop func(*weaverChild, time.Duration) (bool, error)
+	}{
+		{name: "termination error", stop: func(*weaverChild, time.Duration) (bool, error) {
+			return false, errors.New("termination seam error")
+		}},
+		{name: "termination unconfirmed", stop: func(*weaverChild, time.Duration) (bool, error) {
+			return false, nil
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command("sleep", "60")
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				terminatePID(cmd.Process.Pid)
+				waitForPIDExit(cmd.Process.Pid, time.Second)
+			})
+			child := &weaverChild{cmd: cmd, world: world}
+			s := server{children: map[string]*weaverChild{world.ConfigDir: child}}
+			original := terminateAndConfirmFn
+			terminateAndConfirmFn = tt.stop
+			t.Cleanup(func() { terminateAndConfirmFn = original })
+
+			if err := s.stopFailedReplacement(child, time.Millisecond); err == nil {
+				t.Fatal("expected replacement termination failure")
+			}
+			if s.children[world.ConfigDir] != child {
+				t.Fatal("failed replacement lost supervision before termination was confirmed")
+			}
+		})
+	}
+}
 
 func TestDecodeRestartProbeUsesClosedBoundary(t *testing.T) {
 	valid := `{"success":true,"stage":"probe/complete","probe/workspace":"/tmp/probe","source/workspace":"/tmp/source","completed":[],"diagnostics":[],"log":"/tmp/probe.log"}`
@@ -97,7 +136,7 @@ func TestLaunchReplacementRemovesChildAfterReadyPIDMismatch(t *testing.T) {
 	}
 	waitForReplacementReadyStatus = func(world config.World, pid int, done <-chan error, timeout time.Duration) (map[string]any, error) {
 		return map[string]any{
-			"pid": pid + 1, "weaver_id": "replacement", "started_at": "2026-08-23T15:03:00Z",
+			"pid": pid + 1, "weaver_id": "replacement", "generation_id": "generation-replacement", "started_at": "2026-08-23T15:03:00Z",
 			"socket_path": filepath.Join(world.StateDir, "weaver.sock"), "config_dir": world.ConfigDir,
 			"state_dir": world.StateDir, "data_dir": world.DataDir,
 		}, nil
@@ -183,7 +222,8 @@ func serveIdentityEndpoint(t *testing.T, identity weaverIdentity, overrides map[
 				}
 				result := map[string]any{
 					"healthy": true, "pid": identity.PID, "weaver_id": identity.WeaverID,
-					"started_at": identity.StartedAt, "socket_path": identity.Socket,
+					"generation_id": identity.GenerationID,
+					"started_at":    identity.StartedAt, "socket_path": identity.Socket,
 					"config_dir": identity.ConfigDir, "state_dir": identity.StateDir,
 					"data_dir": identity.DataDir,
 				}
@@ -218,7 +258,7 @@ func writeWeaverMetadataForIdentity(t *testing.T, world config.World, identity w
 	metadata := map[string]any{
 		"protocol_version": 3, "pid": identity.PID, "database_kind": "sqlite-file",
 		"database_label": world.DBPath, "database_path": world.DBPath,
-		"weaver_id": identity.WeaverID, "config_dir": identity.ConfigDir,
+		"weaver_id": identity.WeaverID, "generation_id": "generation-" + identity.WeaverID, "config_dir": identity.ConfigDir,
 		"state_dir": identity.StateDir, "data_dir": identity.DataDir, "name": name,
 		"socket_path": identity.Socket, "started_at": identity.StartedAt,
 		"nrepl": map[string]any{"host": "127.0.0.1", "port": 5555},
@@ -301,6 +341,46 @@ func TestRestartConvergesAndReplacesExactlyOnce(t *testing.T) {
 	}
 	if results[0]["generation_id"] == oldGeneration || results[1]["generation_id"] == oldGeneration || results[0]["generation_id"] != results[1]["generation_id"] {
 		t.Fatalf("replacement generation did not converge: old=%v results=%#v", oldGeneration, results)
+	}
+}
+
+func TestRestartWaitsForStartClaimWithoutPolling(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim := make(chan struct{})
+	observed := make(chan struct{})
+	s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}, startClaims: map[string]chan struct{}{world.ConfigDir: claim}}
+	originalWait := waitForStartClaim
+	waitForStartClaim = func(got chan struct{}) {
+		if got != claim {
+			t.Fatalf("restart waited on the wrong start claim")
+		}
+		close(observed)
+		<-got
+		s.mu.Lock()
+		delete(s.startClaims, world.ConfigDir)
+		s.mu.Unlock()
+	}
+	t.Cleanup(func() { waitForStartClaim = originalWait })
+	result := make(chan error, 1)
+	go func() {
+		_, err := s.restartWeaver(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg, ReadyTimeoutMs: 10})
+		result <- err
+	}()
+	<-observed
+	select {
+	case err := <-result:
+		t.Fatalf("restart crossed the start gate before release: %v", err)
+	default:
+	}
+	close(claim)
+	if err := <-result; err == nil || !strings.Contains(err.Error(), "no running weaver") {
+		t.Fatalf("restart should re-evaluate after start release, got %v", err)
 	}
 }
 

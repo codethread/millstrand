@@ -142,7 +142,7 @@ The result names the root lib, canonical root, and namespaces in reload order, a
 publication or resource reconciliation; use a targeted refresh for the normal
 path.
 
-Some changes cannot load into a running weaver at all: removing an already-loaded root, repointing one at different source, or bumping a loaded Maven coordinate's version. Refresh refuses those changes and records a pending generation that takes effect at the next weaver restart. The Mill-owned restart transition is specified but not shipped; its implementation and tests are deferred to `atncp/5526z/3k3ek`. Once it ships, use the transition when you are ready. If other users share this weaver, get their explicit sign-off before running it:
+Some changes cannot load into a running weaver at all: removing an already-loaded root, repointing one at different source, or bumping a loaded Maven coordinate's version. Refresh refuses those changes and records a pending generation that takes effect at the next weaver restart. Use the Mill-owned transition when you are ready. If other users share this weaver, get their explicit sign-off before running it:
 
 ```sh
 mill weaver restart --workspace "${workspace:?}"

@@ -26,6 +26,7 @@ type Metadata struct {
 	// from an accidental empty string.
 	DatabasePath *string `json:"database_path"`
 	DaemonID     string  `json:"weaver_id"`
+	GenerationID string  `json:"generation_id"`
 	ConfigDir    string  `json:"config_dir"`
 	StateDir     string  `json:"state_dir"`
 	DataDir      string  `json:"data_dir"`

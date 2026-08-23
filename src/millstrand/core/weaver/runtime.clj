@@ -628,6 +628,7 @@
                                          :handler (runtime-nrepl-handler runtime-state)))
             port (some-> server :port)
             nonce (metadata/new-nonce)
+            generation-id (str (java.util.UUID/randomUUID))
             meta (metadata/metadata-shape {:pid (current-pid)
                                            :host loopback-host
                                            :port port
@@ -635,6 +636,7 @@
                                            :storage-label (:storage-label storage)
                                            :canonical-db-path (:canonical-db-path storage)
                                            :nonce nonce
+                                           :generation-id generation-id
                                            :world world
                                            :name (or name (default-name world))
                                            :started-at (str (Instant/now))})
@@ -654,7 +656,7 @@
                           :bin-store bin-store
                           :glossary-registry (atom {})
                           :help-transform-slot (atom nil)
-                          :generation-id (str (java.util.UUID/randomUUID))
+                          :generation-id generation-id
                           :release-marker resolved-release-marker
                           :approved-spool-sync-state (atom {})
                           :approved-spool-generation-state (atom {})
@@ -836,10 +838,19 @@
 (defn- delete-tree!
   "Delete the exact disposable probe tree after a successful probe."
   [^java.io.File root]
-  (doseq [^java.io.File file (reverse (file-seq root))]
-    (when (.exists file)
-      (.delete file)))
-  nil)
+  (let [failures (atom [])]
+    (doseq [^java.io.File file (reverse (file-seq root))]
+      (try
+        (Files/deleteIfExists (.toPath file))
+        (catch Throwable t
+          (swap! failures conj {:path (.getPath file)
+                                :message (ex-message t)}))))
+    (when (or (seq @failures) (.exists root))
+      (throw (ex-info "Successful probe cleanup was incomplete"
+                      {:probe/cleanup :failed
+                       :probe/workspace (.getPath root)
+                       :probe/cleanup-failures @failures})))
+    nil))
 
 (defn- report-probe-skipped!
   "Record effects that probe mode deliberately leaves unexecuted."

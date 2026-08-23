@@ -18,13 +18,14 @@ import (
 // mill is deciding whether it may signal it.  PID is only one component: it
 // can be reused after a process exits.
 type weaverIdentity struct {
-	PID       int
-	WeaverID  string
-	StartedAt string
-	Socket    string
-	ConfigDir string
-	StateDir  string
-	DataDir   string
+	PID          int
+	WeaverID     string
+	GenerationID string
+	StartedAt    string
+	Socket       string
+	ConfigDir    string
+	StateDir     string
+	DataDir      string
 }
 
 func identityFromStatus(status map[string]any) (weaverIdentity, error) {
@@ -33,15 +34,16 @@ func identityFromStatus(status map[string]any) (weaverIdentity, error) {
 		return weaverIdentity{}, errors.New("missing valid pid")
 	}
 	identity := weaverIdentity{
-		PID:       pid,
-		WeaverID:  stringStatus(status, "weaver_id"),
-		StartedAt: stringStatus(status, "started_at"),
-		Socket:    stringStatus(status, "socket_path"),
-		ConfigDir: stringStatus(status, "config_dir"),
-		StateDir:  stringStatus(status, "state_dir"),
-		DataDir:   stringStatus(status, "data_dir"),
+		PID:          pid,
+		WeaverID:     stringStatus(status, "weaver_id"),
+		GenerationID: stringStatus(status, "generation_id"),
+		StartedAt:    stringStatus(status, "started_at"),
+		Socket:       stringStatus(status, "socket_path"),
+		ConfigDir:    stringStatus(status, "config_dir"),
+		StateDir:     stringStatus(status, "state_dir"),
+		DataDir:      stringStatus(status, "data_dir"),
 	}
-	if identity.WeaverID == "" || identity.StartedAt == "" || identity.Socket == "" || identity.ConfigDir == "" || identity.StateDir == "" || identity.DataDir == "" {
+	if identity.WeaverID == "" || identity.GenerationID == "" || identity.StartedAt == "" || identity.Socket == "" || identity.ConfigDir == "" || identity.StateDir == "" || identity.DataDir == "" {
 		return weaverIdentity{}, errors.New("missing weaver/start identity or runtime endpoint")
 	}
 	return identity, nil
@@ -129,7 +131,7 @@ func runtimeStatus(identity weaverIdentity) (map[string]any, error) {
 		return nil, fmt.Errorf("runtime status pid mismatch: got %v expected %d", response.Result["pid"], identity.PID)
 	}
 	for key, expected := range map[string]string{
-		"weaver_id": identity.WeaverID, "started_at": identity.StartedAt,
+		"weaver_id": identity.WeaverID, "generation_id": identity.GenerationID, "started_at": identity.StartedAt,
 		"socket_path": identity.Socket, "config_dir": identity.ConfigDir,
 		"state_dir": identity.StateDir, "data_dir": identity.DataDir,
 	} {
@@ -203,25 +205,47 @@ func (s *server) launchReplacement(source string, world config.World, requestedN
 	}()
 	status, err := waitForReplacementReadyStatus(world, cmd.Process.Pid, done, timeout)
 	if err != nil {
-		_, _ = terminateAndConfirm(child, 2*time.Second)
-		_ = s.releaseChild(world.ConfigDir, child)
+		if stopErr := s.stopFailedReplacement(child, 2*time.Second); stopErr != nil {
+			return nil, nil, fmt.Errorf("replacement weaver failed readiness: %w; replacement termination failed: %v; weaver log: %s", err, stopErr, logPath)
+		}
 		return nil, nil, fmt.Errorf("replacement weaver failed readiness: %w; weaver log: %s", err, logPath)
 	}
 	identity, err := identityFromStatus(status)
 	if err != nil {
-		_, _ = terminateAndConfirm(child, 2*time.Second)
-		_ = s.releaseChild(world.ConfigDir, child)
+		if stopErr := s.stopFailedReplacement(child, 2*time.Second); stopErr != nil {
+			return nil, nil, fmt.Errorf("replacement weaver identity is invalid: %w; replacement termination failed: %v", err, stopErr)
+		}
 		return nil, nil, fmt.Errorf("replacement weaver identity is invalid: %w", err)
 	}
 	if identity.PID != cmd.Process.Pid {
-		_, _ = terminateAndConfirm(child, 2*time.Second)
-		_ = s.releaseChild(world.ConfigDir, child)
-		return nil, nil, fmt.Errorf("replacement weaver identity pid %d does not match launched pid %d", identity.PID, cmd.Process.Pid)
+		identityErr := fmt.Errorf("replacement weaver identity pid %d does not match launched pid %d", identity.PID, cmd.Process.Pid)
+		if stopErr := s.stopFailedReplacement(child, 2*time.Second); stopErr != nil {
+			return nil, nil, fmt.Errorf("%w; replacement termination failed: %v", identityErr, stopErr)
+		}
+		return nil, nil, identityErr
 	}
 	child.identity = identity
+	child.generationID = identity.GenerationID
 	status["generation_id"] = child.generationID
 	return status, child, nil
 }
+
+func (s *server) stopFailedReplacement(child *weaverChild, grace time.Duration) error {
+	stopped, err := terminateAndConfirmFn(child, grace)
+	if err != nil {
+		return err
+	}
+	if !stopped {
+		return fmt.Errorf("could not confirm termination of replacement pid %d", child.cmd.Process.Pid)
+	}
+	if !s.releaseChild(child.world.ConfigDir, child) {
+		return errors.New("replacement supervision ownership changed before termination cleanup")
+	}
+	cleanupWorldArtifacts(child.world)
+	return nil
+}
+
+var terminateAndConfirmFn = terminateAndConfirm
 
 // waitForReplacementReadyStatus is a seam for deterministic replacement
 // lifecycle tests; normal starts continue to call waitForReadyStatus directly.

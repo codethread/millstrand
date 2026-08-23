@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"millstrand-strand-cli/internal/client"
+	"millstrand-strand-cli/internal/config"
 )
 
 // handleInvoke resolves the selected workspace weaver and relays its NDJSON
@@ -27,21 +28,67 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/invoke-world-failed", Message: "invoke world resolution failed", Details: map[string]any{"detail": err.Error()}})
 		return
 	}
+	var wrote bool
+	var relayErr error
+	for {
+		s.mu.Lock()
+		status, transition, targetErr := s.admittedInvokeTargetLocked(world)
+		if transition != nil {
+			s.mu.Unlock()
+			if _, err := waitForLifecycleTransition(transition, readyTimeoutFor(envelopeTimeoutMs(req.Payload))); err != nil {
+				writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/weaver-restart-failed", Message: "weaver restart did not admit an invocation", Details: map[string]any{"config_dir": world.ConfigDir, "detail": err.Error()}})
+				return
+			}
+			continue
+		}
+		if targetErr != nil {
+			writeErrorFrame(w, req.RequestID, targetErr)
+			s.mu.Unlock()
+			return
+		}
+		socketPath, _ := status["socket_path"].(string)
+		weaverID, _ := status["weaver_id"].(string)
+		admissionOpen := true
+		wrote, relayErr = relayInvokeWithAdmission(socketPath, weaverID, req.Payload, envelopeTimeoutMs(req.Payload), w, func() {
+			s.mu.Unlock()
+			admissionOpen = false
+		})
+		if admissionOpen {
+			s.mu.Unlock()
+		}
+		if relayErr == nil || wrote {
+			return
+		}
+		break
+	}
+	if relayErr != nil && !wrote {
+		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/weaver-forward-failed", Message: "weaver forwarding failed", Details: map[string]any{"detail": relayErr.Error()}})
+	}
+}
+
+func (s *server) admittedInvokeTargetLocked(world config.World) (map[string]any, *weaverTransition, *client.ResponseError) {
+	if transition := s.transitions[world.ConfigDir]; transition != nil {
+		switch transition.state() {
+		case restartStateProbing:
+			status, stale := readStatus(world)
+			if status != nil && !stale {
+				return status, nil, nil
+			}
+			return nil, nil, &client.ResponseError{Type: "transport", Code: "mill/stale-selected-weaver", Message: "stale selected workspace weaver metadata", Details: map[string]any{"config_dir": world.ConfigDir, "stale_reason": status["stale_reason"]}}
+		case restartStateRestarting:
+			return nil, transition, nil
+		case restartStateFailed:
+			return nil, nil, &client.ResponseError{Type: "domain", Code: "mill/weaver-restart-failed", Message: "weaver restart failed; no generation is admitted", Details: map[string]any{"config_dir": world.ConfigDir, "transition_id": transition.transitionID, "failure": transition.result}}
+		}
+	}
 	status, stale := readStatus(world)
 	if status == nil {
-		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "domain", Code: "mill/no-selected-weaver", Message: "no running weaver for selected workspace; start one with: mill weaver start", Details: map[string]any{"config_dir": world.ConfigDir}})
-		return
+		return nil, nil, &client.ResponseError{Type: "domain", Code: "mill/no-selected-weaver", Message: "no running weaver for selected workspace; start one with: mill weaver start", Details: map[string]any{"config_dir": world.ConfigDir}}
 	}
 	if stale {
-		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/stale-selected-weaver", Message: "stale selected workspace weaver metadata", Details: map[string]any{"config_dir": world.ConfigDir, "stale_reason": status["stale_reason"]}})
-		return
+		return nil, nil, &client.ResponseError{Type: "transport", Code: "mill/stale-selected-weaver", Message: "stale selected workspace weaver metadata", Details: map[string]any{"config_dir": world.ConfigDir, "stale_reason": status["stale_reason"]}}
 	}
-	socketPath, _ := status["socket_path"].(string)
-	weaverID, _ := status["weaver_id"].(string)
-	wrote, err := relayInvoke(socketPath, weaverID, req.Payload, envelopeTimeoutMs(req.Payload), w)
-	if err != nil && !wrote {
-		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/weaver-forward-failed", Message: "weaver forwarding failed", Details: map[string]any{"detail": err.Error()}})
-	}
+	return status, nil, nil
 }
 
 // relayInvoke dials the weaver socket, writes the invoke request frame, and
@@ -51,7 +98,7 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 // the whole response and holds no shared lock, so concurrent connections are
 // not starved. Returns whether any frame was written (so the caller only
 // synthesizes an error frame for a pre-relay failure) and the transport error.
-func relayInvoke(socketPath, weaverID string, envelope map[string]any, timeoutMs int64, w *bufio.Writer) (bool, error) {
+func relayInvokeWithAdmission(socketPath, weaverID string, envelope map[string]any, timeoutMs int64, w *bufio.Writer, admitted func()) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
@@ -69,6 +116,9 @@ func relayInvoke(socketPath, weaverID string, envelope map[string]any, timeoutMs
 	}
 	if err := json.NewEncoder(conn).Encode(reqFrame); err != nil {
 		return false, fmt.Errorf("weaver socket write failed: %w", err)
+	}
+	if admitted != nil {
+		admitted()
 	}
 
 	r := bufio.NewReader(conn)

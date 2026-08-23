@@ -59,20 +59,38 @@ func writeRestartRecord(world config.World, record restartRecord) error {
 	return os.Rename(tmpName, restartRecordPath(world))
 }
 
-func readRestartRecord(world config.World) (restartRecord, bool) {
+func readRestartRecordDetailed(world config.World) (restartRecord, bool, error) {
 	data, err := os.ReadFile(restartRecordPath(world))
 	if err != nil {
-		return restartRecord{}, false
+		if os.IsNotExist(err) {
+			return restartRecord{}, false, nil
+		}
+		return restartRecord{}, false, fmt.Errorf("read restart record %s: %w", restartRecordPath(world), err)
 	}
 	var record restartRecord
-	if err := json.Unmarshal(data, &record); err != nil || record.State == "" || record.TransitionID == "" {
-		return restartRecord{}, false
+	if err := json.Unmarshal(data, &record); err != nil {
+		return restartRecord{}, false, fmt.Errorf("decode restart record %s: %w", restartRecordPath(world), err)
 	}
-	return record, true
+	if record.State == "" || record.TransitionID == "" {
+		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: missing state or transition_id", restartRecordPath(world))
+	}
+	switch record.State {
+	case restartStateProbing, restartStateRestarting, restartStateRunning, restartStateFailed:
+	default:
+		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: unknown state %q", restartRecordPath(world), record.State)
+	}
+	return record, true, nil
+}
+
+func readRestartRecord(world config.World) (restartRecord, bool) {
+	record, present, _ := readRestartRecordDetailed(world)
+	return record, present
 }
 
 func (r restartRecord) status(world config.World) map[string]any {
 	status := baseStatus(world, r.State)
+	status["operation"] = "weaver-restart"
+	status["workspace"] = world.ConfigDir
 	if r.GenerationID != "" {
 		status["generation_id"] = r.GenerationID
 	}
@@ -85,6 +103,14 @@ func (r restartRecord) status(world config.World) map[string]any {
 	}
 	if r.Failure != nil {
 		status["failure"] = *r.Failure
+		status["diagnostics"] = []map[string]any{{
+			"stage":  r.Failure.Stage,
+			"status": "failed",
+			"data": map[string]any{
+				"message":  r.Failure.Message,
+				"log_path": r.Failure.LogPath,
+			},
+		}}
 	}
 	return status
 }

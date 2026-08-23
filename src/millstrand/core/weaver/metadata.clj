@@ -121,7 +121,7 @@
 
 (defn metadata-shape
   "Return the canonical EDN metadata map for a running weaver."
-  [{:keys [pid host port storage-kind storage-label canonical-db-path nonce started-at world name]
+  [{:keys [pid host port storage-kind storage-label canonical-db-path nonce generation-id started-at world name]
     :as shape}]
   (let [socket-path (.getPath (socket-file world))
         name (or name (.getName (io/file (:config-dir world))))]
@@ -140,6 +140,7 @@
      :storage-label storage-label
      :canonical-db-path canonical-db-path
      :nonce nonce
+     :generation-id generation-id
      :socket-path socket-path
      :started-at started-at}))
 
@@ -156,6 +157,7 @@
    "database_kind" (name (:storage-kind metadata))
    "database_label" (:storage-label metadata)
    "database_path" (:canonical-db-path metadata)
+   "generation_id" (:generation-id metadata)
    "socket_path" (:socket-path metadata)
    "started_at" (:started-at metadata)
    "nrepl" {"host" (get-in metadata [:endpoint :host])
@@ -252,12 +254,13 @@
   [expected world claim]
   (locking artifact-monitor
     (try
-      (let [actual (read-metadata world)]
+      (let [actual (read-metadata world)
+            state-dir (canonical-state-dir world)]
         (when (or (current? expected actual)
                   (and (nil? actual)
                        (some? @claim)
                        (identical? @claim
-                                   (get @pre-publication-claims (:state-dir world)))))
+                                   (get @pre-publication-claims state-dir))))
           (delete! world)
           true))
       (finally
@@ -306,7 +309,10 @@
        (string? (get-in metadata [:endpoint :host]))
        (int? (get-in metadata [:endpoint :port]))
        (valid-storage-identity? metadata)
-       (string? (:nonce metadata))))
+       (string? (:nonce metadata))
+       (not (str/blank? (:nonce metadata)))
+       (string? (:generation-id metadata))
+       (not (str/blank? (:generation-id metadata)))))
 
 (defn stale-or-missing?
   "Return true when metadata is absent, malformed, unsupported, or points at a dead process."

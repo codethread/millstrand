@@ -378,7 +378,7 @@ func TestWeaverStatusDistinguishesStaleMetadata(t *testing.T) {
 	if err != nil || status["state"] != "stale" || status["stale_reason"] == nil {
 		t.Fatalf("expected malformed stale status, got %#v err=%v", status, err)
 	}
-	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(`{"protocol_version":3,"pid":1,"database_kind":"sqlite-file","database_label":"/wrong","database_path":"/wrong","weaver_id":"wrong","config_dir":"/wrong","state_dir":"/wrong","data_dir":"/wrong","name":"wrong","socket_path":"/wrong","started_at":"now","nrepl":{"host":"127.0.0.1","port":1}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(`{"protocol_version":3,"pid":1,"database_kind":"sqlite-file","database_label":"/wrong","database_path":"/wrong","weaver_id":"wrong","generation_id":"generation-wrong","config_dir":"/wrong","state_dir":"/wrong","data_dir":"/wrong","name":"wrong","socket_path":"/wrong","started_at":"now","nrepl":{"host":"127.0.0.1","port":1}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	status, err = s.weaverStatus(req)
@@ -466,7 +466,7 @@ func TestStopSignalsNonSupervisedWeaverByPID(t *testing.T) {
 	go func() { _, _ = cmd.Process.Wait(); close(reaped) }()
 	t.Cleanup(func() { _ = cmd.Process.Kill(); <-reaped })
 	identity := weaverIdentity{
-		PID: cmd.Process.Pid, WeaverID: "unsupervised-weaver", StartedAt: "2026-08-23T15:00:00Z",
+		PID: cmd.Process.Pid, WeaverID: "unsupervised-weaver", GenerationID: "generation-unsupervised-weaver", StartedAt: "2026-08-23T15:00:00Z",
 		Socket: filepath.Join(world.StateDir, "weaver.sock"), ConfigDir: world.ConfigDir,
 		StateDir: world.StateDir, DataDir: world.DataDir,
 	}
@@ -802,7 +802,7 @@ func writeWeaverMetadataWithName(t *testing.T, world config.World, pid int, id s
 	if err := os.MkdirAll(world.StateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	meta := `{"protocol_version":3,"pid":` + intString(pid) + `,"database_kind":"sqlite-file","database_label":"` + world.DBPath + `","database_path":"` + world.DBPath + `","weaver_id":"` + id + `","config_dir":"` + world.ConfigDir + `","state_dir":"` + world.StateDir + `","data_dir":"` + world.DataDir + `","name":"` + name + `","socket_path":"` + filepath.Join(world.StateDir, "weaver.sock") + `","started_at":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","nrepl":{"host":"127.0.0.1","port":5555}}`
+	meta := `{"protocol_version":3,"pid":` + intString(pid) + `,"database_kind":"sqlite-file","database_label":"` + world.DBPath + `","database_path":"` + world.DBPath + `","weaver_id":"` + id + `","generation_id":"generation-` + id + `","config_dir":"` + world.ConfigDir + `","state_dir":"` + world.StateDir + `","data_dir":"` + world.DataDir + `","name":"` + name + `","socket_path":"` + filepath.Join(world.StateDir, "weaver.sock") + `","started_at":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","nrepl":{"host":"127.0.0.1","port":5555}}`
 	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(meta), 0o644); err != nil {
 		t.Fatal(err)
 	}

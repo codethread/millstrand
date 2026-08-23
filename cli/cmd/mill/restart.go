@@ -23,11 +23,47 @@ const (
 
 func transitionResultStatus(t *weaverTransition) map[string]any {
 	if t.result != nil {
-		return t.result
+		return restartBoundaryStatus(t.world, t.result)
 	}
 	status := baseStatus(t.world, t.state())
 	status["transition_id"] = t.transitionID
+	return restartBoundaryStatus(t.world, status)
+}
+
+func restartBoundaryStatus(world config.World, status map[string]any) map[string]any {
+	status["operation"] = "weaver-restart"
+	status["workspace"] = world.ConfigDir
 	return status
+}
+
+func validateRestartResult(status map[string]any) error {
+	if status == nil || status["operation"] != "weaver-restart" {
+		return errors.New("restart result missing operation")
+	}
+	workspace, ok := status["workspace"].(string)
+	if !ok || workspace == "" {
+		return errors.New("restart result missing workspace")
+	}
+	state, ok := status["state"].(string)
+	if !ok || state == "" {
+		return errors.New("restart result missing state")
+	}
+	if state == restartStateRunning {
+		generation, ok := status["generation_id"].(string)
+		if !ok || generation == "" {
+			return errors.New("running restart result missing generation_id")
+		}
+	}
+	if state == restartStateFailed {
+		if _, ok := status["failure"]; !ok {
+			return errors.New("failed restart result missing failure diagnostics")
+		}
+		diagnostics, ok := status["diagnostics"].([]map[string]any)
+		if !ok || len(diagnostics) == 0 {
+			return errors.New("failed restart result missing diagnostics")
+		}
+	}
+	return nil
 }
 
 type weaverTransition struct {
@@ -42,6 +78,11 @@ type weaverTransition struct {
 	err          error
 	done         chan struct{}
 }
+
+var (
+	writeRestartRecordFn = writeRestartRecord
+	waitForStartClaim    = func(claim chan struct{}) { <-claim }
+)
 
 func (t *weaverTransition) state() string {
 	t.mu.Lock()
@@ -89,10 +130,10 @@ func (s *server) admittedGenerationStatus(world config.World, t *weaverTransitio
 			status["generation_id"] = t.old.generationID
 			status["transition_id"] = t.transitionID
 			status["restart_state"] = restartStateProbing
-			return status
+			return restartBoundaryStatus(world, status)
 		}
 	}
-	return baseStatusWithName(world, restartStateProbing, "")
+	return restartBoundaryStatus(world, baseStatusWithName(world, restartStateProbing, ""))
 }
 
 func (s *server) setTransitionState(t *weaverTransition, state string, probe *restartProbeResult, failure *restartFailure) error {
@@ -114,7 +155,7 @@ func (s *server) setTransitionState(t *weaverTransition, state string, probe *re
 		record.Probe = t.probe
 	}
 	record.Failure = failure
-	err := writeRestartRecord(t.world, record)
+	err := writeRestartRecordFn(t.world, record)
 	s.mu.Unlock()
 	return err
 }
@@ -137,9 +178,18 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 	if req.ReadyTimeoutMs < 0 {
 		return nil, fmt.Errorf("invalid ready_timeout_ms %d: must be positive milliseconds, or omitted for the default", req.ReadyTimeoutMs)
 	}
+	if claim := s.startClaim(world.ConfigDir); claim != nil {
+		waitForStartClaim(claim)
+		return s.restartWeaver(req)
+	}
 	s.mu.Lock()
 	if s.transitions == nil {
 		s.transitions = map[string]*weaverTransition{}
+	}
+	if claim := s.startClaims[world.ConfigDir]; claim != nil {
+		s.mu.Unlock()
+		waitForStartClaim(claim)
+		return s.restartWeaver(req)
 	}
 	if existing := s.transitions[world.ConfigDir]; existing != nil {
 		if existing.state() == restartStateFailed {
@@ -170,7 +220,10 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 				return nil, fmt.Errorf("selected workspace weaver metadata identity is unusable: %w", identityErr)
 			}
 			old = &weaverChild{cmd: &exec.Cmd{Process: process}, world: world, name: fmt.Sprint(status["name"]), generationID: fmt.Sprint(status["generation_id"]), identity: identity, unsupervised: true}
-		} else if record, ok := readRestartRecord(world); !ok || record.State != restartStateFailed {
+		} else if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+			s.mu.Unlock()
+			return nil, recordErr
+		} else if !ok || record.State != restartStateFailed {
 			s.mu.Unlock()
 			return nil, fmt.Errorf("no running weaver for selected workspace")
 		}
@@ -178,6 +231,9 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 	t := &weaverTransition{world: world, old: old, transitionID: newOpaqueID("transition"), stateValue: restartStateProbing, done: make(chan struct{})}
 	if t.old != nil && t.old.generationID == "" {
 		t.old.generationID = newOpaqueID("generation")
+	}
+	if t.old != nil {
+		t.generationID = t.old.generationID
 	}
 	s.transitions[world.ConfigDir] = t
 	s.mu.Unlock()
@@ -228,6 +284,7 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 	status["generation_id"] = child.generationID
 	status["transition_id"] = t.transitionID
 	status["probe"] = probe
+	restartBoundaryStatus(t.world, status)
 	if err := s.setTransitionState(t, restartStateRunning, &probe, nil); err != nil {
 		s.failRestart(t, "state", err, weaverLogPath(t.world.StateDir))
 		return
@@ -236,18 +293,39 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 }
 
 func (s *server) failProbe(t *weaverTransition, probe *restartProbeResult, err error) {
-	_ = s.setTransitionState(t, restartStateRunning, probe, &restartFailure{Stage: "probe", Message: err.Error()})
+	if stateErr := s.setTransitionState(t, restartStateRunning, probe, &restartFailure{Stage: "probe", Message: err.Error()}); stateErr != nil {
+		status := s.admittedGenerationStatus(t.world, t)
+		status["restart_state"] = restartStateRunning
+		status["state_write_error"] = stateErr.Error()
+		s.completeTransition(t, status, fmt.Errorf("record probe failure in restart state: %w", stateErr), false)
+		return
+	}
 	status := s.admittedGenerationStatus(t.world, t)
 	status["probe_error"] = err.Error()
 	status["restart_state"] = restartStateRunning
+	restartBoundaryStatus(t.world, status)
 	s.completeTransition(t, status, nil, false)
 }
 
 func (s *server) failRestart(t *weaverTransition, stage string, err error, logPath string) {
 	failure := &restartFailure{Stage: stage, Message: err.Error(), LogPath: logPath}
-	_ = s.setTransitionState(t, restartStateFailed, nil, failure)
+	stateErr := s.setTransitionState(t, restartStateFailed, nil, failure)
+	if stateErr != nil {
+		failure.Message = fmt.Sprintf("%s; restart state write failed: %v", failure.Message, stateErr)
+	}
 	status := baseStatus(t.world, restartStateFailed)
 	status["transition_id"] = t.transitionID
 	status["failure"] = *failure
-	s.completeTransition(t, status, nil, true)
+	status["diagnostics"] = []map[string]any{{
+		"stage":  failure.Stage,
+		"status": "failed",
+		"data": map[string]any{
+			"message":  failure.Message,
+			"log_path": failure.LogPath,
+		},
+	}}
+	restartBoundaryStatus(t.world, status)
+	// Keep the failed transition available in memory even when its durable
+	// record could not be written; callers must see the original failure.
+	s.completeTransition(t, status, stateErr, true)
 }

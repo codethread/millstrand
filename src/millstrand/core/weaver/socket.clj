@@ -220,6 +220,7 @@
      "database_label" (:storage-label m)
      "database_path" (:canonical-db-path m)
      "weaver_id" (:nonce m)
+     "generation_id" (:generation-id m)
      "socket_path" (:socket-path m)
      "started_at" (:started-at m)
      "registry_projection" projection
