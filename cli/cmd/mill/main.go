@@ -32,10 +32,15 @@ type server struct {
 }
 
 type weaverChild struct {
-	cmd   *exec.Cmd
-	world config.World
-	name  string
-	done  chan error
+	cmd      *exec.Cmd
+	world    config.World
+	name     string
+	done     chan error
+	identity weaverIdentity
+	// unsupervised means this child was discovered from runtime metadata rather
+	// than launched and owned by this mill.  Such a child needs endpoint-backed
+	// identity proof before mill may signal its recorded PID.
+	unsupervised bool
 	// generationID is Mill's opaque identity for this process generation.  It
 	// is not derived from a PID or from user configuration.
 	generationID string

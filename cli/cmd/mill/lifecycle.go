@@ -214,6 +214,14 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 		}
 		return nil, fmt.Errorf("%w; weaver log: %s", err, logPath)
 	}
+	identity, err := identityFromStatus(status)
+	if err != nil {
+		return nil, fmt.Errorf("weaver ready metadata identity is invalid: %w", err)
+	}
+	if identity.PID != cmd.Process.Pid {
+		return nil, fmt.Errorf("weaver ready metadata pid %d does not match launched pid %d", identity.PID, cmd.Process.Pid)
+	}
+	registered.identity = identity
 	status["generation_id"] = registered.generationID
 	millLogf("weaver started config_dir=%s state_dir=%s pid=%v", world.ConfigDir, world.StateDir, status["pid"])
 	return status, nil
@@ -495,37 +503,6 @@ func samePath(a, b string) bool {
 		realB = filepath.Clean(b)
 	}
 	return realA == realB
-}
-
-func waitForReadyStatus(world config.World, pid int, done <-chan error, timeout time.Duration) (map[string]any, error) {
-	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		status, stale := readStatus(world)
-		if status != nil && !stale {
-			return status, nil
-		}
-		if stale {
-			return nil, fmt.Errorf("weaver published stale metadata during startup: %v", status["stale_reason"])
-		}
-		select {
-		case err := <-done:
-			if err != nil {
-				return nil, fmt.Errorf("weaver exited before publishing ready metadata: %w", err)
-			}
-			return nil, fmt.Errorf("weaver exited before publishing ready metadata")
-		default:
-		}
-		if !processAlive(pid) {
-			return nil, fmt.Errorf("weaver exited before publishing ready metadata")
-		}
-		if time.Now().After(deadline) {
-			terminatePID(pid)
-			return nil, fmt.Errorf("weaver did not publish ready metadata before timeout")
-		}
-		<-ticker.C
-	}
 }
 
 func cleanupWorldArtifacts(world config.World) {

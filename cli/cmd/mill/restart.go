@@ -1,19 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"millstrand-strand-cli/internal/client"
@@ -27,173 +21,6 @@ const (
 	restartStateFailed     = "failed"
 )
 
-// restartProbeResult is the only Clojure-owned shape Mill accepts.  The
-// parser below deliberately validates it once at the subprocess boundary;
-// transition code receives this typed value and never inspects raw JSON.
-type restartProbeResult struct {
-	Success         bool             `json:"success"`
-	Stage           string           `json:"stage"`
-	ProbeWorkspace  string           `json:"probe/workspace"`
-	SourceWorkspace string           `json:"source/workspace"`
-	Completed       []string         `json:"completed"`
-	Diagnostics     []map[string]any `json:"diagnostics"`
-	Log             string           `json:"log"`
-}
-
-func (r restartProbeResult) validate() error {
-	if r.Stage == "" {
-		return errors.New("restart probe result missing stage")
-	}
-	if r.ProbeWorkspace == "" {
-		return errors.New("restart probe result missing probe/workspace")
-	}
-	if r.SourceWorkspace == "" {
-		return errors.New("restart probe result missing source/workspace")
-	}
-	if r.Log == "" {
-		return errors.New("restart probe result missing log")
-	}
-	if r.Success && r.Stage != "probe/complete" {
-		return fmt.Errorf("restart probe success has unexpected stage %q", r.Stage)
-	}
-	if !r.Success && r.Stage != "probe/failure" {
-		return fmt.Errorf("restart probe failure has unexpected stage %q", r.Stage)
-	}
-	return nil
-}
-
-func decodeRestartProbe(data []byte) (restartProbeResult, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	var result restartProbeResult
-	if err := decoder.Decode(&result); err != nil {
-		return restartProbeResult{}, fmt.Errorf("malformed restart probe JSON: %w", err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		if err == nil {
-			return restartProbeResult{}, errors.New("malformed restart probe JSON: multiple values")
-		}
-		return restartProbeResult{}, fmt.Errorf("malformed restart probe JSON: %w", err)
-	}
-	if err := result.validate(); err != nil {
-		return restartProbeResult{}, err
-	}
-	return result, nil
-}
-
-// probeRuntime is replaceable by focused lifecycle tests.  The production
-// implementation invokes the Clojure-owned probe exactly once and parses its
-// one JSON result at this boundary.
-var probeRuntime = runFreshRuntimeProbe
-
-const freshRuntimeProbeExpression = `(require '[clojure.data.json :as json] '[millstrand.core.weaver.runtime :as runtime]) (println (json/write-str (runtime/fresh-runtime-probe! {:config-dir (System/getenv "MILLSTRAND_PROBE_CONFIG") :state-dir (System/getenv "MILLSTRAND_PROBE_STATE") :data-dir (System/getenv "MILLSTRAND_PROBE_DATA")})))`
-
-func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult, error) {
-	cmd := exec.Command("clojure", "-M:millstrand", "-e", freshRuntimeProbeExpression)
-	cmd.Dir = source
-	cmd.Env = append(os.Environ(),
-		"MILLSTRAND_PROBE_CONFIG="+world.ConfigDir,
-		"MILLSTRAND_PROBE_STATE="+world.StateDir,
-		"MILLSTRAND_PROBE_DATA="+world.DataDir,
-	)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if stderr.Len() > 0 {
-			return restartProbeResult{}, fmt.Errorf("restart probe process failed: %w: %s", err, strings.TrimSpace(stderr.String()))
-		}
-		return restartProbeResult{}, fmt.Errorf("restart probe process failed: %w", err)
-	}
-	result, err := decodeRestartProbe(stdout.Bytes())
-	if err != nil {
-		if stderr.Len() > 0 {
-			return restartProbeResult{}, fmt.Errorf("%w; probe stderr: %s", err, strings.TrimSpace(stderr.String()))
-		}
-		return restartProbeResult{}, err
-	}
-	return result, nil
-}
-
-type restartFailure struct {
-	Stage        string `json:"stage"`
-	Message      string `json:"message"`
-	LogPath      string `json:"log_path,omitempty"`
-	ExitEvidence string `json:"exit_evidence,omitempty"`
-}
-
-type restartRecord struct {
-	State              string              `json:"state"`
-	TransitionID       string              `json:"transition_id"`
-	GenerationID       string              `json:"generation_id"`
-	PreviousGeneration string              `json:"previous_generation_id,omitempty"`
-	UpdatedAt          string              `json:"updated_at"`
-	Probe              *restartProbeResult `json:"probe,omitempty"`
-	Failure            *restartFailure     `json:"failure,omitempty"`
-}
-
-func restartRecordPath(world config.World) string {
-	return filepath.Join(world.StateDir, "restart.json")
-}
-
-func writeRestartRecord(world config.World, record restartRecord) error {
-	if record.State != restartStateProbing && record.State != restartStateRestarting && record.State != restartStateRunning && record.State != restartStateFailed {
-		return fmt.Errorf("invalid restart state %q", record.State)
-	}
-	record.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	data, err := json.MarshalIndent(record, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal restart state: %w", err)
-	}
-	if err := os.MkdirAll(world.StateDir, 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(world.StateDir, "restart.json.*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer func() { _ = os.Remove(tmpName) }()
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, restartRecordPath(world))
-}
-
-func readRestartRecord(world config.World) (restartRecord, bool) {
-	data, err := os.ReadFile(restartRecordPath(world))
-	if err != nil {
-		return restartRecord{}, false
-	}
-	var record restartRecord
-	if err := json.Unmarshal(data, &record); err != nil || record.State == "" || record.TransitionID == "" {
-		return restartRecord{}, false
-	}
-	return record, true
-}
-
-func (r restartRecord) status(world config.World) map[string]any {
-	status := baseStatus(world, r.State)
-	if r.GenerationID != "" {
-		status["generation_id"] = r.GenerationID
-	}
-	if r.PreviousGeneration != "" {
-		status["previous_generation_id"] = r.PreviousGeneration
-	}
-	status["transition_id"] = r.TransitionID
-	if r.Probe != nil {
-		status["probe"] = *r.Probe
-	}
-	if r.Failure != nil {
-		status["failure"] = *r.Failure
-	}
-	return status
-}
-
 func transitionResultStatus(t *weaverTransition) map[string]any {
 	if t.result != nil {
 		return t.result
@@ -201,21 +28,6 @@ func transitionResultStatus(t *weaverTransition) map[string]any {
 	status := baseStatus(t.world, t.state())
 	status["transition_id"] = t.transitionID
 	return status
-}
-
-func mergeRestartRecordStatus(status map[string]any, record restartRecord) {
-	if record.GenerationID != "" {
-		status["generation_id"] = record.GenerationID
-	}
-	if record.TransitionID != "" {
-		status["transition_id"] = record.TransitionID
-	}
-	if record.Probe != nil {
-		status["probe"] = *record.Probe
-	}
-	if record.Failure != nil {
-		status["restart_failure"] = *record.Failure
-	}
 }
 
 type weaverTransition struct {
@@ -352,7 +164,12 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 				s.mu.Unlock()
 				return nil, fmt.Errorf("find recorded weaver pid %d: %w", pid, findErr)
 			}
-			old = &weaverChild{cmd: &exec.Cmd{Process: process}, world: world, name: fmt.Sprint(status["name"]), generationID: fmt.Sprint(status["generation_id"])}
+			identity, identityErr := identityFromStatus(status)
+			if identityErr != nil {
+				s.mu.Unlock()
+				return nil, fmt.Errorf("selected workspace weaver metadata identity is unusable: %w", identityErr)
+			}
+			old = &weaverChild{cmd: &exec.Cmd{Process: process}, world: world, name: fmt.Sprint(status["name"]), generationID: fmt.Sprint(status["generation_id"]), identity: identity, unsupervised: true}
 		} else if record, ok := readRestartRecord(world); !ok || record.State != restartStateFailed {
 			s.mu.Unlock()
 			return nil, fmt.Errorf("no running weaver for selected workspace")
@@ -399,7 +216,10 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 			return
 		}
 	}
-	status, child, err := s.launchReplacement(source, t.world, req.Name, readyTimeoutFor(req.ReadyTimeoutMs))
+	// Replacement work is shared by every caller.  A caller's timeout only
+	// bounds its join on t.done; it must never cancel or shorten the shared
+	// mill readiness policy.
+	status, child, err := s.launchReplacement(source, t.world, req.Name, defaultWeaverReadyTimeout)
 	if err != nil {
 		s.failRestart(t, "launch", err, probe.Log)
 		return
@@ -428,95 +248,4 @@ func (s *server) failRestart(t *weaverTransition, stage string, err error, logPa
 	status["transition_id"] = t.transitionID
 	status["failure"] = *failure
 	s.completeTransition(t, status, nil, true)
-}
-
-func (s *server) launchReplacement(source string, world config.World, requestedName string, timeout time.Duration) (map[string]any, *weaverChild, error) {
-	var err error
-	if err := os.MkdirAll(world.StateDir, 0o755); err != nil {
-		return nil, nil, err
-	}
-	if err := os.MkdirAll(world.DataDir, 0o755); err != nil {
-		return nil, nil, err
-	}
-	name, err := friendlyName(world, requestedName)
-	if err != nil {
-		return nil, nil, err
-	}
-	logPath := weaverLogPath(world.StateDir)
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return nil, nil, err
-	}
-	_, _ = fmt.Fprintf(logFile, "=== weaver replacement %s config_dir=%s ===\n", time.Now().UTC().Format(time.RFC3339), world.ConfigDir)
-	cmd, err := launchWeaver(source, weaverArgs(world, name), logFile, logFile)
-	if err != nil {
-		_ = logFile.Close()
-		return nil, nil, err
-	}
-	done := make(chan error, 1)
-	child := &weaverChild{cmd: cmd, world: world, name: name, done: done, generationID: newOpaqueID("generation")}
-	s.mu.Lock()
-	if s.children == nil {
-		s.children = map[string]*weaverChild{}
-	}
-	s.children[world.ConfigDir] = child
-	s.mu.Unlock()
-	go func() {
-		err := cmd.Wait()
-		_ = logFile.Close()
-		done <- err
-	}()
-	status, err := waitForReadyStatus(world, cmd.Process.Pid, done, timeout)
-	if err != nil {
-		_ = terminateAndConfirm(child, 2*time.Second)
-		s.mu.Lock()
-		if s.children[world.ConfigDir] == child {
-			delete(s.children, world.ConfigDir)
-		}
-		s.mu.Unlock()
-		return nil, nil, fmt.Errorf("replacement weaver failed readiness: %w; weaver log: %s", err, logPath)
-	}
-	status["generation_id"] = child.generationID
-	return status, child, nil
-}
-
-func stopRecordedGeneration(child *weaverChild, world config.World) error {
-	if child == nil || child.cmd == nil || child.cmd.Process == nil || child.cmd.Process.Pid <= 0 {
-		return errors.New("restart has no recorded weaver pid")
-	}
-	if !terminateAndConfirm(child, 5*time.Second) {
-		return fmt.Errorf("could not confirm termination of recorded weaver pid %d", child.cmd.Process.Pid)
-	}
-	cleanupWorldArtifacts(world)
-	return nil
-}
-
-func terminateAndConfirm(child *weaverChild, grace time.Duration) bool {
-	pid := child.cmd.Process.Pid
-	terminatePID(pid)
-	if waitRecordedExit(child, grace) {
-		return true
-	}
-	// Escalation still targets only the PID recorded for this generation.
-	_ = syscall.Kill(pid, syscall.SIGKILL)
-	return waitRecordedExit(child, 2*time.Second)
-}
-
-func waitRecordedExit(child *weaverChild, timeout time.Duration) bool {
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		if !processAlive(child.cmd.Process.Pid) {
-			return true
-		}
-		select {
-		case <-child.done:
-			return !processAlive(child.cmd.Process.Pid)
-		case <-deadline.C:
-			return !processAlive(child.cmd.Process.Pid)
-		case <-ticker.C:
-		}
-	}
 }
