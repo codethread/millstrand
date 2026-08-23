@@ -687,6 +687,8 @@
           _ (reset! runtime-state runtime-base)]
       (try
         (let [socket-runtime (when-not probe?
+                               (metadata/claim-pre-publication-artifacts!
+                                world pre-publication-claim)
                                (socket/start! runtime-state (:socket-path meta)))
               runtime (assoc runtime-base :socket-runtime socket-runtime)]
           (reset! runtime-state runtime)
@@ -714,6 +716,8 @@
             (let [published-runtime (if probe?
                                       runtime
                                       (let [metadata-file (metadata/publish! meta)]
+                                        (metadata/release-pre-publication-artifacts!
+                                         world pre-publication-claim)
                                         (when *after-metadata-publish!*
                                           (*after-metadata-publish!* meta))
                                         (assoc runtime :metadata-file metadata-file)))]
@@ -763,20 +767,19 @@
             ;; metadata write without ever unlinking a newer generation.
             (cleanup-step! t :artifacts/delete
                            #(when-not probe?
-                              (metadata/delete-pre-publication-owned!
+                              (metadata/rollback-pre-publication-artifacts!
                                meta world pre-publication-claim)))
             (throw t)))))))
 
 (defn- start-with-options!
-  "Start one runtime with a temporary claim over its pre-publication socket."
+  "Start one runtime with a local pre-publication socket claim."
   [db-file opts]
   (let [world (or (:world opts) (weaver-config/world))]
     (if (:probe? opts)
       (start-with-options-unlocked! db-file (assoc opts :world world))
-      (metadata/with-pre-publication-socket-claim
-        world
-        #(start-with-options-unlocked!
-          db-file (assoc opts :world world :pre-publication-claim %))))))
+      (start-with-options-unlocked!
+       db-file
+       (assoc opts :world world :pre-publication-claim (atom nil))))))
 
 (defn start!
   "Start a weaver runtime for `db-file` and optional `world`.

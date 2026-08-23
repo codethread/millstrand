@@ -8,41 +8,42 @@
             [millstrand.core.weaver.protocol :as protocol])
   (:import [java.lang ProcessHandle]
            [java.nio.file Files StandardCopyOption]
-           [java.util.concurrent ConcurrentHashMap]
            [java.util UUID]))
 
 (def ^:private json-file-name "weaver.json")
 (def ^:private edn-file-name "weaver.edn")
 (def ^:private socket-file-name "weaver.sock")
-(def ^:private pre-publication-claims (ConcurrentHashMap.))
+(def ^:private artifact-monitor (Object.))
+(def ^:private pre-publication-claims (atom {}))
 
-(defn- pre-publication-claim-count
-  "Return the number of active process-local startup socket claims."
-  []
-  (.size ^ConcurrentHashMap pre-publication-claims))
-
-(defn with-pre-publication-socket-claim
-  "Call `f` with this process's temporary ownership claim for `world`.
-
-  The claim starts immediately before socket bind and is released after
-  publication or rollback. It never blocks teardown or runs userland under a
-  monitor. Cross-process ownership remains defined by the operating-system
-  socket bind and published metadata."
-  [world f]
-  (let [state-dir (:state-dir world)
-        claim (Object.)]
-    (when (.putIfAbsent ^ConcurrentHashMap pre-publication-claims state-dir claim)
-      (throw (ex-info "Weaver startup already owns the world socket before publication"
-                      {:state-dir state-dir})))
-    (try
-      (f claim)
-      (finally
-        (.remove ^ConcurrentHashMap pre-publication-claims state-dir claim)))))
-
-(defn pre-publication-claim-owner?
-  "Return true when `claim` still owns `world`'s temporary startup claim."
+(defn- release-pre-publication-claim-unlocked!
   [world claim]
-  (identical? claim (.get ^ConcurrentHashMap pre-publication-claims (:state-dir world))))
+  (let [state-dir (:state-dir world)
+        token @claim]
+    (when (identical? token (get @pre-publication-claims state-dir))
+      (swap! pre-publication-claims dissoc state-dir))
+    (reset! claim nil)))
+
+(defn claim-pre-publication-artifacts!
+  "Claim `world`'s socket artifacts for one local startup attempt.
+
+  Call immediately before binding the socket. Pass a local `claim` atom, which
+  is released after publication or by `rollback-pre-publication-artifacts!`."
+  [world claim]
+  (locking artifact-monitor
+    (let [state-dir (:state-dir world)]
+      (when (get @pre-publication-claims state-dir)
+        (throw (ex-info "Weaver startup already owns the world socket before publication"
+                        {:state-dir state-dir})))
+      (let [token (Object.)]
+        (swap! pre-publication-claims assoc state-dir token)
+        (reset! claim token)))))
+
+(defn release-pre-publication-artifacts!
+  "Release `claim` after its startup has published metadata successfully."
+  [world claim]
+  (locking artifact-monitor
+    (release-pre-publication-claim-unlocked! world claim)))
 
 (defn canonical-db-path
   "Return the canonical filesystem path for `db-file`."
@@ -173,12 +174,20 @@
 (defn delete!
   "Delete metadata and socket files for `world`."
   [world]
-  (doseq [^java.io.File file [(metadata-file world)
-                              (json-metadata-file world)
-                              (socket-file world)]
-          :when (.exists file)]
-    (Files/delete (.toPath file)))
-  nil)
+  (locking artifact-monitor
+    (let [primary (atom nil)]
+      (doseq [^java.io.File file [(metadata-file world)
+                                  (json-metadata-file world)
+                                  (socket-file world)]]
+        (try
+          (Files/deleteIfExists (.toPath file))
+          (catch Throwable t
+            (if-let [first-failure @primary]
+              (.addSuppressed ^Throwable first-failure t)
+              (reset! primary t)))))
+      (when-let [failure @primary]
+        (throw failure))
+      nil)))
 
 (declare current?)
 
@@ -188,23 +197,30 @@
   Return true when the artifacts were removed. Teardown owns artifacts only
   after its metadata has been published with the matching nonce."
   [expected world]
-  (let [actual (read-metadata world)]
-    (when (current? expected actual)
-      (delete! world)
-      true)))
+  (locking artifact-monitor
+    (let [actual (read-metadata world)]
+      (when (current? expected actual)
+        (delete! world)
+        true))))
 
-(defn delete-pre-publication-owned!
+(defn rollback-pre-publication-artifacts!
   "Roll back artifacts owned by the active startup `claim`.
 
   Before publication, the claim authorizes deleting nil or partial metadata.
   After publication, the generation nonce is the sole ownership proof. A
   different nonce always belongs to another generation and is left intact."
   [expected world claim]
-  (let [actual (read-metadata world)]
-    (when (or (current? expected actual)
-              (and (nil? actual) (pre-publication-claim-owner? world claim)))
-      (delete! world)
-      true)))
+  (locking artifact-monitor
+    (try
+      (let [actual (read-metadata world)]
+        (when (or (current? expected actual)
+                  (and (nil? actual)
+                       (identical? @claim
+                                   (get @pre-publication-claims (:state-dir world)))))
+          (delete! world)
+          true))
+      (finally
+        (release-pre-publication-claim-unlocked! world claim)))))
 
 (defn current?
   "Return true when `actual` is metadata published by `expected`.

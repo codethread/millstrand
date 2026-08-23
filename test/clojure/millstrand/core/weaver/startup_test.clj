@@ -218,19 +218,21 @@
       (let [admitted @weaver-runtime/current-runtime]
         (is admitted "candidate generation is ambiently admitted")
         (weaver-runtime/stop! admitted)
-        (deliver release true)
-        (let [failure (deref candidate (test-support/await-budget-ms) ::timed-out)]
-          (is (not= ::timed-out failure) "candidate startup returns after release")
-          (is (instance? clojure.lang.ExceptionInfo failure))
-          (is (= :ambient-runtime-ownership-lost (:reason (ex-data failure)))))
         (let [replacement (weaver-runtime/start! nil {:world world})]
-          (is (= (:generation-id replacement)
-                 (:generation-id @weaver-runtime/current-runtime)))
-          (is (= (:nonce (:metadata replacement))
-                 (:nonce (metadata/read-metadata world))))
-          (is (.exists (metadata/socket-file world)))
-          (is (true? (get (socket-request replacement "status" {}) "ok")))
-          (weaver-runtime/stop! replacement)))
+          (try
+            (deliver release true)
+            (let [failure (deref candidate (test-support/await-budget-ms) ::timed-out)]
+              (is (not= ::timed-out failure) "candidate startup returns after release")
+              (is (instance? clojure.lang.ExceptionInfo failure))
+              (is (= :ambient-runtime-ownership-lost (:reason (ex-data failure))))
+              (is (= (:generation-id replacement)
+                     (:generation-id @weaver-runtime/current-runtime)))
+              (is (= (:nonce (:metadata replacement))
+                     (:nonce (metadata/read-metadata world))))
+              (is (.exists (metadata/socket-file world)))
+              (is (true? (get (socket-request replacement "status" {}) "ok"))))
+            (finally
+              (weaver-runtime/stop! replacement)))))
       (finally
         (deliver release true)
         (when-not (future-done? candidate)
@@ -331,9 +333,7 @@
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
 (deftest pre-publication-cleanup-failure-is-suppressed-and-releases-its-claim
-  (let [world (temp-world)
-        claim-count (ns-resolve 'millstrand.core.weaver.metadata
-                                'pre-publication-claim-count)]
+  (let [world (temp-world)]
     (try
       (let [failure
             (with-redefs [scheduler/rearm! (fn [_]
@@ -346,14 +346,67 @@
         (is (= "rearm primary failure" (ex-message failure)))
         (is (some #(and (= :artifacts/delete (:teardown/step (ex-data %)))
                         (= "artifact delete failure" (some-> % ex-cause ex-message)))
-                  (.getSuppressed ^Throwable failure)))
-        (is (zero? (claim-count))))
+                  (.getSuppressed ^Throwable failure))))
       (metadata/delete! world)
       (let [runtime (weaver-runtime/start! nil {:world world :publish? false})]
         (try
-          (is (zero? (claim-count)))
+          (is (true? (get (socket-request runtime "status" {}) "ok")))
           (finally
             (weaver-runtime/stop! runtime))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-artifact-cleanup-preserves-successor-metadata
+  (let [world (temp-world)
+        stale {:nonce "stale"}
+        successor {:nonce "successor"}]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/metadata-file world) (pr-str successor))
+      (spit (metadata/json-metadata-file world) "successor")
+      (spit (metadata/socket-file world) "successor")
+      (is (nil? (metadata/delete-owned! stale world)))
+      (is (= successor (metadata/read-metadata world)))
+      (is (.exists (metadata/json-metadata-file world)))
+      (is (.exists (metadata/socket-file world)))
+      (finally
+        (metadata/delete! world)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest rollback-without-claim-preserves-an-unpublished-successor
+  (let [world (temp-world)
+        original-claim (atom nil)
+        successor-claim (atom nil)]
+    (try
+      (metadata/claim-pre-publication-artifacts! world original-claim)
+      (metadata/release-pre-publication-artifacts! world original-claim)
+      (metadata/claim-pre-publication-artifacts! world successor-claim)
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/socket-file world) "successor")
+      (is (nil? (metadata/rollback-pre-publication-artifacts!
+                 {:nonce "original"} world original-claim)))
+      (is (nil? (metadata/read-metadata world)))
+      (is (.exists (metadata/socket-file world)))
+      (finally
+        (metadata/rollback-pre-publication-artifacts!
+         {:nonce "successor"} world successor-claim)
+        (metadata/delete! world)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest artifact-delete-attempts-later-files-after-an-earlier-failure
+  (let [world (temp-world)
+        edn-file (metadata/metadata-file world)]
+    (try
+      (.mkdirs edn-file)
+      (spit (io/file edn-file "retained") "retained")
+      (spit (metadata/json-metadata-file world) "metadata")
+      (spit (metadata/socket-file world) "socket")
+      (let [failure (try
+                      (metadata/delete! world)
+                      (catch Throwable t t))]
+        (is (instance? java.nio.file.DirectoryNotEmptyException failure))
+        (is (false? (.exists (metadata/json-metadata-file world))))
+        (is (false? (.exists (metadata/socket-file world)))))
       (finally
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
