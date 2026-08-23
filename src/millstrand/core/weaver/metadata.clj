@@ -147,6 +147,19 @@
   (.delete (json-metadata-file world))
   (.delete (socket-file world)))
 
+(defn delete-current!
+  "Delete metadata files only when `expected` still owns `world`.
+
+  Ownership is the published nonce. Returns true only when the current EDN
+  metadata carried that nonce and its EDN and JSON files were removed. Socket
+  removal remains with the socket owner, which uses this result to avoid
+  unlinking a replacement generation's path."
+  [world expected]
+  (when (= (:nonce expected) (:nonce (read-metadata world)))
+    (.delete (metadata-file world))
+    (.delete (json-metadata-file world))
+    true))
+
 (defn pid-alive?
   "Return true when `pid` identifies a live OS process."
   [pid]

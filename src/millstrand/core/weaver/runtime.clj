@@ -31,6 +31,10 @@
   "Dynamically bound runtime for trusted in-process startup, reload, and nREPL code."
   nil)
 
+(def ^:dynamic *after-metadata-publish!*
+  "Optional test seam called with a generation's metadata after publication."
+  nil)
+
 (defonce ^:private nrepl-port-runtimes
   (atom {}))
 
@@ -559,6 +563,22 @@
   ;; preference cannot cross into the process-wide ambient runtime.
   (and publish? (not probe?)))
 
+(defn- claim-final-publication!
+  "Replace the admitted ambient snapshot with `published-runtime`.
+
+  Return a result containing either the claimed publication or the ambient
+  runtime that displaced this generation. Generation identity, rather than map
+  equality, owns the ambient slot."
+  [runtime published-runtime]
+  (loop []
+    (let [ambient @current-runtime]
+      (cond
+        (not= (:generation-id runtime) (:generation-id ambient))
+        {:claimed? false :published-by ambient}
+        (compare-and-set! current-runtime ambient published-runtime)
+        {:claimed? true}
+        :else (recur)))))
+
 (defn- start-with-options!
   [db-file {:keys [world name publish? storage release-marker probe? diagnostic!
                    old-generation-baseline]
@@ -641,7 +661,8 @@
                         :server server
                         :metadata meta}
           runtime-base (start-event-system! runtime-base (not probe?))
-          _ (reset! runtime-state runtime-base)]
+          _ (reset! runtime-state runtime-base)
+          metadata-published? (atom false)]
       (try
         (let [socket-runtime (when-not probe?
                                (socket/start! runtime-state (:socket-path meta)))
@@ -670,7 +691,11 @@
               (scheduler/rearm! runtime))
             (let [published-runtime (if probe?
                                       runtime
-                                      (assoc runtime :metadata-file (metadata/publish! meta)))]
+                                      (let [metadata-file (metadata/publish! meta)]
+                                        (reset! metadata-published? true)
+                                        (when *after-metadata-publish!*
+                                          (*after-metadata-publish!* meta))
+                                        (assoc runtime :metadata-file metadata-file)))]
               (reset! runtime-state published-runtime)
               (when port
                 (swap! nrepl-port-runtimes assoc port published-runtime))
@@ -680,37 +705,39 @@
                 ;; callers observe the same generation. A concurrent stop and
                 ;; replacement start may have withdrawn that admission; never
                 ;; resurrect or overwrite the replacement in that case.
-                (when-not
-                 (loop []
-                   (let [ambient @current-runtime]
-                     (cond
-                       (not= (:generation-id runtime) (:generation-id ambient)) false
-                       (compare-and-set! current-runtime ambient published-runtime) true
-                       :else (recur))))
-                  (throw (ex-info "Weaver runtime lost ambient publication ownership during startup"
-                                  {:reason :ambient-runtime-ownership-lost
-                                   :generation-id (:generation-id runtime)
-                                   :published-generation-id
-                                   (:generation-id @current-runtime)}))))
+                (let [{:keys [claimed? published-by]}
+                      (claim-final-publication! runtime published-runtime)]
+                  (when-not claimed?
+                    (throw (ex-info "Weaver runtime lost ambient publication ownership during startup"
+                                    {:reason :ambient-runtime-ownership-lost
+                                     :generation-id (:generation-id runtime)
+                                     :published-generation-id
+                                     (:generation-id published-by)})))))
               published-runtime)))
         (catch Throwable t
-          (when port
-            (swap! nrepl-port-runtimes dissoc port))
-          (when (publishes-ambient-runtime? publish? probe?)
-            (compare-and-set! current-runtime @runtime-state nil))
-          (stop-event-system! @runtime-state)
-          (when-let [socket-runtime (:socket-runtime @runtime-state)]
-            (socket/stop! socket-runtime))
-          (when server
-            (nrepl/stop-server server))
+          (let [runtime @runtime-state
+                owns-generation-artifacts?
+                (or probe?
+                    (not @metadata-published?)
+                    (metadata/delete-current! world meta))]
+            (when port
+              (swap! nrepl-port-runtimes dissoc port))
+            (when (publishes-ambient-runtime? publish? probe?)
+              (swap! current-runtime
+                     (fn [published]
+                       (when-not (= (:generation-id published) (:generation-id runtime))
+                         published))))
+            (stop-event-system! runtime)
+            (when-let [socket-runtime (:socket-runtime runtime)]
+              (socket/stop! socket-runtime owns-generation-artifacts?))
+            (when server
+              (nrepl/stop-server server))
            ;; Spool state may own executors started by config before metadata is
            ;; published. Close it on failed startup too, while storage remains
            ;; available, without masking the original startup exception.
-          (close-spool-state! @runtime-state t)
-          (close-storage! @runtime-state)
-          (when-not probe?
-            (metadata/delete! world))
-          (throw t))))))
+            (close-spool-state! runtime t)
+            (close-storage! runtime)
+            (throw t)))))))
 
 (defn start!
   "Start a weaver runtime for `db-file` and optional `world`.

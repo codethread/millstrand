@@ -198,22 +198,17 @@
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
 (deftest final-runtime-publication-requires-admitted-ownership
-  (let [candidate-world (temp-world)
-        replacement-world (temp-world)
+  (let [world (temp-world)
         published (promise)
         release (promise)
-        original-publish! metadata/publish!
         candidate
         (future
           (try
-            (with-redefs [metadata/publish!
-                          (fn [meta]
-                            (let [file (original-publish! meta)]
-                              (when (= (:state-dir candidate-world) (:state-dir meta))
-                                (deliver published true)
-                                @release)
-                              file))]
-              (weaver-runtime/start! nil {:world candidate-world}))
+            (binding [weaver-runtime/*after-metadata-publish!*
+                      (fn [_]
+                        (deliver published true)
+                        @release)]
+              (weaver-runtime/start! nil {:world world}))
             (catch Throwable t
               t)))]
     (try
@@ -222,24 +217,29 @@
       (let [admitted @weaver-runtime/current-runtime]
         (is admitted "candidate generation is ambiently admitted")
         (weaver-runtime/stop! admitted)
-        (let [replacement (weaver-runtime/start! nil {:world replacement-world})]
+        (let [replacement (weaver-runtime/start! nil {:world world})]
           (try
             (deliver release true)
             (let [failure (deref candidate (test-support/await-budget-ms) ::timed-out)]
               (is (not= ::timed-out failure) "candidate startup returns after release")
               (is (instance? clojure.lang.ExceptionInfo failure))
               (is (= :ambient-runtime-ownership-lost (:reason (ex-data failure))))
-              (is (= replacement @weaver-runtime/current-runtime))
-              (is (nil? (metadata/read-metadata candidate-world))))
+              (is (= (:generation-id replacement)
+                     (:generation-id @weaver-runtime/current-runtime)))
+              (is (= (:nonce (:metadata replacement))
+                     (:nonce (metadata/read-metadata world))))
+              (is (.exists (metadata/socket-file world)))
+              (is (true? (get (socket-request replacement "status" {}) "ok"))))
             (finally
               (weaver-runtime/stop! replacement)))))
       (finally
         (deliver release true)
+        (when-not (future-done? candidate)
+          (future-cancel candidate))
+        (deref candidate (test-support/await-budget-ms) ::timed-out)
         (when-let [runtime @weaver-runtime/current-runtime]
           (weaver-runtime/stop! runtime))
-        (reset! weaver-runtime/current-runtime nil)
-        (delete-tree! (io/file (:config-dir candidate-world) ".."))
-        (delete-tree! (io/file (:config-dir replacement-world) ".."))))))
+        (delete-tree! (io/file (:config-dir world) ".."))))))
 
 (deftest unpublished-runtimes-coexist-with-isolated-storage-and-registries
   (let [world-a (temp-world)
