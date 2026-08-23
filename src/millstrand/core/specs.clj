@@ -369,17 +369,33 @@
 (s/def :millstrand.weaver-start/release-marker ::release-marker-syntax)
 (s/def :millstrand.weaver-start/probe? boolean?)
 (s/def :millstrand.weaver-start/diagnostic! ifn?)
+(defn- finite-json-number?
+  "Return true when `value` is an encodable finite JSON number."
+  [value]
+  (and (number? value)
+       (or (not (or (instance? Double value) (instance? Float value)))
+           (let [n (.doubleValue ^Number value)]
+             (and (not (Double/isNaN n))
+                  (not (Double/isInfinite n)))))))
+
+(defn- callable-marker?
+  "Return true for the exact redacted callable marker shape."
+  [value]
+  (and (= #{"callable" "class"} (set (keys value)))
+       (true? (get value "callable"))
+       (non-blank-string? (get value "class"))))
+
 (defn- registry-projection-value?
   "Return true for the closed, redacted JSON value grammar used by registry status."
   [value]
   (cond
-    (or (nil? value) (string? value) (number? value) (boolean? value)) true
+    (or (nil? value) (string? value) (boolean? value)) true
+    (number? value) (finite-json-number? value)
     (vector? value) (every? registry-projection-value? value)
-    (map? value) (or (and (= #{"callable" "class"} (set (keys value)))
-                          (true? (get value "callable"))
-                          (non-blank-string? (get value "class")))
-                     (and (every? string? (keys value))
-                          (every? registry-projection-value? (vals value))))
+    (map? value) (if (or (contains? value "callable") (contains? value "class"))
+                   (callable-marker? value)
+                   (and (every? string? (keys value))
+                        (every? registry-projection-value? (vals value))))
     :else false))
 
 (s/def :millstrand.registry-projection/value registry-projection-value?)

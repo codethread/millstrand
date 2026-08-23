@@ -241,16 +241,18 @@
                     (take-while some? (iterate ex-cause throwable))))
       throwable))
 
-(defn- exception-data [throwable]
+(defn- exception-data [^Throwable throwable]
   (let [causes (vec (take-while some? (iterate ex-cause throwable)))
-        informative (informative-throwable throwable)]
-    {:message (ex-message informative)
-     :class (str (class informative))
-     :data (when (some ex-data causes)
-             (reduce (fn [data cause]
-                       (merge data (ex-data cause)))
-                     {}
-                     (reverse causes)))}))
+        informative (informative-throwable throwable)
+        suppressed (mapv exception-data (.getSuppressed throwable))]
+    (cond-> {:message (ex-message informative)
+             :class (str (class informative))
+             :data (when (some ex-data causes)
+                     (reduce (fn [data cause]
+                               (merge data (ex-data cause)))
+                             {}
+                             (reverse causes)))}
+      (seq suppressed) (assoc :suppressed suppressed))))
 
 (defn- fail! [message data]
   (throw (ex-info message data)))
@@ -1008,11 +1010,16 @@
     (fn? value) {"callable" true "class" (.getName (class value))}
     (or (nil? value) (string? value) (number? value) (boolean? value)) value
     (or (keyword? value) (symbol? value)) (db/json-key value)
-    (map? value) (into (sorted-map)
-                       (map (fn [[key nested]] [(db/json-key key) (projection-value nested)]))
-                       value)
+    (map? value) (reduce-kv (fn [projection key nested]
+                              (let [json-key (db/json-key key)]
+                                (when (contains? projection json-key)
+                                  (fail! "Registry projection map keys collide after JSON canonicalization"
+                                         {:key key :canonical-key json-key}))
+                                (assoc projection json-key (projection-value nested))))
+                            (sorted-map)
+                            value)
     (vector? value) (mapv projection-value value)
-    (set? value) (mapv projection-value (sort-by pr-str value))
+    (set? value) (->> value (map projection-value) (sort-by pr-str) vec)
     (sequential? value) (mapv projection-value value)
     :else (fail! "Registry projection contains a value that cannot cross the status boundary"
                  {:value value :class (str (class value))})))
@@ -1025,12 +1032,19 @@
   diagnostics never expose a function object."
   [backends candidates]
   (into (sorted-map)
-        (keep (fn [[kind-id {:keys [storage]}]]
-                (when-let [candidate (get candidates storage)]
-                  [(db/json-key kind-id) (projection-value
-                                          {:effective (or (:effective candidate) {})
-                                           :owners (or (:owners candidate) {})
-                                           :provenance (or (:provenance candidate) {})})])))
+        (map (fn [[kind-id {:keys [storage]}]]
+               (let [candidate (get candidates storage)]
+                 (when-not (and (some? candidate)
+                                (every? #(map? (get candidate %))
+                                        [:effective :owners :provenance]))
+                   (fail! "Registry candidate is incomplete for status projection"
+                          {:kind kind-id
+                           :storage storage
+                           :candidate candidate
+                           :required [:effective :owners :provenance]}))
+                 [(db/json-key kind-id)
+                  (projection-value (select-keys candidate
+                                                 [:effective :owners :provenance]))])))
         backends))
 
 #_{:clj-kondo/ignore [:unused-private-var]}

@@ -754,14 +754,25 @@
                           [:scheduler/rearm :probe-mode]]]
     (report! {:stage stage :status :skipped :data {:reason reason}})))
 
-(defn- report-lifecycle-plan-unavailable!
-  "Record why a failed probe had no lifecycle plan to execute."
-  [report!]
-  (report! {:stage :lifecycle/plan
-            :status :skipped
-            :data {:available? false
-                   :reason :probe-failed-before-plan
-                   :plan {}}}))
+(defn- failure-context
+  "Return structured primary and suppressed failure details for probe output."
+  [^Throwable throwable]
+  {:message (ex-message throwable)
+   :class (str (class throwable))
+   :data (when (instance? clojure.lang.ExceptionInfo throwable)
+           (ex-data throwable))
+   :suppressed (->> (iterate ex-cause throwable)
+                    (take-while some?)
+                    (mapcat #(.getSuppressed ^Throwable %))
+                    (mapv failure-context))})
+
+(defn- report-failure!
+  "Report one failure diagnostic without replacing the primary throwable."
+  [report! ^Throwable throwable entry]
+  (try
+    (report! entry)
+    (catch Throwable diagnostic-failure
+      (.addSuppressed throwable diagnostic-failure))))
 
 (defn fresh-runtime-probe!
   "Probe a fresh unpublished runtime generation from a selected world.
@@ -830,10 +841,7 @@
          (delete-tree! probe-root)
          result)
        (catch Throwable throwable
-         (let [failure-context {:message (ex-message throwable)
-                                :class (str (class throwable))
-                                :data (when (instance? clojure.lang.ExceptionInfo throwable)
-                                        (ex-data throwable))}
+         (let [initial-failure-context (failure-context throwable)
                failure (merge {:success false
                                :stage :probe/failure
                                :probe/workspace (.getPath probe-root)
@@ -843,15 +851,25 @@
                                :log (.getPath probe-log)}
                               (when (instance? clojure.lang.ExceptionInfo throwable)
                                 (ex-data throwable)))]
-           (report! {:stage :probe/failure
-                     :status :failed
-                     :data failure-context})
+           (report-failure! report! throwable {:stage :probe/failure
+                                               :status :failed
+                                               :data initial-failure-context})
            (when-not (some #(= :lifecycle/plan (:stage %)) @diagnostics)
-             (report-lifecycle-plan-unavailable! report!))
-           (report-probe-skipped! report!)
+             (report-failure! report! throwable
+                              {:stage :lifecycle/plan
+                               :status :skipped
+                               :data {:available? false
+                                      :reason :probe-failed-before-plan
+                                      :plan {}}}))
+           (doseq [[stage reason] [[:publication :probe-mode]
+                                   [:lifecycle/apply :probe-mode]
+                                   [:scheduler/rearm :probe-mode]]]
+             (report-failure! report! throwable
+                              {:stage stage :status :skipped :data {:reason reason}}))
            (assoc failure
                   :completed (mapv :stage @diagnostics)
-                  :diagnostics @diagnostics)))))))
+                  :diagnostics @diagnostics
+                  :failure (failure-context throwable))))))))
 
 (def ^{:doc "Probe a fresh unpublished runtime generation from a selected world."}
   probe!
