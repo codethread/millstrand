@@ -244,6 +244,40 @@
           (weaver-runtime/stop! runtime))
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
+(deftest overlapping-unpublished-start-rejects-after-the-first-publishes
+  (let [world (temp-world)
+        published (promise)
+        release (promise)
+        first (future
+                (binding [weaver-runtime/*after-metadata-publish!*
+                          (fn [_]
+                            (deliver published true)
+                            @release)]
+                  (weaver-runtime/start! nil {:world world :publish? false})))]
+    (try
+      (is (true? (deref published (test-support/await-budget-ms) false))
+          "first startup publishes before the overlapping preflight")
+      (let [failure (try
+                      (weaver-runtime/start! nil {:world world :publish? false})
+                      (catch Throwable t t))]
+        (is (instance? clojure.lang.ExceptionInfo failure))
+        (is (= "Weaver metadata already exists for weaver world"
+               (ex-message failure)))
+        (is (= (:config-dir world) (:config-dir (ex-data failure)))))
+      (deliver release true)
+      (let [runtime (deref first (test-support/await-budget-ms) ::timed-out)]
+        (is (not= ::timed-out runtime) "first startup completes after release")
+        (is (true? (get (socket-request runtime "status" {}) "ok")))
+        (weaver-runtime/stop! runtime))
+      (finally
+        (deliver release true)
+        (when-not (future-done? first)
+          (future-cancel first))
+        (try
+          (deref first (test-support/await-budget-ms) ::timed-out)
+          (catch java.util.concurrent.CancellationException _))
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
 (deftest startup-failure-cleans-only-its-published-metadata
   (let [world (temp-world)]
     (try
@@ -386,6 +420,39 @@
       (is (nil? (metadata/rollback-pre-publication-artifacts!
                  {:nonce "original"} world original-claim)))
       (is (nil? (metadata/read-metadata world)))
+      (is (.exists (metadata/socket-file world)))
+      (finally
+        (metadata/rollback-pre-publication-artifacts!
+         {:nonce "successor"} world successor-claim)
+        (metadata/delete! world)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest rollback-with-nil-token-cannot-delete-an-unclaimed-socket
+  (let [world (temp-world)
+        claim (atom nil)]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/socket-file world) "unclaimed successor")
+      (is (nil? (metadata/rollback-pre-publication-artifacts!
+                 {:nonce "original"} world claim)))
+      (is (.exists (metadata/socket-file world)))
+      (finally
+        (metadata/delete! world)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-stop-does-not-delete-artifacts-during-a-new-claim
+  (let [world (temp-world)
+        original {:nonce "original"}
+        successor-claim (atom nil)]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/metadata-file world) (pr-str original))
+      (spit (metadata/json-metadata-file world) "original")
+      (spit (metadata/socket-file world) "successor socket")
+      (metadata/claim-pre-publication-artifacts! world successor-claim)
+      (is (nil? (metadata/delete-owned! original world)))
+      (is (= original (metadata/read-metadata world)))
+      (is (.exists (metadata/json-metadata-file world)))
       (is (.exists (metadata/socket-file world)))
       (finally
         (metadata/rollback-pre-publication-artifacts!

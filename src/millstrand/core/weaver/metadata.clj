@@ -16,25 +16,48 @@
 (def ^:private artifact-monitor (Object.))
 (def ^:private pre-publication-claims (atom {}))
 
+(declare read-metadata socket-file stale-or-missing?)
+
 (defn- release-pre-publication-claim-unlocked!
   [world claim]
   (let [state-dir (:state-dir world)
         token @claim]
-    (when (identical? token (get @pre-publication-claims state-dir))
+    (when (and (some? token)
+               (identical? token (get @pre-publication-claims state-dir)))
       (swap! pre-publication-claims dissoc state-dir))
     (reset! claim nil)))
+
+(defn- validate-pre-publication-artifacts!
+  "Fail loudly unless `world` has no live metadata or orphaned socket."
+  [world]
+  (let [existing (read-metadata world)
+        ^java.io.File socket-file (socket-file world)]
+    (when-not (stale-or-missing? existing)
+      (throw (ex-info "Weaver metadata already exists for weaver world"
+                      {:config-dir (:config-dir world)
+                       :metadata existing})))
+    (when (and (nil? existing) (.exists socket-file))
+      (throw (ex-info "Weaver socket exists without metadata; cannot prove weaver world is stale"
+                      {:config-dir (:config-dir world)
+                       :socket-path (.getPath socket-file)})))))
 
 (defn claim-pre-publication-artifacts!
   "Claim `world`'s socket artifacts for one local startup attempt.
 
-  Call immediately before binding the socket. Pass a local `claim` atom, which
-  is released after publication or by `rollback-pre-publication-artifacts!`."
+  Under the short artifact monitor, reject a local claimant, validate the
+  metadata/socket preconditions, and install a non-nil token. Call this before
+  startup work. The token is only a process-local ownership marker; operating
+  system socket binding and metadata remain the cross-process proof.
+
+  Pass a local `claim` atom, which is released after publication or by
+  `rollback-pre-publication-artifacts!`."
   [world claim]
   (locking artifact-monitor
     (let [state-dir (:state-dir world)]
       (when (get @pre-publication-claims state-dir)
         (throw (ex-info "Weaver startup already owns the world socket before publication"
                         {:state-dir state-dir})))
+      (validate-pre-publication-artifacts! world)
       (let [token (Object.)]
         (swap! pre-publication-claims assoc state-dir token)
         (reset! claim token)))))
@@ -199,7 +222,8 @@
   [expected world]
   (locking artifact-monitor
     (let [actual (read-metadata world)]
-      (when (current? expected actual)
+      (when (and (nil? (get @pre-publication-claims (:state-dir world)))
+                 (current? expected actual))
         (delete! world)
         true))))
 
@@ -215,6 +239,7 @@
       (let [actual (read-metadata world)]
         (when (or (current? expected actual)
                   (and (nil? actual)
+                       (some? @claim)
                        (identical? @claim
                                    (get @pre-publication-claims (:state-dir world)))))
           (delete! world)

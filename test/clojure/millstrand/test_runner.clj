@@ -67,7 +67,6 @@
    ;; Behavior-owned slices of the former weaver megasuite. Each owns its
    ;; disposable world and namespace-local callback state.
    'millstrand.core.weaver.bins-test
-   'millstrand.core.weaver.startup-test
    'millstrand.core.weaver.graph-query-test
    'millstrand.core.weaver.hooks-events-test
    'millstrand.core.weaver.ops-help-test
@@ -95,6 +94,10 @@
    ;; DynamicClassLoader and retained registry snapshots stay serial until
    ;; concurrent execution has an explicit proof.
    'millstrand.core.weaver.registry-snapshots-test
+   ;; Startup failure tests redefine scheduler, storage, and metadata Vars.
+   ;; `with-redefs` is JVM-global, so this namespace cannot share the parallel
+   ;; parent with runtime consumers.
+   'millstrand.core.weaver.startup-test
    'millstrand.core.weaver.modules-test])
 
 (def add-libs-shards

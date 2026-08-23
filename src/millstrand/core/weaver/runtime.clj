@@ -609,167 +609,166 @@
   (when (and (publishes-ambient-runtime? publish? probe?) @current-runtime)
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
   (let [world (or world (weaver-config/world))
-        resolved-release-marker (resolve-release-marker release-marker)
-        existing (metadata/read-metadata world)
-        socket-file (metadata/socket-file world)]
-    (when-not (metadata/stale-or-missing? existing)
-      (throw (ex-info "Weaver metadata already exists for weaver world" {:config-dir (:config-dir world)
-                                                                         :metadata existing})))
-    (when (and (nil? existing) (.exists socket-file))
-      (throw (ex-info "Weaver socket exists without metadata; cannot prove weaver world is stale" {:config-dir (:config-dir world)
-                                                                                                   :socket-path (.getPath socket-file)})))
-    (.mkdirs (io/file (:state-dir world)))
-    (.mkdirs (io/file (:data-dir world)))
-    (let [storage (storage-for storage db-file world)
-          ds (:connectable storage)
-          _ (db/init! ds)
-          runtime-state (atom nil)
-          server (when-not probe?
-                   (nrepl/start-server :bind loopback-host :port 0
-                                       :handler (runtime-nrepl-handler runtime-state)))
-          port (some-> server :port)
-          nonce (metadata/new-nonce)
-          meta (metadata/metadata-shape {:pid (current-pid)
-                                         :host loopback-host
-                                         :port port
-                                         :storage-kind (:storage-kind storage)
-                                         :storage-label (:storage-label storage)
-                                         :canonical-db-path (:canonical-db-path storage)
-                                         :nonce nonce
-                                         :world world
-                                         :name (or name (default-name world))
-                                         :started-at (str (Instant/now))})
-          op-store (core-registry/backed-registry :ops)
-          query-store (core-registry/backed-registry :queries)
-          pattern-store (core-registry/backed-registry :patterns)
-          hook-store (core-registry/backed-registry :hooks)
-          bin-store (core-registry/backed-registry :bins)
-          runtime-base {:storage storage
-                        :datasource ds
-                        :clock (atom (clock/system-clock))
-                        :clock-pumps (atom {})
-                        :query-store query-store
-                        :pattern-store pattern-store
-                        :op-store op-store
-                        :hook-store hook-store
-                        :bin-store bin-store
-                        :glossary-registry (atom {})
-                        :help-transform-slot (atom nil)
-                        :generation-id (str (java.util.UUID/randomUUID))
-                        :release-marker resolved-release-marker
-                        :approved-spool-sync-state (atom {})
-                        :approved-spool-generation-state (atom {})
-                        :approved-spool-generation-fingerprints (atom {})
-                        :approved-spool-generation-maven (atom {})
-                        :pending-spool-generation (atom nil)
+        resolved-release-marker (resolve-release-marker release-marker)]
+    (when-not probe?
+      (metadata/claim-pre-publication-artifacts! world pre-publication-claim))
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (.mkdirs (io/file (:data-dir world)))
+      (let [storage (storage-for storage db-file world)
+            ds (:connectable storage)
+            _ (db/init! ds)
+            runtime-state (atom nil)
+            server (when-not probe?
+                     (nrepl/start-server :bind loopback-host :port 0
+                                         :handler (runtime-nrepl-handler runtime-state)))
+            port (some-> server :port)
+            nonce (metadata/new-nonce)
+            meta (metadata/metadata-shape {:pid (current-pid)
+                                           :host loopback-host
+                                           :port port
+                                           :storage-kind (:storage-kind storage)
+                                           :storage-label (:storage-label storage)
+                                           :canonical-db-path (:canonical-db-path storage)
+                                           :nonce nonce
+                                           :world world
+                                           :name (or name (default-name world))
+                                           :started-at (str (Instant/now))})
+            op-store (core-registry/backed-registry :ops)
+            query-store (core-registry/backed-registry :queries)
+            pattern-store (core-registry/backed-registry :patterns)
+            hook-store (core-registry/backed-registry :hooks)
+            bin-store (core-registry/backed-registry :bins)
+            runtime-base {:storage storage
+                          :datasource ds
+                          :clock (atom (clock/system-clock))
+                          :clock-pumps (atom {})
+                          :query-store query-store
+                          :pattern-store pattern-store
+                          :op-store op-store
+                          :hook-store hook-store
+                          :bin-store bin-store
+                          :glossary-registry (atom {})
+                          :help-transform-slot (atom nil)
+                          :generation-id (str (java.util.UUID/randomUUID))
+                          :release-marker resolved-release-marker
+                          :approved-spool-sync-state (atom {})
+                          :approved-spool-generation-state (atom {})
+                          :approved-spool-generation-fingerprints (atom {})
+                          :approved-spool-generation-maven (atom {})
+                          :pending-spool-generation (atom nil)
                         ;; Append-only for this process generation. Config reload
                         ;; deliberately leaves loaded-code evidence intact.
-                        :namespace-load-ledger (atom {:last-order 0 :records []})
+                          :namespace-load-ledger (atom {:last-order 0 :records []})
                         ;; Embedded runtimes can share a JVM. Namespaces already
                         ;; present before this runtime creates its spool loader
                         ;; belong to the inherited image, not this runtime's
                         ;; synced-root ledger.
-                        :inherited-namespaces (into #{} (map ns-name) (all-ns))
+                          :inherited-namespaces (into #{} (map ns-name) (all-ns))
                         ;; Status reads this recorded classification without
                         ;; consulting source files. Sync/source-load boundaries
                         ;; replace it when their in-memory evidence changes.
-                        :namespace-load-status (atom nil)
-                        :module-state
-                        (atom ((requiring-resolve
-                                'millstrand.core.weaver.module-refresh/initial-state)))
-                        :module-refresh-lock (Object.)
-                        :spool-state (atom {})
-                        :spool-classloader (clojure.lang.DynamicClassLoader.
-                                            (.getContextClassLoader (Thread/currentThread)))
-                        :server server
-                        :metadata meta}
-          runtime-base (start-event-system! runtime-base (not probe?))
-          _ (reset! runtime-state runtime-base)]
-      (try
-        (let [socket-runtime (when-not probe?
-                               (metadata/claim-pre-publication-artifacts!
-                                world pre-publication-claim)
-                               (socket/start! runtime-state (:socket-path meta)))
-              runtime (assoc runtime-base :socket-runtime socket-runtime)]
-          (reset! runtime-state runtime)
-          (when port
-            (swap! nrepl-port-runtimes assoc port runtime))
-          (when (and (publishes-ambient-runtime? publish? probe?)
-                     (not (compare-and-set! current-runtime nil runtime)))
-            (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
-          (install-built-in-ops! runtime)
-          (let [refresh-result (refresh-modules! runtime (cond-> {:startup? true}
-                                                           probe? (assoc :probe? true
-                                                                         :dry-run? true
-                                                                         :diagnostic! diagnostic!
-                                                                         :old-generation/baseline
-                                                                         old-generation-baseline)))
-                runtime (assoc runtime :probe-result refresh-result)]
-            (when-not (#{:applied :unchanged} (:status refresh-result))
-              (throw (ex-info "Initial module refresh did not complete successfully"
-                              refresh-result)))
+                          :namespace-load-status (atom nil)
+                          :module-state
+                          (atom ((requiring-resolve
+                                  'millstrand.core.weaver.module-refresh/initial-state)))
+                          :module-refresh-lock (Object.)
+                          :spool-state (atom {})
+                          :spool-classloader (clojure.lang.DynamicClassLoader.
+                                              (.getContextClassLoader (Thread/currentThread)))
+                          :server server
+                          :metadata meta}
+            runtime-base (start-event-system! runtime-base (not probe?))
+            _ (reset! runtime-state runtime-base)]
+        (try
+          (let [socket-runtime (when-not probe?
+                                 (socket/start! runtime-state (:socket-path meta)))
+                runtime (assoc runtime-base :socket-runtime socket-runtime)]
+            (reset! runtime-state runtime)
+            (when port
+              (swap! nrepl-port-runtimes assoc port runtime))
+            (when (and (publishes-ambient-runtime? publish? probe?)
+                       (not (compare-and-set! current-runtime nil runtime)))
+              (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
+            (install-built-in-ops! runtime)
+            (let [refresh-result (refresh-modules! runtime (cond-> {:startup? true}
+                                                             probe? (assoc :probe? true
+                                                                           :dry-run? true
+                                                                           :diagnostic! diagnostic!
+                                                                           :old-generation/baseline
+                                                                           old-generation-baseline)))
+                  runtime (assoc runtime :probe-result refresh-result)]
+              (when-not (#{:applied :unchanged} (:status refresh-result))
+                (throw (ex-info "Initial module refresh did not complete successfully"
+                                refresh-result)))
            ;; Arm the scheduler only after startup files finish loading, so
            ;; handlers supplied by approved spools/config resolve before any
            ;; durable pending wake is re-armed. Probe mode has no live scheduler.
-            (when-not probe?
-              (scheduler/rearm! runtime))
-            (let [published-runtime (if probe?
-                                      runtime
-                                      (let [metadata-file (metadata/publish! meta)]
-                                        (metadata/release-pre-publication-artifacts!
-                                         world pre-publication-claim)
-                                        (when *after-metadata-publish!*
-                                          (*after-metadata-publish!* meta))
-                                        (assoc runtime :metadata-file metadata-file)))]
-              (reset! runtime-state published-runtime)
-              (when port
-                (swap! nrepl-port-runtimes assoc port published-runtime))
-              (when (publishes-ambient-runtime? publish? probe?)
+              (when-not probe?
+                (scheduler/rearm! runtime))
+              (let [published-runtime (if probe?
+                                        runtime
+                                        (let [metadata-file (metadata/publish! meta)]
+                                          (metadata/release-pre-publication-artifacts!
+                                           world pre-publication-claim)
+                                          (when *after-metadata-publish!*
+                                            (*after-metadata-publish!* meta))
+                                          (assoc runtime :metadata-file metadata-file)))]
+                (reset! runtime-state published-runtime)
+                (when port
+                  (swap! nrepl-port-runtimes assoc port published-runtime))
+                (when (publishes-ambient-runtime? publish? probe?)
                 ;; The startup CAS admitted this generation to the ambient slot.
                 ;; Publish the final runtime snapshot so stop! and ambient
                 ;; callers observe the same generation. A concurrent stop and
                 ;; replacement start may have withdrawn that admission; never
                 ;; resurrect or overwrite the replacement in that case.
-                (let [{:keys [claimed? published-by]}
-                      (claim-final-publication! runtime published-runtime)]
-                  (when-not claimed?
-                    (throw (ex-info "Weaver runtime lost ambient publication ownership during startup"
-                                    {:reason :ambient-runtime-ownership-lost
-                                     :generation-id (:generation-id runtime)
-                                     :published-generation-id
-                                     (:generation-id published-by)})))))
-              published-runtime)))
-        (catch Throwable t
-          (let [runtime @runtime-state]
-            (cleanup-step! t :nrepl/port-registration
-                           #(when port
-                              (swap! nrepl-port-runtimes
-                                     dissoc-generation-nrepl-runtime port runtime)))
-            (cleanup-step! t :ambient/publication
-                           #(when (publishes-ambient-runtime? publish? probe?)
-                              (swap! current-runtime
-                                     (fn [published]
-                                       (when-not (= (:generation-id published) (:generation-id runtime))
-                                         published)))))
-            (cleanup-step! t :event-system/close #(stop-event-system! runtime))
-            (cleanup-step! t :socket/close
-                           #(when-let [socket-runtime (:socket-runtime runtime)]
-                              (socket/close! socket-runtime)))
-            (cleanup-step! t :nrepl/close #(when server (nrepl/stop-server server)))
+                  (let [{:keys [claimed? published-by]}
+                        (claim-final-publication! runtime published-runtime)]
+                    (when-not claimed?
+                      (throw (ex-info "Weaver runtime lost ambient publication ownership during startup"
+                                      {:reason :ambient-runtime-ownership-lost
+                                       :generation-id (:generation-id runtime)
+                                       :published-generation-id
+                                       (:generation-id published-by)})))))
+                published-runtime)))
+          (catch Throwable t
+            (let [runtime @runtime-state]
+              (cleanup-step! t :nrepl/port-registration
+                             #(when port
+                                (swap! nrepl-port-runtimes
+                                       dissoc-generation-nrepl-runtime port runtime)))
+              (cleanup-step! t :ambient/publication
+                             #(when (publishes-ambient-runtime? publish? probe?)
+                                (swap! current-runtime
+                                       (fn [published]
+                                         (when-not (= (:generation-id published) (:generation-id runtime))
+                                           published)))))
+              (cleanup-step! t :event-system/close #(stop-event-system! runtime))
+              (cleanup-step! t :socket/close
+                             #(when-let [socket-runtime (:socket-runtime runtime)]
+                                (socket/close! socket-runtime)))
+              (cleanup-step! t :nrepl/close #(when server (nrepl/stop-server server)))
             ;; Spool state may own executors started by config before metadata is
             ;; published. Close it while storage remains available, without
             ;; masking the original startup exception.
-            (cleanup-step! t :module-lifecycle/close #(close-module-lifecycle! runtime))
-            (cleanup-step! t :spool-state/close #(close-spool-state! runtime))
-            (cleanup-step! t :storage/close #(close-storage! runtime))
+              (cleanup-step! t :module-lifecycle/close #(close-module-lifecycle! runtime))
+              (cleanup-step! t :spool-state/close #(close-spool-state! runtime))
+              (cleanup-step! t :storage/close #(close-storage! runtime))
             ;; Transports are down before discovery files disappear. This one
             ;; conditional operation covers an unpublished socket and a partial
             ;; metadata write without ever unlinking a newer generation.
-            (cleanup-step! t :artifacts/delete
-                           #(when-not probe?
-                              (metadata/rollback-pre-publication-artifacts!
-                               meta world pre-publication-claim)))
-            (throw t)))))))
+              (cleanup-step! t :artifacts/delete
+                             #(when-not probe?
+                                (metadata/rollback-pre-publication-artifacts!
+                                 meta world pre-publication-claim)))
+              (throw t)))))
+      (finally
+        ;; Startup keeps the local token through setup but never holds the
+        ;; artifact monitor over storage, userland, or endpoint work.
+        (when-not probe?
+          (metadata/release-pre-publication-artifacts!
+           world pre-publication-claim))))))
 
 (defn- start-with-options!
   "Start one runtime with a local pre-publication socket claim."
@@ -969,45 +968,45 @@
 (defn stop!
   "Stop `runtime` without unlinking a newer generation's world artifacts."
   [runtime]
-  (let [world {:state-dir (get-in runtime [:metadata :state-dir])}]
-    (let [primary (atom nil)
-          attempt! (fn [step f]
-                     (try
-                       (f)
-                       (catch Throwable t
-                         (let [failure (ex-info "Weaver teardown step failed"
-                                                {:teardown/step step
-                                                 :exception/message (ex-message t)}
-                                                t)]
-                           (if-let [first-failure @primary]
-                             (.addSuppressed ^Throwable first-failure failure)
-                             (reset! primary failure))))))]
-      (attempt! :event-system/close #(stop-event-system! runtime))
-      (attempt! :socket/close #(when-let [socket-runtime (:socket-runtime runtime)]
-                                 (socket/close! socket-runtime)))
-      (attempt! :nrepl/close #(when-let [server (:server runtime)]
-                                (nrepl/stop-server server)))
+  (let [world {:state-dir (get-in runtime [:metadata :state-dir])}
+        primary (atom nil)
+        attempt! (fn [step f]
+                   (try
+                     (f)
+                     (catch Throwable t
+                       (let [failure (ex-info "Weaver teardown step failed"
+                                              {:teardown/step step
+                                               :exception/message (ex-message t)}
+                                              t)]
+                         (if-let [first-failure @primary]
+                           (.addSuppressed ^Throwable first-failure failure)
+                           (reset! primary failure))))))]
+    (attempt! :event-system/close #(stop-event-system! runtime))
+    (attempt! :socket/close #(when-let [socket-runtime (:socket-runtime runtime)]
+                               (socket/close! socket-runtime)))
+    (attempt! :nrepl/close #(when-let [server (:server runtime)]
+                              (nrepl/stop-server server)))
          ;; Spool resources close while storage is still available to their
          ;; schedulers and workers. A failed step never skips a later one.
-      (attempt! :module-lifecycle/close #(close-module-lifecycle! runtime))
-      (attempt! :spool-state/close #(close-spool-state! runtime))
-      (attempt! :storage/close #(close-storage! runtime))
-      (attempt! :nrepl/port-registration
-                #(when-let [port (get-in runtime [:metadata :endpoint :port])]
-                   (swap! nrepl-port-runtimes
-                          dissoc-generation-nrepl-runtime port runtime)))
+    (attempt! :module-lifecycle/close #(close-module-lifecycle! runtime))
+    (attempt! :spool-state/close #(close-spool-state! runtime))
+    (attempt! :storage/close #(close-storage! runtime))
+    (attempt! :nrepl/port-registration
+              #(when-let [port (get-in runtime [:metadata :endpoint :port])]
+                 (swap! nrepl-port-runtimes
+                        dissoc-generation-nrepl-runtime port runtime)))
          ;; Generation identity, not map equality, owns the ambient slot.
-      (attempt! :ambient/publication
-                #(swap! current-runtime
-                        (fn [published]
-                          (when-not (= (:generation-id published) (:generation-id runtime))
-                            published))))
+    (attempt! :ambient/publication
+              #(swap! current-runtime
+                      (fn [published]
+                        (when-not (= (:generation-id published) (:generation-id runtime))
+                          published))))
          ;; This remains last: discovery stays available until its endpoints
          ;; have been asked to close, and stale handles cannot unlink successors.
-      (attempt! :artifacts/delete #(metadata/delete-owned! (:metadata runtime) world))
-      (if-let [failure @primary]
-        (throw failure)
-        {:stopped true}))))
+    (attempt! :artifacts/delete #(metadata/delete-owned! (:metadata runtime) world))
+    (if-let [failure @primary]
+      (throw failure)
+      {:stopped true})))
 
 (def ^:private main-arg-spec
   {:op :weaver-start
