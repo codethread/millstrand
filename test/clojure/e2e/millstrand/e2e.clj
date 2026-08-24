@@ -1420,8 +1420,11 @@
                               (live-add-runtime-probe! state-home workspace-path))]
           (assert= "running" (:state replacement-status)
                    "planned replacement publishes a running generation")
+          (assert (and (string? new-generation)
+                       (not (clojure.string/blank? new-generation)))
+                  "planned replacement publishes a nonblank generation")
           (assert (not= old-generation new-generation)
-                  "planned replacement changes generation exactly once")
+                  "planned replacement publishes a different generation")
           (assert (.isAlive ^Process @mill-process)
                   "Mill remains alive through planned Weaver replacement"))
         (let [rows-after (process-repl! state-home workspace-path list-form)
