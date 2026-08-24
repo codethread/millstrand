@@ -205,6 +205,7 @@
 
 (deftest attach-repl-delegates-to-helper-ready-nrepl-client-repl
   (with-runtime
+    {:publish? false}
     (fn [rt _]
       (let [{:keys [endpoint]} (:metadata rt)
             calls (atom [])

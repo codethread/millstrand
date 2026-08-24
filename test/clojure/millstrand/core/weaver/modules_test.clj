@@ -1365,3 +1365,146 @@
         (finally
           (when @rt (weaver-runtime/stop! @rt))
           (delete-tree! (io/file workspace "..")))))))
+
+(deftest failed-fresh-runtime-probe-retains-disposable-diagnostics
+  (let [world (temp-world)
+        workspace (:config-dir world)]
+    (try
+      (spit (io/file workspace "init.clj")
+            (str "(require '[millstrand.api.current.alpha :as current] "
+                 "'[millstrand.api.runtime.alpha :as runtime])\n"
+                 "(runtime/module! (current/runtime) :missing/module "
+                 "{:file \"modules/missing.clj\"})\n"))
+      (let [result (weaver-runtime/fresh-runtime-probe!
+                    world {:old-generation-baseline {:status :admitted :projection {}}})]
+        (try
+          (is (false? (:success result)))
+          (is (= :probe/failure (:stage result)))
+          (is (.isDirectory (io/file (:probe/workspace result))))
+          (is (.isFile (io/file (:log result))))
+          (is (some #(= :probe/failure (:stage %)) (:diagnostics result)))
+          (finally
+            (delete-tree! (io/file (:probe/workspace result))))))
+      (finally
+        (delete-tree! (io/file workspace ".."))))))
+
+(deftest failed-fresh-runtime-probe-retains-primary-failure-when-diagnostic-sinks-fail
+  (let [world (temp-world)
+        workspace (:config-dir world)
+        diagnostic-writes (atom 0)
+        original-spit spit]
+    (try
+      (spit (io/file workspace "init.clj")
+            (str "(require '[millstrand.api.current.alpha :as current] "
+                 "'[millstrand.api.runtime.alpha :as runtime])\n"
+                 "(runtime/module! (current/runtime) :missing/module "
+                 "{:file \"modules/missing.clj\"})\n"))
+      (with-redefs [clojure.core/spit
+                    (fn [file content & opts]
+                      (if (> (swap! diagnostic-writes inc) 9)
+                        (throw (ex-info "diagnostic sink boom" {:file file}))
+                        (apply original-spit file content opts)))]
+        (let [result (weaver-runtime/fresh-runtime-probe!
+                      world {:old-generation-baseline {:status :admitted :projection {}}})]
+          (try
+            (is (false? (:success result)))
+            (is (= :probe/failure (:stage result)))
+            (is (not= "diagnostic sink boom" (get-in result [:failure :message])))
+            (is (seq (get-in result [:failure :suppressed])) (pr-str result))
+            (is (every? #(= "diagnostic sink boom" (:message %))
+                        (get-in result [:failure :suppressed])))
+            (finally
+              (delete-tree! (io/file (:probe/workspace result)))))))
+      (finally
+        (delete-tree! (io/file workspace ".."))))))
+
+(deftest registry-projection-canonicalizes-and-validates-boundaries
+  (testing "set elements are canonicalized before deterministic ordering"
+    (let [left (array-map :a 1 :z 0)
+          right (array-map :z 0 :a 1)]
+      (is (= (@#'module-refresh/projection-value #{left (array-map :m 0)})
+             (@#'module-refresh/projection-value #{right (array-map :m 0)})))))
+  (testing "distinct Clojure keys cannot silently collapse into one JSON key"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"keys collide after JSON canonicalization"
+                          (@#'module-refresh/projection-value {:x 1 "x" 2}))))
+  (testing "candidate state is complete for every backend"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"candidate is incomplete"
+                          (@#'module-refresh/candidate-projection
+                           {:ops {:storage :ops}} {})))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"candidate is incomplete"
+                          (@#'module-refresh/candidate-projection
+                           {:ops {:storage :ops}}
+                           {:ops {:effective {} :owners {}}})))))
+
+(deftest registry-projection-spec-rejects-malformed-json-values
+  (doseq [value [{"callable" false "class" "x"}
+                 {"callable" true}
+                 {"class" "x"}
+                 ##NaN ##Inf ##-Inf]]
+    (is (false? (s/valid? :millstrand.registry-projection/value value))
+        (pr-str value))))
+
+(deftest candidate-projection-rejects-malformed-json-values
+  (let [backends {:queries {:storage :queries}}]
+    (doseq [value [##NaN {"callable" false "class" "x"}]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"invalid JSON value"
+                            (@#'module-refresh/candidate-projection
+                             backends
+                             {:queries {:effective {"bad" value}
+                                        :owners {}
+                                        :provenance {}}}))
+          (pr-str value)))))
+
+(deftest fresh-runtime-probe-rejects-malformed-json-values-at-producer
+  (doseq [value [{:nested ##NaN} {"callable" false "class" "x"}]]
+    (let [world (temp-world)
+          workspace (:config-dir world)
+          suffix (str/replace (str (random-uuid)) "-" "")
+          source "modules/malformed-projection.clj"
+          ns-sym (symbol (str "test.module.malformed-projection-" suffix))
+          result (atom nil)]
+      (try
+        (module-source! workspace source ns-sym
+                        (str "(runtime/collect-module-entry! :ops \"bad\" "
+                             (pr-str value) ")"))
+        (spit (io/file workspace "init.clj")
+              (str "(require '[millstrand.api.current.alpha :as current] "
+                   "'[millstrand.api.runtime.alpha :as runtime])\n"
+                   "(runtime/module! (current/runtime) :malformed-projection "
+                   "{:file \"" source "\"})\n"))
+        (reset! result
+                (weaver-runtime/fresh-runtime-probe!
+                 world {:old-generation-baseline
+                        {:status :admitted :projection {}}}))
+        (is (false? (:success @result)) (pr-str @result))
+        (is (= :probe/failure (:stage @result)) (pr-str @result))
+        (is (some #(= "Registry projection contains an invalid JSON value"
+                      (get-in % [:data :message]))
+                  (:diagnostics @result))
+            (pr-str @result))
+        (is (not-any? #(and (= :candidate/staged (:stage %))
+                            (= :completed (:status %)))
+                      (:diagnostics @result))
+            (pr-str @result))
+        (finally
+          (when-let [probe-workspace (:probe/workspace @result)]
+            (delete-tree! (io/file probe-workspace)))
+          (delete-tree! (io/file workspace "..")))))))
+
+(deftest fresh-runtime-probe-requires-admitted-registry-baseline
+  (let [world (temp-world)]
+    (try
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"requires an admitted old-generation baseline"
+                            (weaver-runtime/fresh-runtime-probe! world)))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"requires an admitted old-generation baseline"
+                            (weaver-runtime/fresh-runtime-probe!
+                             world {:old-generation-baseline
+                                    {:status :unavailable :projection {}}})))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))

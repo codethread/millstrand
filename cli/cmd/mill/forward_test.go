@@ -2,10 +2,14 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,6 +39,28 @@ func TestInvokeRelaysSingleWeaverResponse(t *testing.T) {
 	}
 }
 
+func TestInvokeReportsTruncatedResponseWithoutReplay(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	var decodedRequests atomic.Int32
+	serveFakeWeaverPartialResponse(t, world, []byte("not-json"), &decodedRequests)
+	writeWeaverMetadata(t, world, os.Getpid(), "weaver-truncated")
+
+	frames := runInvoke(t, cfg, map[string]any{"name": "read", "argv": []any{}, "payloads": map[string]any{}})
+	if len(frames) != 1 || frames[0]["ok"] != false {
+		t.Fatalf("expected one transport error frame, got %#v", frames)
+	}
+	errFrame := frames[0]["error"].(map[string]any)
+	if errFrame["type"] != "transport" || errFrame["code"] != "mill/weaver-forward-failed" {
+		t.Fatalf("truncated response was not surfaced as transport error: %#v", errFrame)
+	}
+	if errFrame["details"].(map[string]any)["request_delivery"] != true {
+		t.Fatalf("truncated response must never be replayed: %#v", errFrame)
+	}
+	if got := decodedRequests.Load(); got != 1 {
+		t.Fatalf("ambiguous delivery replayed the request: decoded server requests=%d", got)
+	}
+}
+
 func TestInvokeRelaysStreamFramesVerbatim(t *testing.T) {
 	world, cfg := forwardWorld(t)
 	serveFakeWeaverStream(t, world, func(req map[string]any) [][]byte {
@@ -42,6 +68,7 @@ func TestInvokeRelaysStreamFramesVerbatim(t *testing.T) {
 		return [][]byte{
 			mustFrame(t, map[string]any{"protocol_version": client.ProtocolVersion, "request_id": id, "stream": true}),
 			mustFrame(t, map[string]any{"i": 0}),
+			mustFrame(t, map[string]any{"done": true}),
 			mustFrame(t, map[string]any{"i": 1}),
 			mustFrame(t, map[string]any{"protocol_version": client.ProtocolVersion, "request_id": id, "done": true, "success": true, "result": map[string]any{"emitted": 2}}),
 		}
@@ -49,17 +76,17 @@ func TestInvokeRelaysStreamFramesVerbatim(t *testing.T) {
 	writeWeaverMetadata(t, world, os.Getpid(), "weaver-stream")
 
 	frames := runInvoke(t, cfg, map[string]any{"name": "test-stream", "argv": []any{}, "payloads": map[string]any{}})
-	if len(frames) != 4 {
-		t.Fatalf("expected header + 2 emitted + terminator, got %#v", frames)
+	if len(frames) != 5 {
+		t.Fatalf("expected header + 3 emitted + terminator, got %#v", frames)
 	}
 	if frames[0]["stream"] != true {
 		t.Fatalf("first frame is not a stream header: %#v", frames[0])
 	}
-	if frames[1]["i"] != float64(0) || frames[2]["i"] != float64(1) {
+	if frames[1]["i"] != float64(0) || frames[2]["done"] != true || frames[3]["i"] != float64(1) {
 		t.Fatalf("emitted lines not relayed verbatim: %#v", frames)
 	}
-	if frames[3]["done"] != true || frames[3]["success"] != true {
-		t.Fatalf("terminator not relayed verbatim: %#v", frames[3])
+	if frames[4]["done"] != true || frames[4]["success"] != true {
+		t.Fatalf("terminator not relayed verbatim: %#v", frames[4])
 	}
 }
 
@@ -87,6 +114,222 @@ func TestInvokeReportsStaleSelectedWorldWeaver(t *testing.T) {
 	errFrame := frames[0]["error"].(map[string]any)
 	if errFrame["code"] != "mill/stale-selected-weaver" || errFrame["details"].(map[string]any)["stale_reason"] == nil {
 		t.Fatalf("expected stale-selected-weaver error, got %#v", errFrame)
+	}
+}
+
+func TestInvokeCancellationBeforeReplacementAdmissionSendsNoWeaverFrame(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	transition := &weaverTransition{world: world, transitionID: "transition", stateValue: restartStateRestarting, done: make(chan struct{})}
+	s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{world.ConfigDir: transition}}
+	clientConn, serverConn := net.Pipe()
+	req := client.MillRequest{ProtocolVersion: client.MillProtocolVersion, RequestID: "req-cancel", Operation: "invoke", World: client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg}, Payload: map[string]any{"name": "mutate"}}
+	done := make(chan struct{})
+	go func() {
+		s.handleInvoke(serverConn, req)
+		close(done)
+	}()
+	_ = clientConn.Close()
+	close(transition.done)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled invocation did not return")
+	}
+	_ = serverConn.Close()
+	// There is deliberately no Weaver socket: reaching relayInvoke after the
+	// caller closed would be a test failure in the admission path above.
+}
+
+func TestInvokeThroughHandleAcceptsSplitTrailingWhitespace(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	serveFakeWeaverStream(t, world, func(req map[string]any) [][]byte {
+		return [][]byte{mustFrame(t, map[string]any{
+			"protocol_version": client.ProtocolVersion,
+			"request_id":       req["request_id"],
+			"ok":               true,
+			"result":           map[string]any{"ok": true},
+			"error":            nil,
+		})}
+	})
+	writeWeaverMetadata(t, world, os.Getpid(), "split-whitespace")
+	s := server{meta: client.MillMetadata{MillID: "mill-split"}, children: map[string]*weaverChild{}}
+	req := client.MillRequest{
+		ProtocolVersion: client.MillProtocolVersion,
+		RequestID:       "split-request",
+		MillID:          "mill-split",
+		Operation:       "invoke",
+		World:           client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg},
+		Payload:         map[string]any{"name": "status"},
+	}
+	clientConn, serverConn := net.Pipe()
+	done := make(chan struct{})
+	go func() {
+		s.handle(serverConn)
+		close(done)
+	}()
+	defer func() {
+		_ = clientConn.Close()
+		_ = serverConn.Close()
+	}()
+	frame, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := clientConn.Write(frame); err != nil {
+		t.Fatal(err)
+	}
+	// Send the legal framing whitespace separately, after Decode has returned.
+	if _, err := clientConn.Write([]byte("\n \t\r")); err != nil {
+		t.Fatal(err)
+	}
+	_ = clientConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var response map[string]any
+	if err := json.NewDecoder(clientConn).Decode(&response); err != nil {
+		t.Fatalf("split trailing whitespace cancelled invoke: %v", err)
+	}
+	if response["ok"] != true {
+		t.Fatalf("unexpected response: %#v", response)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("mill connection handler did not finish")
+	}
+}
+
+func TestInvokeCancellationInterruptsNonReadingWeaverWrite(t *testing.T) {
+	world, _ := forwardWorld(t)
+	socket := filepath.Join(world.StateDir, "non-reading.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close(); _ = os.Remove(socket) }()
+	accepted := make(chan struct{})
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr == nil {
+			close(accepted)
+			defer func() { _ = conn.Close() }()
+			select {}
+		}
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := bufio.NewWriter(io.Discard)
+	writeDone := make(chan error, 1)
+	admitted := make(chan struct{})
+	writeStarted := make(chan struct{})
+	go func() {
+		outcome := relayInvokeWithAdmission(ctx, socket, "non-reading", map[string]any{
+			"name": "large-write",
+			"data": strings.Repeat("x", 32<<20),
+		}, 0, w, func() { close(admitted) }, func() { close(writeStarted) })
+		writeDone <- outcome.err
+	}()
+	select {
+	case <-accepted:
+	case <-time.After(time.Second):
+		t.Fatal("non-reading Weaver did not accept the socket")
+	}
+	select {
+	case <-admitted:
+		t.Fatal("non-reading Weaver accepted the complete request unexpectedly")
+	case <-writeStarted:
+	}
+	cancel()
+	select {
+	case err := <-writeDone:
+		if err == nil || !strings.Contains(err.Error(), "canceled") {
+			t.Fatalf("cancelling caller did not interrupt blocked write: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancelling caller left blocked Weaver write running")
+	}
+}
+
+func TestInvokeAdmissionDoesNotBlockAnotherWorkspace(t *testing.T) {
+	worldA, cfgA := forwardWorld(t)
+	cfgB := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfgB, "config.json"), []byte(`{"configFormat":"alpha"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	worldB, err := config.RuntimeWorld(cfgB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(worldB.StateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("unix", filepath.Join(worldA.StateDir, "weaver.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close() }()
+	accepted := make(chan struct{})
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr == nil {
+			close(accepted)
+			defer func() { _ = conn.Close() }()
+			select {}
+		}
+	}()
+	if err := os.MkdirAll(worldA.StateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeWeaverMetadata(t, worldA, os.Getpid(), "non-reading")
+	serveFakeWeaverStream(t, worldB, func(req map[string]any) [][]byte {
+		return [][]byte{mustFrame(t, map[string]any{
+			"protocol_version": client.ProtocolVersion,
+			"request_id":       req["request_id"],
+			"ok":               true,
+			"result":           map[string]any{"workspace": "other"},
+		})}
+	})
+	writeWeaverMetadata(t, worldB, os.Getpid(), "responsive")
+	s := &server{children: map[string]*weaverChild{}}
+	largeReq := client.MillRequest{ProtocolVersion: client.MillProtocolVersion, RequestID: "blocked", Operation: "invoke", World: client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfgA}, Payload: map[string]any{"name": "large-write", "data": strings.Repeat("x", 32<<20)}}
+	aClient, aServer := net.Pipe()
+	aDone := make(chan struct{})
+	go func() {
+		s.handleInvoke(aServer, largeReq)
+		close(aDone)
+	}()
+	defer func() { _ = aClient.Close(); _ = aServer.Close() }()
+	select {
+	case <-accepted:
+	case <-time.After(time.Second):
+		t.Fatal("non-reading workspace did not reach its Weaver")
+	}
+
+	bReq := client.MillRequest{ProtocolVersion: client.MillProtocolVersion, RequestID: "other", Operation: "invoke", World: client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfgB}, Payload: map[string]any{"name": "status"}}
+	bClient, bServer := net.Pipe()
+	bDone := make(chan struct{})
+	go func() {
+		s.handleInvoke(bServer, bReq)
+		close(bDone)
+	}()
+	defer func() { _ = bClient.Close(); _ = bServer.Close() }()
+	_ = bClient.SetReadDeadline(time.Now().Add(time.Second))
+	var response map[string]any
+	if err := json.NewDecoder(bClient).Decode(&response); err != nil {
+		t.Fatalf("another workspace was blocked by non-reading Weaver: %v", err)
+	}
+	if response["ok"] != true {
+		t.Fatalf("responsive workspace returned an error: %#v", response)
+	}
+	_ = aClient.Close()
+	select {
+	case <-aDone:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled non-reading workspace did not return")
+	}
+	select {
+	case <-bDone:
+	case <-time.After(time.Second):
+		t.Fatal("responsive workspace handler did not finish")
 	}
 }
 
@@ -183,6 +426,37 @@ func serveFakeWeaverStream(t *testing.T, world config.World, handler func(map[st
 					_, _ = w.Write([]byte("\n"))
 					_ = w.Flush()
 				}
+			}(conn)
+		}
+	}()
+}
+
+func serveFakeWeaverPartialResponse(t *testing.T, world config.World, response []byte, decodedRequests *atomic.Int32) {
+	t.Helper()
+	socket := filepath.Join(world.StateDir, "weaver.sock")
+	_ = os.Remove(socket)
+	ln, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close(); _ = os.Remove(socket) })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer func() { _ = c.Close() }()
+				_ = c.SetDeadline(time.Now().Add(time.Second))
+				var req map[string]any
+				if err := json.NewDecoder(bufio.NewReader(c)).Decode(&req); err != nil {
+					return
+				}
+				if decodedRequests != nil {
+					decodedRequests.Add(1)
+				}
+				_, _ = c.Write(response)
 			}(conn)
 		}
 	}()

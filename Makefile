@@ -1,4 +1,4 @@
-.PHONY: help build kanban-tree land-quality install dash api-docs test-go test-e2e docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop
+.PHONY: help build kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop
 
 help:
 	@printf '%s\n' \
@@ -7,6 +7,7 @@ help:
 		'  make land-quality       Build and run the local landing quality DAG' \
 		'    LAND_QUALITY_HEAVY_LIMIT=N sets its positive heavy-job cap (default 2)' \
 		'  make test-go            Run Go tests in every Go module' \
+		'  make test-restart-acceptance  Run the built-binary disposable Weaver restart acceptance' \
 		'  make test-e2e           Run end-to-end CLI and REPL tests' \
 		'  make fmt-check          Check Clojure and Go formatting' \
 		'  make lint               Run Clojure, convention, and Go linters' \
@@ -103,6 +104,22 @@ fmt-check-go:
 
 test-go:
 	bash scripts/go-quality test
+
+# The restart acceptance controls real Mill and Weaver processes and exercises
+# caller convergence over a gated probe. Keep it out of the normal Go suite,
+# but make its explicit land-quality invocation mandatory.
+test-restart-acceptance: build
+	@output=$$(mktemp); \
+	trap 'rm -f "$$output"' EXIT; \
+	if ! (cd cli && go test -json -tags=integration -count=1 -run '^TestDisposableWeaverRestartAcceptance$$' ./...) >"$$output"; then \
+		cat "$$output"; \
+		exit 1; \
+	fi; \
+	cat "$$output"; \
+	if ! grep -F '"Action":"pass"' "$$output" | grep -F '"Test":"TestDisposableWeaverRestartAcceptance"' >/dev/null; then \
+		echo 'test-restart-acceptance: TestDisposableWeaverRestartAcceptance did not run and pass' >&2; \
+		exit 1; \
+	fi
 
 test-e2e:
 	clojure -M:e2e

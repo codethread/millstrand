@@ -90,7 +90,7 @@ func RelayResponse(r *bufio.Reader, stdout, stderr io.Writer, command []string) 
 		return 1, err
 	}
 	if isStreamHeader(frame) {
-		return relayStream(r, stdout, stderr, command)
+		return relayStream(r, stdout, stderr, command, frame)
 	}
 	return relaySingle(frame, line, stdout, stderr, command)
 }
@@ -147,7 +147,11 @@ func relayVerbatim(raw json.RawMessage, stdout io.Writer) (int, error) {
 	return 0, nil
 }
 
-func relayStream(r *bufio.Reader, stdout, stderr io.Writer, command []string) (int, error) {
+func relayStream(r *bufio.Reader, stdout, stderr io.Writer, command []string, header map[string]json.RawMessage) (int, error) {
+	protocolVersion, requestID, err := streamIdentity(header)
+	if err != nil {
+		return 1, fmt.Errorf("malformed weaver stream header: %w", err)
+	}
 	for {
 		line, err := readFrameLine(r)
 		if err != nil {
@@ -157,7 +161,7 @@ func relayStream(r *bufio.Reader, stdout, stderr io.Writer, command []string) (i
 		if err != nil {
 			return 1, err
 		}
-		if done, _ := frameBool(frame, "done"); done {
+		if isClosedStreamTerminator(frame, protocolVersion, requestID) {
 			success, err := frameBool(frame, "success")
 			if err != nil {
 				return 1, fmt.Errorf("malformed weaver stream terminator: %w", err)
@@ -261,7 +265,59 @@ func decodeFrame(line []byte) (map[string]json.RawMessage, error) {
 
 func isStreamHeader(frame map[string]json.RawMessage) bool {
 	b, err := frameBool(frame, "stream")
-	return err == nil && b
+	if err != nil || !b {
+		return false
+	}
+	_, _, err = streamIdentity(frame)
+	return err == nil && len(frame) == 3
+}
+
+func streamIdentity(frame map[string]json.RawMessage) (int, string, error) {
+	var protocolVersion int
+	if err := json.Unmarshal(frame["protocol_version"], &protocolVersion); err != nil || protocolVersion != MillProtocolVersion {
+		return 0, "", errors.New("protocol_version does not match the stream protocol")
+	}
+	var requestID string
+	if err := json.Unmarshal(frame["request_id"], &requestID); err != nil || requestID == "" {
+		return 0, "", errors.New("request_id is missing or blank")
+	}
+	return protocolVersion, requestID, nil
+}
+
+func isClosedStreamTerminator(frame map[string]json.RawMessage, protocolVersion int, requestID string) bool {
+	done, err := frameBool(frame, "done")
+	if err != nil || !done {
+		return false
+	}
+	success, err := frameBool(frame, "success")
+	if err != nil {
+		return false
+	}
+	if len(frame) != 5 {
+		return false
+	}
+	for key := range frame {
+		if key != "protocol_version" && key != "request_id" && key != "done" && key != "success" && key != "result" && key != "error" {
+			return false
+		}
+	}
+	if success {
+		if _, ok := frame["result"]; !ok {
+			return false
+		}
+		if _, ok := frame["error"]; ok {
+			return false
+		}
+	} else {
+		if _, ok := frame["error"]; !ok {
+			return false
+		}
+		if _, ok := frame["result"]; ok {
+			return false
+		}
+	}
+	actualProtocol, actualRequest, err := streamIdentity(frame)
+	return err == nil && actualProtocol == protocolVersion && actualRequest == requestID
 }
 
 func frameBool(frame map[string]json.RawMessage, key string) (bool, error) {

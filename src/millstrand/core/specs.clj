@@ -367,13 +367,78 @@
 (s/def :millstrand.weaver-start/publish? boolean?)
 (s/def :millstrand.weaver-start/storage keyword?)
 (s/def :millstrand.weaver-start/release-marker ::release-marker-syntax)
+(s/def :millstrand.weaver-start/probe? boolean?)
+(s/def :millstrand.weaver-start/diagnostic! ifn?)
+(defn- finite-json-number?
+  "Return true when `value` is an encodable finite JSON number."
+  [value]
+  (and (number? value)
+       (not (instance? clojure.lang.Ratio value))
+       (or (not (or (instance? Double value) (instance? Float value)))
+           (let [n (.doubleValue ^Number value)]
+             (and (not (Double/isNaN n))
+                  (not (Double/isInfinite n)))))))
+
+(defn- callable-marker?
+  "Return true for the exact redacted callable marker shape."
+  [value]
+  (and (= #{"callable" "class"} (set (keys value)))
+       (true? (get value "callable"))
+       (non-blank-string? (get value "class"))))
+
+(defn- registry-projection-value?
+  "Return true for the closed, redacted JSON value grammar used by registry status."
+  [value]
+  (cond
+    (or (nil? value) (string? value) (boolean? value)) true
+    (number? value) (finite-json-number? value)
+    (vector? value) (every? registry-projection-value? value)
+    (map? value) (if (or (contains? value "callable") (contains? value "class"))
+                   (callable-marker? value)
+                   (and (every? string? (keys value))
+                        (every? registry-projection-value? (vals value))))
+    :else false))
+
+(s/def :millstrand.registry-projection/value registry-projection-value?)
+(s/def :millstrand.registry-projection/registry
+  (s/and map?
+         #(every? string? (keys %))
+         #(every? (fn [[_ value]]
+                    (and (map? value)
+                         (= #{"effective" "owners" "provenance"}
+                            (set (keys value)))
+                         (every? registry-projection-value? (vals value))))
+                  %)))
+(s/def :millstrand.weaver-start/old-generation-baseline
+  (s/and map?
+         #(= #{:status :projection} (set (keys %)))
+         #(= :admitted (:status %))
+         #(s/valid? :millstrand.registry-projection/registry (:projection %))))
+
+(defn- json-safe-value?
+  "Return true for the closed JSON value grammar used by wire results."
+  [value]
+  (cond
+    (or (nil? value) (string? value) (boolean? value)) true
+    (number? value) (finite-json-number? value)
+    (vector? value) (every? json-safe-value? value)
+    (map? value) (and (every? string? (keys value))
+                      (every? json-safe-value? (vals value)))
+    :else false))
+
+(s/def :millstrand.core.specs/json-safe-value json-safe-value?)
 (s/def ::weaver-start-options
   (s/and (s/keys :opt-un [:millstrand.weaver-start/world
                           :millstrand.weaver-start/name
                           :millstrand.weaver-start/publish?
                           :millstrand.weaver-start/storage
-                          :millstrand.weaver-start/release-marker])
-         #(every? #{:world :name :publish? :storage :release-marker} (keys %))))
+                          :millstrand.weaver-start/release-marker
+                          :millstrand.weaver-start/probe?
+                          :millstrand.weaver-start/diagnostic!
+                          :millstrand.weaver-start/old-generation-baseline])
+         #(every? #{:world :name :publish? :storage :release-marker :probe?
+                    :diagnostic! :old-generation-baseline}
+                  (keys %))))
 
 (s/def ::add-command (s/cat :title ::title :opts (s/* string?)))
 (s/def ::update-command (s/cat :id ::id :opts (s/* string?)))
@@ -418,6 +483,221 @@
                    :millstrand.scheduler-wake/wake-at
                    :millstrand.scheduler-wake/handler]
           :opt-un [:millstrand.scheduler-wake/payload]))
+
+;; Restart and replacement boundaries are deliberately closed.  These maps are
+;; consumed by Mill and are not an invitation to add ad-hoc lifecycle fields at
+;; an encoding call site.
+(def ^:private restart-states #{:probing :restarting :running :failed})
+(def ^:private restart-operations #{:start :restart})
+(def ^:private admission-states #{:open :closed})
+(def ^:private diagnostic-statuses #{:completed :failed :skipped :in-progress})
+(def ^:private protocol-operations
+  #{"invoke" "status"})
+
+(s/def :millstrand.restart/operation restart-operations)
+(s/def :millstrand.restart/workspace non-blank-string?)
+(s/def :millstrand.restart/state restart-states)
+(s/def :millstrand.restart/generation-id non-blank-string?)
+(s/def :millstrand.restart/transition-id non-blank-string?)
+(s/def :millstrand.restart/stage non-blank-string?)
+(s/def :millstrand.restart/status diagnostic-statuses)
+(s/def :millstrand.restart/data
+  (s/and map?
+         #(every? data-first-value? (keys %))
+         #(every? data-first-value? (vals %))))
+(defn- restart-data-object? [value]
+  (and (map? value)
+       (every? #(or (keyword? %) (string? %)) (keys value))
+       (every? data-first-value? (vals value))))
+(s/def :millstrand.restart/diagnostic
+  (s/and (s/keys :req-un [:millstrand.restart/stage
+                          :millstrand.restart/status]
+                 :opt-un [:millstrand.restart/data
+                          :millstrand.restart/generation-id
+                          :millstrand.restart/transition-id])
+         #(keys-subset? #{:stage :status :data :generation-id :transition-id}
+                        %)
+         #(or (not (contains? % :data))
+              (restart-data-object? (:data %)))))
+(s/def :millstrand.restart/diagnostics
+  (s/coll-of :millstrand.restart/diagnostic :kind vector?))
+(s/def :millstrand.restart/at non-blank-string?)
+(s/def :millstrand.restart/probe-diagnostic
+  (s/and (s/keys :req-un [:millstrand.restart/stage
+                          :millstrand.restart/status]
+                 :opt-un [:millstrand.restart/data
+                          :millstrand.restart/at])
+         #(keys-subset? #{:stage :status :data :at} %)
+         #(or (not (contains? % :data))
+              (restart-data-object? (:data %)))
+         #(or (not (contains? % :at))
+              (s/valid? :millstrand.restart/at (:at %)))))
+
+(defn- restart-projection-state?
+  [value]
+  (case (:state value)
+    :probing (and (contains? value :generation-id)
+                  (contains? value :transition-id)
+                  (not (contains? value :diagnostics)))
+    :restarting (and (contains? value :transition-id)
+                     (not (contains? value :generation-id))
+                     (not (contains? value :diagnostics)))
+    :running (and (contains? value :generation-id)
+                  (not (contains? value :diagnostics)))
+    :failed (and (contains? value :diagnostics)
+                 (seq (:diagnostics value)))
+    false))
+
+(defn- restart-projection?
+  [value with-operation?]
+  (and (map? value)
+       (every? (if with-operation?
+                 #{:operation :workspace :state :generation-id :transition-id
+                   :diagnostics}
+                 #{:workspace :state :generation-id :transition-id :diagnostics})
+               (keys value))
+       (or (not with-operation?) (= :restart (:operation value)))
+       (s/valid? :millstrand.restart/workspace (:workspace value))
+       (s/valid? :millstrand.restart/state (:state value))
+       (or (not (contains? value :generation-id))
+           (s/valid? :millstrand.restart/generation-id (:generation-id value)))
+       (or (not (contains? value :transition-id))
+           (s/valid? :millstrand.restart/transition-id (:transition-id value)))
+       (or (not (contains? value :diagnostics))
+           (s/valid? :millstrand.restart/diagnostics (:diagnostics value)))
+       (restart-projection-state? value)))
+(defn- restart-envelope? [value]
+  (restart-projection? value true))
+(s/def :millstrand.core.specs/restart-result restart-envelope?)
+
+(s/def :millstrand.status/state restart-states)
+(s/def :millstrand.status/workspace non-blank-string?)
+(s/def :millstrand.status/generation-id non-blank-string?)
+(s/def :millstrand.status/transition-id non-blank-string?)
+(s/def :millstrand.status/diagnostics :millstrand.restart/diagnostics)
+(s/def :millstrand.core.specs/mill-status-projection
+  #(restart-projection? % false))
+(s/def :millstrand.core.specs/weaver-status-projection
+  (s/and map?
+         #(every? #{:generation-id :workspace :storage-kind :storage-label
+                    :database-path}
+                  (keys %))
+         #(s/valid? :millstrand.status/generation-id (:generation-id %))
+         #(s/valid? :millstrand.status/workspace (:workspace %))
+         #(#{:sqlite-file :sqlite-memory} (:storage-kind %))
+         #(non-blank-string? (:storage-label %))
+         #(or (and (= :sqlite-file (:storage-kind %))
+                   (s/valid? :millstrand.status/workspace (:database-path %)))
+              (and (= :sqlite-memory (:storage-kind %))
+                   (nil? (:database-path %))))))
+
+(s/def :millstrand.admission/state admission-states)
+(s/def :millstrand.admission/generation-id non-blank-string?)
+(s/def :millstrand.admission/transition-id non-blank-string?)
+(s/def :millstrand.core.specs/admission-state
+  (s/and map?
+         #(every? #{:state :generation-id :transition-id} (keys %))
+         #(s/valid? :millstrand.admission/state (:state %))
+         #(or (not (contains? % :generation-id))
+              (s/valid? :millstrand.admission/generation-id (:generation-id %)))
+         #(or (not (contains? % :transition-id))
+              (s/valid? :millstrand.admission/transition-id (:transition-id %)))
+         #(case (:state %)
+            :open (contains? % :generation-id)
+            :closed (contains? % :transition-id)
+            false)))
+
+;; The Mill control channel is JSON-shaped at this boundary.  Keep its wire
+;; names here, rather than silently accepting keyword aliases that an adapter
+;; could encode differently.
+(s/def :millstrand.protocol/version pos-int?)
+(s/def :millstrand.protocol/request-id non-blank-string?)
+(s/def :millstrand.protocol/weaver-id non-blank-string?)
+(s/def :millstrand.protocol/operation protocol-operations)
+(s/def :millstrand.protocol/arguments
+  (s/and map?
+         #(every? data-first-value? (keys %))
+         #(every? data-first-value? (vals %))))
+(s/def :millstrand.protocol/options #(= {} %))
+(s/def :millstrand.protocol/error-type #{"domain" "protocol" "transport"})
+(s/def :millstrand.protocol/error
+  (s/and map?
+         #(= #{"type" "code" "message" "details"} (set (keys %)))
+         #(s/valid? :millstrand.protocol/error-type (get % "type"))
+         #(non-blank-string? (get % "code"))
+         #(non-blank-string? (get % "message"))
+         #(map? (get % "details"))))
+(s/def :millstrand.core.mill-protocol/request
+  (s/and map?
+         #(= #{"protocol_version" "request_id" "weaver_id" "operation"
+               "arguments" "options"}
+             (set (keys %)))
+         #(s/valid? :millstrand.protocol/version (get % "protocol_version"))
+         #(s/valid? :millstrand.protocol/request-id (get % "request_id"))
+         #(s/valid? :millstrand.protocol/weaver-id (get % "weaver_id"))
+         #(s/valid? :millstrand.protocol/operation (get % "operation"))
+         #(s/valid? :millstrand.protocol/arguments (get % "arguments"))
+         #(s/valid? :millstrand.protocol/options (get % "options"))))
+(defn- wire-identity?
+  [value]
+  (and (s/valid? :millstrand.protocol/version (get value "protocol_version"))
+       (s/valid? :millstrand.protocol/request-id (get value "request_id"))))
+
+(defn- response-identity?
+  [value]
+  (and (s/valid? :millstrand.protocol/version (get value "protocol_version"))
+       (or (nil? (get value "request_id"))
+           (s/valid? :millstrand.protocol/request-id (get value "request_id")))))
+
+(def ^:private response-keys
+  #{"protocol_version" "request_id" "ok" "result" "error"})
+
+(s/def :millstrand.core.mill-protocol/success
+  (s/and map?
+         #(or (= response-keys (set (keys %)))
+              (= (conj response-keys "verbatim") (set (keys %))))
+         wire-identity?
+         #(boolean? (get % "ok"))
+         #(true? (get % "ok"))
+         #(nil? (get % "error"))
+         #(s/valid? :millstrand.core.specs/json-safe-value (get % "result"))
+         #(or (not (contains? % "verbatim")) (true? (get % "verbatim")))
+         #(or (not (contains? % "verbatim")) (string? (get % "result")))))
+(s/def :millstrand.core.mill-protocol/error-response
+  (s/and map?
+         #(= response-keys (set (keys %)))
+         response-identity?
+         #(false? (get % "ok"))
+         #(nil? (get % "result"))
+         #(s/valid? :millstrand.protocol/error (get % "error"))))
+(s/def :millstrand.core.mill-protocol/response
+  (s/or :success :millstrand.core.mill-protocol/success
+        :error :millstrand.core.mill-protocol/error-response))
+(s/def :millstrand.core.mill-protocol/stream-header
+  (s/and map?
+         #(= #{"protocol_version" "request_id" "stream"} (set (keys %)))
+         wire-identity?
+         #(true? (get % "stream"))))
+(s/def :millstrand.core.mill-protocol/stream-data
+  :millstrand.core.specs/json-safe-value)
+(s/def :millstrand.core.mill-protocol/stream-terminator
+  (s/or
+   :success
+   (s/and map?
+          #(= #{"protocol_version" "request_id" "done" "success" "result"}
+              (set (keys %)))
+          wire-identity?
+          #(true? (get % "done"))
+          #(true? (get % "success"))
+          #(s/valid? :millstrand.core.specs/json-safe-value (get % "result")))
+   :error
+   (s/and map?
+          #(= #{"protocol_version" "request_id" "done" "success" "error"}
+              (set (keys %)))
+          wire-identity?
+          #(true? (get % "done"))
+          #(false? (get % "success"))
+          #(s/valid? :millstrand.protocol/error (get % "error")))))
 
 (defn omitted-attribute-descriptor?
   "Return true when value conforms to the lean-read omission descriptor spec."

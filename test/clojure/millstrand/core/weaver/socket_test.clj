@@ -117,6 +117,21 @@
   (swap! op-side-effects conj name)
   {:ran name})
 
+(defn opaque-result-op
+  "Return a runtime object that must not be stringified as a success result."
+  [_ctx]
+  (Object.))
+
+(defn ratio-result-op
+  "Return a ratio so the JSON boundary must convert it to a JSON number."
+  [_ctx]
+  {:ratio 1/2})
+
+(defn nan-result-op
+  "Return a non-encodable floating-point value for boundary rejection."
+  [_ctx]
+  {:nan Double/NaN})
+
 (defn throwing-op
   "Throw rich, partly non-JSON ex-data to exercise json-safe error rendering."
   [_ctx]
@@ -544,6 +559,16 @@
       (let [status (socket-request rt "status" {})
             rejected (socket-request rt "queries" {})]
         (is (true? (get status "ok")))
+        (is (nil? (get-in status ["result" "registry_projection"])))
+        (let [projected (socket-request rt "status"
+                                        {"include_registry_projection" true})
+              projection (get-in projected ["result" "registry_projection"])]
+          (is (true? (get projected "ok")))
+          (is (map? projection))
+          (is (every? string? (keys projection)))
+          (is (every? #(= #{"effective" "owners" "provenance"}
+                          (set (keys %)))
+                      (vals projection))))
         (is (= "protocol/operation-not-allowed" (get-in rejected ["error" "code"])))))))
 (deftest json-socket-invoke-dispatch
   (with-runtime
@@ -864,7 +889,32 @@
         (is (= "domain" (get-in response ["error" "type"])))
         (is (= "op/failed" (get-in response ["error" "code"])))
         (is (= "policy/nope" (get-in response ["error" "details" "nested" "reason"])))
-        (is (string? (get-in response ["error" "details" "opaque"])))))))
+        (is (string? (get-in response ["error" "details" "opaque"])))
+        (is (= "test-request" (get-in response ["error" "details" "request/id"])))
+        (is (= "invoke" (get-in response ["error" "details" "request/operation"])))))))
+
+(deftest json-socket-rejects-opaque-success-results
+  (with-runtime
+    (fn [rt _]
+      (weaver/register-op! rt 'opaque-result raw-mutating-standard
+                           'millstrand.core.weaver.socket-test/opaque-result-op)
+      (let [response (invoke-request rt "opaque-result" [])]
+        (is (false? (get response "ok")))
+        (is (= "protocol/result-not-encodable" (get-in response ["error" "code"])))
+        (is (str/includes? (get-in response ["error" "message"])
+                           "Operation completed"))))))
+
+(deftest json-socket-result-number-boundary-is-explicit
+  (with-runtime
+    (fn [rt _]
+      (weaver/register-op! rt 'ratio-result raw-mutating-standard
+                           'millstrand.core.weaver.socket-test/ratio-result-op)
+      (weaver/register-op! rt 'nan-result raw-mutating-standard
+                           'millstrand.core.weaver.socket-test/nan-result-op)
+      (is (= 0.5 (get-in (invoke-request rt "ratio-result" []) ["result" "ratio"])))
+      (let [response (invoke-request rt "nan-result" [])]
+        (is (= "protocol/result-not-encodable" (get-in response ["error" "code"])))
+        (is (true? (get-in response ["error" "details" "operation_completed"])))))))
 
 (deftest json-socket-invoke-renders-keyword-error-codes-whole
   (with-runtime

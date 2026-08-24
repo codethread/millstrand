@@ -142,13 +142,15 @@ The result names the root lib, canonical root, and namespaces in reload order, a
 publication or resource reconciliation; use a targeted refresh for the normal
 path.
 
-Some changes cannot load into a running weaver at all: removing an already-loaded root, repointing one at different source, or bumping a loaded Maven coordinate's version. Refresh refuses those changes and records a pending generation that takes effect at the next weaver restart. The Mill-owned restart transition is specified but not shipped; its implementation and tests are deferred to `atncp/5526z/3k3ek`. Once it ships, use the transition when you are ready. If other users share this weaver, get their explicit sign-off before running it:
+Some changes cannot load into a running weaver at all: removing an already-loaded root, repointing one at different source, or bumping a loaded Maven coordinate's version. Refresh refuses those changes and records a pending generation that takes effect at the next weaver restart. Use the Mill-owned transition when you are ready. If other users share this weaver, get their explicit sign-off before running it:
 
 ```sh
 mill weaver restart --workspace "${workspace:?}"
 ```
 
 The planned restart probes the fresh generation before stopping the old one. A failed probe leaves the old generation serving and retains diagnostics. After the cutover begins, the old generation does not return to service. Mill-routed requests that have not been sent wait for the replacement within their existing deadline; an accepted request is sent once and is never replayed. Direct REPL sessions see a disconnect and reconnect themselves.
+
+Mill owns the complete `restart.json` record: `state`, `transition_id`, optional generation identities, `updated_at`, `old_generation_stopped`, the probe result (`success`, stage, probe/source workspaces, completed stages, diagnostics, and log), and the failure (`stage`, message, and optional log or exit evidence). Mill validates this schema and its state relationships before each write and after every read. Malformed or contradictory records are refused loudly. Startup reclaims stale runtime artifacts only with a matching world identity, a proven dead owner, and an inactive socket; live, malformed, or unknown owners remain untouched.
 
 The planned restart continuity covers native children only when their owning spool uses `millstrand.api.process.alpha` and reconciles the retained process facts. Ordinary in-JVM callbacks remain interruptible, and domain spools decide how interruption changes their durable state. The [Weaver Runtime specification](../../devflow/specs/daemon-runtime.md) defines the probe, admission, custody, and interruption contracts in SPEC-004.C113–C123.
 

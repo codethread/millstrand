@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -28,6 +29,22 @@ func resolveLifecycleWorld(req client.MillWorldRequest) (config.World, error) {
 }
 
 const defaultWeaverReadyTimeout = 5 * time.Minute
+
+func (s *server) startClaim(configDir string) chan struct{} {
+	startClaimLookupFn(configDir)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.startClaims[configDir]
+}
+
+func (s *server) releaseStartClaim(configDir string, claim chan struct{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.startClaims[configDir] == claim {
+		delete(s.startClaims, configDir)
+		close(claim)
+	}
+}
 
 // sourceDiagOut receives launch-source warning diagnostics (e.g. a configured
 // installed source that has become unusable and is being bypassed). Defaults to
@@ -97,6 +114,10 @@ func friendlyName(world config.World, requested string) (string, error) {
 }
 
 func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error) {
+	return s.startWeaverLoop(req)
+}
+
+func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, error) {
 	world, err := resolveLifecycleWorld(req)
 	if err != nil {
 		return nil, err
@@ -104,16 +125,53 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 	if req.ReadyTimeoutMs < 0 {
 		return nil, fmt.Errorf("invalid ready_timeout_ms %d: must be positive milliseconds, or omitted for the default", req.ReadyTimeoutMs)
 	}
+	if claim := s.startClaim(world.ConfigDir); claim != nil {
+		waitForStartClaim(claim)
+		return s.startWeaverLoop(req)
+	}
+	if transition := s.lifecycleTransition(world.ConfigDir); transition != nil {
+		// A probe leaves the admitted old generation serving.  Starting during
+		// cutover joins the one shared replacement instead of launching a second
+		// child; failed state is retained for an explicit restart recovery.
+		if transition.state() == restartStateProbing {
+			return s.admittedGenerationStatus(world, transition), nil
+		}
+		return waitForLifecycleTransition(transition, readyTimeoutFor(req.ReadyTimeoutMs))
+	}
+	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+		return nil, recordErr
+	} else if ok && record.State == restartStateFailed {
+		status := record.status(world)
+		status["operation"] = "start"
+		return status, nil
+	}
 	s.mu.Lock()
+	if claim := s.startClaims[world.ConfigDir]; claim != nil {
+		s.mu.Unlock()
+		waitForStartClaim(claim)
+		return s.startWeaverLoop(req)
+	}
+	if transition := s.transitions[world.ConfigDir]; transition != nil {
+		s.mu.Unlock()
+		if transition.state() == restartStateProbing {
+			return s.admittedGenerationStatus(world, transition), nil
+		}
+		return waitForLifecycleTransition(transition, readyTimeoutFor(req.ReadyTimeoutMs))
+	}
 	if child := s.children[world.ConfigDir]; child != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
 		status, stale := readStatus(world)
 		if status != nil && !stale {
+			status["generation_id"] = child.generationID
 			s.mu.Unlock()
 			return status, nil
 		}
 		if status == nil {
 			status = baseStatusWithName(world, "starting", child.name)
 			status["pid"] = child.cmd.Process.Pid
+		}
+		if stale {
+			s.mu.Unlock()
+			return nil, fmt.Errorf("stale restart state for selected workspace: %v", status["stale_reason"])
 		}
 		s.mu.Unlock()
 		return status, nil
@@ -125,7 +183,14 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 		}
 		return nil, fmt.Errorf("stale weaver metadata for selected workspace: %v", status["stale_reason"])
 	}
+	claim := make(chan struct{})
+	if s.startClaims == nil {
+		s.startClaims = map[string]chan struct{}{}
+	}
+	s.startClaims[world.ConfigDir] = claim
+	startClaimInstalledFn(world.ConfigDir)
 	s.mu.Unlock()
+	defer s.releaseStartClaim(world.ConfigDir, claim)
 	source, err := resolveLaunchSource(req.CWD)
 	if err != nil {
 		return nil, err
@@ -165,9 +230,10 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 		}()
 		status := baseStatusWithName(world, "starting", child.name)
 		status["pid"] = child.cmd.Process.Pid
+		status["generation_id"] = child.generationID
 		return status, nil
 	}
-	registered := &weaverChild{cmd: cmd, world: world, name: name, done: done}
+	registered := &weaverChild{cmd: cmd, world: world, name: name, done: done, generationID: newOpaqueID("generation")}
 	s.children[world.ConfigDir] = registered
 	s.mu.Unlock()
 	go func() {
@@ -192,14 +258,24 @@ func (s *server) startWeaver(req client.MillWorldRequest) (map[string]any, error
 		// this entry after our weaver died; only the still-registered owner
 		// may remove supervision state and world artifacts, or a failed
 		// early start would tear down its successor's healthy weaver.
-		if s.releaseChild(world.ConfigDir, registered) {
-			cleanupWorldArtifacts(world)
+		if s.releaseChild(world.ConfigDir, registered) && registered.identity.WeaverID != "" {
+			_ = cleanupWorldArtifactsOwned(world, registered.identity)
 		}
 		if tail := tailOfFile(logPath, 4096); tail != "" {
 			return nil, fmt.Errorf("%w; weaver log tail (%s):\n%s", err, logPath, tail)
 		}
 		return nil, fmt.Errorf("%w; weaver log: %s", err, logPath)
 	}
+	identity, err := identityFromStatus(status)
+	if err != nil {
+		return nil, fmt.Errorf("weaver ready metadata identity is invalid: %w", err)
+	}
+	if identity.PID != cmd.Process.Pid {
+		return nil, fmt.Errorf("weaver ready metadata pid %d does not match launched pid %d", identity.PID, cmd.Process.Pid)
+	}
+	registered.identity = identity
+	registered.generationID = identity.GenerationID
+	status["generation_id"] = registered.generationID
 	millLogf("weaver started config_dir=%s state_dir=%s pid=%v", world.ConfigDir, world.StateDir, status["pid"])
 	return status, nil
 }
@@ -282,6 +358,25 @@ func (s *server) weaverStatusForWorld(world config.World) map[string]any {
 }
 
 func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
+	if transition := s.transitions[world.ConfigDir]; transition != nil {
+		switch transition.state() {
+		case restartStateProbing:
+			return s.admittedGenerationStatus(world, transition)
+		case restartStateRestarting:
+			status := baseStatusWithName(world, restartStateRestarting, "")
+			status["transition_id"] = transition.transitionID
+			return status
+		case restartStateFailed:
+			return transitionResultStatus(transition)
+		}
+	}
+	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+		status := baseStatus(world, "stale")
+		status["stale_reason"] = recordErr.Error()
+		return status
+	} else if ok && record.State == restartStateFailed {
+		return record.status(world)
+	}
 	if status, stale := readStatus(world); status != nil {
 		if stale {
 			status["state"] = "stale"
@@ -292,6 +387,7 @@ func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
 		if child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
 			status := baseStatusWithName(world, "starting", child.name)
 			status["pid"] = child.cmd.Process.Pid
+			status["generation_id"] = child.generationID
 			return status
 		}
 		status := baseStatusWithName(world, "stopped", child.name)
@@ -305,6 +401,13 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
+	if claim := s.startClaim(world.ConfigDir); claim != nil {
+		waitForStartClaim(claim)
+		return s.stopWeaver(req)
+	}
+	if transition := s.lifecycleTransition(world.ConfigDir); transition != nil {
+		return nil, fmt.Errorf("cannot stop selected workspace while weaver restart is %s", transition.state())
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	child := s.children[world.ConfigDir]
@@ -314,23 +417,47 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 			if stale {
 				// Loud staleness check (as the old socket stop had): drop the
 				// dead/mismatched runtime metadata and report stopped.
-				cleanupWorldArtifacts(world)
+				identity, identityErr := identityFromStatus(status)
+				if identityErr == nil {
+					if cleanupErr := cleanupWorldArtifactsOwned(world, identity); cleanupErr != nil {
+						return nil, cleanupErr
+					}
+				} else if data, readErr := os.ReadFile(filepath.Join(world.StateDir, "weaver.json")); readErr == nil {
+					// A syntactically malformed artifact has no identity to
+					// claim. Re-check that it is still malformed immediately
+					// before removing only that artifact; a successor's valid
+					// publication is left intact.
+					var successor client.Metadata
+					if json.Unmarshal(data, &successor) != nil {
+						_ = os.Remove(filepath.Join(world.StateDir, "weaver.json"))
+					}
+				}
 				return baseStatus(world, "stopped"), nil
 			}
 			// A live weaver this mill does not supervise (e.g. started by a
-			// previous mill): the socket `stop` op no longer exists, so signal
-			// the pid and let the weaver's shutdown hook clean its own runtime
-			// metadata, then wait for that cleanup.
-			pid, ok := status["pid"].(int)
-			if !ok || pid <= 0 {
-				return nil, fmt.Errorf("selected workspace weaver metadata is missing a valid pid")
+			// previous mill): prove its metadata through the runtime endpoint
+			// before signalling only the recorded PID.
+			identity, err := identityFromStatus(status)
+			if err != nil {
+				return nil, fmt.Errorf("selected workspace weaver metadata identity is unusable: %w", err)
 			}
-			terminatePID(pid)
-			waitForPIDExit(pid, 5*time.Second)
-			cleanupWorldArtifacts(world)
+			process, err := os.FindProcess(identity.PID)
+			if err != nil {
+				return nil, fmt.Errorf("find recorded weaver pid %d: %w", identity.PID, err)
+			}
+			unsupervised := &weaverChild{
+				cmd:          &exec.Cmd{Process: process},
+				world:        world,
+				name:         fmt.Sprint(status["name"]),
+				identity:     identity,
+				unsupervised: true,
+			}
+			if err := stopRecordedGeneration(unsupervised, world); err != nil {
+				return nil, err
+			}
 			st := baseStatus(world, "stopped")
-			st["pid"] = pid
-			millLogf("weaver stopped (unsupervised) config_dir=%s state_dir=%s pid=%d", world.ConfigDir, world.StateDir, pid)
+			st["pid"] = identity.PID
+			millLogf("weaver stopped (unsupervised) config_dir=%s state_dir=%s pid=%d", world.ConfigDir, world.StateDir, identity.PID)
 			return st, nil
 		}
 		return baseStatus(world, "stopped"), nil
@@ -343,7 +470,9 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 		_ = child.cmd.Process.Kill()
 		<-child.done
 	}
-	cleanupWorldArtifacts(world)
+	if err := cleanupWorldArtifactsOwned(world, child.identity); err != nil {
+		return nil, fmt.Errorf("weaver stopped but teardown cleanup failed: %w", err)
+	}
 	delete(s.children, world.ConfigDir)
 	status := baseStatus(world, "stopped")
 	status["pid"] = pid
@@ -363,7 +492,7 @@ func (s *server) stopAll() {
 				_ = child.cmd.Process.Kill()
 				<-child.done
 			}
-			cleanupWorldArtifacts(child.world)
+			_ = cleanupWorldArtifactsOwned(child.world, child.identity)
 		}
 	}
 }
@@ -381,11 +510,19 @@ func readStatus(world config.World) (map[string]any, bool) {
 		return st, true
 	}
 	if staleReason := validateMetadata(world, m); staleReason != "" {
-		st := baseStatus(world, "stale")
+		st := statusFromMetadata(m, "stale")
 		st["stale_reason"] = staleReason
 		return st, true
 	}
-	return statusFromMetadata(m, "running"), false
+	status := statusFromMetadata(m, "running")
+	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+		status["state"] = "stale"
+		status["stale_reason"] = recordErr.Error()
+		return status, true
+	} else if ok && record.State == restartStateRunning {
+		mergeRestartRecordStatus(status, record)
+	}
+	return status, false
 }
 
 func readStatusFile(path string) (map[string]any, error) {
@@ -410,7 +547,7 @@ func readStatusFile(path string) (map[string]any, error) {
 }
 
 func statusFromMetadata(m client.Metadata, state string) map[string]any {
-	return map[string]any{
+	status := map[string]any{
 		"state":          state,
 		"config_dir":     m.ConfigDir,
 		"state_dir":      m.StateDir,
@@ -426,6 +563,10 @@ func statusFromMetadata(m client.Metadata, state string) map[string]any {
 		"started_at":     m.StartedAt,
 		"log_path":       weaverLogPath(m.StateDir),
 	}
+	if strings.TrimSpace(m.GenerationID) != "" {
+		status["generation_id"] = m.GenerationID
+	}
+	return status
 }
 
 func validateMetadata(world config.World, m client.Metadata) string {
@@ -462,39 +603,34 @@ func samePath(a, b string) bool {
 	return realA == realB
 }
 
-func waitForReadyStatus(world config.World, pid int, done <-chan error, timeout time.Duration) (map[string]any, error) {
-	deadline := time.Now().Add(timeout)
-	for {
-		status, stale := readStatus(world)
-		if status != nil && !stale {
-			return status, nil
-		}
-		if stale {
-			return nil, fmt.Errorf("weaver published stale metadata during startup: %v", status["stale_reason"])
-		}
-		select {
-		case err := <-done:
-			if err != nil {
-				return nil, fmt.Errorf("weaver exited before publishing ready metadata: %w", err)
-			}
-			return nil, fmt.Errorf("weaver exited before publishing ready metadata")
-		default:
-		}
-		if !processAlive(pid) {
-			return nil, fmt.Errorf("weaver exited before publishing ready metadata")
-		}
-		if time.Now().After(deadline) {
-			terminatePID(pid)
-			return nil, fmt.Errorf("weaver did not publish ready metadata before timeout")
-		}
-		time.Sleep(50 * time.Millisecond)
+func cleanupWorldArtifactsOwned(world config.World, expected weaverIdentity) error {
+	data, err := os.ReadFile(filepath.Join(world.StateDir, "weaver.json"))
+	if os.IsNotExist(err) {
+		return nil
 	}
-}
-
-func cleanupWorldArtifacts(world config.World) {
-	_ = os.Remove(filepath.Join(world.StateDir, "weaver.json"))
-	_ = os.Remove(filepath.Join(world.StateDir, "weaver.edn"))
-	_ = os.Remove(filepath.Join(world.StateDir, "weaver.sock"))
+	if err != nil {
+		return err
+	}
+	var metadata client.Metadata
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return fmt.Errorf("decode teardown metadata: %w", err)
+	}
+	actual := weaverIdentity{
+		PID: metadata.PID, WeaverID: metadata.DaemonID,
+		GenerationID: metadata.GenerationID, StartedAt: metadata.StartedAt,
+		Socket: metadata.SocketPath, ConfigDir: metadata.ConfigDir,
+		StateDir: metadata.StateDir, DataDir: metadata.DataDir,
+	}
+	if expected.WeaverID == "" || !sameWeaverIdentity(expected, actual) {
+		return fmt.Errorf("teardown ownership changed before artifact cleanup")
+	}
+	var first error
+	for _, path := range []string{filepath.Join(world.StateDir, "weaver.json"), filepath.Join(world.StateDir, "weaver.edn"), filepath.Join(world.StateDir, "weaver.sock")} {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) && first == nil {
+			first = err
+		}
+	}
+	return first
 }
 
 func weaverLogPath(stateDir string) string {

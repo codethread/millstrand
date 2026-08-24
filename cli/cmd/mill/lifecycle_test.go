@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -113,6 +114,137 @@ func TestWeaverLifecycleWithFakeLauncher(t *testing.T) {
 	}
 	if strings.Contains(logText, "probe: child stdout line") {
 		t.Fatalf("weaver child output should not be forwarded to mill logs:\n%s", logText)
+	}
+}
+
+func TestAtomicStartClaimSerializesOverlappingStartsAndRestart(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	var launches int
+	var pids []int
+	originalLaunch, originalReady, originalProbe, originalClaim, originalWait, originalLookup := launchWeaver, waitForReplacementReadyStatus, probeRuntime, startClaimInstalledFn, waitForStartClaim, startClaimLookupFn
+	t.Cleanup(func() {
+		launchWeaver, waitForReplacementReadyStatus, probeRuntime, startClaimInstalledFn, waitForStartClaim, startClaimLookupFn = originalLaunch, originalReady, originalProbe, originalClaim, originalWait, originalLookup
+		for _, pid := range pids {
+			if processAlive(pid) {
+				terminatePID(pid)
+				waitForPIDExit(pid, time.Second)
+			}
+		}
+	})
+	launchWeaver = func(source string, args []string, out, errOut io.Writer) (*exec.Cmd, error) {
+		cmd := exec.Command("sleep", "60")
+		if err := cmd.Start(); err != nil {
+			return nil, err
+		}
+		mu.Lock()
+		launches++
+		pids = append(pids, cmd.Process.Pid)
+		first := launches == 1
+		mu.Unlock()
+		if first {
+			writeWeaverMetadata(t, world, cmd.Process.Pid, "initial")
+		}
+		return cmd, nil
+	}
+	waitForReplacementReadyStatus = func(world config.World, pid int, done <-chan error, timeout time.Duration) (map[string]any, error) {
+		return map[string]any{
+			"state": "running", "pid": pid, "weaver_id": "replacement", "generation_id": "replacement-generation",
+			"started_at": time.Now().UTC().Format(time.RFC3339Nano), "socket_path": filepath.Join(world.StateDir, "weaver.sock"),
+			"config_dir": world.ConfigDir, "state_dir": world.StateDir, "data_dir": world.DataDir,
+		}, nil
+	}
+	probeRuntime = func(string, config.World) (restartProbeResult, error) {
+		return restartProbeResult{Success: true, Stage: "probe/complete", ProbeWorkspace: "probe", SourceWorkspace: world.ConfigDir, Completed: []string{}, Diagnostics: []map[string]any{}, Log: "probe.log"}, nil
+	}
+	claimInstalled := make(chan struct{})
+	releaseClaim := make(chan struct{})
+	claimLookups := make(chan struct{}, 3)
+	startClaimInstalledFn = func(string) {
+		close(claimInstalled)
+		<-releaseClaim
+	}
+	startClaimLookupFn = func(string) {
+		claimLookups <- struct{}{}
+	}
+	s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}, startClaims: map[string]chan struct{}{}}
+	req := client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg, ReadyTimeoutMs: 2_000}
+	firstDone := make(chan struct {
+		status map[string]any
+		err    error
+	}, 1)
+	go func() {
+		status, err := s.startWeaver(req)
+		firstDone <- struct {
+			status map[string]any
+			err    error
+		}{status, err}
+	}()
+	<-claimInstalled
+	// The first lookup belongs to the owner that installed the claim. The two
+	// remaining lookup signals prove both overlapping callers reached the
+	// deterministic claim seam before release.
+	select {
+	case <-claimLookups:
+	case <-time.After(time.Second):
+		t.Fatal("initial start did not reach the start-claim lookup seam")
+	}
+	secondDone := make(chan struct {
+		status map[string]any
+		err    error
+	}, 1)
+	go func() {
+		status, err := s.startWeaver(req)
+		secondDone <- struct {
+			status map[string]any
+			err    error
+		}{status, err}
+	}()
+	restartDone := make(chan struct {
+		status map[string]any
+		err    error
+	}, 1)
+	go func() {
+		status, err := s.restartWeaver(req)
+		restartDone <- struct {
+			status map[string]any
+			err    error
+		}{status, err}
+	}()
+	for range 2 {
+		select {
+		case <-claimLookups:
+		case <-time.After(time.Second):
+			t.Fatal("overlapping lifecycle call did not reach the start-claim wait seam")
+		}
+	}
+	close(releaseClaim)
+	first := <-firstDone
+	second := <-secondDone
+	restarted := <-restartDone
+	for name, result := range map[string]struct {
+		status map[string]any
+		err    error
+	}{"first start": first, "second start": second, "restart": restarted} {
+		if result.err != nil {
+			t.Fatalf("%s failed: %v", name, result.err)
+		}
+		if result.status == nil || (result.status["state"] != "running" && result.status["state"] != "probing") {
+			t.Fatalf("%s did not return an admitted generation: %#v", name, result.status)
+		}
+	}
+	mu.Lock()
+	gotLaunches := launches
+	mu.Unlock()
+	if gotLaunches != 2 {
+		t.Fatalf("claim overlap launched more than one replacement: launches=%d", gotLaunches)
 	}
 }
 
@@ -378,7 +510,7 @@ func TestWeaverStatusDistinguishesStaleMetadata(t *testing.T) {
 	if err != nil || status["state"] != "stale" || status["stale_reason"] == nil {
 		t.Fatalf("expected malformed stale status, got %#v err=%v", status, err)
 	}
-	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(`{"protocol_version":3,"pid":1,"database_kind":"sqlite-file","database_label":"/wrong","database_path":"/wrong","weaver_id":"wrong","config_dir":"/wrong","state_dir":"/wrong","data_dir":"/wrong","name":"wrong","socket_path":"/wrong","started_at":"now","nrepl":{"host":"127.0.0.1","port":1}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(`{"protocol_version":3,"pid":1,"database_kind":"sqlite-file","database_label":"/wrong","database_path":"/wrong","weaver_id":"wrong","generation_id":"generation-wrong","config_dir":"/wrong","state_dir":"/wrong","data_dir":"/wrong","name":"wrong","socket_path":"/wrong","started_at":"now","nrepl":{"host":"127.0.0.1","port":1}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	status, err = s.weaverStatus(req)
@@ -448,7 +580,7 @@ func TestStopCleansStaleMetadata(t *testing.T) {
 }
 
 func TestStopSignalsNonSupervisedWeaverByPID(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	t.Setenv("XDG_STATE_HOME", shortStateHome(t))
 	source := tempSource(t)
 	cfg := tempConfig(t, source)
 	world, err := config.RuntimeWorld(cfg)
@@ -465,7 +597,13 @@ func TestStopSignalsNonSupervisedWeaverByPID(t *testing.T) {
 	reaped := make(chan struct{})
 	go func() { _, _ = cmd.Process.Wait(); close(reaped) }()
 	t.Cleanup(func() { _ = cmd.Process.Kill(); <-reaped })
-	writeWeaverMetadata(t, world, cmd.Process.Pid, "unsupervised-weaver")
+	identity := weaverIdentity{
+		PID: cmd.Process.Pid, WeaverID: "unsupervised-weaver", GenerationID: "generation-unsupervised-weaver", StartedAt: "2026-08-23T15:00:00Z",
+		Socket: filepath.Join(world.StateDir, "weaver.sock"), ConfigDir: world.ConfigDir,
+		StateDir: world.StateDir, DataDir: world.DataDir,
+	}
+	serveIdentityEndpoint(t, identity, nil)
+	writeWeaverMetadataForIdentity(t, world, identity, "unsupervised-weaver")
 
 	// No child handle: the weaver is metadata-discovered, so stop must signal it
 	// by pid (the socket stop op no longer exists) and then clean its metadata.
@@ -479,6 +617,69 @@ func TestStopSignalsNonSupervisedWeaverByPID(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(world.StateDir, "weaver.json")); !os.IsNotExist(err) {
 		t.Fatalf("unsupervised stop should remove weaver.json, stat err=%v", err)
+	}
+}
+
+func TestStopRefusesUnsupervisedWeaverWithoutEndpointProof(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", shortStateHome(t))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	reaped := make(chan struct{})
+	go func() { _, _ = cmd.Process.Wait(); close(reaped) }()
+	t.Cleanup(func() { _ = cmd.Process.Kill(); <-reaped })
+	identity := weaverIdentity{
+		PID: cmd.Process.Pid, WeaverID: "unsupervised-no-endpoint", StartedAt: "2026-08-23T15:01:00Z",
+		Socket: filepath.Join(world.StateDir, "weaver.sock"), ConfigDir: world.ConfigDir,
+		StateDir: world.StateDir, DataDir: world.DataDir,
+	}
+	writeWeaverMetadataForIdentity(t, world, identity, "unsupervised-no-endpoint")
+
+	s := server{children: map[string]*weaverChild{}}
+	if _, err := s.stopWeaver(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg}); err == nil || !strings.Contains(err.Error(), "endpoint identity failed") {
+		t.Fatalf("expected endpoint-proof failure, got %v", err)
+	}
+	if !processAlive(cmd.Process.Pid) {
+		t.Fatal("missing endpoint proof signalled the unsupervised process")
+	}
+}
+
+func TestStopRefusesUnsupervisedWeaverWithMismatchedEndpointProof(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", shortStateHome(t))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	reaped := make(chan struct{})
+	go func() { _, _ = cmd.Process.Wait(); close(reaped) }()
+	t.Cleanup(func() { _ = cmd.Process.Kill(); <-reaped })
+	identity := weaverIdentity{
+		PID: cmd.Process.Pid, WeaverID: "unsupervised-mismatch", StartedAt: "2026-08-23T15:02:00Z",
+		Socket: filepath.Join(world.StateDir, "weaver.sock"), ConfigDir: world.ConfigDir,
+		StateDir: world.StateDir, DataDir: world.DataDir,
+	}
+	serveIdentityEndpoint(t, identity, map[string]any{"pid": identity.PID + 1})
+	writeWeaverMetadataForIdentity(t, world, identity, "unsupervised-mismatch")
+
+	s := server{children: map[string]*weaverChild{}}
+	if _, err := s.stopWeaver(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg}); err == nil || !strings.Contains(err.Error(), "pid mismatch") {
+		t.Fatalf("expected endpoint identity mismatch, got %v", err)
+	}
+	if !processAlive(cmd.Process.Pid) {
+		t.Fatal("mismatched endpoint proof signalled the unsupervised process")
 	}
 }
 
@@ -733,7 +934,7 @@ func writeWeaverMetadataWithName(t *testing.T, world config.World, pid int, id s
 	if err := os.MkdirAll(world.StateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	meta := `{"protocol_version":3,"pid":` + intString(pid) + `,"database_kind":"sqlite-file","database_label":"` + world.DBPath + `","database_path":"` + world.DBPath + `","weaver_id":"` + id + `","config_dir":"` + world.ConfigDir + `","state_dir":"` + world.StateDir + `","data_dir":"` + world.DataDir + `","name":"` + name + `","socket_path":"` + filepath.Join(world.StateDir, "weaver.sock") + `","started_at":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","nrepl":{"host":"127.0.0.1","port":5555}}`
+	meta := `{"protocol_version":3,"pid":` + intString(pid) + `,"database_kind":"sqlite-file","database_label":"` + world.DBPath + `","database_path":"` + world.DBPath + `","weaver_id":"` + id + `","generation_id":"generation-` + id + `","config_dir":"` + world.ConfigDir + `","state_dir":"` + world.StateDir + `","data_dir":"` + world.DataDir + `","name":"` + name + `","socket_path":"` + filepath.Join(world.StateDir, "weaver.sock") + `","started_at":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","nrepl":{"host":"127.0.0.1","port":5555}}`
 	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(meta), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,16 +26,45 @@ type server struct {
 	meta     client.MillMetadata
 	mu       sync.Mutex
 	children map[string]*weaverChild
+	// startClaims close the check-to-registration window for a new child. A
+	// restart waits for the claim to resolve instead of racing a start that has
+	// not yet published its admitted generation.
+	startClaims map[string]chan struct{}
+	// transitions is keyed by the selected config directory.  A transition is
+	// deliberately shared by all lifecycle callers for that workspace: the
+	// caller's timeout only bounds its wait on transition.done.
+	transitions map[string]*weaverTransition
+	// admissionLocks serialize target selection and request-frame admission per
+	// workspace. They keep one workspace's external socket write from blocking
+	// lifecycle access or invocations for another workspace.
+	admissionLocks map[string]*sync.Mutex
 }
 
 type weaverChild struct {
-	cmd   *exec.Cmd
-	world config.World
-	name  string
-	done  chan error
+	cmd      *exec.Cmd
+	world    config.World
+	name     string
+	done     chan error
+	identity weaverIdentity
+	// unsupervised means this child was discovered from runtime metadata rather
+	// than launched and owned by this mill.  Such a child needs endpoint-backed
+	// identity proof before mill may signal its recorded PID.
+	unsupervised bool
+	// generationID is Mill's opaque identity for this process generation.  It
+	// is not derived from a PID or from user configuration.
+	generationID string
 }
 
 var millLogOut io.Writer = os.Stdout
+
+// startClaimInstalledFn is a deterministic seam for overlap tests.  The
+// default hook is inert; production callers still hold s.mu while the claim is
+// installed and the hook is called.
+var startClaimInstalledFn = func(string) {}
+
+// startClaimLookupFn is a deterministic seam for proving that overlapping
+// lifecycle callers reached the claim lookup before the owner releases it.
+var startClaimLookupFn = func(string) {}
 
 func millLogf(format string, args ...any) {
 	_, _ = fmt.Fprintf(millLogOut, format+"\n", args...)
@@ -139,6 +169,14 @@ Environment:
 	start.Flags().String("name", "", "friendly name for this weaver (defaults to workspace basename)")
 	start.Flags().String("ready-timeout", "", "ready metadata wait budget (Go duration, default 5m)")
 	weaver.AddCommand(start)
+	restart := &cobra.Command{Use: "restart", Short: "Probe and replace the selected workspace's weaver through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		workspace, _ := cmd.Flags().GetString("workspace")
+		readyTimeout, _ := cmd.Flags().GetString("ready-timeout")
+		return runWeaverLifecycleWithReadyTimeout("weaver-restart", workspace, "", readyTimeout)
+	}}
+	restart.Flags().String("workspace", "", "explicit workspace selection (defaults to repo-local .millstrand)")
+	restart.Flags().String("ready-timeout", "", "ready metadata wait budget (Go duration, default 5m)")
+	weaver.AddCommand(restart)
 	status := &cobra.Command{Use: "status", Short: "Show selected workspace weaver status through the local mill", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		workspace, _ := cmd.Flags().GetString("workspace")
 		return runWeaverLifecycle("weaver-status", workspace, "")
@@ -207,7 +245,7 @@ func start() error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() { <-sig; _ = listener.Close() }()
-	s := server{meta: meta, children: map[string]*weaverChild{}}
+	s := server{meta: meta, children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}, startClaims: map[string]chan struct{}{}}
 	defer s.stopAll()
 	for {
 		conn, err := listener.Accept()
@@ -224,8 +262,17 @@ func start() error {
 func (s *server) handle(conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 	var req client.MillRequest
-	if err := json.NewDecoder(conn).Decode(&req); err != nil {
+	reader := bufio.NewReader(conn)
+	if err := json.NewDecoder(reader).Decode(&req); err != nil {
 		_ = json.NewEncoder(conn).Encode(errorResponse("", "protocol", "mill/protocol", "malformed mill request", err.Error()))
+		return
+	}
+	// The request decoder is allowed to read past the JSON value. Drain the
+	// buffered framing whitespace before invoke starts its disconnect watcher;
+	// otherwise the watcher could mistake the request's trailing newline for a
+	// caller message and cancel a healthy invocation.
+	if err := drainRequestWhitespace(reader); err != nil {
+		_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/protocol", "malformed mill request", err.Error()))
 		return
 	}
 	if req.ProtocolVersion != client.MillProtocolVersion || req.RequestID == "" || req.MillID != s.meta.MillID {
@@ -282,11 +329,29 @@ func (s *server) handle(conn net.Conn) {
 			return
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})
+	case "weaver-restart":
+		result, err := s.restartWeaver(req.World)
+		if err != nil {
+			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-restart-failed", "weaver restart failed", err.Error()))
+			return
+		}
+		result = restartResultProjection(result)
+		if err := validateRestartResult(result); err != nil {
+			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/weaver-restart-invalid-result", "weaver restart returned an invalid result", err.Error()))
+			return
+		}
+		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})
 	case "weaver-status":
 		result, err := s.weaverStatus(req.World)
 		if err != nil {
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-status-failed", "weaver status failed", err.Error()))
 			return
+		}
+		if projection := millStatusProjection(result); projection != nil {
+			if err := validateMillStatusProjection(projection); err != nil {
+				_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "protocol", "mill/weaver-status-invalid-result", "weaver status returned an invalid projection", err.Error()))
+				return
+			}
 		}
 		_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: true, Result: result})
 	case "weaver-list":
@@ -320,6 +385,21 @@ func (s *server) handle(conn net.Conn) {
 	}
 }
 
+func drainRequestWhitespace(reader *bufio.Reader) error {
+	for reader.Buffered() > 0 {
+		b, err := reader.ReadByte()
+		if err != nil {
+			return err
+		}
+		switch b {
+		case ' ', '\t', '\r', '\n':
+		default:
+			return fmt.Errorf("unexpected data after mill request")
+		}
+	}
+	return nil
+}
+
 func validateInitRequest(world client.MillWorldRequest) error {
 	if world.Stealth && strings.TrimSpace(world.ConfigDir) != "" {
 		return errors.New("stealth init cannot select an explicit workspace")
@@ -349,7 +429,9 @@ func cleanupPreviousMillState(root, socketPath, metadataPath string) error {
 				}
 			}
 			stateDir := filepath.Dir(path)
-			cleanupWorldArtifacts(config.World{StateDir: stateDir})
+			_ = os.Remove(filepath.Join(stateDir, "weaver.json"))
+			_ = os.Remove(filepath.Join(stateDir, "weaver.edn"))
+			_ = os.Remove(filepath.Join(stateDir, "weaver.sock"))
 		}
 	}
 	_ = os.Remove(socketPath)

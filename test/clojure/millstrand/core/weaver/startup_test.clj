@@ -12,6 +12,7 @@
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.runtime :as weaver-runtime]
+            [millstrand.core.weaver.scheduler :as scheduler]
             [millstrand.core.db :as db]
             [millstrand.core.db-test :as db-test]
             [millstrand.source-file :as source-file]
@@ -19,7 +20,7 @@
 
   (:import [java.io BufferedReader BufferedWriter InputStreamReader OutputStreamWriter]
            [java.net StandardProtocolFamily UnixDomainSocketAddress]
-           [java.nio.channels Channels SocketChannel]))
+           [java.nio.channels Channels ServerSocketChannel SocketChannel]))
 
 (def delete-tree! test-support/delete-tree!)
 
@@ -98,6 +99,9 @@
         (is (= (:state-dir world) (:state-dir metadata)))
         (is (= (:data-dir world) (:data-dir metadata)))
         (is (= (:db-path world) (:canonical-db-path metadata)))
+        (is (string? (:generation-id metadata)))
+        (is (not (str/blank? (:generation-id metadata))))
+        (is (= (:generation-id metadata) (:generation-id rt)))
         (is (.isFile (io/file (:state-dir world) "weaver.edn")))
         (is (.isFile (io/file (:state-dir world) "weaver.json")))
         (is (.exists (io/file (:state-dir world) "weaver.sock")))
@@ -136,12 +140,21 @@
         (let [json-disk (json/read-str (slurp (metadata/json-metadata-file (:metadata rt))))]
           (is (= "sqlite-memory" (get json-disk "database_kind")))
           (is (= (get-in rt [:metadata :storage-label]) (get json-disk "database_label")))
+          (is (= (get-in rt [:metadata :generation-id]) (get json-disk "generation_id")))
           (is (contains? json-disk "database_path"))
           (is (nil? (get json-disk "database_path"))))
         (let [status (socket-request rt "status" {})]
           (is (true? (get status "ok")))
           (is (= "sqlite-memory" (get-in status ["result" "database_kind"])))
-          (is (nil? (get-in status ["result" "database_path"])))))
+          (is (= (:generation-id (:metadata rt))
+                 (get-in status ["result" "generation_id"])))
+          (is (nil? (get-in status ["result" "database_path"])))
+          (is (not (contains? (get status "result") "registry_projection"))))
+        (let [projection-status
+              (socket-request rt "status"
+                              {"include_registry_projection" true})]
+          (is (map? (get-in projection-status
+                            ["result" "registry_projection"])))))
       (let [strand (weaver/add! rt {:title "Mem strand" :attributes {:owner "mem"}})]
         (is (= [(:id strand)] (mapv :id (weaver/ready rt)))))
       (testing "concurrent weaver API calls at test scale"
@@ -166,6 +179,704 @@
                             (weaver-runtime/start! nil {:world world :publish? false :storage :postgres})))
       (finally
         (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest fresh-runtime-probe-is-unpublished-and-cleans-success
+  (let [world (temp-world)
+        result (try
+                 (weaver-runtime/fresh-runtime-probe!
+                  world {:old-generation-baseline {:status :admitted :projection {}}})
+                 (finally
+                   (delete-tree! (io/file (:config-dir world) ".."))))]
+    (is (true? (:success result)))
+    (is (= :probe/complete (:stage result)))
+    (is (seq (:candidate-registries result)))
+    (is (vector? (:diagnostics result)))
+    (is (not (.exists (io/file (:probe/workspace result)))))
+    (is (nil? @weaver-runtime/current-runtime))
+    (is (not (.exists (io/file (:state-dir world) "weaver.json"))))
+    (is (not (.exists (io/file (:data-dir world) "millstrand.sqlite"))))))
+
+(deftest probe-failure-envelope-ignores-colliding-ex-data
+  (let [world (temp-world)]
+    (try
+      (with-redefs [weaver-runtime/start!
+                    (fn [_ _]
+                      (throw (ex-info "candidate failed"
+                                      {:success true
+                                       :stage :probe/complete
+                                       :probe/workspace "/foreign"})))]
+        (let [result (weaver-runtime/fresh-runtime-probe!
+                      world {:old-generation-baseline
+                             {:status :admitted :projection {}}})]
+          (is (false? (:success result)))
+          (is (= :probe/failure (:stage result)))
+          (is (not= "/foreign" (:probe/workspace result)))
+          (is (= :probe/complete (get-in result [:failure :data :stage])))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest probe-adapter-conformance-corpus-is-readable
+  (let [corpus (json/read-str
+                (slurp "cli/cmd/mill/testdata/restart-conformance.json"))
+        cases (get corpus "probe_results")]
+    (is (= 4 (count cases)))
+    (doseq [{:strs [name valid value]} cases]
+      (testing name
+        (is (map? value))
+        (is (boolean? valid))))))
+
+(defn- nonblank-string? [value]
+  (and (string? value) (not (str/blank? value))))
+
+(defn- valid-admission-case? [value]
+  (and (map? value)
+       (every? #{"state" "generation_id" "transition_id"} (keys value))
+       (case (get value "state")
+         "open" (and (= #{"state" "generation_id"} (set (keys value)))
+                     (nonblank-string? (get value "generation_id")))
+         "closed" (and (= #{"state" "transition_id"} (set (keys value)))
+                       (nonblank-string? (get value "transition_id")))
+         false)))
+
+(defn- valid-restart-diagnostic-case? [value]
+  (and (map? value)
+       (every? #{"stage" "status" "data"} (keys value))
+       (nonblank-string? (get value "stage"))
+       (contains? #{"completed" "failed" "skipped" "in-progress"}
+                  (get value "status"))
+       (or (not (contains? value "data")) (map? (get value "data")))))
+
+(defn- valid-restart-projection-case? [value]
+  (and (map? value)
+       (every? #{"operation" "workspace" "state" "generation_id"
+                 "transition_id" "diagnostics"} (keys value))
+       (= "restart" (get value "operation"))
+       (nonblank-string? (get value "workspace"))
+       (contains? #{"probing" "restarting" "running" "failed"}
+                  (get value "state"))
+       (every? #(or (not (contains? value %))
+                    (nonblank-string? (get value %)))
+               ["generation_id" "transition_id"])
+       (or (not (contains? value "diagnostics"))
+           (and (vector? (get value "diagnostics"))
+                (seq (get value "diagnostics"))
+                (every? valid-restart-diagnostic-case?
+                        (get value "diagnostics"))))
+       (case (get value "state")
+         "probing" (and (contains? value "generation_id")
+                        (contains? value "transition_id")
+                        (not (contains? value "diagnostics")))
+         "restarting" (and (contains? value "transition_id")
+                           (not (contains? value "generation_id"))
+                           (not (contains? value "diagnostics")))
+         "running" (and (contains? value "generation_id")
+                        (not (contains? value "diagnostics")))
+         "failed" (contains? value "diagnostics")
+         false)))
+
+(defn- valid-probe-case? [value]
+  (and (map? value)
+       (= #{"success" "stage" "probe/workspace" "source/workspace"
+            "completed" "diagnostics" "log"}
+          (set (keys value)))
+       (boolean? (get value "success"))
+       (= (if (get value "success") "probe/complete" "probe/failure")
+          (get value "stage"))
+       (every? #(nonblank-string? (get value %))
+               ["probe/workspace" "source/workspace" "log"])
+       (vector? (get value "completed"))
+       (every? nonblank-string? (get value "completed"))
+       (vector? (get value "diagnostics"))
+       (every? valid-restart-diagnostic-case? (get value "diagnostics"))))
+
+(defn- valid-restart-record-case? [value]
+  (let [state (get value "state")
+        probe (get value "probe")
+        failure (get value "failure")]
+    (and (map? value)
+         (every? #{"state" "transition_id" "generation_id"
+                   "previous_generation_id" "updated_at"
+                   "old_generation_stopped" "probe" "failure"} (keys value))
+         (contains? #{"probing" "restarting" "running" "failed"} state)
+         (nonblank-string? (get value "transition_id"))
+         (nonblank-string? (get value "updated_at"))
+         (or (not (contains? value "generation_id"))
+             (nonblank-string? (get value "generation_id")))
+         (or (not (contains? value "previous_generation_id"))
+             (nonblank-string? (get value "previous_generation_id")))
+         (or (not (contains? value "old_generation_stopped"))
+             (false? (get value "old_generation_stopped"))
+             (and (nonblank-string? (get value "generation_id"))
+                  (map? probe) (true? (get probe "success"))))
+         (or (not (contains? value "probe")) (valid-probe-case? probe))
+         (or (not (contains? value "failure"))
+             (and (map? failure)
+                  (every? #{"stage" "message" "log_path" "exit_evidence"}
+                          (keys failure))
+                  (nonblank-string? (get failure "stage"))
+                  (nonblank-string? (get failure "message"))))
+         (or (not= state "failed") (map? failure))
+         (or (not (contains? value "failure"))
+             (= state "failed")
+             (and (= state "running")
+                  (= "probe" (get failure "stage"))
+                  (false? (get probe "success"))))
+         (or (not (get value "old_generation_stopped"))
+             (= "launch" (get failure "stage"))))))
+
+(deftest restart-boundary-conformance-corpus-executes-in-clojure
+  (let [corpus (json/read-str (slurp "cli/cmd/mill/testdata/restart-conformance.json"))]
+    (doseq [{:strs [name valid value]} (get corpus "probe_results")]
+      (testing (str "probe/" name)
+        (is (= valid (valid-probe-case? value)))))
+    (doseq [{:strs [name valid value]} (get corpus "admission_states")]
+      (testing (str "admission/" name)
+        (is (= valid (valid-admission-case? value)))))
+    (doseq [{:strs [name valid value]} (get corpus "restart_projections")]
+      (testing (str "projection/" name)
+        (is (= valid (valid-restart-projection-case? value)))))
+    (doseq [{:strs [name valid value]} (get corpus "restart_records")]
+      (testing (str "record/" name)
+        (is (= valid (valid-restart-record-case? value)))))))
+
+(deftest successful-probe-cleanup-fails-loudly-with-path
+  (let [world (temp-world)]
+    (try
+      (with-redefs [weaver-runtime/delete-tree!
+                    (fn [root]
+                      (throw (ex-info "probe cleanup seam" {:probe/workspace
+                                                            (.getPath root)})))]
+        (let [result (weaver-runtime/fresh-runtime-probe!
+                      world {:old-generation-baseline
+                             {:status :admitted :projection {}}})]
+          (is (false? (:success result)))
+          (is (= :probe/failure (:stage result)))
+          (is (string? (:probe/workspace result)))
+          (is (re-find #"probe cleanup seam" (get-in result [:failure :message])))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest probe-failure-after-start-stops-runtime-and-keeps-primary-error
+  (let [world (temp-world)
+        stopped (atom nil)
+        original-stop weaver-runtime/stop!
+        report-skipped (ns-resolve 'millstrand.core.weaver.runtime
+                                   'report-probe-skipped!)]
+    (try
+      (let [result (with-redefs-fn
+                     {report-skipped (fn [_]
+                                       (throw (ex-info "post-start probe failure" {})))
+                      #'weaver-runtime/stop!
+                      (fn [runtime]
+                        (reset! stopped runtime)
+                        (original-stop runtime))}
+                     #(weaver-runtime/fresh-runtime-probe!
+                       world {:old-generation-baseline
+                              {:status :admitted :projection {}}}))]
+        (is (false? (:success result)))
+        (is (= "post-start probe failure"
+               (get-in result [:failure :message])))
+        (is (some? @stopped))
+        (is (.exists (io/file (:probe/workspace result))))
+        (is (.exists (io/file (:log result)))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest direct-probe-start-is-unpublished
+  (let [world (temp-world)
+        rt (weaver-runtime/start! nil {:world world
+                                       :probe? true
+                                       :storage :sqlite-memory
+                                       :old-generation-baseline
+                                       {:status :admitted :projection {}}})]
+    (try
+      (is (nil? @weaver-runtime/current-runtime))
+      (is (nil? (metadata/read-metadata world)))
+      (finally
+        (weaver-runtime/stop! rt)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest probe-preserves-live-metadata-preflight
+  (let [world (temp-world)
+        rt (weaver-runtime/start! nil {:world world :publish? false})]
+    (try
+      (let [failure (try
+                      (weaver-runtime/start! nil {:world world
+                                                  :probe? true
+                                                  :storage :sqlite-memory})
+                      (catch Throwable t t))]
+        (is (instance? clojure.lang.ExceptionInfo failure))
+        (is (= :metadata-present (:reason (ex-data failure))))
+        (is (= (:config-dir world) (:config-dir (ex-data failure)))))
+      (finally
+        (weaver-runtime/stop! rt)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest probe-preserves-orphaned-socket-preflight
+  (let [world (temp-world)]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/socket-file world) "orphan")
+      (let [failure (try
+                      (weaver-runtime/start! nil {:world world
+                                                  :probe? true
+                                                  :storage :sqlite-memory})
+                      (catch Throwable t t))]
+        (is (instance? clojure.lang.ExceptionInfo failure))
+        (is (= :orphaned-socket (:reason (ex-data failure))))
+        (is (= (.getPath (metadata/socket-file world))
+               (:socket-path (ex-data failure)))))
+      (finally
+        (metadata/delete! world)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-owned-metadata-and-socket-are-reclaimed-before-bind
+  (let [world (temp-world)
+        db-file (db-test/temp-db-file)
+        stale (metadata/metadata-shape
+               {:pid 999999
+                :host "127.0.0.1"
+                :port 5555
+                :storage-kind :sqlite-file
+                :storage-label (metadata/canonical-db-path db-file)
+                :canonical-db-path (metadata/canonical-db-path db-file)
+                :nonce "stale-generation"
+                :generation-id "generation-old"
+                :world world
+                :name "stale"
+                :started-at "2026-08-24T00:00:00Z"})
+        claim (atom nil)]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/metadata-file world) (pr-str stale))
+      (spit (metadata/json-metadata-file world) "stale")
+      (spit (metadata/socket-file world) "stale")
+      (metadata/claim-pre-publication-artifacts! world claim)
+      (is (nil? (metadata/read-metadata world)))
+      (is (false? (.exists (metadata/json-metadata-file world))))
+      (is (false? (.exists (metadata/socket-file world))))
+      (finally
+        (metadata/release-pre-publication-artifacts! world claim)
+        (db-test/delete-sqlite-family! db-file)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-metadata-never-unlinks-a-live-unknown-socket-owner
+  (let [world (temp-world)
+        db-file (db-test/temp-db-file)
+        stale (metadata/metadata-shape
+               {:pid 999999
+                :host "127.0.0.1"
+                :port 5555
+                :storage-kind :sqlite-file
+                :storage-label (metadata/canonical-db-path db-file)
+                :canonical-db-path (metadata/canonical-db-path db-file)
+                :nonce "unknown-owner"
+                :generation-id "generation-unknown"
+                :world world
+                :name "unknown-owner"
+                :started-at "2026-08-24T00:00:00Z"})
+        claim (atom nil)
+        server (ServerSocketChannel/open StandardProtocolFamily/UNIX)]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/metadata-file world) (pr-str stale))
+      (.bind server (UnixDomainSocketAddress/of (:socket-path stale)))
+      (metadata/claim-pre-publication-artifacts! world claim)
+      (is (= stale (metadata/read-metadata world)))
+      (is (.exists (metadata/socket-file world)))
+      (finally
+        (metadata/release-pre-publication-artifacts! world claim)
+        (.close server)
+        (metadata/delete! world)
+        (db-test/delete-sqlite-family! db-file)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest final-runtime-publication-requires-admitted-ownership
+  (let [world (temp-world)
+        published (promise)
+        release (promise)
+        candidate
+        (future
+          (try
+            (binding [weaver-runtime/*after-metadata-publish!*
+                      (fn [_]
+                        (deliver published true)
+                        @release)]
+              (weaver-runtime/start! nil {:world world}))
+            (catch Throwable t
+              t)))]
+    (try
+      (is (true? (deref published (test-support/await-budget-ms) false))
+          "candidate startup reaches final publication")
+      (let [admitted @weaver-runtime/current-runtime]
+        (is admitted "candidate generation is ambiently admitted")
+        (weaver-runtime/stop! admitted)
+        (let [replacement (weaver-runtime/start! nil {:world world})]
+          (try
+            (deliver release true)
+            (let [failure (deref candidate (test-support/await-budget-ms) ::timed-out)]
+              (is (not= ::timed-out failure) "candidate startup returns after release")
+              (is (instance? clojure.lang.ExceptionInfo failure))
+              (is (= :ambient-runtime-ownership-lost (:reason (ex-data failure))))
+              (is (= (:generation-id replacement)
+                     (:generation-id @weaver-runtime/current-runtime)))
+              (is (= (:nonce (:metadata replacement))
+                     (:nonce (metadata/read-metadata world))))
+              (is (.exists (metadata/socket-file world)))
+              (is (true? (get (socket-request replacement "status" {}) "ok"))))
+            (finally
+              (weaver-runtime/stop! replacement)))))
+      (finally
+        (deliver release true)
+        (when-not (future-done? candidate)
+          (future-cancel candidate))
+        (try
+          (deref candidate (test-support/await-budget-ms) ::timed-out)
+          (catch java.util.concurrent.CancellationException _))
+        (when-let [runtime @weaver-runtime/current-runtime]
+          (weaver-runtime/stop! runtime))
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest overlapping-unpublished-start-rejects-after-the-first-publishes
+  (let [world (temp-world)
+        published (promise)
+        release (promise)
+        first (future
+                (binding [weaver-runtime/*after-metadata-publish!*
+                          (fn [_]
+                            (deliver published true)
+                            @release)]
+                  (weaver-runtime/start! nil {:world world :publish? false})))]
+    (try
+      (is (true? (deref published (test-support/await-budget-ms) false))
+          "first startup publishes before the overlapping preflight")
+      (let [failure (try
+                      (weaver-runtime/start! nil {:world world :publish? false})
+                      (catch Throwable t t))]
+        (is (instance? clojure.lang.ExceptionInfo failure))
+        (is (= :metadata-present (:reason (ex-data failure))))
+        (is (= "Weaver metadata already exists for weaver world"
+               (ex-message failure)))
+        (is (= (:config-dir world) (:config-dir (ex-data failure)))))
+      (deliver release true)
+      (let [runtime (deref first (test-support/await-budget-ms) ::timed-out)]
+        (is (not= ::timed-out runtime) "first startup completes after release")
+        (is (true? (get (socket-request runtime "status" {}) "ok")))
+        (weaver-runtime/stop! runtime))
+      (finally
+        (deliver release true)
+        (when-not (future-done? first)
+          (future-cancel first))
+        (try
+          (deref first (test-support/await-budget-ms) ::timed-out)
+          (catch java.util.concurrent.CancellationException _))
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pre-publication-claim-rejects-deterministic-overlap
+  (let [world (temp-world)
+        first-claim (atom nil)
+        second-claim (atom nil)]
+    (try
+      (metadata/claim-pre-publication-artifacts! world first-claim)
+      (let [failure (try
+                      (metadata/claim-pre-publication-artifacts!
+                       world second-claim)
+                      (catch Throwable t t))]
+        (is (instance? clojure.lang.ExceptionInfo failure))
+        (is (= :pre-publication-claim-held (:reason (ex-data failure))))
+        (is (= (:state-dir world) (:state-dir (ex-data failure))))
+        (is (nil? @second-claim)))
+      (finally
+        (metadata/release-pre-publication-artifacts! world first-claim)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pre-publication-claim-canonicalizes-state-dir-aliases
+  (let [world (temp-world)
+        state-dir (io/file (:state-dir world))
+        root (.getParentFile state-dir)
+        alias-world (assoc world :state-dir (.getPath (io/file root "alias" ".." "state")))
+        symlink-file (io/file root "state-link")
+        symlink-world (assoc world :state-dir (.getPath symlink-file))
+        first-claim (atom nil)]
+    (try
+      (.mkdirs state-dir)
+      (java.nio.file.Files/createSymbolicLink (.toPath symlink-file)
+                                              (.toPath state-dir)
+                                              (make-array java.nio.file.attribute.FileAttribute 0))
+      (metadata/claim-pre-publication-artifacts! world first-claim)
+      (doseq [alias [alias-world symlink-world]]
+        (let [failure (try
+                        (metadata/claim-pre-publication-artifacts!
+                         alias (atom nil))
+                        (catch Throwable t t))]
+          (is (instance? clojure.lang.ExceptionInfo failure))
+          (is (= :pre-publication-claim-held (:reason (ex-data failure))))
+          (is (= (:state-dir alias) (:state-dir (ex-data failure))))))
+      (finally
+        (metadata/release-pre-publication-artifacts! world first-claim)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest startup-failure-cleans-only-its-published-metadata
+  (let [world (temp-world)]
+    (try
+      (binding [weaver-runtime/*after-metadata-publish!*
+                (fn [_]
+                  (throw (ex-info "fail after metadata publication" {})))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"fail after metadata publication"
+                              (weaver-runtime/start! nil {:world world :publish? false}))))
+      (is (nil? (metadata/read-metadata world)))
+      (is (false? (.exists (metadata/json-metadata-file world))))
+      (is (false? (.exists (metadata/socket-file world))))
+      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+        (try
+          (is (true? (get (socket-request replacement "status" {}) "ok")))
+          (finally
+            (weaver-runtime/stop! replacement))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest partial-metadata-publication-cleans-its-edn-artifact
+  (let [world (temp-world)]
+    (try
+      (with-redefs [metadata/publish!
+                    (fn [meta]
+                      (.mkdirs (io/file (:state-dir meta)))
+                      (spit (metadata/metadata-file meta) (pr-str meta))
+                      (throw (ex-info "json metadata publication failed" {})))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"json metadata publication failed"
+                              (weaver-runtime/start! nil {:world world :publish? false}))))
+      (is (nil? (metadata/read-metadata world)))
+      (is (false? (.exists (metadata/json-metadata-file world))))
+      (is (false? (.exists (metadata/socket-file world))))
+      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+        (try
+          (is (true? (get (socket-request replacement "status" {}) "ok")))
+          (finally
+            (weaver-runtime/stop! replacement))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pre-publication-rearm-failure-removes-its-socket-and-allows-restart
+  (let [world (temp-world)]
+    (try
+      (with-redefs [scheduler/rearm! (fn [_]
+                                       (throw (ex-info "rearm failed before publication" {})))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"rearm failed before publication"
+                              (weaver-runtime/start! nil {:world world :publish? false}))))
+      (is (nil? (metadata/read-metadata world)))
+      (is (false? (.exists (metadata/json-metadata-file world))))
+      (is (false? (.exists (metadata/socket-file world))))
+      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+        (try
+          (is (true? (get (socket-request replacement "status" {}) "ok")))
+          (finally
+            (weaver-runtime/stop! replacement))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pre-publication-failure-retains-primary-error-when-storage-close-fails
+  (let [world (temp-world)
+        close-storage (ns-resolve 'millstrand.core.weaver.runtime 'close-storage!)]
+    (try
+      (let [failure
+            (with-redefs-fn
+              {#'scheduler/rearm! (fn [_]
+                                    (throw (ex-info "rearm primary failure" {})))
+               close-storage (fn [_]
+                               (throw (ex-info "storage close failure" {})))}
+              #(try
+                 (weaver-runtime/start! nil {:world world :publish? false})
+                 (catch Throwable t t)))]
+        (is (instance? clojure.lang.ExceptionInfo failure))
+        (is (= "rearm primary failure" (ex-message failure)))
+        (is (some #(= :storage/close (:teardown/step (ex-data %)))
+                  (.getSuppressed ^Throwable failure))))
+      (is (nil? (metadata/read-metadata world)))
+      (is (false? (.exists (metadata/socket-file world))))
+      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+        (try
+          (is (true? (get (socket-request replacement "status" {}) "ok")))
+          (finally
+            (weaver-runtime/stop! replacement))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest pre-publication-cleanup-failure-is-suppressed-and-releases-its-claim
+  (let [world (temp-world)]
+    (try
+      (let [failure
+            (with-redefs [scheduler/rearm! (fn [_]
+                                             (throw (ex-info "rearm primary failure" {})))
+                          metadata/delete! (fn [_]
+                                             (throw (ex-info "artifact delete failure" {})))]
+              (try
+                (weaver-runtime/start! nil {:world world :publish? false})
+                (catch Throwable t t)))]
+        (is (= "rearm primary failure" (ex-message failure)))
+        (is (some #(and (= :artifacts/delete (:teardown/step (ex-data %)))
+                        (= "artifact delete failure" (some-> % ex-cause ex-message)))
+                  (.getSuppressed ^Throwable failure))))
+      (metadata/delete! world)
+      (let [runtime (weaver-runtime/start! nil {:world world :publish? false})]
+        (try
+          (is (true? (get (socket-request runtime "status" {}) "ok")))
+          (finally
+            (weaver-runtime/stop! runtime))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-artifact-cleanup-preserves-successor-metadata
+  (let [world (temp-world)
+        stale {:nonce "stale"}
+        successor {:nonce "successor"}]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/metadata-file world) (pr-str successor))
+      (spit (metadata/json-metadata-file world) "successor")
+      (spit (metadata/socket-file world) "successor")
+      (is (nil? (metadata/delete-owned! stale world)))
+      (is (= successor (metadata/read-metadata world)))
+      (is (.exists (metadata/json-metadata-file world)))
+      (is (.exists (metadata/socket-file world)))
+      (finally
+        (metadata/delete! world)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest rollback-uses-canonical-state-dir-for-aliases
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "millstrand-rollback-alias-"
+                       (make-array java.nio.file.attribute.FileAttribute 0)))
+        real-state (io/file root "real-state")
+        alias-state (io/file root "alias-state")
+        world {:config-dir (.getPath (io/file root "config"))
+               :state-dir (.getPath real-state)
+               :data-dir (.getPath (io/file root "data"))}
+        alias-world (assoc world :state-dir (.getPath alias-state))
+        claim (atom nil)]
+    (try
+      (.mkdirs real-state)
+      (java.nio.file.Files/createSymbolicLink (.toPath alias-state)
+                                              (.toPath real-state)
+                                              (make-array java.nio.file.attribute.FileAttribute 0))
+      (metadata/claim-pre-publication-artifacts! world claim)
+      (spit (metadata/socket-file alias-world) "partial")
+      (is (true? (metadata/rollback-pre-publication-artifacts!
+                  {} alias-world claim)))
+      (is (false? (.exists (metadata/socket-file world))))
+      (finally
+        (metadata/release-pre-publication-artifacts! world claim)
+        (delete-tree! root)))))
+
+(deftest rollback-without-claim-preserves-an-unpublished-successor
+  (let [world (temp-world)
+        original-claim (atom nil)
+        successor-claim (atom nil)]
+    (try
+      (metadata/claim-pre-publication-artifacts! world original-claim)
+      (metadata/release-pre-publication-artifacts! world original-claim)
+      (metadata/claim-pre-publication-artifacts! world successor-claim)
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/socket-file world) "successor")
+      (is (nil? (metadata/rollback-pre-publication-artifacts!
+                 {:nonce "original"} world original-claim)))
+      (is (nil? (metadata/read-metadata world)))
+      (is (.exists (metadata/socket-file world)))
+      (finally
+        (metadata/rollback-pre-publication-artifacts!
+         {:nonce "successor"} world successor-claim)
+        (metadata/delete! world)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest rollback-with-nil-token-cannot-delete-an-unclaimed-socket
+  (let [world (temp-world)
+        claim (atom nil)]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/socket-file world) "unclaimed successor")
+      (is (nil? (metadata/rollback-pre-publication-artifacts!
+                 {:nonce "original"} world claim)))
+      (is (.exists (metadata/socket-file world)))
+      (finally
+        (metadata/delete! world)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-stop-does-not-delete-artifacts-during-a-new-claim
+  (let [world (temp-world)
+        original {:nonce "original"}
+        successor-claim (atom nil)]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/metadata-file world) (pr-str original))
+      (spit (metadata/json-metadata-file world) "original")
+      (spit (metadata/socket-file world) "successor socket")
+      (metadata/claim-pre-publication-artifacts! world successor-claim)
+      (is (= {:status :blocked
+              :reason :blocked-by-successor-claim
+              :state-dir (:state-dir world)}
+             (metadata/delete-owned! original world)))
+      (is (= original (metadata/read-metadata world)))
+      (is (.exists (metadata/json-metadata-file world)))
+      (is (.exists (metadata/socket-file world)))
+      (finally
+        (metadata/rollback-pre-publication-artifacts!
+         {:nonce "successor"} world successor-claim)
+        (metadata/delete! world)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest artifact-delete-attempts-later-files-after-an-earlier-failure
+  (let [world (temp-world)
+        edn-file (metadata/metadata-file world)]
+    (try
+      (.mkdirs edn-file)
+      (spit (io/file edn-file "retained") "retained")
+      (spit (metadata/json-metadata-file world) "metadata")
+      (spit (metadata/socket-file world) "socket")
+      (let [failure (try
+                      (metadata/delete! world)
+                      (catch Throwable t t))]
+        (is (instance? java.nio.file.DirectoryNotEmptyException failure))
+        (is (false? (.exists (metadata/json-metadata-file world))))
+        (is (false? (.exists (metadata/socket-file world)))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-stop-preserves-a-same-world-replacement
+  (let [world (temp-world)
+        original (weaver-runtime/start! nil {:world world})]
+    (try
+      (weaver-runtime/stop! original)
+      (let [replacement (weaver-runtime/start! nil {:world world})]
+        (try
+          (weaver-runtime/stop! original)
+          (is (= (:generation-id replacement)
+                 (:generation-id @weaver-runtime/current-runtime)))
+          (is (= (:nonce (:metadata replacement))
+                 (:nonce (metadata/read-metadata world))))
+          (is (= (:nonce (:metadata replacement))
+                 (get (json/read-str (slurp (metadata/json-metadata-file world)))
+                      "weaver_id")))
+          (is (.exists (metadata/socket-file world)))
+          (is (true? (get (socket-request replacement "status" {}) "ok")))
+          (finally
+            (weaver-runtime/stop! replacement))))
+      (finally
+        (when-let [runtime @weaver-runtime/current-runtime]
+          (weaver-runtime/stop! runtime))
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-nrepl-port-removal-preserves-a-reused-port-registration
+  (let [remove-runtime (ns-resolve 'millstrand.core.weaver.runtime
+                                   'dissoc-generation-nrepl-runtime)
+        port 43123
+        original {:generation-id "original"}
+        replacement {:generation-id "replacement"}]
+    (is (= {port replacement}
+           (remove-runtime {port replacement} port original)))
+    (is (= {}
+           (remove-runtime {port original} port original)))))
 
 (deftest unpublished-runtimes-coexist-with-isolated-storage-and-registries
   (let [world-a (temp-world)
@@ -290,7 +1001,9 @@
         (is failure "expected startup failure")
         (is (= "Selected workspace startup file failed to load" (ex-message failure)))
         (is (some #(= "post spool boom" %) (throwable-messages failure)))
-        (is (some #(= "Spool state close hook failed" (ex-message %))
+        (is (some #(and (= :spool-state/close (:teardown/step (ex-data %)))
+                        (= "Spool state close hook failed"
+                           (some-> % ex-cause ex-message)))
                   (.getSuppressed failure))))
       (is (empty? (live-thread-names thread-prefix)))
       (is (nil? (metadata/read-metadata world)))
