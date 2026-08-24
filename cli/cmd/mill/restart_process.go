@@ -14,6 +14,30 @@ import (
 	"millstrand-strand-cli/internal/config"
 )
 
+type replacementLaunchError struct {
+	logPath string
+	err     error
+}
+
+func (e *replacementLaunchError) Error() string {
+	if e.logPath == "" {
+		return e.err.Error()
+	}
+	return fmt.Sprintf("%v; weaver log: %s", e.err, e.logPath)
+}
+
+func (e *replacementLaunchError) Unwrap() error { return e.err }
+
+func replacementFailure(logPath string, err error) error {
+	if logPath != "" {
+		if file, openErr := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0o644); openErr == nil {
+			_, _ = fmt.Fprintf(file, "=== replacement startup failure: %s ===\n", err)
+			_ = file.Close()
+		}
+	}
+	return &replacementLaunchError{logPath: logPath, err: err}
+}
+
 // weaverIdentity is the identity that must remain attached to a process while
 // mill is deciding whether it may signal it.  PID is only one component: it
 // can be reused after a process exits.
@@ -187,8 +211,9 @@ func (s *server) launchReplacement(source string, world config.World, requestedN
 	_, _ = fmt.Fprintf(logFile, "=== weaver replacement %s config_dir=%s ===\n", time.Now().UTC().Format(time.RFC3339), world.ConfigDir)
 	cmd, err := launchWeaver(source, weaverArgs(world, name), logFile, logFile)
 	if err != nil {
+		_, _ = fmt.Fprintf(logFile, "=== replacement startup failure: %s ===\n", err)
 		_ = logFile.Close()
-		return nil, nil, err
+		return nil, nil, replacementFailure(logPath, err)
 	}
 	done := make(chan error, 1)
 	child := &weaverChild{cmd: cmd, world: world, name: name, done: done, generationID: newOpaqueID("generation")}
@@ -206,23 +231,23 @@ func (s *server) launchReplacement(source string, world config.World, requestedN
 	status, err := waitForReplacementReadyStatus(world, cmd.Process.Pid, done, timeout)
 	if err != nil {
 		if stopErr := s.stopFailedReplacement(child, 2*time.Second); stopErr != nil {
-			return nil, nil, fmt.Errorf("replacement weaver failed readiness: %w; replacement termination failed: %v; weaver log: %s", err, stopErr, logPath)
+			return nil, nil, replacementFailure(logPath, fmt.Errorf("replacement weaver failed readiness: %w; replacement termination failed: %v", err, stopErr))
 		}
-		return nil, nil, fmt.Errorf("replacement weaver failed readiness: %w; weaver log: %s", err, logPath)
+		return nil, nil, replacementFailure(logPath, fmt.Errorf("replacement weaver failed readiness: %w", err))
 	}
 	identity, err := identityFromStatus(status)
 	if err != nil {
 		if stopErr := s.stopFailedReplacement(child, 2*time.Second); stopErr != nil {
-			return nil, nil, fmt.Errorf("replacement weaver identity is invalid: %w; replacement termination failed: %v", err, stopErr)
+			return nil, nil, replacementFailure(logPath, fmt.Errorf("replacement weaver identity is invalid: %w; replacement termination failed: %v", err, stopErr))
 		}
-		return nil, nil, fmt.Errorf("replacement weaver identity is invalid: %w", err)
+		return nil, nil, replacementFailure(logPath, fmt.Errorf("replacement weaver identity is invalid: %w", err))
 	}
 	if identity.PID != cmd.Process.Pid {
 		identityErr := fmt.Errorf("replacement weaver identity pid %d does not match launched pid %d", identity.PID, cmd.Process.Pid)
 		if stopErr := s.stopFailedReplacement(child, 2*time.Second); stopErr != nil {
-			return nil, nil, fmt.Errorf("%w; replacement termination failed: %v", identityErr, stopErr)
+			return nil, nil, replacementFailure(logPath, fmt.Errorf("%w; replacement termination failed: %v", identityErr, stopErr))
 		}
-		return nil, nil, identityErr
+		return nil, nil, replacementFailure(logPath, identityErr)
 	}
 	child.identity = identity
 	child.generationID = identity.GenerationID

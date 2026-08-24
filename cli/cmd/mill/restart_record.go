@@ -20,13 +20,14 @@ type restartFailure struct {
 }
 
 type restartRecord struct {
-	State              string              `json:"state"`
-	TransitionID       string              `json:"transition_id"`
-	GenerationID       string              `json:"generation_id"`
-	PreviousGeneration string              `json:"previous_generation_id,omitempty"`
-	UpdatedAt          string              `json:"updated_at"`
-	Probe              *restartProbeResult `json:"probe,omitempty"`
-	Failure            *restartFailure     `json:"failure,omitempty"`
+	State                string              `json:"state"`
+	TransitionID         string              `json:"transition_id"`
+	GenerationID         string              `json:"generation_id"`
+	PreviousGeneration   string              `json:"previous_generation_id,omitempty"`
+	UpdatedAt            string              `json:"updated_at"`
+	OldGenerationStopped bool                `json:"old_generation_stopped,omitempty"`
+	Probe                *restartProbeResult `json:"probe,omitempty"`
+	Failure              *restartFailure     `json:"failure,omitempty"`
 }
 
 func restartRecordPath(world config.World) string {
@@ -73,7 +74,7 @@ func readRestartRecordDetailed(world config.World) (restartRecord, bool, error) 
 	if err != nil {
 		return restartRecord{}, false, fmt.Errorf("decode restart record %s: %w", restartRecordPath(world), err)
 	}
-	allowed := map[string]bool{"state": true, "transition_id": true, "generation_id": true, "previous_generation_id": true, "updated_at": true, "probe": true, "failure": true}
+	allowed := map[string]bool{"state": true, "transition_id": true, "generation_id": true, "previous_generation_id": true, "updated_at": true, "old_generation_stopped": true, "probe": true, "failure": true}
 	for key := range raw {
 		if !allowed[key] {
 			return restartRecord{}, false, fmt.Errorf("invalid restart record %s: unknown field %q", restartRecordPath(world), key)
@@ -97,11 +98,36 @@ func readRestartRecordDetailed(world config.World) (restartRecord, bool, error) 
 	default:
 		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: unknown state %q", restartRecordPath(world), record.State)
 	}
+	if record.OldGenerationStopped && record.State != restartStateRestarting && record.State != restartStateFailed && record.State != restartStateRunning {
+		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: old_generation_stopped is contradictory for state %q", restartRecordPath(world), record.State)
+	}
+	if record.OldGenerationStopped && record.GenerationID == "" {
+		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: old_generation_stopped requires generation_id", restartRecordPath(world))
+	}
 	if record.UpdatedAt == "" {
 		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: updated_at must not be blank", restartRecordPath(world))
 	}
+	for _, optional := range []string{"generation_id", "previous_generation_id"} {
+		if value, present := raw[optional]; present {
+			var text string
+			if err := json.Unmarshal(value, &text); err != nil || len(bytes.TrimSpace([]byte(text))) == 0 {
+				return restartRecord{}, false, fmt.Errorf("invalid restart record %s: %s must be a non-blank string", restartRecordPath(world), optional)
+			}
+		}
+	}
 	if record.State == restartStateFailed && record.Failure == nil {
 		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: failed state requires failure", restartRecordPath(world))
+	}
+	if record.Failure != nil && record.State != restartStateFailed {
+		if record.State != restartStateRunning || record.Failure.Stage != "probe" || record.Probe == nil || record.Probe.Success {
+			return restartRecord{}, false, fmt.Errorf("invalid restart record %s: failure is contradictory for state %q", restartRecordPath(world), record.State)
+		}
+	}
+	if record.OldGenerationStopped && record.Failure != nil && record.Failure.Stage != "launch" {
+		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: stopped generation cannot have %s failure", restartRecordPath(world), record.Failure.Stage)
+	}
+	if record.OldGenerationStopped && (record.Probe == nil || !record.Probe.Success) {
+		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: stopped generation requires successful probe", restartRecordPath(world))
 	}
 	if record.State == restartStateRunning && record.GenerationID == "" {
 		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: running state requires generation_id", restartRecordPath(world))
@@ -184,6 +210,9 @@ func (r restartRecord) status(world config.World) map[string]any {
 		status["previous_generation_id"] = r.PreviousGeneration
 	}
 	status["transition_id"] = r.TransitionID
+	if r.OldGenerationStopped {
+		status["old_generation_stopped"] = true
+	}
 	if r.Probe != nil {
 		status["probe"] = *r.Probe
 	}

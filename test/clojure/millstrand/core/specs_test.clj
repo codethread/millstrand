@@ -57,6 +57,19 @@
   (is (s/valid? :millstrand.core.specs/admission-state
                 {:state :closed :transition-id "transition-1"})))
 
+(deftest probe-diagnostics-have-one-closed-shape
+  (is (s/valid? :millstrand.restart/probe-diagnostic
+                {:stage "probe/workspace"
+                 :status :completed
+                 :data {:workspace "/tmp/probe"}
+                 :at "2026-08-24T00:00:00Z"}))
+  (doseq [diagnostic [{:stage " " :status :completed}
+                      {:stage "probe/workspace" :status :unknown}
+                      {:stage "probe/workspace" :status :completed :extra true}
+                      {:stage "probe/workspace" :status :completed :at " "}]]
+    (is (not (s/valid? :millstrand.restart/probe-diagnostic diagnostic))
+        (pr-str diagnostic))))
+
 (deftest mill-protocol-envelopes-reject-unknown-wire-fields
   (is (s/valid? :millstrand.core.mill-protocol/request
                 {"protocol_version" 1

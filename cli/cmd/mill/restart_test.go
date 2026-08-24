@@ -109,6 +109,30 @@ func TestRestartRecordValidationRejectsUnknownAndStateDependentShapes(t *testing
 	}
 }
 
+func TestRestartProjectionRejectsBlankAndContradictoryShapes(t *testing.T) {
+	valid := map[string]any{"operation": "restart", "workspace": "/tmp/world", "state": "running", "generation_id": "generation-1"}
+	for name, value := range map[string]map[string]any{
+		"blank workspace":        mergeMap(valid, "workspace", " "),
+		"blank generation":       mergeMap(valid, "generation_id", ""),
+		"running diagnostics":    mergeMap(valid, "diagnostics", []map[string]any{{"stage": "probe", "status": "failed"}}),
+		"unknown field":          mergeMap(valid, "extra", true),
+		"blank diagnostic stage": mergeMap(map[string]any{"operation": "restart", "workspace": "/tmp/world", "state": "failed", "diagnostics": []map[string]any{{"stage": " ", "status": "failed"}}}, "transition_id", "transition-1"),
+	} {
+		if err := validateRestartResult(value); err == nil {
+			t.Fatalf("accepted invalid %s: %#v", name, value)
+		}
+	}
+}
+
+func mergeMap(source map[string]any, key string, value any) map[string]any {
+	result := map[string]any{}
+	for name, existing := range source {
+		result[name] = existing
+	}
+	result[key] = value
+	return result
+}
+
 func replaceJSONField(value, old, new string) string {
 	return strings.Replace(value, old, new, 1)
 }
@@ -377,7 +401,7 @@ func TestRestartRetriesFailedReplacementStartupWithoutOldGeneration(t *testing.T
 		t.Fatal(err)
 	}
 	probe := &restartProbeResult{Success: true, Stage: "probe/complete", ProbeWorkspace: "probe", SourceWorkspace: world.ConfigDir, Completed: []string{}, Diagnostics: []map[string]any{}, Log: "probe.log"}
-	if err := writeRestartRecord(world, restartRecord{State: restartStateFailed, TransitionID: "failed-transition", Probe: probe, Failure: &restartFailure{Stage: "launch", Message: "startup failed"}}); err != nil {
+	if err := writeRestartRecord(world, restartRecord{State: restartStateFailed, TransitionID: "failed-transition", GenerationID: "old-generation", OldGenerationStopped: true, Probe: probe, Failure: &restartFailure{Stage: "launch", Message: "startup failed"}}); err != nil {
 		t.Fatal(err)
 	}
 	var launches, probes int
@@ -415,6 +439,83 @@ func TestRestartRetriesFailedReplacementStartupWithoutOldGeneration(t *testing.T
 		t.Fatalf("retry launched/probed unexpectedly: launches=%d probes=%d", launches, probes)
 	}
 	s.stopAll()
+}
+
+func TestRestartRetryRequiresDurableStopProofAndReplacementLaunchFailure(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := &restartProbeResult{Success: true, Stage: "probe/complete", ProbeWorkspace: "probe", SourceWorkspace: world.ConfigDir, Completed: []string{}, Diagnostics: []map[string]any{}, Log: "probe.log"}
+	if err := writeRestartRecord(world, restartRecord{State: restartStateFailed, TransitionID: "failed-transition", GenerationID: "old-generation", OldGenerationStopped: true, Probe: probe, Failure: &restartFailure{Stage: "launch", Message: "startup failed"}}); err != nil {
+		t.Fatal(err)
+	}
+	originalLaunch := launchWeaver
+	launchWeaver = func(string, []string, io.Writer, io.Writer) (*exec.Cmd, error) {
+		return nil, errors.New("pre-start launch error")
+	}
+	t.Cleanup(func() { launchWeaver = originalLaunch })
+	s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}}
+	result, err := s.restartWeaver(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg, ReadyTimeoutMs: 2_000})
+	if err != nil || result["state"] != restartStateFailed {
+		t.Fatalf("pre-start replacement failure was not retained: result=%#v err=%v", result, err)
+	}
+	failure := result["failure"].(restartFailure)
+	if failure.LogPath == "" {
+		t.Fatalf("pre-start launch failure omitted replacement log path: %#v", result)
+	}
+	log, readErr := os.ReadFile(failure.LogPath)
+	if readErr != nil || !strings.Contains(string(log), "pre-start launch error") {
+		t.Fatalf("replacement failure log missing path/content: path=%q err=%v content=%q", failure.LogPath, readErr, log)
+	}
+	record, ok, err := readRestartRecordDetailed(world)
+	if err != nil || !ok || !record.OldGenerationStopped {
+		t.Fatalf("retry proof was not durable: record=%#v ok=%v err=%v", record, ok, err)
+	}
+}
+
+func TestRestartDoesNotReuseProbeForStopFailureOrLiveOldMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		liveOld      bool
+		failureStage string
+	}{
+		{name: "stop failure", failureStage: "stop"},
+		{name: "live old metadata", liveOld: true, failureStage: "launch"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+			source := tempSource(t)
+			cfg := tempConfig(t, source)
+			world, err := config.RuntimeWorld(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			probe := &restartProbeResult{Success: true, Stage: "probe/complete", ProbeWorkspace: "probe", SourceWorkspace: world.ConfigDir, Completed: []string{}, Diagnostics: []map[string]any{}, Log: "probe.log"}
+			if err := writeRestartRecord(world, restartRecord{State: restartStateFailed, TransitionID: "failed-transition", GenerationID: "old-generation", OldGenerationStopped: tc.failureStage == "launch", Probe: probe, Failure: &restartFailure{Stage: tc.failureStage, Message: "startup failed"}}); err != nil {
+				t.Fatal(err)
+			}
+			var old *exec.Cmd
+			if tc.liveOld {
+				old = exec.Command("sleep", "60")
+				if err := old.Start(); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { terminatePID(old.Process.Pid); waitForPIDExit(old.Process.Pid, time.Second) })
+				writeWeaverMetadata(t, world, old.Process.Pid, "live-old")
+			}
+			s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}}
+			if _, err := s.restartWeaver(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg, ReadyTimeoutMs: 100}); err == nil {
+				t.Fatal("unsafe probe reuse was accepted")
+			}
+			if old != nil && !processAlive(old.Process.Pid) {
+				t.Fatal("retry attempt signalled the live old generation")
+			}
+		})
+	}
 }
 
 func TestRestartWaitsForStartClaimWithoutPolling(t *testing.T) {

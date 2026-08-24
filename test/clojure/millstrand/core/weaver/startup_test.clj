@@ -207,6 +207,32 @@
       (finally
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
+(deftest probe-failure-after-start-stops-runtime-and-keeps-primary-error
+  (let [world (temp-world)
+        stopped (atom nil)
+        original-stop weaver-runtime/stop!
+        report-skipped (ns-resolve 'millstrand.core.weaver.runtime
+                                   'report-probe-skipped!)]
+    (try
+      (let [result (with-redefs-fn
+                     {report-skipped (fn [_]
+                                       (throw (ex-info "post-start probe failure" {})))
+                      #'weaver-runtime/stop!
+                      (fn [runtime]
+                        (reset! stopped runtime)
+                        (original-stop runtime))}
+                     #(weaver-runtime/fresh-runtime-probe!
+                       world {:old-generation-baseline
+                              {:status :admitted :projection {}}}))]
+        (is (false? (:success result)))
+        (is (= "post-start probe failure"
+               (get-in result [:failure :message])))
+        (is (some? @stopped))
+        (is (.exists (io/file (:probe/workspace result))))
+        (is (.exists (io/file (:log result)))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
 (deftest direct-probe-start-is-unpublished
   (let [world (temp-world)
         rt (weaver-runtime/start! nil {:world world

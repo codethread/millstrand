@@ -37,16 +37,16 @@ type restartProbeWire struct {
 }
 
 func (r restartProbeResult) validate() error {
-	if r.Stage == "" {
+	if strings.TrimSpace(r.Stage) == "" {
 		return errors.New("restart probe result missing stage")
 	}
-	if r.ProbeWorkspace == "" {
+	if strings.TrimSpace(r.ProbeWorkspace) == "" {
 		return errors.New("restart probe result missing probe/workspace")
 	}
-	if r.SourceWorkspace == "" {
+	if strings.TrimSpace(r.SourceWorkspace) == "" {
 		return errors.New("restart probe result missing source/workspace")
 	}
-	if r.Log == "" {
+	if strings.TrimSpace(r.Log) == "" {
 		return errors.New("restart probe result missing log")
 	}
 	if r.Success && r.Stage != "probe/complete" {
@@ -54,6 +54,45 @@ func (r restartProbeResult) validate() error {
 	}
 	if !r.Success && r.Stage != "probe/failure" {
 		return fmt.Errorf("restart probe failure has unexpected stage %q", r.Stage)
+	}
+	for index, stage := range r.Completed {
+		if strings.TrimSpace(stage) == "" {
+			return fmt.Errorf("restart probe completed[%d] must be non-blank", index)
+		}
+	}
+	for index, diagnostic := range r.Diagnostics {
+		if err := validateProbeDiagnostic(diagnostic); err != nil {
+			return fmt.Errorf("restart probe diagnostics[%d]: %w", index, err)
+		}
+	}
+	return nil
+}
+
+func validateProbeDiagnostic(row map[string]any) error {
+	allowed := map[string]bool{"stage": true, "status": true, "data": true, "at": true}
+	for key := range row {
+		if !allowed[key] {
+			return fmt.Errorf("diagnostic contains unknown field %q", key)
+		}
+	}
+	stage, ok := row["stage"].(string)
+	if !ok || strings.TrimSpace(stage) == "" {
+		return errors.New("diagnostic stage must be a non-blank string")
+	}
+	status, ok := row["status"].(string)
+	if !ok || !map[string]bool{"completed": true, "failed": true, "skipped": true, "in-progress": true}[status] {
+		return errors.New("diagnostic status is invalid")
+	}
+	if at, present := row["at"]; present {
+		value, ok := at.(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			return errors.New("diagnostic at must be a non-blank string")
+		}
+	}
+	if data, present := row["data"]; present {
+		if _, ok := data.(map[string]any); !ok {
+			return errors.New("diagnostic data must be an object")
+		}
 	}
 	return nil
 }

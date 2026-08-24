@@ -360,6 +360,11 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 		if failureData["stage"] == "" || data["message"] == "" || data["log_path"] == "" {
 			t.Fatalf("replacement failure lost stage/message/log: %#v", status)
 		}
+		replacementLog := data["log_path"].(string)
+		logBytes, logErr := os.ReadFile(replacementLog)
+		if logErr != nil || !strings.Contains(string(logBytes), "replacement startup") {
+			t.Fatalf("replacement failure did not retain its startup log: path=%q err=%v content=%q", replacementLog, logErr, logBytes)
+		}
 		if processExists(oldPID) {
 			t.Fatalf("old generation remained alive after cutover failure: pid=%d", oldPID)
 		}

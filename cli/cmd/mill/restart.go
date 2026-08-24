@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,72 +55,86 @@ func restartResultProjection(status map[string]any) map[string]any {
 }
 
 func validateRestartResult(status map[string]any) error {
+	return validateRestartProjection(status, true)
+}
+
+func validateRestartProjection(status map[string]any, withOperation bool) error {
 	if status == nil {
-		return errors.New("restart result must be an object")
+		return errors.New("restart projection must be an object")
 	}
-	allowed := map[string]bool{"operation": true, "workspace": true, "state": true, "generation_id": true, "transition_id": true, "diagnostics": true}
+	allowed := map[string]bool{"workspace": true, "state": true, "generation_id": true, "transition_id": true, "diagnostics": true}
+	if withOperation {
+		allowed["operation"] = true
+		if status["operation"] != "restart" {
+			return errors.New("restart projection operation must be restart")
+		}
+	} else if _, ok := status["operation"]; ok {
+		return errors.New("mill status projection must not contain operation")
+	}
 	for key := range status {
 		if !allowed[key] {
-			return fmt.Errorf("restart result contains unknown field %q", key)
+			return fmt.Errorf("restart projection contains unknown field %q", key)
 		}
-	}
-	if status["operation"] != "restart" {
-		return errors.New("restart result missing operation")
 	}
 	workspace, ok := status["workspace"].(string)
-	if !ok || workspace == "" {
-		return errors.New("restart result missing workspace")
+	if !ok || strings.TrimSpace(workspace) == "" {
+		return errors.New("restart projection workspace must be non-blank")
 	}
 	state, ok := status["state"].(string)
-	if !ok || state == "" {
-		return errors.New("restart result missing state")
+	if !ok || !map[string]bool{restartStateProbing: true, restartStateRestarting: true, restartStateRunning: true, restartStateFailed: true}[state] {
+		return fmt.Errorf("restart projection has unknown state %q", status["state"])
 	}
-	if generation, present := status["generation_id"]; present {
-		if value, ok := generation.(string); !ok || value == "" {
-			return errors.New("restart result generation_id must be a non-empty string")
-		}
-	}
-	if transition, present := status["transition_id"]; present {
-		if value, ok := transition.(string); !ok || value == "" {
-			return errors.New("restart result transition_id must be a non-empty string")
+	for _, key := range []string{"generation_id", "transition_id"} {
+		if value, present := status[key]; present {
+			text, ok := value.(string)
+			if !ok || strings.TrimSpace(text) == "" {
+				return fmt.Errorf("restart projection %s must be non-blank", key)
+			}
 		}
 	}
 	if diagnostics, present := status["diagnostics"]; present {
 		rows, ok := diagnostics.([]map[string]any)
 		if !ok || len(rows) == 0 {
-			return errors.New("restart result diagnostics must be a non-empty array")
+			return errors.New("restart projection diagnostics must be a non-empty array")
 		}
 		for index, row := range rows {
 			if err := validateRestartDiagnostic(row); err != nil {
-				return fmt.Errorf("restart result diagnostics[%d]: %w", index, err)
+				return fmt.Errorf("restart projection diagnostics[%d]: %w", index, err)
 			}
 		}
 	}
 	switch state {
 	case restartStateProbing:
 		if _, ok := status["generation_id"]; !ok {
-			return errors.New("probing restart result missing generation_id")
+			return errors.New("probing restart projection missing generation_id")
 		}
 		if _, ok := status["transition_id"]; !ok {
-			return errors.New("probing restart result missing transition_id")
+			return errors.New("probing restart projection missing transition_id")
+		}
+		if _, ok := status["diagnostics"]; ok {
+			return errors.New("probing restart projection must not contain diagnostics")
 		}
 	case restartStateRestarting:
 		if _, ok := status["transition_id"]; !ok {
-			return errors.New("restarting result missing transition_id")
+			return errors.New("restarting restart projection missing transition_id")
+		}
+		if _, ok := status["generation_id"]; ok {
+			return errors.New("restarting restart projection must not contain generation_id")
+		}
+		if _, ok := status["diagnostics"]; ok {
+			return errors.New("restarting restart projection must not contain diagnostics")
 		}
 	case restartStateRunning:
 		if _, ok := status["generation_id"]; !ok {
-			return errors.New("running restart result missing generation_id")
+			return errors.New("running restart projection missing generation_id")
 		}
 		if _, ok := status["diagnostics"]; ok {
-			return errors.New("running restart result must not contain diagnostics")
+			return errors.New("running restart projection must not contain diagnostics")
 		}
 	case restartStateFailed:
 		if _, ok := status["diagnostics"]; !ok {
-			return errors.New("failed restart result missing diagnostics")
+			return errors.New("failed restart projection missing diagnostics")
 		}
-	default:
-		return fmt.Errorf("restart result has unknown state %q", state)
 	}
 	return nil
 }
@@ -132,7 +147,7 @@ func validateRestartDiagnostic(row map[string]any) error {
 		}
 	}
 	stage, ok := row["stage"].(string)
-	if !ok || stage == "" {
+	if !ok || strings.TrimSpace(stage) == "" {
 		return errors.New("diagnostic stage must be a non-empty string")
 	}
 	status, ok := row["status"].(string)
@@ -148,36 +163,7 @@ func validateRestartDiagnostic(row map[string]any) error {
 }
 
 func validateMillStatusProjection(status map[string]any) error {
-	allowed := map[string]bool{"state": true, "workspace": true, "generation_id": true, "transition_id": true, "diagnostics": true}
-	for key := range status {
-		if !allowed[key] {
-			return fmt.Errorf("mill status projection contains unknown field %q", key)
-		}
-	}
-	if state, ok := status["state"].(string); !ok || !map[string]bool{restartStateProbing: true, restartStateRestarting: true, restartStateRunning: true, restartStateFailed: true}[state] {
-		return errors.New("mill status projection has invalid state")
-	}
-	workspace, ok := status["workspace"].(string)
-	if !ok || workspace == "" {
-		return errors.New("mill status projection missing workspace")
-	}
-	if state := status["state"].(string); state == restartStateRunning {
-		if generation, ok := status["generation_id"].(string); !ok || generation == "" {
-			return errors.New("running mill status projection missing generation_id")
-		}
-	}
-	if diagnostics, ok := status["diagnostics"]; ok {
-		rows, ok := diagnostics.([]map[string]any)
-		if !ok {
-			return errors.New("mill status projection diagnostics must be an array")
-		}
-		for index, row := range rows {
-			if err := validateRestartDiagnostic(row); err != nil {
-				return fmt.Errorf("mill status projection diagnostics[%d]: %w", index, err)
-			}
-		}
-	}
-	return nil
+	return validateRestartProjection(status, false)
 }
 
 func millStatusProjection(status map[string]any) map[string]any {
@@ -240,10 +226,11 @@ type weaverTransition struct {
 	// retryStartup records that a previous probe already completed and only
 	// replacement startup needs to be retried.  This is the recovery path after
 	// a cutover startup failure, when no old generation remains admitted.
-	retryStartup bool
-	result       map[string]any
-	err          error
-	done         chan struct{}
+	retryStartup         bool
+	oldGenerationStopped bool
+	result               map[string]any
+	err                  error
+	done                 chan struct{}
 }
 
 var (
@@ -322,6 +309,7 @@ func (s *server) setTransitionState(t *weaverTransition, state string, probe *re
 	if t.old != nil {
 		record.PreviousGeneration = t.old.generationID
 	}
+	record.OldGenerationStopped = t.oldGenerationStopped
 	if probe != nil {
 		copy := *probe
 		if copy.Completed == nil {
@@ -382,7 +370,12 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 		}
 	}
 	old := s.children[world.ConfigDir]
+	if old != nil && (old.cmd == nil || old.cmd.Process == nil || !processAlive(old.cmd.Process.Pid)) {
+		delete(s.children, world.ConfigDir)
+		old = nil
+	}
 	var retryProbe *restartProbeResult
+	var retryRecord *restartRecord
 	if old == nil {
 		if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
 			s.mu.Unlock()
@@ -391,16 +384,21 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 			// A failed replacement has already completed its disposable probe.
 			// Retry only the authoritative startup step; there is no admitted old
 			// generation to use as a new probe baseline.
-			if record.Probe == nil || !record.Probe.Success {
+			if record.Probe == nil || !record.Probe.Success || !record.OldGenerationStopped || record.Failure == nil || record.Failure.Stage != "launch" {
 				s.mu.Unlock()
-				return nil, errors.New("failed restart record has no successful replacement probe to retry")
+				return nil, errors.New("failed restart record is not a retryable replacement launch failure")
 			}
 			copy := *record.Probe
 			retryProbe = &copy
+			retryRecord = &record
 		}
 	}
 	if old == nil {
 		if status, stale := readStatus(world); status != nil && !stale {
+			if retryRecord != nil {
+				s.mu.Unlock()
+				return nil, errors.New("cannot retry replacement while selected workspace metadata still identifies a live generation")
+			}
 			pid, ok := status["pid"].(int)
 			if !ok || pid <= 0 {
 				s.mu.Unlock()
@@ -417,6 +415,9 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 				return nil, fmt.Errorf("selected workspace weaver metadata identity is unusable: %w", identityErr)
 			}
 			old = &weaverChild{cmd: &exec.Cmd{Process: process}, world: world, name: fmt.Sprint(status["name"]), generationID: fmt.Sprint(status["generation_id"]), identity: identity, unsupervised: true}
+		} else if status, stale := readStatus(world); status != nil && stale {
+			s.mu.Unlock()
+			return nil, fmt.Errorf("cannot retry replacement with stale selected workspace metadata: %v", status["stale_reason"])
 		} else if retryProbe == nil {
 			s.mu.Unlock()
 			return nil, fmt.Errorf("no running weaver for selected workspace")
@@ -426,12 +427,16 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 	if retryProbe != nil {
 		state = restartStateRestarting
 	}
-	t := &weaverTransition{world: world, old: old, transitionID: newOpaqueID("transition"), stateValue: state, probe: retryProbe, retryStartup: retryProbe != nil, done: make(chan struct{})}
+	t := &weaverTransition{world: world, old: old, transitionID: newOpaqueID("transition"), stateValue: state, probe: retryProbe, retryStartup: retryProbe != nil, oldGenerationStopped: retryRecord != nil && retryRecord.OldGenerationStopped, done: make(chan struct{})}
 	if t.old != nil && t.old.generationID == "" {
 		t.old.generationID = newOpaqueID("generation")
 	}
 	if t.old != nil {
 		t.generationID = t.old.generationID
+	} else if retryRecord != nil {
+		// Carry the durable stopped generation identity through a replacement
+		// retry so a second launch failure remains a valid persisted record.
+		t.generationID = retryRecord.GenerationID
 	}
 	s.transitions[world.ConfigDir] = t
 	s.mu.Unlock()
@@ -444,6 +449,9 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 }
 
 func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldRequest) {
+	admission := s.workspaceAdmissionLock(t.world.ConfigDir)
+	admission.Lock()
+	defer admission.Unlock()
 	source, err := resolveLaunchSource(req.CWD)
 	if err != nil {
 		s.failRestart(t, "probe", err, "")
@@ -478,13 +486,27 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 			s.failRestart(t, "stop", err, probe.Log)
 			return
 		}
+		t.oldGenerationStopped = true
+		// The stop proof is durable before replacement launch. A later retry may
+		// reuse the successful probe only when this record survives the launch
+		// failure and metadata remains absent.
+		if err := s.setTransitionState(t, restartStateRestarting, &probe, nil); err != nil {
+			s.failRestart(t, "state", err, "")
+			return
+		}
+		s.releaseChild(t.world.ConfigDir, t.old)
 	}
 	// Replacement work is shared by every caller.  A caller's timeout only
 	// bounds its join on t.done; it must never cancel or shorten the shared
 	// mill readiness policy.
 	status, child, err := s.launchReplacement(source, t.world, req.Name, defaultWeaverReadyTimeout)
 	if err != nil {
-		s.failRestart(t, "launch", err, probe.Log)
+		logPath := ""
+		var launchErr *replacementLaunchError
+		if errors.As(err, &launchErr) {
+			logPath = launchErr.logPath
+		}
+		s.failRestart(t, "launch", err, logPath)
 		return
 	}
 	t.generationID = child.generationID
@@ -500,6 +522,10 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 }
 
 func (s *server) failProbe(t *weaverTransition, probe *restartProbeResult, err error) {
+	if t.old == nil || t.retryStartup {
+		s.failRestart(t, "probe", err, "")
+		return
+	}
 	if stateErr := s.setTransitionState(t, restartStateRunning, probe, &restartFailure{Stage: "probe", Message: err.Error()}); stateErr != nil {
 		status := s.admittedGenerationStatus(t.world, t)
 		status["restart_state"] = restartStateRunning

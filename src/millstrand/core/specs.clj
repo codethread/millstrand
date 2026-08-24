@@ -492,6 +492,10 @@
   (s/and map?
          #(every? data-first-value? (keys %))
          #(every? data-first-value? (vals %))))
+(defn- restart-data-object? [value]
+  (and (map? value)
+       (every? #(or (keyword? %) (string? %)) (keys value))
+       (every? data-first-value? (vals value))))
 (s/def :millstrand.restart/diagnostic
   (s/and (s/keys :req-un [:millstrand.restart/stage
                           :millstrand.restart/status]
@@ -499,17 +503,47 @@
                           :millstrand.restart/generation-id
                           :millstrand.restart/transition-id])
          #(keys-subset? #{:stage :status :data :generation-id :transition-id}
-                        %)))
+                        %)
+         #(or (not (contains? % :data))
+              (restart-data-object? (:data %)))))
 (s/def :millstrand.restart/diagnostics
   (s/coll-of :millstrand.restart/diagnostic :kind vector?))
+(s/def :millstrand.restart/at non-blank-string?)
+(s/def :millstrand.restart/probe-diagnostic
+  (s/and (s/keys :req-un [:millstrand.restart/stage
+                          :millstrand.restart/status]
+                 :opt-un [:millstrand.restart/data
+                          :millstrand.restart/at])
+         #(keys-subset? #{:stage :status :data :at} %)
+         #(or (not (contains? % :data))
+              (restart-data-object? (:data %)))
+         #(or (not (contains? % :at))
+              (s/valid? :millstrand.restart/at (:at %)))))
 
-(defn- restart-envelope?
+(defn- restart-projection-state?
   [value]
+  (case (:state value)
+    :probing (and (contains? value :generation-id)
+                  (contains? value :transition-id)
+                  (not (contains? value :diagnostics)))
+    :restarting (and (contains? value :transition-id)
+                     (not (contains? value :generation-id))
+                     (not (contains? value :diagnostics)))
+    :running (and (contains? value :generation-id)
+                  (not (contains? value :diagnostics)))
+    :failed (and (contains? value :diagnostics)
+                 (seq (:diagnostics value)))
+    false))
+
+(defn- restart-projection?
+  [value with-operation?]
   (and (map? value)
-       (every? #{:operation :workspace :state :generation-id :transition-id
-                 :diagnostics}
+       (every? (if with-operation?
+                 #{:operation :workspace :state :generation-id :transition-id
+                   :diagnostics}
+                 #{:workspace :state :generation-id :transition-id :diagnostics})
                (keys value))
-       (s/valid? :millstrand.restart/operation (:operation value))
+       (or (not with-operation?) (= :restart (:operation value)))
        (s/valid? :millstrand.restart/workspace (:workspace value))
        (s/valid? :millstrand.restart/state (:state value))
        (or (not (contains? value :generation-id))
@@ -518,14 +552,9 @@
            (s/valid? :millstrand.restart/transition-id (:transition-id value)))
        (or (not (contains? value :diagnostics))
            (s/valid? :millstrand.restart/diagnostics (:diagnostics value)))
-       (case (:state value)
-         :probing (and (contains? value :transition-id)
-                       (contains? value :generation-id))
-         :restarting (contains? value :transition-id)
-         :running (and (contains? value :generation-id)
-                       (not (contains? value :diagnostics)))
-         :failed (contains? value :diagnostics)
-         false)))
+       (restart-projection-state? value)))
+(defn- restart-envelope? [value]
+  (restart-projection? value true))
 (s/def :millstrand.core.specs/restart-result restart-envelope?)
 
 (s/def :millstrand.status/state restart-states)
@@ -534,20 +563,7 @@
 (s/def :millstrand.status/transition-id non-blank-string?)
 (s/def :millstrand.status/diagnostics :millstrand.restart/diagnostics)
 (s/def :millstrand.core.specs/mill-status-projection
-  (s/and map?
-         #(every? #{:state :workspace :generation-id :transition-id :diagnostics}
-                  (keys %))
-         #(s/valid? :millstrand.status/state (:state %))
-         #(s/valid? :millstrand.status/workspace (:workspace %))
-         #(or (not (contains? % :generation-id))
-              (s/valid? :millstrand.status/generation-id (:generation-id %)))
-         #(or (not (contains? % :transition-id))
-              (s/valid? :millstrand.status/transition-id (:transition-id %)))
-         #(or (not (contains? % :diagnostics))
-              (s/valid? :millstrand.status/diagnostics (:diagnostics %)))
-         #(if (= :running (:state %))
-            (contains? % :generation-id)
-            true)))
+  #(restart-projection? % false))
 (s/def :millstrand.core.specs/weaver-status-projection
   (s/and map?
          #(every? #{:generation-id :workspace :storage-kind :storage-label

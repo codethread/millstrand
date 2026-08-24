@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"millstrand-strand-cli/internal/client"
@@ -33,14 +34,17 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 	}
 	var wrote bool
 	var relayErr error
+	admission := s.workspaceAdmissionLock(world.ConfigDir)
 	for {
 		if err := callerCtx.Err(); err != nil {
 			return
 		}
+		admission.Lock()
 		s.mu.Lock()
 		status, transition, targetErr := s.admittedInvokeTargetLocked(world)
 		if transition != nil {
 			s.mu.Unlock()
+			admission.Unlock()
 			if _, err := waitForLifecycleTransitionContext(callerCtx, transition, readyTimeoutFor(envelopeTimeoutMs(req.Payload))); err != nil {
 				if callerCtx.Err() != nil {
 					return
@@ -53,17 +57,24 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		if targetErr != nil {
 			writeErrorFrame(w, req.RequestID, targetErr)
 			s.mu.Unlock()
+			admission.Unlock()
 			return
 		}
 		socketPath, _ := status["socket_path"].(string)
 		weaverID, _ := status["weaver_id"].(string)
+		// Target selection is protected by the workspace admission lock. Once
+		// selected, release the process-global state mutex before any external
+		// socket operation; the workspace lock remains held until the request
+		// frame is admitted, so a same-workspace lifecycle transition cannot
+		// cut over underneath this admission.
+		s.mu.Unlock()
 		admissionOpen := true
 		wrote, relayErr = relayInvokeWithAdmission(callerCtx, socketPath, weaverID, req.Payload, envelopeTimeoutMs(req.Payload), w, func() {
-			s.mu.Unlock()
+			admission.Unlock()
 			admissionOpen = false
 		})
 		if admissionOpen {
-			s.mu.Unlock()
+			admission.Unlock()
 		}
 		if relayErr == nil || wrote {
 			return
@@ -73,6 +84,20 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 	if relayErr != nil && !wrote {
 		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/weaver-forward-failed", Message: "weaver forwarding failed", Details: map[string]any{"detail": relayErr.Error()}})
 	}
+}
+
+func (s *server) workspaceAdmissionLock(configDir string) *sync.Mutex {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.admissionLocks == nil {
+		s.admissionLocks = map[string]*sync.Mutex{}
+	}
+	if lock := s.admissionLocks[configDir]; lock != nil {
+		return lock
+	}
+	lock := &sync.Mutex{}
+	s.admissionLocks[configDir] = lock
+	return lock
 }
 
 // watchCallerConnection turns a client disconnect into cancellation for the
@@ -90,7 +115,17 @@ func watchCallerConnection(conn net.Conn) (context.Context, func()) {
 		for {
 			_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 			_, err := conn.Read(probe[:])
-			if err == nil || !isTimeout(err) {
+			if err == nil {
+				// The one-request protocol permits whitespace after the JSON
+				// value. It can arrive in a later write than the request frame;
+				// consuming it is not caller cancellation.
+				if probe[0] == ' ' || probe[0] == '\t' || probe[0] == '\r' || probe[0] == '\n' {
+					continue
+				}
+				cancel()
+				return
+			}
+			if !isTimeout(err) {
 				cancel()
 				return
 			}
@@ -192,7 +227,20 @@ func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID st
 	if err := callerCtx.Err(); err != nil {
 		return false, err
 	}
-	if err := json.NewEncoder(conn).Encode(reqFrame); err != nil {
+	writeDone := make(chan error, 1)
+	go func() {
+		writeDone <- json.NewEncoder(conn).Encode(reqFrame)
+	}()
+	select {
+	case err := <-writeDone:
+		if err != nil {
+			return false, fmt.Errorf("weaver socket write failed: %w", err)
+		}
+	case <-callerCtx.Done():
+		_ = conn.Close()
+		return false, callerCtx.Err()
+	}
+	if err := callerCtx.Err(); err != nil {
 		return false, fmt.Errorf("weaver socket write failed: %w", err)
 	}
 	if admitted != nil {

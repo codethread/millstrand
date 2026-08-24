@@ -916,6 +916,7 @@
                                           (.getPath probe-state)
                                           (.getPath probe-data))
          diagnostics (atom [])
+         started-runtime (atom nil)
          report! (fn [entry]
                    (let [entry (assoc entry :at (str (Instant/now)))]
                      (swap! diagnostics conj entry)
@@ -926,14 +927,15 @@
        (copy-tree! (:config-dir world) probe-config)
        (report! {:stage :probe/workspace :status :completed
                  :data {:workspace (.getPath probe-root)}})
-       (let [runtime (start! nil (merge opts
-                                        {:world probe-world
-                                         :publish? false
-                                         :storage :sqlite-memory
-                                         :probe? true
-                                         :diagnostic! report!
-                                         :old-generation-baseline
-                                         (:old-generation-baseline opts)}))
+       (let [runtime (reset! started-runtime
+                             (start! nil (merge opts
+                                                {:world probe-world
+                                                 :publish? false
+                                                 :storage :sqlite-memory
+                                                 :probe? true
+                                                 :diagnostic! report!
+                                                 :old-generation-baseline
+                                                 (:old-generation-baseline opts)})))
              _ (report-probe-skipped! report!)
              result (assoc (or (:probe-result runtime) {})
                            :success true
@@ -947,6 +949,19 @@
          (delete-tree! probe-root)
          result)
        (catch Throwable throwable
+         ;; `start!` has its own startup rollback, but failures after it returns
+         ;; (diagnostic reporting, result assembly, or stop) still own live
+         ;; probe resources. Stop them best-effort while retaining the first
+         ;; failure as the primary throwable and the probe log as evidence.
+         (when-let [runtime @started-runtime]
+           (report-failure! report! throwable
+                            {:stage :probe/runtime-stop
+                             :status :failed
+                             :data {:reason :post-start-probe-failure}})
+           (try
+             (stop! runtime)
+             (catch Throwable stop-failure
+               (.addSuppressed throwable stop-failure))))
          (let [initial-failure-context (failure-context throwable)
                failure (merge {:success false
                                :stage :probe/failure
