@@ -75,8 +75,9 @@
                 {"protocol_version" 1
                  "request_id" "request-1"
                  "weaver_id" "weaver-1"
-                 "operation" "process.get"
-                 "arguments" {"handle" "handle-1"}}))
+                 "operation" "invoke"
+                 "arguments" {"handle" "handle-1"}
+                 "options" {}}))
   (is (s/valid? :millstrand.core.mill-protocol/response
                 {"protocol_version" 1
                  "request_id" "request-1"
@@ -87,15 +88,36 @@
                      {"protocol_version" 1
                       "request_id" "request-1"
                       "weaver_id" "weaver-1"
-                      "operation" "process.get"
-                      "arguments" {}
-                      "options" {}}))))
+                      "operation" "invoke"
+                      "arguments" {}}))))
 
 (deftest successful-wire-results-use-an-explicit-json-shape
   (is (s/valid? :millstrand.core.specs/json-safe-value
                 {"items" [1 true nil]}))
   (doseq [value [{:items #{:unordered}}
                  {1 "numeric key"}
-                 {:items (Object.)}]]
+                 {:items (Object.)}
+                 {:ratio 1/2}
+                 {:nan Double/NaN}
+                 {:infinite Double/POSITIVE_INFINITY}]]
     (is (not (s/valid? :millstrand.core.specs/json-safe-value value))
         (pr-str value))))
+
+(deftest wire-final-response-shapes-are-closed
+  (let [identity {"protocol_version" 3 "request_id" "request-1"}]
+    (is (s/valid? :millstrand.core.mill-protocol/success
+                  (merge identity {"ok" true "result" {} "error" nil})))
+    (is (s/valid? :millstrand.core.mill-protocol/success
+                  (merge identity {"ok" true "result" "text" "error" nil "verbatim" true})))
+    (is (s/valid? :millstrand.core.mill-protocol/error-response
+                  (merge identity {"ok" false "result" nil
+                                   "error" {"type" "protocol" "code" "protocol/error"
+                                            "message" "bad" "details" {}}})))
+    (is (s/valid? :millstrand.core.mill-protocol/stream-header
+                  (merge identity {"stream" true})))
+    (is (s/valid? :millstrand.core.mill-protocol/stream-data {"done" true}))
+    (is (s/valid? :millstrand.core.mill-protocol/stream-terminator
+                  (merge identity {"done" true "success" true "result" {}})))
+    (is (not (s/valid? :millstrand.core.mill-protocol/stream-terminator
+                       (merge identity {"done" true "success" true "result" {}
+                                        "extra" true}))))))

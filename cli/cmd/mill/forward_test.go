@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,7 +41,8 @@ func TestInvokeRelaysSingleWeaverResponse(t *testing.T) {
 
 func TestInvokeReportsTruncatedResponseWithoutReplay(t *testing.T) {
 	world, cfg := forwardWorld(t)
-	serveFakeWeaverPartialResponse(t, world, []byte("not-json"))
+	var decodedRequests atomic.Int32
+	serveFakeWeaverPartialResponse(t, world, []byte("not-json"), &decodedRequests)
 	writeWeaverMetadata(t, world, os.Getpid(), "weaver-truncated")
 
 	frames := runInvoke(t, cfg, map[string]any{"name": "read", "argv": []any{}, "payloads": map[string]any{}})
@@ -54,6 +56,9 @@ func TestInvokeReportsTruncatedResponseWithoutReplay(t *testing.T) {
 	if errFrame["details"].(map[string]any)["request_delivery"] != true {
 		t.Fatalf("truncated response must never be replayed: %#v", errFrame)
 	}
+	if got := decodedRequests.Load(); got != 1 {
+		t.Fatalf("ambiguous delivery replayed the request: decoded server requests=%d", got)
+	}
 }
 
 func TestInvokeRelaysStreamFramesVerbatim(t *testing.T) {
@@ -63,6 +68,7 @@ func TestInvokeRelaysStreamFramesVerbatim(t *testing.T) {
 		return [][]byte{
 			mustFrame(t, map[string]any{"protocol_version": client.ProtocolVersion, "request_id": id, "stream": true}),
 			mustFrame(t, map[string]any{"i": 0}),
+			mustFrame(t, map[string]any{"done": true}),
 			mustFrame(t, map[string]any{"i": 1}),
 			mustFrame(t, map[string]any{"protocol_version": client.ProtocolVersion, "request_id": id, "done": true, "success": true, "result": map[string]any{"emitted": 2}}),
 		}
@@ -70,17 +76,17 @@ func TestInvokeRelaysStreamFramesVerbatim(t *testing.T) {
 	writeWeaverMetadata(t, world, os.Getpid(), "weaver-stream")
 
 	frames := runInvoke(t, cfg, map[string]any{"name": "test-stream", "argv": []any{}, "payloads": map[string]any{}})
-	if len(frames) != 4 {
-		t.Fatalf("expected header + 2 emitted + terminator, got %#v", frames)
+	if len(frames) != 5 {
+		t.Fatalf("expected header + 3 emitted + terminator, got %#v", frames)
 	}
 	if frames[0]["stream"] != true {
 		t.Fatalf("first frame is not a stream header: %#v", frames[0])
 	}
-	if frames[1]["i"] != float64(0) || frames[2]["i"] != float64(1) {
+	if frames[1]["i"] != float64(0) || frames[2]["done"] != true || frames[3]["i"] != float64(1) {
 		t.Fatalf("emitted lines not relayed verbatim: %#v", frames)
 	}
-	if frames[3]["done"] != true || frames[3]["success"] != true {
-		t.Fatalf("terminator not relayed verbatim: %#v", frames[3])
+	if frames[4]["done"] != true || frames[4]["success"] != true {
+		t.Fatalf("terminator not relayed verbatim: %#v", frames[4])
 	}
 }
 
@@ -425,7 +431,7 @@ func serveFakeWeaverStream(t *testing.T, world config.World, handler func(map[st
 	}()
 }
 
-func serveFakeWeaverPartialResponse(t *testing.T, world config.World, response []byte) {
+func serveFakeWeaverPartialResponse(t *testing.T, world config.World, response []byte, decodedRequests *atomic.Int32) {
 	t.Helper()
 	socket := filepath.Join(world.StateDir, "weaver.sock")
 	_ = os.Remove(socket)
@@ -446,6 +452,9 @@ func serveFakeWeaverPartialResponse(t *testing.T, world config.World, response [
 				var req map[string]any
 				if err := json.NewDecoder(bufio.NewReader(c)).Decode(&req); err != nil {
 					return
+				}
+				if decodedRequests != nil {
+					decodedRequests.Add(1)
 				}
 				_, _ = c.Write(response)
 			}(conn)

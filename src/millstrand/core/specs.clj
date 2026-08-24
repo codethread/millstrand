@@ -373,6 +373,7 @@
   "Return true when `value` is an encodable finite JSON number."
   [value]
   (and (number? value)
+       (not (instance? clojure.lang.Ratio value))
        (or (not (or (instance? Double value) (instance? Float value)))
            (let [n (.doubleValue ^Number value)]
              (and (not (Double/isNaN n))
@@ -491,8 +492,7 @@
 (def ^:private admission-states #{:open :closed})
 (def ^:private diagnostic-statuses #{:completed :failed :skipped :in-progress})
 (def ^:private protocol-operations
-  #{"process.launch" "process.get" "process.list-owned"
-    "process.cancel" "process.acknowledge"})
+  #{"invoke" "status"})
 
 (s/def :millstrand.restart/operation restart-operations)
 (s/def :millstrand.restart/workspace non-blank-string?)
@@ -618,6 +618,7 @@
   (s/and map?
          #(every? data-first-value? (keys %))
          #(every? data-first-value? (vals %))))
+(s/def :millstrand.protocol/options #(= {} %))
 (s/def :millstrand.protocol/error-type #{"domain" "protocol" "transport"})
 (s/def :millstrand.protocol/error
   (s/and map?
@@ -629,26 +630,74 @@
 (s/def :millstrand.core.mill-protocol/request
   (s/and map?
          #(= #{"protocol_version" "request_id" "weaver_id" "operation"
-               "arguments"}
+               "arguments" "options"}
              (set (keys %)))
          #(s/valid? :millstrand.protocol/version (get % "protocol_version"))
          #(s/valid? :millstrand.protocol/request-id (get % "request_id"))
          #(s/valid? :millstrand.protocol/weaver-id (get % "weaver_id"))
          #(s/valid? :millstrand.protocol/operation (get % "operation"))
-         #(s/valid? :millstrand.protocol/arguments (get % "arguments"))))
-(s/def :millstrand.core.mill-protocol/response
+         #(s/valid? :millstrand.protocol/arguments (get % "arguments"))
+         #(s/valid? :millstrand.protocol/options (get % "options"))))
+(defn- wire-identity?
+  [value]
+  (and (s/valid? :millstrand.protocol/version (get value "protocol_version"))
+       (s/valid? :millstrand.protocol/request-id (get value "request_id"))))
+
+(defn- response-identity?
+  [value]
+  (and (s/valid? :millstrand.protocol/version (get value "protocol_version"))
+       (or (nil? (get value "request_id"))
+           (s/valid? :millstrand.protocol/request-id (get value "request_id")))))
+
+(def ^:private response-keys
+  #{"protocol_version" "request_id" "ok" "result" "error"})
+
+(s/def :millstrand.core.mill-protocol/success
   (s/and map?
-         #(= #{"protocol_version" "request_id" "ok" "result" "error"}
-             (set (keys %)))
-         #(s/valid? :millstrand.protocol/version (get % "protocol_version"))
-         #(s/valid? :millstrand.protocol/request-id (get % "request_id"))
+         #(or (= response-keys (set (keys %)))
+              (= (conj response-keys "verbatim") (set (keys %))))
+         wire-identity?
          #(boolean? (get % "ok"))
-         #(if (get % "ok")
-            (and (nil? (get % "error"))
-                 (s/valid? :millstrand.core.specs/json-safe-value
-                           (get % "result")))
-            (and (nil? (get % "result"))
-                 (s/valid? :millstrand.protocol/error (get % "error"))))))
+         #(true? (get % "ok"))
+         #(nil? (get % "error"))
+         #(s/valid? :millstrand.core.specs/json-safe-value (get % "result"))
+         #(or (not (contains? % "verbatim")) (true? (get % "verbatim")))
+         #(or (not (contains? % "verbatim")) (string? (get % "result")))))
+(s/def :millstrand.core.mill-protocol/error-response
+  (s/and map?
+         #(= response-keys (set (keys %)))
+         response-identity?
+         #(false? (get % "ok"))
+         #(nil? (get % "result"))
+         #(s/valid? :millstrand.protocol/error (get % "error"))))
+(s/def :millstrand.core.mill-protocol/response
+  (s/or :success :millstrand.core.mill-protocol/success
+        :error :millstrand.core.mill-protocol/error-response))
+(s/def :millstrand.core.mill-protocol/stream-header
+  (s/and map?
+         #(= #{"protocol_version" "request_id" "stream"} (set (keys %)))
+         wire-identity?
+         #(true? (get % "stream"))))
+(s/def :millstrand.core.mill-protocol/stream-data
+  :millstrand.core.specs/json-safe-value)
+(s/def :millstrand.core.mill-protocol/stream-terminator
+  (s/or
+   :success
+   (s/and map?
+          #(= #{"protocol_version" "request_id" "done" "success" "result"}
+              (set (keys %)))
+          wire-identity?
+          #(true? (get % "done"))
+          #(true? (get % "success"))
+          #(s/valid? :millstrand.core.specs/json-safe-value (get % "result")))
+   :error
+   (s/and map?
+          #(= #{"protocol_version" "request_id" "done" "success" "error"}
+              (set (keys %)))
+          wire-identity?
+          #(true? (get % "done"))
+          #(false? (get % "success"))
+          #(s/valid? :millstrand.protocol/error (get % "error")))))
 
 (defn omitted-attribute-descriptor?
   "Return true when value conforms to the lean-read omission descriptor spec."

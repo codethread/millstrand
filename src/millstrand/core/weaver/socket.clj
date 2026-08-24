@@ -42,13 +42,34 @@
 (def ^:private default-standard-deadline-ms 10000)
 
 (defn- protocol-error [request-id code message details]
-  {"protocol_version" protocol/version "request_id" request-id "ok" false "result" nil
-   "error" {"type" "protocol" "code" code "message" message "details" (or details {})}})
+  (let [frame {"protocol_version" protocol/version "request_id" request-id "ok" false "result" nil
+               "error" {"type" "protocol" "code" code "message" message "details" (or details {})}}]
+    (when-not (s/valid? :millstrand.core.mill-protocol/error-response frame)
+      (throw (ex-info "Protocol error response does not match the shared wire spec"
+                      {:response frame
+                       :explain (s/explain-data
+                                 :millstrand.core.mill-protocol/error-response frame)})))
+    frame))
+
+(defn- json-number
+  "Return a number that `clojure.data.json` can encode as JSON."
+  [value]
+  (let [value (if (instance? clojure.lang.Ratio value) (double value) value)]
+    (when-not (s/valid? :millstrand.core.specs/json-safe-value value)
+      (throw (ex-info "Number is not JSON-safe" {:value value})))
+    (try
+      (let [_encoded (json/write-str value)]
+        (when-not _encoded
+          (throw (ex-info "Number encoder returned no JSON" {:value value}))))
+      value
+      (catch Exception e
+        (throw (ex-info "Number cannot be encoded as JSON" {:value value} e))))))
 
 (defn- json-safe-value [value]
   (cond
     (nil? value) nil
-    (or (string? value) (number? value) (boolean? value)) value
+    (or (string? value) (boolean? value)) value
+    (number? value) (try (json-number value) (catch Exception _ (pr-str value)))
     (keyword? value) (subs (str value) 1)
     (symbol? value) (str value)
     (map? value) (into {} (map (fn [[k v]] [(json-safe-value k) (json-safe-value v)])) value)
@@ -66,10 +87,7 @@
         (cond
           (nil? value) nil
           (or (string? value) (boolean? value)) value
-          (number? value) (if (s/valid? :millstrand.core.specs/json-safe-value value)
-                            value
-                            (throw (ex-info "Successful result contains a non-finite number"
-                                            {:value value})))
+          (number? value) (json-number value)
           (keyword? value) (subs (str value) 1)
           (or (symbol? value) (inst? value) (uuid? value)) (str value)
           (map? value) (let [entries (map (fn [[k v]]
@@ -99,15 +117,15 @@
         wire-result (strict-json-safe-value (if verbatim?
                                               (help/verbatim-text result)
                                               result))
-        frame {"protocol_version" protocol/version "request_id" request-id "ok" true
-               "result" wire-result "error" nil}]
-    (when-not (s/valid? :millstrand.core.mill-protocol/response frame)
+        frame (cond-> {"protocol_version" protocol/version "request_id" request-id "ok" true
+                       "result" wire-result "error" nil}
+                verbatim? (assoc "verbatim" true))]
+    (when-not (s/valid? :millstrand.core.mill-protocol/success frame)
       (throw (ex-info "Successful response does not match the shared wire spec"
                       {:response frame
                        :explain (s/explain-data
-                                 :millstrand.core.mill-protocol/response frame)})))
-    (cond-> frame
-      verbatim? (assoc "verbatim" true))))
+                                 :millstrand.core.mill-protocol/success frame)})))
+    frame))
 
 (defn- rendered-code
   "Render a present ex-data `:code` as the wire's code string (SPEC-004.C24),
@@ -164,12 +182,32 @@
         (invalid-code-envelope message details)))))
 
 (defn- domain-error [request-id e]
-  {"protocol_version" protocol/version "request_id" request-id "ok" false "result" nil
-   "error" (error-envelope e)})
+  (let [frame {"protocol_version" protocol/version "request_id" request-id "ok" false "result" nil
+               "error" (error-envelope e)}]
+    (when-not (s/valid? :millstrand.core.mill-protocol/error-response frame)
+      (throw (ex-info "Domain error response does not match the shared wire spec"
+                      {:response frame})))
+    frame))
 
 (defn- transport-error [request-id e]
-  {"protocol_version" protocol/version "request_id" request-id "ok" false "result" nil
-   "error" {"type" "transport" "code" "transport/server-error" "message" (ex-message e) "details" {}}})
+  (let [frame {"protocol_version" protocol/version "request_id" request-id "ok" false "result" nil
+               "error" {"type" "transport" "code" "transport/server-error" "message" (ex-message e) "details" {}}}]
+    (when-not (s/valid? :millstrand.core.mill-protocol/error-response frame)
+      (throw (ex-info "Transport error response does not match the shared wire spec"
+                      {:response frame})))
+    frame))
+
+(defn- result-not-encodable
+  "Return the protocol error used after an operation has completed.
+
+  Encoding is deliberately a separate seam from operation dispatch: callers
+  must not mistake a committed operation for a failed or replayable one merely
+  because its result cannot cross the JSON boundary."
+  [request-id e]
+  (protocol-error request-id "protocol/result-not-encodable"
+                  "Operation completed but its result could not be encoded as JSON"
+                  {"operation_completed" true
+                   "detail" (or (ex-message e) "result encoding failed")}))
 
 (defn- uninitialized-db-error? [e]
   (and (instance? SQLiteException e)
@@ -247,11 +285,10 @@
       (protocol-error (get req "request_id") "protocol/identity-mismatch" "Weaver identity mismatch" {})
       (not (allowed-operations (get req "operation")))
       (protocol-error (get req "request_id") "protocol/operation-not-allowed" "Operation is not available over JSON socket" {"operation" (get req "operation")})
+      (not (s/valid? :millstrand.core.mill-protocol/request req))
+      (protocol-error (get req "request_id") "protocol/malformed-request" "Request envelope does not match protocol" {})
       (not (map? (get req "arguments")))
       (protocol-error (get req "request_id") "protocol/malformed-request" "arguments must be an object" {})
-      (not= {} (get req "options"))
-      (protocol-error (get req "request_id") "protocol/malformed-request" "options must be empty" {})
-
       :else (argument-error req))))
 
 (defn- status-result
@@ -292,16 +329,25 @@
                        :explain (s/explain-data
                                  :millstrand.core.specs/weaver-status-projection
                                  status-projection)})))
-    (if include-registry?
-      (do
-        (when-not (s/valid? :millstrand.registry-projection/registry projection)
-          (throw (ex-info "Registry projection has an invalid socket status shape"
-                          {:projection projection
-                           :explain (s/explain-data
-                                     :millstrand.registry-projection/registry
-                                     projection)})))
-        (assoc result "registry_projection" projection))
-      result)))
+    (let [emitted-projection {:generation-id (get result "generation_id")
+                              :workspace (get result "config_dir")
+                              :storage-kind (keyword (get result "database_kind"))
+                              :storage-label (get result "database_label")
+                              :database-path (get result "database_path")}]
+      (when-not (= status-projection emitted-projection)
+        (throw (ex-info "Weaver status projection does not match emitted status"
+                        {:projection status-projection
+                         :emitted emitted-projection})))
+      (if include-registry?
+        (do
+          (when-not (s/valid? :millstrand.registry-projection/registry projection)
+            (throw (ex-info "Registry projection has an invalid socket status shape"
+                            {:projection projection
+                             :explain (s/explain-data
+                                       :millstrand.registry-projection/registry
+                                       projection)})))
+          (assoc result "registry_projection" projection))
+        result))))
 
 (defn- api [sym]
   (requiring-resolve (symbol "millstrand.api.weaver.alpha" (name sym))))
@@ -396,12 +442,24 @@
         result))))
 
 (defn- stream-header [request-id]
-  {"protocol_version" protocol/version "request_id" request-id "stream" true})
+  (let [frame {"protocol_version" protocol/version "request_id" request-id "stream" true}]
+    (when-not (s/valid? :millstrand.core.mill-protocol/stream-header frame)
+      (throw (ex-info "Stream header does not match the shared wire spec" {:frame frame})))
+    frame))
 
 (defn- stream-terminator [request-id success? result error]
-  (cond-> {"protocol_version" protocol/version "request_id" request-id "done" true "success" success?}
-    success? (assoc "result" result)
-    (not success?) (assoc "error" error)))
+  (let [frame (cond-> {"protocol_version" protocol/version "request_id" request-id "done" true "success" success?}
+                success? (assoc "result" (strict-json-safe-value result))
+                (not success?) (assoc "error" error))]
+    (when-not (s/valid? :millstrand.core.mill-protocol/stream-terminator frame)
+      (throw (ex-info "Stream terminator does not match the shared wire spec" {:frame frame})))
+    frame))
+
+(defn- stream-data [value]
+  (let [frame (strict-json-safe-value value)]
+    (when-not (s/valid? :millstrand.core.mill-protocol/stream-data frame)
+      (throw (ex-info "Stream data does not match the shared wire spec" {:frame frame})))
+    frame))
 
 (defn- handle-stream-invoke!
   "Serve a `:stream? true` op: header frame, emitted NDJSON lines, terminator.
@@ -424,10 +482,14 @@
       (do
         (write-frame! (stream-header request-id))
         (try
-          (let [emit! write-frame!
-                terminator (invoke-op! runtime op-name (get args "argv")
-                                       (assoc envelope :emit! emit!))]
-            (write-frame! (stream-terminator request-id true terminator nil)))
+          (let [emit! #(write-frame! (stream-data %))
+                result (invoke-op! runtime op-name (get args "argv")
+                                   (assoc envelope :emit! emit!))]
+            (try
+              (write-frame! (stream-terminator request-id true result nil))
+              (catch Exception e
+                (write-frame! (stream-terminator request-id false nil
+                                                 (get (result-not-encodable request-id e) "error"))))))
           (catch Exception e
             (write-frame! (stream-terminator request-id false nil
                                              (get (error-frame-with-context request-id "invoke" e) "error")))))))))
@@ -436,15 +498,19 @@
   "Serve a single-result op: gate by the invoked leaf's hook class, dispatch
   under the leaf's effective deadline, and write exactly one response frame."
   [runtime request-id args entry classes envelope write-frame!]
-  (write-frame!
-   (try
-     (run-payload-hooks-if-mutating! runtime entry (:hook-class classes)
-                                     request-id args {})
-     (success request-id
-              (invoke-with-deadline runtime (:name entry) (get args "argv")
-                                    envelope (effective-deadline-ms
-                                              (:deadline-class classes) envelope)))
-     (catch Exception e (error-frame-with-context request-id "invoke" e)))))
+  (let [result (try
+                 (run-payload-hooks-if-mutating! runtime entry (:hook-class classes)
+                                                 request-id args {})
+                 {:value (invoke-with-deadline runtime (:name entry) (get args "argv")
+                                               envelope (effective-deadline-ms
+                                                         (:deadline-class classes) envelope))}
+                 (catch Exception e {:error (error-frame-with-context request-id "invoke" e)}))]
+    (if-let [error (:error result)]
+      (write-frame! error)
+      (try
+        (write-frame! (success request-id (:value result)))
+        (catch Exception e
+          (write-frame! (result-not-encodable request-id e)))))))
 
 (defn- handle-invoke!
   "Dispatch an invoke request. Unknown ops — and unresolvable verb tokens of a
@@ -471,7 +537,10 @@
                            (catch Exception e {:error (error-frame-with-context request-id "invoke" e)})))]
         (cond
           (:error alias) (write-frame! (:error alias))
-          (some? (:result alias)) (write-frame! (success request-id (:result alias)))
+          (some? (:result alias)) (write-frame! (try
+                                                  (success request-id (:result alias))
+                                                  (catch Exception e
+                                                    (result-not-encodable request-id e))))
           (:error classes) (write-frame! (:error classes))
           (:stream? entry) (handle-stream-invoke! runtime request-id args entry
                                                   (:ok classes) envelope write-frame!)

@@ -299,7 +299,7 @@ func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID st
 				streaming = true
 				_ = conn.SetDeadline(time.Time{}) // streams run unbounded
 			}
-			if streaming && isStreamTerminatorLine(line) {
+			if streaming && isStreamTerminatorLine(line, requestID) {
 				streamTerminated = true
 			}
 			if _, werr := w.Write(line); werr != nil {
@@ -310,6 +310,12 @@ func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID st
 			if ferr := w.Flush(); ferr != nil {
 				outcome.clientWriteFailed = true
 				outcome.err = ferr
+				return outcome
+			}
+			// A complete non-stream frame is the whole response. Do not read for
+			// another frame and turn a later socket error into a contradictory
+			// transport response.
+			if !streaming || streamTerminated {
 				return outcome
 			}
 		} else if len(line) > 0 {
@@ -344,14 +350,52 @@ func isStreamHeaderLine(line []byte) bool {
 	return frame.Stream
 }
 
-func isStreamTerminatorLine(line []byte) bool {
-	var frame struct {
-		Done bool `json:"done"`
-	}
+func isStreamTerminatorLine(line []byte, requestID string) bool {
+	var frame map[string]json.RawMessage
 	if err := json.Unmarshal(line, &frame); err != nil {
 		return false
 	}
-	return frame.Done
+	if frame == nil {
+		return false
+	}
+	var done, success bool
+	if err := json.Unmarshal(frame["done"], &done); err != nil || !done {
+		return false
+	}
+	if err := json.Unmarshal(frame["success"], &success); err != nil {
+		return false
+	}
+	if !hasExactKeys(frame, map[string]bool{"protocol_version": true, "request_id": true, "done": true, "success": true, "result": success, "error": !success}) {
+		return false
+	}
+	var version int
+	if err := json.Unmarshal(frame["protocol_version"], &version); err != nil || version != client.ProtocolVersion {
+		return false
+	}
+	var actualRequestID string
+	if err := json.Unmarshal(frame["request_id"], &actualRequestID); err != nil || actualRequestID == "" || actualRequestID != requestID {
+		return false
+	}
+	return true
+}
+
+func hasExactKeys(frame map[string]json.RawMessage, expected map[string]bool) bool {
+	requiredCount := 0
+	for _, required := range expected {
+		if required {
+			requiredCount++
+		}
+	}
+	if len(frame) != requiredCount {
+		return false
+	}
+	for key, required := range expected {
+		_, present := frame[key]
+		if present != required {
+			return false
+		}
+	}
+	return true
 }
 
 // envelopeTimeoutMs extracts the millisecond timeout the strand dispatcher put

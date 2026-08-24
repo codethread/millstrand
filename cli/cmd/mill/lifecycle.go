@@ -139,9 +139,6 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 		return waitForLifecycleTransition(transition, readyTimeoutFor(req.ReadyTimeoutMs))
 	}
 	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
-		if status, stale := readStatus(world); status != nil && !stale {
-			return status, nil
-		}
 		return nil, recordErr
 	} else if ok && record.State == restartStateFailed {
 		status := record.status(world)
@@ -171,6 +168,10 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 		if status == nil {
 			status = baseStatusWithName(world, "starting", child.name)
 			status["pid"] = child.cmd.Process.Pid
+		}
+		if stale {
+			s.mu.Unlock()
+			return nil, fmt.Errorf("stale restart state for selected workspace: %v", status["stale_reason"])
 		}
 		s.mu.Unlock()
 		return status, nil
@@ -369,18 +370,17 @@ func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
 			return transitionResultStatus(transition)
 		}
 	}
-	if record, ok := readRestartRecord(world); ok && record.State == restartStateFailed {
+	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+		status := baseStatus(world, "stale")
+		status["stale_reason"] = recordErr.Error()
+		return status
+	} else if ok && record.State == restartStateFailed {
 		return record.status(world)
 	}
 	if status, stale := readStatus(world); status != nil {
 		if stale {
 			status["state"] = "stale"
 		}
-		return status
-	}
-	if _, _, recordErr := readRestartRecordDetailed(world); recordErr != nil {
-		status := baseStatus(world, "stale")
-		status["stale_reason"] = recordErr.Error()
 		return status
 	}
 	if child := s.children[world.ConfigDir]; child != nil {
@@ -516,7 +516,9 @@ func readStatus(world config.World) (map[string]any, bool) {
 	}
 	status := statusFromMetadata(m, "running")
 	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
-		status["restart_record_error"] = recordErr.Error()
+		status["state"] = "stale"
+		status["stale_reason"] = recordErr.Error()
+		return status, true
 	} else if ok && record.State == restartStateRunning {
 		mergeRestartRecordStatus(status, record)
 	}

@@ -122,6 +122,16 @@
   [_ctx]
   (Object.))
 
+(defn ratio-result-op
+  "Return a ratio so the JSON boundary must convert it to a JSON number."
+  [_ctx]
+  {:ratio 1/2})
+
+(defn nan-result-op
+  "Return a non-encodable floating-point value for boundary rejection."
+  [_ctx]
+  {:nan Double/NaN})
+
 (defn throwing-op
   "Throw rich, partly non-JSON ex-data to exercise json-safe error rendering."
   [_ctx]
@@ -890,9 +900,21 @@
                            'millstrand.core.weaver.socket-test/opaque-result-op)
       (let [response (invoke-request rt "opaque-result" [])]
         (is (false? (get response "ok")))
-        (is (= "domain/error" (get-in response ["error" "code"])))
+        (is (= "protocol/result-not-encodable" (get-in response ["error" "code"])))
         (is (str/includes? (get-in response ["error" "message"])
-                           "unsupported value"))))))
+                           "Operation completed"))))))
+
+(deftest json-socket-result-number-boundary-is-explicit
+  (with-runtime
+    (fn [rt _]
+      (weaver/register-op! rt 'ratio-result raw-mutating-standard
+                           'millstrand.core.weaver.socket-test/ratio-result-op)
+      (weaver/register-op! rt 'nan-result raw-mutating-standard
+                           'millstrand.core.weaver.socket-test/nan-result-op)
+      (is (= 0.5 (get-in (invoke-request rt "ratio-result" []) ["result" "ratio"])))
+      (let [response (invoke-request rt "nan-result" [])]
+        (is (= "protocol/result-not-encodable" (get-in response ["error" "code"])))
+        (is (true? (get-in response ["error" "details" "operation_completed"])))))))
 
 (deftest json-socket-invoke-renders-keyword-error-codes-whole
   (with-runtime

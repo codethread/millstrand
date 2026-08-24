@@ -193,6 +193,57 @@ func TestRestartRecordValidationRejectsUnknownAndStateDependentShapes(t *testing
 	}
 }
 
+func TestMalformedRestartRecordRefusesStartBeforeLiveMetadataFallback(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if processAlive(cmd.Process.Pid) {
+			terminatePID(cmd.Process.Pid)
+			waitForPIDExit(cmd.Process.Pid, time.Second)
+		}
+	})
+	writeWeaverMetadata(t, world, cmd.Process.Pid, "live-generation")
+	if err := os.WriteFile(restartRecordPath(world), []byte(`{"state":"failed","transition_id":"transition-1","updated_at":"now"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}}
+	if status, err := s.startWeaver(client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg}); err == nil || status != nil {
+		t.Fatalf("start fell back to live metadata despite malformed restart record: status=%#v err=%v", status, err)
+	}
+	status := s.weaverStatusForWorld(world)
+	if status["state"] != "stale" || status["stale_reason"] == nil {
+		t.Fatalf("status did not refuse malformed restart record: %#v", status)
+	}
+}
+
+func TestRestartRecordStatusPreservesOptionalFieldPresence(t *testing.T) {
+	world := config.World{ConfigDir: "/tmp/world", StateDir: t.TempDir()}
+	recordJSON := `{"state":"failed","transition_id":"transition-1","updated_at":"now","old_generation_stopped":false,"failure":{"stage":"launch","message":"startup failed"}}`
+	if err := os.WriteFile(restartRecordPath(world), []byte(recordJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	record, present, err := readRestartRecordDetailed(world)
+	if err != nil || !present {
+		t.Fatalf("valid optional-field record was rejected: record=%#v present=%v err=%v", record, present, err)
+	}
+	status := record.status(world)
+	if _, ok := status["generation_id"]; ok {
+		t.Fatalf("absent generation_id was invented in status: %#v", status)
+	}
+	if stopped, ok := status["old_generation_stopped"]; !ok || stopped != false {
+		t.Fatalf("explicit false old_generation_stopped was lost: %#v", status)
+	}
+}
+
 func TestLegacyLiveMetadataWithoutGenerationRemainsAdmitted(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
 	source := tempSource(t)
@@ -775,8 +826,8 @@ func TestFailedProbeRetainsOldGenerationAndDiagnostics(t *testing.T) {
 	if !processAlive(s.children[world.ConfigDir].cmd.Process.Pid) {
 		t.Fatal("failed probe stopped the admitted old generation")
 	}
-	record, ok := readRestartRecord(world)
-	if !ok || record.State != restartStateRunning || record.Probe == nil {
-		t.Fatalf("probe diagnostics were not retained: %#v ok=%v", record, ok)
+	record, ok, recordErr := readRestartRecordDetailed(world)
+	if recordErr != nil || !ok || record.State != restartStateRunning || record.Probe == nil {
+		t.Fatalf("probe diagnostics were not retained: %#v ok=%v err=%v", record, ok, recordErr)
 	}
 }
