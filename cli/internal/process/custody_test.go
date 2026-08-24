@@ -161,7 +161,7 @@ func TestCustodyTERMIgnoringChildHelper(t *testing.T) {
 		if err := os.WriteFile(os.Getenv("CUSTODY_HELPER_PID_FILE"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
 			os.Exit(2)
 		}
-		waitForHelperRelease()
+		waitForHelperRelease(os.Getenv("CUSTODY_HELPER_CHILD_RELEASE_PATH"))
 	}
 	if role != "leader" {
 		os.Exit(2)
@@ -174,14 +174,24 @@ func TestCustodyTERMIgnoringChildHelper(t *testing.T) {
 	if err := os.WriteFile(os.Getenv("CUSTODY_HELPER_LEADER_PID_FILE"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
 		os.Exit(2)
 	}
-	waitForHelperRelease()
+	waitForHelperRelease(os.Getenv("CUSTODY_HELPER_RELEASE_PATH"))
 }
 
-func waitForHelperRelease() {
-	released := make(chan os.Signal, 1)
-	signal.Notify(released, syscall.SIGUSR1)
-	defer signal.Stop(released)
-	<-released
+func waitForHelperRelease(path string) {
+	if strings.TrimSpace(path) == "" {
+		os.Exit(2)
+	}
+	for {
+		file, err := os.Open(path)
+		if err == nil {
+			_ = file.Close()
+			return
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			os.Exit(2)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func waitPIDFile(t *testing.T, path string) int {
@@ -207,54 +217,31 @@ func waitPIDFile(t *testing.T, path string) int {
 	}
 }
 
-func terminatePID(t *testing.T, pid int) {
+func releaseHelper(t *testing.T, path string) {
 	t.Helper()
-	if pid > 0 && Alive(pid) {
-		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-			t.Errorf("PID-specific cleanup for %d failed: %v", pid, err)
-		}
+	if err := os.WriteFile(path, []byte("release\n"), 0o600); err != nil {
+		t.Errorf("helper release marker %s could not be written: %v", path, err)
 	}
 }
 
-func releasePID(t *testing.T, pid int) {
+func cleanupHelper(t *testing.T, releasePaths ...string) {
 	t.Helper()
-	if pid > 0 && Alive(pid) {
-		if err := syscall.Kill(pid, syscall.SIGUSR1); err != nil && !errors.Is(err, syscall.ESRCH) {
-			t.Errorf("PID-specific helper release for %d failed: %v", pid, err)
-		}
+	for _, path := range releasePaths {
+		releaseHelper(t, path)
 	}
 }
 
-func helperPID(path string) int {
-	value, err := os.ReadFile(path)
-	if err != nil {
-		return 0
-	}
-	pid, err := strconv.Atoi(string(value))
-	if err != nil {
-		return 0
-	}
-	return pid
-}
-
-func cleanupHelper(t *testing.T, pidFiles ...string) {
-	t.Helper()
-	for _, path := range pidFiles {
-		pid := helperPID(path)
-		releasePID(t, pid)
-		terminatePID(t, pid)
-	}
-}
-
-func termIgnoringChildSpec(t *testing.T, root, childPIDFile, leaderPIDFile string) LaunchSpec {
+func termIgnoringChildSpec(t *testing.T, root, childPIDFile, leaderPIDFile, childReleasePath, leaderReleasePath string) LaunchSpec {
 	t.Helper()
 	return LaunchSpec{
 		Argv: []string{os.Args[0], "-test.run=TestCustodyTERMIgnoringChildHelper", "--"},
 		CWD:  root,
 		Env: map[string]string{
-			"CUSTODY_HELPER_ROLE":            "leader",
-			"CUSTODY_HELPER_PID_FILE":        childPIDFile,
-			"CUSTODY_HELPER_LEADER_PID_FILE": leaderPIDFile,
+			"CUSTODY_HELPER_ROLE":               "leader",
+			"CUSTODY_HELPER_PID_FILE":           childPIDFile,
+			"CUSTODY_HELPER_LEADER_PID_FILE":    leaderPIDFile,
+			"CUSTODY_HELPER_CHILD_RELEASE_PATH": childReleasePath,
+			"CUSTODY_HELPER_RELEASE_PATH":       leaderReleasePath,
 		},
 	}
 }
@@ -267,11 +254,13 @@ func TestCancelKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
 	}
 	childPIDFile := filepath.Join(root, "child.pid")
 	leaderPIDFile := filepath.Join(root, "leader.pid")
-	row, err := custody.Launch("owner/tree", "cancel", termIgnoringChildSpec(t, root, childPIDFile, leaderPIDFile))
+	childReleasePath := filepath.Join(root, "child.release")
+	leaderReleasePath := filepath.Join(root, "leader.release")
+	row, err := custody.Launch("owner/tree", "cancel", termIgnoringChildSpec(t, root, childPIDFile, leaderPIDFile, childReleasePath, leaderReleasePath))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cleanupHelper(t, childPIDFile, leaderPIDFile) })
+	t.Cleanup(func() { cleanupHelper(t, childReleasePath, leaderReleasePath) })
 	_ = waitPIDFile(t, leaderPIDFile)
 	childPID := waitPIDFile(t, childPIDFile)
 	escalated := false
@@ -310,11 +299,13 @@ func TestShutdownKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
 	}
 	childPIDFile := filepath.Join(root, "child.pid")
 	leaderPIDFile := filepath.Join(root, "leader.pid")
-	row, err := custody.Launch("owner/tree", "shutdown", termIgnoringChildSpec(t, root, childPIDFile, leaderPIDFile))
+	childReleasePath := filepath.Join(root, "child.release")
+	leaderReleasePath := filepath.Join(root, "leader.release")
+	row, err := custody.Launch("owner/tree", "shutdown", termIgnoringChildSpec(t, root, childPIDFile, leaderPIDFile, childReleasePath, leaderReleasePath))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cleanupHelper(t, childPIDFile, leaderPIDFile) })
+	t.Cleanup(func() { cleanupHelper(t, childReleasePath, leaderReleasePath) })
 	_ = waitPIDFile(t, leaderPIDFile)
 	childPID := waitPIDFile(t, childPIDFile)
 	if err := custody.Shutdown(); err != nil {
