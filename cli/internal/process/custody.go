@@ -60,15 +60,16 @@ type Record struct {
 
 type custodyRecord struct {
 	Record
-	spec       LaunchSpec
-	cmd        *exec.Cmd
-	stdout     *os.File
-	stderr     *os.File
-	cancelled  string
-	done       chan struct{}
-	cleanupErr error
-	treeDone   chan struct{}
-	treeErr    error
+	spec        LaunchSpec
+	cmd         *exec.Cmd
+	stdout      *os.File
+	stderr      *os.File
+	cancelled   string
+	done        chan struct{}
+	cleanupErr  error
+	treeDone    chan struct{}
+	treeErr     error
+	reapClaimed bool
 }
 
 // Custody owns process trees for one Mill-selected workspace.
@@ -79,6 +80,7 @@ type Custody struct {
 	reservations map[string]string
 	closed       bool
 	removeAll    func(string) error
+	signalGroup  func(int, syscall.Signal) error
 }
 
 // NewCustody creates an in-memory Mill-lifetime custody store rooted at root.
@@ -89,7 +91,7 @@ func NewCustody(root string) (*Custody, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, fmt.Errorf("create custody output root: %w", err)
 	}
-	return &Custody{root: root, byHandle: map[string]*custodyRecord{}, reservations: map[string]string{}, removeAll: os.RemoveAll}, nil
+	return &Custody{root: root, byHandle: map[string]*custodyRecord{}, reservations: map[string]string{}, removeAll: os.RemoveAll, signalGroup: signalProcessGroup}, nil
 }
 
 // ParseLaunchSpec parses boundary data exactly once before process launch.
@@ -310,7 +312,40 @@ func (c *Custody) wait(row *custodyRecord) {
 		row.Phase = "running"
 	}
 	c.mu.Unlock()
-	err := row.cmd.Wait()
+	if observeErr := observeProcessExit(row.cmd.Process.Pid); observeErr != nil {
+		// Observation is an internal synchronization aid, not a reason to
+		// abandon the child. Reap it after any in-flight tree cleanup and retain
+		// the observer failure as cleanup evidence.
+		c.mu.Lock()
+		treeDone := row.treeDone
+		c.mu.Unlock()
+		if treeDone != nil {
+			<-treeDone
+		}
+		c.finishWait(row, row.cmd.Wait(), observeErr)
+		return
+	}
+
+	// The observer deliberately does not reap.  If cancellation won the race,
+	// the group cleanup retains the unreaped leader as a stable PGID anchor until
+	// all descendants are gone.  Otherwise claim reaping before releasing the
+	// mutex so a concurrent Cancel waits for this ordinary terminal fact instead
+	// of sending to a possibly recycled group.
+	c.mu.Lock()
+	if row.cancelled == "" {
+		row.reapClaimed = true
+		c.mu.Unlock()
+	} else {
+		treeDone := row.treeDone
+		c.mu.Unlock()
+		if treeDone != nil {
+			<-treeDone
+		}
+	}
+	c.finishWait(row, row.cmd.Wait(), nil)
+}
+
+func (c *Custody) finishWait(row *custodyRecord, err, observeErr error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if row.cancelled != "" {
@@ -322,7 +357,7 @@ func (c *Custody) wait(row *custodyRecord) {
 		row.Cancellation = nil
 		row.Exit = exitResult(row.cmd, err)
 	}
-	row.cleanupErr = errors.Join(row.stdout.Close(), row.stderr.Close())
+	row.cleanupErr = errors.Join(observeErr, row.stdout.Close(), row.stderr.Close())
 	close(row.done)
 }
 
@@ -382,6 +417,15 @@ func (c *Custody) Cancel(owner, handle string) (Record, error) {
 		c.mu.Unlock()
 		return record, nil
 	}
+	if row.reapClaimed {
+		done := row.done
+		record := row.Record
+		c.mu.Unlock()
+		if !waitDoneUntil(done, time.Now().Add(5*time.Second)) {
+			return record, fmt.Errorf("custody process for handle %q did not finish reaping", handle)
+		}
+		return c.Get(handle)
+	}
 	var pid int
 	var treeDone chan struct{}
 	var shouldTerminate bool
@@ -399,7 +443,7 @@ func (c *Custody) Cancel(owner, handle string) (Record, error) {
 	record := row.Record
 	c.mu.Unlock()
 	if shouldTerminate {
-		err := terminateProcessTree(pid)
+		err := terminateProcessTreeWithSignal(pid, c.signalGroup)
 		c.mu.Lock()
 		row.treeErr = err
 		close(treeDone)
@@ -408,7 +452,9 @@ func (c *Custody) Cancel(owner, handle string) (Record, error) {
 			return record, fmt.Errorf("cancel custody process group for handle %q: %w", handle, err)
 		}
 	} else if treeDone != nil {
-		<-treeDone
+		if !waitDoneUntil(treeDone, time.Now().Add(5*time.Second)) {
+			return record, fmt.Errorf("cancel custody process group for handle %q did not finish", handle)
+		}
 		c.mu.Lock()
 		err := row.treeErr
 		record = row.Record
@@ -456,6 +502,10 @@ func (c *Custody) Shutdown() error {
 	treeTargets := make([]treeTarget, 0, len(c.byHandle))
 	for _, row := range c.byHandle {
 		if row.Phase != "terminal" {
+			if row.reapClaimed {
+				rows = append(rows, row)
+				continue
+			}
 			if row.cancelled == "" {
 				row.cancelled = "Mill shutdown"
 			}
@@ -480,7 +530,7 @@ func (c *Custody) Shutdown() error {
 		go func(target treeTarget) {
 			var err error
 			if target.start {
-				err = terminateProcessTree(target.pid)
+				err = terminateProcessTreeWithSignal(target.pid, c.signalGroup)
 				c.mu.Lock()
 				target.row.treeErr = err
 				close(target.done)
@@ -538,24 +588,10 @@ func signalProcessGroup(pid int, signal syscall.Signal) error {
 	return nil
 }
 
-func processGroupExists(pid int) (bool, error) {
-	if pid <= 0 {
-		return false, fmt.Errorf("invalid process group pid %d", pid)
-	}
-	err := syscall.Kill(-pid, 0)
-	if err == nil || errors.Is(err, syscall.EPERM) {
-		return true, nil
-	}
-	if errors.Is(err, syscall.ESRCH) {
-		return false, nil
-	}
-	return false, fmt.Errorf("probe process group %d: %w", pid, err)
-}
-
-func waitProcessGroupGone(pid int, timeout time.Duration) (bool, error) {
+func waitProcessGroupGone(pid, leaderPID int, timeout time.Duration) (bool, error) {
 	deadline := time.Now().Add(timeout)
 	for {
-		exists, err := processGroupExists(pid)
+		exists, err := processGroupHasLiveMembers(pid, leaderPID)
 		if err != nil {
 			return false, err
 		}
@@ -568,24 +604,25 @@ func waitProcessGroupGone(pid int, timeout time.Duration) (bool, error) {
 		}
 		timer := time.NewTimer(minDuration(remaining, 10*time.Millisecond))
 		<-timer.C
+		timer.Stop()
 	}
 }
 
-func terminateProcessTree(pid int) error {
-	if err := signalProcessGroup(pid, syscall.SIGTERM); err != nil {
+func terminateProcessTreeWithSignal(pid int, signalGroup func(int, syscall.Signal) error) error {
+	if err := signalGroup(pid, syscall.SIGTERM); err != nil {
 		return err
 	}
-	gone, err := waitProcessGroupGone(pid, processTreeGracePeriod)
+	gone, err := waitProcessGroupGone(pid, pid, processTreeGracePeriod)
 	if err != nil {
 		return err
 	}
 	if gone {
 		return nil
 	}
-	if err := signalProcessGroup(pid, syscall.SIGKILL); err != nil {
+	if err := signalGroup(pid, syscall.SIGKILL); err != nil {
 		return err
 	}
-	gone, err = waitProcessGroupGone(pid, processTreeGracePeriod)
+	gone, err = waitProcessGroupGone(pid, pid, processTreeGracePeriod)
 	if err != nil {
 		return err
 	}

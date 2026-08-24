@@ -236,6 +236,19 @@ func TestCancelKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
 	}
 	leaderPID := waitPIDFile(t, leaderPIDFile)
 	childPID := waitPIDFile(t, childPIDFile)
+	escalated := false
+	custody.signalGroup = func(pid int, signal syscall.Signal) error {
+		if signal == syscall.SIGKILL {
+			escalated = true
+			custody.mu.Lock()
+			defer custody.mu.Unlock()
+			internalRow := custody.byHandle[row.Handle]
+			if internalRow.cmd.ProcessState != nil || internalRow.reapClaimed {
+				t.Errorf("SIGKILL sent after leader identity was invalidated: process_state=%v reap_claimed=%v", internalRow.cmd.ProcessState, internalRow.reapClaimed)
+			}
+		}
+		return signalProcessGroup(pid, signal)
+	}
 	t.Cleanup(func() {
 		terminatePID(t, childPID)
 		terminatePID(t, leaderPID)
@@ -245,6 +258,9 @@ func TestCancelKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
 	}
 	if Alive(childPID) {
 		t.Fatalf("TERM-ignoring descendant %d survived Cancel", childPID)
+	}
+	if !escalated {
+		t.Fatal("TERM-ignoring descendant test did not exercise SIGKILL escalation")
 	}
 	terminal := waitTerminal(t, custody, row.Handle)
 	if terminal.Cancellation == nil || terminal.Cancellation.Reason == "" {
