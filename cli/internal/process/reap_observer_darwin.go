@@ -65,7 +65,7 @@ func observeProcessExit(pid int) error {
 func processExitWaitableDarwin(pid int) (bool, error) {
 	var info darwinSiginfo
 	_, _, err := unix.Syscall6(
-		unix.SYS_WAITID,
+		unix.SYS_WAITID, //nolint:staticcheck // x/sys exposes no Darwin waitid wrapper; this direct syscall is required for WNOWAIT.
 		uintptr(darwinPID),
 		uintptr(pid),
 		uintptr(unsafe.Pointer(&info)),
