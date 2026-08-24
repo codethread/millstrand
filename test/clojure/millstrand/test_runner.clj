@@ -61,6 +61,7 @@
    ;; there is no JVM-global timer or shared-lane state.
    'millstrand.core.weaver.scheduler.runtime-test 'millstrand.api.scheduler.alpha-test 'millstrand.integration.scheduler.lifecycle-test
    'millstrand.api.process.alpha-test
+   'millstrand.integration.process-custody-test
    ;; isolated pure coordinator prototype; injected callables own all effects.
    'millstrand.lifecycle-spike-test
    ;; production lifecycle transition engine is pure over injected callables.
