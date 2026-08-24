@@ -1404,6 +1404,9 @@
                (require '[millstrand.api.current.alpha :as current]
                         '[millstrand.api.process.alpha :as process])
                (process/list-owned (current/runtime) :e2e/process))]
+        (assert (and (string? old-generation)
+                     (not (clojure.string/blank? old-generation)))
+                "custody fixture starts from a nonblank generation")
         (assert= :starting (:phase long-row)
                  "custody launch returns a real long child record")
         (assert= "short" (:key short-row)
@@ -1419,14 +1422,14 @@
               new-generation (:generation
                               (live-add-runtime-probe! state-home workspace-path))]
           (assert= "running" (:state replacement-status)
-                   "planned replacement publishes a running generation")
+                   "custody replacement publishes a running generation")
           (assert (and (string? new-generation)
                        (not (clojure.string/blank? new-generation)))
-                  "planned replacement publishes a nonblank generation")
+                  "custody replacement publishes a nonblank generation")
           (assert (not= old-generation new-generation)
-                  "planned replacement publishes a different generation")
+                  "custody replacement publishes a different generation")
           (assert (.isAlive ^Process @mill-process)
-                  "Mill remains alive through planned Weaver replacement"))
+                  "Mill remains alive through Weaver replacement"))
         (let [rows-after (process-repl! state-home workspace-path list-form)
               short-row-after
               (await-condition!
