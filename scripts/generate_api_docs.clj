@@ -13,7 +13,7 @@
   (concat
    (for [nm ["authoring" "batch" "cli" "clock" "current" "errors" "events" "format" "graph" "hooks"
              "lifecycle" "notes" "patterns" "peers" "registry" "relations" "return-shape"
-             "runtime" "scheduler" "millstrand" "spec" "spool" "weaver"]]
+             "runtime" "scheduler" "process" "millstrand" "spec" "spool" "weaver"]]
      {:name nm
       :source (str "src/millstrand/api/" (if (= nm "return-shape") "return_shape" nm) "/alpha.clj")
       :outfile (str "docs/api/" nm ".api.md")})

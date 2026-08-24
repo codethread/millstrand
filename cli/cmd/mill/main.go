@@ -20,12 +20,14 @@ import (
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
 	"millstrand-strand-cli/internal/errfmt"
+	"millstrand-strand-cli/internal/process"
 )
 
 type server struct {
-	meta     client.MillMetadata
-	mu       sync.Mutex
-	children map[string]*weaverChild
+	meta      client.MillMetadata
+	mu        sync.Mutex
+	children  map[string]*weaverChild
+	custodies map[string]*process.Custody
 	// startClaims close the check-to-registration window for a new child. A
 	// restart waits for the claim to resolve instead of racing a start that has
 	// not yet published its admitted generation.
@@ -215,7 +217,7 @@ Environment:
 	return root
 }
 
-func start() error {
+func start() (err error) {
 	root, err := config.StateRoot()
 	if err != nil {
 		return err
@@ -249,8 +251,17 @@ func start() error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() { <-sig; _ = listener.Close() }()
-	s := server{meta: meta, children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}, startClaims: map[string]chan struct{}{}}
-	defer s.stopAll()
+	s := server{meta: meta, children: map[string]*weaverChild{}, custodies: map[string]*process.Custody{}, transitions: map[string]*weaverTransition{}, startClaims: map[string]chan struct{}{}}
+	defer func() {
+		if shutdownErr := s.stopAll(); shutdownErr != nil {
+			if err == nil {
+				err = shutdownErr
+			} else {
+				err = fmt.Errorf("mill stopped with request error: %v; custody shutdown failed: %w",
+					err, shutdownErr)
+			}
+		}
+	}()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -265,9 +276,25 @@ func start() error {
 
 func (s *server) handle(conn net.Conn) {
 	defer func() { _ = conn.Close() }()
-	var req client.MillRequest
 	reader := bufio.NewReader(conn)
-	if err := json.NewDecoder(reader).Decode(&req); err != nil {
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(reader).Decode(&raw); err != nil {
+		_ = json.NewEncoder(conn).Encode(errorResponse("", "protocol", "mill/protocol", "malformed mill request", err.Error()))
+		return
+	}
+	var operation string
+	_ = json.Unmarshal(raw["operation"], &operation)
+	if strings.HasPrefix(operation, "process.") && raw["mill_id"] == nil {
+		s.handleProcessControl(conn, raw)
+		return
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		_ = json.NewEncoder(conn).Encode(errorResponse("", "protocol", "mill/protocol", "malformed mill request", err.Error()))
+		return
+	}
+	var req client.MillRequest
+	if err := json.Unmarshal(encoded, &req); err != nil {
 		_ = json.NewEncoder(conn).Encode(errorResponse("", "protocol", "mill/protocol", "malformed mill request", err.Error()))
 		return
 	}
