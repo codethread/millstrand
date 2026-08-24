@@ -14,6 +14,7 @@
   {:name "planned-peer"
    :workspace "/tmp/planned-peer-workspace"
    :weaver-id "peer-weaver"
+   :generation-id "peer-generation"
    :protocol-version 3
    :socket-path socket
    :state-dir state-dir})
@@ -72,12 +73,48 @@
   (with-peer-server nil
     (fn [peer]
       (spit (io/file (:state-dir peer) "restart.json")
-            (json/write-str {"state" "restarting"}))
+            (json/write-str {"state" "restarting"
+                             "previous_weaver_id" "peer-weaver"
+                             "previous_generation_id" "peer-generation"}))
       (try
         (peers/call! peer "read")
         (is false "expected a structured restart outcome after a sent request")
         (catch clojure.lang.ExceptionInfo ex
           (is (= :weaver/restarted (:code (ex-data ex))))))))
+
+  (with-peer-server nil
+    (fn [peer]
+      (spit (io/file (:state-dir peer) "restart.json")
+            (json/write-str {"state" "running"
+                             "old_generation_stopped" true
+                             "previous_weaver_id" "peer-weaver"
+                             "previous_generation_id" "peer-generation"}))
+      (try
+        (peers/call! peer "read")
+        (is false "expected completed restart state to classify the old call")
+        (catch clojure.lang.ExceptionInfo ex
+          (is (= :weaver/restarted (:code (ex-data ex))))))))
+
+  (doseq [[label record]
+          [["unrelated later restart"
+            {"state" "running"
+             "old_generation_stopped" true
+             "previous_weaver_id" "other-weaver"
+             "previous_generation_id" "other-generation"}]
+           ["generation mismatch"
+            {"state" "running"
+             "old_generation_stopped" true
+             "previous_weaver_id" "peer-weaver"
+             "previous_generation_id" "other-generation"}]]]
+    (with-peer-server nil
+      (fn [peer]
+        (spit (io/file (:state-dir peer) "restart.json")
+              (json/write-str record))
+        (try
+          (peers/call! peer "read")
+          (is false (str label " must remain an ordinary transport failure"))
+          (catch clojure.lang.ExceptionInfo ex
+            (is (= :peer/transport-failed (:code (ex-data ex)))))))))
 
   (with-peer-server nil
     (fn [peer]

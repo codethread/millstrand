@@ -239,12 +239,12 @@ func validateAdmissionState(admission map[string]any) error {
 }
 
 type weaverTransition struct {
-	mu           sync.Mutex
-	world        config.World
-	old          *weaverChild
-	transitionID string
-	createdAt    time.Time
-	stateValue   string
+	mu             sync.Mutex
+	world          config.World
+	old            *weaverChild
+	transitionID   string
+	admissionEpoch uint64
+	stateValue     string
 	// cutoverStarted remains true after the replacement becomes ready so an
 	// admitted old-generation request that reports EOF after transition
 	// cleanup still receives weaver/restarted rather than an ordinary loss.
@@ -339,6 +339,7 @@ func (s *server) setTransitionState(t *weaverTransition, state string, probe *re
 	record := restartRecord{State: state, TransitionID: t.transitionID, GenerationID: t.generationID}
 	if t.old != nil {
 		record.PreviousGeneration = t.old.generationID
+		record.PreviousWeaver = t.old.identity.WeaverID
 	}
 	record.OldGenerationStopped = t.oldGenerationStopped
 	if probe != nil {
@@ -385,6 +386,9 @@ func validateRestartRecord(record restartRecord, mode restartRecordValidationMod
 	if record.PreviousGeneration != "" && strings.TrimSpace(record.PreviousGeneration) == "" {
 		return errors.New("restart record previous_generation_id must be non-blank")
 	}
+	if record.PreviousWeaver != "" && strings.TrimSpace(record.PreviousWeaver) == "" {
+		return errors.New("restart record previous_weaver_id must be non-blank")
+	}
 	if record.OldGenerationStopped && (strings.TrimSpace(record.GenerationID) == "" || record.Probe == nil || !record.Probe.Success) {
 		return errors.New("stopped generation requires a successful probe and generation_id")
 	}
@@ -425,10 +429,6 @@ func (s *server) completeTransition(t *weaverTransition, result map[string]any, 
 	t.result, t.err = result, err
 	if !retain && s.transitions[t.world.ConfigDir] == t {
 		delete(s.transitions, t.world.ConfigDir)
-		if s.lastTransitions == nil {
-			s.lastTransitions = map[string]*weaverTransition{}
-		}
-		s.lastTransitions[t.world.ConfigDir] = t
 	}
 	close(t.done)
 	s.mu.Unlock()
@@ -523,7 +523,11 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 	if retryProbe != nil {
 		state = restartStateRestarting
 	}
-	t := &weaverTransition{world: world, old: old, transitionID: newOpaqueID("transition"), createdAt: time.Now(), stateValue: state, probe: retryProbe, retryStartup: retryProbe != nil, oldGenerationStopped: retryRecord != nil && retryRecord.OldGenerationStopped, done: make(chan struct{})}
+	if s.admissionEpochs == nil {
+		s.admissionEpochs = map[string]uint64{}
+	}
+	s.admissionEpochs[world.ConfigDir]++
+	t := &weaverTransition{world: world, old: old, transitionID: newOpaqueID("transition"), admissionEpoch: s.admissionEpochs[world.ConfigDir], stateValue: state, probe: retryProbe, retryStartup: retryProbe != nil, oldGenerationStopped: retryRecord != nil && retryRecord.OldGenerationStopped, done: make(chan struct{})}
 	if t.old != nil && t.old.generationID == "" {
 		t.old.generationID = newOpaqueID("generation")
 	}

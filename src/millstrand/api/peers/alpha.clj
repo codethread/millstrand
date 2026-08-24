@@ -107,6 +107,7 @@
   {:name (:name m)
    :workspace (:config-dir m)
    :weaver-id (:nonce m)
+   :generation-id (:generation-id m)
    :protocol-version (:protocol-version m)
    :socket-path (:socket-path m)
    :state-dir (:state-dir m)
@@ -298,10 +299,12 @@
           (throw (transport-failure peer op t)))))))
 
 (defn- planned-restart?
-  "Return whether Mill has closed a peer generation for replacement.
+  "Return whether `peer` is the generation named by durable restart state.
 
   A missing record means ordinary transport loss. A malformed present record
-  remains visible as a boundary error instead of becoming a fallback."
+  remains visible as a boundary error instead of becoming a fallback. The
+  weaver and generation identities must both match the stopped generation;
+  state alone is not evidence that this peer's request crossed a cutover."
   [peer]
   (let [file (io/file (:state-dir peer) "restart.json")]
     (when (.isFile file)
@@ -318,9 +321,13 @@
                           {:code :peer/restart-state-malformed
                            :peer (peer-identity peer)
                            :file (.getPath file)})))
-        (or (= "restarting" (get record "state"))
-            (and (= "failed" (get record "state"))
-                 (true? (get record "old_generation_stopped"))))))))
+        (and (or (= "restarting" (get record "state"))
+                 (and (= "failed" (get record "state"))
+                      (true? (get record "old_generation_stopped")))
+                 (and (= "running" (get record "state"))
+                      (true? (get record "old_generation_stopped"))))
+             (= (:weaver-id peer) (get record "previous_weaver_id"))
+             (= (:generation-id peer) (get record "previous_generation_id")))))))
 
 (defn- valid-error-envelope?
   "True when `error` is a well-formed peer error envelope."
@@ -452,4 +459,4 @@
 (defn- peer-identity
   "Project the identifying keys of a peer row for error data and summaries."
   [peer]
-  (select-keys peer [:name :workspace :weaver-id :socket-path :state-dir]))
+  (select-keys peer [:name :workspace :weaver-id :generation-id :socket-path :state-dir]))

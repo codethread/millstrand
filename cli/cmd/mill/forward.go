@@ -60,11 +60,11 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		}
 		socketPath, _ := status["socket_path"].(string)
 		weaverID, _ := status["weaver_id"].(string)
-		// Keep the transition that admitted the old generation alongside the
-		// target.  The transition may leave s.transitions after replacement is
-		// ready, but an accepted old-generation request still needs its planned
-		// interruption outcome classified as weaver/restarted.
-		admittedTransition := s.admittedInvocationTransitionLocked(world.ConfigDir, status)
+		// Capture the causal cutover boundary while the workspace admission lock
+		// is still held. A lifecycle caller cannot create a later transition until
+		// this request releases that lock, so a later socket failure cannot be
+		// relabelled by an unrelated restart.
+		admissionBoundary := s.admissionBoundaryLocked(world.ConfigDir, status)
 		// Target selection is protected by the workspace admission lock. Once
 		// selected, release the process-global state mutex before any external
 		// socket operation; the workspace lock remains held until the request
@@ -82,16 +82,8 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		if outcome.err == nil || outcome.clientWriteFailed {
 			return
 		}
-		failureObservedAt := time.Now()
 		if callerCtx.Err() != nil {
 			return
-		}
-		if admittedTransition == nil && outcome.requestDelivery {
-			// The request may have been admitted before the lifecycle caller
-			// created its transition. Re-check after the relay failed so a
-			// planned cutover that began after send is still classified as a
-			// restart, without making ordinary socket loss look planned.
-			admittedTransition = s.admittedInvocationTransitionAt(world.ConfigDir, status, failureObservedAt)
 		}
 		// A request that may have reached the Weaver is never replayed. Emit a
 		// transport frame when no response exists so the caller can distinguish
@@ -99,26 +91,16 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		code := "mill/weaver-forward-failed"
 		message := "weaver forwarding failed"
 		details := map[string]any{"detail": outcome.err.Error(), "request_delivery": outcome.requestDelivery}
-		if outcome.requestDelivery && plannedCutoverInterrupted(admittedTransition) {
+		if outcome.requestDelivery && plannedCutoverInterrupted(admissionBoundary) {
 			code = "weaver/restarted"
 			message = "weaver replacement interrupted an admitted invocation"
 			details["sent_once"] = true
 			details["response"] = "ambiguous"
-			details["transition_id"] = admittedTransition.transitionID
+			details["transition_id"] = admissionBoundary.transition.transitionID
 		}
 		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: code, Message: message, Details: details})
 		return
 	}
-}
-
-func (s *server) admittedInvocationTransitionAt(configDir string, status map[string]any, observedAt time.Time) *weaverTransition {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t := s.admittedInvocationTransitionLocked(configDir, status)
-	if t != nil && !observedAt.IsZero() && t.createdAt.After(observedAt) {
-		return nil
-	}
-	return t
 }
 
 func (s *server) workspaceAdmissionLock(configDir string) *sync.Mutex {
@@ -135,25 +117,30 @@ func (s *server) workspaceAdmissionLock(configDir string) *sync.Mutex {
 	return lock
 }
 
-func (s *server) admittedInvocationTransitionLocked(configDir string, status map[string]any) *weaverTransition {
-	t := s.transitions[configDir]
-	if t == nil {
-		t = s.lastTransitions[configDir]
-	}
-	if t == nil || t.old == nil || !plannedCutoverInterrupted(t) {
-		return nil
-	}
-	weaverID, _ := status["weaver_id"].(string)
-	generationID, _ := status["generation_id"].(string)
-	if (t.old.identity.WeaverID == "" || t.old.identity.WeaverID != weaverID) &&
-		(t.old.generationID == "" || t.old.generationID != generationID) {
-		return nil
-	}
-	return t
+type admissionBoundary struct {
+	epoch      uint64
+	transition *weaverTransition
 }
 
-func plannedCutoverInterrupted(t *weaverTransition) bool {
-	if t == nil {
+func (s *server) admissionBoundaryLocked(configDir string, status map[string]any) admissionBoundary {
+	t := s.transitions[configDir]
+	boundary := admissionBoundary{epoch: s.admissionEpochs[configDir]}
+	if t != nil && t.old != nil && t.admissionEpoch == boundary.epoch && transitionMatchesStatus(t, status) {
+		boundary.transition = t
+	}
+	return boundary
+}
+
+func transitionMatchesStatus(t *weaverTransition, status map[string]any) bool {
+	weaverID, _ := status["weaver_id"].(string)
+	generationID, _ := status["generation_id"].(string)
+	return (t.old.identity.WeaverID == "" || t.old.identity.WeaverID == weaverID) &&
+		(t.old.generationID == "" || t.old.generationID == generationID)
+}
+
+func plannedCutoverInterrupted(boundary admissionBoundary) bool {
+	t := boundary.transition
+	if t == nil || t.admissionEpoch != boundary.epoch {
 		return false
 	}
 	t.mu.Lock()
