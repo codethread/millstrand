@@ -1397,6 +1397,8 @@
                                     (launch-form "long" long-spec))
             short-row (process-repl! state-home workspace-path
                                      (launch-form "short" short-spec))
+            old-generation (:generation
+                            (live-add-runtime-probe! state-home workspace-path))
             list-form
             '(do
                (require '[millstrand.api.current.alpha :as current]
@@ -1413,6 +1415,15 @@
          (fn [_]
            (when (= "short" (slurp (:stdout-ref (:output short-row)))) true)))
         (start-live-add-weaver! state-home workspace-path mill-process new-weaver-status)
+        (let [replacement-status @new-weaver-status
+              new-generation (:generation
+                              (live-add-runtime-probe! state-home workspace-path))]
+          (assert= "running" (:state replacement-status)
+                   "planned replacement publishes a running generation")
+          (assert (not= old-generation new-generation)
+                  "planned replacement changes generation exactly once")
+          (assert (.isAlive ^Process @mill-process)
+                  "Mill remains alive through planned Weaver replacement"))
         (let [rows-after (process-repl! state-home workspace-path list-form)
               short-row-after
               (await-condition!
