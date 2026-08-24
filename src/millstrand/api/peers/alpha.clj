@@ -6,7 +6,8 @@
             [clojure.string :as str]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.protocol :as protocol])
-  (:import [java.io BufferedReader BufferedWriter File InputStreamReader OutputStreamWriter]
+  (:import [java.io BufferedReader BufferedWriter File InputStreamReader OutputStreamWriter
+            PushbackReader]
            [java.net StandardProtocolFamily UnixDomainSocketAddress]
            [java.nio.channels Channels SocketChannel]
            [java.util UUID]))
@@ -15,7 +16,8 @@
          resolved-peer
          ensure-peer-protocol! operation-name validate-args! call-frame request-envelope
          socket-roundtrip! planned-restart? reject-stream-response! verify-response! unwrap-result!
-         canonical-path peer-identity validate-peer-row! validate-restart-record!)
+         canonical-path peer-identity validate-peer-row! validate-restart-record!
+         read-restart-record)
 
 (defn peers
   "Return data-first rows for weaver metadata under the mill state root.
@@ -338,23 +340,7 @@
   [peer]
   (let [file (io/file (:state-dir peer) "restart.json")]
     (when (.isFile file)
-      (let [record (try
-                     (json/read-str (slurp file))
-                     (catch Exception e
-                       (throw (ex-info "Peer restart record is malformed"
-                                       {:code :peer/restart-state-malformed
-                                        :peer (peer-identity peer)
-                                        :file (.getPath file)
-                                        :field nil
-                                        :value nil
-                                        :allowed #{"state" "transition_id"
-                                                   "generation_id"
-                                                   "previous_generation_id"
-                                                   "previous_weaver_id"
-                                                   "updated_at"
-                                                   "old_generation_stopped"
-                                                   "probe" "failure"}}
-                                       e))))]
+      (let [record (read-restart-record peer file)]
         (validate-restart-record! peer file record)
         (and (or (= "restarting" (get record "state"))
                  (and (= "failed" (get record "state"))
@@ -363,6 +349,36 @@
                       (true? (get record "old_generation_stopped"))))
              (= (:weaver-id peer) (get record "previous_weaver_id"))
              (= (:generation-id peer) (get record "previous_generation_id")))))))
+
+(defn- read-restart-record
+  "Read exactly one JSON value from `file`, allowing only trailing whitespace.
+
+  Use one pushback reader for both reads so a second JSON value cannot be
+  mistaken for EOF."
+  [peer ^File file]
+  (try
+    (with-open [reader (PushbackReader. (io/reader file) 64)]
+      (let [record (json/read reader)
+            trailing (json/read reader :eof-error? false :eof-value ::eof)]
+        (if (= ::eof trailing)
+          record
+          (throw (ex-info "Peer restart record contains multiple JSON values"
+                          {:trailing-value trailing})))))
+    (catch Exception e
+      (throw (ex-info "Peer restart record is malformed"
+                      {:code :peer/restart-state-malformed
+                       :peer (peer-identity peer)
+                       :file (.getPath file)
+                       :field nil
+                       :value nil
+                       :allowed #{"state" "transition_id"
+                                  "generation_id"
+                                  "previous_generation_id"
+                                  "previous_weaver_id"
+                                  "updated_at"
+                                  "old_generation_stopped"
+                                  "probe" "failure"}}
+                      e)))))
 
 (defn- validate-restart-record!
   "Return a valid decoded `restart.json` record or fail with field context."

@@ -79,10 +79,11 @@
   (with-peer-server nil
     (fn [peer]
       (spit (io/file (:state-dir peer) "restart.json")
-            (json/write-str (restart-record
-                             {"state" "restarting"
-                              "previous_weaver_id" "peer-weaver"
-                              "previous_generation_id" "peer-generation"})))
+            (str (json/write-str (restart-record
+                                  {"state" "restarting"
+                                   "previous_weaver_id" "peer-weaver"
+                                   "previous_generation_id" "peer-generation"}))
+                 " \n\t"))
       (try
         (peers/call! peer "read")
         (is false "expected a structured restart outcome after a sent request")
@@ -189,3 +190,21 @@
                     (if (= expected-field "unexpected")
                       (not (contains? (:allowed data) expected-field))
                       (contains? (:allowed data) expected-field)))))))))))
+
+(deftest trailing-peer-restart-data-fails-at-the-boundary
+  (let [record (json/write-str (restart-record {"state" "restarting"}))]
+    (doseq [[label trailing] [["concatenated JSON" (json/write-str {})]
+                              ["trailing text" "trailing text"]]]
+      (with-peer-server nil
+        (fn [peer]
+          (let [file (io/file (:state-dir peer) "restart.json")
+                _ (spit file (str record trailing))
+                ex (try
+                     (peers/call! peer "read")
+                     (catch clojure.lang.ExceptionInfo ex
+                       ex))
+                data (ex-data ex)]
+            (is ex (str label " must fail loudly"))
+            (is (= :peer/restart-state-malformed (:code data)))
+            (is (= (.getPath file) (:file data)))
+            (is (nil? (:field data)))))))))
