@@ -217,7 +217,7 @@ Environment:
 	return root
 }
 
-func start() error {
+func start() (err error) {
 	root, err := config.StateRoot()
 	if err != nil {
 		return err
@@ -252,7 +252,16 @@ func start() error {
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() { <-sig; _ = listener.Close() }()
 	s := server{meta: meta, children: map[string]*weaverChild{}, custodies: map[string]*process.Custody{}, transitions: map[string]*weaverTransition{}, startClaims: map[string]chan struct{}{}}
-	defer s.stopAll()
+	defer func() {
+		if shutdownErr := s.stopAll(); shutdownErr != nil {
+			if err == nil {
+				err = shutdownErr
+			} else {
+				err = fmt.Errorf("mill stopped with request error: %v; custody shutdown failed: %w",
+					err, shutdownErr)
+			}
+		}
+	}()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {

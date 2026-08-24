@@ -726,7 +726,7 @@
          #(= #{:protocol-version :request-id :weaver-id :operation :arguments}
              (set (keys %)))))
 (s/def :millstrand.process-protocol/ok boolean?)
-(s/def :millstrand.process-protocol/error map?)
+(s/def :millstrand.process-protocol/error (s/nilable map?))
 (s/def :millstrand.process-protocol/result any?)
 (s/def :millstrand.core.weaver.process-protocol/control-response
   (s/and (s/keys :req-un [:millstrand.process-protocol/request-id

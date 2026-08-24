@@ -107,8 +107,8 @@ The API has five operations:
 (process/launch! runtime owner key launch-spec)
 (process/get runtime handle)
 (process/list-owned runtime owner)
-(process/cancel! runtime handle)
-(process/acknowledge! runtime handle)
+(process/cancel! runtime owner handle)
+(process/acknowledge! runtime owner handle)
 ```
 
 `owner` is a stable spool-owned keyword. `key` is an owner-scoped idempotency key derived from the durable domain record, such as `"run-42"`; callers do not use a PID as either value. `launch-spec` is data, not a shell command string. It contains an argv vector, working directory, environment additions, and optional stdin content. Mill validates the complete spec before launch.
@@ -223,7 +223,7 @@ On module activation, the agent module's `defreconcile!` effect enumerates the o
     :terminal
     (do
       (runs/record-result-once! runtime key {:exit exit :output output})
-      (process/acknowledge! runtime handle))
+      (process/acknowledge! runtime owner handle))
 
     nil))
 ```
@@ -280,7 +280,7 @@ After replacement, Millhouse's `defreconcile!` effect enumerates its processes. 
                 (shell-attempts/record-result-once!
                  runtime key {:exit exit :output output})
                 (workflow/apply-shell-result-once! runtime key)
-                (process/acknowledge! runtime handle))))
+      (process/acknowledge! runtime owner handle))))
 ```
 
 A workflow await that reaches Mill during planned downtime waits and is sent once to the replacement. An await already accepted by the old Weaver ends with `weaver/restarted`; a workflow-aware client rearms it against the same durable run id. If reconciliation advanced the gate during downtime, the new await immediately returns the new frontier. Mill does not replay the accepted await because only the workflow client knows that rearming this read is safe.

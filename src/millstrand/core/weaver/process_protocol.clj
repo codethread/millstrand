@@ -16,10 +16,24 @@
 
 (declare validate-request! validate-response!)
 
-(defn- keyword-frame [frame]
-  (into {} (map (fn [[key value]]
-                  [(keyword (str/replace (str key) "_" "-")) value])
-                frame)))
+(defn- keyword-frame
+  "Convert one JSON object tree to the internal keyword-keyed shape.
+
+  JSON decoding deliberately starts with string keys.  Keyword input is also
+  accepted for embedded test seams, but uses the keyword name rather than
+  `(str key)`, which would manufacture names such as `::protocol-version`."
+  [value]
+  (cond
+    (map? value)
+    (into {}
+          (map (fn [[key item]]
+                 [(keyword (str/replace (if (keyword? key) (name key) key)
+                                        "_" "-"))
+                  (keyword-frame item)]))
+          value)
+
+    (sequential? value) (mapv keyword-frame value)
+    :else value))
 
 (defn- fail!
   [message data]
@@ -54,7 +68,8 @@
     (when-not (and (string? weaver-id) (not (str/blank? weaver-id)))
       (fail! "Weaver identity is unavailable for process custody"
              {:code "process/control-unavailable"}))
-    (let [socket-path ^String (:socket_path (mill-metadata))
+    (let [socket-path ^String (or (:process-control-socket runtime)
+                                  (:socket_path (mill-metadata)))
           request-id (str (java.util.UUID/randomUUID))
           request {"protocol_version" protocol-version
                    "request_id" request-id
@@ -76,7 +91,7 @@
           (.newLine writer)
           (.flush writer)
           (let [line (.readLine reader)
-                response (some-> line (json/read-str :key-fn keyword) keyword-frame)]
+                response (some-> line json/read-str keyword-frame)]
             (validate-response! response)
             (when-not (and (map? response)
                            (= protocol-version (:protocol-version response))
@@ -139,15 +154,15 @@
 (defn validate-record!
   "Validate and return one Mill wire process record."
   [record]
-  (let [decoded (-> record
+  (let [decoded (-> (keyword-frame record)
                     (update :owner keyword)
                     (update :phase keyword)
                     (update :output #(-> %
-                                         (assoc :stdout-ref (:stdout_ref %)
-                                                :stderr-ref (:stderr_ref %))
+                                         (assoc :stdout-ref (or (:stdout-ref %)
+                                                                (:stdout_ref %))
+                                                :stderr-ref (or (:stderr-ref %)
+                                                                (:stderr_ref %)))
                                          (dissoc :stdout_ref :stderr_ref)))
-                    (cond-> (contains? record :launch_failure)
-                      (assoc :launch-failure (:launch_failure record)))
                     (dissoc :launch_failure))]
     (when-not (s/valid? :millstrand.core.specs/process-record decoded)
       (fail! "Mill returned a malformed process record"

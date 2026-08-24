@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -480,11 +481,14 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 	return status, nil
 }
 
-func (s *server) stopAll() {
+func (s *server) stopAll() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var failures []error
 	for _, custody := range s.custodies {
-		custody.Shutdown()
+		if err := custody.Shutdown(); err != nil {
+			failures = append(failures, err)
+		}
 	}
 	for _, child := range s.children {
 		if child.cmd != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
@@ -498,6 +502,7 @@ func (s *server) stopAll() {
 			_ = cleanupWorldArtifactsOwned(child.world, child.identity)
 		}
 	}
+	return errors.Join(failures...)
 }
 
 func readStatus(world config.World) (map[string]any, bool) {

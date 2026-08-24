@@ -129,17 +129,17 @@ func dispatchProcessControl(custody *process.Custody, operation string, argument
 		}
 		return custody.ListOwned(owner)
 	case "process.cancel":
-		handle, err := handleArgument(arguments)
+		owner, handle, err := ownerHandleArguments(arguments)
 		if err != nil {
 			return nil, err
 		}
-		return custody.CancelHandle(handle)
+		return custody.Cancel(owner, handle)
 	case "process.acknowledge":
-		handle, err := handleArgument(arguments)
+		owner, handle, err := ownerHandleArguments(arguments)
 		if err != nil {
 			return nil, err
 		}
-		if err := custody.AcknowledgeHandle(handle); err != nil {
+		if err := custody.Acknowledge(owner, handle); err != nil {
 			return nil, err
 		}
 		return map[string]any{"acknowledged": true, "handle": handle}, nil
@@ -174,6 +174,23 @@ func handleArgument(arguments map[string]any) (string, error) {
 		return "", errors.New("handle must be a non-blank string")
 	}
 	return handle, nil
+}
+
+func ownerHandleArguments(arguments map[string]any) (string, string, error) {
+	for key := range arguments {
+		if key != "owner" && key != "handle" {
+			return "", "", fmt.Errorf("owner/handle arguments contain unknown field %q", key)
+		}
+	}
+	owner, ownerOK := arguments["owner"].(string)
+	handle, handleOK := arguments["handle"].(string)
+	if !ownerOK || strings.TrimSpace(owner) == "" {
+		return "", "", errors.New("owner must be a non-blank string")
+	}
+	if !handleOK || strings.TrimSpace(handle) == "" {
+		return "", "", errors.New("handle must be a non-blank string")
+	}
+	return owner, handle, nil
 }
 
 func processErrorCode(err error) string {

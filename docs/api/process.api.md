@@ -9,24 +9,28 @@ This trusted in-process surface launches shell-free argv vectors through the Wea
 ## <a name="millstrand.api.process.alpha/acknowledge!">`acknowledge!`</a>
 
 ```clojure
-(acknowledge! runtime handle)
+(acknowledge! runtime owner handle)
 ```
 
 Function.
 
-Acknowledge one terminal process fact and permit Mill to clean its output.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L96-L106">Source</a></sub></p>
+Acknowledge one terminal fact owned by `owner` and clean its output.
+
+Mill rejects a handle when the caller does not name its reserving owner.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L101-L116">Source</a></sub></p>
 
 ## <a name="millstrand.api.process.alpha/cancel!">`cancel!`</a>
 
 ```clojure
-(cancel! runtime handle)
+(cancel! runtime owner handle)
 ```
 
 Function.
 
-Request idempotent cancellation of the process tree addressed by `handle`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L89-L94">Source</a></sub></p>
+Request idempotent cancellation of `handle` owned by `owner`.
+
+Mill rejects a handle when the caller does not name its reserving owner.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L89-L99">Source</a></sub></p>
 
 ## <a name="millstrand.api.process.alpha/get">`get`</a>
 

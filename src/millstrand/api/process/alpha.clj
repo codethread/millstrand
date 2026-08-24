@@ -87,18 +87,28 @@
     (mapv result-record! records)))
 
 (defn cancel!
-  "Request idempotent cancellation of the process tree addressed by `handle`."
-  [runtime handle]
+  "Request idempotent cancellation of `handle` owned by `owner`.
+
+  Mill rejects a handle when the caller does not name its reserving owner."
+  [runtime owner handle]
   (require-runtime! runtime)
+  (require-owner! owner)
   (require-handle! handle)
-  (result-record! (protocol/call! runtime "process.cancel" {"handle" handle})))
+  (result-record! (protocol/call! runtime "process.cancel"
+                                  {"owner" (owner-wire owner)
+                                   "handle" handle})))
 
 (defn acknowledge!
-  "Acknowledge one terminal process fact and permit Mill to clean its output."
-  [runtime handle]
+  "Acknowledge one terminal fact owned by `owner` and clean its output.
+
+  Mill rejects a handle when the caller does not name its reserving owner."
+  [runtime owner handle]
   (require-runtime! runtime)
+  (require-owner! owner)
   (require-handle! handle)
-  (let [result (protocol/call! runtime "process.acknowledge" {"handle" handle})]
+  (let [result (protocol/call! runtime "process.acknowledge"
+                               {"owner" (owner-wire owner)
+                                "handle" handle})]
     (when-not (and (map? result) (true? (:acknowledged result))
                    (= handle (:handle result)))
       (throw (ex-info "Mill returned a malformed process acknowledgement"
@@ -121,5 +131,5 @@
   :args (s/cat :runtime ::runtime :owner ::owner)
   :ret (s/coll-of :millstrand.core.specs/process-record :kind vector?))
 (s/fdef cancel!
-  :args (s/cat :runtime ::runtime :handle ::handle)
+  :args (s/cat :runtime ::runtime :owner ::owner :handle ::handle)
   :ret :millstrand.core.specs/process-record)

@@ -60,12 +60,13 @@ type Record struct {
 
 type custodyRecord struct {
 	Record
-	spec      LaunchSpec
-	cmd       *exec.Cmd
-	stdout    *os.File
-	stderr    *os.File
-	cancelled string
-	done      chan struct{}
+	spec       LaunchSpec
+	cmd        *exec.Cmd
+	stdout     *os.File
+	stderr     *os.File
+	cancelled  string
+	done       chan struct{}
+	cleanupErr error
 }
 
 // Custody owns process trees for one Mill-selected workspace.
@@ -318,8 +319,7 @@ func (c *Custody) wait(row *custodyRecord) {
 		row.Cancellation = nil
 		row.Exit = exitResult(row.cmd, err)
 	}
-	_ = row.stdout.Close()
-	_ = row.stderr.Close()
+	row.cleanupErr = errors.Join(row.stdout.Close(), row.stderr.Close())
 	close(row.done)
 }
 
@@ -398,20 +398,6 @@ func (c *Custody) Cancel(owner, handle string) (Record, error) {
 	return record, nil
 }
 
-// CancelHandle is the private control-channel form. The opaque handle already
-// identifies its owner; public owner-aware callers use Cancel.
-func (c *Custody) CancelHandle(handle string) (Record, error) {
-	c.mu.Lock()
-	row, ok := c.byHandle[handle]
-	if !ok {
-		c.mu.Unlock()
-		return Record{}, fmt.Errorf("unknown custody handle %q", handle)
-	}
-	owner := row.Owner
-	c.mu.Unlock()
-	return c.Cancel(owner, handle)
-}
-
 // Acknowledge removes a terminal record but retains its reservation tombstone.
 func (c *Custody) Acknowledge(owner, handle string) error {
 	c.mu.Lock()
@@ -431,22 +417,9 @@ func (c *Custody) Acknowledge(owner, handle string) error {
 	return nil
 }
 
-// AcknowledgeHandle is the private control-channel form.
-func (c *Custody) AcknowledgeHandle(handle string) error {
-	c.mu.Lock()
-	row, ok := c.byHandle[handle]
-	if !ok {
-		c.mu.Unlock()
-		return fmt.Errorf("unknown custody handle %q", handle)
-	}
-	owner := row.Owner
-	c.mu.Unlock()
-	return c.Acknowledge(owner, handle)
-}
-
-// Shutdown cancels every live owned process tree and waits briefly for facts
-// to become terminal before closing the Mill-lifetime service.
-func (c *Custody) Shutdown() {
+// Shutdown cancels every live owned process tree and waits for each terminal
+// fact and its output descriptors to settle before returning.
+func (c *Custody) Shutdown() error {
 	c.mu.Lock()
 	c.closed = true
 	rows := make([]*custodyRecord, 0, len(c.byHandle))
@@ -461,17 +434,57 @@ func (c *Custody) Shutdown() {
 	}
 	c.mu.Unlock()
 	deadline := time.Now().Add(5 * time.Second)
+	remaining := make([]*custodyRecord, 0, len(rows))
 	for _, row := range rows {
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			break
+		if !waitDoneUntil(row.done, deadline) {
+			remaining = append(remaining, row)
 		}
+	}
+	for _, row := range remaining {
+		if row.cmd != nil && row.cmd.Process != nil {
+			_ = syscall.Kill(-row.cmd.Process.Pid, syscall.SIGKILL)
+		}
+	}
+	graceDeadline := time.Now().Add(2 * time.Second)
+	var failures []error
+	for _, row := range rows {
+		if !waitDoneUntil(row.done, graceDeadline) {
+			failures = append(failures,
+				fmt.Errorf("custody handle %q did not terminalize before shutdown deadline", row.Handle))
+			continue
+		}
+		c.mu.Lock()
+		cleanupErr := row.cleanupErr
+		phase := row.Phase
+		c.mu.Unlock()
+		if phase != "terminal" {
+			failures = append(failures,
+				fmt.Errorf("custody handle %q completed shutdown in phase %q", row.Handle, phase))
+		}
+		if cleanupErr != nil {
+			failures = append(failures,
+				fmt.Errorf("custody handle %q output cleanup failed: %w", row.Handle, cleanupErr))
+		}
+	}
+	return errors.Join(failures...)
+}
+
+func waitDoneUntil(done <-chan struct{}, deadline time.Time) bool {
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
 		select {
-		case <-row.done:
-		case <-time.After(remaining):
-			if row.cmd != nil && row.cmd.Process != nil {
-				_ = syscall.Kill(-row.cmd.Process.Pid, syscall.SIGKILL)
-			}
+		case <-done:
+			return true
+		default:
+			return false
 		}
+	}
+	timer := time.NewTimer(remaining)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
 	}
 }

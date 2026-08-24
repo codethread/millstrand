@@ -1348,6 +1348,151 @@
           (.addSuppressed summary cleanup-error))
         (throw summary)))))
 
+(defn- process-repl!
+  "Evaluate one custody API form in the selected live Weaver."
+  [xdg-state-home workspace form]
+  (edn/read-string
+   (run-mill-env-stdin!
+    xdg-state-home workspace
+    (source-file/render-forms [form])
+    "weaver" "repl" "--stdin")))
+
+(defn smoke-process-custody!
+  "Prove custody continuity through a real Mill and Weaver replacement."
+  []
+  (let [world (live-add-root!)
+        {:keys [workspace outside xdg-state-home root]} world
+        reconciliation-marker (java.io.File. root "reconciled")
+        workspace-path (.getCanonicalPath workspace)
+        state-home (.getCanonicalPath xdg-state-home)
+        mill-process (atom nil)
+        old-weaver-status (atom nil)
+        new-weaver-status (atom nil)
+        failure (atom nil)]
+    (try
+      (.mkdirs workspace)
+      (write-client-config-to-dir! workspace-path)
+      (spit (java.io.File. workspace "spools.edn")
+            (live-add-spools-edn false nil))
+      (source-file/spit-forms! (java.io.File. workspace "init.clj")
+                               (live-add-init-forms false))
+      (reset! mill-process (start-live-add-mill! state-home))
+      (run-mill-env! state-home workspace-path "init")
+      (start-live-add-weaver! state-home workspace-path mill-process old-weaver-status)
+      (let [long-spec {:argv ["sh" "-c" "sleep 30"]
+                       :cwd (.getCanonicalPath outside)
+                       :env {}}
+            short-spec {:argv ["sh" "-c" "sleep 1; printf short"]
+                        :cwd (.getCanonicalPath outside)
+                        :env {}}
+            launch-form
+            (fn [key spec]
+              (list 'do
+                    '(require '[millstrand.api.current.alpha :as current]
+                              '[millstrand.api.process.alpha :as process])
+                    (list 'millstrand.api.process.alpha/launch!
+                          (list 'millstrand.api.current.alpha/runtime)
+                          :e2e/process key spec)))
+            long-row (process-repl! state-home workspace-path
+                                    (launch-form "long" long-spec))
+            short-row (process-repl! state-home workspace-path
+                                     (launch-form "short" short-spec))
+            list-form
+            '(do
+               (require '[millstrand.api.current.alpha :as current]
+                        '[millstrand.api.process.alpha :as process])
+               (process/list-owned (current/runtime) :e2e/process))]
+        (assert= :starting (:phase long-row)
+                 "custody launch returns a real long child record")
+        (assert= "short" (:key short-row)
+                 "custody launch returns a real short child record")
+        (run-mill-env! state-home workspace-path "weaver" "stop")
+        (await-condition!
+         "short custody child terminal output while Weaver is down"
+         (smoke-await-ms 5000)
+         (fn [_]
+           (when (= "short" (slurp (:stdout-ref (:output short-row)))) true)))
+        (start-live-add-weaver! state-home workspace-path mill-process new-weaver-status)
+        (let [rows-after (process-repl! state-home workspace-path list-form)
+              short-row-after
+              (await-condition!
+               "short custody child terminal reconciliation"
+               (smoke-await-ms 5000)
+               (fn [_]
+                 (let [rows (process-repl! state-home workspace-path list-form)]
+                   (or (first (filter #(and (= "short" (:key %))
+                                            (= :terminal (:phase %))) rows))
+                       nil))))
+              apply-form
+              (list 'do
+                    '(require '[millstrand.api.current.alpha :as current]
+                              '[millstrand.api.process.alpha :as process])
+                    (list 'let ['rt (list 'millstrand.api.current.alpha/runtime)
+                                'row (list 'first
+                                           (list 'filter
+                                                 '(fn [row]
+                                                    (= "short" (:key row)))
+                                                 (list 'process/list-owned
+                                                       'rt :e2e/process)))]
+                          (list 'when
+                                (list 'and 'row
+                                      '(= :terminal (:phase row))
+                                      (list 'not
+                                            (list '.exists
+                                                  (list 'java.io.File.
+                                                        (.getAbsolutePath reconciliation-marker)))))
+                                (list 'spit (.getAbsolutePath reconciliation-marker) "applied"))
+                          'row))]
+          (assert (some #(= "long" (:key %)) rows-after)
+                  "long custody child remains visible after Weaver replacement")
+          (assert short-row-after
+                  "short custody child is terminal after replacement")
+          (process-repl! state-home workspace-path apply-form)
+          (process-repl! state-home workspace-path apply-form)
+          (assert= "applied" (slurp reconciliation-marker)
+                   "terminal custody application is idempotent across reconciliation")
+          (process-repl! state-home workspace-path
+                         (list 'millstrand.api.process.alpha/acknowledge!
+                               (list 'millstrand.api.current.alpha/runtime)
+                               :e2e/process (:handle short-row-after)))
+          (let [tombstone-result
+                (process-repl! state-home workspace-path
+                               (list 'try
+                                     (launch-form "short" short-spec)
+                                     :unexpected-success
+                                     '(catch Exception error
+                                        (select-keys (ex-data error) [:code :message]))))]
+            (assert= "process/conflicting-key" (:code tombstone-result)
+                     (str "acknowledged custody key must remain tombstoned: "
+                          (pr-str tombstone-result))))
+          (let [long-row-after (first (filter #(= "long" (:key %))
+                                              (process-repl! state-home workspace-path
+                                                             list-form)))]
+            (process-repl! state-home workspace-path
+                           (list 'millstrand.api.process.alpha/cancel!
+                                 (list 'millstrand.api.current.alpha/runtime)
+                                 :e2e/process (:handle long-row-after))))))
+      (catch Throwable error
+        (reset! failure error)
+        (throw error))
+      (finally
+        (let [cleanup-errors (atom [])
+              old-pid (some-> @old-weaver-status :pid)
+              new-pid (some-> @new-weaver-status :pid)
+              mill-pid (some-> @mill-process .pid)]
+          (live-add-cleanup-stage! cleanup-errors "terminate old custody-test Weaver"
+                                   #(when old-pid
+                                      (terminate-recorded-pid! old-pid "old custody-test Weaver")))
+          (live-add-cleanup-stage! cleanup-errors "terminate replacement custody-test Weaver"
+                                   #(when new-pid
+                                      (terminate-recorded-pid! new-pid "replacement custody-test Weaver")))
+          (live-add-cleanup-stage! cleanup-errors "terminate custody-test Mill"
+                                   #(when @mill-process
+                                      (terminate-process! @mill-process "custody-test Mill")))
+          (live-add-cleanup-stage! cleanup-errors "remove guarded custody-test root"
+                                   #(delete-live-add-root! world [old-pid new-pid mill-pid]))
+          (finish-live-add-cleanup! failure cleanup-errors))))))
+
 (defn smoke-live-add!
   "Prove an absent local spool is additively published by one live weaver."
   []
@@ -1874,6 +2019,7 @@
         (smoke-cli-help!)
         (smoke-live-add!)
         (smoke-live-cutover!)
+        (smoke-process-custody!)
         (smoke-bootstrap! db-file)
         (catch Throwable t
           (reset! failure t)
