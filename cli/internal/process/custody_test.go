@@ -2,6 +2,7 @@ package process
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -159,9 +160,9 @@ func TestCustodyTERMIgnoringChildHelper(t *testing.T) {
 	if role == "child" {
 		signal.Ignore(syscall.SIGTERM)
 		if err := os.WriteFile(os.Getenv("CUSTODY_HELPER_PID_FILE"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
-			os.Exit(2)
+			helperFatalf("write child pid marker: %v", err)
 		}
-		waitForHelperRelease(os.Getenv("CUSTODY_HELPER_CHILD_RELEASE_PATH"))
+		waitForHelperRelease(os.Getenv("CUSTODY_HELPER_CHILD_RELEASE_PATH"), os.Getenv("CUSTODY_HELPER_CHILD_ACK_PATH"))
 	}
 	if role != "leader" {
 		os.Exit(2)
@@ -169,28 +170,45 @@ func TestCustodyTERMIgnoringChildHelper(t *testing.T) {
 	child := exec.Command(os.Args[0], "-test.run=TestCustodyTERMIgnoringChildHelper", "--")
 	child.Env = append(os.Environ(), "CUSTODY_HELPER_ROLE=child")
 	if err := child.Start(); err != nil {
-		os.Exit(2)
+		helperFatalf("start child helper: %v", err)
 	}
 	if err := os.WriteFile(os.Getenv("CUSTODY_HELPER_LEADER_PID_FILE"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
-		os.Exit(2)
+		helperFatalf("write leader pid marker: %v", err)
 	}
-	waitForHelperRelease(os.Getenv("CUSTODY_HELPER_RELEASE_PATH"))
+	waitForHelperRelease(os.Getenv("CUSTODY_HELPER_RELEASE_PATH"), os.Getenv("CUSTODY_HELPER_ACK_PATH"))
 }
 
-func waitForHelperRelease(path string) {
-	if strings.TrimSpace(path) == "" {
-		os.Exit(2)
+const helperReleaseDeadline = 5 * time.Second
+
+func helperFatalf(format string, args ...any) {
+	_, _ = fmt.Fprintf(os.Stderr, "custody test helper: "+format+"\n", args...)
+	os.Exit(2)
+}
+
+func waitForHelperRelease(releasePath, acknowledgementPath string) {
+	if strings.TrimSpace(releasePath) == "" || strings.TrimSpace(acknowledgementPath) == "" {
+		helperFatalf("release and acknowledgement marker paths must not be blank")
 	}
+	deadline := time.Now().Add(helperReleaseDeadline)
 	for {
-		file, err := os.Open(path)
+		file, err := os.Open(releasePath)
 		if err == nil {
 			_ = file.Close()
+			if err := os.WriteFile(acknowledgementPath, []byte("consumed\n"), 0o600); err != nil {
+				helperFatalf("write acknowledgement marker %s: %v", acknowledgementPath, err)
+			}
 			return
 		}
 		if !errors.Is(err, os.ErrNotExist) {
-			os.Exit(2)
+			helperFatalf("read release marker %s: %v", releasePath, err)
 		}
-		time.Sleep(10 * time.Millisecond)
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			helperFatalf("release marker %s was not received before the %s deadline", releasePath, helperReleaseDeadline)
+		}
+		timer := time.NewTimer(minDuration(remaining, 10*time.Millisecond))
+		<-timer.C
+		timer.Stop()
 	}
 }
 
@@ -224,14 +242,85 @@ func releaseHelper(t *testing.T, path string) {
 	}
 }
 
-func cleanupHelper(t *testing.T, releasePaths ...string) {
+type helperMarkers struct {
+	releasePath         string
+	acknowledgementPath string
+	pidPath             string
+}
+
+func cleanupHelper(t *testing.T, markers ...helperMarkers) {
 	t.Helper()
-	for _, path := range releasePaths {
-		releaseHelper(t, path)
+	for _, marker := range markers {
+		releaseHelper(t, marker.releasePath)
+	}
+	deadline := time.Now().Add(helperReleaseDeadline)
+	for _, marker := range markers {
+		if err := waitForHelperCompletion(marker, deadline); err != nil {
+			t.Errorf("helper cleanup for %s failed: %v", marker.releasePath, err)
+		}
 	}
 }
 
-func termIgnoringChildSpec(t *testing.T, root, childPIDFile, leaderPIDFile, childReleasePath, leaderReleasePath string) LaunchSpec {
+func waitForHelperCompletion(marker helperMarkers, deadline time.Time) error {
+	if strings.TrimSpace(marker.acknowledgementPath) == "" || strings.TrimSpace(marker.pidPath) == "" {
+		return errors.New("acknowledgement and pid marker paths must not be blank")
+	}
+	pid, err := readHelperPID(marker.pidPath, deadline)
+	if err != nil {
+		return err
+	}
+	acknowledged := false
+	for {
+		if !Alive(pid) {
+			// Cancellation may have killed the helper before cleanup could
+			// publish its release marker. Its exact PID being gone is enough to
+			// permit t.TempDir cleanup because it cannot access the root again.
+			return nil
+		}
+		if !acknowledged {
+			if _, err := os.Stat(marker.acknowledgementPath); err == nil {
+				acknowledged = true
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("read acknowledgement marker %s: %w", marker.acknowledgementPath, err)
+			}
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			if acknowledged {
+				return fmt.Errorf("helper pid %d acknowledged its release marker but did not exit before the %s deadline", pid, helperReleaseDeadline)
+			}
+			return fmt.Errorf("helper pid %d did not acknowledge its release marker and exit before the %s deadline", pid, helperReleaseDeadline)
+		}
+		timer := time.NewTimer(minDuration(remaining, 10*time.Millisecond))
+		<-timer.C
+		timer.Stop()
+	}
+}
+
+func readHelperPID(path string, deadline time.Time) (int, error) {
+	for {
+		value, err := os.ReadFile(path)
+		if err == nil {
+			pid, parseErr := strconv.Atoi(strings.TrimSpace(string(value)))
+			if parseErr != nil || pid <= 0 {
+				return 0, fmt.Errorf("helper pid marker %s is invalid: %q", path, string(value))
+			}
+			return pid, nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return 0, fmt.Errorf("read helper pid marker %s: %w", path, err)
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return 0, fmt.Errorf("helper pid marker %s was not written before the %s deadline", path, helperReleaseDeadline)
+		}
+		timer := time.NewTimer(minDuration(remaining, 10*time.Millisecond))
+		<-timer.C
+		timer.Stop()
+	}
+}
+
+func termIgnoringChildSpec(t *testing.T, root, childPIDFile, leaderPIDFile, childReleasePath, leaderReleasePath, childAckPath, leaderAckPath string) LaunchSpec {
 	t.Helper()
 	return LaunchSpec{
 		Argv: []string{os.Args[0], "-test.run=TestCustodyTERMIgnoringChildHelper", "--"},
@@ -242,6 +331,8 @@ func termIgnoringChildSpec(t *testing.T, root, childPIDFile, leaderPIDFile, chil
 			"CUSTODY_HELPER_LEADER_PID_FILE":    leaderPIDFile,
 			"CUSTODY_HELPER_CHILD_RELEASE_PATH": childReleasePath,
 			"CUSTODY_HELPER_RELEASE_PATH":       leaderReleasePath,
+			"CUSTODY_HELPER_CHILD_ACK_PATH":     childAckPath,
+			"CUSTODY_HELPER_ACK_PATH":           leaderAckPath,
 		},
 	}
 }
@@ -256,11 +347,18 @@ func TestCancelKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
 	leaderPIDFile := filepath.Join(root, "leader.pid")
 	childReleasePath := filepath.Join(root, "child.release")
 	leaderReleasePath := filepath.Join(root, "leader.release")
-	row, err := custody.Launch("owner/tree", "cancel", termIgnoringChildSpec(t, root, childPIDFile, leaderPIDFile, childReleasePath, leaderReleasePath))
+	childAckPath := filepath.Join(root, "child.ack")
+	leaderAckPath := filepath.Join(root, "leader.ack")
+	row, err := custody.Launch("owner/tree", "cancel", termIgnoringChildSpec(t, root, childPIDFile, leaderPIDFile, childReleasePath, leaderReleasePath, childAckPath, leaderAckPath))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cleanupHelper(t, childReleasePath, leaderReleasePath) })
+	t.Cleanup(func() {
+		cleanupHelper(t,
+			helperMarkers{releasePath: childReleasePath, acknowledgementPath: childAckPath, pidPath: childPIDFile},
+			helperMarkers{releasePath: leaderReleasePath, acknowledgementPath: leaderAckPath, pidPath: leaderPIDFile},
+		)
+	})
 	_ = waitPIDFile(t, leaderPIDFile)
 	childPID := waitPIDFile(t, childPIDFile)
 	escalated := false
@@ -301,11 +399,18 @@ func TestShutdownKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
 	leaderPIDFile := filepath.Join(root, "leader.pid")
 	childReleasePath := filepath.Join(root, "child.release")
 	leaderReleasePath := filepath.Join(root, "leader.release")
-	row, err := custody.Launch("owner/tree", "shutdown", termIgnoringChildSpec(t, root, childPIDFile, leaderPIDFile, childReleasePath, leaderReleasePath))
+	childAckPath := filepath.Join(root, "child.ack")
+	leaderAckPath := filepath.Join(root, "leader.ack")
+	row, err := custody.Launch("owner/tree", "shutdown", termIgnoringChildSpec(t, root, childPIDFile, leaderPIDFile, childReleasePath, leaderReleasePath, childAckPath, leaderAckPath))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cleanupHelper(t, childReleasePath, leaderReleasePath) })
+	t.Cleanup(func() {
+		cleanupHelper(t,
+			helperMarkers{releasePath: childReleasePath, acknowledgementPath: childAckPath, pidPath: childPIDFile},
+			helperMarkers{releasePath: leaderReleasePath, acknowledgementPath: leaderAckPath, pidPath: leaderPIDFile},
+		)
+	})
 	_ = waitPIDFile(t, leaderPIDFile)
 	childPID := waitPIDFile(t, childPIDFile)
 	if err := custody.Shutdown(); err != nil {
