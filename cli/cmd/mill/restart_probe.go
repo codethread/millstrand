@@ -189,7 +189,7 @@ func decodeRestartProbe(data []byte) (restartProbeResult, error) {
 
 var probeRuntime = runFreshRuntimeProbe
 
-const freshRuntimeProbeExpression = `(require '[clojure.data.json :as json] '[millstrand.core.db :as db] '[millstrand.core.weaver.runtime :as runtime]) (let [wire-baseline (json/read-str (System/getenv "MILLSTRAND_PROBE_BASELINE")) baseline {:status (keyword (get wire-baseline "status")) :projection (get wire-baseline "projection")} result (runtime/fresh-runtime-probe! {:config-dir (System/getenv "MILLSTRAND_PROBE_CONFIG") :state-dir (System/getenv "MILLSTRAND_PROBE_STATE") :data-dir (System/getenv "MILLSTRAND_PROBE_DATA")} {:old-generation-baseline baseline}) stage->wire (fn [value] (if (keyword? value) (subs (str value) 1) value)) wire (-> (select-keys result [:success :stage :probe/workspace :source/workspace :completed :diagnostics :log]) (update :stage stage->wire) (update :completed #(mapv stage->wire %)))] (spit (System/getenv "MILLSTRAND_PROBE_RESULT") (json/write-str wire :key-fn db/json-key)))`
+const freshRuntimeProbeExpression = `(require '[clojure.data.json :as json] '[millstrand.core.db :as db] '[millstrand.core.weaver.runtime :as runtime]) (let [wire-baseline (json/read-str (slurp (System/getenv "MILLSTRAND_PROBE_BASELINE_PATH"))) baseline {:status (keyword (get wire-baseline "status")) :projection (get wire-baseline "projection")} result (runtime/fresh-runtime-probe! {:config-dir (System/getenv "MILLSTRAND_PROBE_CONFIG") :state-dir (System/getenv "MILLSTRAND_PROBE_STATE") :data-dir (System/getenv "MILLSTRAND_PROBE_DATA")} {:old-generation-baseline baseline}) stage->wire (fn [value] (if (keyword? value) (subs (str value) 1) value)) wire (-> (select-keys result [:success :stage :probe/workspace :source/workspace :completed :diagnostics :log]) (update :stage stage->wire) (update :completed #(mapv stage->wire %)))] (spit (System/getenv "MILLSTRAND_PROBE_RESULT") (json/write-str wire :key-fn db/json-key)))`
 
 func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult, error) {
 	status, stale := readStatus(world)
@@ -212,6 +212,19 @@ func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult
 	if err != nil {
 		return restartProbeResult{}, fmt.Errorf("marshal old-generation baseline: %w", err)
 	}
+	baselineFile, err := os.CreateTemp("", "millstrand-probe-baseline-*.json")
+	if err != nil {
+		return restartProbeResult{}, fmt.Errorf("create restart probe baseline frame: %w", err)
+	}
+	baselinePath := baselineFile.Name()
+	defer func() { _ = os.Remove(baselinePath) }()
+	if _, err := baselineFile.Write(baseline); err != nil {
+		_ = baselineFile.Close()
+		return restartProbeResult{}, fmt.Errorf("write restart probe baseline frame: %w", err)
+	}
+	if err := baselineFile.Close(); err != nil {
+		return restartProbeResult{}, fmt.Errorf("close restart probe baseline frame: %w", err)
+	}
 	resultFile, err := os.CreateTemp("", "millstrand-probe-result-*.json")
 	if err != nil {
 		return restartProbeResult{}, fmt.Errorf("create restart probe result sink: %w", err)
@@ -224,7 +237,7 @@ func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult
 	defer func() { _ = os.Remove(resultPath) }()
 	cmd := exec.Command("clojure", "-M:millstrand", "-e", freshRuntimeProbeExpression)
 	cmd.Dir = source
-	cmd.Env = append(os.Environ(), "MILLSTRAND_PROBE_CONFIG="+world.ConfigDir, "MILLSTRAND_PROBE_STATE="+world.StateDir, "MILLSTRAND_PROBE_DATA="+world.DataDir, "MILLSTRAND_PROBE_BASELINE="+string(baseline), "MILLSTRAND_PROBE_RESULT="+resultPath)
+	cmd.Env = append(os.Environ(), "MILLSTRAND_PROBE_CONFIG="+world.ConfigDir, "MILLSTRAND_PROBE_STATE="+world.StateDir, "MILLSTRAND_PROBE_DATA="+world.DataDir, "MILLSTRAND_PROBE_BASELINE_PATH="+baselinePath, "MILLSTRAND_PROBE_RESULT="+resultPath)
 	var stderr cappedBuffer
 	stderr.limit = maxProbeStderr
 	// User init/module code may write ordinary stdout.  The probe result has a
