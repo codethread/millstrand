@@ -641,6 +641,101 @@
                    :millstrand.scheduler-wake/handler]
           :opt-un [:millstrand.scheduler-wake/payload]))
 
+;; Mill-owned native process custody boundaries (SPEC-003.C71-C76). These
+;; shapes are closed because they cross a JVM/process boundary; the process API
+;; projects them into keyword-keyed Clojure data after wire validation.
+(defn- absolute-path-string? [^String value]
+  (and (non-blank-string? value)
+       (.isAbsolute (File. value))))
+
+(s/def :millstrand.process/argv
+  (s/and (s/coll-of non-blank-string? :kind vector? :min-count 1)
+         vector?))
+(s/def :millstrand.process/cwd absolute-path-string?)
+(s/def :millstrand.process/env
+  (s/map-of non-blank-string? string?))
+(s/def :millstrand.process/stdin (s/nilable string?))
+(s/def :millstrand.process/launch-spec
+  (s/and (s/keys :req-un [:millstrand.process/argv
+                          :millstrand.process/cwd
+                          :millstrand.process/env]
+                 :opt-un [:millstrand.process/stdin])
+         #(every? #{:argv :cwd :env :stdin} (keys %))
+         #(or (not (contains? % :env)) (map? (:env %)))))
+(s/def :millstrand.core.specs/process-launch-spec :millstrand.process/launch-spec)
+(s/def :millstrand.process/owner keyword?)
+(s/def :millstrand.process/key non-blank-string?)
+(s/def :millstrand.process/handle non-blank-string?)
+(s/def :millstrand.process/phase #{:starting :running :terminal})
+(s/def :millstrand.process/stdout-ref non-blank-string?)
+(s/def :millstrand.process/stderr-ref non-blank-string?)
+(s/def :millstrand.process/output
+  (s/and (s/keys :req-un [:millstrand.process/stdout-ref
+                          :millstrand.process/stderr-ref])
+         #(exact-keys? #{:stdout-ref :stderr-ref} %)))
+(s/def :millstrand.process/code integer?)
+(s/def :millstrand.process/signal (s/nilable string?))
+(s/def :millstrand.process/exit
+  (s/and (s/keys :req-un [:millstrand.process/code
+                          :millstrand.process/signal])
+         #(exact-keys? #{:code :signal} %)))
+(s/def :millstrand.process/reason non-blank-string?)
+(s/def :millstrand.process/cancellation
+  (s/and (s/keys :req-un [:millstrand.process/reason])
+         #(exact-keys? #{:reason} %)))
+(s/def :millstrand.process/message non-blank-string?)
+(s/def :millstrand.process/launch-failure
+  (s/and (s/keys :req-un [:millstrand.process/message])
+         #(exact-keys? #{:message} %)))
+(s/def :millstrand.core.specs/terminal-process-result
+  (s/or :exit :millstrand.process/exit
+        :cancellation :millstrand.process/cancellation
+        :launch-failure :millstrand.process/launch-failure))
+(s/def :millstrand.core.specs/process-record
+  (s/and (s/keys :req-un [:millstrand.process/handle
+                          :millstrand.process/owner
+                          :millstrand.process/key
+                          :millstrand.process/phase
+                          :millstrand.process/output]
+                 :opt-un [:millstrand.process/exit
+                          :millstrand.process/cancellation
+                          :millstrand.process/launch-failure])
+         #(every? #{:handle :owner :key :phase :output :exit
+                    :cancellation :launch-failure}
+                  (keys %))
+         (fn [value]
+           (let [result-keys [:exit :cancellation :launch-failure]
+                 present (filter #(contains? value %) result-keys)]
+             (case (:phase value)
+               :terminal (= 1 (count present))
+               (empty? present))))))
+
+(def ^:private process-control-operations
+  #{"process.launch" "process.get" "process.list-owned"
+    "process.cancel" "process.acknowledge"})
+(s/def :millstrand.process-protocol/protocol-version #{3})
+(s/def :millstrand.process-protocol/request-id non-blank-string?)
+(s/def :millstrand.process-protocol/weaver-id non-blank-string?)
+(s/def :millstrand.process-protocol/operation process-control-operations)
+(s/def :millstrand.process-protocol/arguments map?)
+(s/def :millstrand.core.weaver.process-protocol/control-request
+  (s/and (s/keys :req-un [:millstrand.process-protocol/request-id
+                          :millstrand.process-protocol/weaver-id
+                          :millstrand.process-protocol/operation
+                          :millstrand.process-protocol/arguments])
+         #(= #{:protocol-version :request-id :weaver-id :operation :arguments}
+             (set (keys %)))))
+(s/def :millstrand.process-protocol/ok boolean?)
+(s/def :millstrand.process-protocol/error map?)
+(s/def :millstrand.process-protocol/result any?)
+(s/def :millstrand.core.weaver.process-protocol/control-response
+  (s/and (s/keys :req-un [:millstrand.process-protocol/request-id
+                          :millstrand.process-protocol/ok]
+                 :opt-un [:millstrand.process-protocol/result
+                          :millstrand.process-protocol/error])
+         #(every? #{:protocol-version :request-id :ok :result :error}
+                  (keys %))))
+
 ;; Restart and replacement boundaries are deliberately closed.  These maps are
 ;; consumed by Mill and are not an invitation to add ad-hoc lifecycle fields at
 ;; an encoding call site.

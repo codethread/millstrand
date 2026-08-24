@@ -483,6 +483,9 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 func (s *server) stopAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, custody := range s.custodies {
+		custody.Shutdown()
+	}
 	for _, child := range s.children {
 		if child.cmd != nil && child.cmd.Process != nil && processAlive(child.cmd.Process.Pid) {
 			terminateProcess(child.cmd.Process)

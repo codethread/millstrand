@@ -119,7 +119,9 @@ Event handlers receive one event map and may perform trusted side effects, inclu
 
 ## SPEC-003.P4b Native process custody
 
-This section is a proposed addition, not a shipped API. Its implementation, validators, and tests are deferred to `atncp/5526z/3k3ek`, whose Done-when contracts own the custody channel and replacement coverage. The `Implemented` document status remains for the other SPEC-003 clauses and does not claim this namespace is available.
+This section describes the shipped Mill-owned custody API. Its implementation,
+wire validators, and focused replacement fixture live in feature card
+`3k3ek`.
 
 `millstrand.api.process.alpha` is the trusted in-process surface for native work that must continue while Mill replaces its Weaver. It takes the active runtime explicitly, is backed by the Weaver-to-Mill custody channel, and is not a `strand` op or a public JSON socket operation. Mill owns process identity, process-tree cancellation, output retention, and completion facts; the calling spool owns the durable record and the domain transition applied during reconciliation.
 

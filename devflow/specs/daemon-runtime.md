@@ -335,9 +335,8 @@ Design decisions: dedicated tables keep task queries, readiness, relation traver
 
 ## SPEC-004.P10e Weaver replacement and process custody
 
-This section is shipped for Weaver replacement and admission behavior. Process
-custody remains outside this implementation and is covered only where the
-individual custody clauses are explicitly available.
+This section is shipped for Weaver replacement, admission, and Mill-owned
+process custody behavior.
 
 The Mill router owns replacement of one Weaver generation while the Mill process remains alive. The Weaver remains the semantic owner of storage, registries, lifecycle effects, and domain policy. This section defines the Mill boundary needed for planned replacement; it does not turn restart into a durable workflow service.
 
