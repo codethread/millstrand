@@ -3,10 +3,22 @@
 package process
 
 import (
+	"errors"
 	"fmt"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
+
+var registerProcessExit = func(kqueue int, change unix.Kevent_t) error {
+	_, err := unix.Kevent(kqueue, []unix.Kevent_t{change}, nil, nil)
+	return err
+}
+
+var processExitWaitable = processExitWaitableDarwin
+
+// Darwin's idtype_t enum is not exported by x/sys/unix.
+const darwinPID = 1 // P_PID; P_ALL=0, P_PGID=2
 
 // observeProcessExit reports exit without consuming the child's wait status.
 // kqueue NOTE_EXIT observes the child while leaving it waitable, pinning its
@@ -18,7 +30,19 @@ func observeProcessExit(pid int) error {
 	}
 	defer func() { _ = unix.Close(kqueue) }()
 	change := unix.Kevent_t{Ident: uint64(pid), Filter: unix.EVFILT_PROC, Flags: unix.EV_ADD | unix.EV_ONESHOT, Fflags: unix.NOTE_EXIT}
-	if _, err := unix.Kevent(kqueue, []unix.Kevent_t{change}, nil, nil); err != nil {
+	if err := registerProcessExit(kqueue, change); err != nil {
+		// A child can become a waitable zombie between Start and this EV_ADD.
+		// Confirm that exact race without consuming its status; ESRCH by itself
+		// is not enough to turn an observer failure into success.
+		if errors.Is(err, unix.ESRCH) {
+			waitable, waitErr := processExitWaitable(pid)
+			if waitErr == nil && waitable {
+				return nil
+			}
+			if waitErr != nil {
+				return fmt.Errorf("watch process %d exit: %w", pid, errors.Join(err, waitErr))
+			}
+		}
 		return fmt.Errorf("watch process %d exit: %w", pid, err)
 	}
 	events := make([]unix.Kevent_t, 1)
@@ -34,6 +58,41 @@ func observeProcessExit(pid int) error {
 			return nil
 		}
 	}
+}
+
+// processExitWaitableDarwin checks for a waitable child without consuming its
+// status. The single Cmd.Wait owner still performs the eventual reap.
+func processExitWaitableDarwin(pid int) (bool, error) {
+	var info darwinSiginfo
+	_, _, err := unix.Syscall6(
+		unix.SYS_WAITID,
+		uintptr(darwinPID),
+		uintptr(pid),
+		uintptr(unsafe.Pointer(&info)),
+		uintptr(unix.WEXITED|unix.WNOHANG|unix.WNOWAIT),
+		0,
+		0,
+	)
+	if err != 0 {
+		return false, fmt.Errorf("check process %d waitability: %w", pid, err)
+	}
+	return info.pid == int32(pid), nil
+}
+
+// darwinSiginfo matches the stable prefix and size of Darwin's LP64
+// siginfo_t. Only si_pid is needed; the padding keeps waitid's copyout within
+// the supplied buffer on both amd64 and arm64.
+type darwinSiginfo struct {
+	signo  int32
+	errno  int32
+	code   int32
+	pid    int32
+	uid    uint32
+	status int32
+	addr   uintptr
+	value  uintptr
+	band   int64
+	pad    [7]uint64
 }
 
 func processGroupHasLiveMembers(pgid, leaderPID int) (bool, error) {
