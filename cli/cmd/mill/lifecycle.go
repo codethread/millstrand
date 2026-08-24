@@ -31,6 +31,7 @@ func resolveLifecycleWorld(req client.MillWorldRequest) (config.World, error) {
 const defaultWeaverReadyTimeout = 5 * time.Minute
 
 func (s *server) startClaim(configDir string) chan struct{} {
+	startClaimLookupFn(configDir)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.startClaims[configDir]
@@ -125,7 +126,7 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 		return nil, fmt.Errorf("invalid ready_timeout_ms %d: must be positive milliseconds, or omitted for the default", req.ReadyTimeoutMs)
 	}
 	if claim := s.startClaim(world.ConfigDir); claim != nil {
-		<-claim
+		waitForStartClaim(claim)
 		return s.startWeaverLoop(req)
 	}
 	if transition := s.lifecycleTransition(world.ConfigDir); transition != nil {
@@ -150,7 +151,7 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 	s.mu.Lock()
 	if claim := s.startClaims[world.ConfigDir]; claim != nil {
 		s.mu.Unlock()
-		<-claim
+		waitForStartClaim(claim)
 		return s.startWeaverLoop(req)
 	}
 	if transition := s.transitions[world.ConfigDir]; transition != nil {
@@ -401,7 +402,7 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 		return nil, err
 	}
 	if claim := s.startClaim(world.ConfigDir); claim != nil {
-		<-claim
+		waitForStartClaim(claim)
 		return s.stopWeaver(req)
 	}
 	if transition := s.lifecycleTransition(world.ConfigDir); transition != nil {

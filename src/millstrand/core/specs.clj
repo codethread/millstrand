@@ -413,6 +413,19 @@
          #(= #{:status :projection} (set (keys %)))
          #(= :admitted (:status %))
          #(s/valid? :millstrand.registry-projection/registry (:projection %))))
+
+(defn- json-safe-value?
+  "Return true for the closed JSON value grammar used by wire results."
+  [value]
+  (cond
+    (or (nil? value) (string? value) (boolean? value)) true
+    (number? value) (finite-json-number? value)
+    (vector? value) (every? json-safe-value? value)
+    (map? value) (and (every? string? (keys value))
+                      (every? json-safe-value? (vals value)))
+    :else false))
+
+(s/def :millstrand.core.specs/json-safe-value json-safe-value?)
 (s/def ::weaver-start-options
   (s/and (s/keys :opt-un [:millstrand.weaver-start/world
                           :millstrand.weaver-start/name
@@ -631,7 +644,9 @@
          #(s/valid? :millstrand.protocol/request-id (get % "request_id"))
          #(boolean? (get % "ok"))
          #(if (get % "ok")
-            (nil? (get % "error"))
+            (and (nil? (get % "error"))
+                 (s/valid? :millstrand.core.specs/json-safe-value
+                           (get % "result")))
             (and (nil? (get % "result"))
                  (s/valid? :millstrand.protocol/error (get % "error"))))))
 

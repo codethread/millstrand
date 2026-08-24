@@ -70,11 +70,11 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		outcome := relayInvokeWithAdmission(callerCtx, socketPath, weaverID, req.Payload, envelopeTimeoutMs(req.Payload), w, func() {
 			admission.Unlock()
 			admissionOpen = false
-		})
+		}, nil)
 		if admissionOpen {
 			admission.Unlock()
 		}
-		if outcome.responseWritten || outcome.err == nil {
+		if outcome.err == nil || outcome.clientWriteFailed {
 			return
 		}
 		if callerCtx.Err() != nil {
@@ -225,12 +225,13 @@ func cloneStatus(status map[string]any) map[string]any {
 // delivery ambiguity forbids replay, while the absence of a response frame
 // still produces a transport error for the caller.
 type relayOutcome struct {
-	requestDelivery bool
-	responseWritten bool
-	err             error
+	requestDelivery   bool
+	responseWritten   bool
+	clientWriteFailed bool
+	err               error
 }
 
-func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID string, envelope map[string]any, timeoutMs int64, w *bufio.Writer, admitted func()) relayOutcome {
+func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID string, envelope map[string]any, timeoutMs int64, w *bufio.Writer, admitted, writeStarted func()) relayOutcome {
 	ctx, cancel := context.WithTimeout(callerCtx, time.Second)
 	defer cancel()
 	if err := callerCtx.Err(); err != nil {
@@ -256,6 +257,9 @@ func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID st
 	deliveryStarted := make(chan struct{})
 	go func() {
 		close(deliveryStarted)
+		if writeStarted != nil {
+			writeStarted()
+		}
 		writeDone <- json.NewEncoder(conn).Encode(reqFrame)
 	}()
 	select {
@@ -282,10 +286,12 @@ func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID st
 	r := bufio.NewReader(conn)
 	outcome := relayOutcome{requestDelivery: true}
 	streaming := false
+	streamTerminated := false
 	for {
 		line, readErr := r.ReadBytes('\n')
-		if len(line) > 0 {
-			// A partial client write is still delivery evidence. Set this before
+		completeFrame := len(line) > 0 && line[len(line)-1] == '\n'
+		if completeFrame {
+			// A complete response frame is delivery evidence. Set this before
 			// handing bytes to the caller's writer, whose failure is response-side
 			// and must not cause request replay.
 			outcome.responseWritten = true
@@ -293,18 +299,29 @@ func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID st
 				streaming = true
 				_ = conn.SetDeadline(time.Time{}) // streams run unbounded
 			}
+			if streaming && isStreamTerminatorLine(line) {
+				streamTerminated = true
+			}
 			if _, werr := w.Write(line); werr != nil {
+				outcome.clientWriteFailed = true
 				outcome.err = werr
 				return outcome
 			}
 			if ferr := w.Flush(); ferr != nil {
+				outcome.clientWriteFailed = true
 				outcome.err = ferr
 				return outcome
 			}
+		} else if len(line) > 0 {
+			// A response is not delivered until its newline-delimited frame is
+			// complete. Do not relay a truncated or garbage partial line; the
+			// request remains ambiguous and the caller receives a transport error.
+			outcome.err = errors.New("weaver closed connection before a complete response frame")
+			return outcome
 		}
 		if readErr != nil {
 			if readErr == io.EOF {
-				if !outcome.responseWritten {
+				if !outcome.responseWritten || (streaming && !streamTerminated) {
 					outcome.err = errors.New("weaver closed connection without a response frame")
 				}
 				return outcome
@@ -325,6 +342,16 @@ func isStreamHeaderLine(line []byte) bool {
 		return false
 	}
 	return frame.Stream
+}
+
+func isStreamTerminatorLine(line []byte) bool {
+	var frame struct {
+		Done bool `json:"done"`
+	}
+	if err := json.Unmarshal(line, &frame); err != nil {
+		return false
+	}
+	return frame.Done
 }
 
 // envelopeTimeoutMs extracts the millisecond timeout the strand dispatcher put

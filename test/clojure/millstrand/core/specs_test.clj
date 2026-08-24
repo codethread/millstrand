@@ -90,3 +90,12 @@
                       "operation" "process.get"
                       "arguments" {}
                       "options" {}}))))
+
+(deftest successful-wire-results-use-an-explicit-json-shape
+  (is (s/valid? :millstrand.core.specs/json-safe-value
+                {"items" [1 true nil]}))
+  (doseq [value [{:items #{:unordered}}
+                 {1 "numeric key"}
+                 {:items (Object.)}]]
+    (is (not (s/valid? :millstrand.core.specs/json-safe-value value))
+        (pr-str value))))

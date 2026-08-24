@@ -117,6 +117,11 @@
   (swap! op-side-effects conj name)
   {:ran name})
 
+(defn opaque-result-op
+  "Return a runtime object that must not be stringified as a success result."
+  [_ctx]
+  (Object.))
+
 (defn throwing-op
   "Throw rich, partly non-JSON ex-data to exercise json-safe error rendering."
   [_ctx]
@@ -877,6 +882,17 @@
         (is (string? (get-in response ["error" "details" "opaque"])))
         (is (= "test-request" (get-in response ["error" "details" "request/id"])))
         (is (= "invoke" (get-in response ["error" "details" "request/operation"])))))))
+
+(deftest json-socket-rejects-opaque-success-results
+  (with-runtime
+    (fn [rt _]
+      (weaver/register-op! rt 'opaque-result raw-mutating-standard
+                           'millstrand.core.weaver.socket-test/opaque-result-op)
+      (let [response (invoke-request rt "opaque-result" [])]
+        (is (false? (get response "ok")))
+        (is (= "domain/error" (get-in response ["error" "code"])))
+        (is (str/includes? (get-in response ["error" "message"])
+                           "unsupported value"))))))
 
 (deftest json-socket-invoke-renders-keyword-error-codes-whole
   (with-runtime

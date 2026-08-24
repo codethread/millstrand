@@ -91,8 +91,8 @@ func readRestartRecordDetailed(world config.World) (restartRecord, bool, error) 
 	if err := decoder.Decode(&record); err != nil {
 		return restartRecord{}, false, fmt.Errorf("decode restart record %s: %w", restartRecordPath(world), err)
 	}
-	for _, field := range []string{"probe", "failure"} {
-		if value, present := raw[field]; present && string(bytes.TrimSpace(value)) == "null" {
+	for field, value := range raw {
+		if string(bytes.TrimSpace(value)) == "null" {
 			return restartRecord{}, false, fmt.Errorf("invalid restart record %s: %s must not be null", restartRecordPath(world), field)
 		}
 	}

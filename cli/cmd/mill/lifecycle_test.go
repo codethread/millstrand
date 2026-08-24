@@ -129,9 +129,9 @@ func TestAtomicStartClaimSerializesOverlappingStartsAndRestart(t *testing.T) {
 	var mu sync.Mutex
 	var launches int
 	var pids []int
-	originalLaunch, originalReady, originalProbe, originalClaim := launchWeaver, waitForReplacementReadyStatus, probeRuntime, startClaimInstalledFn
+	originalLaunch, originalReady, originalProbe, originalClaim, originalWait, originalLookup := launchWeaver, waitForReplacementReadyStatus, probeRuntime, startClaimInstalledFn, waitForStartClaim, startClaimLookupFn
 	t.Cleanup(func() {
-		launchWeaver, waitForReplacementReadyStatus, probeRuntime, startClaimInstalledFn = originalLaunch, originalReady, originalProbe, originalClaim
+		launchWeaver, waitForReplacementReadyStatus, probeRuntime, startClaimInstalledFn, waitForStartClaim, startClaimLookupFn = originalLaunch, originalReady, originalProbe, originalClaim, originalWait, originalLookup
 		for _, pid := range pids {
 			if processAlive(pid) {
 				terminatePID(pid)
@@ -166,9 +166,13 @@ func TestAtomicStartClaimSerializesOverlappingStartsAndRestart(t *testing.T) {
 	}
 	claimInstalled := make(chan struct{})
 	releaseClaim := make(chan struct{})
+	claimLookups := make(chan struct{}, 3)
 	startClaimInstalledFn = func(string) {
 		close(claimInstalled)
 		<-releaseClaim
+	}
+	startClaimLookupFn = func(string) {
+		claimLookups <- struct{}{}
 	}
 	s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}, startClaims: map[string]chan struct{}{}}
 	req := client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg, ReadyTimeoutMs: 2_000}
@@ -184,6 +188,14 @@ func TestAtomicStartClaimSerializesOverlappingStartsAndRestart(t *testing.T) {
 		}{status, err}
 	}()
 	<-claimInstalled
+	// The first lookup belongs to the owner that installed the claim. The two
+	// remaining lookup signals prove both overlapping callers reached the
+	// deterministic claim seam before release.
+	select {
+	case <-claimLookups:
+	case <-time.After(time.Second):
+		t.Fatal("initial start did not reach the start-claim lookup seam")
+	}
 	secondDone := make(chan struct {
 		status map[string]any
 		err    error
@@ -206,12 +218,12 @@ func TestAtomicStartClaimSerializesOverlappingStartsAndRestart(t *testing.T) {
 			err    error
 		}{status, err}
 	}()
-	select {
-	case <-secondDone:
-		t.Fatal("overlapping start crossed the locked claim installation seam")
-	case <-restartDone:
-		t.Fatal("overlapping restart crossed the locked claim installation seam")
-	case <-time.After(50 * time.Millisecond):
+	for range 2 {
+		select {
+		case <-claimLookups:
+		case <-time.After(time.Second):
+			t.Fatal("overlapping lifecycle call did not reach the start-claim wait seam")
+		}
 	}
 	close(releaseClaim)
 	first := <-firstDone

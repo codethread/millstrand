@@ -38,6 +38,24 @@ func TestInvokeRelaysSingleWeaverResponse(t *testing.T) {
 	}
 }
 
+func TestInvokeReportsTruncatedResponseWithoutReplay(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	serveFakeWeaverPartialResponse(t, world, []byte("not-json"))
+	writeWeaverMetadata(t, world, os.Getpid(), "weaver-truncated")
+
+	frames := runInvoke(t, cfg, map[string]any{"name": "read", "argv": []any{}, "payloads": map[string]any{}})
+	if len(frames) != 1 || frames[0]["ok"] != false {
+		t.Fatalf("expected one transport error frame, got %#v", frames)
+	}
+	errFrame := frames[0]["error"].(map[string]any)
+	if errFrame["type"] != "transport" || errFrame["code"] != "mill/weaver-forward-failed" {
+		t.Fatalf("truncated response was not surfaced as transport error: %#v", errFrame)
+	}
+	if errFrame["details"].(map[string]any)["request_delivery"] != true {
+		t.Fatalf("truncated response must never be replayed: %#v", errFrame)
+	}
+}
+
 func TestInvokeRelaysStreamFramesVerbatim(t *testing.T) {
 	world, cfg := forwardWorld(t)
 	serveFakeWeaverStream(t, world, func(req map[string]any) [][]byte {
@@ -196,11 +214,12 @@ func TestInvokeCancellationInterruptsNonReadingWeaverWrite(t *testing.T) {
 	w := bufio.NewWriter(io.Discard)
 	writeDone := make(chan error, 1)
 	admitted := make(chan struct{})
+	writeStarted := make(chan struct{})
 	go func() {
 		outcome := relayInvokeWithAdmission(ctx, socket, "non-reading", map[string]any{
 			"name": "large-write",
 			"data": strings.Repeat("x", 32<<20),
-		}, 0, w, func() { close(admitted) })
+		}, 0, w, func() { close(admitted) }, func() { close(writeStarted) })
 		writeDone <- outcome.err
 	}()
 	select {
@@ -211,7 +230,7 @@ func TestInvokeCancellationInterruptsNonReadingWeaverWrite(t *testing.T) {
 	select {
 	case <-admitted:
 		t.Fatal("non-reading Weaver accepted the complete request unexpectedly")
-	case <-time.After(100 * time.Millisecond):
+	case <-writeStarted:
 	}
 	cancel()
 	select {
@@ -401,6 +420,34 @@ func serveFakeWeaverStream(t *testing.T, world config.World, handler func(map[st
 					_, _ = w.Write([]byte("\n"))
 					_ = w.Flush()
 				}
+			}(conn)
+		}
+	}()
+}
+
+func serveFakeWeaverPartialResponse(t *testing.T, world config.World, response []byte) {
+	t.Helper()
+	socket := filepath.Join(world.StateDir, "weaver.sock")
+	_ = os.Remove(socket)
+	ln, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close(); _ = os.Remove(socket) })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer func() { _ = c.Close() }()
+				_ = c.SetDeadline(time.Now().Add(time.Second))
+				var req map[string]any
+				if err := json.NewDecoder(bufio.NewReader(c)).Decode(&req); err != nil {
+					return
+				}
+				_, _ = c.Write(response)
 			}(conn)
 		}
 	}()

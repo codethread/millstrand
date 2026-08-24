@@ -56,16 +56,58 @@
     (set? value) (mapv json-safe-value (sort-by pr-str value))
     :else (pr-str value)))
 
+(defn- strict-json-safe-value
+  "Convert a successful result to the closed JSON value grammar.
+
+  Unsupported runtime values fail at the response seam instead of being
+  stringified into a value that only looks like a successful result."
+  [value]
+  (let [converted
+        (cond
+          (nil? value) nil
+          (or (string? value) (boolean? value)) value
+          (number? value) (if (s/valid? :millstrand.core.specs/json-safe-value value)
+                            value
+                            (throw (ex-info "Successful result contains a non-finite number"
+                                            {:value value})))
+          (keyword? value) (subs (str value) 1)
+          (or (symbol? value) (inst? value) (uuid? value)) (str value)
+          (map? value) (let [entries (map (fn [[k v]]
+                                            [(strict-json-safe-value k)
+                                             (strict-json-safe-value v)])
+                                          value)
+                             result (into {} entries)]
+                         (when-not (= (count result) (count value))
+                           (throw (ex-info "Successful result has colliding JSON keys"
+                                           {:value value})))
+                         result)
+          (sequential? value) (mapv strict-json-safe-value value)
+          (set? value) (mapv strict-json-safe-value (sort-by pr-str value))
+          :else (throw (ex-info "Successful result contains an unsupported value"
+                                {:class (class value)})))]
+    (if (s/valid? :millstrand.core.specs/json-safe-value converted)
+      converted
+      (throw (ex-info "Successful result is not JSON-safe" {:value converted})))))
+
 (defn- success [request-id result]
   ;; A default help transform's output rides back as a verbatim marker
   ;; (`help/verbatim-result?`, DELTA-Dtf-002.CC1): unwrap it to the raw string and
   ;; flag the frame `verbatim` so the thin client relays it byte-for-byte instead
   ;; of re-encoding it as a JSON-quoted string. Every other result is an ordinary
   ;; single-result JSON payload.
-  (if (help/verbatim-result? result)
-    {"protocol_version" protocol/version "request_id" request-id "ok" true
-     "result" (help/verbatim-text result) "error" nil "verbatim" true}
-    {"protocol_version" protocol/version "request_id" request-id "ok" true "result" result "error" nil}))
+  (let [verbatim? (help/verbatim-result? result)
+        wire-result (strict-json-safe-value (if verbatim?
+                                              (help/verbatim-text result)
+                                              result))
+        frame {"protocol_version" protocol/version "request_id" request-id "ok" true
+               "result" wire-result "error" nil}]
+    (when-not (s/valid? :millstrand.core.mill-protocol/response frame)
+      (throw (ex-info "Successful response does not match the shared wire spec"
+                      {:response frame
+                       :explain (s/explain-data
+                                 :millstrand.core.mill-protocol/response frame)})))
+    (cond-> frame
+      verbatim? (assoc "verbatim" true))))
 
 (defn- rendered-code
   "Render a present ex-data `:code` as the wire's code string (SPEC-004.C24),
@@ -234,10 +276,22 @@
                 "socket_path" (:socket-path m)
                 "started_at" (:started-at m)
                 "nrepl" {"host" (get-in m [:endpoint :host]) "port" (get-in m [:endpoint :port])}}
+        status-projection {:generation-id (:generation-id m)
+                           :workspace (:config-dir m)
+                           :storage-kind (:storage-kind m)
+                           :storage-label (:storage-label m)
+                           :database-path (:canonical-db-path m)}
         projection (when include-registry?
                      ((requiring-resolve
                        'millstrand.core.weaver.module-refresh/registry-projection)
                       runtime))]
+    (when-not (s/valid? :millstrand.core.specs/weaver-status-projection
+                        status-projection)
+      (throw (ex-info "Weaver status projection has an invalid shared shape"
+                      {:projection status-projection
+                       :explain (s/explain-data
+                                 :millstrand.core.specs/weaver-status-projection
+                                 status-projection)})))
     (if include-registry?
       (do
         (when-not (s/valid? :millstrand.registry-projection/registry projection)

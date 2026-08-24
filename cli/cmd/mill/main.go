@@ -62,6 +62,10 @@ var millLogOut io.Writer = os.Stdout
 // installed and the hook is called.
 var startClaimInstalledFn = func(string) {}
 
+// startClaimLookupFn is a deterministic seam for proving that overlapping
+// lifecycle callers reached the claim lookup before the owner releases it.
+var startClaimLookupFn = func(string) {}
+
 func millLogf(format string, args ...any) {
 	_, _ = fmt.Fprintf(millLogOut, format+"\n", args...)
 }

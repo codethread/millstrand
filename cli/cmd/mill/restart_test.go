@@ -178,6 +178,8 @@ func TestRestartRecordValidationRejectsUnknownAndStateDependentShapes(t *testing
 		{"running missing generation", `{"state":"running","transition_id":"t","updated_at":"now"}`},
 		{"probing missing generation", `{"state":"probing","transition_id":"t","updated_at":"now"}`},
 		{"failure unknown field", `{"state":"failed","transition_id":"t","updated_at":"now","failure":{"stage":"launch","message":"x","extra":true}}`},
+		{"optional generation null", `{"state":"failed","transition_id":"t","generation_id":null,"updated_at":"now","failure":{"stage":"launch","message":"x"}}`},
+		{"optional failure null", `{"state":"failed","transition_id":"t","updated_at":"now","failure":null}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
