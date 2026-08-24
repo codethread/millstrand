@@ -12,7 +12,7 @@ verifier_tree="$tmp_root/verifier-tree"
 mill_pid=""
 mill_drain_pid=""
 weaver_started=0
-kanban_sha="7c615bd1032be0e443c36fa12e8c50143e8014ff"
+kanban_sha="3af5786f06121ee6055f34b4eefddc7000a84b5a"
 kanban_url="https://github.com/codethread/millhouse.spool.git"
 
 cleanup() {
