@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -98,6 +99,21 @@ func TestRestartProbeConformanceCorpus(t *testing.T) {
 			Valid bool           `json:"valid"`
 			Value map[string]any `json:"value"`
 		} `json:"probe_results"`
+		AdmissionStates []struct {
+			Name  string         `json:"name"`
+			Valid bool           `json:"valid"`
+			Value map[string]any `json:"value"`
+		} `json:"admission_states"`
+		RestartProjections []struct {
+			Name  string         `json:"name"`
+			Valid bool           `json:"valid"`
+			Value map[string]any `json:"value"`
+		} `json:"restart_projections"`
+		RestartRecords []struct {
+			Name  string         `json:"name"`
+			Valid bool           `json:"valid"`
+			Value map[string]any `json:"value"`
+		} `json:"restart_records"`
 	}
 	if err := json.Unmarshal(restartConformanceCorpus, &corpus); err != nil {
 		t.Fatal(err)
@@ -111,6 +127,41 @@ func TestRestartProbeConformanceCorpus(t *testing.T) {
 			_, decodeErr := decodeRestartProbe(data)
 			if (decodeErr == nil) != testCase.Valid {
 				t.Fatalf("corpus validity mismatch: valid=%v err=%v", testCase.Valid, decodeErr)
+			}
+		})
+	}
+	for _, testCase := range corpus.AdmissionStates {
+		t.Run("admission/"+testCase.Name, func(t *testing.T) {
+			err := validateAdmissionState(testCase.Value)
+			if (err == nil) != testCase.Valid {
+				t.Fatalf("corpus validity mismatch: valid=%v err=%v value=%#v", testCase.Valid, err, testCase.Value)
+			}
+		})
+	}
+	for _, testCase := range corpus.RestartProjections {
+		t.Run("projection/"+testCase.Name, func(t *testing.T) {
+			err := validateRestartResult(testCase.Value)
+			if (err == nil) != testCase.Valid {
+				t.Fatalf("corpus validity mismatch: valid=%v err=%v value=%#v", testCase.Valid, err, testCase.Value)
+			}
+		})
+	}
+	for _, testCase := range corpus.RestartRecords {
+		t.Run("record/"+testCase.Name, func(t *testing.T) {
+			encoded, err := json.Marshal(testCase.Value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var record restartRecord
+			decoder := json.NewDecoder(bytes.NewReader(encoded))
+			decoder.DisallowUnknownFields()
+			if decodeErr := decoder.Decode(&record); decodeErr != nil {
+				err = decodeErr
+			} else {
+				err = validateRestartRecord(record, validateRestartRecordFromDisk)
+			}
+			if (err == nil) != testCase.Valid {
+				t.Fatalf("corpus validity mismatch: valid=%v err=%v value=%#v", testCase.Valid, err, testCase.Value)
 			}
 		})
 	}

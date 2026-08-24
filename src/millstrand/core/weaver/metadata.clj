@@ -7,6 +7,8 @@
             [clojure.string :as str]
             [millstrand.core.weaver.protocol :as protocol])
   (:import [java.lang ProcessHandle]
+           [java.net UnixDomainSocketAddress]
+           [java.nio.channels SocketChannel]
            [java.nio.file Files StandardCopyOption]
            [java.util UUID]))
 
@@ -16,12 +18,18 @@
 (def ^:private artifact-monitor (Object.))
 (def ^:private pre-publication-claims (atom {}))
 
-(declare read-metadata socket-file stale-or-missing?)
+(declare read-metadata socket-file stale-or-missing? valid-metadata? pid-alive? delete!)
+
+(defn- canonical-path
+  "Return the canonical filesystem path for `value`."
+  [value]
+  (let [^java.io.File file (io/file value)]
+    (.getPath (.getCanonicalFile file))))
 
 (defn- canonical-state-dir
   "Return the filesystem identity used for process-local state-dir claims."
   [world]
-  (.getPath (.getCanonicalFile (io/file (:state-dir world)))))
+  (canonical-path (:state-dir world)))
 
 (defn- release-pre-publication-claim-unlocked!
   [world claim]
@@ -48,6 +56,36 @@
                        :config-dir (:config-dir world)
                        :socket-path (.getPath socket-file)})))))
 
+(defn- same-world-path?
+  "Return true when `actual` names exactly the selected runtime world."
+  [actual world]
+  (and (= (canonical-state-dir world) (canonical-path (:state-dir actual)))
+       (= (canonical-path (:config-dir world)) (canonical-path (:config-dir actual)))
+       (= (canonical-path (:data-dir world)) (canonical-path (:data-dir actual)))
+       (= (canonical-path (socket-file world)) (canonical-path (:socket-path actual)))))
+
+(defn- reclaim-stale-artifacts!
+  "Reclaim only dead metadata whose complete identity claims this world.
+
+  Malformed or live metadata is deliberately left untouched: neither shape
+  proves ownership strongly enough to justify unlinking a socket before bind."
+  [world]
+  (let [actual (read-metadata world)
+        ^java.io.File socket (socket-file world)
+        socket-live? (try
+                       (when (.exists socket)
+                         (with-open [channel (SocketChannel/open
+                                              java.net.StandardProtocolFamily/UNIX)]
+                           (.connect channel
+                                     (UnixDomainSocketAddress/of (.getPath socket)))
+                           true))
+                       (catch Throwable _ false))]
+    (when (and (valid-metadata? actual)
+               (same-world-path? actual world)
+               (not (pid-alive? (:pid actual)))
+               (not socket-live?))
+      (delete! world))))
+
 (defn claim-pre-publication-artifacts!
   "Claim `world`'s socket artifacts for one local startup attempt.
 
@@ -66,6 +104,7 @@
                         {:reason :pre-publication-claim-held
                          :state-dir (:state-dir world)})))
       (validate-pre-publication-artifacts! world)
+      (reclaim-stale-artifacts! world)
       (let [token (Object.)]
         (swap! pre-publication-claims assoc state-dir token)
         (reset! claim token)))))
@@ -303,9 +342,14 @@
        (= :nrepl (:transport metadata))
        (= protocol/version (:protocol-version metadata))
        (string? (:config-dir metadata))
+       (not (str/blank? (:config-dir metadata)))
+       (string? (:state-dir metadata))
+       (not (str/blank? (:state-dir metadata)))
        (not (str/blank? (:name metadata)))
        (string? (:data-dir metadata))
+       (not (str/blank? (:data-dir metadata)))
        (string? (:socket-path metadata))
+       (not (str/blank? (:socket-path metadata)))
        (string? (get-in metadata [:endpoint :host]))
        (int? (get-in metadata [:endpoint :port]))
        (valid-storage-identity? metadata)

@@ -32,8 +32,6 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/invoke-world-failed", Message: "invoke world resolution failed", Details: map[string]any{"detail": err.Error()}})
 		return
 	}
-	var wrote bool
-	var relayErr error
 	admission := s.workspaceAdmissionLock(world.ConfigDir)
 	for {
 		if err := callerCtx.Err(); err != nil {
@@ -69,20 +67,24 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		// cut over underneath this admission.
 		s.mu.Unlock()
 		admissionOpen := true
-		wrote, relayErr = relayInvokeWithAdmission(callerCtx, socketPath, weaverID, req.Payload, envelopeTimeoutMs(req.Payload), w, func() {
+		outcome := relayInvokeWithAdmission(callerCtx, socketPath, weaverID, req.Payload, envelopeTimeoutMs(req.Payload), w, func() {
 			admission.Unlock()
 			admissionOpen = false
 		})
 		if admissionOpen {
 			admission.Unlock()
 		}
-		if relayErr == nil || wrote {
+		if outcome.responseWritten || outcome.err == nil {
 			return
 		}
-		break
-	}
-	if relayErr != nil && !wrote {
-		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/weaver-forward-failed", Message: "weaver forwarding failed", Details: map[string]any{"detail": relayErr.Error()}})
+		if callerCtx.Err() != nil {
+			return
+		}
+		// A request that may have reached the Weaver is never replayed. Emit a
+		// transport frame when no response exists so the caller can distinguish
+		// an ambiguous send from a successful relay.
+		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/weaver-forward-failed", Message: "weaver forwarding failed", Details: map[string]any{"detail": outcome.err.Error(), "request_delivery": outcome.requestDelivery}})
+		return
 	}
 }
 
@@ -168,6 +170,14 @@ func (s *server) admittedInvokeTargetLocked(world config.World) (map[string]any,
 		case restartStateProbing:
 			status, stale := readStatus(world)
 			if status != nil && !stale {
+				// Metadata written by a legacy Weaver has no generation identity.
+				// The transition minted one when it admitted this old process; bind
+				// the invocation to that synthesized identity for the duration of
+				// the gated probe without rewriting legacy metadata.
+				status = cloneStatus(status)
+				if transition.old != nil && stringStatus(status, "generation_id") == "" {
+					status["generation_id"] = transition.old.generationID
+				}
 				if err := validateAdmissionState(map[string]any{"state": "open", "generation_id": status["generation_id"]}); err != nil {
 					return nil, nil, &client.ResponseError{Type: "protocol", Code: "mill/admission-invalid", Message: "invalid open admission state", Details: map[string]any{"detail": err.Error()}}
 				}
@@ -198,22 +208,37 @@ func (s *server) admittedInvokeTargetLocked(world config.World) (map[string]any,
 	return status, nil, nil
 }
 
+func cloneStatus(status map[string]any) map[string]any {
+	clone := make(map[string]any, len(status)+1)
+	for key, value := range status {
+		clone[key] = value
+	}
+	return clone
+}
+
 // relayInvoke dials the weaver socket, writes the invoke request frame, and
 // streams the weaver's NDJSON response lines to w verbatim, flushing per line.
 // A stream header switches the proxy to unbounded line-relay until the weaver
 // closes (terminator); a single-result response is one line. It never buffers
 // the whole response and holds no shared lock, so concurrent connections are
-// not starved. Returns whether any frame was written (so the caller only
-// synthesizes an error frame for a pre-relay failure) and the transport error.
-func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID string, envelope map[string]any, timeoutMs int64, w *bufio.Writer, admitted func()) (bool, error) {
+// not starved. Request delivery and response relay are tracked separately:
+// delivery ambiguity forbids replay, while the absence of a response frame
+// still produces a transport error for the caller.
+type relayOutcome struct {
+	requestDelivery bool
+	responseWritten bool
+	err             error
+}
+
+func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID string, envelope map[string]any, timeoutMs int64, w *bufio.Writer, admitted func()) relayOutcome {
 	ctx, cancel := context.WithTimeout(callerCtx, time.Second)
 	defer cancel()
 	if err := callerCtx.Err(); err != nil {
-		return false, err
+		return relayOutcome{err: err}
 	}
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
 	if err != nil {
-		return false, fmt.Errorf("weaver socket unreachable: %w", err)
+		return relayOutcome{err: fmt.Errorf("weaver socket unreachable: %w", err)}
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -225,34 +250,37 @@ func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID st
 		_ = conn.SetDeadline(time.Now().Add(time.Duration(timeoutMs) * time.Millisecond))
 	}
 	if err := callerCtx.Err(); err != nil {
-		return false, err
+		return relayOutcome{err: err}
 	}
 	writeDone := make(chan error, 1)
-	// The request may have reached the Weaver even when Encode reports a
-	// broken pipe. Mark the send boundary before writing so the caller never
-	// retries a possibly delivered mutation.
-	sent := true
+	deliveryStarted := make(chan struct{})
 	go func() {
+		close(deliveryStarted)
 		writeDone <- json.NewEncoder(conn).Encode(reqFrame)
 	}()
 	select {
 	case err := <-writeDone:
 		if err != nil {
-			return sent, fmt.Errorf("weaver socket write failed: %w", err)
+			return relayOutcome{requestDelivery: true, err: fmt.Errorf("weaver socket write failed: %w", err)}
 		}
 	case <-callerCtx.Done():
 		_ = conn.Close()
-		return false, callerCtx.Err()
+		select {
+		case <-deliveryStarted:
+			return relayOutcome{requestDelivery: true, err: callerCtx.Err()}
+		default:
+			return relayOutcome{err: callerCtx.Err()}
+		}
 	}
 	if err := callerCtx.Err(); err != nil {
-		return false, fmt.Errorf("weaver socket write failed: %w", err)
+		return relayOutcome{requestDelivery: true, err: fmt.Errorf("weaver socket write failed: %w", err)}
 	}
 	if admitted != nil {
 		admitted()
 	}
 
 	r := bufio.NewReader(conn)
-	wrote := false
+	outcome := relayOutcome{requestDelivery: true}
 	streaming := false
 	for {
 		line, readErr := r.ReadBytes('\n')
@@ -260,23 +288,29 @@ func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID st
 			// A partial client write is still delivery evidence. Set this before
 			// handing bytes to the caller's writer, whose failure is response-side
 			// and must not cause request replay.
-			wrote = true
+			outcome.responseWritten = true
 			if !streaming && isStreamHeaderLine(line) {
 				streaming = true
 				_ = conn.SetDeadline(time.Time{}) // streams run unbounded
 			}
 			if _, werr := w.Write(line); werr != nil {
-				return wrote, werr
+				outcome.err = werr
+				return outcome
 			}
 			if ferr := w.Flush(); ferr != nil {
-				return wrote, ferr
+				outcome.err = ferr
+				return outcome
 			}
 		}
 		if readErr != nil {
 			if readErr == io.EOF {
-				return wrote, nil
+				if !outcome.responseWritten {
+					outcome.err = errors.New("weaver closed connection without a response frame")
+				}
+				return outcome
 			}
-			return wrote, readErr
+			outcome.err = readErr
+			return outcome
 		}
 	}
 }

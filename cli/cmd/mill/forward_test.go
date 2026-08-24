@@ -186,7 +186,7 @@ func TestInvokeCancellationInterruptsNonReadingWeaverWrite(t *testing.T) {
 		conn, acceptErr := listener.Accept()
 		if acceptErr == nil {
 			close(accepted)
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 			select {}
 		}
 	}()
@@ -197,11 +197,11 @@ func TestInvokeCancellationInterruptsNonReadingWeaverWrite(t *testing.T) {
 	writeDone := make(chan error, 1)
 	admitted := make(chan struct{})
 	go func() {
-		_, relayErr := relayInvokeWithAdmission(ctx, socket, "non-reading", map[string]any{
+		outcome := relayInvokeWithAdmission(ctx, socket, "non-reading", map[string]any{
 			"name": "large-write",
 			"data": strings.Repeat("x", 32<<20),
 		}, 0, w, func() { close(admitted) })
-		writeDone <- relayErr
+		writeDone <- outcome.err
 	}()
 	select {
 	case <-accepted:
@@ -241,13 +241,13 @@ func TestInvokeAdmissionDoesNotBlockAnotherWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 	accepted := make(chan struct{})
 	go func() {
 		conn, acceptErr := listener.Accept()
 		if acceptErr == nil {
 			close(accepted)
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 			select {}
 		}
 	}()

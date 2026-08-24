@@ -41,10 +41,14 @@ func restartBoundaryStatus(world config.World, status map[string]any) map[string
 // probe detail, and log paths remain internal Mill status; they do not leak
 // into the restart envelope owned by the core restart spec.
 func restartResultProjection(status map[string]any) map[string]any {
+	state, _ := status["state"].(string)
+	if restartState, _ := status["restart_state"].(string); restartState == restartStateFailed {
+		state = restartStateFailed
+	}
 	projection := map[string]any{
 		"operation": "restart",
 		"workspace": status["workspace"],
-		"state":     status["state"],
+		"state":     state,
 	}
 	for _, key := range []string{"generation_id", "transition_id", "diagnostics"} {
 		if value, ok := status[key]; ok {
@@ -93,7 +97,7 @@ func validateRestartProjection(status map[string]any, withOperation bool) error 
 		}
 	}
 	if diagnostics, present := status["diagnostics"]; present {
-		rows, ok := diagnostics.([]map[string]any)
+		rows, ok := restartDiagnosticRows(diagnostics)
 		if !ok || len(rows) == 0 {
 			return errors.New("restart projection diagnostics must be a non-empty array")
 		}
@@ -137,6 +141,25 @@ func validateRestartProjection(status map[string]any, withOperation bool) error 
 		}
 	}
 	return nil
+}
+
+func restartDiagnosticRows(value any) ([]map[string]any, bool) {
+	switch rows := value.(type) {
+	case []map[string]any:
+		return rows, true
+	case []any:
+		result := make([]map[string]any, len(rows))
+		for index, row := range rows {
+			mapped, ok := row.(map[string]any)
+			if !ok {
+				return nil, false
+			}
+			result[index] = mapped
+		}
+		return result, true
+	default:
+		return nil, false
+	}
 }
 
 func validateRestartDiagnostic(row map[string]any) error {
@@ -196,7 +219,7 @@ func validateAdmissionState(admission map[string]any) error {
 	}
 	if state == "open" {
 		generation, ok := admission["generation_id"].(string)
-		if !ok || generation == "" {
+		if !ok || strings.TrimSpace(generation) == "" {
 			return errors.New("open admission state requires generation_id")
 		}
 		if _, ok := admission["transition_id"]; ok {
@@ -205,7 +228,7 @@ func validateAdmissionState(admission map[string]any) error {
 	}
 	if state == "closed" {
 		transition, ok := admission["transition_id"].(string)
-		if !ok || transition == "" {
+		if !ok || strings.TrimSpace(transition) == "" {
 			return errors.New("closed admission state requires transition_id")
 		}
 		if _, ok := admission["generation_id"]; ok {
@@ -323,7 +346,7 @@ func (s *server) setTransitionState(t *weaverTransition, state string, probe *re
 		record.Probe = t.probe
 	}
 	record.Failure = failure
-	if err := validateRestartRecord(record); err != nil {
+	if err := validateRestartRecord(record, validateRestartRecordForWrite); err != nil {
 		s.mu.Unlock()
 		return err
 	}
@@ -332,25 +355,35 @@ func (s *server) setTransitionState(t *weaverTransition, state string, probe *re
 	return err
 }
 
-func validateRestartRecord(record restartRecord) error {
-	if record.TransitionID == "" {
+func validateRestartRecord(record restartRecord, mode restartRecordValidationMode) error {
+	if strings.TrimSpace(record.TransitionID) == "" {
 		return errors.New("restart record requires transition_id")
 	}
-	if record.UpdatedAt != "" {
-		return errors.New("restart record updated_at is writer-owned")
+	if mode == validateRestartRecordForWrite {
+		if record.UpdatedAt != "" {
+			return errors.New("restart record updated_at is writer-owned")
+		}
+	} else if strings.TrimSpace(record.UpdatedAt) == "" {
+		return errors.New("restart record requires updated_at")
 	}
 	switch record.State {
 	case restartStateProbing, restartStateRestarting, restartStateRunning, restartStateFailed:
 	default:
 		return fmt.Errorf("restart record has unknown state %q", record.State)
 	}
-	if record.OldGenerationStopped && (record.GenerationID == "" || record.Probe == nil || !record.Probe.Success) {
+	if record.GenerationID != "" && strings.TrimSpace(record.GenerationID) == "" {
+		return errors.New("restart record generation_id must be non-blank")
+	}
+	if record.PreviousGeneration != "" && strings.TrimSpace(record.PreviousGeneration) == "" {
+		return errors.New("restart record previous_generation_id must be non-blank")
+	}
+	if record.OldGenerationStopped && (strings.TrimSpace(record.GenerationID) == "" || record.Probe == nil || !record.Probe.Success) {
 		return errors.New("stopped generation requires a successful probe and generation_id")
 	}
-	if record.State == restartStateProbing && (record.GenerationID == "" || record.Probe != nil || record.Failure != nil) {
+	if record.State == restartStateProbing && (strings.TrimSpace(record.GenerationID) == "" || record.Probe != nil || record.Failure != nil || record.OldGenerationStopped) {
 		return errors.New("probing restart record has contradictory fields")
 	}
-	if record.State == restartStateRunning && record.GenerationID == "" {
+	if record.State == restartStateRunning && strings.TrimSpace(record.GenerationID) == "" {
 		return errors.New("running restart record requires generation_id")
 	}
 	if record.State == restartStateFailed && record.Failure == nil {
@@ -360,10 +393,16 @@ func validateRestartRecord(record restartRecord) error {
 		if strings.TrimSpace(record.Failure.Stage) == "" || strings.TrimSpace(record.Failure.Message) == "" {
 			return errors.New("restart failure requires non-blank stage and message")
 		}
-		if record.State == restartStateRunning &&
-			(record.Failure.Stage != "probe" || record.Probe == nil || record.Probe.Success) {
-			return errors.New("running restart failure requires a failed probe")
+		if record.State == restartStateRunning {
+			if record.Failure.Stage != "probe" || record.Probe == nil || record.Probe.Success {
+				return errors.New("running restart failure requires a failed probe")
+			}
+		} else if record.State != restartStateFailed {
+			return fmt.Errorf("restart failure is contradictory for state %q", record.State)
 		}
+	}
+	if record.OldGenerationStopped && record.Failure != nil && record.Failure.Stage != "launch" {
+		return fmt.Errorf("stopped generation cannot have %s failure", record.Failure.Stage)
 	}
 	if record.Probe != nil {
 		if err := record.Probe.validate(); err != nil {
@@ -510,8 +549,6 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 
 func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldRequest) {
 	admission := s.workspaceAdmissionLock(t.world.ConfigDir)
-	admission.Lock()
-	defer admission.Unlock()
 	source, err := resolveLaunchSource(req.CWD)
 	if err != nil {
 		s.failProbe(t, nil, err)
@@ -537,6 +574,11 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 			return
 		}
 	}
+	// Probe execution is deliberately outside the admission lock. The old
+	// generation remains admitted and must continue serving invokes while the
+	// candidate is gated; lock only the irreversible stop-and-replace cutover.
+	admission.Lock()
+	defer admission.Unlock()
 	if err := s.setTransitionState(t, restartStateRestarting, &probe, nil); err != nil {
 		s.failRestart(t, "state", err, probe.Log)
 		return
@@ -609,8 +651,22 @@ func (s *server) failProbe(t *weaverTransition, probe *restartProbeResult, err e
 		return
 	}
 	status := s.admittedGenerationStatus(t.world, t)
+	// The old generation remains admitted, but the closed restart command must
+	// describe the refused transition rather than masquerading as a successful
+	// replacement.  The public projection has no probe-specific field; use its
+	// failed state and structured diagnostics while keeping admission status
+	// independently open through the old metadata.
 	status["probe_error"] = err.Error()
-	status["restart_state"] = restartStateRunning
+	status["restart_state"] = restartStateFailed
+	status["diagnostics"] = []map[string]any{{
+		"stage":  "probe",
+		"status": "failed",
+		"data": map[string]any{
+			"message":       err.Error(),
+			"generation_id": status["generation_id"],
+			"transition_id": t.transitionID,
+		},
+	}}
 	restartBoundaryStatus(t.world, status)
 	s.completeTransition(t, status, nil, false)
 }

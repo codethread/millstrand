@@ -145,6 +145,17 @@
     (uninitialized-db-error? e) (domain-error request-id (uninitialized-db-exception))
     :else (transport-error request-id e)))
 
+(defn- error-frame-with-context
+  "Attach the decoded request identity to producer failures before rendering."
+  [request-id operation e]
+  (let [details (assoc (or (ex-data e) {})
+                       :request/id request-id
+                       :request/operation operation)]
+    (if (instance? clojure.lang.ExceptionInfo e)
+      (error-frame request-id
+                   (ex-info (or (ex-message e) "Request operation failed") details e))
+      (assoc-in (error-frame request-id e) ["error" "details"] (json-safe-value details)))))
+
 (defn- string-map? [m] (and (map? m) (every? string? (vals m))))
 
 (defn- valid-invoke-args? [args]
@@ -353,7 +364,7 @@
                      (run-payload-hooks-if-mutating! runtime entry (:hook-class classes)
                                                      request-id args {})
                      nil
-                     (catch Exception e (error-frame request-id e)))]
+                     (catch Exception e (error-frame-with-context request-id "invoke" e)))]
     (if hook-error
       (write-frame! hook-error)
       (do
@@ -365,7 +376,7 @@
             (write-frame! (stream-terminator request-id true terminator nil)))
           (catch Exception e
             (write-frame! (stream-terminator request-id false nil
-                                             (get (error-frame request-id e) "error")))))))))
+                                             (get (error-frame-with-context request-id "invoke" e) "error")))))))))
 
 (defn- handle-single-invoke!
   "Serve a single-result op: gate by the invoked leaf's hook class, dispatch
@@ -379,7 +390,7 @@
               (invoke-with-deadline runtime (:name entry) (get args "argv")
                                     envelope (effective-deadline-ms
                                               (:deadline-class classes) envelope)))
-     (catch Exception e (error-frame request-id e)))))
+     (catch Exception e (error-frame-with-context request-id "invoke" e)))))
 
 (defn- handle-invoke!
   "Dispatch an invoke request. Unknown ops — and unresolvable verb tokens of a
@@ -388,7 +399,7 @@
   [runtime request-id args write-frame!]
   (let [op-name (get args "name")
         entry (try {:ok ((api 'resolve-op) runtime (symbol op-name))}
-                   (catch Exception e {:error (error-frame request-id e)}))]
+                   (catch Exception e {:error (error-frame-with-context request-id "invoke" e)}))]
     (if-let [err (:error entry)]
       (write-frame! err)
       (let [entry (:ok entry)
@@ -397,13 +408,13 @@
             ;; hook gating; a retired-sugar or malformed shape redirects loudly
             ;; here (DELTA-Dtf-002.CC3) rather than reaching the handler.
             alias (try {:result (help/help-alias-result runtime entry (get args "argv") envelope)}
-                       (catch Exception e {:error (error-frame request-id e)}))
+                       (catch Exception e {:error (error-frame-with-context request-id "invoke" e)}))
             ;; The leaf walk resolves the gating/deadline classes pre-hook; an
             ;; unresolvable verb fails here, after the alias check so `--help`
             ;; shapes never reach the walk.
             classes (when-not (or (:error alias) (some? (:result alias)))
                       (try {:ok (invoked-leaf-classes entry (get args "argv"))}
-                           (catch Exception e {:error (error-frame request-id e)})))]
+                           (catch Exception e {:error (error-frame-with-context request-id "invoke" e)})))]
         (cond
           (:error alias) (write-frame! (:error alias))
           (some? (:result alias)) (write-frame! (success request-id (:result alias)))
@@ -417,20 +428,38 @@
   "Handle one newline-delimited JSON protocol request, writing one or more
   response frames through `write-frame!` (a fn of one JSON-safe frame)."
   [runtime line write-frame!]
-  (try
-    (let [req (json/read-str line)
-          request-id (get req "request_id")]
-      (if-let [err (validate-request (:metadata runtime) req)]
-        (write-frame! err)
-        (case (get req "operation")
-          "status" (write-frame!
-                    (success request-id
-                             (status-result runtime
-                                            (= true (get (get req "arguments")
-                                                         "include_registry_projection")))))
-          "invoke" (handle-invoke! runtime request-id (get req "arguments") write-frame!))))
-    (catch Exception _
-      (write-frame! (protocol-error nil "protocol/malformed-json" "Request must be one JSON object followed by newline" {})))))
+  (let [decoded (try
+                  {:value (json/read-str line)}
+                  (catch Exception e {:decode-error e}))]
+    (if-let [decode-error (:decode-error decoded)]
+      ;; Only the JSON decoder owns malformed-json. Runtime producer failures
+      ;; below retain the decoded request id and operation context.
+      (write-frame! (protocol-error nil "protocol/malformed-json"
+                                    "Request must be one JSON object followed by newline"
+                                    {"detail" (ex-message decode-error)}))
+      (let [req (:value decoded)
+            request-id (when (map? req) (get req "request_id"))
+            operation (when (map? req) (get req "operation"))]
+        (if-not (map? req)
+          (write-frame! (protocol-error nil "protocol/malformed-request"
+                                        "Request must be a JSON object" {}))
+          (try
+            (if-let [err (validate-request (:metadata runtime) req)]
+              (write-frame! err)
+              (case operation
+                "status" (write-frame!
+                          (success request-id
+                                   (status-result runtime
+                                                  (true? (get (get req "arguments")
+                                                              "include_registry_projection")))))
+                "invoke" (handle-invoke! runtime request-id (get req "arguments") write-frame!)))
+            (catch Exception e
+              (let [details (assoc (or (ex-data e) {})
+                                   :request/id request-id
+                                   :request/operation operation)]
+                (write-frame! (error-frame request-id
+                                           (ex-info (or (ex-message e) "Request operation failed")
+                                                    details e)))))))))))
 
 (defn start!
   "Start the JSON socket server for `runtime-state` at `socket-path`."

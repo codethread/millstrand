@@ -20,7 +20,7 @@
 
   (:import [java.io BufferedReader BufferedWriter InputStreamReader OutputStreamWriter]
            [java.net StandardProtocolFamily UnixDomainSocketAddress]
-           [java.nio.channels Channels SocketChannel]))
+           [java.nio.channels Channels ServerSocketChannel SocketChannel]))
 
 (def delete-tree! test-support/delete-tree!)
 
@@ -225,6 +225,120 @@
         (is (map? value))
         (is (boolean? valid))))))
 
+(defn- nonblank-string? [value]
+  (and (string? value) (not (str/blank? value))))
+
+(defn- valid-admission-case? [value]
+  (and (map? value)
+       (every? #{"state" "generation_id" "transition_id"} (keys value))
+       (case (get value "state")
+         "open" (and (= #{"state" "generation_id"} (set (keys value)))
+                     (nonblank-string? (get value "generation_id")))
+         "closed" (and (= #{"state" "transition_id"} (set (keys value)))
+                       (nonblank-string? (get value "transition_id")))
+         false)))
+
+(defn- valid-restart-diagnostic-case? [value]
+  (and (map? value)
+       (every? #{"stage" "status" "data"} (keys value))
+       (nonblank-string? (get value "stage"))
+       (contains? #{"completed" "failed" "skipped" "in-progress"}
+                  (get value "status"))
+       (or (not (contains? value "data")) (map? (get value "data")))))
+
+(defn- valid-restart-projection-case? [value]
+  (and (map? value)
+       (every? #{"operation" "workspace" "state" "generation_id"
+                 "transition_id" "diagnostics"} (keys value))
+       (= "restart" (get value "operation"))
+       (nonblank-string? (get value "workspace"))
+       (contains? #{"probing" "restarting" "running" "failed"}
+                  (get value "state"))
+       (every? #(or (not (contains? value %))
+                    (nonblank-string? (get value %)))
+               ["generation_id" "transition_id"])
+       (or (not (contains? value "diagnostics"))
+           (and (vector? (get value "diagnostics"))
+                (seq (get value "diagnostics"))
+                (every? valid-restart-diagnostic-case?
+                        (get value "diagnostics"))))
+       (case (get value "state")
+         "probing" (and (contains? value "generation_id")
+                        (contains? value "transition_id")
+                        (not (contains? value "diagnostics")))
+         "restarting" (and (contains? value "transition_id")
+                           (not (contains? value "generation_id"))
+                           (not (contains? value "diagnostics")))
+         "running" (and (contains? value "generation_id")
+                        (not (contains? value "diagnostics")))
+         "failed" (contains? value "diagnostics")
+         false)))
+
+(defn- valid-probe-case? [value]
+  (and (map? value)
+       (= #{"success" "stage" "probe/workspace" "source/workspace"
+            "completed" "diagnostics" "log"}
+          (set (keys value)))
+       (boolean? (get value "success"))
+       (= (if (get value "success") "probe/complete" "probe/failure")
+          (get value "stage"))
+       (every? #(nonblank-string? (get value %))
+               ["probe/workspace" "source/workspace" "log"])
+       (vector? (get value "completed"))
+       (every? nonblank-string? (get value "completed"))
+       (vector? (get value "diagnostics"))
+       (every? valid-restart-diagnostic-case? (get value "diagnostics"))))
+
+(defn- valid-restart-record-case? [value]
+  (let [state (get value "state")
+        probe (get value "probe")
+        failure (get value "failure")]
+    (and (map? value)
+         (every? #{"state" "transition_id" "generation_id"
+                   "previous_generation_id" "updated_at"
+                   "old_generation_stopped" "probe" "failure"} (keys value))
+         (contains? #{"probing" "restarting" "running" "failed"} state)
+         (nonblank-string? (get value "transition_id"))
+         (nonblank-string? (get value "updated_at"))
+         (or (not (contains? value "generation_id"))
+             (nonblank-string? (get value "generation_id")))
+         (or (not (contains? value "previous_generation_id"))
+             (nonblank-string? (get value "previous_generation_id")))
+         (or (not (contains? value "old_generation_stopped"))
+             (false? (get value "old_generation_stopped"))
+             (and (nonblank-string? (get value "generation_id"))
+                  (map? probe) (true? (get probe "success"))))
+         (or (not (contains? value "probe")) (valid-probe-case? probe))
+         (or (not (contains? value "failure"))
+             (and (map? failure)
+                  (every? #{"stage" "message" "log_path" "exit_evidence"}
+                          (keys failure))
+                  (nonblank-string? (get failure "stage"))
+                  (nonblank-string? (get failure "message"))))
+         (or (not= state "failed") (map? failure))
+         (or (not (contains? value "failure"))
+             (= state "failed")
+             (and (= state "running")
+                  (= "probe" (get failure "stage"))
+                  (false? (get probe "success"))))
+         (or (not (get value "old_generation_stopped"))
+             (= "launch" (get failure "stage"))))))
+
+(deftest restart-boundary-conformance-corpus-executes-in-clojure
+  (let [corpus (json/read-str (slurp "cli/cmd/mill/testdata/restart-conformance.json"))]
+    (doseq [{:strs [name valid value]} (get corpus "probe_results")]
+      (testing (str "probe/" name)
+        (is (= valid (valid-probe-case? value)))))
+    (doseq [{:strs [name valid value]} (get corpus "admission_states")]
+      (testing (str "admission/" name)
+        (is (= valid (valid-admission-case? value)))))
+    (doseq [{:strs [name valid value]} (get corpus "restart_projections")]
+      (testing (str "projection/" name)
+        (is (= valid (valid-restart-projection-case? value)))))
+    (doseq [{:strs [name valid value]} (get corpus "restart_records")]
+      (testing (str "record/" name)
+        (is (= valid (valid-restart-record-case? value)))))))
+
 (deftest successful-probe-cleanup-fails-loudly-with-path
   (let [world (temp-world)]
     (try
@@ -314,6 +428,67 @@
                (:socket-path (ex-data failure)))))
       (finally
         (metadata/delete! world)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-owned-metadata-and-socket-are-reclaimed-before-bind
+  (let [world (temp-world)
+        db-file (db-test/temp-db-file)
+        stale (metadata/metadata-shape
+               {:pid 999999
+                :host "127.0.0.1"
+                :port 5555
+                :storage-kind :sqlite-file
+                :storage-label (metadata/canonical-db-path db-file)
+                :canonical-db-path (metadata/canonical-db-path db-file)
+                :nonce "stale-generation"
+                :generation-id "generation-old"
+                :world world
+                :name "stale"
+                :started-at "2026-08-24T00:00:00Z"})
+        claim (atom nil)]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/metadata-file world) (pr-str stale))
+      (spit (metadata/json-metadata-file world) "stale")
+      (spit (metadata/socket-file world) "stale")
+      (metadata/claim-pre-publication-artifacts! world claim)
+      (is (nil? (metadata/read-metadata world)))
+      (is (false? (.exists (metadata/json-metadata-file world))))
+      (is (false? (.exists (metadata/socket-file world))))
+      (finally
+        (metadata/release-pre-publication-artifacts! world claim)
+        (db-test/delete-sqlite-family! db-file)
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest stale-metadata-never-unlinks-a-live-unknown-socket-owner
+  (let [world (temp-world)
+        db-file (db-test/temp-db-file)
+        stale (metadata/metadata-shape
+               {:pid 999999
+                :host "127.0.0.1"
+                :port 5555
+                :storage-kind :sqlite-file
+                :storage-label (metadata/canonical-db-path db-file)
+                :canonical-db-path (metadata/canonical-db-path db-file)
+                :nonce "unknown-owner"
+                :generation-id "generation-unknown"
+                :world world
+                :name "unknown-owner"
+                :started-at "2026-08-24T00:00:00Z"})
+        claim (atom nil)
+        server (ServerSocketChannel/open StandardProtocolFamily/UNIX)]
+    (try
+      (.mkdirs (io/file (:state-dir world)))
+      (spit (metadata/metadata-file world) (pr-str stale))
+      (.bind server (UnixDomainSocketAddress/of (:socket-path stale)))
+      (metadata/claim-pre-publication-artifacts! world claim)
+      (is (= stale (metadata/read-metadata world)))
+      (is (.exists (metadata/socket-file world)))
+      (finally
+        (metadata/release-pre-publication-artifacts! world claim)
+        (.close server)
+        (metadata/delete! world)
+        (db-test/delete-sqlite-family! db-file)
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
 (deftest final-runtime-publication-requires-admitted-ownership

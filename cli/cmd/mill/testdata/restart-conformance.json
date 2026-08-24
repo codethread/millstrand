@@ -53,5 +53,86 @@
         "log": "/tmp/probe.log"
       }
     }
+  ],
+  "admission_states": [
+    {
+      "name": "open-with-generation",
+      "valid": true,
+      "value": {"state": "open", "generation_id": "generation-1"}
+    },
+    {
+      "name": "closed-with-transition",
+      "valid": true,
+      "value": {"state": "closed", "transition_id": "transition-1"}
+    },
+    {
+      "name": "blank-generation",
+      "valid": false,
+      "value": {"state": "open", "generation_id": " "}
+    },
+    {
+      "name": "contradictory-open-identities",
+      "valid": false,
+      "value": {"state": "open", "generation_id": "generation-1", "transition_id": "transition-1"}
+    },
+    {
+      "name": "unknown-admission-field",
+      "valid": false,
+      "value": {"state": "closed", "transition_id": "transition-1", "extra": true}
+    }
+  ],
+  "restart_projections": [
+    {
+      "name": "running-replacement",
+      "valid": true,
+      "value": {"operation": "restart", "workspace": "/tmp/world", "state": "running", "generation_id": "generation-1"}
+    },
+    {
+      "name": "failed-probe-with-old-generation-diagnostic",
+      "valid": true,
+      "value": {"operation": "restart", "workspace": "/tmp/world", "state": "failed", "generation_id": "generation-old", "transition_id": "transition-1", "diagnostics": [{"stage": "probe", "status": "failed", "data": {"message": "refused"}}]}
+    },
+    {
+      "name": "blank-workspace",
+      "valid": false,
+      "value": {"operation": "restart", "workspace": " ", "state": "running", "generation_id": "generation-1"}
+    },
+    {
+      "name": "contradictory-running-diagnostics",
+      "valid": false,
+      "value": {"operation": "restart", "workspace": "/tmp/world", "state": "running", "generation_id": "generation-1", "diagnostics": [{"stage": "probe", "status": "failed"}]}
+    },
+    {
+      "name": "blank-transition",
+      "valid": false,
+      "value": {"operation": "restart", "workspace": "/tmp/world", "state": "failed", "transition_id": " ", "diagnostics": [{"stage": "probe", "status": "failed"}]}
+    }
+  ],
+  "restart_records": [
+    {
+      "name": "running-probe-refusal",
+      "valid": true,
+      "value": {"state": "running", "transition_id": "transition-1", "generation_id": "generation-old", "updated_at": "2026-08-24T00:00:00Z", "probe": {"success": false, "stage": "probe/failure", "probe/workspace": "/tmp/probe", "source/workspace": "/tmp/world", "completed": [], "diagnostics": [], "log": "/tmp/probe.log"}, "failure": {"stage": "probe", "message": "refused"}}
+    },
+    {
+      "name": "stopped-successful-probe",
+      "valid": true,
+      "value": {"state": "failed", "transition_id": "transition-1", "generation_id": "generation-old", "updated_at": "2026-08-24T00:00:00Z", "old_generation_stopped": true, "probe": {"success": true, "stage": "probe/complete", "probe/workspace": "/tmp/probe", "source/workspace": "/tmp/world", "completed": [], "diagnostics": [], "log": "/tmp/probe.log"}, "failure": {"stage": "launch", "message": "startup failed"}}
+    },
+    {
+      "name": "blank-transition",
+      "valid": false,
+      "value": {"state": "failed", "transition_id": " ", "updated_at": "2026-08-24T00:00:00Z", "failure": {"stage": "launch", "message": "startup failed"}}
+    },
+    {
+      "name": "contradictory-stopped-failed-probe",
+      "valid": false,
+      "value": {"state": "failed", "transition_id": "transition-1", "generation_id": "generation-old", "updated_at": "2026-08-24T00:00:00Z", "old_generation_stopped": true, "probe": {"success": false, "stage": "probe/failure", "probe/workspace": "/tmp/probe", "source/workspace": "/tmp/world", "completed": [], "diagnostics": [], "log": "/tmp/probe.log"}, "failure": {"stage": "launch", "message": "startup failed"}}
+    },
+    {
+      "name": "unknown-record-field",
+      "valid": false,
+      "value": {"state": "failed", "transition_id": "transition-1", "updated_at": "2026-08-24T00:00:00Z", "failure": {"stage": "launch", "message": "startup failed"}, "extra": true}
+    }
   ]
 }

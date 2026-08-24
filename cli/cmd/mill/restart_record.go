@@ -30,12 +30,19 @@ type restartRecord struct {
 	Failure              *restartFailure     `json:"failure,omitempty"`
 }
 
+type restartRecordValidationMode uint8
+
+const (
+	validateRestartRecordForWrite restartRecordValidationMode = iota
+	validateRestartRecordFromDisk
+)
+
 func restartRecordPath(world config.World) string {
 	return filepath.Join(world.StateDir, "restart.json")
 }
 
 func writeRestartRecord(world config.World, record restartRecord) error {
-	if err := validateRestartRecord(record); err != nil {
+	if err := validateRestartRecord(record, validateRestartRecordForWrite); err != nil {
 		return fmt.Errorf("invalid restart record: %w", err)
 	}
 	record.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -74,79 +81,23 @@ func readRestartRecordDetailed(world config.World) (restartRecord, bool, error) 
 	if err != nil {
 		return restartRecord{}, false, fmt.Errorf("decode restart record %s: %w", restartRecordPath(world), err)
 	}
-	allowed := map[string]bool{"state": true, "transition_id": true, "generation_id": true, "previous_generation_id": true, "updated_at": true, "old_generation_stopped": true, "probe": true, "failure": true}
-	for key := range raw {
-		if !allowed[key] {
-			return restartRecord{}, false, fmt.Errorf("invalid restart record %s: unknown field %q", restartRecordPath(world), key)
-		}
-	}
 	var record restartRecord
 	encoded, err := json.Marshal(raw)
 	if err != nil {
 		return restartRecord{}, false, fmt.Errorf("encode restart record %s: %w", restartRecordPath(world), err)
 	}
-	if err := json.Unmarshal(encoded, &record); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&record); err != nil {
 		return restartRecord{}, false, fmt.Errorf("decode restart record %s: %w", restartRecordPath(world), err)
 	}
-	for _, required := range []string{"state", "transition_id", "updated_at"} {
-		if value, ok := raw[required]; !ok || string(bytes.TrimSpace(value)) == "null" {
-			return restartRecord{}, false, fmt.Errorf("invalid restart record %s: missing %s", restartRecordPath(world), required)
+	for _, field := range []string{"probe", "failure"} {
+		if value, present := raw[field]; present && string(bytes.TrimSpace(value)) == "null" {
+			return restartRecord{}, false, fmt.Errorf("invalid restart record %s: %s must not be null", restartRecordPath(world), field)
 		}
 	}
-	switch record.State {
-	case restartStateProbing, restartStateRestarting, restartStateRunning, restartStateFailed:
-	default:
-		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: unknown state %q", restartRecordPath(world), record.State)
-	}
-	if record.OldGenerationStopped && record.State != restartStateRestarting && record.State != restartStateFailed && record.State != restartStateRunning {
-		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: old_generation_stopped is contradictory for state %q", restartRecordPath(world), record.State)
-	}
-	if record.OldGenerationStopped && record.GenerationID == "" {
-		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: old_generation_stopped requires generation_id", restartRecordPath(world))
-	}
-	if record.UpdatedAt == "" {
-		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: updated_at must not be blank", restartRecordPath(world))
-	}
-	for _, optional := range []string{"generation_id", "previous_generation_id"} {
-		if value, present := raw[optional]; present {
-			var text string
-			if err := json.Unmarshal(value, &text); err != nil || len(bytes.TrimSpace([]byte(text))) == 0 {
-				return restartRecord{}, false, fmt.Errorf("invalid restart record %s: %s must be a non-blank string", restartRecordPath(world), optional)
-			}
-		}
-	}
-	if record.State == restartStateFailed && record.Failure == nil {
-		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: failed state requires failure", restartRecordPath(world))
-	}
-	if record.Failure != nil && record.State != restartStateFailed {
-		if record.State != restartStateRunning || record.Failure.Stage != "probe" || record.Probe == nil || record.Probe.Success {
-			return restartRecord{}, false, fmt.Errorf("invalid restart record %s: failure is contradictory for state %q", restartRecordPath(world), record.State)
-		}
-	}
-	if record.OldGenerationStopped && record.Failure != nil && record.Failure.Stage != "launch" {
-		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: stopped generation cannot have %s failure", restartRecordPath(world), record.Failure.Stage)
-	}
-	if record.OldGenerationStopped && (record.Probe == nil || !record.Probe.Success) {
-		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: stopped generation requires successful probe", restartRecordPath(world))
-	}
-	if record.State == restartStateRunning && record.GenerationID == "" {
-		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: running state requires generation_id", restartRecordPath(world))
-	}
-	if record.State == restartStateProbing && record.GenerationID == "" {
-		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: probing state requires generation_id", restartRecordPath(world))
-	}
-	if failureRaw, ok := raw["failure"]; ok {
-		if err := validateFailureJSON(failureRaw); err != nil {
-			return restartRecord{}, false, fmt.Errorf("invalid restart record %s: %w", restartRecordPath(world), err)
-		}
-	}
-	if probeRaw, ok := raw["probe"]; ok {
-		if string(bytes.TrimSpace(probeRaw)) == "null" {
-			return restartRecord{}, false, fmt.Errorf("invalid restart record %s: probe must not be null", restartRecordPath(world))
-		}
-		if _, err := decodeRestartProbe(probeRaw); err != nil {
-			return restartRecord{}, false, fmt.Errorf("invalid restart record %s: %w", restartRecordPath(world), err)
-		}
+	if err := validateRestartRecord(record, validateRestartRecordFromDisk); err != nil {
+		return restartRecord{}, false, fmt.Errorf("invalid restart record %s: %w", restartRecordPath(world), err)
 	}
 	return record, true, nil
 }
@@ -168,30 +119,6 @@ func decodeObject(data []byte, label string) (map[string]json.RawMessage, error)
 		return nil, fmt.Errorf("%s has trailing JSON: %w", label, err)
 	}
 	return raw, nil
-}
-
-func validateFailureJSON(data json.RawMessage) error {
-	raw, err := decodeObject(data, "restart failure")
-	if err != nil {
-		return err
-	}
-	allowed := map[string]bool{"stage": true, "message": true, "log_path": true, "exit_evidence": true}
-	for key := range raw {
-		if !allowed[key] {
-			return fmt.Errorf("restart failure contains unknown field %q", key)
-		}
-	}
-	for _, required := range []string{"stage", "message"} {
-		value, ok := raw[required]
-		if !ok || string(bytes.TrimSpace(value)) == "null" {
-			return fmt.Errorf("restart failure missing %s", required)
-		}
-		var text string
-		if err := json.Unmarshal(value, &text); err != nil || text == "" {
-			return fmt.Errorf("restart failure %s must be a non-empty string", required)
-		}
-	}
-	return nil
 }
 
 func readRestartRecord(world config.World) (restartRecord, bool) {

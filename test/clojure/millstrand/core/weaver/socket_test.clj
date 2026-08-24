@@ -544,7 +544,11 @@
       (let [status (socket-request rt "status" {})
             rejected (socket-request rt "queries" {})]
         (is (true? (get status "ok")))
-        (let [projection (get-in status ["result" "registry_projection"])]
+        (is (nil? (get-in status ["result" "registry_projection"])))
+        (let [projected (socket-request rt "status"
+                                        {"include_registry_projection" true})
+              projection (get-in projected ["result" "registry_projection"])]
+          (is (true? (get projected "ok")))
           (is (map? projection))
           (is (every? string? (keys projection)))
           (is (every? #(= #{"effective" "owners" "provenance"}
@@ -870,7 +874,9 @@
         (is (= "domain" (get-in response ["error" "type"])))
         (is (= "op/failed" (get-in response ["error" "code"])))
         (is (= "policy/nope" (get-in response ["error" "details" "nested" "reason"])))
-        (is (string? (get-in response ["error" "details" "opaque"])))))))
+        (is (string? (get-in response ["error" "details" "opaque"])))
+        (is (= "test-request" (get-in response ["error" "details" "request/id"])))
+        (is (= "invoke" (get-in response ["error" "details" "request/operation"])))))))
 
 (deftest json-socket-invoke-renders-keyword-error-codes-whole
   (with-runtime
