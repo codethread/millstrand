@@ -244,8 +244,12 @@ type weaverTransition struct {
 	old          *weaverChild
 	transitionID string
 	stateValue   string
-	generationID string
-	probe        *restartProbeResult
+	// cutoverStarted remains true after the replacement becomes ready so an
+	// admitted old-generation request that reports EOF after transition
+	// cleanup still receives weaver/restarted rather than an ordinary loss.
+	cutoverStarted bool
+	generationID   string
+	probe          *restartProbeResult
 	// retryStartup records that a previous probe already completed and only
 	// replacement startup needs to be retried.  This is the recovery path after
 	// a cutover startup failure, when no old generation remains admitted.
@@ -317,6 +321,9 @@ func (s *server) setTransitionState(t *weaverTransition, state string, probe *re
 	s.mu.Lock()
 	t.mu.Lock()
 	t.stateValue = state
+	if state == restartStateRestarting {
+		t.cutoverStarted = true
+	}
 	if probe != nil {
 		copy := *probe
 		if copy.Completed == nil {

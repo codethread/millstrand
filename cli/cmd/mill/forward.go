@@ -60,6 +60,11 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		}
 		socketPath, _ := status["socket_path"].(string)
 		weaverID, _ := status["weaver_id"].(string)
+		// Keep the transition that admitted the old generation alongside the
+		// target.  The transition may leave s.transitions after replacement is
+		// ready, but an accepted old-generation request still needs its planned
+		// interruption outcome classified as weaver/restarted.
+		admittedTransition := s.admittedInvocationTransitionLocked(world.ConfigDir, status)
 		// Target selection is protected by the workspace admission lock. Once
 		// selected, release the process-global state mutex before any external
 		// socket operation; the workspace lock remains held until the request
@@ -83,7 +88,17 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		// A request that may have reached the Weaver is never replayed. Emit a
 		// transport frame when no response exists so the caller can distinguish
 		// an ambiguous send from a successful relay.
-		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/weaver-forward-failed", Message: "weaver forwarding failed", Details: map[string]any{"detail": outcome.err.Error(), "request_delivery": outcome.requestDelivery}})
+		code := "mill/weaver-forward-failed"
+		message := "weaver forwarding failed"
+		details := map[string]any{"detail": outcome.err.Error(), "request_delivery": outcome.requestDelivery}
+		if outcome.requestDelivery && plannedCutoverInterrupted(admittedTransition) {
+			code = "weaver/restarted"
+			message = "weaver replacement interrupted an admitted invocation"
+			details["sent_once"] = true
+			details["response"] = "ambiguous"
+			details["transition_id"] = admittedTransition.transitionID
+		}
+		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: code, Message: message, Details: details})
 		return
 	}
 }
@@ -100,6 +115,35 @@ func (s *server) workspaceAdmissionLock(configDir string) *sync.Mutex {
 	lock := &sync.Mutex{}
 	s.admissionLocks[configDir] = lock
 	return lock
+}
+
+func (s *server) admittedInvocationTransitionLocked(configDir string, status map[string]any) *weaverTransition {
+	t := s.transitions[configDir]
+	if t == nil || t.old == nil {
+		return nil
+	}
+	weaverID, _ := status["weaver_id"].(string)
+	generationID, _ := status["generation_id"].(string)
+	if (t.old.identity.WeaverID == "" || t.old.identity.WeaverID != weaverID) &&
+		(t.old.generationID == "" || t.old.generationID != generationID) {
+		return nil
+	}
+	switch t.state() {
+	case restartStateProbing, restartStateRestarting:
+		return t
+	default:
+		return nil
+	}
+}
+
+func plannedCutoverInterrupted(t *weaverTransition) bool {
+	if t == nil {
+		return false
+	}
+	t.mu.Lock()
+	cutoverStarted := t.cutoverStarted
+	t.mu.Unlock()
+	return cutoverStarted
 }
 
 // watchCallerConnection turns a client disconnect into cancellation for the

@@ -362,18 +362,32 @@
 
 (defn- unwrap-result!
   "Return a verified success `response`'s result, or raise the peer's error:
-  domain envelopes as `:peer/domain-error`, everything else as
-  `:peer/socket-error`."
+  domain envelopes as `:peer/domain-error`, a planned replacement as
+  `:weaver/restarted`, and everything else as `:peer/socket-error`.
+
+  A replacement outcome is already evidence that the request crossed its
+  one-send boundary. Keep it distinct from an ordinary socket loss so a
+  caller can apply its own safe-read policy without replaying a mutation."
   [peer op response]
   (if (true? (get response "ok"))
     (get response "result")
     (let [error (get response "error")]
-      (if (= "domain" (get error "type"))
+      (cond
+        (= "weaver/restarted" (get error "code"))
+        (throw (ex-info (get error "message" "Peer Weaver restarted")
+                        {:code :weaver/restarted
+                         :peer (peer-identity peer)
+                         :operation op
+                         :error error}))
+
+        (= "domain" (get error "type"))
         (throw (ex-info (get error "message" "Peer domain error")
                         {:code :peer/domain-error
                          :peer (peer-identity peer)
                          :operation op
                          :error error}))
+
+        :else
         (throw (ex-info (get error "message" "Peer socket error")
                         {:code :peer/socket-error
                          :peer (peer-identity peer)
