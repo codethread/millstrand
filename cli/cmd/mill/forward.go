@@ -82,8 +82,16 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		if outcome.err == nil || outcome.clientWriteFailed {
 			return
 		}
+		failureObservedAt := time.Now()
 		if callerCtx.Err() != nil {
 			return
+		}
+		if admittedTransition == nil && outcome.requestDelivery {
+			// The request may have been admitted before the lifecycle caller
+			// created its transition. Re-check after the relay failed so a
+			// planned cutover that began after send is still classified as a
+			// restart, without making ordinary socket loss look planned.
+			admittedTransition = s.admittedInvocationTransitionAt(world.ConfigDir, status, failureObservedAt)
 		}
 		// A request that may have reached the Weaver is never replayed. Emit a
 		// transport frame when no response exists so the caller can distinguish
@@ -103,6 +111,16 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 	}
 }
 
+func (s *server) admittedInvocationTransitionAt(configDir string, status map[string]any, observedAt time.Time) *weaverTransition {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t := s.admittedInvocationTransitionLocked(configDir, status)
+	if t != nil && !observedAt.IsZero() && t.createdAt.After(observedAt) {
+		return nil
+	}
+	return t
+}
+
 func (s *server) workspaceAdmissionLock(configDir string) *sync.Mutex {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -119,7 +137,10 @@ func (s *server) workspaceAdmissionLock(configDir string) *sync.Mutex {
 
 func (s *server) admittedInvocationTransitionLocked(configDir string, status map[string]any) *weaverTransition {
 	t := s.transitions[configDir]
-	if t == nil || t.old == nil {
+	if t == nil {
+		t = s.lastTransitions[configDir]
+	}
+	if t == nil || t.old == nil || !plannedCutoverInterrupted(t) {
 		return nil
 	}
 	weaverID, _ := status["weaver_id"].(string)
@@ -128,12 +149,7 @@ func (s *server) admittedInvocationTransitionLocked(configDir string, status map
 		(t.old.generationID == "" || t.old.generationID != generationID) {
 		return nil
 	}
-	switch t.state() {
-	case restartStateProbing, restartStateRestarting:
-		return t
-	default:
-		return nil
-	}
+	return t
 }
 
 func plannedCutoverInterrupted(t *weaverTransition) bool {

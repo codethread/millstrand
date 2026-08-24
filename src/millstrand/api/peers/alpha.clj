@@ -13,7 +13,7 @@
 (declare state-root weaver-metadata-files read-peer-metadata row
          resolved-peer
          ensure-peer-protocol! operation-name validate-args! call-frame request-envelope
-         socket-roundtrip! reject-stream-response! verify-response! unwrap-result!
+         socket-roundtrip! planned-restart? reject-stream-response! verify-response! unwrap-result!
          canonical-path peer-identity)
 
 (defn peers
@@ -269,21 +269,58 @@
    "options" {}})
 
 (defn- socket-roundtrip!
-  "Send `envelope` over one unix socket connection to `peer` and read the
-  single response line; any connection or IO failure throws
-  `:peer/transport-failed`."
+  "Send one envelope to peer and read its single response line.
+
+  A completed write followed by connection loss during a Mill replacement is
+  reported as :weaver/restarted. This function never retries a request."
   [peer op envelope]
-  (try
-    (with-open [ch (doto (SocketChannel/open StandardProtocolFamily/UNIX)
-                     (.connect (UnixDomainSocketAddress/of ^String (:socket-path peer))))
-                rdr (BufferedReader. (InputStreamReader. (Channels/newInputStream ch)))
-                wrt (BufferedWriter. (OutputStreamWriter. (Channels/newOutputStream ch)))]
-      (.write wrt (json/write-str envelope))
-      (.newLine wrt)
-      (.flush wrt)
-      (json/read-str (.readLine rdr)))
-    (catch Throwable t
-      (throw (transport-failure peer op t)))))
+  (let [sent? (atom false)]
+    (try
+      (with-open [ch (doto (SocketChannel/open StandardProtocolFamily/UNIX)
+                       (.connect (UnixDomainSocketAddress/of ^String (:socket-path peer))))
+                  rdr (BufferedReader. (InputStreamReader. (Channels/newInputStream ch)))
+                  wrt (BufferedWriter. (OutputStreamWriter. (Channels/newOutputStream ch)))]
+        (.write wrt (json/write-str envelope))
+        (.newLine wrt)
+        (.flush wrt)
+        (reset! sent? true)
+        (json/read-str (.readLine rdr)))
+      (catch Throwable t
+        (if (and @sent? (planned-restart? peer))
+          (throw (ex-info "Peer Weaver restarted after accepting the request"
+                          {:code :weaver/restarted
+                           :peer (peer-identity peer)
+                           :operation op
+                           :error {"code" "weaver/restarted"
+                                   "request_delivery" true
+                                   "sent_once" true}}
+                          t))
+          (throw (transport-failure peer op t)))))))
+
+(defn- planned-restart?
+  "Return whether Mill has closed a peer generation for replacement.
+
+  A missing record means ordinary transport loss. A malformed present record
+  remains visible as a boundary error instead of becoming a fallback."
+  [peer]
+  (let [file (io/file (:state-dir peer) "restart.json")]
+    (when (.isFile file)
+      (let [record (try
+                     (json/read-str (slurp file))
+                     (catch Exception e
+                       (throw (ex-info "Peer restart record is malformed"
+                                       {:code :peer/restart-state-malformed
+                                        :peer (peer-identity peer)
+                                        :file (.getPath file)}
+                                       e))))]
+        (when-not (map? record)
+          (throw (ex-info "Peer restart record must be an object"
+                          {:code :peer/restart-state-malformed
+                           :peer (peer-identity peer)
+                           :file (.getPath file)})))
+        (or (= "restarting" (get record "state"))
+            (and (= "failed" (get record "state"))
+                 (true? (get record "old_generation_stopped"))))))))
 
 (defn- valid-error-envelope?
   "True when `error` is a well-formed peer error envelope."

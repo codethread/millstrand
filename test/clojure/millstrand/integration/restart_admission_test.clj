@@ -10,13 +10,13 @@
            [java.net StandardProtocolFamily UnixDomainSocketAddress]
            [java.nio.channels Channels ServerSocketChannel]))
 
-(defn- peer-row [socket]
+(defn- peer-row [socket state-dir]
   {:name "planned-peer"
    :workspace "/tmp/planned-peer-workspace"
    :weaver-id "peer-weaver"
    :protocol-version 3
    :socket-path socket
-   :state-dir "/tmp/planned-peer-state"})
+   :state-dir state-dir})
 
 (defn- with-peer-server [response f]
   (let [root (test-support/temp-dir "millstrand-restart-admission")
@@ -44,7 +44,7 @@
                     "restart-admission-peer")]
         (.setDaemon thread true)
         (.start thread)
-        (f (peer-row socket-path)))
+        (f (peer-row socket-path root)))
       (finally
         (.close server)
         (test-support/delete-tree! root)))))
@@ -68,6 +68,16 @@
         (catch clojure.lang.ExceptionInfo ex
           (is (= :weaver/restarted (:code (ex-data ex))))
           (is (true? (get-in (ex-data ex) [:error "details" "sent_once"])))))))
+
+  (with-peer-server nil
+    (fn [peer]
+      (spit (io/file (:state-dir peer) "restart.json")
+            (json/write-str {"state" "restarting"}))
+      (try
+        (peers/call! peer "read")
+        (is false "expected a structured restart outcome after a sent request")
+        (catch clojure.lang.ExceptionInfo ex
+          (is (= :weaver/restarted (:code (ex-data ex))))))))
 
   (with-peer-server nil
     (fn [peer]

@@ -34,6 +34,10 @@ type server struct {
 	// deliberately shared by all lifecycle callers for that workspace: the
 	// caller's timeout only bounds its wait on transition.done.
 	transitions map[string]*weaverTransition
+	// lastTransitions retains the completed cutover identity long enough to
+	// classify an old-generation invocation whose socket reports EOF after the
+	// active transition has been removed.
+	lastTransitions map[string]*weaverTransition
 	// admissionLocks serialize target selection and request-frame admission per
 	// workspace. They keep one workspace's external socket write from blocking
 	// lifecycle access or invocations for another workspace.

@@ -243,6 +243,7 @@ type weaverTransition struct {
 	world        config.World
 	old          *weaverChild
 	transitionID string
+	createdAt    time.Time
 	stateValue   string
 	// cutoverStarted remains true after the replacement becomes ready so an
 	// admitted old-generation request that reports EOF after transition
@@ -424,6 +425,10 @@ func (s *server) completeTransition(t *weaverTransition, result map[string]any, 
 	t.result, t.err = result, err
 	if !retain && s.transitions[t.world.ConfigDir] == t {
 		delete(s.transitions, t.world.ConfigDir)
+		if s.lastTransitions == nil {
+			s.lastTransitions = map[string]*weaverTransition{}
+		}
+		s.lastTransitions[t.world.ConfigDir] = t
 	}
 	close(t.done)
 	s.mu.Unlock()
@@ -518,7 +523,7 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 	if retryProbe != nil {
 		state = restartStateRestarting
 	}
-	t := &weaverTransition{world: world, old: old, transitionID: newOpaqueID("transition"), stateValue: state, probe: retryProbe, retryStartup: retryProbe != nil, oldGenerationStopped: retryRecord != nil && retryRecord.OldGenerationStopped, done: make(chan struct{})}
+	t := &weaverTransition{world: world, old: old, transitionID: newOpaqueID("transition"), createdAt: time.Now(), stateValue: state, probe: retryProbe, retryStartup: retryProbe != nil, oldGenerationStopped: retryRecord != nil && retryRecord.OldGenerationStopped, done: make(chan struct{})}
 	if t.old != nil && t.old.generationID == "" {
 		t.old.generationID = newOpaqueID("generation")
 	}

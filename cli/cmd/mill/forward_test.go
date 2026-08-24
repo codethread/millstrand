@@ -105,6 +105,94 @@ func TestInvokeReportsPlannedRestartForAcceptedOldGeneration(t *testing.T) {
 	}
 }
 
+func TestInvokeReportsPlannedRestartWhenCutoverStartsAfterSend(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	socket := filepath.Join(world.StateDir, "weaver.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close(); _ = os.Remove(socket) })
+
+	received := make(chan struct{})
+	release := make(chan struct{})
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		var request map[string]any
+		if err := json.NewDecoder(bufio.NewReader(conn)).Decode(&request); err != nil {
+			return
+		}
+		close(received)
+		<-release
+		_, _ = conn.Write([]byte("not-json"))
+	}()
+	writeWeaverMetadata(t, world, os.Getpid(), "weaver-late-restart")
+
+	s := &server{children: map[string]*weaverChild{}}
+	req := client.MillRequest{
+		ProtocolVersion: client.MillProtocolVersion,
+		RequestID:       "late-restart",
+		Operation:       "invoke",
+		World:           client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg},
+		Payload:         map[string]any{"name": "mutate", "argv": []any{}, "payloads": map[string]any{}},
+	}
+	clientConn, serverConn := net.Pipe()
+	done := make(chan struct{})
+	go func() {
+		s.handleInvoke(serverConn, req)
+		close(done)
+	}()
+	defer func() { _ = clientConn.Close(); _ = serverConn.Close() }()
+
+	select {
+	case <-received:
+	case <-time.After(time.Second):
+		t.Fatal("weaver did not receive the admitted invocation")
+	}
+	// There was no transition during target selection or request delivery.
+	// Create the planned cutover only after the old generation has received the
+	// frame, then let it interrupt the response.
+	transition := &weaverTransition{
+		world:          world,
+		transitionID:   "transition-after-send",
+		stateValue:     restartStateRunning,
+		cutoverStarted: true,
+		done:           make(chan struct{}),
+		old: &weaverChild{
+			generationID: "generation-weaver-late-restart",
+			identity:     weaverIdentity{WeaverID: "weaver-late-restart"},
+		},
+	}
+	s.mu.Lock()
+	s.transitions = map[string]*weaverTransition{world.ConfigDir: transition}
+	s.mu.Unlock()
+	s.completeTransition(transition, map[string]any{"state": restartStateRunning}, nil, false)
+	close(release)
+
+	_ = clientConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var frame map[string]any
+	if err := json.NewDecoder(clientConn).Decode(&frame); err != nil {
+		t.Fatal(err)
+	}
+	errFrame, ok := frame["error"].(map[string]any)
+	if !ok || errFrame["code"] != "weaver/restarted" {
+		t.Fatalf("late planned interruption was not structured as weaver/restarted: %#v", frame)
+	}
+	details, ok := errFrame["details"].(map[string]any)
+	if !ok || details["request_delivery"] != true || details["sent_once"] != true || details["response"] != "ambiguous" {
+		t.Fatalf("late planned interruption lost sent-once ambiguity: %#v", errFrame)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("invoke did not finish")
+	}
+}
+
 func TestInvokeRelaysStreamFramesVerbatim(t *testing.T) {
 	world, cfg := forwardWorld(t)
 	serveFakeWeaverStream(t, world, func(req map[string]any) [][]byte {
