@@ -17,7 +17,7 @@ Function.
 Acknowledge one terminal fact owned by `owner` and clean its output.
 
 Mill rejects a handle when the caller does not name its reserving owner.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L101-L116">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L91-L102">Source</a></sub></p>
 
 ## <a name="millstrand.api.process.alpha/cancel!">`cancel!`</a>
 
@@ -30,7 +30,7 @@ Function.
 Request idempotent cancellation of `handle` owned by `owner`.
 
 Mill rejects a handle when the caller does not name its reserving owner.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L89-L99">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L74-L84">Source</a></sub></p>
 
 ## <a name="millstrand.api.process.alpha/get">`get`</a>
 
@@ -41,7 +41,7 @@ Mill rejects a handle when the caller does not name its reserving owner.
 Function.
 
 Return one Mill-owned process record by opaque handle.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L70-L75">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L47-L52">Source</a></sub></p>
 
 ## <a name="millstrand.api.process.alpha/launch!">`launch!`</a>
 
@@ -54,7 +54,7 @@ Function.
 Reserve `[owner key]` and launch one Mill-owned native process tree.
 
 Equal repeats converge on the existing record in its current phase. A different launch specification for an existing key fails loudly.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L54-L68">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L26-L40">Source</a></sub></p>
 
 ## <a name="millstrand.api.process.alpha/list-owned">`list-owned`</a>
 
@@ -65,4 +65,4 @@ Equal repeats converge on the existing record in its current phase. A different 
 Function.
 
 Return every unacknowledged process record owned by `owner`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L77-L87">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/process/alpha.clj#L58-L68">Source</a></sub></p>

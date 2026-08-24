@@ -1,6 +1,6 @@
 # REPL API
 
-**Document ID:** `SPEC-003` **Status:** Implemented **Last Updated:** 2026-08-23 **Code:** `src/millstrand/repl.clj`, `src/millstrand/api/*.alpha`, `src/millstrand/test`
+**Document ID:** `SPEC-003` **Status:** Implemented **Last Updated:** 2026-08-24 **Code:** `src/millstrand/repl.clj`, `src/millstrand/api/*.alpha`, `src/millstrand/test`
 
 ## SPEC-003.P1 Purpose
 
@@ -119,13 +119,11 @@ Event handlers receive one event map and may perform trusted side effects, inclu
 
 ## SPEC-003.P4b Native process custody
 
-This section describes the shipped Mill-owned custody API. Its implementation,
-wire validators, and focused replacement fixture live in feature card
-`3k3ek`.
+This section describes the shipped Mill-owned custody API.
 
 `millstrand.api.process.alpha` is the trusted in-process surface for native work that must continue while Mill replaces its Weaver. It takes the active runtime explicitly, is backed by the Weaver-to-Mill custody channel, and is not a `strand` op or a public JSON socket operation. Mill owns process identity, process-tree cancellation, output retention, and completion facts; the calling spool owns the durable record and the domain transition applied during reconciliation.
 
-- Boundary ownership is explicit: `millstrand.core.specs` owns `:millstrand.core.specs/process-launch-spec`, `:millstrand.core.specs/process-record`, and `:millstrand.core.specs/terminal-process-result`; the wire adapter owns `:millstrand.core.weaver.process-protocol/control-request` and `:millstrand.core.weaver.process-protocol/control-response`, plus `validate-request!` and `validate-response!`. The executable specs, validators, and tests are deferred to `atncp/5526z/3k3ek`; their Done-when contracts own them. This documentation-only correction adds no placeholder tests.
+- Boundary ownership is explicit: `millstrand.core.specs` owns `:millstrand.core.specs/process-launch-spec`, `:millstrand.core.specs/process-record`, `:millstrand.core.specs/terminal-process-result`, and `:millstrand.core.specs/process-acknowledgement-result`; the wire adapter owns `:millstrand.core.weaver.process-protocol/control-request` and `:millstrand.core.weaver.process-protocol/control-response`, plus `validate-request!` and `validate-response!`.
 - **SPEC-003.C71:** `millstrand.api.process.alpha` exposes exactly `(launch! runtime owner key launch-spec)`, `(get runtime handle)`, `(list-owned runtime owner)`, `(cancel! runtime owner handle)`, and `(acknowledge! runtime owner handle)`. `owner` is a stable spool-owned keyword and `key` is a non-blank owner-scoped string derived from the caller's durable record; neither may be a PID. `launch-spec` is a closed map with a non-empty vector of strings `:argv`, absolute string `:cwd`, string-to-string `:env` additions, and optional string-or-nil `:stdin`. Mill passes `:argv` directly to the operating system; it does not parse a shell command or interpolate tokens. Mill validates the complete launch spec at this boundary and fails loudly on malformed values, missing paths, or unsupported process state; the API does not accept a shell command string or a function.
 - **SPEC-003.C72 (launch idempotency):** `launch!` atomically reserves `[owner key]` and starts one process tree. A repeated call with the same owner, key, and launch spec returns the existing record in its current phase (`:starting`, `:running`, or `:terminal`). Reuse with a different launch spec fails loudly. The reservation remains after acknowledgement, so the same owner/key cannot launch a second process during the selected Mill lifetime. The returned process record contains an opaque non-blank `:handle`, `:owner`, `:key`, `:phase`, and `:output` references. A terminal record contains exactly one of `:exit {:code integer :signal nil-or-string}`, `:cancellation {:reason non-blank-string}`, or `:launch-failure {:message non-blank-string}`.
 - **SPEC-003.C73 (process records):** `get` returns one process record by opaque handle. `list-owned` returns every unacknowledged record for the owner, including `:starting`, `:running`, and `:terminal` phases, and is the startup reconciliation surface. Output references identify Mill-retained stdout and stderr facts without exposing a PID contract. A terminal `:exit` records the process exit status, a terminal `:cancellation` records Mill's cancellation reason, and a terminal `:launch-failure` records exactly one non-blank failure message when Mill could not start the process. Unknown handles, owner mismatches, malformed records, and contradictory phase/result shapes fail loudly.

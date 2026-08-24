@@ -113,16 +113,19 @@
                   :cause (ex-message e)}))))))
 
 (defn call!
-  "Send one validated private control request to Mill.
+  "Send one process custody control request through the internal seam.
 
-  A runtime may carry `:process-control` as a test or embedded-runtime seam;
-  normal Weaver runtimes use the local Mill metadata and Unix socket."
+  This is the sole public transport seam used by the explicit-runtime process
+  API. A runtime may carry `:process-control` as a test or embedded-runtime
+  seam; normal Weaver runtimes use the local Mill metadata and Unix socket.
+
+  Callers should use `millstrand.api.process.alpha` rather than this namespace."
   [runtime operation arguments]
   (if-let [control (:process-control runtime)]
     (control operation arguments)
     (request! runtime operation arguments)))
 
-(defn validate-request!
+(defn- validate-request!
   "Validate one string-keyed process control request before it is sent."
   [request]
   (let [decoded (keyword-frame request)]
@@ -136,7 +139,7 @@
                         decoded)})))
   request)
 
-(defn validate-response!
+(defn- validate-response!
   "Validate one decoded process control response at the wire boundary."
   [response]
   (when-not (and (map? response)
@@ -150,33 +153,3 @@
                       :millstrand.core.weaver.process-protocol/control-response
                       response)}))
   response)
-
-(defn validate-record!
-  "Validate and return one Mill wire process record."
-  [record]
-  (let [decoded (-> (keyword-frame record)
-                    (update :owner keyword)
-                    (update :phase keyword)
-                    (update :output #(-> %
-                                         (assoc :stdout-ref (or (:stdout-ref %)
-                                                                (:stdout_ref %))
-                                                :stderr-ref (or (:stderr-ref %)
-                                                                (:stderr_ref %)))
-                                         (dissoc :stdout_ref :stderr_ref)))
-                    (dissoc :launch_failure))]
-    (when-not (s/valid? :millstrand.core.specs/process-record decoded)
-      (fail! "Mill returned a malformed process record"
-             {:code "process/malformed-record"
-              :record decoded
-              :explain (s/explain-data :millstrand.core.specs/process-record decoded)}))
-    decoded))
-
-(defn wire-keys
-  "Convert keyword-keyed API data into the string-keyed control wire shape."
-  [value]
-  (cond
-    (map? value) (into {} (map (fn [[key item]]
-                                 [(if (keyword? key) (subs (str key) 1) (str key))
-                                  (wire-keys item)])) value)
-    (sequential? value) (mapv wire-keys value)
-    :else value))

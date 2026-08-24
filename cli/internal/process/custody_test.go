@@ -161,7 +161,7 @@ func TestCustodyTERMIgnoringChildHelper(t *testing.T) {
 		if err := os.WriteFile(os.Getenv("CUSTODY_HELPER_PID_FILE"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
 			os.Exit(2)
 		}
-		time.Sleep(24 * time.Hour)
+		waitForHelperRelease()
 	}
 	if role != "leader" {
 		os.Exit(2)
@@ -174,7 +174,14 @@ func TestCustodyTERMIgnoringChildHelper(t *testing.T) {
 	if err := os.WriteFile(os.Getenv("CUSTODY_HELPER_LEADER_PID_FILE"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
 		os.Exit(2)
 	}
-	time.Sleep(24 * time.Hour)
+	waitForHelperRelease()
+}
+
+func waitForHelperRelease() {
+	released := make(chan os.Signal, 1)
+	signal.Notify(released, syscall.SIGUSR1)
+	defer signal.Stop(released)
+	<-released
 }
 
 func waitPIDFile(t *testing.T, path string) int {
@@ -209,6 +216,36 @@ func terminatePID(t *testing.T, pid int) {
 	}
 }
 
+func releasePID(t *testing.T, pid int) {
+	t.Helper()
+	if pid > 0 && Alive(pid) {
+		if err := syscall.Kill(pid, syscall.SIGUSR1); err != nil && !errors.Is(err, syscall.ESRCH) {
+			t.Errorf("PID-specific helper release for %d failed: %v", pid, err)
+		}
+	}
+}
+
+func helperPID(path string) int {
+	value, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	pid, err := strconv.Atoi(string(value))
+	if err != nil {
+		return 0
+	}
+	return pid
+}
+
+func cleanupHelper(t *testing.T, pidFiles ...string) {
+	t.Helper()
+	for _, path := range pidFiles {
+		pid := helperPID(path)
+		releasePID(t, pid)
+		terminatePID(t, pid)
+	}
+}
+
 func termIgnoringChildSpec(t *testing.T, root, childPIDFile, leaderPIDFile string) LaunchSpec {
 	t.Helper()
 	return LaunchSpec{
@@ -234,7 +271,8 @@ func TestCancelKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaderPID := waitPIDFile(t, leaderPIDFile)
+	t.Cleanup(func() { cleanupHelper(t, childPIDFile, leaderPIDFile) })
+	_ = waitPIDFile(t, leaderPIDFile)
 	childPID := waitPIDFile(t, childPIDFile)
 	escalated := false
 	custody.signalGroup = func(pid int, signal syscall.Signal) error {
@@ -249,10 +287,6 @@ func TestCancelKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
 		}
 		return signalProcessGroup(pid, signal)
 	}
-	t.Cleanup(func() {
-		terminatePID(t, childPID)
-		terminatePID(t, leaderPID)
-	})
 	if _, err := custody.Cancel("owner/tree", row.Handle); err != nil {
 		t.Fatal(err)
 	}
@@ -280,12 +314,9 @@ func TestShutdownKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaderPID := waitPIDFile(t, leaderPIDFile)
+	t.Cleanup(func() { cleanupHelper(t, childPIDFile, leaderPIDFile) })
+	_ = waitPIDFile(t, leaderPIDFile)
 	childPID := waitPIDFile(t, childPIDFile)
-	t.Cleanup(func() {
-		terminatePID(t, childPID)
-		terminatePID(t, leaderPID)
-	})
 	if err := custody.Shutdown(); err != nil {
 		t.Fatal(err)
 	}

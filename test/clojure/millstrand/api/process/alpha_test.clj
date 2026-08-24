@@ -93,6 +93,16 @@
                                       "handle" "process-test"}]]
              @calls))))
 
+(t/deftest acknowledgement-result-is-closed-and-correlated
+  (let [runtime {:process-control
+                 (fn [_ _]
+                   {:acknowledged true
+                    :handle "process-test"
+                    :unexpected "field"})}]
+    (t/is (throws-message? #"malformed process acknowledgement"
+                           #(process/acknowledge! runtime :agent-harness/run
+                                                  "process-test")))))
+
 (t/deftest response-parsing-roundtrips-through-a-unix-socket
   (let [socket-file (java.io.File/createTempFile "mill-process-" ".sock")
         _ (.delete socket-file)

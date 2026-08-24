@@ -691,6 +691,11 @@
   (s/or :exit :millstrand.process/exit
         :cancellation :millstrand.process/cancellation
         :launch-failure :millstrand.process/launch-failure))
+(s/def :millstrand.process/acknowledged true?)
+(s/def :millstrand.core.specs/process-acknowledgement-result
+  (s/and (s/keys :req-un [:millstrand.process/acknowledged
+                          :millstrand.process/handle])
+         #(exact-keys? #{:acknowledged :handle} %)))
 (s/def :millstrand.core.specs/process-record
   (s/and (s/keys :req-un [:millstrand.process/handle
                           :millstrand.process/owner
