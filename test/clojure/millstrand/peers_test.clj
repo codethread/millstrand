@@ -196,9 +196,11 @@
   (let [peer-row {:name "offline"
                   :workspace "/tmp/offline"
                   :weaver-id "missing"
+                  :generation-id "missing-generation"
                   :protocol-version 3
                   :socket-path "/tmp/millstrand-peer-missing.sock"
-                  :state-dir "/tmp"}]
+                  :state-dir "/tmp"
+                  :running? false}]
     (try
       (peers/call! peer-row 42 {})
       (is false "expected invalid operation type to throw")
@@ -214,9 +216,11 @@
   (let [peer-row {:name "offline"
                   :workspace "/tmp/offline"
                   :weaver-id "missing"
+                  :generation-id "missing-generation"
                   :protocol-version 3
                   :socket-path "/tmp/millstrand-peer-missing.sock"
-                  :state-dir "/tmp"}]
+                  :state-dir "/tmp"
+                  :running? false}]
     (doseq [[args key] [["not-a-map" :args]
                         [{:argv "x"} :argv]
                         [{:argv [1 2]} :argv]

@@ -18,6 +18,30 @@ import (
 	"millstrand-strand-cli/internal/config"
 )
 
+func TestForwardOwnedBlockingHelperProcess(t *testing.T) {
+	if os.Getenv("MILLSTRAND_FORWARD_HELPER_PROCESS") != "1" {
+		return
+	}
+	select {}
+}
+
+func startForwardOwnedBlockingProcess(t *testing.T) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=TestForwardOwnedBlockingHelperProcess")
+	cmd.Env = append(os.Environ(), "MILLSTRAND_FORWARD_HELPER_PROCESS=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := cmd.Process.Pid
+	t.Cleanup(func() {
+		if processAlive(pid) {
+			terminatePID(pid)
+		}
+		waitForPIDExit(pid, time.Second)
+	})
+	return cmd
+}
+
 func TestInvokeRelaysSingleWeaverResponse(t *testing.T) {
 	world, cfg := forwardWorld(t)
 	var gotReq map[string]any
@@ -229,10 +253,7 @@ func TestInvokeClassifiesActualRestartAndDurableCleanup(t *testing.T) {
 		launchWeaver, probeRuntime, waitForReplacementReadyStatus = originalLaunch, originalProbe, originalReady
 	})
 	launchWeaver = func(source string, args []string, out, errOut io.Writer) (*exec.Cmd, error) {
-		cmd := exec.Command("sleep", "60")
-		if err := cmd.Start(); err != nil {
-			return nil, err
-		}
+		cmd := startForwardOwnedBlockingProcess(t)
 		if launches.Add(1) == 1 {
 			oldPID.Store(int32(cmd.Process.Pid))
 			writeWeaverMetadata(t, world, cmd.Process.Pid, "old-weaver")

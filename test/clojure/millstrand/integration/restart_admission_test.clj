@@ -17,7 +17,13 @@
    :generation-id "peer-generation"
    :protocol-version 3
    :socket-path socket
-   :state-dir state-dir})
+   :state-dir state-dir
+   :running? true})
+
+(defn- restart-record [fields]
+  (merge {"transition_id" "transition-1"
+          "updated_at" "2026-08-24T00:00:00Z"}
+         fields))
 
 (defn- with-peer-server [response f]
   (let [root (test-support/temp-dir "millstrand-restart-admission")
@@ -45,7 +51,7 @@
                     "restart-admission-peer")]
         (.setDaemon thread true)
         (.start thread)
-        (f (peer-row socket-path root)))
+        (f (peer-row socket-path (.getPath root))))
       (finally
         (.close server)
         (test-support/delete-tree! root)))))
@@ -73,9 +79,10 @@
   (with-peer-server nil
     (fn [peer]
       (spit (io/file (:state-dir peer) "restart.json")
-            (json/write-str {"state" "restarting"
-                             "previous_weaver_id" "peer-weaver"
-                             "previous_generation_id" "peer-generation"}))
+            (json/write-str (restart-record
+                             {"state" "restarting"
+                              "previous_weaver_id" "peer-weaver"
+                              "previous_generation_id" "peer-generation"})))
       (try
         (peers/call! peer "read")
         (is false "expected a structured restart outcome after a sent request")
@@ -85,10 +92,19 @@
   (with-peer-server nil
     (fn [peer]
       (spit (io/file (:state-dir peer) "restart.json")
-            (json/write-str {"state" "running"
-                             "old_generation_stopped" true
-                             "previous_weaver_id" "peer-weaver"
-                             "previous_generation_id" "peer-generation"}))
+            (json/write-str (restart-record
+                             {"state" "running"
+                              "generation_id" "replacement-generation"
+                              "old_generation_stopped" true
+                              "previous_weaver_id" "peer-weaver"
+                              "previous_generation_id" "peer-generation"
+                              "probe" {"success" true
+                                       "stage" "probe/complete"
+                                       "probe/workspace" "/tmp/probe"
+                                       "source/workspace" "/tmp/source"
+                                       "completed" []
+                                       "diagnostics" []
+                                       "log" "/tmp/probe.log"}})))
       (try
         (peers/call! peer "read")
         (is false "expected completed restart state to classify the old call")
@@ -97,15 +113,33 @@
 
   (doseq [[label record]
           [["unrelated later restart"
-            {"state" "running"
-             "old_generation_stopped" true
-             "previous_weaver_id" "other-weaver"
-             "previous_generation_id" "other-generation"}]
+            (restart-record
+             {"state" "running"
+              "generation_id" "replacement-generation"
+              "old_generation_stopped" true
+              "previous_weaver_id" "other-weaver"
+              "previous_generation_id" "other-generation"
+              "probe" {"success" true
+                       "stage" "probe/complete"
+                       "probe/workspace" "/tmp/probe"
+                       "source/workspace" "/tmp/source"
+                       "completed" []
+                       "diagnostics" []
+                       "log" "/tmp/probe.log"}})]
            ["generation mismatch"
-            {"state" "running"
-             "old_generation_stopped" true
-             "previous_weaver_id" "peer-weaver"
-             "previous_generation_id" "other-generation"}]]]
+            (restart-record
+             {"state" "running"
+              "generation_id" "replacement-generation"
+              "old_generation_stopped" true
+              "previous_weaver_id" "peer-weaver"
+              "previous_generation_id" "other-generation"
+              "probe" {"success" true
+                       "stage" "probe/complete"
+                       "probe/workspace" "/tmp/probe"
+                       "source/workspace" "/tmp/source"
+                       "completed" []
+                       "diagnostics" []
+                       "log" "/tmp/probe.log"}})]]]
     (with-peer-server nil
       (fn [peer]
         (spit (io/file (:state-dir peer) "restart.json")
@@ -123,3 +157,35 @@
         (is false "expected ordinary peer transport failure")
         (catch clojure.lang.ExceptionInfo ex
           (is (= :peer/transport-failed (:code (ex-data ex)))))))))
+
+(deftest malformed-peer-restart-records-fail-at-the-boundary
+  (doseq [[label record expected-field]
+          [["unknown state" (restart-record {"state" "surprise"}) "state"]
+           ["missing transition" {"state" "restarting"
+                                  "updated_at" "2026-08-24T00:00:00Z"}
+            "transition_id"]
+           ["wrong identity type" (restart-record
+                                   {"state" "restarting"
+                                    "previous_weaver_id" 42})
+            "previous_weaver_id"]
+           ["extra field" (assoc (restart-record {"state" "restarting"})
+                                 "unexpected" true)
+            "unexpected"]]]
+    (with-peer-server nil
+      (fn [peer]
+        (spit (io/file (:state-dir peer) "restart.json")
+              (json/write-str record))
+        (try
+          (peers/call! peer "read")
+          (is false (str label " must fail loudly"))
+          (catch clojure.lang.ExceptionInfo ex
+            (let [data (ex-data ex)]
+              (is (= :peer/restart-state-malformed (:code data)))
+              (is (= expected-field (:field data)))
+              (is (= (.getPath (io/file (:state-dir peer) "restart.json"))
+                     (:file data)))
+              (is (if (= expected-field "state")
+                    (contains? (:allowed data) "running")
+                    (if (= expected-field "unexpected")
+                      (not (contains? (:allowed data) expected-field))
+                      (contains? (:allowed data) expected-field)))))))))))

@@ -2,6 +2,7 @@
   "Discover and call local sibling weavers from mill-published runtime metadata."
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.protocol :as protocol])
@@ -14,7 +15,7 @@
          resolved-peer
          ensure-peer-protocol! operation-name validate-args! call-frame request-envelope
          socket-roundtrip! planned-restart? reject-stream-response! verify-response! unwrap-result!
-         canonical-path peer-identity)
+         canonical-path peer-identity validate-peer-row! validate-restart-record!)
 
 (defn peers
   "Return data-first rows for weaver metadata under the mill state root.
@@ -39,12 +40,16 @@
   become `ExceptionInfo` with
   `:code :peer/domain-error`; a peer that answers with a stream header fails
   loudly with `:code :peer/stream-unsupported` (streams are out of scope for
-  `call!`). Transport failures are loud and include peer identity. No retries or
-  peer lifecycle management are attempted."
+  `call!`). Transport failures are loud and include peer identity. A request
+  sent once is never retried; an interrupted planned transition reports
+  `:code :weaver/restarted` with sent-once ambiguity. Restart classification
+  requires both the previous weaver and generation identities to match. A
+  present `previous_weaver_id` in `restart.json` must be a non-blank string."
   ([peerish op] (call! peerish op {}))
   ([peerish op args]
    (let [peer (-> peerish
                   (resolved-peer peers)
+                  (validate-peer-row!)
                   (ensure-peer-protocol!))
          op (operation-name op)
          [operation arguments] (call-frame op (validate-args! op args))
@@ -104,14 +109,29 @@
 (defn- row
   "Project validated metadata `m` into a data-first peer row."
   [m]
-  {:name (:name m)
-   :workspace (:config-dir m)
-   :weaver-id (:nonce m)
-   :generation-id (:generation-id m)
-   :protocol-version (:protocol-version m)
-   :socket-path (:socket-path m)
-   :state-dir (:state-dir m)
-   :running? (not (metadata/stale-or-missing? m))})
+  (validate-peer-row!
+   {:name (:name m)
+    :workspace (:config-dir m)
+    :weaver-id (:nonce m)
+    :generation-id (:generation-id m)
+    :protocol-version (:protocol-version m)
+    :socket-path (:socket-path m)
+    :state-dir (:state-dir m)
+    :running? (not (metadata/stale-or-missing? m))}))
+
+(defn- validate-peer-row!
+  "Return `peer` when it conforms to the core-owned peer-row boundary."
+  [peer]
+  (if (s/valid? :millstrand.core.specs/peer-row peer)
+    peer
+    (throw (ex-info "Peer row is malformed"
+                    {:code :peer/invalid-peer
+                     :peer peer
+                     :allowed #{:name :workspace :weaver-id :generation-id
+                                :protocol-version :socket-path :state-dir
+                                :running?}
+                     :explain (s/explain-data
+                               :millstrand.core.specs/peer-row peer)}))))
 
 ;; ---------------------------------------------------------------------------
 ;; Resolution: one running peer from a caller's peerish argument (SPEC-004.C87)
@@ -178,7 +198,7 @@
   via `list-peers` (called only in that case) and resolve one running peer."
   [peerish list-peers]
   (if (map? peerish)
-    peerish
+    (validate-peer-row! peerish)
     (resolve-peer (list-peers) peerish)))
 
 ;; ---------------------------------------------------------------------------
@@ -233,12 +253,22 @@
   sequential collection of strings, and `:payloads` nil or a map. Anything
   else fails loudly with `:code :peer/invalid-args` before any socket work."
   [op args]
-  (let [{:keys [argv payloads]} (when (map? args) args)
-        problem (cond
-                  (not (map? args)) {:args args}
-                  (not (or (nil? argv)
-                           (and (sequential? argv) (every? string? argv)))) {:argv argv}
-                  (not (or (nil? payloads) (map? payloads))) {:payloads payloads})]
+  (let [problem (when-not (s/valid? :millstrand.core.specs/peer-call-args args)
+                  (merge
+                   (cond
+                     (not (map? args)) {:args args}
+                     (and (contains? args :argv)
+                          (not (s/valid? :millstrand.peer/argv (:argv args))))
+                     {:argv (:argv args)}
+                     (and (contains? args :payloads)
+                          (not (s/valid? :millstrand.peer/payloads
+                                         (:payloads args))))
+                     {:payloads (:payloads args)}
+                     :else {:args args})
+                   {:allowed #{:argv :payloads}
+                    :explain (s/explain-data
+                              :millstrand.core.specs/peer-call-args
+                              args)}))]
     (when problem
       (throw (ex-info "Peer call args are malformed"
                       (merge {:code :peer/invalid-args :operation op} problem))))
@@ -314,13 +344,18 @@
                        (throw (ex-info "Peer restart record is malformed"
                                        {:code :peer/restart-state-malformed
                                         :peer (peer-identity peer)
-                                        :file (.getPath file)}
+                                        :file (.getPath file)
+                                        :field nil
+                                        :value nil
+                                        :allowed #{"state" "transition_id"
+                                                   "generation_id"
+                                                   "previous_generation_id"
+                                                   "previous_weaver_id"
+                                                   "updated_at"
+                                                   "old_generation_stopped"
+                                                   "probe" "failure"}}
                                        e))))]
-        (when-not (map? record)
-          (throw (ex-info "Peer restart record must be an object"
-                          {:code :peer/restart-state-malformed
-                           :peer (peer-identity peer)
-                           :file (.getPath file)})))
+        (validate-restart-record! peer file record)
         (and (or (= "restarting" (get record "state"))
                  (and (= "failed" (get record "state"))
                       (true? (get record "old_generation_stopped")))
@@ -328,6 +363,68 @@
                       (true? (get record "old_generation_stopped"))))
              (= (:weaver-id peer) (get record "previous_weaver_id"))
              (= (:generation-id peer) (get record "previous_generation_id")))))))
+
+(defn- validate-restart-record!
+  "Return a valid decoded `restart.json` record or fail with field context."
+  [peer ^File file record]
+  (let [allowed #{"state" "transition_id" "generation_id"
+                  "previous_generation_id" "previous_weaver_id" "updated_at"
+                  "old_generation_stopped" "probe" "failure"}
+        missing (when (map? record)
+                  (filterv #(not (contains? record %))
+                           #{"state" "transition_id" "updated_at"}))
+        unknown (when (map? record)
+                  (first (remove allowed (keys record))))
+        field (cond
+                (not (map? record)) nil
+                unknown unknown
+                (seq missing) (first missing)
+                (not (contains? #{"probing" "restarting" "running" "failed"}
+                                (get record "state"))) "state"
+                (not (and (string? (get record "transition_id"))
+                          (not (str/blank? (get record "transition_id")))))
+                "transition_id"
+                (not (and (string? (get record "updated_at"))
+                          (not (str/blank? (get record "updated_at")))))
+                "updated_at"
+                (and (contains? record "generation_id")
+                     (or (not (string? (get record "generation_id")))
+                         (str/blank? (get record "generation_id"))))
+                "generation_id"
+                (and (contains? record "previous_generation_id")
+                     (or (not (string? (get record "previous_generation_id")))
+                         (str/blank? (get record "previous_generation_id"))))
+                "previous_generation_id"
+                (and (contains? record "previous_weaver_id")
+                     (or (not (string? (get record "previous_weaver_id")))
+                         (str/blank? (get record "previous_weaver_id"))))
+                "previous_weaver_id"
+                (and (contains? record "old_generation_stopped")
+                     (not (boolean? (get record "old_generation_stopped"))))
+                "old_generation_stopped"
+                (and (contains? record "probe")
+                     (not (s/valid? :millstrand.core.specs/peer-restart-record
+                                    record))) "probe"
+                (and (contains? record "failure")
+                     (not (s/valid? :millstrand.core.specs/peer-restart-record
+                                    record))) "failure"
+                :else "state")]
+    (if (and (map? record)
+             (s/valid? :millstrand.core.specs/peer-restart-record record))
+      record
+      (throw (ex-info "Peer restart record is malformed"
+                      {:code :peer/restart-state-malformed
+                       :peer (peer-identity peer)
+                       :file (.getPath file)
+                       :field field
+                       :value (when (map? record) (get record field))
+                       :allowed (if (= field "state")
+                                  #{"probing" "restarting" "running" "failed"}
+                                  allowed)
+                       :record record
+                       :explain (s/explain-data
+                                 :millstrand.core.specs/peer-restart-record
+                                 record)})))))
 
 (defn- valid-error-envelope?
   "True when `error` is a well-formed peer error envelope."
