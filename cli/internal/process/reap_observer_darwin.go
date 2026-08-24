@@ -10,12 +10,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var registerProcessExit = func(kqueue int, change unix.Kevent_t) error {
+func registerProcessExitDarwin(kqueue int, change unix.Kevent_t) error {
 	_, err := unix.Kevent(kqueue, []unix.Kevent_t{change}, nil, nil)
 	return err
 }
-
-var processExitWaitable = processExitWaitableDarwin
 
 // Darwin's idtype_t enum is not exported by x/sys/unix.
 const darwinPID = 1 // P_PID; P_ALL=0, P_PGID=2
@@ -24,6 +22,14 @@ const darwinPID = 1 // P_PID; P_ALL=0, P_PGID=2
 // kqueue NOTE_EXIT observes the child while leaving it waitable, pinning its
 // PID and PGID until cancellation has finished tearing down descendants.
 func observeProcessExit(pid int) error {
+	return observeProcessExitWith(pid, registerProcessExitDarwin, processExitWaitableDarwin)
+}
+
+func observeProcessExitWith(
+	pid int,
+	registerProcessExit func(int, unix.Kevent_t) error,
+	processExitWaitable func(int) (bool, error),
+) error {
 	kqueue, err := unix.Kqueue()
 	if err != nil {
 		return fmt.Errorf("create process exit kqueue: %w", err)
