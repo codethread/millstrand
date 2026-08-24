@@ -71,7 +71,9 @@
    'millstrand.core.weaver.hooks-events-test
    'millstrand.core.weaver.ops-help-test
    'millstrand.core.weaver.patterns-test
-   'millstrand.core.weaver.socket-test])
+   'millstrand.core.weaver.socket-test
+   ;; Uses a disposable Unix socket and no shared runtime state.
+   'millstrand.integration.restart-admission-test])
 
 (def serial-namespaces
   "JVM-global namespaces the parent still runs serially outside add-libs shards."

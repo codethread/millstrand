@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -16,6 +17,30 @@ import (
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
 )
+
+func TestForwardOwnedBlockingHelperProcess(t *testing.T) {
+	if os.Getenv("MILLSTRAND_FORWARD_HELPER_PROCESS") != "1" {
+		return
+	}
+	select {}
+}
+
+func startForwardOwnedBlockingProcess(t *testing.T) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=TestForwardOwnedBlockingHelperProcess")
+	cmd.Env = append(os.Environ(), "MILLSTRAND_FORWARD_HELPER_PROCESS=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := cmd.Process.Pid
+	t.Cleanup(func() {
+		if processAlive(pid) {
+			terminatePID(pid)
+		}
+		waitForPIDExit(pid, time.Second)
+	})
+	return cmd
+}
 
 func TestInvokeRelaysSingleWeaverResponse(t *testing.T) {
 	world, cfg := forwardWorld(t)
@@ -58,6 +83,281 @@ func TestInvokeReportsTruncatedResponseWithoutReplay(t *testing.T) {
 	}
 	if got := decodedRequests.Load(); got != 1 {
 		t.Fatalf("ambiguous delivery replayed the request: decoded server requests=%d", got)
+	}
+}
+
+func TestInvokeReportsPlannedRestartForAcceptedOldGeneration(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	serveFakeWeaverPartialResponse(t, world, []byte("not-json"), nil)
+	writeWeaverMetadata(t, world, os.Getpid(), "weaver-restart")
+	transition := &weaverTransition{
+		world:          world,
+		transitionID:   "transition-restart",
+		stateValue:     restartStateProbing,
+		cutoverStarted: true,
+		done:           make(chan struct{}),
+		old: &weaverChild{
+			generationID: "generation-weaver-restart",
+			identity:     weaverIdentity{WeaverID: "weaver-restart"},
+		},
+	}
+	s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{world.ConfigDir: transition}}
+	req := client.MillRequest{
+		ProtocolVersion: client.MillProtocolVersion,
+		RequestID:       "planned-restart",
+		Operation:       "invoke",
+		World:           client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg},
+		Payload:         map[string]any{"name": "mutate", "argv": []any{}, "payloads": map[string]any{}},
+	}
+	clientConn, serverConn := net.Pipe()
+	go func() {
+		s.handleInvoke(serverConn, req)
+		_ = serverConn.Close()
+	}()
+	defer func() { _ = clientConn.Close() }()
+	_ = clientConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var frame map[string]any
+	if err := json.NewDecoder(clientConn).Decode(&frame); err != nil {
+		t.Fatal(err)
+	}
+	errFrame, ok := frame["error"].(map[string]any)
+	if !ok || errFrame["code"] != "weaver/restarted" {
+		t.Fatalf("accepted planned interruption was not structured as weaver/restarted: %#v", frame)
+	}
+	details, ok := errFrame["details"].(map[string]any)
+	if !ok || details["request_delivery"] != true || details["sent_once"] != true || details["response"] != "ambiguous" {
+		t.Fatalf("planned interruption lost sent-once ambiguity: %#v", errFrame)
+	}
+}
+
+func TestInvokeDoesNotRelabelFailureWhenRestartStartsAfterAdmission(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	socket := filepath.Join(world.StateDir, "weaver.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close(); _ = os.Remove(socket) })
+
+	received := make(chan struct{})
+	release := make(chan struct{})
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		var request map[string]any
+		if err := json.NewDecoder(bufio.NewReader(conn)).Decode(&request); err != nil {
+			return
+		}
+		close(received)
+		<-release
+		_, _ = conn.Write([]byte("not-json"))
+	}()
+	writeWeaverMetadata(t, world, os.Getpid(), "weaver-late-restart")
+
+	s := &server{children: map[string]*weaverChild{}}
+	req := client.MillRequest{
+		ProtocolVersion: client.MillProtocolVersion,
+		RequestID:       "late-restart",
+		Operation:       "invoke",
+		World:           client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg},
+		Payload:         map[string]any{"name": "mutate", "argv": []any{}, "payloads": map[string]any{}},
+	}
+	clientConn, serverConn := net.Pipe()
+	done := make(chan struct{})
+	go func() {
+		s.handleInvoke(serverConn, req)
+		close(done)
+	}()
+	defer func() { _ = clientConn.Close(); _ = serverConn.Close() }()
+
+	select {
+	case <-received:
+	case <-time.After(time.Second):
+		t.Fatal("weaver did not receive the admitted invocation")
+	}
+	// There was no transition during target selection or request delivery.
+	// Create the planned cutover only after the old generation has received the
+	// frame, then let it interrupt the response.
+	transition := &weaverTransition{
+		world:          world,
+		transitionID:   "transition-after-send",
+		stateValue:     restartStateRunning,
+		cutoverStarted: true,
+		done:           make(chan struct{}),
+		old: &weaverChild{
+			generationID: "generation-weaver-late-restart",
+			identity:     weaverIdentity{WeaverID: "weaver-late-restart"},
+		},
+	}
+	s.mu.Lock()
+	s.transitions = map[string]*weaverTransition{world.ConfigDir: transition}
+	s.mu.Unlock()
+	s.completeTransition(transition, map[string]any{"state": restartStateRunning}, nil, false)
+	close(release)
+
+	_ = clientConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var frame map[string]any
+	if err := json.NewDecoder(clientConn).Decode(&frame); err != nil {
+		t.Fatal(err)
+	}
+	errFrame, ok := frame["error"].(map[string]any)
+	if !ok || errFrame["code"] != "mill/weaver-forward-failed" {
+		t.Fatalf("restart created after admission relabelled an unrelated failure: %#v", frame)
+	}
+	details, ok := errFrame["details"].(map[string]any)
+	if !ok || details["request_delivery"] != true || details["sent_once"] != nil {
+		t.Fatalf("ordinary transport failure lost its non-replay delivery evidence: %#v", errFrame)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("invoke did not finish")
+	}
+}
+
+func TestInvokeClassifiesActualRestartAndDurableCleanup(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	t.Setenv("MILLSTRAND_SOURCE", tempSource(t))
+	oldSocket := filepath.Join(world.StateDir, "weaver.sock")
+	listener, err := net.Listen("unix", oldSocket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close(); _ = os.Remove(oldSocket) })
+
+	accepted := make(chan struct{})
+	releaseResponse := make(chan struct{})
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		var request map[string]any
+		if err := json.NewDecoder(bufio.NewReader(conn)).Decode(&request); err != nil {
+			return
+		}
+		close(accepted)
+		<-releaseResponse
+		_, _ = conn.Write([]byte("not-json"))
+	}()
+
+	var launches atomic.Int32
+	var oldPID atomic.Int32
+	var replacementCleanupObserved atomic.Bool
+	originalLaunch, originalProbe, originalReady := launchWeaver, probeRuntime, waitForReplacementReadyStatus
+	t.Cleanup(func() {
+		launchWeaver, probeRuntime, waitForReplacementReadyStatus = originalLaunch, originalProbe, originalReady
+	})
+	launchWeaver = func(source string, args []string, out, errOut io.Writer) (*exec.Cmd, error) {
+		cmd := startForwardOwnedBlockingProcess(t)
+		if launches.Add(1) == 1 {
+			oldPID.Store(int32(cmd.Process.Pid))
+			writeWeaverMetadata(t, world, cmd.Process.Pid, "old-weaver")
+		} else {
+			if _, statErr := os.Stat(filepath.Join(world.StateDir, "weaver.json")); os.IsNotExist(statErr) {
+				replacementCleanupObserved.Store(true)
+			}
+			writeWeaverMetadata(t, world, cmd.Process.Pid, "new-weaver")
+		}
+		return cmd, nil
+	}
+	probeStarted := make(chan struct{})
+	releaseProbe := make(chan struct{})
+	probeRuntime = func(string, config.World) (restartProbeResult, error) {
+		close(probeStarted)
+		<-releaseProbe
+		return restartProbeResult{Success: true, Stage: "probe/complete", ProbeWorkspace: "probe", SourceWorkspace: cfg, Completed: []string{}, Diagnostics: []map[string]any{}, Log: "probe.log"}, nil
+	}
+	waitForReplacementReadyStatus = func(world config.World, pid int, done <-chan error, timeout time.Duration) (map[string]any, error) {
+		return map[string]any{
+			"state": "running", "pid": pid, "weaver_id": "new-weaver", "generation_id": "new-generation",
+			"started_at": time.Now().UTC().Format(time.RFC3339Nano), "socket_path": filepath.Join(world.StateDir, "weaver.sock"),
+			"config_dir": world.ConfigDir, "state_dir": world.StateDir, "data_dir": world.DataDir,
+		}, nil
+	}
+
+	s := &server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}}
+	t.Cleanup(func() { s.stopAll() })
+	req := client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg, ReadyTimeoutMs: 2_000}
+	if _, err := s.startWeaver(req); err != nil {
+		t.Fatal(err)
+	}
+	restartDone := make(chan struct {
+		result map[string]any
+		err    error
+	})
+	go func() {
+		result, restartErr := s.restartWeaver(req)
+		restartDone <- struct {
+			result map[string]any
+			err    error
+		}{result, restartErr}
+	}()
+	select {
+	case <-probeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("restart did not enter its durable probe")
+	}
+
+	invokeReq := client.MillRequest{
+		ProtocolVersion: client.MillProtocolVersion,
+		RequestID:       "actual-restart",
+		Operation:       "invoke",
+		World:           client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg},
+		Payload:         map[string]any{"name": "mutate", "argv": []any{}, "payloads": map[string]any{}},
+	}
+	clientConn, serverConn := net.Pipe()
+	invokeDone := make(chan struct{})
+	go func() {
+		s.handleInvoke(serverConn, invokeReq)
+		close(invokeDone)
+	}()
+	t.Cleanup(func() { _ = clientConn.Close(); _ = serverConn.Close() })
+	select {
+	case <-accepted:
+	case <-time.After(time.Second):
+		t.Fatal("old generation did not receive the admitted invocation")
+	}
+	close(releaseProbe)
+	var restartResult struct {
+		result map[string]any
+		err    error
+	}
+	select {
+	case restartResult = <-restartDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("actual restart did not complete")
+	}
+	if restartResult.err != nil || restartResult.result["state"] != restartStateRunning {
+		t.Fatalf("actual restart failed: result=%#v err=%v", restartResult.result, restartResult.err)
+	}
+	close(releaseResponse)
+	_ = clientConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var frame map[string]any
+	if err := json.NewDecoder(clientConn).Decode(&frame); err != nil {
+		t.Fatal(err)
+	}
+	if got := frame["error"].(map[string]any)["code"]; got != "weaver/restarted" {
+		t.Fatalf("durable restart did not classify the accepted old call: %#v", frame)
+	}
+	select {
+	case <-invokeDone:
+	case <-time.After(time.Second):
+		t.Fatal("invoke did not finish after replacement interruption")
+	}
+	record, ok, err := readRestartRecordDetailed(world)
+	if err != nil || !ok || record.State != restartStateRunning || record.PreviousWeaver != "old-weaver" || record.PreviousGeneration != "generation-old-weaver" || !record.OldGenerationStopped {
+		t.Fatalf("durable transition lost old identity: record=%#v ok=%v err=%v", record, ok, err)
+	}
+	if !replacementCleanupObserved.Load() {
+		t.Fatal("replacement launch did not observe cleanup of old generation artifacts")
+	}
+	if processAlive(int(oldPID.Load())) {
+		t.Fatal("actual restart left the old weaver process alive")
 	}
 }
 
@@ -138,6 +438,34 @@ func TestInvokeCancellationBeforeReplacementAdmissionSendsNoWeaverFrame(t *testi
 	_ = serverConn.Close()
 	// There is deliberately no Weaver socket: reaching relayInvoke after the
 	// caller closed would be a test failure in the admission path above.
+}
+
+func TestInvokeDeadlineBeforeReplacementAdmissionSendsNoWeaverFrame(t *testing.T) {
+	world, cfg := forwardWorld(t)
+	transition := &weaverTransition{world: world, transitionID: "transition-deadline", stateValue: restartStateRestarting, done: make(chan struct{})}
+	s := server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{world.ConfigDir: transition}}
+	clientConn, serverConn := net.Pipe()
+	req := client.MillRequest{ProtocolVersion: client.MillProtocolVersion, RequestID: "req-deadline", Operation: "invoke", World: client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg}, Payload: map[string]any{"name": "mutate", "timeout": float64(1)}}
+	done := make(chan struct{})
+	go func() {
+		s.handleInvoke(serverConn, req)
+		close(done)
+	}()
+	defer func() { _ = clientConn.Close(); _ = serverConn.Close() }()
+	_ = clientConn.SetReadDeadline(time.Now().Add(time.Second))
+	var frame map[string]any
+	if err := json.NewDecoder(clientConn).Decode(&frame); err != nil {
+		t.Fatal(err)
+	}
+	errFrame, ok := frame["error"].(map[string]any)
+	if !ok || errFrame["code"] != "mill/weaver-restart-failed" {
+		t.Fatalf("deadline before admission returned the wrong envelope: %#v", frame)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("deadline admission wait did not return")
+	}
 }
 
 func TestInvokeThroughHandleAcceptsSplitTrailingWhitespace(t *testing.T) {

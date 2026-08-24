@@ -34,6 +34,10 @@ type server struct {
 	// deliberately shared by all lifecycle callers for that workspace: the
 	// caller's timeout only bounds its wait on transition.done.
 	transitions map[string]*weaverTransition
+	// admissionEpochs advances once per lifecycle cutover. An invocation keeps
+	// the transition pointer it observed at admission; the epoch prevents a
+	// later transition from being mistaken for that boundary.
+	admissionEpochs map[string]uint64
 	// admissionLocks serialize target selection and request-frame admission per
 	// workspace. They keep one workspace's external socket write from blocking
 	// lifecycle access or invocations for another workspace.

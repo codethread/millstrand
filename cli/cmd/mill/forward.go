@@ -60,6 +60,11 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		}
 		socketPath, _ := status["socket_path"].(string)
 		weaverID, _ := status["weaver_id"].(string)
+		// Capture the causal cutover boundary while the workspace admission lock
+		// is still held. A lifecycle caller cannot create a later transition until
+		// this request releases that lock, so a later socket failure cannot be
+		// relabelled by an unrelated restart.
+		admissionBoundary := s.admissionBoundaryLocked(world.ConfigDir, status)
 		// Target selection is protected by the workspace admission lock. Once
 		// selected, release the process-global state mutex before any external
 		// socket operation; the workspace lock remains held until the request
@@ -83,7 +88,17 @@ func (s *server) handleInvoke(conn net.Conn, req client.MillRequest) {
 		// A request that may have reached the Weaver is never replayed. Emit a
 		// transport frame when no response exists so the caller can distinguish
 		// an ambiguous send from a successful relay.
-		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: "mill/weaver-forward-failed", Message: "weaver forwarding failed", Details: map[string]any{"detail": outcome.err.Error(), "request_delivery": outcome.requestDelivery}})
+		code := "mill/weaver-forward-failed"
+		message := "weaver forwarding failed"
+		details := map[string]any{"detail": outcome.err.Error(), "request_delivery": outcome.requestDelivery}
+		if outcome.requestDelivery && plannedCutoverInterrupted(admissionBoundary) {
+			code = "weaver/restarted"
+			message = "weaver replacement interrupted an admitted invocation"
+			details["sent_once"] = true
+			details["response"] = "ambiguous"
+			details["transition_id"] = admissionBoundary.transition.transitionID
+		}
+		writeErrorFrame(w, req.RequestID, &client.ResponseError{Type: "transport", Code: code, Message: message, Details: details})
 		return
 	}
 }
@@ -100,6 +115,38 @@ func (s *server) workspaceAdmissionLock(configDir string) *sync.Mutex {
 	lock := &sync.Mutex{}
 	s.admissionLocks[configDir] = lock
 	return lock
+}
+
+type admissionBoundary struct {
+	epoch      uint64
+	transition *weaverTransition
+}
+
+func (s *server) admissionBoundaryLocked(configDir string, status map[string]any) admissionBoundary {
+	t := s.transitions[configDir]
+	boundary := admissionBoundary{epoch: s.admissionEpochs[configDir]}
+	if t != nil && t.old != nil && t.admissionEpoch == boundary.epoch && transitionMatchesStatus(t, status) {
+		boundary.transition = t
+	}
+	return boundary
+}
+
+func transitionMatchesStatus(t *weaverTransition, status map[string]any) bool {
+	weaverID, _ := status["weaver_id"].(string)
+	generationID, _ := status["generation_id"].(string)
+	return (t.old.identity.WeaverID == "" || t.old.identity.WeaverID == weaverID) &&
+		(t.old.generationID == "" || t.old.generationID == generationID)
+}
+
+func plannedCutoverInterrupted(boundary admissionBoundary) bool {
+	t := boundary.transition
+	if t == nil || t.admissionEpoch != boundary.epoch {
+		return false
+	}
+	t.mu.Lock()
+	cutoverStarted := t.cutoverStarted
+	t.mu.Unlock()
+	return cutoverStarted
 }
 
 // watchCallerConnection turns a client disconnect into cancellation for the

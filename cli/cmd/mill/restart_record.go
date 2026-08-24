@@ -24,6 +24,7 @@ type restartRecord struct {
 	TransitionID         string              `json:"transition_id"`
 	GenerationID         string              `json:"generation_id"`
 	PreviousGeneration   string              `json:"previous_generation_id,omitempty"`
+	PreviousWeaver       string              `json:"previous_weaver_id,omitempty"`
 	UpdatedAt            string              `json:"updated_at"`
 	OldGenerationStopped bool                `json:"old_generation_stopped,omitempty"`
 	Probe                *restartProbeResult `json:"probe,omitempty"`

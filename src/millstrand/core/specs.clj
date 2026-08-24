@@ -469,6 +469,163 @@
           :opt-un [:millstrand.batch-strand/ref :millstrand.batch-strand/edges ::attributes]))
 (s/def ::batch-input (s/coll-of ::batch-strand :kind vector? :min-count 1))
 
+;; Local peer discovery and calls are one public boundary. Keep the row and
+;; its identifying projection closed so callers cannot accidentally route a
+;; request with a stale or partially reconstructed identity.
+(s/def :millstrand.peer/name non-blank-string?)
+(s/def :millstrand.peer/workspace non-blank-string?)
+(s/def :millstrand.peer/weaver-id non-blank-string?)
+(s/def :millstrand.peer/generation-id non-blank-string?)
+(s/def :millstrand.peer/protocol-version pos-int?)
+(s/def :millstrand.peer/socket-path non-blank-string?)
+(s/def :millstrand.peer/state-dir non-blank-string?)
+(s/def :millstrand.peer/running? boolean?)
+(def ^:private peer-identity-keys
+  #{:name :workspace :weaver-id :generation-id :socket-path :state-dir})
+(def ^:private peer-row-keys
+  (conj peer-identity-keys :protocol-version :running?))
+(s/def :millstrand.core.specs/peer-identity
+  (s/and
+   (s/keys :req-un [:millstrand.peer/name
+                    :millstrand.peer/workspace
+                    :millstrand.peer/weaver-id
+                    :millstrand.peer/generation-id
+                    :millstrand.peer/socket-path
+                    :millstrand.peer/state-dir])
+   #(exact-keys? peer-identity-keys %)))
+(s/def :millstrand.core.specs/peer-row
+  (s/and
+   (s/keys :req-un [:millstrand.peer/name
+                    :millstrand.peer/workspace
+                    :millstrand.peer/weaver-id
+                    :millstrand.peer/generation-id
+                    :millstrand.peer/protocol-version
+                    :millstrand.peer/socket-path
+                    :millstrand.peer/state-dir
+                    :millstrand.peer/running?])
+   #(exact-keys? peer-row-keys %)))
+(s/def :millstrand.peer/argv
+  (s/nilable (s/coll-of string? :kind vector?)))
+(s/def :millstrand.peer/payloads
+  (s/nilable
+   (s/and map?
+          #(every? data-first-value? (keys %))
+          #(every? data-first-value? (vals %)))))
+(s/def :millstrand.core.specs/peer-call-args
+  (s/and
+   (s/keys :opt-un [:millstrand.peer/argv :millstrand.peer/payloads])
+   #(keys-subset? #{:argv :payloads} %)))
+
+;; `restart.json` is read as a string-keyed JSON object. This is deliberately
+;; separate from the keyword projections above: accepting keyword aliases here
+;; would hide an adapter that encoded the wrong wire contract.
+(def ^:private peer-restart-record-keys
+  #{"state" "transition_id" "generation_id" "previous_generation_id"
+    "previous_weaver_id" "updated_at" "old_generation_stopped" "probe"
+    "failure"})
+(def ^:private peer-restart-states
+  #{"probing" "restarting" "running" "failed"})
+(def ^:private peer-restart-probe-keys
+  #{"success" "stage" "probe/workspace" "source/workspace" "completed"
+    "diagnostics" "log"})
+(def ^:private peer-restart-failure-keys
+  #{"stage" "message" "log_path" "exit_evidence"})
+(def ^:private peer-restart-diagnostic-keys
+  #{"stage" "status" "data" "at"})
+(def ^:private peer-restart-diagnostic-statuses
+  #{"completed" "failed" "skipped" "in-progress"})
+
+(defn- wire-keys-subset? [allowed value]
+  (every? allowed (keys value)))
+
+(defn- valid-peer-restart-diagnostic? [value]
+  (and (map? value)
+       (wire-keys-subset? peer-restart-diagnostic-keys value)
+       (non-blank-string? (get value "stage"))
+       (contains? peer-restart-diagnostic-statuses (get value "status"))
+       (or (not (contains? value "data"))
+           (and (map? (get value "data"))
+                (s/valid? :millstrand.core.specs/json-safe-value
+                          (get value "data"))))
+       (or (not (contains? value "at"))
+           (non-blank-string? (get value "at")))))
+
+(defn- valid-peer-restart-probe? [value]
+  (and (map? value)
+       (= peer-restart-probe-keys (set (keys value)))
+       (boolean? (get value "success"))
+       (non-blank-string? (get value "stage"))
+       (non-blank-string? (get value "probe/workspace"))
+       (non-blank-string? (get value "source/workspace"))
+       (vector? (get value "completed"))
+       (every? non-blank-string? (get value "completed"))
+       (vector? (get value "diagnostics"))
+       (every? valid-peer-restart-diagnostic? (get value "diagnostics"))
+       (non-blank-string? (get value "log"))
+       (if (true? (get value "success"))
+         (= "probe/complete" (get value "stage"))
+         (= "probe/failure" (get value "stage")))))
+
+(defn- valid-peer-restart-failure? [value]
+  (and (map? value)
+       (wire-keys-subset? peer-restart-failure-keys value)
+       (non-blank-string? (get value "stage"))
+       (non-blank-string? (get value "message"))
+       (or (not (contains? value "log_path"))
+           (non-blank-string? (get value "log_path")))
+       (or (not (contains? value "exit_evidence"))
+           (non-blank-string? (get value "exit_evidence")))))
+
+(defn- peer-restart-state-consistent? [value]
+  (let [state (get value "state")
+        stopped? (true? (get value "old_generation_stopped"))
+        probe (get value "probe")
+        failure (get value "failure")]
+    (and
+     (case state
+       "probing" (and (contains? value "generation_id")
+                      (not stopped?)
+                      (not (contains? value "probe"))
+                      (not (contains? value "failure")))
+       "restarting" (not (contains? value "failure"))
+       "running" (and (contains? value "generation_id")
+                      (or (nil? failure)
+                          (and (= "probe" (get failure "stage"))
+                               (map? probe)
+                               (false? (get probe "success")))))
+       "failed" (contains? value "failure")
+       false)
+     (or (not stopped?)
+         (and (contains? value "generation_id")
+              (map? probe)
+              (true? (get probe "success"))))
+     (or (nil? failure)
+         (and (= state "failed")
+              (or (not stopped?) (= "launch" (get failure "stage"))))))))
+
+(defn- valid-peer-restart-record? [value]
+  (and (map? value)
+       (wire-keys-subset? peer-restart-record-keys value)
+       (every? #(contains? value %) #{"state" "transition_id" "updated_at"})
+       (contains? peer-restart-states (get value "state"))
+       (non-blank-string? (get value "transition_id"))
+       (non-blank-string? (get value "updated_at"))
+       (or (not (contains? value "generation_id"))
+           (non-blank-string? (get value "generation_id")))
+       (or (not (contains? value "previous_generation_id"))
+           (non-blank-string? (get value "previous_generation_id")))
+       (or (not (contains? value "previous_weaver_id"))
+           (non-blank-string? (get value "previous_weaver_id")))
+       (or (not (contains? value "old_generation_stopped"))
+           (boolean? (get value "old_generation_stopped")))
+       (or (not (contains? value "probe"))
+           (valid-peer-restart-probe? (get value "probe")))
+       (or (not (contains? value "failure"))
+           (valid-peer-restart-failure? (get value "failure")))
+       (peer-restart-state-consistent? value)))
+
+(s/def :millstrand.core.specs/peer-restart-record valid-peer-restart-record?)
+
 ;; Weaver-owned scheduler wake boundary shape (RFC-009): the single durable-write
 ;; contract shared by db persistence and the API tiers above it, so prose specs,
 ;; DB validation, and callers cannot drift apart. Component keys live under a
