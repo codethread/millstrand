@@ -67,6 +67,8 @@ type custodyRecord struct {
 	cancelled  string
 	done       chan struct{}
 	cleanupErr error
+	treeDone   chan struct{}
+	treeErr    error
 }
 
 // Custody owns process trees for one Mill-selected workspace.
@@ -76,6 +78,7 @@ type Custody struct {
 	byHandle     map[string]*custodyRecord
 	reservations map[string]string
 	closed       bool
+	removeAll    func(string) error
 }
 
 // NewCustody creates an in-memory Mill-lifetime custody store rooted at root.
@@ -86,7 +89,7 @@ func NewCustody(root string) (*Custody, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, fmt.Errorf("create custody output root: %w", err)
 	}
-	return &Custody{root: root, byHandle: map[string]*custodyRecord{}, reservations: map[string]string{}}, nil
+	return &Custody{root: root, byHandle: map[string]*custodyRecord{}, reservations: map[string]string{}, removeAll: os.RemoveAll}, nil
 }
 
 // ParseLaunchSpec parses boundary data exactly once before process launch.
@@ -374,27 +377,46 @@ func (c *Custody) Cancel(owner, handle string) (Record, error) {
 		c.mu.Unlock()
 		return Record{}, errors.New("custody handle belongs to a different owner")
 	}
-	if row.Phase == "terminal" {
+	if row.Phase == "terminal" && row.treeDone == nil {
 		record := row.Record
 		c.mu.Unlock()
 		return record, nil
 	}
+	var pid int
+	var treeDone chan struct{}
+	var shouldTerminate bool
 	if row.cancelled == "" {
 		row.cancelled = "cancelled by owner"
 		if row.cmd != nil && row.cmd.Process != nil {
-			_ = syscall.Kill(-row.cmd.Process.Pid, syscall.SIGTERM)
-			pid := row.cmd.Process.Pid
-			go func() {
-				select {
-				case <-row.done:
-				case <-time.After(2 * time.Second):
-					_ = syscall.Kill(-pid, syscall.SIGKILL)
-				}
-			}()
+			pid = row.cmd.Process.Pid
+			row.treeDone = make(chan struct{})
+			treeDone = row.treeDone
+			shouldTerminate = true
 		}
+	} else {
+		treeDone = row.treeDone
 	}
 	record := row.Record
 	c.mu.Unlock()
+	if shouldTerminate {
+		err := terminateProcessTree(pid)
+		c.mu.Lock()
+		row.treeErr = err
+		close(treeDone)
+		c.mu.Unlock()
+		if err != nil {
+			return record, fmt.Errorf("cancel custody process group for handle %q: %w", handle, err)
+		}
+	} else if treeDone != nil {
+		<-treeDone
+		c.mu.Lock()
+		err := row.treeErr
+		record = row.Record
+		c.mu.Unlock()
+		if err != nil {
+			return record, fmt.Errorf("cancel custody process group for handle %q: %w", handle, err)
+		}
+	}
 	return record, nil
 }
 
@@ -412,7 +434,9 @@ func (c *Custody) Acknowledge(owner, handle string) error {
 	if row.Phase != "terminal" {
 		return errors.New("custody handle is not terminal")
 	}
-	_ = os.RemoveAll(filepath.Dir(row.Output.StdoutRef))
+	if err := c.removeAll(filepath.Dir(row.Output.StdoutRef)); err != nil {
+		return fmt.Errorf("remove custody output directory: %w", err)
+	}
 	delete(c.byHandle, handle)
 	return nil
 }
@@ -423,32 +447,65 @@ func (c *Custody) Shutdown() error {
 	c.mu.Lock()
 	c.closed = true
 	rows := make([]*custodyRecord, 0, len(c.byHandle))
+	type treeTarget struct {
+		row   *custodyRecord
+		pid   int
+		done  chan struct{}
+		start bool
+	}
+	treeTargets := make([]treeTarget, 0, len(c.byHandle))
 	for _, row := range c.byHandle {
 		if row.Phase != "terminal" {
-			row.cancelled = "Mill shutdown"
+			if row.cancelled == "" {
+				row.cancelled = "Mill shutdown"
+			}
 			if row.cmd != nil && row.cmd.Process != nil {
-				_ = syscall.Kill(-row.cmd.Process.Pid, syscall.SIGTERM)
+				start := row.treeDone == nil
+				if start {
+					row.treeDone = make(chan struct{})
+				}
+				treeTargets = append(treeTargets, treeTarget{row: row, pid: row.cmd.Process.Pid, done: row.treeDone, start: start})
 			}
 			rows = append(rows, row)
 		}
 	}
 	c.mu.Unlock()
+
+	type treeResult struct {
+		row *custodyRecord
+		err error
+	}
+	treeResults := make(chan treeResult, len(rows))
+	for _, target := range treeTargets {
+		go func(target treeTarget) {
+			var err error
+			if target.start {
+				err = terminateProcessTree(target.pid)
+				c.mu.Lock()
+				target.row.treeErr = err
+				close(target.done)
+				c.mu.Unlock()
+			} else {
+				<-target.done
+				c.mu.Lock()
+				err = target.row.treeErr
+				c.mu.Unlock()
+			}
+			treeResults <- treeResult{row: target.row, err: err}
+		}(target)
+	}
+
+	var failures []error
+	for range treeTargets {
+		result := <-treeResults
+		if result.err != nil {
+			failures = append(failures,
+				fmt.Errorf("custody handle %q process-tree cleanup failed: %w", result.row.Handle, result.err))
+		}
+	}
 	deadline := time.Now().Add(5 * time.Second)
-	remaining := make([]*custodyRecord, 0, len(rows))
 	for _, row := range rows {
 		if !waitDoneUntil(row.done, deadline) {
-			remaining = append(remaining, row)
-		}
-	}
-	for _, row := range remaining {
-		if row.cmd != nil && row.cmd.Process != nil {
-			_ = syscall.Kill(-row.cmd.Process.Pid, syscall.SIGKILL)
-		}
-	}
-	graceDeadline := time.Now().Add(2 * time.Second)
-	var failures []error
-	for _, row := range rows {
-		if !waitDoneUntil(row.done, graceDeadline) {
 			failures = append(failures,
 				fmt.Errorf("custody handle %q did not terminalize before shutdown deadline", row.Handle))
 			continue
@@ -467,6 +524,82 @@ func (c *Custody) Shutdown() error {
 		}
 	}
 	return errors.Join(failures...)
+}
+
+const processTreeGracePeriod = 2 * time.Second
+
+func signalProcessGroup(pid int, signal syscall.Signal) error {
+	if pid <= 0 {
+		return fmt.Errorf("invalid process group pid %d", pid)
+	}
+	if err := syscall.Kill(-pid, signal); err != nil && !errors.Is(err, syscall.ESRCH) {
+		return fmt.Errorf("signal process group %d with %s: %w", pid, signal, err)
+	}
+	return nil
+}
+
+func processGroupExists(pid int) (bool, error) {
+	if pid <= 0 {
+		return false, fmt.Errorf("invalid process group pid %d", pid)
+	}
+	err := syscall.Kill(-pid, 0)
+	if err == nil || errors.Is(err, syscall.EPERM) {
+		return true, nil
+	}
+	if errors.Is(err, syscall.ESRCH) {
+		return false, nil
+	}
+	return false, fmt.Errorf("probe process group %d: %w", pid, err)
+}
+
+func waitProcessGroupGone(pid int, timeout time.Duration) (bool, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		exists, err := processGroupExists(pid)
+		if err != nil {
+			return false, err
+		}
+		if !exists {
+			return true, nil
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return false, nil
+		}
+		timer := time.NewTimer(minDuration(remaining, 10*time.Millisecond))
+		<-timer.C
+	}
+}
+
+func terminateProcessTree(pid int) error {
+	if err := signalProcessGroup(pid, syscall.SIGTERM); err != nil {
+		return err
+	}
+	gone, err := waitProcessGroupGone(pid, processTreeGracePeriod)
+	if err != nil {
+		return err
+	}
+	if gone {
+		return nil
+	}
+	if err := signalProcessGroup(pid, syscall.SIGKILL); err != nil {
+		return err
+	}
+	gone, err = waitProcessGroupGone(pid, processTreeGracePeriod)
+	if err != nil {
+		return err
+	}
+	if !gone {
+		return fmt.Errorf("process group %d survived SIGKILL", pid)
+	}
+	return nil
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func waitDoneUntil(done <-chan struct{}, deadline time.Time) bool {

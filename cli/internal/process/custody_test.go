@@ -1,8 +1,14 @@
 package process
 
 import (
+	"errors"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -145,6 +151,137 @@ func TestCancelTerminatesProcessTreeAndRetainsCancellation(t *testing.T) {
 	}
 }
 
+func TestCustodyTERMIgnoringChildHelper(t *testing.T) {
+	role := os.Getenv("CUSTODY_HELPER_ROLE")
+	if role == "" {
+		return
+	}
+	if role == "child" {
+		signal.Ignore(syscall.SIGTERM)
+		if err := os.WriteFile(os.Getenv("CUSTODY_HELPER_PID_FILE"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+			os.Exit(2)
+		}
+		time.Sleep(24 * time.Hour)
+	}
+	if role != "leader" {
+		os.Exit(2)
+	}
+	child := exec.Command(os.Args[0], "-test.run=TestCustodyTERMIgnoringChildHelper", "--")
+	child.Env = append(os.Environ(), "CUSTODY_HELPER_ROLE=child")
+	if err := child.Start(); err != nil {
+		os.Exit(2)
+	}
+	if err := os.WriteFile(os.Getenv("CUSTODY_HELPER_LEADER_PID_FILE"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+		os.Exit(2)
+	}
+	time.Sleep(24 * time.Hour)
+}
+
+func waitPIDFile(t *testing.T, path string) int {
+	t.Helper()
+	deadline := time.NewTimer(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer deadline.Stop()
+	defer ticker.Stop()
+	for {
+		select {
+		case <-deadline.C:
+			t.Fatalf("PID file %s was not written", path)
+		case <-ticker.C:
+			value, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			pid, err := strconv.Atoi(string(value))
+			if err == nil && pid > 0 {
+				return pid
+			}
+		}
+	}
+}
+
+func terminatePID(t *testing.T, pid int) {
+	t.Helper()
+	if pid > 0 && Alive(pid) {
+		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			t.Errorf("PID-specific cleanup for %d failed: %v", pid, err)
+		}
+	}
+}
+
+func termIgnoringChildSpec(t *testing.T, root, childPIDFile, leaderPIDFile string) LaunchSpec {
+	t.Helper()
+	return LaunchSpec{
+		Argv: []string{os.Args[0], "-test.run=TestCustodyTERMIgnoringChildHelper", "--"},
+		CWD:  root,
+		Env: map[string]string{
+			"CUSTODY_HELPER_ROLE":            "leader",
+			"CUSTODY_HELPER_PID_FILE":        childPIDFile,
+			"CUSTODY_HELPER_LEADER_PID_FILE": leaderPIDFile,
+		},
+	}
+}
+
+func TestCancelKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
+	root := t.TempDir()
+	custody, err := NewCustody(filepath.Join(root, "custody"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	childPIDFile := filepath.Join(root, "child.pid")
+	leaderPIDFile := filepath.Join(root, "leader.pid")
+	row, err := custody.Launch("owner/tree", "cancel", termIgnoringChildSpec(t, root, childPIDFile, leaderPIDFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaderPID := waitPIDFile(t, leaderPIDFile)
+	childPID := waitPIDFile(t, childPIDFile)
+	t.Cleanup(func() {
+		terminatePID(t, childPID)
+		terminatePID(t, leaderPID)
+	})
+	if _, err := custody.Cancel("owner/tree", row.Handle); err != nil {
+		t.Fatal(err)
+	}
+	if Alive(childPID) {
+		t.Fatalf("TERM-ignoring descendant %d survived Cancel", childPID)
+	}
+	terminal := waitTerminal(t, custody, row.Handle)
+	if terminal.Cancellation == nil || terminal.Cancellation.Reason == "" {
+		t.Fatalf("cancellation result = %#v", terminal)
+	}
+}
+
+func TestShutdownKillsTERMIgnoringDescendantAfterLeaderExits(t *testing.T) {
+	root := t.TempDir()
+	custody, err := NewCustody(filepath.Join(root, "custody"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	childPIDFile := filepath.Join(root, "child.pid")
+	leaderPIDFile := filepath.Join(root, "leader.pid")
+	row, err := custody.Launch("owner/tree", "shutdown", termIgnoringChildSpec(t, root, childPIDFile, leaderPIDFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaderPID := waitPIDFile(t, leaderPIDFile)
+	childPID := waitPIDFile(t, childPIDFile)
+	t.Cleanup(func() {
+		terminatePID(t, childPID)
+		terminatePID(t, leaderPID)
+	})
+	if err := custody.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
+	if Alive(childPID) {
+		t.Fatalf("TERM-ignoring descendant %d survived Shutdown", childPID)
+	}
+	terminal := waitTerminal(t, custody, row.Handle)
+	if terminal.Cancellation == nil || terminal.Cancellation.Reason != "Mill shutdown" {
+		t.Fatalf("shutdown result = %#v", terminal)
+	}
+}
+
 func TestShutdownCancelsOwnedTrees(t *testing.T) {
 	custody, err := NewCustody(t.TempDir())
 	if err != nil {
@@ -154,7 +291,9 @@ func TestShutdownCancelsOwnedTrees(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	custody.Shutdown()
+	if err := custody.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
 	terminal := waitTerminal(t, custody, row.Handle)
 	if terminal.Cancellation == nil || terminal.Cancellation.Reason != "Mill shutdown" {
 		t.Fatalf("shutdown result = %#v", terminal)
@@ -182,5 +321,28 @@ func TestAcknowledgementCleansOutputFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(row.Output.StdoutRef); !os.IsNotExist(err) {
 		t.Fatalf("stdout still exists after acknowledgement: %v", err)
+	}
+}
+
+func TestAcknowledgementRetainsRecordWhenOutputCleanupFails(t *testing.T) {
+	custody, err := NewCustody(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := custody.Launch("owner/log", "retry", testSpec(t, []string{"printf", "x"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitTerminal(t, custody, row.Handle)
+	custody.removeAll = func(string) error { return errors.New("injected cleanup failure") }
+	if err := custody.Acknowledge("owner/log", row.Handle); err == nil || !strings.Contains(err.Error(), "injected cleanup failure") {
+		t.Fatalf("cleanup failure was not visible: %v", err)
+	}
+	if _, err := custody.Get(row.Handle); err != nil {
+		t.Fatalf("terminal fact was deleted after cleanup failure: %v", err)
+	}
+	custody.removeAll = os.RemoveAll
+	if err := custody.Acknowledge("owner/log", row.Handle); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -364,7 +364,7 @@ func TestStartPassesConfiguredNameToWeaverMetadata(t *testing.T) {
 	if status["name"] != "shop-fe" {
 		t.Fatalf("configured name not published in metadata: %#v", status)
 	}
-	s.stopAll()
+	_ = s.stopAll()
 }
 
 func TestValidateMetadataRejectsWhitespaceOnlyName(t *testing.T) {
@@ -724,7 +724,7 @@ func TestDifferentReposHaveDistinctRuntimeDirsAndStopSelectedOnly(t *testing.T) 
 	if child := s.children[worldB.ConfigDir]; child == nil || !processAlive(child.cmd.Process.Pid) {
 		t.Fatalf("stopping A should not stop B: %#v", s.children)
 	}
-	s.stopAll()
+	_ = s.stopAll()
 }
 
 func TestCleanupPreviousMillStateRemovesStaleSocketsAndWeaverMetadata(t *testing.T) {

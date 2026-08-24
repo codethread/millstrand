@@ -623,7 +623,7 @@ func TestRestartRetriesFailedReplacementStartupWithoutOldGeneration(t *testing.T
 	if launches != 1 || probes != 0 {
 		t.Fatalf("retry launched/probed unexpectedly: launches=%d probes=%d", launches, probes)
 	}
-	s.stopAll()
+	_ = s.stopAll()
 }
 
 func TestRestartRetryRequiresDurableStopProofAndReplacementLaunchFailure(t *testing.T) {

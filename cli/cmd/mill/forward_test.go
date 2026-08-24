@@ -281,7 +281,7 @@ func TestInvokeClassifiesActualRestartAndDurableCleanup(t *testing.T) {
 	}
 
 	s := &server{children: map[string]*weaverChild{}, transitions: map[string]*weaverTransition{}}
-	t.Cleanup(func() { s.stopAll() })
+	t.Cleanup(func() { _ = s.stopAll() })
 	req := client.MillWorldRequest{CWD: t.TempDir(), ConfigDir: cfg, ReadyTimeoutMs: 2_000}
 	if _, err := s.startWeaver(req); err != nil {
 		t.Fatal(err)
