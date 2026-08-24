@@ -311,8 +311,12 @@
        (valid-storage-identity? metadata)
        (string? (:nonce metadata))
        (not (str/blank? (:nonce metadata)))
-       (string? (:generation-id metadata))
-       (not (str/blank? (:generation-id metadata)))))
+       ;; Metadata written before generation identities were introduced is
+       ;; still valid while its process is alive. Mill upgrades the identity
+       ;; at the next replacement; absence alone must not make admission stale.
+       (or (nil? (:generation-id metadata))
+           (and (string? (:generation-id metadata))
+                (not (str/blank? (:generation-id metadata)))))))
 
 (defn stale-or-missing?
   "Return true when metadata is absent, malformed, unsupported, or points at a dead process."

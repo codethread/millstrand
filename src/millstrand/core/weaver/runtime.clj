@@ -963,15 +963,16 @@
              (catch Throwable stop-failure
                (.addSuppressed throwable stop-failure))))
          (let [initial-failure-context (failure-context throwable)
-               failure (merge {:success false
-                               :stage :probe/failure
-                               :probe/workspace (.getPath probe-root)
-                               :source/workspace (:config-dir world)
-                               :completed (mapv :stage @diagnostics)
-                               :diagnostics @diagnostics
-                               :log (.getPath probe-log)}
-                              (when (instance? clojure.lang.ExceptionInfo throwable)
-                                (ex-data throwable)))]
+           ;; The probe envelope is producer-owned. Exception data belongs in
+           ;; the failure diagnostic below; merging it here would let thrown
+           ;; `:success` or `:stage` keys replace the authoritative outcome.
+               failure {:success false
+                        :stage :probe/failure
+                        :probe/workspace (.getPath probe-root)
+                        :source/workspace (:config-dir world)
+                        :completed (mapv :stage @diagnostics)
+                        :diagnostics @diagnostics
+                        :log (.getPath probe-log)}]
            (report-failure! report! throwable {:stage :probe/failure
                                                :status :failed
                                                :data initial-failure-context})

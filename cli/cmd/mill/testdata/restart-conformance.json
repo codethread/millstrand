@@ -1,0 +1,57 @@
+{
+  "probe_results": [
+    {
+      "name": "complete",
+      "valid": true,
+      "value": {
+        "success": true,
+        "stage": "probe/complete",
+        "probe/workspace": "/tmp/probe",
+        "source/workspace": "/tmp/source",
+        "completed": [],
+        "diagnostics": [],
+        "log": "/tmp/probe.log"
+      }
+    },
+    {
+      "name": "failure",
+      "valid": true,
+      "value": {
+        "success": false,
+        "stage": "probe/failure",
+        "probe/workspace": "/tmp/probe",
+        "source/workspace": "/tmp/source",
+        "completed": ["config/read"],
+        "diagnostics": [{"stage": "probe/failure", "status": "failed", "data": {"message": "bad source"}}],
+        "log": "/tmp/probe.log"
+      }
+    },
+    {
+      "name": "unknown-envelope-key",
+      "valid": false,
+      "value": {
+        "success": true,
+        "stage": "probe/complete",
+        "probe/workspace": "/tmp/probe",
+        "source/workspace": "/tmp/source",
+        "completed": [],
+        "diagnostics": [],
+        "log": "/tmp/probe.log",
+        "extra": true
+      }
+    },
+    {
+      "name": "contradictory-outcome",
+      "valid": false,
+      "value": {
+        "success": true,
+        "stage": "probe/failure",
+        "probe/workspace": "/tmp/probe",
+        "source/workspace": "/tmp/source",
+        "completed": [],
+        "diagnostics": [],
+        "log": "/tmp/probe.log"
+      }
+    }
+  ]
+}

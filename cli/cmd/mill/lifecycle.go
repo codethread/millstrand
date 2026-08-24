@@ -138,6 +138,9 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 		return waitForLifecycleTransition(transition, readyTimeoutFor(req.ReadyTimeoutMs))
 	}
 	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+		if status, stale := readStatus(world); status != nil && !stale {
+			return status, nil
+		}
 		return nil, recordErr
 	} else if ok && record.State == restartStateFailed {
 		status := record.status(world)
@@ -253,8 +256,8 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 		// this entry after our weaver died; only the still-registered owner
 		// may remove supervision state and world artifacts, or a failed
 		// early start would tear down its successor's healthy weaver.
-		if s.releaseChild(world.ConfigDir, registered) {
-			cleanupWorldArtifacts(world)
+		if s.releaseChild(world.ConfigDir, registered) && registered.identity.WeaverID != "" {
+			_ = cleanupWorldArtifactsOwned(world, registered.identity)
 		}
 		if tail := tailOfFile(logPath, 4096); tail != "" {
 			return nil, fmt.Errorf("%w; weaver log tail (%s):\n%s", err, logPath, tail)
@@ -365,11 +368,6 @@ func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
 			return transitionResultStatus(transition)
 		}
 	}
-	if _, _, recordErr := readRestartRecordDetailed(world); recordErr != nil {
-		status := baseStatus(world, "stale")
-		status["stale_reason"] = recordErr.Error()
-		return status
-	}
 	if record, ok := readRestartRecord(world); ok && record.State == restartStateFailed {
 		return record.status(world)
 	}
@@ -377,6 +375,11 @@ func (s *server) weaverStatusForWorldLocked(world config.World) map[string]any {
 		if stale {
 			status["state"] = "stale"
 		}
+		return status
+	}
+	if _, _, recordErr := readRestartRecordDetailed(world); recordErr != nil {
+		status := baseStatus(world, "stale")
+		status["stale_reason"] = recordErr.Error()
 		return status
 	}
 	if child := s.children[world.ConfigDir]; child != nil {
@@ -413,7 +416,21 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 			if stale {
 				// Loud staleness check (as the old socket stop had): drop the
 				// dead/mismatched runtime metadata and report stopped.
-				cleanupWorldArtifacts(world)
+				identity, identityErr := identityFromStatus(status)
+				if identityErr == nil {
+					if cleanupErr := cleanupWorldArtifactsOwned(world, identity); cleanupErr != nil {
+						return nil, cleanupErr
+					}
+				} else if data, readErr := os.ReadFile(filepath.Join(world.StateDir, "weaver.json")); readErr == nil {
+					// A syntactically malformed artifact has no identity to
+					// claim. Re-check that it is still malformed immediately
+					// before removing only that artifact; a successor's valid
+					// publication is left intact.
+					var successor client.Metadata
+					if json.Unmarshal(data, &successor) != nil {
+						_ = os.Remove(filepath.Join(world.StateDir, "weaver.json"))
+					}
+				}
 				return baseStatus(world, "stopped"), nil
 			}
 			// A live weaver this mill does not supervise (e.g. started by a
@@ -452,7 +469,9 @@ func (s *server) stopWeaver(req client.MillWorldRequest) (map[string]any, error)
 		_ = child.cmd.Process.Kill()
 		<-child.done
 	}
-	cleanupWorldArtifacts(world)
+	if err := cleanupWorldArtifactsOwned(world, child.identity); err != nil {
+		return nil, fmt.Errorf("weaver stopped but teardown cleanup failed: %w", err)
+	}
 	delete(s.children, world.ConfigDir)
 	status := baseStatus(world, "stopped")
 	status["pid"] = pid
@@ -472,7 +491,7 @@ func (s *server) stopAll() {
 				_ = child.cmd.Process.Kill()
 				<-child.done
 			}
-			cleanupWorldArtifacts(child.world)
+			_ = cleanupWorldArtifactsOwned(child.world, child.identity)
 		}
 	}
 }
@@ -490,15 +509,13 @@ func readStatus(world config.World) (map[string]any, bool) {
 		return st, true
 	}
 	if staleReason := validateMetadata(world, m); staleReason != "" {
-		st := baseStatus(world, "stale")
+		st := statusFromMetadata(m, "stale")
 		st["stale_reason"] = staleReason
 		return st, true
 	}
 	status := statusFromMetadata(m, "running")
 	if record, ok, recordErr := readRestartRecordDetailed(world); recordErr != nil {
-		st := baseStatus(world, "stale")
-		st["stale_reason"] = recordErr.Error()
-		return st, true
+		status["restart_record_error"] = recordErr.Error()
 	} else if ok && record.State == restartStateRunning {
 		mergeRestartRecordStatus(status, record)
 	}
@@ -527,7 +544,7 @@ func readStatusFile(path string) (map[string]any, error) {
 }
 
 func statusFromMetadata(m client.Metadata, state string) map[string]any {
-	return map[string]any{
+	status := map[string]any{
 		"state":          state,
 		"config_dir":     m.ConfigDir,
 		"state_dir":      m.StateDir,
@@ -538,16 +555,19 @@ func statusFromMetadata(m client.Metadata, state string) map[string]any {
 		"name":           m.Name,
 		"pid":            m.PID,
 		"weaver_id":      m.DaemonID,
-		"generation_id":  m.GenerationID,
 		"socket_path":    m.SocketPath,
 		"nrepl":          m.NREPL,
 		"started_at":     m.StartedAt,
 		"log_path":       weaverLogPath(m.StateDir),
 	}
+	if strings.TrimSpace(m.GenerationID) != "" {
+		status["generation_id"] = m.GenerationID
+	}
+	return status
 }
 
 func validateMetadata(world config.World, m client.Metadata) string {
-	if m.ProtocolVersion != client.ProtocolVersion || m.PID == 0 || m.DaemonID == "" || strings.TrimSpace(m.GenerationID) == "" || m.ConfigDir == "" || m.StateDir == "" || m.DataDir == "" || strings.TrimSpace(m.Name) == "" || m.SocketPath == "" || m.StartedAt == "" || m.NREPL.Host == "" || m.NREPL.Port == 0 {
+	if m.ProtocolVersion != client.ProtocolVersion || m.PID == 0 || m.DaemonID == "" || m.ConfigDir == "" || m.StateDir == "" || m.DataDir == "" || strings.TrimSpace(m.Name) == "" || m.SocketPath == "" || m.StartedAt == "" || m.NREPL.Host == "" || m.NREPL.Port == 0 {
 		return "malformed weaver metadata: missing required fields"
 	}
 	if err := client.ValidateStorageIdentity(m); err != nil {
@@ -580,10 +600,34 @@ func samePath(a, b string) bool {
 	return realA == realB
 }
 
-func cleanupWorldArtifacts(world config.World) {
-	_ = os.Remove(filepath.Join(world.StateDir, "weaver.json"))
-	_ = os.Remove(filepath.Join(world.StateDir, "weaver.edn"))
-	_ = os.Remove(filepath.Join(world.StateDir, "weaver.sock"))
+func cleanupWorldArtifactsOwned(world config.World, expected weaverIdentity) error {
+	data, err := os.ReadFile(filepath.Join(world.StateDir, "weaver.json"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var metadata client.Metadata
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return fmt.Errorf("decode teardown metadata: %w", err)
+	}
+	actual := weaverIdentity{
+		PID: metadata.PID, WeaverID: metadata.DaemonID,
+		GenerationID: metadata.GenerationID, StartedAt: metadata.StartedAt,
+		Socket: metadata.SocketPath, ConfigDir: metadata.ConfigDir,
+		StateDir: metadata.StateDir, DataDir: metadata.DataDir,
+	}
+	if expected.WeaverID == "" || !sameWeaverIdentity(expected, actual) {
+		return fmt.Errorf("teardown ownership changed before artifact cleanup")
+	}
+	var first error
+	for _, path := range []string{filepath.Join(world.StateDir, "weaver.json"), filepath.Join(world.StateDir, "weaver.edn"), filepath.Join(world.StateDir, "weaver.sock")} {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) && first == nil {
+			first = err
+		}
+	}
+	return first
 }
 
 func weaverLogPath(stateDir string) string {

@@ -425,7 +425,9 @@ func cleanupPreviousMillState(root, socketPath, metadataPath string) error {
 				}
 			}
 			stateDir := filepath.Dir(path)
-			cleanupWorldArtifacts(config.World{StateDir: stateDir})
+			_ = os.Remove(filepath.Join(stateDir, "weaver.json"))
+			_ = os.Remove(filepath.Join(stateDir, "weaver.edn"))
+			_ = os.Remove(filepath.Join(stateDir, "weaver.sock"))
 		}
 	}
 	_ = os.Remove(socketPath)

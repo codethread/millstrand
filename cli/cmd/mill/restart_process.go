@@ -67,8 +67,8 @@ func identityFromStatus(status map[string]any) (weaverIdentity, error) {
 		StateDir:     stringStatus(status, "state_dir"),
 		DataDir:      stringStatus(status, "data_dir"),
 	}
-	if identity.WeaverID == "" || identity.GenerationID == "" || identity.StartedAt == "" || identity.Socket == "" || identity.ConfigDir == "" || identity.StateDir == "" || identity.DataDir == "" {
-		return weaverIdentity{}, errors.New("missing weaver/start identity or runtime endpoint")
+	if identity.WeaverID == "" || identity.StartedAt == "" || identity.Socket == "" || identity.ConfigDir == "" || identity.StateDir == "" || identity.DataDir == "" {
+		return weaverIdentity{}, errors.New("missing weaver identity or runtime endpoint")
 	}
 	return identity, nil
 }
@@ -79,7 +79,9 @@ func stringStatus(status map[string]any, key string) string {
 }
 
 func sameWeaverIdentity(a, b weaverIdentity) bool {
-	return a.PID == b.PID && a.WeaverID == b.WeaverID && a.StartedAt == b.StartedAt && a.Socket == b.Socket && a.ConfigDir == b.ConfigDir && a.StateDir == b.StateDir && a.DataDir == b.DataDir
+	return a.PID == b.PID && a.WeaverID == b.WeaverID &&
+		(a.GenerationID == "" || b.GenerationID == "" || a.GenerationID == b.GenerationID) &&
+		a.StartedAt == b.StartedAt && a.Socket == b.Socket && a.ConfigDir == b.ConfigDir && a.StateDir == b.StateDir && a.DataDir == b.DataDir
 }
 
 // verifyUnsupervisedIdentity proves the metadata-discovered process through
@@ -115,6 +117,14 @@ func verifyRuntimeEndpoint(identity weaverIdentity) error {
 }
 
 func runtimeStatus(identity weaverIdentity) (map[string]any, error) {
+	return runtimeStatusRequest(identity, false)
+}
+
+func runtimeStatusWithRegistryProjection(identity weaverIdentity) (map[string]any, error) {
+	return runtimeStatusRequest(identity, true)
+}
+
+func runtimeStatusRequest(identity weaverIdentity, includeRegistryProjection bool) (map[string]any, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", identity.Socket)
@@ -131,6 +141,9 @@ func runtimeStatus(identity weaverIdentity) (map[string]any, error) {
 		"operation":        "status",
 		"arguments":        map[string]any{},
 		"options":          map[string]any{},
+	}
+	if includeRegistryProjection {
+		request["arguments"] = map[string]any{"include_registry_projection": true}
 	}
 	if err := json.NewEncoder(conn).Encode(request); err != nil {
 		return nil, fmt.Errorf("write status request: %w", err)
@@ -155,12 +168,17 @@ func runtimeStatus(identity weaverIdentity) (map[string]any, error) {
 		return nil, fmt.Errorf("runtime status pid mismatch: got %v expected %d", response.Result["pid"], identity.PID)
 	}
 	for key, expected := range map[string]string{
-		"weaver_id": identity.WeaverID, "generation_id": identity.GenerationID, "started_at": identity.StartedAt,
+		"weaver_id": identity.WeaverID, "started_at": identity.StartedAt,
 		"socket_path": identity.Socket, "config_dir": identity.ConfigDir,
 		"state_dir": identity.StateDir, "data_dir": identity.DataDir,
 	} {
 		if got, ok := response.Result[key].(string); !ok || got != expected {
 			return nil, fmt.Errorf("runtime status %s mismatch: got %v expected %q", key, response.Result[key], expected)
+		}
+	}
+	if identity.GenerationID != "" {
+		if got, ok := response.Result["generation_id"].(string); !ok || got != identity.GenerationID {
+			return nil, fmt.Errorf("runtime status generation_id mismatch: got %v expected %q", response.Result["generation_id"], identity.GenerationID)
 		}
 	}
 	return response.Result, nil
@@ -266,7 +284,9 @@ func (s *server) stopFailedReplacement(child *weaverChild, grace time.Duration) 
 	if !s.releaseChild(child.world.ConfigDir, child) {
 		return errors.New("replacement supervision ownership changed before termination cleanup")
 	}
-	cleanupWorldArtifacts(child.world)
+	if err := cleanupWorldArtifactsOwned(child.world, child.identity); err != nil {
+		return fmt.Errorf("replacement stopped but teardown cleanup failed: %w", err)
+	}
 	return nil
 }
 
@@ -288,7 +308,9 @@ func stopRecordedGeneration(child *weaverChild, world config.World) error {
 	} else if !stopped {
 		return fmt.Errorf("could not confirm termination of recorded weaver pid %d", child.cmd.Process.Pid)
 	}
-	cleanupWorldArtifacts(world)
+	if err := cleanupWorldArtifactsOwned(world, child.identity); err != nil {
+		return fmt.Errorf("recorded generation stopped but teardown cleanup failed: %w", err)
+	}
 	return nil
 }
 

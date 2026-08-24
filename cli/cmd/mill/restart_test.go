@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"io"
@@ -16,6 +17,11 @@ import (
 	"millstrand-strand-cli/internal/client"
 	"millstrand-strand-cli/internal/config"
 )
+
+// The adapter conformance corpus is shared with Clojure boundary tests.
+//
+//go:embed testdata/restart-conformance.json
+var restartConformanceCorpus []byte
 
 func TestFailedReplacementKeepsSupervisionUntilTerminationConfirmed(t *testing.T) {
 	world := config.World{ConfigDir: t.TempDir(), StateDir: t.TempDir(), DataDir: t.TempDir()}
@@ -85,6 +91,31 @@ func TestDecodeRestartProbeUsesClosedBoundary(t *testing.T) {
 	}
 }
 
+func TestRestartProbeConformanceCorpus(t *testing.T) {
+	var corpus struct {
+		ProbeResults []struct {
+			Name  string         `json:"name"`
+			Valid bool           `json:"valid"`
+			Value map[string]any `json:"value"`
+		} `json:"probe_results"`
+	}
+	if err := json.Unmarshal(restartConformanceCorpus, &corpus); err != nil {
+		t.Fatal(err)
+	}
+	for _, testCase := range corpus.ProbeResults {
+		t.Run(testCase.Name, func(t *testing.T) {
+			data, err := json.Marshal(testCase.Value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, decodeErr := decodeRestartProbe(data)
+			if (decodeErr == nil) != testCase.Valid {
+				t.Fatalf("corpus validity mismatch: valid=%v err=%v", testCase.Valid, decodeErr)
+			}
+		})
+	}
+}
+
 func TestRestartRecordValidationRejectsUnknownAndStateDependentShapes(t *testing.T) {
 	world := config.World{StateDir: t.TempDir()}
 	tests := []struct {
@@ -106,6 +137,56 @@ func TestRestartRecordValidationRejectsUnknownAndStateDependentShapes(t *testing
 				t.Fatalf("malformed restart record accepted: ok=%v err=%v", ok, err)
 			}
 		})
+	}
+}
+
+func TestLegacyLiveMetadataWithoutGenerationRemainsAdmitted(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
+	source := tempSource(t)
+	cfg := tempConfig(t, source)
+	world, err := config.RuntimeWorld(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if processAlive(cmd.Process.Pid) {
+			terminatePID(cmd.Process.Pid)
+			waitForPIDExit(cmd.Process.Pid, time.Second)
+		}
+	})
+	identity := weaverIdentity{
+		PID: cmd.Process.Pid, WeaverID: "legacy-weaver",
+		StartedAt: "2026-08-24T00:00:00Z", Socket: filepath.Join(world.StateDir, "weaver.sock"),
+		ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir,
+	}
+	writeWeaverMetadataForIdentity(t, world, identity, "legacy")
+	data, err := os.ReadFile(filepath.Join(world.StateDir, "weaver.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	delete(raw, "generation_id")
+	data, err = json.Marshal(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	status, stale := readStatus(world)
+	if stale || status == nil || status["state"] != "running" || status["generation_id"] != nil {
+		t.Fatalf("legacy live metadata was treated as stale or upgraded unsafely: %#v stale=%v", status, stale)
+	}
+	parsed, err := identityFromStatus(status)
+	if err != nil || parsed.GenerationID != "" {
+		t.Fatalf("legacy identity did not remain usable: %#v err=%v", parsed, err)
 	}
 }
 

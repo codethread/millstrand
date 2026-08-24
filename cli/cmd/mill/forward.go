@@ -228,13 +228,17 @@ func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID st
 		return false, err
 	}
 	writeDone := make(chan error, 1)
+	// The request may have reached the Weaver even when Encode reports a
+	// broken pipe. Mark the send boundary before writing so the caller never
+	// retries a possibly delivered mutation.
+	sent := true
 	go func() {
 		writeDone <- json.NewEncoder(conn).Encode(reqFrame)
 	}()
 	select {
 	case err := <-writeDone:
 		if err != nil {
-			return false, fmt.Errorf("weaver socket write failed: %w", err)
+			return sent, fmt.Errorf("weaver socket write failed: %w", err)
 		}
 	case <-callerCtx.Done():
 		_ = conn.Close()
@@ -253,6 +257,10 @@ func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID st
 	for {
 		line, readErr := r.ReadBytes('\n')
 		if len(line) > 0 {
+			// A partial client write is still delivery evidence. Set this before
+			// handing bytes to the caller's writer, whose failure is response-side
+			// and must not cause request replay.
+			wrote = true
 			if !streaming && isStreamHeaderLine(line) {
 				streaming = true
 				_ = conn.SetDeadline(time.Time{}) // streams run unbounded
@@ -263,7 +271,6 @@ func relayInvokeWithAdmission(callerCtx context.Context, socketPath, weaverID st
 			if ferr := w.Flush(); ferr != nil {
 				return wrote, ferr
 			}
-			wrote = true
 		}
 		if readErr != nil {
 			if readErr == io.EOF {

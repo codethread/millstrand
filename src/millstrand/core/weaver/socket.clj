@@ -175,7 +175,8 @@
   (let [op (get req "operation")
         args (get req "arguments")]
     (when-not (case op
-                "status" (= {} args)
+                "status" (or (= {} args)
+                             (= {"include_registry_projection" true} args))
                 "invoke" (valid-invoke-args? args)
                 false)
       (protocol-error (get req "request_id") "protocol/malformed-request" "operation arguments do not match protocol" {"operation" op}))))
@@ -200,31 +201,42 @@
 
       :else (argument-error req))))
 
-(defn- status-result [runtime]
+(defn- status-result
+  "Return minimal identity health, with registry data only when requested.
+
+  Mill's liveness and teardown checks use the default shape. Probe setup opts
+  into the complete projection for its old-generation semantic baseline."
+  [runtime include-registry?]
   (let [m (:metadata runtime)
-        projection ((requiring-resolve
-                     'millstrand.core.weaver.module-refresh/registry-projection)
-                    runtime)]
-    (when-not (s/valid? :millstrand.registry-projection/registry projection)
-      (throw (ex-info "Registry projection has an invalid socket status shape"
-                      {:projection projection
-                       :explain (s/explain-data :millstrand.registry-projection/registry projection)})))
-    {"healthy" true
-     "pid" (:pid m)
-     "protocol_version" (:protocol-version m)
-     "config_dir" (:config-dir m)
-     "state_dir" (:state-dir m)
-     "name" (:name m)
-     "data_dir" (:data-dir m)
-     "database_kind" (name (:storage-kind m))
-     "database_label" (:storage-label m)
-     "database_path" (:canonical-db-path m)
-     "weaver_id" (:nonce m)
-     "generation_id" (:generation-id m)
-     "socket_path" (:socket-path m)
-     "started_at" (:started-at m)
-     "registry_projection" projection
-     "nrepl" {"host" (get-in m [:endpoint :host]) "port" (get-in m [:endpoint :port])}}))
+        result {"healthy" true
+                "pid" (:pid m)
+                "protocol_version" (:protocol-version m)
+                "config_dir" (:config-dir m)
+                "state_dir" (:state-dir m)
+                "name" (:name m)
+                "data_dir" (:data-dir m)
+                "database_kind" (name (:storage-kind m))
+                "database_label" (:storage-label m)
+                "database_path" (:canonical-db-path m)
+                "weaver_id" (:nonce m)
+                "generation_id" (:generation-id m)
+                "socket_path" (:socket-path m)
+                "started_at" (:started-at m)
+                "nrepl" {"host" (get-in m [:endpoint :host]) "port" (get-in m [:endpoint :port])}}
+        projection (when include-registry?
+                     ((requiring-resolve
+                       'millstrand.core.weaver.module-refresh/registry-projection)
+                      runtime))]
+    (if include-registry?
+      (do
+        (when-not (s/valid? :millstrand.registry-projection/registry projection)
+          (throw (ex-info "Registry projection has an invalid socket status shape"
+                          {:projection projection
+                           :explain (s/explain-data
+                                     :millstrand.registry-projection/registry
+                                     projection)})))
+        (assoc result "registry_projection" projection))
+      result)))
 
 (defn- api [sym]
   (requiring-resolve (symbol "millstrand.api.weaver.alpha" (name sym))))
@@ -411,7 +423,11 @@
       (if-let [err (validate-request (:metadata runtime) req)]
         (write-frame! err)
         (case (get req "operation")
-          "status" (write-frame! (success request-id (status-result runtime)))
+          "status" (write-frame!
+                    (success request-id
+                             (status-result runtime
+                                            (= true (get (get req "arguments")
+                                                         "include_registry_projection")))))
           "invoke" (handle-invoke! runtime request-id (get req "arguments") write-frame!))))
     (catch Exception _
       (write-frame! (protocol-error nil "protocol/malformed-json" "Request must be one JSON object followed by newline" {})))))
@@ -421,7 +437,6 @@
   [runtime-state socket-path]
   (let [file (io/file socket-path)
         _ (.mkdirs (.getParentFile file))
-        _ (.delete file)
         address (UnixDomainSocketAddress/of ^String socket-path)
         server (ServerSocketChannel/open StandardProtocolFamily/UNIX)
         running? (atom true)]
@@ -463,7 +478,6 @@
         {:server server :thread thread :running? running? :socket-path socket-path})
       (catch Throwable t
         (.close server)
-        (.delete file)
         (throw t)))))
 
 (defn close!

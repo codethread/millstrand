@@ -323,9 +323,54 @@ func (s *server) setTransitionState(t *weaverTransition, state string, probe *re
 		record.Probe = t.probe
 	}
 	record.Failure = failure
+	if err := validateRestartRecord(record); err != nil {
+		s.mu.Unlock()
+		return err
+	}
 	err := writeRestartRecordFn(t.world, record)
 	s.mu.Unlock()
 	return err
+}
+
+func validateRestartRecord(record restartRecord) error {
+	if record.TransitionID == "" {
+		return errors.New("restart record requires transition_id")
+	}
+	if record.UpdatedAt != "" {
+		return errors.New("restart record updated_at is writer-owned")
+	}
+	switch record.State {
+	case restartStateProbing, restartStateRestarting, restartStateRunning, restartStateFailed:
+	default:
+		return fmt.Errorf("restart record has unknown state %q", record.State)
+	}
+	if record.OldGenerationStopped && (record.GenerationID == "" || record.Probe == nil || !record.Probe.Success) {
+		return errors.New("stopped generation requires a successful probe and generation_id")
+	}
+	if record.State == restartStateProbing && (record.GenerationID == "" || record.Probe != nil || record.Failure != nil) {
+		return errors.New("probing restart record has contradictory fields")
+	}
+	if record.State == restartStateRunning && record.GenerationID == "" {
+		return errors.New("running restart record requires generation_id")
+	}
+	if record.State == restartStateFailed && record.Failure == nil {
+		return errors.New("failed restart record requires failure")
+	}
+	if record.Failure != nil {
+		if strings.TrimSpace(record.Failure.Stage) == "" || strings.TrimSpace(record.Failure.Message) == "" {
+			return errors.New("restart failure requires non-blank stage and message")
+		}
+		if record.State == restartStateRunning &&
+			(record.Failure.Stage != "probe" || record.Probe == nil || record.Probe.Success) {
+			return errors.New("running restart failure requires a failed probe")
+		}
+	}
+	if record.Probe != nil {
+		if err := record.Probe.validate(); err != nil {
+			return fmt.Errorf("restart record probe: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *server) completeTransition(t *weaverTransition, result map[string]any, err error, retain bool) {
@@ -441,6 +486,21 @@ func (s *server) restartWeaver(req client.MillWorldRequest) (map[string]any, err
 	s.transitions[world.ConfigDir] = t
 	s.mu.Unlock()
 	if err := s.setTransitionState(t, state, retryProbe, nil); err != nil {
+		if t.old != nil && !t.retryStartup {
+			// The first durable transition write is before admission closes. Keep
+			// the verified old generation routable and remove the failed in-memory
+			// probe rather than leaving a forever-probing transition with no
+			// recoverable result.
+			t.mu.Lock()
+			t.stateValue = restartStateRunning
+			t.probe = nil
+			t.mu.Unlock()
+			status := s.admittedGenerationStatus(t.world, t)
+			status["restart_state"] = restartStateRunning
+			status["probe_error"] = err.Error()
+			s.completeTransition(t, status, err, false)
+			return nil, err
+		}
 		s.completeTransition(t, nil, err, true)
 		return nil, err
 	}
@@ -454,7 +514,7 @@ func (s *server) runRestartTransition(t *weaverTransition, req client.MillWorldR
 	defer admission.Unlock()
 	source, err := resolveLaunchSource(req.CWD)
 	if err != nil {
-		s.failRestart(t, "probe", err, "")
+		s.failProbe(t, nil, err)
 		return
 	}
 	probe := restartProbeResult{}
@@ -525,6 +585,21 @@ func (s *server) failProbe(t *weaverTransition, probe *restartProbeResult, err e
 	if t.old == nil || t.retryStartup {
 		s.failRestart(t, "probe", err, "")
 		return
+	}
+	if probe == nil {
+		probe = &restartProbeResult{
+			Success:         false,
+			Stage:           "probe/failure",
+			ProbeWorkspace:  t.world.StateDir,
+			SourceWorkspace: t.world.ConfigDir,
+			Completed:       []string{},
+			Diagnostics: []map[string]any{{
+				"stage":  "probe/transport",
+				"status": "failed",
+				"data":   map[string]any{"message": err.Error()},
+			}},
+			Log: weaverLogPath(t.world.StateDir),
+		}
 	}
 	if stateErr := s.setTransitionState(t, restartStateRunning, probe, &restartFailure{Stage: "probe", Message: err.Error()}); stateErr != nil {
 		status := s.admittedGenerationStatus(t.world, t)

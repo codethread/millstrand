@@ -148,7 +148,13 @@
           (is (= "sqlite-memory" (get-in status ["result" "database_kind"])))
           (is (= (:generation-id (:metadata rt))
                  (get-in status ["result" "generation_id"])))
-          (is (nil? (get-in status ["result" "database_path"])))))
+          (is (nil? (get-in status ["result" "database_path"])))
+          (is (not (contains? (get status "result") "registry_projection"))))
+        (let [projection-status
+              (socket-request rt "status"
+                              {"include_registry_projection" true})]
+          (is (map? (get-in projection-status
+                            ["result" "registry_projection"])))))
       (let [strand (weaver/add! rt {:title "Mem strand" :attributes {:owner "mem"}})]
         (is (= [(:id strand)] (mapv :id (weaver/ready rt)))))
       (testing "concurrent weaver API calls at test scale"
@@ -189,6 +195,35 @@
     (is (nil? @weaver-runtime/current-runtime))
     (is (not (.exists (io/file (:state-dir world) "weaver.json"))))
     (is (not (.exists (io/file (:data-dir world) "millstrand.sqlite"))))))
+
+(deftest probe-failure-envelope-ignores-colliding-ex-data
+  (let [world (temp-world)]
+    (try
+      (with-redefs [weaver-runtime/start!
+                    (fn [_ _]
+                      (throw (ex-info "candidate failed"
+                                      {:success true
+                                       :stage :probe/complete
+                                       :probe/workspace "/foreign"})))]
+        (let [result (weaver-runtime/fresh-runtime-probe!
+                      world {:old-generation-baseline
+                             {:status :admitted :projection {}}})]
+          (is (false? (:success result)))
+          (is (= :probe/failure (:stage result)))
+          (is (not= "/foreign" (:probe/workspace result)))
+          (is (= :probe/complete (get-in result [:failure :data :stage])))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest probe-adapter-conformance-corpus-is-readable
+  (let [corpus (json/read-str
+                (slurp "cli/cmd/mill/testdata/restart-conformance.json"))
+        cases (get corpus "probe_results")]
+    (is (= 4 (count cases)))
+    (doseq [{:strs [name valid value]} cases]
+      (testing name
+        (is (map? value))
+        (is (boolean? valid))))))
 
 (deftest successful-probe-cleanup-fails-loudly-with-path
   (let [world (temp-world)]

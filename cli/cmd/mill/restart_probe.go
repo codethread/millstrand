@@ -36,6 +36,41 @@ type restartProbeWire struct {
 	Log             *string           `json:"log"`
 }
 
+const maxProbeStderr = 64 * 1024
+
+type cappedBuffer struct {
+	buf       bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func (b *cappedBuffer) Write(p []byte) (int, error) {
+	if b.buf.Len() < b.limit {
+		remaining := b.limit - b.buf.Len()
+		if len(p) > remaining {
+			_, _ = b.buf.Write(p[:remaining])
+			b.truncated = true
+			return len(p), nil
+		}
+		return b.buf.Write(p)
+	}
+	b.truncated = true
+	return len(p), nil
+}
+
+func (b *cappedBuffer) String() string {
+	value := strings.TrimSpace(b.buf.String())
+	if b.truncated {
+		if value == "" {
+			return "[probe stderr truncated]"
+		}
+		return value + " [probe stderr truncated]"
+	}
+	return value
+}
+
+func (b *cappedBuffer) Len() int { return b.buf.Len() }
+
 func (r restartProbeResult) validate() error {
 	if strings.TrimSpace(r.Stage) == "" {
 		return errors.New("restart probe result missing stage")
@@ -165,11 +200,11 @@ func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult
 	if err != nil {
 		return restartProbeResult{}, fmt.Errorf("old-generation baseline identity is invalid: %w", err)
 	}
-	endpointStatus, err := runtimeStatus(identity)
+	projectionStatus, err := runtimeStatusWithRegistryProjection(identity)
 	if err != nil {
-		return restartProbeResult{}, fmt.Errorf("old-generation baseline status failed: %w", err)
+		return restartProbeResult{}, fmt.Errorf("old-generation registry projection failed: %w", err)
 	}
-	projection, ok := endpointStatus["registry_projection"]
+	projection, ok := projectionStatus["registry_projection"]
 	if !ok {
 		return restartProbeResult{}, errors.New("old-generation baseline status omitted registry_projection")
 	}
@@ -190,7 +225,8 @@ func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult
 	cmd := exec.Command("clojure", "-M:millstrand", "-e", freshRuntimeProbeExpression)
 	cmd.Dir = source
 	cmd.Env = append(os.Environ(), "MILLSTRAND_PROBE_CONFIG="+world.ConfigDir, "MILLSTRAND_PROBE_STATE="+world.StateDir, "MILLSTRAND_PROBE_DATA="+world.DataDir, "MILLSTRAND_PROBE_BASELINE="+string(baseline), "MILLSTRAND_PROBE_RESULT="+resultPath)
-	var stderr bytes.Buffer
+	var stderr cappedBuffer
+	stderr.limit = maxProbeStderr
 	// User init/module code may write ordinary stdout.  The probe result has a
 	// dedicated file sink, so that output is diagnostic noise rather than a
 	// framing hazard or an unbounded buffer.
@@ -198,21 +234,21 @@ func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if stderr.Len() > 0 {
-			return restartProbeResult{}, fmt.Errorf("restart probe process failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+			return restartProbeResult{}, fmt.Errorf("restart probe process failed: %w: %s", err, stderr.String())
 		}
 		return restartProbeResult{}, fmt.Errorf("restart probe process failed: %w", err)
 	}
 	framed, readErr := os.ReadFile(resultPath)
 	if readErr != nil {
 		if stderr.Len() > 0 {
-			return restartProbeResult{}, fmt.Errorf("restart probe did not write framed result: %w; probe stderr: %s", readErr, strings.TrimSpace(stderr.String()))
+			return restartProbeResult{}, fmt.Errorf("restart probe did not write framed result: %w; probe stderr: %s", readErr, stderr.String())
 		}
 		return restartProbeResult{}, fmt.Errorf("restart probe did not write framed result: %w", readErr)
 	}
 	result, err := decodeRestartProbe(framed)
 	if err != nil {
 		if stderr.Len() > 0 {
-			return restartProbeResult{}, fmt.Errorf("%w; probe stderr: %s", err, strings.TrimSpace(stderr.String()))
+			return restartProbeResult{}, fmt.Errorf("%w; probe stderr: %s", err, stderr.String())
 		}
 		return restartProbeResult{}, err
 	}

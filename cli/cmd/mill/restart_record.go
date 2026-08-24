@@ -35,8 +35,8 @@ func restartRecordPath(world config.World) string {
 }
 
 func writeRestartRecord(world config.World, record restartRecord) error {
-	if record.State != restartStateProbing && record.State != restartStateRestarting && record.State != restartStateRunning && record.State != restartStateFailed {
-		return fmt.Errorf("invalid restart state %q", record.State)
+	if err := validateRestartRecord(record); err != nil {
+		return fmt.Errorf("invalid restart record: %w", err)
 	}
 	record.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	data, err := json.MarshalIndent(record, "", "  ")
