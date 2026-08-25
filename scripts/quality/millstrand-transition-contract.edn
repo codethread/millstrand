@@ -6,7 +6,7 @@
    :git/sha "f3a74045296eba0394709a1feab46f5ca910e343"}
   millhouse/spools
   {:git/url "https://github.com/codethread/millhouse.spool.git"
-   :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a"}
+   :git/sha "f1cdda3b46706b186f547251d285791be650d232"}
   ct.spools/agent-run
   {:git/url "https://github.com/codethread/agent-harness.spool.git"
    :git/sha "85eaa606d2a8cc9200ad1098056d9f7bb94a2f20"}}

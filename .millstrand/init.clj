@@ -46,38 +46,6 @@
 (runtime/module! runtime :millhouse/spools-workflow
                  {:ns 'millhouse.spools.workflow
                   :spools ['millhouse.spools/workflow]})
-;; Millhouse's workspace workflow extensions are a separate root over the
-;; engine, and must collect after the engine's module has published its base.
-(runtime/module! runtime :millhouse/spools-millstrand-workflows
-                 {:ns 'millhouse.spools.millstrand-workflows
-                  :spools ['millhouse.spools/millstrand-workflows
-                           'millhouse.spools/workflow]
-                  :after [:millhouse/spools-workflow]
-                  :required? true})
-;; The generic worker CLI is a separate, opt-in module of the same spool: the
-;; engine ships no verbs, and this declaration is what puts the root `workflow`
-;; op (list/show/start/ready/complete/choose/defer/await) on the surface for
-;; every registered definition. Its collected lifecycle declaration seeds the
-;; failure glossary. Dropping it and refreshing removes the verb.
-(runtime/module! runtime :millhouse/spools-workflow-cli
-                 {:ns 'millhouse.spools.workflow.cli
-                  :spools ['millhouse.spools/workflow]
-                  :after [:millhouse/spools-workflow]})
-;; The shell executor has its own approved root and fulfils :shell gates
-;; by running the gate command directly. Collected forms publish the :shell executor
-;; symbol and its query. Lifecycle resources own the worker pool and initial scan;
-;; ordered after workflow, which owns the executor registry it contributes into.
-(runtime/module! runtime :millhouse/spools-shell
-                 {:ns 'millhouse.spools.executors.shell
-                  :spools ['millhouse.spools.executors/shell
-                           'millhouse.spools/workflow]
-                  :after [:millhouse/spools-workflow]})
-;; UNSAFE spool: unsafe-text-search reaches past the blessed api.* contract into
-;; millstrand.core.db to LIKE-search titles and attribute values, including archived
-;; rows the query language cannot see. It is a maintained, in-the-open example of
-;; rule-breaking (see spools/unsafe-text-search.md), activated here so it stays
-;; exercised. Its `millstrand/defop!` form contributes the search operation; it owns no
-;; live resource and therefore declares no lifecycle effect.
 (runtime/module! runtime :millstrand/spools-unsafe-text-search
                  {:ns 'millstrand.spools.unsafe-text-search
                   :spools ['millstrand.spools/unsafe-text-search]})
@@ -280,12 +248,11 @@
                   :after [:millhouse/spools-workflow]
                   :required? true})
 
-;; The code executor's lifecycle resource scans ready gates when opened. It must load after
-;; every workflow definition so persisted code/fn symbols resolve on the initial scan.
-(runtime/module! runtime :millhouse/spools-code
-                 {:ns 'millhouse.spools.executors.code
-                  :spools ['millhouse.spools.executors/code
-                           'millhouse.spools/workflow]
+;; Activate the consolidated providers after every workflow definition so the
+;; executors' initial scans can resolve all persisted gate symbols.
+(runtime/module! runtime :millhouse/spools-workflow-providers
+                 {:ns 'millhouse.spools.workflow.spool
+                  :spools ['millhouse.spools/workflow]
                   :after [:millhouse/spools-workflow :workflows
                           :workflows.land
                           :workflows.story :workflows.explore :workflows.fix

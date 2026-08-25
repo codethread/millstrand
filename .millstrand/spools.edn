@@ -15,16 +15,13 @@
  {:millstrand/source-root "spools/batteries"},
  millhouse/spools
  {:git/url "https://github.com/codethread/millhouse.spool.git",
-  :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a",
+  :git/sha "f1cdda3b46706b186f547251d285791be650d232",
   :roots
   {millhouse.spools/identity "spools/identity",
    millhouse.spools/workflow "spools/workflow",
-   millhouse.spools/millstrand-workflows "spools/millstrand-workflows",
    millhouse.spools/chime "spools/chime",
    millhouse.spools/cron "spools/cron",
-   millhouse.spools/kanban "spools/kanban",
-   millhouse.spools.executors/code "spools/code-executor",
-   millhouse.spools.executors/shell "spools/shell-executor"}},
+   millhouse.spools/kanban "spools/kanban"}},
  ct.spools/agent-run
  {:git/url "https://github.com/codethread/agent-harness.spool.git",
   :git/sha "85eaa606d2a8cc9200ad1098056d9f7bb94a2f20",

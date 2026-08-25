@@ -78,35 +78,23 @@
                              :deps/root "bench"}
                             millhouse.spools/identity
                             {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a"
+                             :git/sha "f1cdda3b46706b186f547251d285791be650d232"
                              :deps/root "spools/identity"}
                             millhouse.spools/workflow
                             {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a"
+                             :git/sha "f1cdda3b46706b186f547251d285791be650d232"
                              :deps/root "spools/workflow"}
-                            millhouse.spools/millstrand-workflows
-                            {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a"
-                             :deps/root "spools/millstrand-workflows"}
-                            millhouse.spools.executors/code
-                            {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a"
-                             :deps/root "spools/code-executor"}
-                            millhouse.spools.executors/shell
-                            {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a"
-                             :deps/root "spools/shell-executor"}
                             millhouse.spools/chime
                             {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a"
+                             :git/sha "f1cdda3b46706b186f547251d285791be650d232"
                              :deps/root "spools/chime"}
                             millhouse.spools/cron
                             {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a"
+                             :git/sha "f1cdda3b46706b186f547251d285791be650d232"
                              :deps/root "spools/cron"}
                             millhouse.spools/kanban
                             {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a"
+                             :git/sha "f1cdda3b46706b186f547251d285791be650d232"
                              :deps/root "spools/kanban"}}
                :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
   :e2e {:extra-paths ["test/clojure/e2e"]
