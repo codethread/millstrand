@@ -76,33 +76,24 @@ func runWeaverLifecycleWithReadyTimeout(operation, workspace, name, readyTimeout
 		return err
 	}
 	world.ReadyTimeoutMs = ms
-	var result any
-	if operation == "weaver-restart" && stderrIsTerminal() {
-		result, err = restartWithProgress(world)
-	} else {
-		result, err = client.MillCall(operation, world)
+	if operation != "weaver-restart" || !term.IsTerminal(int(os.Stderr.Fd())) {
+		result, err := client.MillCall(operation, world)
+		if err != nil {
+			return err
+		}
+		return emitJSON(result)
 	}
-	if err != nil {
-		return err
-	}
-	return emitJSON(result)
-}
 
-func stderrIsTerminal() bool {
-	return term.IsTerminal(int(os.Stderr.Fd()))
-}
-
-func restartWithProgress(world client.MillWorldRequest) (any, error) {
-	type outcome struct {
+	type restartOutcome struct {
 		result any
 		err    error
 	}
-	completed := make(chan outcome, 1)
+	completed := make(chan restartOutcome, 1)
 	fmt.Fprintln(os.Stderr, "verifying new weaver")
 	fmt.Fprintln(os.Stderr, "  weaver init")
 	go func() {
-		result, err := client.MillCall("weaver-restart", world)
-		completed <- outcome{result: result, err: err}
+		result, err := client.MillCall(operation, world)
+		completed <- restartOutcome{result: result, err: err}
 	}()
 
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -110,21 +101,37 @@ func restartWithProgress(world client.MillWorldRequest) (any, error) {
 	cutoverReported := false
 	for {
 		select {
-		case result := <-completed:
-			return result.result, result.err
+		case outcome := <-completed:
+			if outcome.err != nil {
+				return outcome.err
+			}
+			return emitJSON(outcome.result)
 		case <-ticker.C:
 			if cutoverReported {
 				continue
 			}
 			status, statusErr := client.MillCall("weaver-status", world)
 			if statusErr != nil {
-				continue
+				return fmt.Errorf("read weaver restart progress: %w", statusErr)
 			}
 			fields, ok := status.(map[string]any)
-			if ok && fields["state"] == "restarting" {
+			if !ok {
+				return fmt.Errorf("read weaver restart progress: expected status object, got %T", status)
+			}
+			state, ok := fields["state"].(string)
+			if !ok {
+				return fmt.Errorf("read weaver restart progress: status has invalid state: %v", status)
+			}
+			switch state {
+			case "restarting":
 				fmt.Fprintln(os.Stderr, "closing open handles")
 				fmt.Fprintln(os.Stderr, "starting new weaver")
 				cutoverReported = true
+			case "probing", "running", "failed":
+			case "":
+				return fmt.Errorf("read weaver restart progress: status has empty state: %v", status)
+			default:
+				return fmt.Errorf("read weaver restart progress: unexpected state %q in %v", state, status)
 			}
 		}
 	}
