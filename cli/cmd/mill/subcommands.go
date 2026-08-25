@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"golang.org/x/term"
+
 	"millstrand-strand-cli/internal/client"
 )
 
@@ -74,11 +76,58 @@ func runWeaverLifecycleWithReadyTimeout(operation, workspace, name, readyTimeout
 		return err
 	}
 	world.ReadyTimeoutMs = ms
-	result, err := client.MillCall(operation, world)
+	var result any
+	if operation == "weaver-restart" && stderrIsTerminal() {
+		result, err = restartWithProgress(world)
+	} else {
+		result, err = client.MillCall(operation, world)
+	}
 	if err != nil {
 		return err
 	}
 	return emitJSON(result)
+}
+
+func stderrIsTerminal() bool {
+	return term.IsTerminal(int(os.Stderr.Fd()))
+}
+
+func restartWithProgress(world client.MillWorldRequest) (any, error) {
+	type outcome struct {
+		result any
+		err    error
+	}
+	completed := make(chan outcome, 1)
+	fmt.Fprintln(os.Stderr, "verifying new weaver")
+	fmt.Fprintln(os.Stderr, "  weaver init")
+	go func() {
+		result, err := client.MillCall("weaver-restart", world)
+		completed <- outcome{result: result, err: err}
+	}()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	cutoverReported := false
+	for {
+		select {
+		case result := <-completed:
+			return result.result, result.err
+		case <-ticker.C:
+			if cutoverReported {
+				continue
+			}
+			status, statusErr := client.MillCall("weaver-status", world)
+			if statusErr != nil {
+				continue
+			}
+			fields, ok := status.(map[string]any)
+			if ok && fields["state"] == "restarting" {
+				fmt.Fprintln(os.Stderr, "closing open handles")
+				fmt.Fprintln(os.Stderr, "starting new weaver")
+				cutoverReported = true
+			}
+		}
+	}
 }
 
 // runWeaverRepl resolves the live weaver's nREPL endpoint and launch source
