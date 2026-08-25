@@ -25,6 +25,7 @@ Root specs are canonical for shipped behavior:
 
 ## Archived features
 
+- `26-08-25__weaver-restart-continuity` — preserved the approved Weaver restart continuity proposal for later implementation planning.
 Archived feature folders preserve historical planning context. Current shipped contracts are the root specs above, even if older archive notes describe pre-spec documentation locations. Default `rg` searches skip `archive/`; use `rg --no-ignore devflow/archive` when you need those records.
 
 - `26-08-14__clj-kondo-provenance` — shipped clj-kondo ownership and provenance hygiene.
