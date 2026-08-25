@@ -94,13 +94,19 @@
 ;; --- peer coordination spools -----------------------------------------------
 ;; These sibling modules collect owner-complete contributions from source.
 ;; Named lifecycle resources own their runtime setup and removal.
+(runtime/module! runtime :millhouse/spools-identity
+                 {:ns 'millhouse.spools.identity
+                  :spools ['millhouse.spools/identity]
+                  :required? true})
 (runtime/module! runtime :millstrand/spools-shuttle
                  {:ns 'ct.spools.agent-run
-                  :spools ['ct.spools/agent-run]
+                  :spools ['ct.spools/agent-run 'millhouse.spools/identity]
+                  :after [:millhouse/spools-identity]
                   :required? true})
 (runtime/module! runtime :millstrand/spools-harness-core
                  {:ns 'ct.spools.harness-core
-                  :spools ['ct.spools/harness-core]
+                  :spools ['ct.spools/harness-core 'millhouse.spools/identity]
+                  :after [:millhouse/spools-identity]
                   :required? true})
 (runtime/module! runtime :millstrand/spools-codex-harness
                  {:ns 'ct.spools.codex-harness

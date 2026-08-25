@@ -76,6 +76,10 @@
                             {:git/url "https://github.com/codethread/agent-harness.spool.git"
                              :git/sha "85eaa606d2a8cc9200ad1098056d9f7bb94a2f20"
                              :deps/root "bench"}
+                            millhouse.spools/identity
+                            {:git/url "https://github.com/codethread/millhouse.spool.git"
+                             :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a"
+                             :deps/root "spools/identity"}
                             millhouse.spools/workflow
                             {:git/url "https://github.com/codethread/millhouse.spool.git"
                              :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a"

@@ -17,7 +17,8 @@
  {:git/url "https://github.com/codethread/millhouse.spool.git",
   :git/sha "3af5786f06121ee6055f34b4eefddc7000a84b5a",
   :roots
-  {millhouse.spools/workflow "spools/workflow",
+  {millhouse.spools/identity "spools/identity",
+   millhouse.spools/workflow "spools/workflow",
    millhouse.spools/millstrand-workflows "spools/millstrand-workflows",
    millhouse.spools/chime "spools/chime",
    millhouse.spools/cron "spools/cron",
