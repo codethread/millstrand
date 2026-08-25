@@ -73,7 +73,7 @@
                                              {:argv [] :cwd "/tmp" :env {}})))))
 
 (t/deftest unavailable-control-channel-fails-visibly
-  (t/is (throws-message? #"identity mismatch|control channel is unavailable|response is malformed"
+  (t/is (throws-message? #"identity mismatch|not an admitted Weaver|control channel is unavailable|response is malformed"
                          #(process/get {:metadata {:nonce "missing-weaver"}}
                                        "process-test"))))
 
