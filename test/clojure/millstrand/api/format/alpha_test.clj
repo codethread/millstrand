@@ -10,7 +10,7 @@
             [clojure.test :refer [deftest is]]
             [millstrand.api.format.alpha :as fmt]))
 
-(deftest prose-preserves-markdown-after-baseline-dedent
+(deftest prose-renders-without-scope-and-preserves-markdown-after-baseline-dedent
   (is (= "# Consumer tooling\n\nRead the repository before changing it.\n  - Preserve deliberate list indentation.\n```sh\nstrand spool status\n```"
          (fmt/prose
           "
@@ -21,8 +21,7 @@
             ```sh
             strand spool status
             ```
-            "
-          {}))))
+            "))))
 
 (deftest prose-interpolates-values-and-compact-json
   (is (= "Inspect /tmp/consumer.\n\n```json\n{\"git/url\":\"https://example.test/spool.git\",\"ready\":true}\n```"
@@ -46,7 +45,10 @@
            ["\n  first\n second\n" {} :baseline]]]
     (let [ex (try (fmt/prose template scope) nil (catch clojure.lang.ExceptionInfo e e))]
       (is (some? ex) (pr-str [template scope]))
-      (is (contains? (ex-data ex) expected-key) (pr-str (ex-data ex))))))
+      (is (contains? (ex-data ex) expected-key) (pr-str (ex-data ex)))))
+  (let [ex (try (fmt/prose "{missing}") nil (catch clojure.lang.ExceptionInfo e e))]
+    (is (some? ex))
+    (is (contains? (ex-data ex) :placeholder))))
 
 (deftest prose-rejects-malformed-placeholders
   (doseq [template ["{worktree" "{1name}" "{name:}"]]
