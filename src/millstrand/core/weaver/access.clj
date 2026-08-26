@@ -143,9 +143,11 @@
   [runtime path]
   (let [expanded-path (expand-user-home path)
         file (io/file expanded-path)
+        origin (or (:source-config-dir runtime)
+                   (config-dir runtime))
         resolved (if (.isAbsolute file)
                    file
-                   (io/file (config-dir runtime) expanded-path))]
+                   (io/file origin expanded-path))]
     (.getCanonicalPath resolved)))
 
 (defn source-checkout-root

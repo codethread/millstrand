@@ -663,6 +663,7 @@
                           :approved-spool-generation-fingerprints (atom {})
                           :approved-spool-generation-maven (atom {})
                           :pending-spool-generation (atom nil)
+                          :source-config-dir (:source-config-dir world)
                         ;; Append-only for this process generation. Config reload
                         ;; deliberately leaves loaded-code evidence intact.
                           :namespace-load-ledger (atom {:last-order 0 :records []})
@@ -912,9 +913,10 @@
          probe-state (io/file probe-root "state")
          probe-data (io/file probe-root "data")
          probe-log (io/file probe-root "probe.edn")
-         probe-world (weaver-config/world (.getPath probe-config)
-                                          (.getPath probe-state)
-                                          (.getPath probe-data))
+         probe-world (assoc (weaver-config/world (.getPath probe-config)
+                                                 (.getPath probe-state)
+                                                 (.getPath probe-data))
+                            :source-config-dir (:config-dir world))
          diagnostics (atom [])
          started-runtime (atom nil)
          report! (fn [entry]
