@@ -122,19 +122,22 @@
     (str output)))
 
 (defn prose
-  "Render an indentation-aware Markdown template with named interpolation.
+  "Render an indentation-aware Markdown template with optional named interpolation.
 
-  The first content line establishes the source indentation removed from every
+  With one argument, render a template that contains no braces. With two, the
+  first content line establishes the source indentation removed from every
   nonblank line; remaining whitespace, blank lines, Markdown, and line width are
   preserved. `{name}` interpolates `:name` or `\"name\"` from `scope`; `{name:json}`
   renders compact JSON. Throws with the offending template or scope when either
   input is invalid, or when rendering finds malformed indentation or placeholders."
-  [template scope]
-  (require-valid! ::template template :template
-                  "prose: template must satisfy ::template")
-  (require-valid! ::scope scope :scope
-                  "prose: scope must satisfy ::scope")
-  (interpolate (dedent template) scope template))
+  ([template]
+   (prose template {}))
+  ([template scope]
+   (require-valid! ::template template :template
+                   "prose: template must satisfy ::template")
+   (require-valid! ::scope scope :scope
+                   "prose: scope must satisfy ::scope")
+   (interpolate (dedent template) scope template)))
 
 (defn fill
   "Reflow a `|`-margin doc block into a vector of item strings.
@@ -163,7 +166,8 @@
   (format/reflow block))
 
 (s/fdef prose
-  :args (s/cat :template ::template :scope ::scope)
+  :args (s/or :plain (s/cat :template ::template)
+              :interpolated (s/cat :template ::template :scope ::scope))
   :ret string?)
 
 (s/def ::block
