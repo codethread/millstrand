@@ -587,6 +587,20 @@
   ;; preference cannot cross into the process-wide ambient runtime.
   (and publish? (not probe?)))
 
+(defn- validated-source-config-dir
+  "Return the selected world's source config-dir, failing on bad provenance."
+  [world]
+  (let [source-config-dir (if (contains? world :source-config-dir)
+                            (:source-config-dir world)
+                            (:config-dir world))]
+    (when-not (and (string? source-config-dir)
+                   (not (str/blank? source-config-dir)))
+      (throw (ex-info "Weaver world has invalid source-config-dir provenance"
+                      {:code :millstrand.weaver/invalid-source-config-dir
+                       :source-config-dir source-config-dir
+                       :world (select-keys world [:config-dir :source-config-dir])})))
+    source-config-dir))
+
 (defn- claim-final-publication!
   "Replace the admitted ambient snapshot with `published-runtime`.
 
@@ -609,6 +623,7 @@
   (when (and (publishes-ambient-runtime? publish? probe?) @current-runtime)
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
   (let [world (or world (weaver-config/world))
+        world (assoc world :source-config-dir (validated-source-config-dir world))
         resolved-release-marker (resolve-release-marker release-marker)]
     (if probe?
       ;; Probe worlds are normally disposable, but `:probe?` does not make an
