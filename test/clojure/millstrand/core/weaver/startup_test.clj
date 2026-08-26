@@ -196,6 +196,41 @@
     (is (not (.exists (io/file (:state-dir world) "weaver.json"))))
     (is (not (.exists (io/file (:data-dir world) "millstrand.sqlite"))))))
 
+(deftest fresh-runtime-probe-resolves-relative-local-root-from-selected-workspace
+  (let [world (temp-world)
+        workspace (:config-dir world)
+        root (io/file workspace ".." "probe-root")]
+    (try
+      (.mkdirs (io/file root "src"))
+      (spit (io/file workspace "spools.edn")
+            (pr-str {:spools {'test/probe-root {:local/root "../probe-root"}}}))
+      (spit (io/file root "deps.edn") "{:paths [\"src\"]}\n")
+      (spit (io/file root "src/probe_root.clj") "(ns test.probe-root)\n")
+      (let [result (weaver-runtime/fresh-runtime-probe!
+                    world {:old-generation-baseline
+                           {:status :admitted :projection {}}})]
+        (is (true? (:success result)) (pr-str result))
+        (is (= :probe/complete (:stage result)))
+        (let [sync-diagnostic (some #(when (= :spools/materialize (:stage %)) %)
+                                    (:diagnostics result))]
+          (is (= (.getCanonicalPath root)
+                 (get-in sync-diagnostic
+                         [:data :sync :spools 'test/probe-root :root])))))
+      (finally
+        (delete-tree! (io/file workspace ".."))))))
+
+(deftest runtime-rejects-invalid-source-config-dir-provenance
+  (let [world (assoc (temp-world) :source-config-dir 42)]
+    (try
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Weaver start options have an invalid shape"
+                            (weaver-runtime/start!
+                             nil {:world world
+                                  :publish? false
+                                  :storage :sqlite-memory})))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
 (deftest probe-failure-envelope-ignores-colliding-ex-data
   (let [world (temp-world)]
     (try

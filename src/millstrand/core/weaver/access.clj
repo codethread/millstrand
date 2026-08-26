@@ -139,13 +139,24 @@
     :else path))
 
 (defn canonical-root
-  "Resolve path against the runtime config-dir and return its canonical path."
+  "Resolve a root path against the runtime's source config-dir.
+
+  Relative local-root coordinates use the selected world's source config-dir,
+  which remains the provenance of the copied configuration during a restart
+  probe. The runtime validates that provenance at startup; a missing or
+  malformed source config-dir fails loudly rather than silently resolving
+  against the probe's disposable config-dir."
   [runtime path]
-  (let [expanded-path (expand-user-home path)
+  (let [origin (:source-config-dir runtime)
+        _ (when-not (and (string? origin) (not (str/blank? origin)))
+            (throw (ex-info "Runtime source-config-dir provenance is invalid"
+                            {:code :millstrand.weaver/invalid-source-config-dir
+                             :source-config-dir origin})))
+        expanded-path (expand-user-home path)
         file (io/file expanded-path)
         resolved (if (.isAbsolute file)
                    file
-                   (io/file (config-dir runtime) expanded-path))]
+                   (io/file origin expanded-path))]
     (.getCanonicalPath resolved)))
 
 (defn source-checkout-root
