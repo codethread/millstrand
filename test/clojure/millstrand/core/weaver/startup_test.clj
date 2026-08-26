@@ -223,7 +223,7 @@
   (let [world (assoc (temp-world) :source-config-dir 42)]
     (try
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                            #"invalid source-config-dir provenance"
+                            #"Weaver start options have an invalid shape"
                             (weaver-runtime/start!
                              nil {:world world
                                   :publish? false

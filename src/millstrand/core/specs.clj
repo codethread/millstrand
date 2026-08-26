@@ -353,6 +353,7 @@
 ;; Implementation-only field specs used to compose ::weaver-start-options. The
 ;; owning public contract is ::weaver-start-options, not these field keywords.
 (s/def :millstrand.weaver-start/config-dir non-blank-string?)
+(s/def :millstrand.weaver-start/source-config-dir non-blank-string?)
 (s/def :millstrand.weaver-start/state-dir non-blank-string?)
 (s/def :millstrand.weaver-start/data-dir non-blank-string?)
 (s/def :millstrand.weaver-start/config-file non-blank-string?)
@@ -362,7 +363,8 @@
                    :millstrand.weaver-start/state-dir
                    :millstrand.weaver-start/data-dir
                    :millstrand.weaver-start/db-path]
-          :opt-un [:millstrand.weaver-start/config-file]))
+          :opt-un [:millstrand.weaver-start/config-file
+                   :millstrand.weaver-start/source-config-dir]))
 (s/def :millstrand.weaver-start/name (s/nilable non-blank-string?))
 (s/def :millstrand.weaver-start/publish? boolean?)
 (s/def :millstrand.weaver-start/storage keyword?)
