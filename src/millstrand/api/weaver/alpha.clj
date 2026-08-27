@@ -60,9 +60,11 @@
 (s/def ::about (s/and string? (complement str/blank?)))
 (s/def ::prime (s/and string? (complement str/blank?)))
 (s/def ::op-metadata-map
-  (s/and (s/keys :req-un [::arg-spec]
-                 :opt-un [::doc ::returns ::stream? ::about ::prime])
-         #(every? op-entry/op-metadata-keys (keys %))))
+  (s/and map?
+         #(try
+            (op-entry/validate-op-metadata! %)
+            true
+            (catch clojure.lang.ExceptionInfo _ false))))
 (s/def ::op-metadata
   ::op-metadata-map)
 
@@ -397,8 +399,8 @@
   Registered operations are invoked at the CLI root as `strand <name>
   [args...]`. The handler symbol must resolve to a function that accepts one
   context map (see `op!` for the context keys) and returns JSON-compatible data.
-  The third positional argument is an op metadata map with keys `:doc`,
-  `:arg-spec` (parser spec, structurally validated at
+  The third positional argument is an op metadata map conforming to
+  `::op-metadata-map`, with keys `:doc`, `:arg-spec` (parser spec, structurally validated at
   registration), `:returns` (validated return-shape declaration), `:stream?`
   (default false), `:about`, and `:prime`; unknown keys fail loudly. The metadata
   map is required to contain `:arg-spec`; every op declares both classes on
@@ -718,9 +720,6 @@
   (let [opts (op-entry/validate-op-metadata! opts)
         fn-sym (op-entry/validate-op-fn-symbol! fn-sym)
         stream? (boolean (:stream? opts))]
-    (when-not (contains? opts :arg-spec)
-      (throw (ex-info "Operation requires :arg-spec"
-                      {:operation (op-entry/canonical-op-name op-name)})))
     (when (:doc opts)
       (op-entry/validate-op-doc! (:doc opts)))
     (validate-op-arg-spec! op-name (:arg-spec opts))

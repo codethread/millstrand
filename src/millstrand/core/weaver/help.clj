@@ -17,8 +17,9 @@
   deadline-class, use-when, notes, failure-modes, children}`) at every depth,
   recursing to the arg-spec's declared depth. `hook-class`/`deadline-class` are
   node keys with per-kind null semantics (DELTA-Lhc-003.CC1): class strings on
-  invocable leaf node and `null` on interior nodes and subcommand-op roots. The projection
-  normalizes today's registry data — the op envelope, the arg-spec `explain`
+  invocable leaf node and `null` on interior nodes and subcommand-op roots.
+  The projection normalizes today's registry data — the op envelope, the
+  arg-spec `explain`
   (SPEC-003.C64/C65), and the per-case return-shape `explain` (SPEC-003.C60b)
   — into that schema; nothing here re-models or hand-writes usage.
 
@@ -63,9 +64,9 @@
   "Positive integer versioning the help-schema contract itself.
 
   Bumps only when the envelope/node shape changes; independent of release/build
-  identity and of `protocol_version` (DELTA-Dtf-001.D3). v3 removes the
-  `operation.raw-envelope` fact and the `raw-envelope` invocation mode because
-  every op now declares an arg-spec."
+  identity and of `protocol_version` (DELTA-Dtf-001.D3). Version 3 describes
+  the uniform declared-op schema: every operation projects its arg-spec and
+  `operation` carries only `name`, `provenance`, and `stream?`."
   3)
 
 (defn- registered-op-entries

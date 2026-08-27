@@ -64,6 +64,8 @@
     (when-not (and (string? value) (not (str/blank? value)))
       (throw (ex-info (str "Operation " key " must be a non-blank prose string")
                       {key value}))))
+  (when-not (contains? opts :arg-spec)
+    (throw (ex-info "Operation requires :arg-spec" {})))
   opts)
 
 (defn invalid-returns!
