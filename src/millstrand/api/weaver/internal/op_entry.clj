@@ -35,41 +35,18 @@
   "Metadata keys a caller may supply to register-op!/replace-op!.
 
   `:about`/`:prime` are optional non-blank prose strings the `about`/`prime`
-  meta-verbs project (DELTA-Dtf-002.CC4). `:annotations` is the root annotation
-  sub-map for a **raw-envelope** op that declares no `:arg-spec`
-  (DELTA-Dtf-002.CC4/MI1a); an op with an `:arg-spec` carries annotations on the
-  arg-spec node instead (DELTA-Dtf-003.CC2)."
-  #{:doc :arg-spec :returns :stream? :deadline-class :hook-class
-    :about :prime :annotations})
-
-(def op-deadline-classes
-  "Accepted :deadline-class values."
-  #{:standard :unbounded})
-
-(def op-hook-classes
-  "Accepted :hook-class values."
-  #{:read :mutating})
-
-(defn normalize-op-opts
-  "Coerce a register-op! metadata argument into an options map.
-
-  A string is the legacy positional doc; a map is the full metadata map; nil is
-  the no-metadata case."
-  [opts]
-  (cond
-    (nil? opts) {}
-    (string? opts) {:doc opts}
-    (map? opts) opts
-    :else (throw (ex-info "Operation metadata must be a doc string or options map"
-                          {:opts opts}))))
+  meta-verbs project (DELTA-Dtf-002.CC4)."
+  #{:doc :arg-spec :returns :stream? :about :prime})
 
 (defn validate-op-metadata!
-  "Validate a normalized op metadata map, returning it.
+  "Validate an op metadata map, returning it.
 
   Rejects caller-supplied `:provenance` (registry-recorded from the handler
-  namespace), unknown keys, and malformed `:stream?`/`:deadline-class`/
-  `:hook-class` values."
+  namespace), unknown keys, and malformed `:stream?` values."
   [opts]
+  (when-not (map? opts)
+    (throw (ex-info "Operation metadata must be an options map"
+                    {:opts opts})))
   ;; Provenance is registry-recorded from the handler namespace; a caller must
   ;; never assert it. Reject it explicitly so the error is unambiguous even
   ;; though it would also trip the unknown-key check below.
@@ -81,69 +58,15 @@
     (throw (ex-info "Operation metadata contains unknown keys" {:keys (vec unknown)})))
   (when (and (contains? opts :stream?) (not (boolean? (:stream? opts))))
     (throw (ex-info "Operation :stream? must be a boolean" {:stream? (:stream? opts)})))
-  (when (and (contains? opts :deadline-class)
-             (not (op-deadline-classes (:deadline-class opts))))
-    (throw (ex-info "Operation :deadline-class must be :standard or :unbounded"
-                    {:deadline-class (:deadline-class opts)})))
-  (when (and (contains? opts :hook-class)
-             (not (op-hook-classes (:hook-class opts))))
-    (throw (ex-info "Operation :hook-class must be :read or :mutating"
-                    {:hook-class (:hook-class opts)})))
   (doseq [key [:about :prime]
           :when (contains? opts key)
           :let [value (get opts key)]]
     (when-not (and (string? value) (not (str/blank? value)))
       (throw (ex-info (str "Operation " key " must be a non-blank prose string")
                       {key value}))))
-  ;; The root `:annotations` metadata is the raw-envelope root annotation surface
-  ;; (MI1a); an arg-spec op carries annotations on its arg-spec node instead
-  ;; (DELTA-Dtf-003.CC2), so declaring both would double-source the root node.
-  (when (and (contains? opts :annotations) (some? (:arg-spec opts)))
-    (throw (ex-info (str "Operation :annotations metadata is only for raw-envelope ops; "
-                         "an arg-spec op annotates its arg-spec node")
-                    {:annotations (:annotations opts)})))
+  (when-not (contains? opts :arg-spec)
+    (throw (ex-info "Operation requires :arg-spec" {})))
   opts)
-
-(defn validate-op-classes!
-  "Require one canonical class source for `op-name`, returning `opts`.
-
-  Arg-spec operations declare both classes on every leaf and never in
-  registration metadata. Raw-envelope operations declare both classes in
-  registration metadata. Node-level failures carry the canonical routing
-  context (DELTA-Lhc-001.CC2/CC3, DELTA-Lhc-002.CC1)."
-  [op-name opts]
-  (let [op (canonical-op-name op-name)
-        context (fn [path extra]
-                  (merge {:operation op :op op :path path
-                          :token nil :available []}
-                         extra))]
-    (if-let [arg-spec (:arg-spec opts)]
-      (do
-        (when-let [classes (seq (filter #(contains? opts %)
-                                        [:hook-class :deadline-class]))]
-          (throw (ex-info
-                  "Arg-spec operation classes belong on leaves, not registration metadata"
-                  (context [] {:fields (vec classes)}))))
-        (letfn [(walk! [node path]
-                  (if-let [subcommands (:subcommands node)]
-                    (doseq [[subcommand child] subcommands]
-                      (walk! child (conj path subcommand)))
-                    (doseq [key [:hook-class :deadline-class]]
-                      (when-not (contains? node key)
-                        (throw (ex-info (str "Operation leaf requires " key)
-                                        (context path {:field key})))))))]
-          (walk! arg-spec [])))
-      (do
-        (doseq [key [:hook-class :deadline-class]]
-          (when-not (contains? opts key)
-            (throw (ex-info (str "Raw-envelope operation requires " key)
-                            (context [] {:field key})))))
-        (when (and (:stream? opts) (not= :unbounded (:deadline-class opts)))
-          (throw (ex-info
-                  "Stream operation leaves must declare :deadline-class :unbounded"
-                  (context [] {:reason :stream-leaf-deadline
-                               :deadline-class (:deadline-class opts)}))))))
-    opts))
 
 (defn invalid-returns!
   "Throw a canonicalized `:returns` validation error for `op-name`."
@@ -240,7 +163,7 @@
   "Assemble the registry entry for already-validated registration inputs.
 
   Provenance is derived from the handler symbol's namespace. Arg-spec leaf
-  classes remain on the arg-spec; raw-envelope classes remain on the entry.
+  classes remain on the arg-spec.
   Pure assembly: the caller has already validated the metadata map,
   the handler symbol, and any declared doc, arg-spec, and returns."
   [op-name opts fn-sym]
@@ -250,10 +173,7 @@
              :stream? stream?
              :provenance (symbol (namespace fn-sym))}
       (:doc opts) (assoc :doc (:doc opts))
-      (some? (:arg-spec opts)) (assoc :arg-spec (:arg-spec opts))
-      (contains? opts :deadline-class) (assoc :deadline-class (:deadline-class opts))
-      (contains? opts :hook-class) (assoc :hook-class (:hook-class opts))
+      true (assoc :arg-spec (:arg-spec opts))
       (contains? opts :returns) (assoc :returns (:returns opts))
       (:about opts) (assoc :about (:about opts))
-      (:prime opts) (assoc :prime (:prime opts))
-      (some? (:annotations opts)) (assoc :annotations (:annotations opts)))))
+      (:prime opts) (assoc :prime (:prime opts)))))

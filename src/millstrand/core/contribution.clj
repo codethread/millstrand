@@ -7,8 +7,7 @@
             [millstrand.core.query :as query]))
 
 (def ^:private op-option-keys
-  #{:arg-spec :returns :stream? :deadline-class :hook-class :about :prime
-    :annotations :override?})
+  #{:arg-spec :returns :stream? :about :prime :override?})
 
 (s/def ::override? boolean?)
 (s/def ::op-options
@@ -75,9 +74,9 @@
 (s/def ::op-entry
   (s/and map?
          #(every? #{:name :fn :provenance :doc :arg-spec :returns :stream?
-                    :deadline-class :hook-class :about :prime :annotations}
+                    :about :prime}
                   (keys %))
-         #(every? (partial contains? %) [:name :fn :provenance])))
+         #(every? (partial contains? %) [:name :fn :provenance :arg-spec])))
 (s/def ::query-entry
   (s/and #(try
             (query/validate-query-def! %)

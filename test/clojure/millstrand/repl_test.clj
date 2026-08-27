@@ -49,8 +49,10 @@
   [_event]
   nil)
 
-(def ^:private raw-read-standard
-  {:hook-class :read :deadline-class :standard})
+(def ^:private flat-read-standard
+  {:arg-spec {:hook-class :read
+              :deadline-class :standard
+              :positionals [{:name :args :variadic? true}]}})
 
 (defn- registered-op
   "Return the registered op entry named `op-name`, or nil.
@@ -311,11 +313,11 @@
     (fn [rt _db-file]
       (reset-open-state!)
       (testing "ops"
-        (is (= "wrap-op" (:name (repl/register-op! 'wrap-op raw-read-standard
+        (is (= "wrap-op" (:name (repl/register-op! 'wrap-op flat-read-standard
                                                    'millstrand.repl-test/wrapper-op))))
         (is (= 'millstrand.repl-test/wrapper-op (:fn (registered-op rt "wrap-op"))))
         (is (= 'millstrand.repl-test/wrapper-op-2
-               (:fn (repl/replace-op! 'wrap-op raw-read-standard
+               (:fn (repl/replace-op! 'wrap-op flat-read-standard
                                       'millstrand.repl-test/wrapper-op-2))))
         (is (= {:unregistered "wrap-op"} (repl/unregister-op! 'wrap-op)))
         (is (nil? (registered-op rt "wrap-op"))))
@@ -391,7 +393,7 @@
     (fn [rt _db-file]
       (repl/connect! (:config-dir (:metadata rt)))
       (try
-        (let [connected (try (repl/replace-op! 'nope raw-read-standard 'millstrand.repl-test/wrapper-op)
+        (let [connected (try (repl/replace-op! 'nope flat-read-standard 'millstrand.repl-test/wrapper-op)
                              (catch clojure.lang.ExceptionInfo e e))]
           (is (= {:helper 'replace-op!
                   :session-mode :connected

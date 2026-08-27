@@ -194,8 +194,10 @@
 (def cleanup-events (atom []))
 (def module-contributions (atom {}))
 
-(def ^:private raw-mutating-standard
-  {:hook-class :mutating :deadline-class :standard})
+(def ^:private flat-mutating-standard
+  {:arg-spec {:hook-class :mutating
+              :deadline-class :standard
+              :positionals [{:name :args :variadic? true}]}})
 
 (s/def ::module-item map?)
 
@@ -378,7 +380,7 @@
 (defn snapshot-probe-op-v1
   "Op handler that replaces itself mid-invocation, then answers as v1."
   [{:op/keys [runtime]}]
-  (weaver/replace-op! runtime 'snapshot-probe raw-mutating-standard
+  (weaver/replace-op! runtime 'snapshot-probe flat-mutating-standard
                       'millstrand.core.weaver.registry-snapshots-test/snapshot-probe-op-v2)
   {:version :v1})
 
@@ -529,7 +531,7 @@
   ;; entry it resolved; only the next invocation observes the replacement.
   (with-runtime
     (fn [rt _db-file]
-      (weaver/register-op! rt 'snapshot-probe raw-mutating-standard
+      (weaver/register-op! rt 'snapshot-probe flat-mutating-standard
                            'millstrand.core.weaver.registry-snapshots-test/snapshot-probe-op-v1)
       (is (= {:version :v1} (weaver/op! rt 'snapshot-probe []))
           "the call answers with the entry it resolved at invocation start")
@@ -541,13 +543,13 @@
   ;; invocations only ever observe old-or-new, never a torn read.
   (with-runtime
     (fn [rt _db-file]
-      (weaver/register-op! rt 'torn-probe raw-mutating-standard
+      (weaver/register-op! rt 'torn-probe flat-mutating-standard
                            'millstrand.core.weaver.registry-snapshots-test/torn-read-op-a)
       (let [running? (atom true)
             flipper (future
                       (loop [sym 'millstrand.core.weaver.registry-snapshots-test/torn-read-op-b]
                         (when @running?
-                          (weaver/replace-op! rt 'torn-probe raw-mutating-standard sym)
+                          (weaver/replace-op! rt 'torn-probe flat-mutating-standard sym)
                           (recur (if (= sym 'millstrand.core.weaver.registry-snapshots-test/torn-read-op-a)
                                    'millstrand.core.weaver.registry-snapshots-test/torn-read-op-b
                                    'millstrand.core.weaver.registry-snapshots-test/torn-read-op-a)))))
@@ -568,7 +570,7 @@
   ;; direct owner. Op entries hold the handler symbol, never a function value.
   (with-runtime
     (fn [rt _db-file]
-      (weaver/register-op! rt 'prov-probe raw-mutating-standard
+      (weaver/register-op! rt 'prov-probe flat-mutating-standard
                            'millstrand.core.weaver.registry-snapshots-test/test-op)
       (let [provenance (weaver/op-provenance rt)
             help-eff (get-in provenance ["help" :effective])

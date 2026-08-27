@@ -88,8 +88,8 @@
                           {"watch" {:stream {:emits :string
                                              :result [:nullable :boolean]}}}}]
       (weaver/register-op! rt 'flat
-                           {:hook-class :mutating
-                            :deadline-class :standard
+                           {:arg-spec {:hook-class :mutating
+                                       :deadline-class :standard}
                             :returns flat-shape}
                            'millstrand.test.alpha-test/unused-op)
       (weaver/register-op! rt 'subcommand
@@ -154,17 +154,18 @@
   (t/with-weaver-world [ctx {:storage :sqlite-memory}]
     (let [rt (:runtime ctx)]
       (weaver/register-op! rt 'undeclared
-                           {:hook-class :mutating :deadline-class :standard}
+                           {:arg-spec {:hook-class :mutating
+                                       :deadline-class :standard}}
                            'millstrand.test.alpha-test/unused-op)
       (weaver/register-op! rt 'flat
-                           {:hook-class :mutating
-                            :deadline-class :standard
+                           {:arg-spec {:hook-class :mutating
+                                       :deadline-class :standard}
                             :returns :string}
                            'millstrand.test.alpha-test/unused-op)
       (weaver/register-op! rt 'stream
                            {:stream? true
-                            :hook-class :mutating
-                            :deadline-class :unbounded
+                            :arg-spec {:hook-class :mutating
+                                       :deadline-class :unbounded}
                             :returns {:stream {:emits :string :result :boolean}}}
                            'millstrand.test.alpha-test/unused-op)
       (doseq [[operation context value reason]

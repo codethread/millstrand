@@ -100,19 +100,6 @@
   (validation/validate-node! (:op arg-spec) [] arg-spec reserved-subcommand-names)
   arg-spec)
 
-(defn validate-annotations!
-  "Structurally validate a standalone annotation sub-map for `op`, returning it.
-
-  The same closed-shape check `validate!` applies to an arg-spec node's
-  `:annotations` (closed `use-when`/`notes`/`failure-modes` keys, each an array of
-  non-blank strings), exposed for the raw-envelope root annotation surface an op
-  declares outside any arg-spec (DELTA-Dtf-002.MI1a). Purely structural: the
-  glossary-ref existence check for `failure-modes` names runs at registration
-  (DELTA-Dtf-003.CC2)."
-  [op annotations]
-  (validation/validate-annotations! op [] annotations)
-  annotations)
-
 (defn parse
   "Parse `argv` against `arg-spec`, resolving payload references from `payloads`.
 

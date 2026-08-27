@@ -45,7 +45,7 @@
 
 (declare apply-edges! reject-unknown-update-keys! supersede-context
          require-archive-result! require-lean-result!
-         validated-op-entry validate-op-annotations! check-op-glossary-refs!
+         validated-op-entry check-op-glossary-refs!
          check-arg-spec-refs! operation-label)
 
 ;; A runtime is an opaque, non-nil handle; callers select it and pass it first.
@@ -57,17 +57,16 @@
 (s/def ::arg-spec map?)
 (s/def ::returns any?)
 (s/def ::stream? boolean?)
-(s/def ::deadline-class op-entry/op-deadline-classes)
-(s/def ::hook-class op-entry/op-hook-classes)
 (s/def ::about (s/and string? (complement str/blank?)))
 (s/def ::prime (s/and string? (complement str/blank?)))
-(s/def ::annotations map?)
 (s/def ::op-metadata-map
-  (s/and (s/keys :opt-un [::doc ::arg-spec ::returns ::stream? ::deadline-class
-                          ::hook-class ::about ::prime ::annotations])
-         #(every? op-entry/op-metadata-keys (keys %))))
+  (s/and map?
+         #(try
+            (op-entry/validate-op-metadata! %)
+            true
+            (catch clojure.lang.ExceptionInfo _ false))))
 (s/def ::op-metadata
-  (s/nilable (s/or :legacy-doc ::doc :metadata ::op-metadata-map)))
+  ::op-metadata-map)
 
 ;; --- schema init ------------------------------------------------------------
 
@@ -400,15 +399,13 @@
   Registered operations are invoked at the CLI root as `strand <name>
   [args...]`. The handler symbol must resolve to a function that accepts one
   context map (see `op!` for the context keys) and returns JSON-compatible data.
-  The third positional argument is either a doc string or an op metadata map
-  with keys `:doc`, `:arg-spec` (parser spec, structurally validated at
+  The third positional argument is an op metadata map conforming to
+  `::op-metadata-map`, with keys `:doc`, `:arg-spec` (parser spec, structurally validated at
   registration), `:returns` (validated return-shape declaration), `:stream?`
-  (default false), `:deadline-class` (`:standard`/`:unbounded`), and
-  `:hook-class` (`:read`/`:mutating`); unknown keys fail loudly. Arg-spec ops
-  declare both classes on every leaf and may not declare them in this metadata
-  map. Raw-envelope ops declare both classes here. Provenance (the registering
-  namespace) is recorded from the handler symbol and must never be
-  caller-supplied.
+  (default false), `:about`, and `:prime`; unknown keys fail loudly. The metadata
+  map is required to contain `:arg-spec`; every op declares both classes on
+  every arg-spec leaf. Provenance (the registering namespace) is recorded from
+  the handler symbol and must never be caller-supplied.
 
   Registering an already-registered name fails loudly, naming both the existing
   entry's provenance and the attempted registrant; use `replace-op!` to override
@@ -416,8 +413,6 @@
   are normally published by owner-complete modules from init.clj or registered
   directly from a live REPL. Module refresh replaces its owner's partition;
   direct registrations remain until explicitly replaced or removed."
-  ([runtime op-name fn-sym]
-   (register-op! runtime core-registry/repl-owner op-name nil fn-sym))
   ([runtime op-name opts fn-sym]
    (register-op! runtime core-registry/repl-owner op-name opts fn-sym))
   ([runtime owner op-name opts fn-sym]
@@ -432,8 +427,7 @@
      entry)))
 
 (s/fdef register-op!
-  :args (s/or :default (s/cat :runtime ::runtime :op-name ::op-name :fn-sym symbol?)
-              :with-opts (s/cat :runtime ::runtime :op-name ::op-name
+  :args (s/or :with-opts (s/cat :runtime ::runtime :op-name ::op-name
                                 :opts ::op-metadata :fn-sym symbol?)
               :owned (s/cat :runtime ::runtime :owner keyword? :op-name ::op-name
                             :opts ::op-metadata :fn-sym symbol?))
@@ -448,8 +442,6 @@
   override intent is recorded, which is what lets the direct entry keep
   shadowing the original across `runtime/refresh!`. `unregister-op!` retracts
   the shadow and the shadowed entry becomes effective again."
-  ([runtime op-name fn-sym]
-   (replace-op! runtime core-registry/repl-owner op-name nil fn-sym))
   ([runtime op-name opts fn-sym]
    (replace-op! runtime core-registry/repl-owner op-name opts fn-sym))
   ([runtime owner op-name opts fn-sym]
@@ -463,8 +455,7 @@
      entry)))
 
 (s/fdef replace-op!
-  :args (s/or :default (s/cat :runtime ::runtime :op-name ::op-name :fn-sym symbol?)
-              :with-opts (s/cat :runtime ::runtime :op-name ::op-name
+  :args (s/or :with-opts (s/cat :runtime ::runtime :op-name ::op-name
                                 :opts ::op-metadata :fn-sym symbol?)
               :owned (s/cat :runtime ::runtime :owner keyword? :op-name ::op-name
                             :opts ::op-metadata :fn-sym symbol?))
@@ -585,8 +576,8 @@
   arity threads any present `:cwd`, `:worktree-root`, `:git-common-dir`,
   `:timeout`, `:is-tty`, and `:tty-col` fields into their corresponding
   `:op/*` context keys, and an envelope `:emit!` fn (supplied by the streaming
-  socket transport for `:stream? true` ops) into `:op/emit!`. When the resolved
-  op declares an `:arg-spec`, `:op/argv` and the attached payloads are parsed
+  socket transport for `:stream? true` ops) into `:op/emit!`. Every resolved op
+  declares an `:arg-spec`; `:op/argv` and the attached payloads are parsed
   through `millstrand.api.cli.alpha/parse` and the result is supplied as `:op/args`;
   a parse failure throws before the handler runs. A clean trailing `--help`/`-h`
   flag (the final argv token, no other flags, no payloads) is rewritten to the
@@ -597,9 +588,7 @@
   canonical `:operation` label containing the registered op name and full
   resolved subcommand path. A handler-supplied `:operation`
   equal to the derived label is preserved; any other value, including explicit
-  nil, fails loudly with the expected and actual labels. Raw-envelope ops (no
-  `:arg-spec`) receive the context unchanged, still carrying the raw
-  `:op/payloads` map."
+  nil, fails loudly with the expected and actual labels."
   ([runtime op-name argv]
    (op! runtime op-name argv {}))
   ([runtime op-name argv envelope]
@@ -608,27 +597,26 @@
      (if-let [alias (help/help-alias-result runtime entry argv envelope)]
        alias
        (let [payloads (or (:payloads envelope) {})
-             ctx (cond-> {:op/name name
-                          :op/argv argv
-                          :op/runtime runtime
-                          :op/runtime-metadata (:metadata runtime)
-                          :op/payloads payloads}
-                   (contains? envelope :cwd)
-                   (assoc :op/cwd (:cwd envelope))
-                   (contains? envelope :worktree-root)
-                   (assoc :op/worktree-root (:worktree-root envelope))
-                   (contains? envelope :git-common-dir)
-                   (assoc :op/git-common-dir (:git-common-dir envelope))
-                   (contains? envelope :timeout)
-                   (assoc :op/timeout (:timeout envelope))
-                   (contains? envelope :is-tty)
-                   (assoc :op/is-tty (:is-tty envelope))
-                   (contains? envelope :tty-col)
-                   (assoc :op/tty-col (:tty-col envelope))
-                   (contains? envelope :emit!)
-                   (assoc :op/emit! (:emit! envelope))
-                   (some? arg-spec)
-                   (assoc :op/args (cli/parse arg-spec argv payloads)))
+             ctx0 (cond-> {:op/name name
+                           :op/argv argv
+                           :op/runtime runtime
+                           :op/runtime-metadata (:metadata runtime)
+                           :op/payloads payloads}
+                    (contains? envelope :cwd)
+                    (assoc :op/cwd (:cwd envelope))
+                    (contains? envelope :worktree-root)
+                    (assoc :op/worktree-root (:worktree-root envelope))
+                    (contains? envelope :git-common-dir)
+                    (assoc :op/git-common-dir (:git-common-dir envelope))
+                    (contains? envelope :timeout)
+                    (assoc :op/timeout (:timeout envelope))
+                    (contains? envelope :is-tty)
+                    (assoc :op/is-tty (:is-tty envelope))
+                    (contains? envelope :tty-col)
+                    (assoc :op/tty-col (:tty-col envelope))
+                    (contains? envelope :emit!)
+                    (assoc :op/emit! (:emit! envelope)))
+             ctx (assoc ctx0 :op/args (cli/parse arg-spec argv payloads))
              result (with-spool-classloader runtime #((requiring-resolve fn-sym) ctx))
              parsed-args (:op/args ctx)]
          (if-not (and (map? result) (contains? parsed-args :subcommand))
@@ -729,47 +717,17 @@
   and `millstrand.api.return-shape.alpha` contracts happen here, because an
   internal namespace never requires an alpha namespace (SPEC-003.C19a)."
   [op-name opts fn-sym]
-  (let [opts (op-entry/validate-op-metadata! (op-entry/normalize-op-opts opts))
+  (let [opts (op-entry/validate-op-metadata! opts)
         fn-sym (op-entry/validate-op-fn-symbol! fn-sym)
         stream? (boolean (:stream? opts))]
     (when (:doc opts)
       (op-entry/validate-op-doc! (:doc opts)))
-    (when (some? (:arg-spec opts))
-      (validate-op-arg-spec! op-name (:arg-spec opts))
-      (check-arg-spec-refs! op-name (:arg-spec opts)))
-    (op-entry/validate-op-classes! op-name opts)
-    (when (some? (:arg-spec opts))
-      (op-entry/validate-stream-leaf-deadlines! op-name stream? (:arg-spec opts)))
-    (when (contains? opts :annotations)
-      (validate-op-annotations! op-name (:annotations opts)))
+    (validate-op-arg-spec! op-name (:arg-spec opts))
+    (check-arg-spec-refs! op-name (:arg-spec opts))
+    (op-entry/validate-stream-leaf-deadlines! op-name stream? (:arg-spec opts))
     (when (contains? opts :returns)
       (validate-op-returns! op-name (:arg-spec opts) stream? (:returns opts)))
     (op-entry/assemble op-name opts fn-sym)))
-
-(defn- validate-op-annotations!
-  "Structurally validate a raw-envelope op's root `:annotations` metadata
-  (DELTA-Dtf-002.MI1a) through the CLI annotation contract, returning it.
-
-  The reach into `millstrand.api.cli.alpha` happens here for the same reason
-  `validate-op-arg-spec!` does: an internal namespace never requires an alpha one
-  (SPEC-003.C19a). The glossary-ref existence check for its `failure-modes` names
-  runs separately in `check-op-glossary-refs!`.
-
-  A SUPPLIED `:annotations` value must be a map (MI1a): the CLI validator treats
-  a nil sub-map as \"absent\" (optional on an arg-spec node), so an explicit nil or
-  any non-map at the op-metadata root is an author error rejected here."
-  [op-name annotations]
-  (when-not (map? annotations)
-    (throw (ex-info "Operation :annotations metadata is invalid"
-                    {:operation (op-entry/canonical-op-name op-name)
-                     :reason :invalid-annotations
-                     :annotations annotations})))
-  (try
-    (cli/validate-annotations! (op-entry/canonical-op-name op-name) annotations)
-    (catch clojure.lang.ExceptionInfo e
-      (throw (ex-info "Operation :annotations metadata is invalid"
-                      (assoc (ex-data e) :operation (op-entry/canonical-op-name op-name))
-                      e)))))
 
 (defn- arg-spec-failure-modes
   "Return every `failure-modes` outcome name referenced across `arg-spec`'s
@@ -784,18 +742,13 @@
 (defn- entry-failure-modes
   "Return every `failure-modes` outcome name `entry` references.
 
-  Gathers from the arg-spec's annotation sub-maps (Task 2) and, for a
-  raw-envelope op that declares no arg-spec, from the entry's root `:annotations`
-  metadata (MI1a) — the two annotation surfaces are mutually exclusive by
-  construction (`validate-op-metadata!`), so this simply unions them."
+  Gathers from the arg-spec's annotation sub-maps at every node depth."
   [entry]
-  (into (vec (get-in entry [:annotations :failure-modes]))
-        (arg-spec-failure-modes (:arg-spec entry))))
+  (arg-spec-failure-modes (:arg-spec entry)))
 
 (defn- check-op-glossary-refs!
-  "Fail loudly unless every `failure-modes` name `entry` references — across its
-  arg-spec annotation sub-maps and its raw-envelope root `:annotations` metadata —
-  points at an already-registered glossary outcome.
+  "Fail loudly unless every `failure-modes` name `entry` references across its
+  arg-spec annotation sub-maps points at an already-registered glossary outcome.
 
   The unconditional glossary-ref existence check (DELTA-Dtf-003.CC2), run at
   registration because that is where the runtime glossary is in hand. It enforces

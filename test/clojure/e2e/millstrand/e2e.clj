@@ -497,7 +497,7 @@
         ;; envelope (DELTA-Dtf-001.CC4).
         (let [help-list (parse-json (run-strand-config! workspace "help" "--json"))
               help-add (parse-json (run-strand-config! workspace "help" "--json" "add"))]
-          (assert (= 2 (:schema-version help-list)) "strand help --json catalog carries the versioned schema")
+          (assert (= 3 (:schema-version help-list)) "strand help --json catalog carries the versioned schema")
           (assert (some #(= "add" (get-in % [:operation :name])) (:ops help-list)) "strand help --json lists the add batteries op")
           (assert (some #(= "test-stream" (get-in % [:operation :name])) (:ops help-list)) "strand help --json lists the fixture stream op")
           (assert= "add" (get-in help-add [:operation :name]) "strand help --json <op> returns the op detail envelope")
