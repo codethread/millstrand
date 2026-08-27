@@ -3,8 +3,8 @@ class Millstrand < Formula
   homepage "https://github.com/codethread/millstrand"
   url "https://github.com/codethread/millstrand.git",
       branch:   "main",
-      revision: "3fdcb5ed8b7382d3b7d9a4e025b0120201e73a8d"
-  version "0.4.0"
+      revision: "37e80478a605c8667f698062e162d237a60e67f4"
+  version "0.5.0"
 
   depends_on "go" => :build
   depends_on "clojure"
