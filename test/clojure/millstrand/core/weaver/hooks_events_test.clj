@@ -197,8 +197,9 @@
 (def cleanup-events (atom []))
 (def module-contributions (atom {}))
 
-(def ^:private raw-mutating-standard
-  {:hook-class :mutating :deadline-class :standard})
+(def ^:private flat-mutating-standard
+  {:arg-spec {:hook-class :mutating
+              :deadline-class :standard}})
 
 (s/def ::module-item map?)
 
@@ -381,7 +382,7 @@
 (defn snapshot-probe-op-v1
   "Op handler that replaces itself mid-invocation, then answers as v1."
   [{:op/keys [runtime]}]
-  (weaver/replace-op! runtime 'snapshot-probe raw-mutating-standard
+  (weaver/replace-op! runtime 'snapshot-probe flat-mutating-standard
                       'millstrand.core.weaver.hooks-events-test/snapshot-probe-op-v2)
   {:version :v1})
 

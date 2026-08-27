@@ -217,11 +217,17 @@
 ;; symbol and resolved to top-level vars, so their capture state cannot be
 ;; per-test locals. The runner never splits a namespace across threads, and
 ;; the :each fixture below resets this state between tests.
-(def ^:private raw-mutating-standard
-  {:hook-class :mutating :deadline-class :standard})
+(def ^:private flat-mutating-standard
+  {:arg-spec {:hook-class :mutating
+              :deadline-class :standard
+              :flags {:flag {:type :string}}
+              :positionals [{:name :args :variadic? true}]}})
 
-(def ^:private raw-mutating-unbounded
-  {:hook-class :mutating :deadline-class :unbounded :stream? true})
+(def ^:private flat-mutating-unbounded
+  {:stream? true
+   :arg-spec {:hook-class :mutating
+              :deadline-class :unbounded
+              :positionals [{:name :args :variadic? true}]}})
 
 (s/def ::module-item map?)
 (defn write-op-lib! [workspace lib ns-sym]
@@ -257,10 +263,10 @@
                                                      (str/replace \. java.io.File/separatorChar))
                                                  ".clj"))))
         (weaver/register-op! rt 'synced-lib
-                             (assoc raw-mutating-standard :doc "Echo argv from a synced lib")
+                             (assoc flat-mutating-standard :doc "Echo argv from a synced lib")
                              (symbol (str ns-sym) "render"))
-        (is (= {:lib-op ["--from" "synced"]}
-               (weaver/op! rt 'synced-lib ["--from" "synced"])))))))
+        (is (= {:lib-op ["synced"]}
+               (weaver/op! rt 'synced-lib ["synced"])))))))
 
 (deftest weaver-op-registry-and-built-in-help
   (with-runtime
@@ -268,16 +274,15 @@
       (is (= {:name "custom"
               :fn 'millstrand.core.weaver.ops-help-test/test-op
               :stream? false
-              :deadline-class :standard
-              :hook-class :mutating
               :provenance 'millstrand.core.weaver.ops-help-test
-              :doc "Echo argv"}
+              :doc "Echo argv"
+              :arg-spec (:arg-spec flat-mutating-standard)}
              (weaver/register-op! rt 'custom
-                                  (assoc raw-mutating-standard :doc "Echo argv")
+                                  (assoc flat-mutating-standard :doc "Echo argv")
                                   'millstrand.core.weaver.ops-help-test/test-op)))
       (is (= {:operation "custom" :argv ["--flag" "value"]}
              (weaver/op! rt 'custom ["--flag" "value"])))
-      (weaver/register-op! rt 'undocumented raw-mutating-standard
+      (weaver/register-op! rt 'undocumented flat-mutating-standard
                            'millstrand.core.weaver.ops-help-test/test-op)
       (let [help (weaver/op! rt 'help [])]
         (is (some #(= "help" (get-in % [:operation :name])) (:ops help)))
@@ -290,7 +295,7 @@
                             (weaver/op! rt 'missing [])))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Operation function"
-                            (weaver/register-op! rt 'bad raw-mutating-standard 'unqualified)))
+                            (weaver/register-op! rt 'bad flat-mutating-standard 'unqualified)))
       (is (= {:unregistered "undocumented"} (weaver/unregister-op! rt 'undocumented)))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Operation not found"
@@ -315,7 +320,7 @@
           ;; check each built-in op's return to clear the coverage set; about/
           ;; prime need an op that declares the prose they project.
           (weaver/register-op! rt 'described
-                               (merge raw-mutating-standard
+                               (merge flat-mutating-standard
                                       {:about "About the described op."
                                        :prime "Prime the described op."})
                                'millstrand.core.weaver.ops-help-test/test-op)
@@ -328,7 +333,7 @@
     (with-runtime
       (fn [rt _]
         (weaver/register-op! rt 'flat
-                             (assoc raw-mutating-standard :returns :string)
+                             (assoc flat-mutating-standard :returns :string)
                              'millstrand.core.weaver.ops-help-test/test-op)
         (weaver/register-op! rt 'subcommand
                              {:arg-spec {:op "subcommand"
@@ -337,7 +342,7 @@
                               :returns {:subcommands {"show" :integer}}}
                              'millstrand.core.weaver.ops-help-test/test-op)
         (weaver/register-op! rt 'stream
-                             (assoc raw-mutating-unbounded
+                             (assoc flat-mutating-unbounded
                                     :returns {:stream {:emits :string :result :boolean}})
                              'millstrand.core.weaver.ops-help-test/test-op)
         (let [initial (owner-return-coverage rt 'millstrand.core.weaver.ops-help-test #{})
@@ -367,14 +372,14 @@
   (with-runtime
     (fn [rt _]
       (testing "registration metadata has a named closed public spec"
-        (is (s/valid? ::weaver/op-metadata-map raw-mutating-standard))
-        (is (s/valid? ::weaver/op-metadata "Legacy doc"))
-        (is (s/valid? ::weaver/op-metadata nil))
+        (is (s/valid? ::weaver/op-metadata-map flat-mutating-standard))
+        (is (not (s/valid? ::weaver/op-metadata "Legacy doc")))
+        (is (not (s/valid? ::weaver/op-metadata nil)))
         (is (not (s/valid? ::weaver/op-metadata-map
-                           (assoc raw-mutating-standard :unknown true)))))
-      (testing "registration requires one explicit class source"
+                           (assoc flat-mutating-standard :unknown true)))))
+      (testing "registration requires an arg-spec and leaf classes"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                              #"Raw-envelope operation requires :hook-class"
+                              #"Operation requires :arg-spec"
                               (weaver/register-op! rt 'missing-raw-classes
                                                    'millstrand.core.weaver.ops-help-test/test-op)))
         (let [missing (is (thrown-with-msg?
@@ -405,15 +410,6 @@
                                               {"run" {:hook-class :read
                                                       :deadline-class :standard}}}}
                                   'millstrand.core.weaver.ops-help-test/test-op))))
-      (testing "raw-envelope registration records explicit classes and provenance"
-        (is (= {:name "bare"
-                :fn 'millstrand.core.weaver.ops-help-test/test-op
-                :stream? false
-                :deadline-class :standard
-                :hook-class :mutating
-                :provenance 'millstrand.core.weaver.ops-help-test}
-               (weaver/register-op! rt 'bare raw-mutating-standard
-                                    'millstrand.core.weaver.ops-help-test/test-op))))
       (testing "arg-spec classes remain leaf-owned"
         (is (= {:name "streamer"
                 :fn 'millstrand.core.weaver.ops-help-test/test-op
@@ -433,7 +429,7 @@
       (testing "valid return declarations are retained"
         (is (= {:type :collection :items :string}
                (:returns (weaver/register-op! rt 'declared
-                                              (assoc raw-mutating-standard
+                                              (assoc flat-mutating-standard
                                                      :returns {:type :collection
                                                                :items :string})
                                               'millstrand.core.weaver.ops-help-test/test-op))))
@@ -453,12 +449,11 @@
       (testing "return routing and stream alignment fail before registration"
         (doseq [[name opts reason]
                 [['bad-return-shape
-                  {:hook-class :mutating :deadline-class :standard
-                   :returns [:nullable :json]}
+                  (assoc flat-mutating-standard :returns [:nullable :json])
                   :invalid-nullable]
                  ['flat-with-subcommands
-                  {:hook-class :mutating :deadline-class :standard
-                   :returns {:subcommands {"run" :string}}}
+                  (assoc flat-mutating-standard
+                         :returns {:subcommands {"run" :string}})
                   :return-routing-misalignment]
                  ['subcommands-missing-case
                   {:arg-spec {:op "subcommands-missing-case"
@@ -468,12 +463,11 @@
                    :returns {:subcommands {"run" :string}}}
                   :return-subcommand-misalignment]
                  ['stream-with-flat-return
-                  {:stream? true :hook-class :mutating :deadline-class :unbounded
-                   :returns :string}
+                  (assoc flat-mutating-unbounded :returns :string)
                   :return-stream-misalignment]
                  ['flat-with-stream-return
-                  {:hook-class :mutating :deadline-class :standard
-                   :returns {:stream {:emits :string :result :boolean}}}
+                  (assoc flat-mutating-standard
+                         :returns {:stream {:emits :string :result :boolean}})
                   :return-stream-misalignment]]]
           (let [before (weaver/ops rt)
                 e (is (thrown? clojure.lang.ExceptionInfo
@@ -580,7 +574,7 @@
           (is (= :reserved-subcommand-name (:reason (ex-data e))))
           (is (= "help" (:name (ex-data e))))))
       (testing "replace-op! also validates subcommand arg-specs before replacing"
-        (weaver/register-op! rt 'replaceable raw-mutating-standard
+        (weaver/register-op! rt 'replaceable flat-mutating-standard
                              'millstrand.core.weaver.ops-help-test/test-op)
         (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                       #"arg-spec is invalid"
@@ -594,22 +588,23 @@
           (is (= 'millstrand.core.weaver.ops-help-test/test-op (:fn (weaver/resolve-op rt 'replaceable))))))
       (testing "replace-op! retains the old entry when returns are invalid"
         (weaver/register-op! rt 'replace-returns
-                             (assoc raw-mutating-standard :returns :string)
+                             (assoc flat-mutating-standard :returns :string)
                              'millstrand.core.weaver.ops-help-test/test-op)
         (let [before (weaver/resolve-op rt 'replace-returns)
               e (is (thrown? clojure.lang.ExceptionInfo
                              (weaver/replace-op! rt 'replace-returns
-                                                 (assoc raw-mutating-unbounded :returns :string)
+                                                 (assoc flat-mutating-unbounded :returns :string)
                                                  'millstrand.core.weaver.ops-help-test/context-echo-op)))]
           (is (= :return-stream-misalignment (:reason (ex-data e))))
           (is (= before (weaver/resolve-op rt 'replace-returns)))))
-      (testing "raw-envelope stream ops must explicitly remain unbounded"
+      (testing "stream ops must explicitly remain unbounded"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"must declare :deadline-class :unbounded"
                               (weaver/register-op!
                                rt 'bounded-stream
-                               {:stream? true :hook-class :mutating
-                                :deadline-class :standard}
+                               {:stream? true
+                                :arg-spec {:hook-class :mutating
+                                           :deadline-class :standard}}
                                'millstrand.core.weaver.ops-help-test/test-op))))
       (testing "unknown metadata keys fail loudly"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
@@ -629,13 +624,12 @@
         (is (= {:name "described"
                 :fn 'millstrand.core.weaver.ops-help-test/test-op
                 :stream? false
-                :deadline-class :standard
-                :hook-class :mutating
                 :provenance 'millstrand.core.weaver.ops-help-test
+                :arg-spec (:arg-spec flat-mutating-standard)
                 :about "About the described op."
                 :prime "Prime the described op."}
                (weaver/register-op! rt 'described
-                                    (merge raw-mutating-standard
+                                    (merge flat-mutating-standard
                                            {:about "About the described op."
                                             :prime "Prime the described op."})
                                     'millstrand.core.weaver.ops-help-test/test-op))))
@@ -645,45 +639,21 @@
           (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                 #"must be a non-blank prose string"
                                 (weaver/register-op! rt 'nope {key bad} 'millstrand.core.weaver.ops-help-test/test-op)))))
-      (testing "raw-envelope root :annotations is recorded for an op with no arg-spec"
-        (is (= {:use-when ["when discovering"] :notes ["a root note"]}
-               (:annotations
-                (weaver/register-op! rt 'root-annotated
-                                     (assoc raw-mutating-standard
-                                            :annotations
-                                            {:use-when ["when discovering"]
-                                             :notes ["a root note"]})
-                                     'millstrand.core.weaver.ops-help-test/test-op)))))
-      (testing "root :annotations reject an invalid shape"
+      (testing "removed root annotation metadata fails as an unknown key"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                              #":annotations metadata is invalid"
-                              (weaver/register-op! rt 'bad-annotated
-                                                   (assoc raw-mutating-standard
-                                                          :annotations {:bogus ["x"]})
-                                                   'millstrand.core.weaver.ops-help-test/test-op))))
-      (testing "a SUPPLIED :annotations value must be a map — explicit nil or non-map fails loudly (MI1a)"
-        (doseq [bad [nil 42 ["use-when"]]]
-          (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                                #":annotations metadata is invalid"
-                                (weaver/register-op! rt 'nil-annotated
-                                                     (assoc raw-mutating-standard
-                                                            :annotations bad)
-                                                     'millstrand.core.weaver.ops-help-test/test-op)))))
-      (testing "root :annotations and an arg-spec cannot coexist (single root-annotation source)"
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                              #"only for raw-envelope ops"
-                              (weaver/register-op! rt 'both-annotated
-                                                   {:arg-spec {:op "both-annotated"}
-                                                    :annotations {:use-when ["x"]}}
+                              #"unknown keys"
+                              (weaver/register-op! rt 'root-annotated
+                                                   (assoc flat-mutating-standard
+                                                          :annotations {:use-when ["x"]})
                                                    'millstrand.core.weaver.ops-help-test/test-op)))))))
 
 (deftest weaver-op-registration-collision-and-replace
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'custom raw-mutating-standard 'millstrand.core.weaver.ops-help-test/test-op)
+      (weaver/register-op! rt 'custom flat-mutating-standard 'millstrand.core.weaver.ops-help-test/test-op)
       (testing "re-registering a name fails loudly, naming both provenances"
         (let [e (is (thrown? clojure.lang.ExceptionInfo
-                             (weaver/register-op! rt 'custom raw-mutating-standard
+                             (weaver/register-op! rt 'custom flat-mutating-standard
                                                   'millstrand.peers-test/peer-test-op)))]
           (is (= "custom" (:operation (ex-data e))))
           (is (= 'millstrand.core.weaver.ops-help-test (:existing-provenance (ex-data e))))
@@ -691,11 +661,11 @@
       (testing "replace-op! requires an existing name"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"cannot replace"
-                              (weaver/replace-op! rt 'absent raw-mutating-standard
+                              (weaver/replace-op! rt 'absent flat-mutating-standard
                                                   'millstrand.core.weaver.ops-help-test/test-op))))
       (testing "replace-op! overrides an existing entry"
         (is (= 'millstrand.peers-test
-               (:provenance (weaver/replace-op! rt 'custom raw-mutating-standard
+               (:provenance (weaver/replace-op! rt 'custom flat-mutating-standard
                                                 'millstrand.peers-test/peer-test-op))))
         (is (= 'millstrand.peers-test
                (:provenance (weaver/resolve-op rt 'custom))))))))
@@ -742,7 +712,7 @@
 (deftest weaver-op-envelope-threads-into-handler-context
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'ctx raw-mutating-standard
+      (weaver/register-op! rt 'ctx flat-mutating-standard
                            'millstrand.core.weaver.ops-help-test/context-echo-op)
       (testing "empty envelope threads only default payloads"
         (let [ctx (weaver/op! rt 'ctx ["a"])]
@@ -750,7 +720,7 @@
           (is (not (contains? ctx :op/cwd)))
           (is (not (contains? ctx :op/timeout)))))
       (testing "full envelope threads all fields into handler context"
-        (let [ctx (weaver/op! rt 'ctx ["a"]
+        (let [ctx (weaver/op! rt 'ctx [":payload/body"]
                               {:payloads {"body" "hello"}
                                :cwd "/tmp/work"
                                :worktree-root "/tmp/wt"
@@ -876,11 +846,9 @@
                                        :deadline-class :standard
                                        :flags {:verbose {:type :boolean}}}}
                            'millstrand.core.weaver.ops-help-test/context-echo-op)
-      (weaver/register-op! rt 'raw raw-mutating-standard
-                           'millstrand.core.weaver.ops-help-test/context-echo-op)
       (testing "a trailing --help/-h flag rewrites to help detail for every op class"
-        ;; subbed = subcommand, flat-no-positionals = flat, raw = raw-envelope.
-        (doseq [op '[subbed flat-no-positionals raw]
+        ;; subbed = subcommand, flat-no-positionals = flat.
+        (doseq [op '[subbed flat-no-positionals]
                 flag ["--help" "-h"]]
           (let [expected (weaver/op! rt 'help [(name op)])
                 actual (weaver/op! rt op [flag])]
@@ -898,13 +866,11 @@
         ;; regression guard: it is distinct from the whole-op detail.
         (is (not= (weaver/op! rt 'help ["subbed"])
                   (weaver/op! rt 'subbed ["add" "--help"]))))
-      (weaver/register-op! rt 'raw-side-effect raw-mutating-standard
-                           'millstrand.core.weaver.ops-help-test/side-effecting-op)
       (testing "the bare word help/about/prime in verb position redirects loudly"
         (reset! op-side-effects [])
-        ;; every op class — including raw-envelope, which parses no arg-spec —
-        ;; fails with the concise redirect before any handler runs.
-        (doseq [op '[subbed flat-no-positionals raw-side-effect]
+        ;; Every declared op class fails with the concise redirect before any
+        ;; handler runs.
+        (doseq [op '[subbed flat-no-positionals]
                 word ["help" "about" "prime"]]
           (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                         #"retired sugar"
@@ -936,7 +902,7 @@
                                                              :deadline-class :standard}}}}
                              'millstrand.core.weaver.ops-help-test/side-effecting-op)
         (reset! op-side-effects [])
-        (doseq [op '[subbed-side-effect raw-side-effect]
+        (doseq [op '[subbed-side-effect]
                 [argv envelope] [[["--help" "add"] {}]                        ; non-final
                                  [["--force" "--help"] {}]                     ; another flag
                                  [["--help"] {:payloads {"stdin" "attached"}}]]] ; payloads
@@ -990,12 +956,10 @@
           (is (= ["admin" "caps"] (:path (ex-data e))))
           (is (nil? (:token (ex-data e))))
           (is (= ["grant" "show"] (:available (ex-data e))))))
-      (testing "raw-envelope ops receive no :op/args and keep the raw payloads map"
-        (let [ctx (weaver/op! rt 'raw ["a" "b"] {:payloads {"stdin" "hi"}})]
-          (is (not (contains? ctx :op/args)))
-          (is (not (contains? ctx :operation)))
-          (is (= {"stdin" "hi"} (:op/payloads ctx)))
-          (is (= ["a" "b"] (:op/argv ctx))))))))
+      (testing "flat ops parse argv and expose the parsed args"
+        (let [ctx (weaver/op! rt 'flat-no-positionals [])]
+          (is (contains? ctx :op/args))
+          (is (= {} (:op/args ctx))))))))
 
 (deftest weaver-op-help-projection
   (with-runtime
@@ -1026,12 +990,10 @@
                                        "list" {:type :collection :items :string}}}}
                            'millstrand.core.weaver.ops-help-test/context-echo-op)
       (weaver/register-op! rt 'streamed
-                           (assoc raw-mutating-unbounded
+                           (assoc flat-mutating-unbounded
                                   :returns {:stream {:emits :string
                                                      :result [:nullable :boolean]}})
                            'millstrand.core.weaver.ops-help-test/test-op)
-      (weaver/register-op! rt 'raw (assoc raw-mutating-standard :doc "Raw op")
-                           'millstrand.core.weaver.ops-help-test/context-echo-op)
       ;; Keep one defop-shaped direct fixture in the help catalog.
       (core-registry/put-entry!
        (:op-store rt) :millstrand.owner/defop-fixture "unclassed"
@@ -1045,7 +1007,7 @@
       (testing "no argv returns the versioned catalog of shallow per-op envelopes"
         (let [{:keys [schema-version ops]} (weaver/op! rt 'help [])]
           (is (= 2 schema-version))
-          (is (= ["about" "bins" "custom" "help" "prime" "raw" "streamed" "subbed" "unclassed"]
+          (is (= ["about" "bins" "custom" "help" "prime" "streamed" "subbed" "unclassed"]
                  (mapv #(get-in % [:operation :name]) ops)))
           ;; Every catalog node is a summary node: op-wide facts stay in
           ;; :operation and :source, never merged onto the node. The op-wide
@@ -1062,7 +1024,6 @@
           (let [help-entry (first (filter #(= "help" (get-in % [:operation :name])) ops))]
             (is (= "millstrand.core.weaver.help" (get-in help-entry [:operation :provenance])))
             (is (false? (get-in help-entry [:operation :stream?])))
-            (is (false? (get-in help-entry [:operation :raw-envelope])))
             (is (= "declared" (get-in help-entry [:node :invocation :mode])))
             (is (= [] (get-in help-entry [:node :invocation :flags])))
             ;; a flat op's summary node is its leaf, so classes populate.
@@ -1073,12 +1034,6 @@
             ;; a subcommand op's summary node is a root, never a leaf: null classes.
             (is (nil? (get-in subbed-entry [:node :hook-class])))
             (is (nil? (get-in subbed-entry [:node :deadline-class]))))
-          (let [raw-entry (first (filter #(= "raw" (get-in % [:operation :name])) ops))]
-            (is (true? (get-in raw-entry [:operation :raw-envelope])))
-            (is (= "raw-envelope" (get-in raw-entry [:node :invocation :mode])))
-            ;; a raw-envelope op's root is its leaf: entry classes populate.
-            (is (= "mutating" (get-in raw-entry [:node :hook-class])))
-            (is (= "standard" (get-in raw-entry [:node :deadline-class]))))
           (let [unclassed-entry
                 (first (filter #(= "unclassed" (get-in % [:operation :name])) ops))]
             (is (= "mutating" (get-in unclassed-entry [:node :hook-class])))
@@ -1093,7 +1048,6 @@
           (is (pos-int? (:line source)))
           (is (= {} glossary))
           (is (= "custom" (:name operation)))
-          (is (false? (:raw-envelope operation)))
           (is (= "custom" (:name node)))
           (is (= "Echo argv" (:doc node)))
           (is (= "declared" (get-in node [:invocation :mode])))
@@ -1154,33 +1108,27 @@
           (is (= [] (:path (ex-data e))))
           (is (= "nope" (:token (ex-data e))))
           (is (= ["add" "list"] (:available (ex-data e))))))
-      (testing "raw-envelope ops (declared or streaming) project a raw-envelope node"
+      (testing "streaming flat ops project a declared node"
         (let [{:keys [operation node]} (weaver/op! rt 'help ["streamed"])]
-          (is (true? (:raw-envelope operation)))
           (is (true? (:stream? operation)))
-          (is (= "raw-envelope" (get-in node [:invocation :mode])))
+          (is (= "declared" (get-in node [:invocation :mode])))
           (is (= "mutating" (:hook-class node)))
           (is (= "unbounded" (:deadline-class node)))
           (is (= {:stream {:emits "string" :result ["nullable" "boolean"]}}
                  (:returns node))))
-        (let [{:keys [operation node]} (weaver/op! rt 'help ["raw"])]
-          (is (true? (:raw-envelope operation)))
-          (is (= "raw-envelope" (get-in node [:invocation :mode])))
-          (is (nil? (:returns node)))
-          (is (= [] (:children node)))))
-      (testing "defop-shaped entries project their declared leaf classes"
-        (let [node (:node (weaver/op! rt 'help ["unclassed"]))]
-          (is (= "mutating" (:hook-class node)))
-          (is (= "standard" (:deadline-class node)))))
-      (testing "every help projection satisfies the declared return shape"
-        (doseq [argv [[] ["custom"] ["subbed"] ["subbed" "add"] ["streamed"] ["raw"]
-                      ["unclassed"]]]
-          (t/check-op-return! rt 'help (weaver/op! rt 'help argv))))
-      (testing "unknown op name fails loudly carrying available names"
-        (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                                      #"Operation not found"
-                                      (weaver/op! rt 'help ["nope"])))]
-          (is (some #{"help"} (:available (ex-data e)))))))))
+        (testing "defop-shaped entries project their declared leaf classes"
+          (let [node (:node (weaver/op! rt 'help ["unclassed"]))]
+            (is (= "mutating" (:hook-class node)))
+            (is (= "standard" (:deadline-class node)))))
+        (testing "every help projection satisfies the declared return shape"
+          (doseq [argv [[] ["custom"] ["subbed"] ["subbed" "add"] ["streamed"]
+                        ["unclassed"]]]
+            (t/check-op-return! rt 'help (weaver/op! rt 'help argv))))
+        (testing "unknown op name fails loudly carrying available names"
+          (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                        #"Operation not found"
+                                        (weaver/op! rt 'help ["nope"])))]
+            (is (some #{"help"} (:available (ex-data e))))))))))
 
 (defn- register-fixture-outcomes!
   "Register the synthetic glossary outcomes the closure fixture references, in
@@ -1473,48 +1421,15 @@
           (is (= "vanisher" (:operation data)))
           (is (= "v" (:arg data))))))))
 
-(deftest weaver-raw-envelope-root-annotations
-  ;; A raw-envelope op declares no arg-spec, so its root annotation surface lives
-  ;; in the op's `:annotations` metadata (MI1a). It carries the same closed shape
-  ;; and glossary-ref discipline an arg-spec node's annotations do (Task 2).
-  (with-runtime
-    (fn [rt _]
-      (testing "a root failure-mode ref to an unregistered outcome fails loudly at registration"
-        (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                              #"unregistered glossary outcome"
-                              (weaver/register-op! rt 'unresolved-root
-                                                   (assoc raw-mutating-standard
-                                                          :annotations
-                                                          {:failure-modes
-                                                           ["discovery/unavailable"]})
-                                                   'millstrand.core.weaver.ops-help-test/test-op))))
-      (register-fixture-outcomes! rt ["discovery/unavailable"])
-      (weaver/register-op! rt 'rooted
-                           (merge raw-mutating-standard
-                                  {:doc "Rooted raw op"
-                                   :annotations {:use-when ["when rooted"]
-                                                 :notes ["a root note"]
-                                                 :failure-modes
-                                                 ["discovery/unavailable"]}})
-                           'millstrand.core.weaver.ops-help-test/test-op)
-      (testing "root :annotations fold onto the raw-envelope help root node and close the glossary"
-        (let [{:keys [glossary node]} (weaver/op! rt 'help ["rooted"])]
-          (is (= "raw-envelope" (get-in node [:invocation :mode])))
-          (is (= ["when rooted"] (:use-when node)))
-          (is (= ["a root note"] (:notes node)))
-          (is (= ["discovery/unavailable"] (:failure-modes node)))
-          (is (= {"discovery/unavailable" "discovery/unavailable definition"} glossary))
-          (t/check-op-return! rt 'help (weaver/op! rt 'help ["rooted"])))))))
-
 (deftest weaver-about-prime-meta-verbs
   (with-runtime
     (fn [rt _]
       (weaver/register-op! rt 'described
-                           (merge raw-mutating-standard
+                           (merge flat-mutating-standard
                                   {:about "About the described op."
                                    :prime "Prime the described op."})
                            'millstrand.core.weaver.ops-help-test/test-op)
-      (weaver/register-op! rt 'bare-op raw-mutating-standard
+      (weaver/register-op! rt 'bare-op flat-mutating-standard
                            'millstrand.core.weaver.ops-help-test/test-op)
       (testing "about/prime return declared prose beside the op-wide source"
         (let [about (weaver/op! rt 'about ["described"])
@@ -1551,7 +1466,7 @@
   (with-runtime
     (fn [rt _]
       (weaver/register-op! rt 'described
-                           (merge raw-mutating-standard
+                           (merge flat-mutating-standard
                                   {:about "About prose." :prime "Prime prose."})
                            'millstrand.core.weaver.ops-help-test/test-op)
       (testing "with no transform registered, help output is the raw envelope"
@@ -1604,30 +1519,30 @@
   (with-runtime
     (fn [rt _]
       (testing "a readable on-disk handler resolves to its {file, line}"
-        (weaver/register-op! rt 'on-disk raw-mutating-standard
+        (weaver/register-op! rt 'on-disk flat-mutating-standard
                              'millstrand.core.weaver.ops-help-test/test-op)
         (let [source (:source (weaver/op! rt 'help ["on-disk"]))]
           (is (str/ends-with? (:file source) "ops_help_test.clj"))
           (is (pos-int? (:line source)))))
       (testing "null when requiring-resolve fails"
-        (weaver/register-op! rt 'unresolvable raw-mutating-standard
+        (weaver/register-op! rt 'unresolvable flat-mutating-standard
                              'millstrand.does-not-exist.ns/nope)
         (is (nil? (:source (weaver/op! rt 'help ["unresolvable"])))))
       (testing "null when the resolved var carries no :file/:line"
         (intern 'millstrand.core.weaver.ops-help-test 'no-meta-handler (fn [_] {}))
         (alter-meta! (resolve 'millstrand.core.weaver.ops-help-test/no-meta-handler) dissoc :file :line)
-        (weaver/register-op! rt 'no-meta raw-mutating-standard
+        (weaver/register-op! rt 'no-meta flat-mutating-standard
                              'millstrand.core.weaver.ops-help-test/no-meta-handler)
         (is (nil? (:source (weaver/op! rt 'help ["no-meta"])))))
       (testing "null when :file does not name a readable on-disk file"
         (intern 'millstrand.core.weaver.ops-help-test 'bogus-file-handler (fn [_] {}))
         (alter-meta! (resolve 'millstrand.core.weaver.ops-help-test/bogus-file-handler)
                      assoc :file "/no/such/path/nope.clj" :line 5)
-        (weaver/register-op! rt 'bogus-file raw-mutating-standard
+        (weaver/register-op! rt 'bogus-file flat-mutating-standard
                              'millstrand.core.weaver.ops-help-test/bogus-file-handler)
         (is (nil? (:source (weaver/op! rt 'help ["bogus-file"])))))
       (testing "an unrelated projection failure is not swallowed as a null source"
-        (weaver/register-op! rt 'resolvable raw-mutating-standard
+        (weaver/register-op! rt 'resolvable flat-mutating-standard
                              'millstrand.core.weaver.ops-help-test/test-op)
         (with-redefs [weaver-help/source-pointer
                       (fn [_] (throw (ex-info "boom in source projection"

@@ -218,14 +218,23 @@
 (def cleanup-events (atom []))
 (def module-contributions (atom {}))
 
-(def ^:private raw-mutating-standard
-  {:hook-class :mutating :deadline-class :standard})
+(def ^:private flat-mutating-standard
+  {:arg-spec {:hook-class :mutating
+              :deadline-class :standard
+              :flags {:flag {:type :string}}
+              :positionals [{:name :args :variadic? true}]}})
 
-(def ^:private raw-read-standard
-  {:hook-class :read :deadline-class :standard})
+(def ^:private flat-read-standard
+  {:arg-spec {:hook-class :read
+              :deadline-class :standard
+              :flags {:flag {:type :string}}
+              :positionals [{:name :args :variadic? true}]}})
 
-(def ^:private raw-mutating-unbounded
-  {:hook-class :mutating :deadline-class :unbounded :stream? true})
+(def ^:private flat-mutating-unbounded
+  {:stream? true
+   :arg-spec {:hook-class :mutating
+              :deadline-class :unbounded
+              :positionals [{:name :args :variadic? true}]}})
 
 (s/def ::module-item map?)
 
@@ -408,7 +417,7 @@
 (defn snapshot-probe-op-v1
   "Op handler that replaces itself mid-invocation, then answers as v1."
   [{:op/keys [runtime]}]
-  (weaver/replace-op! runtime 'snapshot-probe raw-mutating-standard
+  (weaver/replace-op! runtime 'snapshot-probe flat-mutating-standard
                       'millstrand.core.weaver.socket-test/snapshot-probe-op-v2)
   {:version :v1})
 
@@ -573,7 +582,7 @@
 (deftest json-socket-invoke-dispatch
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'custom raw-mutating-standard 'millstrand.core.weaver.socket-test/test-op)
+      (weaver/register-op! rt 'custom flat-mutating-standard 'millstrand.core.weaver.socket-test/test-op)
       (testing "invoke dispatches to the op registry with argv and payloads"
         (let [custom (invoke-request rt "custom" ["--flag" "value"])]
           (is (true? (get custom "ok")))
@@ -589,16 +598,16 @@
           (is (true? (get detail "ok")))
           (is (= "help" (get-in detail ["result" "operation" "name"])))
           (is (= "help" (get-in detail ["result" "node" "name"])))
-          (is (false? (get-in detail ["result" "operation" "raw-envelope"])))))
+          (is (= [] (get-in detail ["result" "node" "children"])))))
       (testing "context envelope fields ride the invoke arguments"
-        (weaver/register-op! rt 'ctx raw-mutating-standard
+        (weaver/register-op! rt 'ctx flat-mutating-standard
                              'millstrand.core.weaver.socket-test/envelope-echo-op)
-        (let [echoed (invoke-request rt "ctx" ["a"] {"body" "hi"} {"cwd" "/tmp/work"
-                                                                   "worktree_root" "/tmp/wt"
-                                                                   "git_common_dir" "/tmp/wt/.git"
-                                                                   "timeout" 5000
-                                                                   "is_tty" true
-                                                                   "tty_col" 120})]
+        (let [echoed (invoke-request rt "ctx" [":payload/body"] {"body" "hi"} {"cwd" "/tmp/work"
+                                                                               "worktree_root" "/tmp/wt"
+                                                                               "git_common_dir" "/tmp/wt/.git"
+                                                                               "timeout" 5000
+                                                                               "is_tty" true
+                                                                               "tty_col" 120})]
           (is (true? (get echoed "ok")))
           (is (= "/tmp/work" (get-in echoed ["result" "cwd"])))
           (is (= "/tmp/wt" (get-in echoed ["result" "worktree-root"])))
@@ -629,7 +638,7 @@
 (deftest json-socket-stream-invoke-framing
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'streamer raw-mutating-unbounded
+      (weaver/register-op! rt 'streamer flat-mutating-unbounded
                            'millstrand.core.weaver.socket-test/gated-stream-op)
       (let [m (:metadata rt)]
         (with-open [ch (doto (SocketChannel/open StandardProtocolFamily/UNIX)
@@ -655,7 +664,7 @@
 (deftest json-socket-stream-invoke-error-terminator
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'streamer-error raw-mutating-unbounded
+      (weaver/register-op! rt 'streamer-error flat-mutating-unbounded
                            'millstrand.core.weaver.socket-test/stream-error-op)
       (let [m (:metadata rt)]
         (with-open [ch (doto (SocketChannel/open StandardProtocolFamily/UNIX)
@@ -698,7 +707,7 @@
 (deftest json-socket-invoke-honors-op-deadline
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'slow raw-mutating-standard 'millstrand.core.weaver.socket-test/slow-op)
+      (weaver/register-op! rt 'slow flat-mutating-standard 'millstrand.core.weaver.socket-test/slow-op)
       (let [timed-out (invoke-request rt "slow" [] {} {"timeout" 100})]
         (is (false? (get timed-out "ok")))
         (is (= "domain" (get-in timed-out ["error" "type"])))
@@ -714,10 +723,10 @@
 (deftest json-socket-invoke-payload-hooks-gate-mutating-ops
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'mutate raw-mutating-standard 'millstrand.core.weaver.socket-test/test-op)
-      (weaver/register-op! rt 'reader raw-read-standard 'millstrand.core.weaver.socket-test/test-op)
+      (weaver/register-op! rt 'mutate flat-mutating-standard 'millstrand.core.weaver.socket-test/test-op)
+      (weaver/register-op! rt 'reader flat-read-standard 'millstrand.core.weaver.socket-test/test-op)
       (hooks/register-hook! rt :payload #{:payload/received} 'millstrand.core.weaver.socket-test/capture-hook {})
-      (is (true? (get (invoke-request rt "mutate" ["--flag" "value"] {"body" "hi"}) "ok")))
+      (is (true? (get (invoke-request rt "mutate" ["--flag" ":payload/body"] {"body" "hi"}) "ok")))
       ;; a read-class op skips payload hooks, preserving the old read exemption
       (is (true? (get (invoke-request rt "reader" ["x"]) "ok")))
       (is (= 1 (count @hook-contexts)))
@@ -729,7 +738,7 @@
         (is (= :invoke (:request/operation ctx)))
         (is (= "test-request" (:request/id ctx)))
         (is (= "mutate" (:op/name ctx)))
-        (is (= {"name" "mutate" "argv" ["--flag" "value"] "payloads" {"body" "hi"}
+        (is (= {"name" "mutate" "argv" ["--flag" ":payload/body"] "payloads" {"body" "hi"}
                 "is_tty" false "tty_col" nil}
                (:request/args ctx)))
         (is (= {} (:request/options ctx))))
@@ -843,7 +852,7 @@
 (deftest json-socket-invoke-read-ops-skip-hooks-and-protocol-errors
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'reader raw-read-standard 'millstrand.core.weaver.socket-test/test-op)
+      (weaver/register-op! rt 'reader flat-read-standard 'millstrand.core.weaver.socket-test/test-op)
       (hooks/register-hook! rt :payload #{:payload/received} 'millstrand.core.weaver.socket-test/rejecting-hook {})
       (is (true? (get (invoke-request rt "reader" []) "ok")))
       (is (true? (get (socket-request rt "status" {}) "ok")))
@@ -866,7 +875,7 @@
 (deftest json-socket-invoke-payload-hook-rejection-is-domain-error-before-dispatch
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'mutate raw-mutating-standard
+      (weaver/register-op! rt 'mutate flat-mutating-standard
                            'millstrand.core.weaver.socket-test/side-effecting-op)
       (hooks/register-hook! rt :reject-payload #{:payload/received} 'millstrand.core.weaver.socket-test/rejecting-hook {})
       (let [response (invoke-request rt "mutate" ["arg"] {"body" "payload"})]
@@ -883,7 +892,7 @@
 (deftest json-socket-invoke-error-details-are-json-safe
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'boom raw-mutating-standard 'millstrand.core.weaver.socket-test/throwing-op)
+      (weaver/register-op! rt 'boom flat-mutating-standard 'millstrand.core.weaver.socket-test/throwing-op)
       (let [response (invoke-request rt "boom" [])]
         (is (false? (get response "ok")))
         (is (= "domain" (get-in response ["error" "type"])))
@@ -896,7 +905,7 @@
 (deftest json-socket-rejects-opaque-success-results
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'opaque-result raw-mutating-standard
+      (weaver/register-op! rt 'opaque-result flat-mutating-standard
                            'millstrand.core.weaver.socket-test/opaque-result-op)
       (let [response (invoke-request rt "opaque-result" [])]
         (is (false? (get response "ok")))
@@ -907,9 +916,9 @@
 (deftest json-socket-result-number-boundary-is-explicit
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'ratio-result raw-mutating-standard
+      (weaver/register-op! rt 'ratio-result flat-mutating-standard
                            'millstrand.core.weaver.socket-test/ratio-result-op)
-      (weaver/register-op! rt 'nan-result raw-mutating-standard
+      (weaver/register-op! rt 'nan-result flat-mutating-standard
                            'millstrand.core.weaver.socket-test/nan-result-op)
       (is (= 0.5 (get-in (invoke-request rt "ratio-result" []) ["result" "ratio"])))
       (let [response (invoke-request rt "nan-result" [])]
@@ -919,7 +928,7 @@
 (deftest json-socket-invoke-renders-keyword-error-codes-whole
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'keyword-code raw-mutating-standard
+      (weaver/register-op! rt 'keyword-code flat-mutating-standard
                            'millstrand.core.weaver.socket-test/keyword-code-op)
       (let [response (invoke-request rt "keyword-code" [])]
         (is (= "operation/deprecated" (get-in response ["error" "code"])))
@@ -928,11 +937,11 @@
 (deftest json-socket-invoke-reports-an-unusable-error-code-as-the-defect
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'non-string-code raw-mutating-standard
+      (weaver/register-op! rt 'non-string-code flat-mutating-standard
                            'millstrand.core.weaver.socket-test/non-string-code-op)
-      (weaver/register-op! rt 'nil-code raw-mutating-standard
+      (weaver/register-op! rt 'nil-code flat-mutating-standard
                            'millstrand.core.weaver.socket-test/nil-code-op)
-      (weaver/register-op! rt 'opaque-code raw-mutating-standard
+      (weaver/register-op! rt 'opaque-code flat-mutating-standard
                            'millstrand.core.weaver.socket-test/opaque-code-op)
       (testing "a code the wire cannot carry is named, never coerced"
         (let [response (invoke-request rt "non-string-code" [])
@@ -954,7 +963,7 @@
 (deftest json-socket-invoke-carries-the-error-factory-affordances
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'factory-not-found raw-mutating-standard
+      (weaver/register-op! rt 'factory-not-found flat-mutating-standard
                            'millstrand.core.weaver.socket-test/factory-not-found-op)
       (let [response (invoke-request rt "factory-not-found" [])
             details (get-in response ["error" "details"])]
@@ -971,7 +980,7 @@
   ;; and SPEC-005.C7 pins it as one of the three contractual code strings.
   (with-runtime
     (fn [rt _]
-      (weaver/register-op! rt 'factory-canonical-query raw-mutating-standard
+      (weaver/register-op! rt 'factory-canonical-query flat-mutating-standard
                            'millstrand.core.weaver.socket-test/factory-canonical-query-op)
       (let [response (invoke-request rt "factory-canonical-query" [])]
         (is (= "query/not-found" (get-in response ["error" "code"])))

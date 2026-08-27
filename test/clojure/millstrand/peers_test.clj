@@ -178,8 +178,10 @@
 (deftest call-peer-invoke-and-status-test
   (with-two-runtimes
     (fn [_rt-a rt-b]
-      (weaver/register-op! rt-b 'echo {:hook-class :mutating
-                                       :deadline-class :standard}
+      (weaver/register-op! rt-b 'echo {:arg-spec {:hook-class :mutating
+                                                  :deadline-class :standard
+                                                  :positionals [{:name :args
+                                                                 :variadic? true}]}}
                            'millstrand.peers-test/peer-test-op)
       (let [beta (first (filter #(= "beta" (:name %)) (peers/peers)))
             echoed (peers/call! "beta" "echo" {:argv ["x" "y"]})
@@ -248,8 +250,8 @@
   (with-two-runtimes
     (fn [_rt-a rt-b]
       (weaver/register-op! rt-b 'streamer {:stream? true
-                                           :hook-class :mutating
-                                           :deadline-class :unbounded}
+                                           :arg-spec {:hook-class :mutating
+                                                      :deadline-class :unbounded}}
                            'millstrand.peers-test/peer-stream-op)
       (try
         (peers/call! "beta" "streamer")

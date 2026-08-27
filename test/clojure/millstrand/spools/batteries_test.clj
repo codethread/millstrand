@@ -1335,8 +1335,7 @@
                               :required {:id {:type "string"}
                                          :state {:type "string"}}})
         envelope {:schema-version 2
-                  :operation {:name "root" :provenance "test" :stream? false
-                              :raw-envelope false}
+                  :operation {:name "root" :provenance "test" :stream? false}
                   :source nil
                   :glossary {"synthetic/leaf-outcome"
                              "an outcome only the depth-3 leaf references"}
@@ -1397,8 +1396,7 @@
                         :hook-class "mutating"
                         :deadline-class "standard"))
         envelope {:schema-version 2
-                  :operation {:name "chooser" :provenance "test" :stream? false
-                              :raw-envelope false}
+                  :operation {:name "chooser" :provenance "test" :stream? false}
                   :source nil
                   :glossary {}
                   :node node}

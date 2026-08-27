@@ -52,7 +52,7 @@ Function.
 Render `arg-spec` as JSON-safe help data.
 
 Includes arguments, types, docs, required flags, and payload-parse declarations for the `help <op>` projection; nested subcommands render recursively to their declared depth (DELTA-Lhc-001.CC3).
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/cli/alpha.clj#L152-L159">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/cli/alpha.clj#L139-L146">Source</a></sub></p>
 
 ## <a name="millstrand.api.cli.alpha/parse">`parse`</a>
 
@@ -66,7 +66,7 @@ Function.
 Parse `argv` against `arg-spec`, resolving payload references from `payloads`.
 
 Returns a map of keyword arg names to parsed values. For subcommand arg-specs, argv tokens route recursively to the invoked leaf and the result includes `:subcommand` bound to the full routing path vector (DELTA-Lhc-001.CC3). Throws a structured `ex-info` (ex-data carries `:reason` plus the offending token/flag and the op) on any violation: unknown flags, missing required args, type violations, duplicate non-repeat flags, malformed key=value tokens, trailing unconsumed tokens, missing/unknown subcommands (with the canonical `:op`/`:path`/`:token`/`:available` context), dangling or unused payload references, and malformed :json/:jsonl payloads.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/cli/alpha.clj#L116-L136">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/cli/alpha.clj#L103-L123">Source</a></sub></p>
 
 ## <a name="millstrand.api.cli.alpha/reserved-subcommand-names">`reserved-subcommand-names`</a>
 
@@ -86,7 +86,7 @@ Function.
 Walk `argv`'s routing tokens through `arg-spec` to the invoked leaf node.
 
 Returns `{:node <leaf-node> :path <path-vector>}` without parsing the leaf's flags or positionals: the walk consumes exactly the routing tokens, so callers such as the socket payload-hook gate and deadline lookup (DELTA-Lhc-002.CC3/CC4) can read leaf metadata before any hook runs. A flat arg-spec resolves to its own root at path `[]`. Missing or unknown routing tokens fail loudly with the canonical `:op`/`:path`/`:token`/`:available` context.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/cli/alpha.clj#L138-L150">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/cli/alpha.clj#L125-L137">Source</a></sub></p>
 
 ## <a name="millstrand.api.cli.alpha/validate!">`validate!`</a>
 
@@ -100,16 +100,3 @@ Validate any parser arg-spec shape, returning it unchanged on success.
 
 Validates the fractal node tree recursively (DELTA-Lhc-001.CC1/CC2): interior nodes may not declare `:flags`/`:positionals` or class metadata, leaves may carry `:hook-class`/`:deadline-class`, reserved names are rejected at every level, and an empty `:subcommands {}` is invalid. Throws structured `ex-info` on malformed specs so op registration fails before help or invocation can drift from the contract.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/cli/alpha.clj#L86-L101">Source</a></sub></p>
-
-## <a name="millstrand.api.cli.alpha/validate-annotations!">`validate-annotations!`</a>
-
-```clojure
-(validate-annotations! op annotations)
-```
-
-Function.
-
-Structurally validate a standalone annotation sub-map for `op`, returning it.
-
-The same closed-shape check `validate!` applies to an arg-spec node's `:annotations` (closed `use-when`/`notes`/`failure-modes` keys, each an array of non-blank strings), exposed for the raw-envelope root annotation surface an op declares outside any arg-spec (DELTA-Dtf-002.MI1a). Purely structural: the glossary-ref existence check for `failure-modes` names runs at registration (DELTA-Dtf-003.CC2).
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/cli/alpha.clj#L103-L114">Source</a></sub></p>

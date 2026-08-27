@@ -17,9 +17,7 @@
   deadline-class, use-when, notes, failure-modes, children}`) at every depth,
   recursing to the arg-spec's declared depth. `hook-class`/`deadline-class` are
   node keys with per-kind null semantics (DELTA-Lhc-003.CC1): class strings on
-  an invocable leaf node (a flat or raw-envelope op's root node is its leaf —
-  from the leaf's declared metadata or, in this accretive slice, the op-entry
-  fallback), `null` on interior nodes and subcommand-op roots. The projection
+  invocable leaf node and `null` on interior nodes and subcommand-op roots. The projection
   normalizes today's registry data — the op envelope, the arg-spec `explain`
   (SPEC-003.C64/C65), and the per-case return-shape `explain` (SPEC-003.C60b)
   — into that schema; nothing here re-models or hand-writes usage.
@@ -146,13 +144,11 @@
   These are the facts that are not per-verb — `name` and the registry envelope
   metadata — so they live in the response envelope, never on the recursive node
   (DELTA-Dtf-001.CC1). `hook-class`/`deadline-class` are per-leaf node keys and
-  no longer envelope facts (DELTA-Lhc-003.CC1). `raw-envelope` marks an op that
-  declares no arg-spec."
+  no longer envelope facts (DELTA-Lhc-003.CC1)."
   [entry]
   {:name (:name entry)
    :provenance (str (:provenance entry))
-   :stream? (:stream? entry)
-   :raw-envelope (not (contains? entry :arg-spec))})
+   :stream? (:stream? entry)})
 
 (defn- node
   "Assemble one uniform fractal node.
@@ -161,7 +157,7 @@
   (DELTA-Dtf-001.CC2), so one recursive renderer needs no per-level branches.
   Authored annotations are read from `annotations`, the arg-spec node's
   `{:use-when :notes :failure-modes}` sub-map (nil for a node with none, e.g. a
-  raw-envelope or catalog summary node); `failure-modes` carries outcome-name
+  catalog summary node); `failure-modes` carries outcome-name
   references only, and the envelope resolves their definitions once
   (DELTA-Dtf-002.CC5). `hook-class`/`deadline-class` are class strings on
   invocable leaf nodes and nil elsewhere (DELTA-Lhc-003.CC1)."
@@ -266,28 +262,15 @@
 (defn- op-node
   "Project one op registry entry into its root fractal node.
 
-  An arg-spec op projects its node tree recursively: leaves carry their own
-  flags/positionals, routed return case, and class strings; interior nodes
-  carry children and null classes. A raw-envelope op (no declared arg-spec)
-  yields a `raw-envelope` root node whose root IS its leaf, so its classes
-  populate from the entry. Op-wide facts stay in the envelope, never here."
+  Leaves carry their own flags/positionals, routed return case, and class
+  strings; interior nodes carry children and null classes. Op-wide facts stay
+  in the envelope, never here."
   [entry]
   (let [arg-spec (:arg-spec entry)
-        returns (when (contains? entry :returns) (:returns entry))]
-    (if (nil? arg-spec)
-      (node (:name entry) (:doc entry)
-            {:mode "raw-envelope" :flags [] :positionals []}
-            (when (contains? entry :returns) (return-shape/explain returns))
-            ;; A raw-envelope op has no arg-spec node, so its root annotations
-            ;; come from the op's `:annotations` metadata (MI1a); an arg-spec op
-            ;; sources them from its arg-spec nodes.
-            (:annotations entry)
-            (leaf-class entry :hook-class)
-            (leaf-class entry :deadline-class)
-            [])
-      (let [explained (cli/explain arg-spec)]
-        (arg-node entry (:name entry) (node-doc entry explained)
-                  arg-spec explained returns)))))
+        returns (when (contains? entry :returns) (:returns entry))
+        explained (cli/explain arg-spec)]
+    (arg-node entry (:name entry) (node-doc entry explained)
+              arg-spec explained returns)))
 
 (defn- summary-node
   "Project the shallow catalog node for one op (DELTA-Dtf-001.CC3).
@@ -295,19 +278,18 @@
   `name` and `doc` populated; `invocation` at its declared mode with empty
   flags/positionals; `returns` null, annotations `[]`, `children` `[]`.
   Classes follow the node rule (DELTA-Lhc-003.CC1): populated only when the
-  summary node is itself the leaf — a flat or raw-envelope op — and null for
-  subcommand-op roots."
+  summary node is itself the leaf, and null for subcommand-op roots."
   [entry]
   (let [arg-spec (:arg-spec entry)
-        explained (when arg-spec (cli/explain arg-spec))
+        explained (cli/explain arg-spec)
         leaf? (not (contains? arg-spec :subcommands))]
     (node (:name entry) (node-doc entry explained)
-          {:mode (if arg-spec "declared" "raw-envelope")
+          {:mode "declared"
            :flags [] :positionals []}
           nil
           nil
-          (when leaf? (leaf-class (or arg-spec entry) :hook-class))
-          (when leaf? (leaf-class (or arg-spec entry) :deadline-class))
+          (when leaf? (leaf-class arg-spec :hook-class))
+          (when leaf? (leaf-class arg-spec :deadline-class))
           [])))
 
 (defn- referenced-outcomes
@@ -515,7 +497,7 @@
 
   A **clean trailing** `--help`/`-h` — the final argv token, with no other flag
   token before it and no attached payloads — rewrites to the `help` op for every
-  op class (flat, subcommand, and raw-envelope). It resolves to the SAME node as
+  op class (flat or subcommand). It resolves to the SAME node as
   `strand help <op> <verb...>`: a bare `<op> --help` yields the op's detail
   envelope, and verb tokens before the flag narrow it to the node that path
   names, composing to any declared depth (DELTA-Lhc-002.CC6) — a token naming
@@ -531,8 +513,7 @@
   subcommand by that name or is itself the meta-verb (then the word is a
   legitimate argument and flows to normal parsing). Any other `--help`/`-h` shape
   (a non-final flag, another flag alongside it, or attached payloads) likewise
-  fails with the loud redirect rather than reaching a handler; on raw-envelope
-  ops this is the only guard, since they parse no arg-spec. A shape with no
+  fails with the loud redirect rather than reaching a handler. A shape with no
   `--help`/`-h` and no retired verb returns nil and flows through normal parsing.
 
   Supersedes SPEC-004.C63e's subcommand-only sole-token alias. `help`/`-h`/
@@ -641,8 +622,7 @@
   {:type :map
    :required {:name :string
               :provenance :string
-              :stream? :boolean
-              :raw-envelope :boolean}})
+              :stream? :boolean}})
 
 (def ^:private node-return-shape
   "Declared return shape for the uniform fractal `node` (DELTA-Dtf-001.CC2).

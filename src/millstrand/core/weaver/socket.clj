@@ -371,16 +371,13 @@
   (DELTA-Lhc-002.CC3/CC4).
 
   Walks the envelope argv's routing tokens through the op's arg-spec to the
-  invoked leaf. A missing or unknown
-  verb token at any depth throws loudly here — before any hook runs, the same
-  pre-hook policy as an unknown op name — carrying the canonical
-  `:op`/`:path`/`:token`/`:available` context. Flat ops resolve their own root
-  leaf; raw-envelope ops (no arg-spec) gate on the entry classes."
+  invoked leaf. A missing or unknown verb token at any depth throws loudly here
+  — before any hook runs, the same pre-hook policy as an unknown op name —
+  carrying the canonical `:op`/`:path`/`:token`/`:available` context. Flat ops
+  resolve their own root leaf."
   [entry argv]
-  (if-let [arg-spec (:arg-spec entry)]
-    (select-keys (:node (cli/resolve-leaf arg-spec argv))
-                 [:hook-class :deadline-class])
-    (select-keys entry [:hook-class :deadline-class])))
+  (select-keys (:node (cli/resolve-leaf (:arg-spec entry) argv))
+               [:hook-class :deadline-class]))
 
 (defn- run-payload-hooks-if-mutating!
   "Gate a mutating invoke behind `:payload/received` hooks (SPEC-004-D003.C4).
