@@ -151,10 +151,8 @@
   Runtime-implied twin of `millstrand.api.weaver.alpha/register-op!`, which owns the
   contract: ops reject any name already registered, their own included, so
   `replace-op!` is the only way to take one over."
-  ([op-name fn-sym]
-   (weaver/register-op! (registering-runtime 'register-op!) op-name fn-sym))
-  ([op-name opts fn-sym]
-   (weaver/register-op! (registering-runtime 'register-op!) op-name opts fn-sym)))
+  [op-name opts fn-sym]
+  (weaver/register-op! (registering-runtime 'register-op!) op-name opts fn-sym))
 
 (defn replace-op!
   "Replace the live op `op-name`, recording intent to shadow another owner.
@@ -162,10 +160,8 @@
   Runtime-implied twin of `millstrand.api.weaver.alpha/replace-op!`: loud when the
   name is absent, and the recorded intent is what carries the shadow across
   `millstrand.api.runtime.alpha/refresh!`."
-  ([op-name fn-sym]
-   (weaver/replace-op! (registering-runtime 'replace-op!) op-name fn-sym))
-  ([op-name opts fn-sym]
-   (weaver/replace-op! (registering-runtime 'replace-op!) op-name opts fn-sym)))
+  [op-name opts fn-sym]
+  (weaver/replace-op! (registering-runtime 'replace-op!) op-name opts fn-sym))
 
 (defn unregister-op!
   "Retract this session's own registration of op `op-name`.

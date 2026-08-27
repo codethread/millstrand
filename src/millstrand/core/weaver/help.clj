@@ -63,10 +63,10 @@
   "Positive integer versioning the help-schema contract itself.
 
   Bumps only when the envelope/node shape changes; independent of release/build
-  identity and of `protocol_version` (DELTA-Dtf-001.D3). v2: per-leaf
-  `hook-class`/`deadline-class` became node keys and left the envelope's
-  `operation` facts (DELTA-Lhc-003.CC1/CC2)."
-  2)
+  identity and of `protocol_version` (DELTA-Dtf-001.D3). v3 removes the
+  `operation.raw-envelope` fact and the `raw-envelope` invocation mode because
+  every op now declares an arg-spec."
+  3)
 
 (defn- registered-op-entries
   "Return `runtime`'s registered op entries sorted by canonical name.

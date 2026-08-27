@@ -591,7 +591,7 @@
       (testing "the built-in help op is reachable through invoke"
         (let [help (invoke-request rt "help" [])]
           (is (true? (get help "ok")))
-          (is (= 2 (get-in help ["result" "schema-version"])))
+          (is (= 3 (get-in help ["result" "schema-version"])))
           (is (some #(= "help" (get-in % ["operation" "name"]))
                     (get-in help ["result" "ops"]))))
         (let [detail (invoke-request rt "help" ["help"])]

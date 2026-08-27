@@ -1334,7 +1334,7 @@
                     :returns {:type "map"
                               :required {:id {:type "string"}
                                          :state {:type "string"}}})
-        envelope {:schema-version 2
+        envelope {:schema-version 3
                   :operation {:name "root" :provenance "test" :stream? false}
                   :source nil
                   :glossary {"synthetic/leaf-outcome"
@@ -1395,7 +1395,7 @@
                                         :doc "Choice key"}]}
                         :hook-class "mutating"
                         :deadline-class "standard"))
-        envelope {:schema-version 2
+        envelope {:schema-version 3
                   :operation {:name "chooser" :provenance "test" :stream? false}
                   :source nil
                   :glossary {}

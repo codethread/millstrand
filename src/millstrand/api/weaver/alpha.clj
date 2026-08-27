@@ -397,8 +397,8 @@
   Registered operations are invoked at the CLI root as `strand <name>
   [args...]`. The handler symbol must resolve to a function that accepts one
   context map (see `op!` for the context keys) and returns JSON-compatible data.
-  The third positional argument is either a doc string or an op metadata map
-  with keys `:doc`, `:arg-spec` (parser spec, structurally validated at
+  The third positional argument is an op metadata map with keys `:doc`,
+  `:arg-spec` (parser spec, structurally validated at
   registration), `:returns` (validated return-shape declaration), `:stream?`
   (default false), `:about`, and `:prime`; unknown keys fail loudly. The metadata
   map is required to contain `:arg-spec`; every op declares both classes on
@@ -411,8 +411,6 @@
   are normally published by owner-complete modules from init.clj or registered
   directly from a live REPL. Module refresh replaces its owner's partition;
   direct registrations remain until explicitly replaced or removed."
-  ([runtime op-name fn-sym]
-   (register-op! runtime core-registry/repl-owner op-name nil fn-sym))
   ([runtime op-name opts fn-sym]
    (register-op! runtime core-registry/repl-owner op-name opts fn-sym))
   ([runtime owner op-name opts fn-sym]
@@ -427,8 +425,7 @@
      entry)))
 
 (s/fdef register-op!
-  :args (s/or :default (s/cat :runtime ::runtime :op-name ::op-name :fn-sym symbol?)
-              :with-opts (s/cat :runtime ::runtime :op-name ::op-name
+  :args (s/or :with-opts (s/cat :runtime ::runtime :op-name ::op-name
                                 :opts ::op-metadata :fn-sym symbol?)
               :owned (s/cat :runtime ::runtime :owner keyword? :op-name ::op-name
                             :opts ::op-metadata :fn-sym symbol?))
@@ -443,8 +440,6 @@
   override intent is recorded, which is what lets the direct entry keep
   shadowing the original across `runtime/refresh!`. `unregister-op!` retracts
   the shadow and the shadowed entry becomes effective again."
-  ([runtime op-name fn-sym]
-   (replace-op! runtime core-registry/repl-owner op-name nil fn-sym))
   ([runtime op-name opts fn-sym]
    (replace-op! runtime core-registry/repl-owner op-name opts fn-sym))
   ([runtime owner op-name opts fn-sym]
@@ -458,8 +453,7 @@
      entry)))
 
 (s/fdef replace-op!
-  :args (s/or :default (s/cat :runtime ::runtime :op-name ::op-name :fn-sym symbol?)
-              :with-opts (s/cat :runtime ::runtime :op-name ::op-name
+  :args (s/or :with-opts (s/cat :runtime ::runtime :op-name ::op-name
                                 :opts ::op-metadata :fn-sym symbol?)
               :owned (s/cat :runtime ::runtime :owner keyword? :op-name ::op-name
                             :opts ::op-metadata :fn-sym symbol?))

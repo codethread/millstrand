@@ -282,7 +282,7 @@ unload guarantee: restart the weaver when you need a clean runtime.
 
 ## Your own CLI command
 
-Every `strand` command is a registered op, and ops use the same three-layer order as queries. Define and select a durable command with `millstrand/defop!` in module source; use `millstrand.api.weaver.alpha/register-op!` from explicit-runtime code or tests for a live experiment; use `millstrand.repl/register-op!` from the connected REPL. `strand help` lists registered ops and `strand help <op>` explains one. The CLI forwards everything after the op name to the handler as string argv.
+Every `strand` command is a registered op, and ops use the same three-layer order as queries. Define and select a durable command with `millstrand/defop!` in module source; use `millstrand.api.weaver.alpha/register-op!` from explicit-runtime code or tests for a live experiment; use `millstrand.repl/register-op!` from the connected REPL. `strand help` lists registered ops and `strand help <op>` explains one. The CLI parses everything after the op name through the declared arg-spec before calling the handler.
 
 The durable form belongs in the module source:
 
@@ -295,10 +295,10 @@ The durable form belongs in the module source:
    :positionals [{:name :text :type :string :required? true :doc "Text to echo."}]})
 
 (millstrand/defop! echo
-  "Echo raw argv."
+  "Echo the given text."
   {:arg-spec echo-arg-spec}
-  [ctx]
-  {:operation "echo" :argv (:op/argv ctx)})
+  [{:op/keys [args]}]
+  {:text (:text args)})
 ```
 
 Activate that module with `runtime/module!` as in the query example above. The form owns the op's help, parser contract, and handler declaration as one published contribution.
@@ -306,8 +306,8 @@ Activate that module with `runtime/module!` as in the query example above. The f
 ```clojure
 (ns my.workflow)
 
-(defn echo-op [{:op/keys [name argv]}]
-  {:operation name :argv argv})
+(defn echo-op [{:op/keys [args]}]
+  {:text (:text args)})
 ```
 
 For a temporary live experiment, register it from the connected REPL:
@@ -315,11 +315,17 @@ For a temporary live experiment, register it from the connected REPL:
 ```clojure
 (require '[millstrand.repl :as repl])
 
-(repl/register-op! 'echo "Echo raw argv" 'my.workflow/echo-op)
+(repl/register-op! 'echo
+                   {:arg-spec {:hook-class :read
+                               :deadline-class :standard
+                               :positionals [{:name :text
+                                              :type :string
+                                              :required? true}]}}
+                   'my.workflow/echo-op)
 ```
 
 ```sh
-strand echo --flag value
+strand echo value
 ```
 
 Op handlers return data; the CLI prints it as JSON. The explicit-runtime registration is weaver-lifetime state, so keep a durable command in module source. To mask a spool op durably, put `(millstrand/defop! {:override? true} ...)` in a workspace module; a local-root and a git-pinned spool follow the same registry rules. `replace-op!` is the live, intentional shadow; `unregister-op!` retracts only your shadow and restores the original. The [Kanban spool](https://github.com/codethread/millhouse.spool/tree/main/spools/kanban) is a complete example of this pattern: a board surface built from ops, queries, and attributes.

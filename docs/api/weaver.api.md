@@ -126,7 +126,7 @@ Function.
 Invoke a registered CLI operation with raw string argv from a root-level `strand <name>` invoke.
 
 The handler receives a context map with `:op/name`, `:op/argv`, `:op/runtime`, `:op/runtime-metadata`, and `:op/payloads` (defaulting to `{}`). The envelope arity threads any present `:cwd`, `:worktree-root`, `:git-common-dir`, `:timeout`, `:is-tty`, and `:tty-col` fields into their corresponding `:op/*` context keys, and an envelope `:emit!` fn (supplied by the streaming socket transport for `:stream? true` ops) into `:op/emit!`. Every resolved op declares an `:arg-spec`; `:op/argv` and the attached payloads are parsed through `millstrand.api.cli.alpha/parse` and the result is supplied as `:op/args`; a parse failure throws before the handler runs. A clean trailing `--help`/`-h` flag (the final argv token, no other flags, no payloads) is rewritten to the op's help projection instead of running the handler, for every op class — the op detail, or a verb's sliced node when a verb token precedes the flag; retired `<op> help`/`about`/`prime` sugar and malformed `--help` shapes redirect loudly (DELTA-Dtf-002.CC3). Subcommand map results receive a canonical `:operation` label containing the registered op name and full resolved subcommand path. A handler-supplied `:operation` equal to the derived label is preserved; any other value, including explicit nil, fails loudly with the expected and actual labels.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L574-L634">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L568-L628">Source</a></sub></p>
 
 ## <a name="millstrand.api.weaver.alpha/op-provenance">`op-provenance`</a>
 
@@ -139,7 +139,7 @@ Function.
 Return owner/provenance diagnostics for `runtime`'s CLI op registry as data.
 
 Maps each registered op name to `{:effective <winning contender> :shadowed   [<lower contenders>] :contenders [<all, low-to-high>]}`; each contender names its `:owner`, `:layer`, `:value` (the op entry), and `:override?`/`:effective?` flags, so a caller sees which owner supplies each op — a built-in under the system owner, a workspace op under the direct owner — and which lower-layer entries an override shadows. Op entries carry the handler symbol as data, not a resolved function value (DELTA-OlrDrt-001.CC9).
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L557-L568">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L551-L562">Source</a></sub></p>
 
 ## <a name="millstrand.api.weaver.alpha/ops">`ops`</a>
 
@@ -150,7 +150,7 @@ Maps each registered op name to `{:effective <winning contender> :shadowed   [<l
 Function.
 
 Return registered CLI operation entries for the current weaver runtime.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L493-L496">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L487-L490">Source</a></sub></p>
 
 ## <a name="millstrand.api.weaver.alpha/ready">`ready`</a>
 
@@ -182,7 +182,6 @@ The optional limit arity is for the CLI/wire read surface; the trusted in-proces
 ## <a name="millstrand.api.weaver.alpha/register-op!">`register-op!`</a>
 
 ```clojure
-(register-op! runtime op-name fn-sym)
 (register-op! runtime op-name opts fn-sym)
 (register-op! runtime owner op-name opts fn-sym)
 ```
@@ -191,15 +190,14 @@ Function.
 
 Register a trusted weaver-side CLI operation.
 
-Registered operations are invoked at the CLI root as `strand <name>   [args...]`. The handler symbol must resolve to a function that accepts one context map (see `op!` for the context keys) and returns JSON-compatible data. The third positional argument is either a doc string or an op metadata map with keys `:doc`, `:arg-spec` (parser spec, structurally validated at registration), `:returns` (validated return-shape declaration), `:stream?` (default false), `:about`, and `:prime`; unknown keys fail loudly. The metadata map is required to contain `:arg-spec`; every op declares both classes on every arg-spec leaf. Provenance (the registering namespace) is recorded from the handler symbol and must never be caller-supplied.
+Registered operations are invoked at the CLI root as `strand <name>   [args...]`. The handler symbol must resolve to a function that accepts one context map (see `op!` for the context keys) and returns JSON-compatible data. The third positional argument is an op metadata map with keys `:doc`, `:arg-spec` (parser spec, structurally validated at registration), `:returns` (validated return-shape declaration), `:stream?` (default false), `:about`, and `:prime`; unknown keys fail loudly. The metadata map is required to contain `:arg-spec`; every op declares both classes on every arg-spec leaf. Provenance (the registering namespace) is recorded from the handler symbol and must never be caller-supplied.
 
 Registering an already-registered name fails loudly, naming both the existing entry's provenance and the attempted registrant; use `replace-op!` to override deliberately. Registry contents live only for the current weaver lifetime and are normally published by owner-complete modules from init.clj or registered directly from a live REPL. Module refresh replaces its owner's partition; direct registrations remain until explicitly replaced or removed.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L394-L427">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L394-L425">Source</a></sub></p>
 
 ## <a name="millstrand.api.weaver.alpha/replace-op!">`replace-op!`</a>
 
 ```clojure
-(replace-op! runtime op-name fn-sym)
 (replace-op! runtime op-name opts fn-sym)
 (replace-op! runtime owner op-name opts fn-sym)
 ```
@@ -209,7 +207,7 @@ Function.
 Replace an already-registered op, failing loudly when the name is absent.
 
 Same signature as `register-op!`. This is the deliberate override for a name that already exists; unlike `register-op!` it requires the name to be present. When another owner supplies the name — a module-published op, say — the override intent is recorded, which is what lets the direct entry keep shadowing the original across `runtime/refresh!`. `unregister-op!` retracts the shadow and the shadowed entry becomes effective again.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L437-L458">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L434-L453">Source</a></sub></p>
 
 ## <a name="millstrand.api.weaver.alpha/resolve-op">`resolve-op`</a>
 
@@ -222,7 +220,7 @@ Function.
 Return the registered CLI operation entry for `op-name`, or fail loudly.
 
 Reads one effective op snapshot for the invocation already beginning, so a concurrent registry replacement takes effect only for a later resolve — the in-flight lookup and its not-found diagnostic share one immutable view (DELTA-OlrDrt-001.CC9/CC10, op symbols resolve at invocation).
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L537-L551">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L531-L545">Source</a></sub></p>
 
 ## <a name="millstrand.api.weaver.alpha/show">`show`</a>
 
@@ -279,7 +277,7 @@ Function.
 Retract `owner`'s own op registration for `op-name`.
 
 Removal reaches only into the calling owner's partition, so it is the counterpart of `replace-op!` rather than a way to delete another owner's op: retracting a shadow restores the shadowed entry as effective, and retracting a fresh claim leaves the name unregistered. Unregistering a name this owner never registered is an idempotent no-op. Returns `{:unregistered   <canonical-name>}`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L472-L486">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/weaver/alpha.clj#L466-L480">Source</a></sub></p>
 
 ## <a name="millstrand.api.weaver.alpha/update!">`update!`</a>
 

@@ -377,10 +377,10 @@
         (is (not (s/valid? ::weaver/op-metadata nil)))
         (is (not (s/valid? ::weaver/op-metadata-map
                            (assoc flat-mutating-standard :unknown true)))))
-      (testing "registration requires an arg-spec and leaf classes"
+      (testing "registration requires metadata with an arg-spec and leaf classes"
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"Operation requires :arg-spec"
-                              (weaver/register-op! rt 'missing-raw-classes
+                              (weaver/register-op! rt 'missing-arg-spec {}
                                                    'millstrand.core.weaver.ops-help-test/test-op)))
         (let [missing (is (thrown-with-msg?
                            clojure.lang.ExceptionInfo
@@ -1006,7 +1006,7 @@
                    :hook-class :mutating :deadline-class :standard}})
       (testing "no argv returns the versioned catalog of shallow per-op envelopes"
         (let [{:keys [schema-version ops]} (weaver/op! rt 'help [])]
-          (is (= 2 schema-version))
+          (is (= 3 schema-version))
           (is (= ["about" "bins" "custom" "help" "prime" "streamed" "subbed" "unclassed"]
                  (mapv #(get-in % [:operation :name]) ops)))
           ;; Every catalog node is a summary node: op-wide facts stay in
@@ -1041,7 +1041,7 @@
       (testing "op name returns the detail envelope with a flat-op fractal node"
         (let [{:keys [schema-version operation source glossary node]}
               (weaver/op! rt 'help ["custom"])]
-          (is (= 2 schema-version))
+          (is (= 3 schema-version))
           ;; test-op is a readable on-disk handler, so source resolves to its
           ;; {file, line}; the exact path is environment-specific.
           (is (str/ends-with? (:file source) "ops_help_test.clj"))
@@ -1471,7 +1471,7 @@
                            'millstrand.core.weaver.ops-help-test/test-op)
       (testing "with no transform registered, help output is the raw envelope"
         (is (map? (weaver/op! rt 'help ["described"])))
-        (is (= 2 (:schema-version (weaver/op! rt 'help ["described"]))))
+        (is (= 3 (:schema-version (weaver/op! rt 'help ["described"]))))
         (is (map? (weaver/op! rt 'help []))))
       (testing "an elected transform renders the full envelope to a verbatim result"
         (help-transform/register-default-help-transform!
@@ -1489,7 +1489,7 @@
           (is (= "RENDERED:described" (weaver-help/verbatim-text (weaver/op! rt 'described ["--help"])))))
         (testing "leading --json bypasses the slot back to the raw envelope"
           (is (map? (weaver/op! rt 'help ["--json" "described"])))
-          (is (= 2 (:schema-version (weaver/op! rt 'help ["--json" "described"]))))
+          (is (= 3 (:schema-version (weaver/op! rt 'help ["--json" "described"]))))
           (is (map? (weaver/op! rt 'help ["--json"])))
           (is (contains? (weaver/op! rt 'help ["--json"]) :ops)))
         (testing "--json is leading-only within the help surface"

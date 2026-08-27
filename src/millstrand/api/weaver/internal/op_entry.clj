@@ -47,16 +47,12 @@
   #{:read :mutating})
 
 (defn normalize-op-opts
-  "Coerce a register-op! metadata argument into an options map.
-
-  A map is the full metadata map; nil is the no-metadata case used by the
-  arity that intentionally demonstrates the missing-arg-spec failure."
+  "Require and return a register-op! metadata map."
   [opts]
-  (cond
-    (nil? opts) {}
-    (map? opts) opts
-    :else (throw (ex-info "Operation metadata must be an options map"
-                          {:opts opts}))))
+  (if (map? opts)
+    opts
+    (throw (ex-info "Operation metadata must be an options map"
+                    {:opts opts}))))
 
 (defn validate-op-metadata!
   "Validate a normalized op metadata map, returning it.
