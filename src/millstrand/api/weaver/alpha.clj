@@ -57,14 +57,11 @@
 (s/def ::arg-spec map?)
 (s/def ::returns any?)
 (s/def ::stream? boolean?)
-(s/def ::deadline-class op-entry/op-deadline-classes)
-(s/def ::hook-class op-entry/op-hook-classes)
 (s/def ::about (s/and string? (complement str/blank?)))
 (s/def ::prime (s/and string? (complement str/blank?)))
 (s/def ::op-metadata-map
   (s/and (s/keys :req-un [::arg-spec]
-                 :opt-un [::doc ::returns ::stream? ::deadline-class
-                          ::hook-class ::about ::prime])
+                 :opt-un [::doc ::returns ::stream? ::about ::prime])
          #(every? op-entry/op-metadata-keys (keys %))))
 (s/def ::op-metadata
   ::op-metadata-map)
@@ -403,12 +400,10 @@
   The third positional argument is either a doc string or an op metadata map
   with keys `:doc`, `:arg-spec` (parser spec, structurally validated at
   registration), `:returns` (validated return-shape declaration), `:stream?`
-  (default false), `:deadline-class` (`:standard`/`:unbounded`), and
-  `:hook-class` (`:read`/`:mutating`); unknown keys fail loudly. The metadata
+  (default false), `:about`, and `:prime`; unknown keys fail loudly. The metadata
   map is required to contain `:arg-spec`; every op declares both classes on
-  every arg-spec leaf and may not declare them in this metadata map. Provenance (the registering
-  namespace) is recorded from the handler symbol and must never be
-  caller-supplied.
+  every arg-spec leaf. Provenance (the registering namespace) is recorded from
+  the handler symbol and must never be caller-supplied.
 
   Registering an already-registered name fails loudly, naming both the existing
   entry's provenance and the attempted registrant; use `replace-op!` to override
@@ -736,7 +731,6 @@
       (op-entry/validate-op-doc! (:doc opts)))
     (validate-op-arg-spec! op-name (:arg-spec opts))
     (check-arg-spec-refs! op-name (:arg-spec opts))
-    (op-entry/validate-op-classes! op-name opts)
     (op-entry/validate-stream-leaf-deadlines! op-name stream? (:arg-spec opts))
     (when (contains? opts :returns)
       (validate-op-returns! op-name (:arg-spec opts) stream? (:returns opts)))

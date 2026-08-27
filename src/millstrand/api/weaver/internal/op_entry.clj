@@ -35,10 +35,8 @@
   "Metadata keys a caller may supply to register-op!/replace-op!.
 
   `:about`/`:prime` are optional non-blank prose strings the `about`/`prime`
-  meta-verbs project (DELTA-Dtf-002.CC4). Classes remain accepted here only so
-  registration can report the migration error that classes belong on leaves."
-  #{:doc :arg-spec :returns :stream? :deadline-class :hook-class
-    :about :prime})
+  meta-verbs project (DELTA-Dtf-002.CC4)."
+  #{:doc :arg-spec :returns :stream? :about :prime})
 
 (def op-deadline-classes
   "Accepted :deadline-class values."
@@ -64,8 +62,7 @@
   "Validate a normalized op metadata map, returning it.
 
   Rejects caller-supplied `:provenance` (registry-recorded from the handler
-  namespace), unknown keys, and malformed `:stream?`/`:deadline-class`/
-  `:hook-class` values."
+  namespace), unknown keys, and malformed `:stream?` values."
   [opts]
   ;; Provenance is registry-recorded from the handler namespace; a caller must
   ;; never assert it. Reject it explicitly so the error is unambiguous even
@@ -78,14 +75,6 @@
     (throw (ex-info "Operation metadata contains unknown keys" {:keys (vec unknown)})))
   (when (and (contains? opts :stream?) (not (boolean? (:stream? opts))))
     (throw (ex-info "Operation :stream? must be a boolean" {:stream? (:stream? opts)})))
-  (when (and (contains? opts :deadline-class)
-             (not (op-deadline-classes (:deadline-class opts))))
-    (throw (ex-info "Operation :deadline-class must be :standard or :unbounded"
-                    {:deadline-class (:deadline-class opts)})))
-  (when (and (contains? opts :hook-class)
-             (not (op-hook-classes (:hook-class opts))))
-    (throw (ex-info "Operation :hook-class must be :read or :mutating"
-                    {:hook-class (:hook-class opts)})))
   (doseq [key [:about :prime]
           :when (contains? opts key)
           :let [value (get opts key)]]
@@ -93,35 +82,6 @@
       (throw (ex-info (str "Operation " key " must be a non-blank prose string")
                       {key value}))))
   opts)
-
-(defn validate-op-classes!
-  "Require one canonical class source for `op-name`, returning `opts`.
-
-  Arg-spec operations declare both classes on every leaf and never in
-  registration metadata. Node-level failures carry the canonical routing
-  context (DELTA-Lhc-001.CC2/CC3, DELTA-Lhc-002.CC1)."
-  [op-name opts]
-  (let [op (canonical-op-name op-name)
-        context (fn [path extra]
-                  (merge {:operation op :op op :path path
-                          :token nil :available []}
-                         extra))]
-    (let [arg-spec (:arg-spec opts)]
-      (when-let [classes (seq (filter #(contains? opts %)
-                                      [:hook-class :deadline-class]))]
-        (throw (ex-info
-                "Arg-spec operation classes belong on leaves, not registration metadata"
-                (context [] {:fields (vec classes)}))))
-      (letfn [(walk! [node path]
-                (if-let [subcommands (:subcommands node)]
-                  (doseq [[subcommand child] subcommands]
-                    (walk! child (conj path subcommand)))
-                  (doseq [key [:hook-class :deadline-class]]
-                    (when-not (contains? node key)
-                      (throw (ex-info (str "Operation leaf requires " key)
-                                      (context path {:field key})))))))]
-        (walk! arg-spec [])))
-    opts))
 
 (defn invalid-returns!
   "Throw a canonicalized `:returns` validation error for `op-name`."

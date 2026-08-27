@@ -393,7 +393,7 @@
           (is (= "missing-leaf-class" (:op (ex-data missing)))))
         (is (thrown-with-msg?
              clojure.lang.ExceptionInfo
-             #"classes belong on leaves"
+             #"unknown keys"
              (weaver/register-op! rt 'double-sourced-classes
                                   {:hook-class :read
                                    :arg-spec {:op "double-sourced-classes"
@@ -615,10 +615,10 @@
                               #":stream\? must be a boolean"
                               (weaver/register-op! rt 'nope {:stream? "yes"} 'millstrand.core.weaver.ops-help-test/test-op)))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                              #":deadline-class must be"
+                              #"unknown keys"
                               (weaver/register-op! rt 'nope {:deadline-class :soon} 'millstrand.core.weaver.ops-help-test/test-op)))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                              #":hook-class must be"
+                              #"unknown keys"
                               (weaver/register-op! rt 'nope {:hook-class :both} 'millstrand.core.weaver.ops-help-test/test-op))))
       (testing ":about/:prime prose is recorded when non-blank"
         (is (= {:name "described"
