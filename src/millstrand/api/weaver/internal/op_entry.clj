@@ -38,28 +38,15 @@
   meta-verbs project (DELTA-Dtf-002.CC4)."
   #{:doc :arg-spec :returns :stream? :about :prime})
 
-(def op-deadline-classes
-  "Accepted :deadline-class values."
-  #{:standard :unbounded})
-
-(def op-hook-classes
-  "Accepted :hook-class values."
-  #{:read :mutating})
-
-(defn normalize-op-opts
-  "Require and return a register-op! metadata map."
-  [opts]
-  (if (map? opts)
-    opts
-    (throw (ex-info "Operation metadata must be an options map"
-                    {:opts opts}))))
-
 (defn validate-op-metadata!
-  "Validate a normalized op metadata map, returning it.
+  "Validate an op metadata map, returning it.
 
   Rejects caller-supplied `:provenance` (registry-recorded from the handler
   namespace), unknown keys, and malformed `:stream?` values."
   [opts]
+  (when-not (map? opts)
+    (throw (ex-info "Operation metadata must be an options map"
+                    {:opts opts})))
   ;; Provenance is registry-recorded from the handler namespace; a caller must
   ;; never assert it. Reject it explicitly so the error is unambiguous even
   ;; though it would also trip the unknown-key check below.

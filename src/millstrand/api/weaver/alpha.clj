@@ -715,7 +715,7 @@
   and `millstrand.api.return-shape.alpha` contracts happen here, because an
   internal namespace never requires an alpha namespace (SPEC-003.C19a)."
   [op-name opts fn-sym]
-  (let [opts (op-entry/validate-op-metadata! (op-entry/normalize-op-opts opts))
+  (let [opts (op-entry/validate-op-metadata! opts)
         fn-sym (op-entry/validate-op-fn-symbol! fn-sym)
         stream? (boolean (:stream? opts))]
     (when-not (contains? opts :arg-spec)
