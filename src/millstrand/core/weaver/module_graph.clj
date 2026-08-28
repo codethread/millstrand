@@ -328,7 +328,8 @@
             {:kind kind-id :key entry-key :override? override?}))
    (when *contribution-collector*
      (require-collection-source!)
-     (let [value (if (= :bins kind-id)
+     (let [value (if (and (= :bins kind-id)
+                          (not (contains? value :source/file)))
                    (assoc value :source/file (:source/file *contribution-context*))
                    value)]
        (swap! *contribution-collector*

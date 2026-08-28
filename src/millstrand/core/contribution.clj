@@ -1,6 +1,7 @@
 (ns millstrand.core.contribution
   "Constructs and validates collected declarations for Millstrand's core kinds."
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [millstrand.api.spool.alpha :refer [require-valid!]]
             [millstrand.api.weaver.alpha :as weaver]
@@ -92,9 +93,12 @@
 
 (s/def ::bin-entry
   (s/and map?
-         #(every? #{:name :doc :executable :provenance :build} (keys %))
+         #(every? #{:name :doc :executable :provenance :source/file :build}
+                  (keys %))
          #(every? (partial contains? %) [:name :doc :executable :provenance])
-         #(s/valid? string? (:doc %))))
+         #(s/valid? string? (:doc %))
+         #(or (not (contains? % :source/file))
+              (non-blank-string? (:source/file %)))))
 
 (defn op-declaration
   "Return a validated `:ops` entry.
@@ -158,11 +162,28 @@
                    :metadata (get opts :metadata {})}
                   "defhandler declaration is invalid"))
 
+(defn- declaration-source-file []
+  (when-not (or (nil? *file*) (= "NO_SOURCE_FILE" *file*))
+    (let [file (io/file *file*)
+          loader (.getContextClassLoader (Thread/currentThread))
+          resource (when-not (.isAbsolute ^java.io.File file)
+                     (io/resource *file* loader))]
+      (cond
+        (.isAbsolute ^java.io.File file) (.getCanonicalPath ^java.io.File file)
+        resource (.getCanonicalPath (io/file resource))
+        :else
+        (throw (ex-info "Bin declaration source file cannot be resolved"
+                        {:reason :bin/declaration-source-unresolved
+                         :source/file *file*
+                         :classloader (str loader)
+                         :accepted [:absolute-file :classloader-resource]}))))))
+
 (defn bin-declaration
   "Return a validated `:bins` entry for executable `bin-name`.
 
-  The executable spelling and optional argv recipe are retained as authored;
-  path resolution and filesystem readiness belong to the plan read path."
+  The result conforms to `::bin-entry`. The executable spelling and optional
+  argv recipe are retained as authored; path resolution and filesystem
+  readiness belong to the plan read path."
   [bin-name doc opts provenance]
   (when (and (map? opts)
              (vector? (:executable opts))
@@ -175,11 +196,13 @@
                      :allowed (vec (sort bin-anchors))})))
   (require-valid! string? doc "defbin doc is invalid")
   (require-valid! ::bin-options opts "defbin options are invalid")
-  (require-valid!
-   ::bin-entry
-   (cond-> {:name (name bin-name)
-            :doc doc
-            :executable (:executable opts)
-            :provenance provenance}
-     (contains? opts :build) (assoc :build (:build opts)))
-   "defbin declaration is invalid"))
+  (let [source-file (declaration-source-file)]
+    (require-valid!
+     ::bin-entry
+     (cond-> {:name (name bin-name)
+              :doc doc
+              :executable (:executable opts)
+              :provenance provenance}
+       source-file (assoc :source/file source-file)
+       (contains? opts :build) (assoc :build (:build opts)))
+     "defbin declaration is invalid")))

@@ -147,6 +147,42 @@
   (.setExecutable ^java.io.File file executable? false)
   file)
 
+(deftest use-bin-preserves-the-declaring-root
+  (with-runtime
+    (fn [rt _db-file]
+      (let [workspace (get-in rt [:metadata :config-dir])
+            suffix (str/replace (str (random-uuid)) "-" "")
+            family 'test/bin-selection-family
+            declaring-lib 'test/bin-declaring
+            selecting-lib 'test/bin-selecting
+            roots {declaring-lib "declaring" selecting-lib "selecting"}
+            family-root (io/file workspace "spools/bin-selection-family")
+            declaring-root (io/file family-root "declaring")
+            selecting-root (io/file family-root "selecting")
+            declaring-ns (symbol (str "test.module.bin-declaring-" suffix))
+            selecting-ns (symbol (str "test.module.bin-selecting-" suffix))
+            executable (write-executable! (io/file declaring-root "bin" "agent") true)]
+        (write-multi-root-spool-module!
+         workspace family roots declaring-lib declaring-ns
+         "(millstrand/defbin agent \"agent\" {:executable [:root \"bin/agent\"]})")
+        (let [relative-source (-> (str selecting-ns)
+                                  (str/replace "." "/")
+                                  (str/replace "-" "_"))
+              source (io/file selecting-root "src" (str relative-source ".clj"))]
+          (io/make-parents source)
+          (spit source
+                (str "(ns " selecting-ns
+                     "\n  (:require [millstrand.api.millstrand.alpha :as millstrand]"
+                     "\n            [" declaring-ns " :as declared]))\n"
+                     "(millstrand/use-bin! declared/agent)\n")))
+        (is (= :applied (:status (runtime/module! rt :selected
+                                                  {:ns selecting-ns
+                                                   :spools [declaring-lib
+                                                            selecting-lib]}))))
+        (let [plan (weaver/op! rt 'bins ["plan" "agent"])]
+          (is (= (.getCanonicalPath executable) (get-in plan [:exec :path])))
+          (is (true? (:runnable plan))))))))
+
 (deftest defbin-production-path-publishes-removes-and-restores
   (with-runtime
     (fn [rt _db-file]
