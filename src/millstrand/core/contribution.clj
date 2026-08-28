@@ -1,10 +1,12 @@
 (ns millstrand.core.contribution
   "Constructs and validates collected declarations for Millstrand's core kinds."
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [millstrand.api.spool.alpha :refer [require-valid!]]
             [millstrand.api.weaver.alpha :as weaver]
-            [millstrand.core.query :as query]))
+            [millstrand.core.query :as query]
+            [millstrand.core.weaver.module-graph :as module-graph]))
 
 (def ^:private op-option-keys
   #{:arg-spec :returns :stream? :about :prime :override?})
@@ -92,9 +94,12 @@
 
 (s/def ::bin-entry
   (s/and map?
-         #(every? #{:name :doc :executable :provenance :build} (keys %))
-         #(every? (partial contains? %) [:name :doc :executable :provenance])
-         #(s/valid? string? (:doc %))))
+         #(every? #{:name :doc :executable :provenance :source/file :build}
+                  (keys %))
+         #(every? (partial contains? %)
+                  [:name :doc :executable :provenance :source/file])
+         #(s/valid? string? (:doc %))
+         #(non-blank-string? (:source/file %))))
 
 (defn op-declaration
   "Return a validated `:ops` entry.
@@ -158,6 +163,16 @@
                    :metadata (get opts :metadata {})}
                   "defhandler declaration is invalid"))
 
+(defn- declaration-source-file []
+  (let [file (some-> *file* io/file)
+        resource (when (and *file* (not (.isAbsolute ^java.io.File file)))
+                   (io/resource *file* (.getContextClassLoader
+                                        (Thread/currentThread))))]
+    (cond
+      (some-> file .isAbsolute) (.getCanonicalPath ^java.io.File file)
+      resource (.getCanonicalPath (io/file resource))
+      :else (module-graph/contribution-source-file))))
+
 (defn bin-declaration
   "Return a validated `:bins` entry for executable `bin-name`.
 
@@ -180,6 +195,7 @@
    (cond-> {:name (name bin-name)
             :doc doc
             :executable (:executable opts)
-            :provenance provenance}
+            :provenance provenance
+            :source/file (declaration-source-file)}
      (contains? opts :build) (assoc :build (:build opts)))
    "defbin declaration is invalid"))

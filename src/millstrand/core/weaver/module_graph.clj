@@ -288,6 +288,11 @@
   []
   (some? *contribution-collector*))
 
+(defn contribution-source-file
+  "Return the canonical source file for the active module contribution."
+  []
+  (:source/file *contribution-context*))
+
 (defn- current-source-context []
   {:source/file (some-> *file* io/file .getCanonicalPath)
    :source/namespace (ns-name *ns*)})
@@ -328,15 +333,12 @@
             {:kind kind-id :key entry-key :override? override?}))
    (when *contribution-collector*
      (require-collection-source!)
-     (let [value (if (= :bins kind-id)
-                   (assoc value :source/file (:source/file *contribution-context*))
-                   value)]
-       (swap! *contribution-collector*
-              (fn [contribution]
-                (cond-> (assoc-in contribution [kind-id :entries entry-key] value)
-                  override? (update-in [kind-id :overrides] (fnil conj #{}) entry-key)
-                  (false? override?)
-                  (update-in [kind-id :overrides] (fnil disj #{}) entry-key))))))
+     (swap! *contribution-collector*
+            (fn [contribution]
+              (cond-> (assoc-in contribution [kind-id :entries entry-key] value)
+                override? (update-in [kind-id :overrides] (fnil conj #{}) entry-key)
+                (false? override?)
+                (update-in [kind-id :overrides] (fnil disj #{}) entry-key)))))
    value))
 
 (defn collect-lifecycle!
