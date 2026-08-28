@@ -213,6 +213,8 @@ func TestDisposableWeaverRestartAcceptance(t *testing.T) {
 		started := filepath.Join(shortTempDir(t), "probe-started")
 		release := filepath.Join(shortTempDir(t), "probe-release")
 		h.initWorld(t, workspace)
+		appendInit(t, filepath.Join(workspace, "init.clj"),
+			"(require '[millstrand.api.runtime.alpha :as runtime])\n")
 		appendProbeGate(t, filepath.Join(workspace, "init.clj"), started, release)
 		module := filepath.Join(workspace, "modules", "stdout.clj")
 		if err := os.MkdirAll(filepath.Dir(module), 0o755); err != nil {
