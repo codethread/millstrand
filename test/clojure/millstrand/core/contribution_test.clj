@@ -168,6 +168,19 @@
                      '[sample sample-query sample-pattern sample-hook sample-handler
                        sample-bin])))))
 
+(deftest defbin-rejects-an-unresolvable-declaration-source
+  (let [failure (try
+                  (binding [*file* "missing/bin_declaration.clj"]
+                    (contribution/bin-declaration
+                     'sample "Sample." {:executable "sample"} 'test/bins))
+                  nil
+                  (catch clojure.lang.ExceptionInfo throwable
+                    throwable))]
+    (is (= :bin/declaration-source-unresolved (-> failure ex-data :reason)))
+    (is (= "missing/bin_declaration.clj" (-> failure ex-data :source/file)))
+    (is (= [:absolute-file :classloader-resource]
+           (-> failure ex-data :accepted)))))
+
 (deftest defbin-rejects-the-closed-option-grammar
   (doseq [[label opts expected]
           [["missing executable" {} #"defbin options are invalid"]

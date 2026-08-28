@@ -5,8 +5,7 @@
             [clojure.string :as str]
             [millstrand.api.spool.alpha :refer [require-valid!]]
             [millstrand.api.weaver.alpha :as weaver]
-            [millstrand.core.query :as query]
-            [millstrand.core.weaver.module-graph :as module-graph]))
+            [millstrand.core.query :as query]))
 
 (def ^:private op-option-keys
   #{:arg-spec :returns :stream? :about :prime :override?})
@@ -96,10 +95,10 @@
   (s/and map?
          #(every? #{:name :doc :executable :provenance :source/file :build}
                   (keys %))
-         #(every? (partial contains? %)
-                  [:name :doc :executable :provenance :source/file])
+         #(every? (partial contains? %) [:name :doc :executable :provenance])
          #(s/valid? string? (:doc %))
-         #(non-blank-string? (:source/file %))))
+         #(or (not (contains? % :source/file))
+              (non-blank-string? (:source/file %)))))
 
 (defn op-declaration
   "Return a validated `:ops` entry.
@@ -164,20 +163,27 @@
                   "defhandler declaration is invalid"))
 
 (defn- declaration-source-file []
-  (let [file (some-> *file* io/file)
-        resource (when (and *file* (not (.isAbsolute ^java.io.File file)))
-                   (io/resource *file* (.getContextClassLoader
-                                        (Thread/currentThread))))]
-    (cond
-      (some-> file .isAbsolute) (.getCanonicalPath ^java.io.File file)
-      resource (.getCanonicalPath (io/file resource))
-      :else (module-graph/contribution-source-file))))
+  (when-not (or (nil? *file*) (= "NO_SOURCE_FILE" *file*))
+    (let [file (io/file *file*)
+          loader (.getContextClassLoader (Thread/currentThread))
+          resource (when-not (.isAbsolute ^java.io.File file)
+                     (io/resource *file* loader))]
+      (cond
+        (.isAbsolute ^java.io.File file) (.getCanonicalPath ^java.io.File file)
+        resource (.getCanonicalPath (io/file resource))
+        :else
+        (throw (ex-info "Bin declaration source file cannot be resolved"
+                        {:reason :bin/declaration-source-unresolved
+                         :source/file *file*
+                         :classloader (str loader)
+                         :accepted [:absolute-file :classloader-resource]}))))))
 
 (defn bin-declaration
   "Return a validated `:bins` entry for executable `bin-name`.
 
-  The executable spelling and optional argv recipe are retained as authored;
-  path resolution and filesystem readiness belong to the plan read path."
+  The result conforms to `::bin-entry`. The executable spelling and optional
+  argv recipe are retained as authored; path resolution and filesystem
+  readiness belong to the plan read path."
   [bin-name doc opts provenance]
   (when (and (map? opts)
              (vector? (:executable opts))
@@ -190,12 +196,13 @@
                      :allowed (vec (sort bin-anchors))})))
   (require-valid! string? doc "defbin doc is invalid")
   (require-valid! ::bin-options opts "defbin options are invalid")
-  (require-valid!
-   ::bin-entry
-   (cond-> {:name (name bin-name)
-            :doc doc
-            :executable (:executable opts)
-            :provenance provenance
-            :source/file (declaration-source-file)}
-     (contains? opts :build) (assoc :build (:build opts)))
-   "defbin declaration is invalid"))
+  (let [source-file (declaration-source-file)]
+    (require-valid!
+     ::bin-entry
+     (cond-> {:name (name bin-name)
+              :doc doc
+              :executable (:executable opts)
+              :provenance provenance}
+       source-file (assoc :source/file source-file)
+       (contains? opts :build) (assoc :build (:build opts)))
+     "defbin declaration is invalid")))
