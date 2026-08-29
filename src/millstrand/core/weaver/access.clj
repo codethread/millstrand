@@ -1,8 +1,8 @@
 (ns millstrand.core.weaver.access
   "Shared low-level plumbing over a weaver runtime map.
 
-  Datasource and registry accessors, JSON-row normalization, spool config-dir
-  path resolution, the spool classloader boundary, and fully-qualified-symbol
+  Datasource and registry accessors, JSON-row normalization, the generation
+  classloader boundary, and fully-qualified-symbol
   validation. Internal tier: the API and REPL layers reach through these instead
   of destructuring the runtime map's physical shape (TEN-007)."
   (:require [clojure.java.io :as io]
@@ -90,16 +90,6 @@
   [runtime]
   (:bin-store runtime))
 
-(defn approved-spool-sync-state
-  "Return the runtime's approved-spool sync-state atom."
-  [runtime]
-  (:approved-spool-sync-state runtime))
-
-(defn namespace-load-ledger
-  "Return the runtime's append-only namespace-load ledger atom."
-  [runtime]
-  (:namespace-load-ledger runtime))
-
 (defn event-system
   "Return the runtime's event system."
   [runtime]
@@ -111,7 +101,7 @@
   (:handler-store (event-system runtime)))
 
 (defn with-spool-classloader
-  "Run f with the runtime bound and its spool classloader installed."
+  "Run `f` with the runtime bound and its generation classloader installed."
   [runtime f]
   (weaver-runtime/with-runtime-and-spool-classloader runtime f))
 
@@ -160,29 +150,25 @@
     (.getCanonicalPath resolved)))
 
 (defn source-checkout-root
-  "Return the running weaver's mill-resolved millstrand source checkout root File.
-
-  The sole resolution authority for `:millstrand/source-root` coordinates
-  (SPEC-004.C50b): it delegates to the runtime module's resource-derived
-  locator, never reading cwd, the config dir, or request/envelope state. Fails
-  loudly (TEN-003) when the checkout is unavailable or its classpath resource
-  does not identify a readable file checkout, so a source-root coordinate can
-  never resolve against a missing or unreadable checkout."
+  "Return the running Weaver's Mill-resolved source checkout root."
   ^java.io.File []
   (let [^java.io.File checkout (weaver-runtime/source-checkout-root)]
     (when-not (and checkout (.isDirectory checkout) (.canRead checkout))
-      (throw (ex-info "Millstrand source checkout is unavailable for source-root resolution"
+      (throw (ex-info "Millstrand source checkout is unavailable"
                       {:reason :source-checkout-unavailable
                        :checkout (some-> checkout .getPath)})))
     checkout))
 
 (defn cache-base
-  "Return Millstrand's cache base for git-backed spool materialization."
+  "Return Millstrand's cache base for legacy materialization."
   []
   (io/file (let [xdg-cache-home (System/getenv "XDG_CACHE_HOME")]
-             (if (and (string? xdg-cache-home) (not (str/blank? xdg-cache-home)))
+             (if (and (string? xdg-cache-home)
+                      (not (str/blank? xdg-cache-home)))
                xdg-cache-home
-               (str (System/getProperty "user.home") java.io.File/separator ".cache")))))
+               (str (System/getProperty "user.home")
+                    java.io.File/separator ".cache")))))
+
 
 (defn validate-fn-symbol!
   "Require fn-sym to be a fully qualified symbol, returning it or failing loudly."

@@ -5,10 +5,8 @@
   argument. Use `millstrand.api.current.alpha/runtime` only at trusted in-process
   entry points that need to capture the active runtime.
 
-  The module reads as the live-image lifecycle: read the approved/declared
-  config (`approved`, `declared`, `release-marker`), edit the primary
-  `spools.edn` (`upsert-spool-entry!`, `remove-spool-entry!`), declare stable
-  modules (`module!`), collect authoring-form entries and open kinds from
+  The module exposes the live-image lifecycle: declare stable modules
+  (`module!`), collect authoring-form entries and open kinds from
   module sources (`collect-entry!`, `collect-kind!`), reconcile the running
   image against them (`refresh!`, with `plan` its effect-free dry-run), inspect
   the joined offline picture
@@ -27,165 +25,15 @@
             [millstrand.api.clock.alpha :as clock-api]
             [millstrand.api.registry.alpha :as registry]
             [millstrand.api.runtime.internal.shapes :as shapes]
-            [millstrand.api.runtime.internal.spools-edn :as spools-edn]
             [millstrand.api.spool.alpha :refer [require-valid!]]
-            [millstrand.core.specs :as specs]
             [millstrand.core.weaver.access :as access]
             [millstrand.core.weaver.module-graph :as module-graph]
-            [millstrand.core.weaver.runtime :as weaver-runtime]
-            [millstrand.core.weaver.spool-sync :as spool-sync]))
+            [millstrand.core.weaver.runtime :as weaver-runtime]))
 
-(declare running-release-marker spools-file
-         validate-approved-result! validate-declared-result!
-         validate-refresh-opts! validate-refresh-result! validate-plan-result!
+(declare validate-refresh-opts! validate-refresh-result! validate-plan-result!
          validate-status-result! validate-module-opts! validate-module-result!
          validate-reload-code-result!
-         families-requiring
          validate-spool-state-opts! versioned-value reinit-mismatched-state)
-
-;; --- reading spool config ---------------------------------------------------
-
-(s/def ::approved-result :millstrand.core.weaver.spool-sync/approved-result)
-(s/def ::declared-result :millstrand.core.weaver.spool-sync/declared-result)
-(s/def ::pending-generation :millstrand.core.weaver.spool-sync/pending-generation)
-(s/def ::running-marker (s/or :marker string?
-                              :unavailable #{:none}
-                              :deferred nil?))
-
-(defn approved
-  "Return the normalized approved spool roots for `runtime`'s config dir.
-
-  Each root entry includes `:provenance :spools-edn|:local-overlay`; overlay
-  entries also include their explicit `:claims` marker. `:families` maps family
-  symbols to the declared `spools.edn` entry, effective post-overlay coordinate,
-  provenance, and overlay claim or nil. The result conforms to
-  `::approved-result`."
-  [runtime]
-  (validate-approved-result!
-   (spool-sync/approved-spools runtime (running-release-marker runtime))))
-
-(s/fdef approved
-  :args (s/cat :runtime map?)
-  :ret ::approved-result)
-
-(defn declared
-  "Return declared spool families with release-floor validation as data.
-
-  `:families` has the same declared/effective projection as `approved`.
-  Each family projection's `:declared`, `:effective-coordinate`, `:provenance`,
-  and `:claims` conform to `::spool-entry`, `::spool-coordinate`,
-  `::spool-provenance`, and `::spool-claims`.
-  `:requirements` is valid with pending validations, or invalid with findings
-  and bump suggestions. Stage-1 structural errors still throw. The explicit
-  `running-marker` arity accepts nil to leave Millstrand floor checks pending. The
-  result conforms to `::declared-result`."
-  ([runtime]
-   (declared runtime (running-release-marker runtime)))
-  ([runtime running-marker]
-   (validate-declared-result!
-    (spool-sync/declared-spools runtime running-marker))))
-
-(s/fdef declared
-  :args (s/or :runtime (s/cat :runtime map?)
-              :with-marker (s/cat :runtime map?
-                                  :running-marker ::running-marker))
-  :ret ::declared-result)
-
-(s/def ::release-marker-claim ::specs/release-marker-claim)
-(s/def ::release-marker-result ::specs/release-marker-result)
-
-(defn release-marker
-  "Return the running Millstrand release marker and its provenance.
-
-  The result has marker `vN` and provenance `:claimed` for an explicit startup
-  claim, marker `vN` and provenance `:tag` for an annotated tag on the source
-  checkout's HEAD, or `{:marker nil :provenance :none}` when the checkout
-  resource is absent or non-filesystem, or successful inspection finds no
-  matching annotated tag. Git startup, checkout-root resolution, and nonzero
-  Git command failures throw. Consumers that require marker arithmetic must
-  reject `:none` explicitly. The result conforms to
-  `::release-marker-result`; marker claims conform to `::release-marker-claim`."
-  [runtime]
-  (let [result (access/release-marker runtime)]
-    (require-valid! ::release-marker-result result
-                    "runtime release marker has an invalid shape")
-    result))
-
-(s/fdef release-marker
-  :args (s/cat :runtime map?)
-  :ret ::release-marker-result)
-
-;; --- the spools.edn write seam ----------------------------------------------
-
-(s/def ::spool-family symbol?)
-(s/def ::spool-entry :millstrand.core.weaver.spool-sync/family-entry)
-(s/def ::spool-coordinate ::spool-sync/coordinate)
-(s/def ::spool-provenance ::spool-sync/provenance)
-(s/def ::spool-claims ::spool-sync/claims)
-(s/def ::spool-write-result
-  (s/and #(shapes/exact-keys? #{:status :lib :entry :file} %)
-         #(s/valid? ::spool-write-status (:status %))
-         #(s/valid? ::spool-family (:lib %))
-         #(s/valid? ::spool-entry (:entry %))
-         #(s/valid? ::specs/spools-file-result (:file %))))
-
-(defn upsert-spool-entry!
-  "Insert or replace `lib` in `runtime`'s primary `spools.edn`.
-
-  `lib` and `entry` conform to `::spool-family` and `::spool-entry`. The full
-  post-edit config is validated through sync's stage-1 contract before an atomic
-  write. Only the `:spools` map is rewritten, so comments outside it are kept.
-  The result conforms to `::spool-write-result`."
-  [runtime lib entry]
-  (require-valid! ::spool-family lib "upsert-spool-entry! lib must be a symbol")
-  (let [^java.io.File file (spools-file runtime)
-        original (spools-edn/read-primary file)
-        config (spools-edn/parse-primary original file)
-        _ (spool-sync/validate-shared-spools-config! file config)
-        existed? (contains? (:spools config) lib)
-        updated (assoc-in config [:spools lib] entry)]
-    (spools-edn/write-primary! file original updated)
-    {:status (if existed? :updated :inserted)
-     :lib lib
-     :entry entry
-     :file file}))
-
-(s/fdef upsert-spool-entry!
-  :args (s/cat :runtime map? :lib ::spool-family :entry ::spool-entry)
-  :ret ::spool-write-result)
-
-(defn remove-spool-entry!
-  "Remove `lib` from `runtime`'s primary `spools.edn`.
-
-  Refuses a missing family or a family whose root libs appear in another
-  family's `:requires`, naming all requirers. Inputs and result conform to
-  `::spool-family` and `::spool-write-result`. Only the primary file is changed."
-  [runtime lib]
-  (require-valid! ::spool-family lib "remove-spool-entry! lib must be a symbol")
-  (let [^java.io.File file (spools-file runtime)
-        original (spools-edn/read-primary file)
-        config (spools-edn/parse-primary original file)
-        _ (spool-sync/validate-shared-spools-config! file config)
-        entry (get-in config [:spools lib])]
-    (when-not entry
-      (throw (ex-info "Spool family is not present in spools.edn"
-                      {:reason :spool-family-not-found :lib lib :file (.getPath file)})))
-    (let [normalized (:families (spool-sync/validate-shared-spools-config! file config))
-          target (some #(when (= lib (:family %)) %) normalized)
-          roots (set (keys (:roots-map target)))
-          requirers (families-requiring normalized lib roots)]
-      (when (seq requirers)
-        (throw (ex-info "Spool family is required by other families"
-                        {:reason :spool-family-required
-                         :lib lib
-                         :roots roots
-                         :requirers requirers})))
-      (spools-edn/write-primary! file original (update config :spools dissoc lib))
-      {:status :removed :lib lib :entry entry :file file})))
-
-(s/fdef remove-spool-entry!
-  :args (s/cat :runtime map? :lib ::spool-family)
-  :ret ::spool-write-result)
 
 ;; --- the live module lifecycle ----------------------------------------------
 ;;
@@ -215,14 +63,12 @@
 ;; refusing whatever this narrower grammar still rejects.
 (s/def ::module-opts
   (s/and map?
-         #(every? #{:ns :file :load :spools :after :required?} (keys %))
+         #(every? #{:ns :file :load :after :required?} (keys %))
          #(not= (contains? % :ns) (contains? % :file))
          #(or (not (contains? % :ns)) (non-blank-symbol? (:ns %)))
          #(or (not (contains? % :file)) (workspace-relative-file? (:file %)))
          #(or (not (contains? % :load)) (= :image (:load %)))
          #(or (not (contains? % :load)) (not (contains? % :file)))
-         #(or (not (contains? % :spools))
-              (and (coll? (:spools %)) (every? symbol? (:spools %))))
          #(or (not (contains? % :after))
               (and (coll? (:after %)) (every? keyword? (:after %))))
          #(or (not (contains? % :required?)) (boolean? (:required? %)))))
@@ -233,14 +79,13 @@
 ;; passes through this staged-result spec (DELTA-Dsp-004.D3).
 (s/def ::module-declaration
   (s/and map?
-         #(every? #{:ns :file :load :spools :after :required?}
+         #(every? #{:ns :file :load :after :required?}
                   (keys %))
          #(not= (contains? % :ns) (contains? % :file))
          #(or (not (contains? % :ns)) (non-blank-symbol? (:ns %)))
          #(or (not (contains? % :file)) (workspace-relative-file? (:file %)))
          #(or (not (contains? % :load)) (= :image (:load %)))
          #(or (not (contains? % :load)) (not (contains? % :file)))
-         #(and (vector? (:spools %)) (every? symbol? (:spools %)))
          #(and (vector? (:after %)) (every? keyword? (:after %)))
          #(boolean? (:required? %))))
 
@@ -254,7 +99,20 @@
               (and (coll? (:only %)) (seq (:only %))
                    (every? keyword? (:only %))))))
 
-(s/def ::refresh-status #{:applied :partial :unchanged :refused})
+(s/def ::basis-fingerprint :millstrand.core.specs/basis-fingerprint)
+(s/def ::basis-change
+  (s/and #(shapes/exact-keys? #{:running-fingerprint
+                                :candidate-fingerprint} %)
+         #(s/valid? ::basis-fingerprint (:running-fingerprint %))
+         #(s/valid? ::basis-fingerprint (:candidate-fingerprint %))
+         #(not= (:running-fingerprint %) (:candidate-fingerprint %))))
+(s/def ::dependency-diagnostic :millstrand.core.specs/dependency-diagnostic)
+(s/def ::restart-required-result
+  (s/and #(shapes/exact-keys? #{:status :reason :basis} %)
+         #(= :restart-required (:status %))
+         #(= :dependency-basis-changed (:reason %))
+         #(s/valid? ::basis-change (:basis %))))
+(s/def ::refresh-status #{:applied :partial :unchanged})
 (s/def ::refresh-mode #{:full :targeted})
 (defn- valid-lifecycle-projection?
   [{:keys [status phase] :as projection}]
@@ -278,51 +136,38 @@
                 (every? valid-lifecycle-projection? (vals outcomes))))))
    (vals modules)))
 
-(defn- valid-lifecycle-status?
-  "True when every offline lifecycle projection satisfies lifecycle API specs."
-  [outcomes]
-  (or (nil? outcomes)
-      (and (map? outcomes)
-           (every?
-            (fn [effects]
-              (and (map? effects)
-                   (every? valid-lifecycle-projection? (vals effects))))
-            (vals outcomes)))))
-
 (s/def ::refresh-result
-  (s/and map?
-         #(s/valid? ::refresh-status (:status %))
-         #(s/valid? ::refresh-mode (:mode %))
-         #(map? (:modules %))
-         #(valid-lifecycle-outcomes? (:modules %))
-         #(map? (:roots %))
-         #(vector? (:residuals %))
-         #(vector? (:conflicts %))
-         #(vector? (:remedies %))))
+  (s/or :dependency ::dependency-diagnostic
+        :restart ::restart-required-result
+        :current (s/and map?
+                        #(s/valid? ::refresh-status (:status %))
+                        #(s/valid? ::refresh-mode (:mode %))
+                        #(map? (:modules %))
+                        #(valid-lifecycle-outcomes? (:modules %)))))
 
 (s/def ::caveat (s/and string? seq))
 (s/def ::plan-result
-  (s/and ::refresh-result
-         #(true? (:dry-run? %))
-         #(s/valid? ::caveat (:caveat %))))
+  (s/or :dependency ::dependency-diagnostic
+        :restart ::restart-required-result
+        :current (s/and map?
+                        #(s/valid? ::refresh-result %)
+                        #(true? (:dry-run? %))
+                        #(s/valid? ::caveat (:caveat %)))))
 
 (s/def ::status-result
-  (s/and map?
+  (s/and #(shapes/exact-keys? #{:basis-fingerprint :modules :resources
+                                :loaded-namespaces :last-refresh} %)
+         #(s/valid? ::basis-fingerprint (:basis-fingerprint %))
          #(map? (:modules %))
-         #(map? (:contributions %))
-         #(valid-lifecycle-status? (:lifecycle/outcomes %))
-         #(map? (:loaded %))
-         #(contains? % :pending-generation)
-         #(s/valid? (s/nilable ::pending-generation) (:pending-generation %))
-         #(contains? % :last-refresh)))
+         #(map? (:resources %))
+         #(vector? (:loaded-namespaces %))))
 
 (s/def ::reload-code-result
-  (s/and #(shapes/exact-keys? #{:root-lib :root :namespaces :residuals :hard-conflicts} %)
-         #(s/valid? ::root-lib (:root-lib %))
-         #(s/valid? ::canonical-root (:root %))
-         #(s/valid? ::namespaces (:namespaces %))
-         #(vector? (:residuals %))
-         #(vector? (:hard-conflicts %))))
+  (s/and #(shapes/exact-keys? #{:lib :status :namespaces} %)
+         #(s/valid? ::root-lib (:lib %))
+         #(contains? #{:reloaded :unchanged} (:status %))
+         #(vector? (:namespaces %))
+         #(every? non-blank-symbol? (:namespaces %))))
 
 (s/def ::staged-module-result
   (s/and #(shapes/exact-keys? #{:module/key :module/declaration :staged?} %)
@@ -337,11 +182,10 @@
   "Declare one stable runtime module under keyword `key` for `runtime`.
 
   `opts` conforms to `::module-opts`: it is closed to a source target (`:ns`
-  namespace symbol — synced for ordinary source-loading declarations — or
+  namespace symbol visible in the generation basis, or
   workspace-relative `:file` string; exactly one is required), an optional
-  `:load :image` mode, optional approved `:spools` root prerequisites,
-  optional module-key `:after` dependencies, and an optional boolean
-  `:required?`.
+  `:load :image` mode, optional module-key `:after` dependencies, and an
+  optional boolean `:required?`.
 
   Registry entries and live effects are authored with top-level contribution
   and lifecycle forms. `opts` names neither callbacks nor entry points:
@@ -364,7 +208,11 @@
   [runtime key opts]
   (require-valid! ::module-key key "module! key must be a keyword")
   (validate-module-opts! key opts)
-  (validate-module-result! (weaver-runtime/declare-module! runtime key opts)))
+  (let [result (weaver-runtime/declare-module! runtime key opts)]
+    (validate-module-result!
+     (if (:staged? result)
+       (update result :module/declaration dissoc :spools)
+       result))))
 
 (s/fdef module!
   :args (s/cat :runtime map? :key ::module-key :opts ::module-opts)
@@ -487,11 +335,11 @@
   "Reconcile `runtime`'s live image against its declared module graph.
 
   The no-opts arity re-reads `init.clj`/`init.local.clj`, collects the complete
-  layered graph, and applies the Weaver Runtime refresh contract: it composes
-  approved-root synchronization, changed-source reload, contribution collection
-  and classification, owner-complete registry publication, and resource
-  reconciliation, leaving queued events, recent failures, and unrelated
-  spool-state live. `(refresh! runtime {:only keys})` refreshes a non-empty set
+  layered graph, compares the workspace dependency basis with the running
+  generation, and applies source evaluation, owner-complete publication, and
+  resource reconciliation when the basis is unchanged. A changed or invalid
+  basis returns the exact dependency result without evaluating activation or
+  module source. `(refresh! runtime {:only keys})` refreshes a non-empty set
   of known module keys and affected dependents against the active declaration
   graph without re-reading startup files. Options conform to `::refresh-opts`
   (closed to `:only`): unknown option keys, an empty or malformed `:only`, and
@@ -503,7 +351,8 @@
   ([runtime] (refresh! runtime {}))
   ([runtime opts]
    (validate-refresh-opts! opts)
-   (validate-refresh-result! (weaver-runtime/refresh-modules! runtime opts))))
+   (validate-refresh-result!
+    (weaver-runtime/refresh-modules! runtime opts))))
 
 (s/fdef refresh!
   :args (s/or :full (s/cat :runtime map?)
@@ -513,14 +362,13 @@
 (defn plan
   "Return the dry-run intentions of `refresh!` without publishing or reconciling.
 
-  `plan` and `(plan runtime {:only keys})` collect and diff against the current
-  synchronized roots without fetching, synchronizing, publishing, reconciling,
+  Full plan performs the same dependency-basis comparison as `refresh!`.
+  Current-basis plans collect and stage source without publishing, reconciling,
   or recording coordinator state. They return a `::refresh-result`-shaped map
-  flagged `:dry-run? true` with a `:caveat`. The one honest caveat, stated in
-  the result and here: collection may load module source code and record that
-  load in the namespace ledger. Options conform to `::refresh-opts`; malformed
-  options fail loudly. The result conforms to `::plan-result`
-  (DELTA-OlrRepl-001.CC14)."
+  flagged `:dry-run? true` with a `:caveat`; collection may evaluate module
+  source code. Options conform to `::refresh-opts`; malformed options fail
+  loudly. The result conforms to `::plan-result`
+  (DELTA-Dns-Repl-001.C11)."
   ([runtime] (plan runtime {}))
   ([runtime opts]
    (validate-refresh-opts! opts)
@@ -535,41 +383,35 @@
 (defn status
   "Return `runtime`'s offline, read-only joined module status.
 
-  Reports desired modules and their declaration layers/shadows, active
-  contributions, module and resource outcomes, root outcomes, and the joined
-  loaded-code picture (current bindings, prior bindings, residuals, hard
-  conflicts), the nullable `:pending-generation` record for a refused
-  non-additive sync, and the last refresh result. It performs no network access,
-  file write, source load, registration, or reconcile. The result conforms to
-  `::status-result` (DELTA-OlrRepl-001.CC8, DELTA-OlrDrt-001.CC15)."
+  Returns exactly the running basis fingerprint, desired modules, resource
+  outcomes, loaded namespaces, and last refresh result. It performs no
+  dependency read, file write, source load, registration, or reconcile. The
+  result conforms to `::status-result` (DELTA-Dns-Repl-001.C12)."
   [runtime]
-  (validate-status-result! (weaver-runtime/module-status runtime)))
+  (let [module-status (weaver-runtime/module-status runtime)]
+    (validate-status-result!
+     {:basis-fingerprint (:basis-fingerprint runtime)
+      :modules (update-vals (:modules module-status) #(dissoc % :spools))
+      :resources (:resources module-status)
+      :loaded-namespaces (:loaded-namespaces module-status)
+      :last-refresh (:last-refresh module-status)})))
 
 (s/fdef status
   :args (s/cat :runtime map?)
   :ret ::status-result)
 
 (defn reload-code!
-  "Make `root-lib`'s current synced source live in dependency order (code only).
+  "Reload loaded namespaces from source-backed entries for basis `root-lib`.
 
-  The advanced code-only seam: it loads the selected synced root's namespaces in
-  dependency order and records exact load-ledger entries, then classifies the
-  generation's loaded code against current source. It performs no module
-  contribution publication or resource reconciliation — use `refresh!` for the
-  normal path. `root-lib` is a root-lib symbol from a family's effective `:roots`
-  map (e.g. `millstrand.spools/batteries`); an unresolvable root fails loudly with a
-  `:reason` in ex-data. The result names the reloaded root, its canonical path,
-  the namespaces reloaded with their sources, and the residual and hard-conflict
-  outcomes from the post-reload classification, conforming to
-  `::reload-code-result` (DELTA-OlrRepl-001.CC9)."
+  This advanced code-only seam reloads namespaces whose file resources belong
+  to the selected library's source paths. It does not publish module
+  contributions or reconcile resources; use `refresh!` for the normal path.
+  The result conforms to `::reload-code-result`
+  (DELTA-Dns-Repl-001.C5)."
   [runtime root-lib]
   (require-valid! ::root-lib root-lib "reload-code! root-lib must be a symbol")
-  (let [reload (spool-sync/reload-synced-spool! runtime root-lib)
-        loaded (spool-sync/loaded-namespace-status runtime)
-        result (assoc (select-keys reload [:root-lib :root :namespaces])
-                      :residuals (:residuals loaded)
-                      :hard-conflicts (:hard-conflicts loaded))]
-    (validate-reload-code-result! result)))
+  (validate-reload-code-result!
+   (weaver-runtime/reload-basis-lib! runtime root-lib)))
 
 (s/fdef reload-code!
   :args (s/cat :runtime map? :root-lib ::root-lib)
@@ -692,46 +534,7 @@
                                 :opts ::spool-state-opts :init-fn ifn?))
   :ret any?)
 
-;; --- release marker and spools.edn access -----------------------------------
-
-(defn- running-release-marker [runtime]
-  (let [result (access/release-marker runtime)
-        _ (require-valid! ::specs/release-marker-result result
-                          "runtime release marker has an invalid shape")
-        {:keys [marker provenance]} result]
-    (if (= :none provenance) :none marker)))
-
-(defn- spools-file
-  "Return the `java.io.File` for `runtime`'s shared `spools.edn`.
-
-  The result conforms to `:millstrand.core.specs/spools-file-result`."
-  [runtime]
-  (let [result (access/spools-file runtime "spools.edn")]
-    (require-valid! ::specs/spools-file-result result
-                    "runtime spools file has an invalid shape")
-    result))
-
-(defn- families-requiring
-  "Return `{:family :roots}` rows for the families other than `lib` whose
-  `:requires` name any root in `roots`."
-  [normalized lib roots]
-  (->> normalized
-       (remove #(= lib (:family %)))
-       (keep (fn [{:keys [family requires]}]
-               (let [required (set (filter roots (keys requires)))]
-                 (when (seq required)
-                   {:family family :roots required}))))
-       vec))
-
 ;; --- result-shape validators ------------------------------------------------
-
-(defn- validate-approved-result! [result]
-  (require-valid! ::approved-result result "runtime approved spool config has an invalid shape")
-  result)
-
-(defn- validate-declared-result! [result]
-  (require-valid! ::declared-result result "runtime declared spool config has an invalid shape")
-  result)
 
 (def ^:private allowed-refresh-keys #{:only})
 

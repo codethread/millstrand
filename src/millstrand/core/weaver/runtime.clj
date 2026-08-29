@@ -9,6 +9,7 @@
             [millstrand.api.clock.alpha :as clock]
             [millstrand.core.specs :as specs]
             [millstrand.core.weaver.config :as weaver-config]
+            [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.core-registry :as core-registry]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.scheduler :as scheduler]
@@ -308,13 +309,73 @@
   ([runtime]
    (refresh-modules! runtime {}))
   ([runtime opts]
-   ((requiring-resolve 'millstrand.core.weaver.module-refresh/refresh!)
-    runtime (module-coordinator-context runtime) opts)))
+   (let [running (:generation-basis runtime)
+         boundary? (and running
+                        (not (:startup? opts))
+                        (not (contains? opts :only))
+                        (not (:declare opts)))
+         candidate-result
+         (when boundary?
+           (try
+             (let [coordinate (get (:reserved-deps running)
+                                   'io.millstrand/millstrand)
+                   candidate (basis/create-generation-basis
+                              (:source-config-dir runtime) coordinate)]
+               (when-not (= (:fingerprint running) (:fingerprint candidate))
+                 {:status :restart-required
+                  :reason :dependency-basis-changed
+                  :basis {:running-fingerprint (:fingerprint running)
+                          :candidate-fingerprint (:fingerprint candidate)}}))
+             (catch Throwable throwable
+               (or (basis/dependency-diagnostic throwable)
+                   (throw throwable)))))]
+     (or candidate-result
+         ((requiring-resolve 'millstrand.core.weaver.module-refresh/refresh!)
+          runtime (module-coordinator-context runtime) opts)))))
 
 (defn module-status
   "Return offline joined state for the internal live-module coordinator."
   [runtime]
   ((requiring-resolve 'millstrand.core.weaver.module-refresh/status) runtime))
+
+(defn reload-basis-lib!
+  "Reload loaded namespaces backed by source paths for `lib` in the running basis.
+
+  Returns the closed result owned by
+  `:millstrand.api.runtime.alpha/reload-code-result`
+  (DELTA-Dns-Repl-001.C4)."
+  [runtime lib]
+  (let [coordinate (get-in runtime [:generation-basis :basis :libs lib])]
+    (when-not coordinate
+      (throw (ex-info "Library is absent from the running generation basis"
+                      {:lib lib :stage :lookup})))
+    (let [roots (->> (:paths coordinate)
+                     (map #(-> % io/file .getCanonicalPath))
+                     vec)]
+      (when-not (seq roots)
+        (throw (ex-info "Library has no source-backed classpath entry"
+                        {:lib lib :stage :source-paths})))
+      (let [namespaces
+            (->> (all-ns)
+                 (keep (fn [namespace]
+                         (when-let [file (:file (meta namespace))]
+                           (when-let [resource (io/resource file)]
+                             (when (= "file" (.getProtocol resource))
+                               (let [path (-> resource .toURI io/file .getCanonicalPath)]
+                                 (when (some #(or (= path %)
+                                                 (str/starts-with?
+                                                  path (str % java.io.File/separator)))
+                                             roots)
+                                   (ns-name namespace))))))))
+                 (sort-by str)
+                 vec)]
+        (with-runtime-and-spool-classloader
+          runtime
+          #(doseq [namespace namespaces]
+             (require namespace :reload)))
+        {:lib lib
+         :status (if (seq namespaces) :reloaded :unchanged)
+         :namespaces namespaces}))))
 
 (defn- close-module-lifecycle!
   "Close runtime-scoped module lifecycle resources before spool state."
@@ -341,16 +402,16 @@
   (let [thread (Thread/currentThread)
         previous-loader (.getContextClassLoader thread)]
     (try
-      (.setContextClassLoader thread (:spool-classloader runtime))
+      (.setContextClassLoader thread (:generation-classloader runtime))
       (f)
       (finally
         (.setContextClassLoader thread previous-loader)))))
 
 (defn with-runtime-and-spool-classloader
-  "Call `f` with runtime ambiently bound and the runtime spool classloader as
+  "Call `f` with runtime ambiently bound and the generation classloader as
   the thread's context classloader, matching trusted startup-file evaluation.
 
-  Also rebinds Compiler/LOADER onto the spool classloader: inside an outer
+  Also rebinds Compiler/LOADER onto the generation classloader: inside an outer
   eval (such as an nREPL session) a compiler loader is already bound, so the
   context classloader alone would not let require/load in `f` see synced spool
   sources."
@@ -361,7 +422,7 @@
        runtime
        (fn []
          (clojure.lang.Var/pushThreadBindings
-          {clojure.lang.Compiler/LOADER (clojure.lang.DynamicClassLoader. (:spool-classloader runtime))})
+          {clojure.lang.Compiler/LOADER (:generation-classloader runtime)})
          (try
            (f)
            (finally
@@ -618,13 +679,15 @@
 
 (defn- start-with-options-unlocked!
   [db-file {:keys [world name publish? storage release-marker probe? diagnostic!
+                   generation-basis
                    old-generation-baseline pre-publication-claim]
             :or {publish? true}}]
   (when (and (publishes-ambient-runtime? publish? probe?) @current-runtime)
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
   (let [world (or world (weaver-config/world))
         world (assoc world :source-config-dir (validated-source-config-dir world))
-        resolved-release-marker (resolve-release-marker release-marker)]
+        resolved-release-marker (resolve-release-marker release-marker)
+        basis-fingerprint (:fingerprint generation-basis)]
     (if probe?
       ;; Probe worlds are normally disposable, but `:probe?` does not make an
       ;; arbitrary caller-supplied world safe to reuse. Keep the same
@@ -672,32 +735,18 @@
                           :glossary-registry (atom {})
                           :help-transform-slot (atom nil)
                           :generation-id generation-id
+                          :generation-basis generation-basis
+                          :basis-fingerprint basis-fingerprint
+                          :generation-classloader
+                          (or (:classloader generation-basis)
+                              (.getContextClassLoader (Thread/currentThread)))
                           :release-marker resolved-release-marker
-                          :approved-spool-sync-state (atom {})
-                          :approved-spool-generation-state (atom {})
-                          :approved-spool-generation-fingerprints (atom {})
-                          :approved-spool-generation-maven (atom {})
-                          :pending-spool-generation (atom nil)
                           :source-config-dir (:source-config-dir world)
-                        ;; Append-only for this process generation. Config reload
-                        ;; deliberately leaves loaded-code evidence intact.
-                          :namespace-load-ledger (atom {:last-order 0 :records []})
-                        ;; Embedded runtimes can share a JVM. Namespaces already
-                        ;; present before this runtime creates its spool loader
-                        ;; belong to the inherited image, not this runtime's
-                        ;; synced-root ledger.
-                          :inherited-namespaces (into #{} (map ns-name) (all-ns))
-                        ;; Status reads this recorded classification without
-                        ;; consulting source files. Sync/source-load boundaries
-                        ;; replace it when their in-memory evidence changes.
-                          :namespace-load-status (atom nil)
                           :module-state
                           (atom ((requiring-resolve
                                   'millstrand.core.weaver.module-refresh/initial-state)))
                           :module-refresh-lock (Object.)
                           :spool-state (atom {})
-                          :spool-classloader (clojure.lang.DynamicClassLoader.
-                                              (.getContextClassLoader (Thread/currentThread)))
                           :server server
                           :metadata meta}
             runtime-base (start-event-system! runtime-base (not probe?))
@@ -1112,6 +1161,33 @@
     (start! nil (cond-> {:world (weaver-config/world config-dir state-dir data-dir)
                          :name name}
                   release-marker (assoc :release-marker release-marker)))
+    (install-signal-shutdown!)
+    (println "weaver started")
+    (while @current-runtime
+      (Thread/sleep 100))))
+
+(defn start-with-generation-basis!
+  "Start a foreground Weaver from an already resolved generation basis.
+
+  `generation-basis` conforms to
+  `:millstrand.core.specs/generation-basis`; `runtime-args` contains the
+  ordinary runtime launch flags after the basis launcher has consumed its own
+  options (DELTA-DnsRuntime-001.CC7-CC8). Dependency files are not read again
+  during startup."
+  [generation-basis runtime-args]
+  (when-not (s/valid? :millstrand.core.specs/generation-basis generation-basis)
+    (throw (ex-info "Generation basis has an invalid shape"
+                    {:explain (s/explain-data
+                               :millstrand.core.specs/generation-basis
+                               generation-basis)})))
+  (let [workspace (some-> generation-basis :sources first :path io/file .getParent)
+        {:keys [config-dir state-dir data-dir name]}
+        (parse-main-args (into ["--workspace" workspace] runtime-args))]
+    (start-with-options!
+     nil
+     {:world (weaver-config/world config-dir state-dir data-dir)
+      :name name
+      :generation-basis generation-basis})
     (install-signal-shutdown!)
     (println "weaver started")
     (while @current-runtime
