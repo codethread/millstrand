@@ -50,7 +50,6 @@
    :pattern-explain 'millstrand.api.patterns.alpha/explain
    :weave! 'millstrand.api.patterns.alpha/weave!
    :apply-batch 'millstrand.api.batch.alpha/apply!
-   :approved-spools 'millstrand.api.runtime.alpha/approved
    :module! 'millstrand.api.runtime.alpha/module!
    :refresh! 'millstrand.api.runtime.alpha/refresh!
    :plan 'millstrand.api.runtime.alpha/plan

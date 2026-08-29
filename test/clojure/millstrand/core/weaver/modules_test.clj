@@ -112,6 +112,15 @@
            :contribution-sources :lifecycle :resources :outcomes :last-refresh}
          (set (keys (module-refresh/initial-state))))))
 
+(deftest module-declarations-reject-removed-spools-option
+  (let [error (try
+                (runtime/module! {} :demo {:ns 'demo.module
+                                           :spools ['demo/root]})
+                nil
+                (catch clojure.lang.ExceptionInfo e e))]
+    (is (= [:spools] (-> error ex-data :unknown)))
+    (is (re-find #"unknown keys" (ex-message error)))))
+
 (deftest file-modules-change-live-within-one-generation
   (with-runtime
     (fn [rt workspace]

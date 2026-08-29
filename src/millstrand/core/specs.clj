@@ -405,25 +405,9 @@
 (s/def ::db non-blank-string?)
 (s/def ::opts (s/keys :req-un [::db ::format]))
 
-(def ^:private release-marker-syntax-pattern #"v(?:0|[1-9][0-9]*)")
-
 ;; Public runtime boundary contracts. Public API docstrings name these specs and
 ;; the runtime API tests exercise each one directly.
-(s/def ::release-marker-syntax
-  #(and (string? %) (boolean (re-matches release-marker-syntax-pattern %))))
-(s/def ::release-marker-claim
-  #(and (s/valid? ::release-marker-syntax %) (not= "v0" %)))
-(s/def :millstrand.release-marker/marker (s/nilable ::release-marker-claim))
-(s/def :millstrand.release-marker/provenance #{:claimed :tag :none})
-(s/def ::release-marker-result
-  (s/and (s/keys :req-un [:millstrand.release-marker/marker
-                          :millstrand.release-marker/provenance])
-         #(case (:provenance %)
-            :none (nil? (:marker %))
-            (:claimed :tag) (some? (:marker %))
-            false)))
 (s/def ::config-dir-result non-blank-string?)
-(s/def ::spools-file-result #(instance? File %))
 
 ;; Implementation-only field specs used to compose ::weaver-start-options. The
 ;; owning public contract is ::weaver-start-options, not these field keywords.
@@ -443,7 +427,6 @@
 (s/def :millstrand.weaver-start/name (s/nilable non-blank-string?))
 (s/def :millstrand.weaver-start/publish? boolean?)
 (s/def :millstrand.weaver-start/storage keyword?)
-(s/def :millstrand.weaver-start/release-marker ::release-marker-syntax)
 (s/def :millstrand.weaver-start/probe? boolean?)
 (s/def :millstrand.weaver-start/diagnostic! ifn?)
 (s/def :millstrand.weaver-start/generation-basis
@@ -511,12 +494,11 @@
                           :millstrand.weaver-start/name
                           :millstrand.weaver-start/publish?
                           :millstrand.weaver-start/storage
-                          :millstrand.weaver-start/release-marker
                           :millstrand.weaver-start/probe?
                           :millstrand.weaver-start/diagnostic!
                           :millstrand.weaver-start/generation-basis
                           :millstrand.weaver-start/old-generation-baseline])
-         #(every? #{:world :name :publish? :storage :release-marker :probe?
+         #(every? #{:world :name :publish? :storage :probe?
                     :diagnostic! :generation-basis :old-generation-baseline}
                   (keys %))))
 

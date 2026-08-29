@@ -14,7 +14,7 @@
             [millstrand.core.weaver.lifecycle-effects :as lifecycle-effects]))
 
 (def ^:private declaration-keys
-  #{:ns :file :load :spools :after :required?})
+  #{:ns :file :load :after :required?})
 
 (def ^:private entry-point-keys [:contribute :reconcile])
 
@@ -47,13 +47,6 @@
 
 (defn- fail! [message data]
   (throw (ex-info message data)))
-
-(defn- normalize-symbol-coll [label values]
-  (let [values (or values [])]
-    (when-not (and (coll? values) (every? symbol? values))
-      (fail! (str "Module " label " must be a collection of symbols")
-             {:field label :value values}))
-    (vec (distinct values))))
 
 (defn- normalize-keyword-coll [label values]
   (let [values (or values [])]
@@ -101,8 +94,8 @@
   "Validate and normalize one freshly authored module declaration.
 
   The key is independent of source identity. Options are closed, name exactly
-  one `:ns` or workspace-relative `:file`, and carry normalized `:spools`,
-  `:after`, and `:required?` values. `:load :image` (the only accepted `:load`
+  one `:ns` or workspace-relative `:file`, and carry normalized `:after` and
+  `:required?` values. `:load :image` (the only accepted `:load`
   value) trusts the already-loaded JVM image: it requires an `:ns` target and
   refresh replays that namespace's retained authoring declaration record.
 
@@ -143,10 +136,8 @@
     (fail! "Module :required? must be boolean"
            {:module/key key :required? (:required? opts)}))
   (cond-> (assoc opts
-                 :spools (normalize-symbol-coll ":spools" (:spools opts))
                  :after (normalize-keyword-coll ":after" (:after opts))
                  :required? (boolean (:required? opts)))
-    (nil? (:spools opts)) (assoc :spools [])
     (nil? (:after opts)) (assoc :after [])))
 
 (defn collecting-modules?

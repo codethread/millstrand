@@ -22,9 +22,6 @@
            [java.nio.file.attribute FileAttribute]))
 
 (def ^:private loopback-host "127.0.0.1")
-(def ^:private reserved-release-marker-message
-  "Release marker v0 is reserved; the first public release marker is v1")
-
 (defonce ^{:doc "Atom containing the published ambient weaver runtime map for this process, or nil."} current-runtime
   (atom nil))
 
@@ -514,137 +511,8 @@
                      (db/memory-storage))
     (throw (ex-info "Unknown weaver storage kind" {:storage storage}))))
 
-(defn- require-release-marker! [marker provenance]
-  (when-not (s/valid? ::specs/release-marker-syntax marker)
-    (throw (ex-info "Release marker must be strictly v<int> with no leading zeroes"
-                    {:reason :invalid-release-marker
-                     :marker marker
-                     :provenance provenance
-                     :spec ::specs/release-marker-syntax
-                     :explain (s/explain-data ::specs/release-marker-syntax marker)})))
-  (when (= "v0" marker)
-    (throw (ex-info reserved-release-marker-message
-                    {:reason :reserved-release-marker
-                     :marker marker
-                     :provenance provenance})))
-  (when-not (s/valid? ::specs/release-marker-claim marker)
-    (throw (ex-info "Release marker claim has an invalid shape"
-                    {:reason :invalid-release-marker
-                     :marker marker
-                     :provenance provenance
-                     :spec ::specs/release-marker-claim
-                     :explain (s/explain-data ::specs/release-marker-claim marker)})))
-  marker)
-
-(defn- run-git [dir & args]
-  (let [command (vec (cons "git" args))
-        root (some-> dir io/file .getCanonicalFile)
-        failure-data (fn [exit stderr]
-                       {:reason :git-inspection-failed
-                        :command command
-                        :root (some-> root .getPath)
-                        :exit exit
-                        :stderr stderr})]
-    (try
-      (let [process (-> (ProcessBuilder. ^"[Ljava.lang.String;" (into-array String command))
-                        (.directory dir)
-                        (.redirectErrorStream false)
-                        (.start))
-            stderr (future (slurp (.getErrorStream process)))
-            stdout (future (slurp (.getInputStream process)))
-            exit (.waitFor process)
-            result {:command command
-                    :root (.getPath root)
-                    :exit exit
-                    :stdout @stdout
-                    :stderr @stderr}]
-        (when (or (not (zero? exit)) (not (str/blank? (:stderr result))))
-          (throw (ex-info "Git inspection command failed"
-                          (failure-data exit (:stderr result)))))
-        result)
-      (catch java.io.IOException e
-        (throw (ex-info "Git inspection command could not start"
-                        (failure-data 127 (ex-message e))
-                        e))))))
-
-(defn- non-repo-root-result? [data]
-  (and (= ["git" "rev-parse" "--show-toplevel"] (:command data))
-       (not (zero? (:exit data)))
-       (boolean (re-find #"(?i)not a git repository" (or (:stderr data) "")))))
-
-(defn source-checkout-root
-  "Return the running weaver's mill-resolved millstrand source checkout root, or nil.
-
-  The resource-derived source-checkout authority (SPEC-004.C50b): it locates the
-  checkout from this module's own classpath resource, never from cwd, the config
-  directory, or request/envelope state. Returns nil when the resource is not a
-  `file:` checkout resource; throws only when a located git checkout reports no
-  toplevel. Callers that require a checkout (source-root coordinate resolution)
-  wrap this and fail loudly on nil; the release-marker path tolerates nil."
-  ([] (source-checkout-root (io/resource "millstrand/core/weaver/runtime.clj")))
-  ([^java.net.URL url]
-   (when (and url (= "file" (.getProtocol url)))
-     (let [resource-dir (-> (io/file (.toURI url)) .getCanonicalFile .getParentFile)
-           result (try
-                    (run-git resource-dir "rev-parse" "--show-toplevel")
-                    (catch clojure.lang.ExceptionInfo e
-                      (when-not (non-repo-root-result? (ex-data e))
-                        (throw e))))]
-       (when result
-         (let [root-path (str/trim (:stdout result))]
-           (when (str/blank? root-path)
-             (throw (ex-info "Git inspection returned no source checkout root"
-                             (assoc (select-keys result [:command :root :exit :stderr])
-                                    :reason :invalid-git-root))))
-           (.getCanonicalFile (io/file root-path))))))))
-
-(defn- annotated-head-release-markers [source-root]
-  (when source-root
-    (let [result (run-git source-root
-                          "for-each-ref"
-                          "--points-at"
-                          "HEAD"
-                          "--format=%(objecttype)%09%(refname:short)"
-                          "refs/tags")]
-      (->> (str/split-lines (:stdout result))
-           (keep (fn [line]
-                   (let [[object-type tag] (str/split line #"\t" 2)]
-                     (when (and (= "tag" object-type)
-                                (s/valid? ::specs/release-marker-syntax tag))
-                       tag))))
-           distinct
-           sort
-           vec))))
-
-(defn- require-release-marker-result! [result]
-  (when-not (s/valid? ::specs/release-marker-result result)
-    (throw (ex-info "Resolved release marker has an invalid shape"
-                    {:reason :invalid-release-marker-result
-                     :result result
-                     :spec ::specs/release-marker-result
-                     :explain (s/explain-data ::specs/release-marker-result result)})))
-  result)
-
-(defn- resolve-release-marker [claim]
-  (require-release-marker-result!
-   (if (some? claim)
-     {:marker (require-release-marker! claim :claimed)
-      :provenance :claimed}
-     (let [markers (annotated-head-release-markers (source-checkout-root))]
-       (case (count markers)
-         0 {:marker nil :provenance :none}
-         1 {:marker (require-release-marker! (first markers) :tag)
-            :provenance :tag}
-         (throw (ex-info "Source HEAD has multiple annotated release marker tags"
-                         {:reason :ambiguous-release-marker
-                          :markers markers})))))))
-
 (defn- require-start-options! [opts]
   (when-not (s/valid? ::specs/weaver-start-options opts)
-    ;; Preserve the claim-specific diagnostic, including v0's reserved-marker
-    ;; error, while the options spec remains the owning structural contract.
-    (when (and (map? opts) (contains? opts :release-marker))
-      (require-release-marker! (:release-marker opts) :claimed))
     (throw (ex-info "Weaver start options have an invalid shape"
                     {:reason :invalid-start-options
                      :options opts
@@ -687,7 +555,7 @@
         :else (recur)))))
 
 (defn- start-with-options-unlocked!
-  [db-file {:keys [world name publish? storage release-marker probe? diagnostic!
+  [db-file {:keys [world name publish? storage probe? diagnostic!
                    generation-basis
                    old-generation-baseline pre-publication-claim]
             :or {publish? true}}]
@@ -700,7 +568,6 @@
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
   (let [world (or world (weaver-config/world))
         world (assoc world :source-config-dir (validated-source-config-dir world))
-        resolved-release-marker (resolve-release-marker release-marker)
         basis-fingerprint (:fingerprint generation-basis)]
     (if probe?
       ;; Probe worlds are normally disposable, but `:probe?` does not make an
@@ -753,7 +620,6 @@
                           :basis-fingerprint basis-fingerprint
                           :generation-classloader
                           (:classloader generation-basis)
-                          :release-marker resolved-release-marker
                           :source-config-dir (:source-config-dir world)
                           :module-state
                           (atom ((requiring-resolve
@@ -786,7 +652,7 @@
                 (throw (ex-info "Initial module refresh did not complete successfully"
                                 refresh-result)))
            ;; Arm the scheduler only after startup files finish loading, so
-           ;; handlers supplied by approved spools/config resolve before any
+           ;; handlers supplied by activated modules/config resolve before any
            ;; durable pending wake is re-armed. Probe mode has no live scheduler.
               (when-not probe?
                 (scheduler/rearm! runtime))
@@ -879,11 +745,7 @@
   other runtimes in the same JVM. Trusted callers may select `:storage
   :sqlite-memory` for a weaver-lifetime in-memory database; file-backed SQLite
   in the selected workspace remains the default. In probe mode, publication is
-  always disabled even when `:publish?` is omitted or true. `:release-marker`
-  explicitly
-  claims the running source generation as a canonical `v<int>` marker; without
-  a claim, startup uses an annotated marker tag on the source checkout's HEAD
-  when one can be resolved. Options conform to
+  always disabled even when `:publish?` is omitted or true. Options conform to
   `:millstrand.core.specs/weaver-start-options`."
   ([] (start! nil {}))
   ([db-file] (start! db-file {}))
@@ -1151,8 +1013,7 @@
                        :doc "Selected runtime-state directory."}
            :data-dir {:required? true
                       :doc "Selected persistent-data directory."}
-           :name {:doc "Friendly weaver name."}
-           :release-marker {:doc "Explicit canonical vN release marker claim."}}})
+           :name {:doc "Friendly weaver name."}}})
 
 (defn- parse-main-args
   ([args] (parse-main-args args {}))
@@ -1183,11 +1044,10 @@
 (defn -main
   "Start a foreground weaver process from command-line arguments."
   [& args]
-  (let [{:keys [config-dir state-dir data-dir name release-marker]} (parse-main-args args)]
+  (let [{:keys [config-dir state-dir data-dir name]} (parse-main-args args)]
     (throw (ex-info "Direct Weaver startup requires a resolved generation basis"
                     {:world (weaver-config/world config-dir state-dir data-dir)
-                     :name name
-                     :release-marker release-marker}))))
+                     :name name}))))
 
 (defn start-with-generation-basis!
   "Start a foreground Weaver from an already resolved generation basis.

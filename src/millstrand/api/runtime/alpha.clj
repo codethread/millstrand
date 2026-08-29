@@ -204,10 +204,7 @@
   (require-valid! ::module-key key "module! key must be a keyword")
   (validate-module-opts! key opts)
   (let [result (weaver-runtime/declare-module! runtime key opts)]
-    (validate-module-result!
-     (if (:staged? result)
-       (update result :module/declaration dissoc :spools)
-       result))))
+    (validate-module-result! result)))
 
 (s/fdef module!
   :args (s/cat :runtime map? :key ::module-key :opts ::module-opts)
@@ -386,7 +383,7 @@
   (let [module-status (weaver-runtime/module-status runtime)]
     (validate-status-result!
      {:basis-fingerprint (:basis-fingerprint runtime)
-      :modules (update-vals (:modules module-status) #(dissoc % :spools))
+      :modules (:modules module-status)
       :resources (:resources module-status)
       :loaded-namespaces (:loaded-namespaces module-status)
       :last-refresh (:last-refresh module-status)})))
