@@ -1,11 +1,11 @@
 # Deps-native spool dependencies proposal
 
 **Document ID:** `PROP-Dns-001`
-**Status:** Draft
-**Approved:** —
+**Status:** Approved
+**Approved:** 2026-08-29
 **Depends on:** [`PROP-Wrc-001`, Weaver restart continuity](../weaver-restart-continuity/proposal.md)
-**Related RFCs:** None
-**Related root specs:** [CLI](../../specs/cli.md) (SPEC-002), [REPL API](../../specs/repl-api.md) (SPEC-003), [Weaver runtime](../../specs/daemon-runtime.md) (SPEC-004), [Alpha surface](../../specs/alpha-surface.md) (SPEC-005)
+**Related RFCs:** [Spool authoring forms](../../rfcs/2026-07-28-spool-authoring-forms.md), [Lifecycle authoring forms](../../rfcs/2026-07-28-lifecycle-authoring-forms.md), [Runtime module `:using`](../../rfcs/2026-08-14-runtime-module-using.md)
+**Related root specs:** [CLI](../../specs/cli.md) (SPEC-002), [REPL API](../../specs/repl-api.md) (SPEC-003), [Weaver runtime](../../specs/daemon-runtime.md) (SPEC-004), [Alpha surface](../../specs/alpha-surface.md) (SPEC-005), [Testing](../../specs/testing.md) (SPEC-006)
 
 Once approved this document is frozen. Later detail belongs in spec deltas, the plan, and code.
 
@@ -15,9 +15,9 @@ Millstrand has two dependency descriptions. Standard `deps.edn` files drive Cloj
 
 A Weaver is the Clojure process serving one selected workspace. A spool is a Clojure library loaded into that process. Mill is the local Go supervisor and CLI that starts and replaces Weavers. tools.deps is Clojure's standard dependency resolver; its basis is the resolved libraries and classpath for one Weaver generation. By default, Mill discovers the nearest `.millstrand` or `.ms` workspace directory; `--workspace` selects one explicitly.
 
-The extra machinery chiefly preserves live addition. Replacement and removal already need a fresh generation because the JVM cannot safely unload an active classpath. Once Weaver replacement is supervised, readiness-aware, and able to preserve registered native work, live coordinate mutation no longer justifies a second dependency language.
+The separate dependency subsystem exists mainly so a running Weaver can add libraries without restarting. Replacement and removal already need a fresh generation because the JVM cannot safely unload an active classpath. Once Weaver replacement is supervised and readiness-aware, live coordinate mutation no longer justifies a second dependency language.
 
-Replacement still disconnects REPLs and interrupts uncheckpointed JVM callbacks while the new Weaver starts. A failed replacement leaves the workspace in the predecessor proposal's visible `failed` state until the user fixes the cause and retries. [`PROP-Wrc-001`](../weaver-restart-continuity/proposal.md) makes this acceptable by preserving registered native work, making callers wait before sending, reporting readiness and failure, and never replaying accepted mutations. This proposal accepts that interruption in exchange for removing live coordinate mutation and its second package-management model.
+Replacement still disconnects REPLs and interrupts uncheckpointed JVM callbacks while the new Weaver starts. A failed replacement leaves the workspace in the predecessor proposal's visible `failed` state until the user fixes the cause and retries. [`PROP-Wrc-001`](../weaver-restart-continuity/proposal.md) preserves registered native work and exposes replacement readiness and failure to callers without replaying accepted mutations. That limits the accepted disruption to disconnected REPLs and uncheckpointed JVM callbacks. This proposal accepts that interruption in exchange for removing live coordinate mutation and its second package-management model.
 
 ## PROP-Dns-001.P2 Goals
 
@@ -27,7 +27,7 @@ Use ordinary tools.deps data as the only coordinate language for shared and pers
 
 ### PROP-Dns-001.G2 — Live activation and authoring
 
-Keep `init.clj`, workspace-relative `:file` modules, owner-complete authoring forms, lifecycle reconciliation, and `runtime/refresh!` as the live configuration path.
+Keep `init.clj`, `init.local.clj`, workspace-relative `:file` modules, owner-complete authoring forms, lifecycle reconciliation, and `runtime/refresh!` as the live configuration path. A developer can add a personal spool dependency and activate its modules without changing the team's committed configuration.
 
 ### PROP-Dns-001.G3 — Fresh generations for coordinate changes
 
@@ -69,9 +69,11 @@ Atomic replacement, readiness waiting, and process continuity belong to `PROP-Wr
 
 `<selected-workspace>/deps.edn` is the canonical shared project file. Optional `<selected-workspace>/deps.local.edn` is the personal overlay and is gitignored by bootstrap. Each is an ordinary tools.deps map containing standard keys such as `:deps`, `:paths`, `:mvn/repos`, and `:aliases`. The default workspace marker therefore uses `.millstrand/deps.edn` and `.millstrand/deps.local.edn`; `.ms` and explicit workspace paths use the same filenames in their resolved directory.
 
-Mill creates the basis through tools.deps with the standard user config disabled for reproducibility. It supplies shared `deps.edn` as the tools.deps project source and present `deps.local.edn` as the later extra source. tools.deps merges dependency maps by library name, so unrelated entries remain and a local entry for `com.example/reporting-core` replaces that library's entire shared Git coordinate with the local coordinate shown below. Other top-level keys retain tools.deps source-merge behavior rather than a Millstrand-specific deep merge. Mill then applies shared alias `:millstrand/weaver`, followed by optional local alias `:millstrand/local`. Map-valued alias arguments such as `:extra-deps` and `:override-deps` combine by library, with a collision won by the later local alias; replacement arguments such as `:replace-paths` use the later alias value. Mill finally adds its paired `io.millstrand/millstrand` runtime coordinate as reserved launch data and starts `millstrand.core.weaver.runtime`.
+Mill creates the basis through tools.deps with the standard user config disabled for reproducibility. It supplies shared `deps.edn` as the tools.deps project source and present `deps.local.edn` as the later extra source. It selects shared alias `:millstrand/weaver`, followed by optional local alias `:millstrand/local`.
 
-Shared Weaver-only paths, JVM options, additions, or overrides belong in `:millstrand/weaver`. Personal equivalents belong in `:millstrand/local`; selecting it second gives its alias arguments the normal later-alias precedence. Mill selects either alias only when present. The global Clojure user file, normally `~/.clojure/deps.edn`, does not affect a Weaver basis. A user who wants global data in one workspace copies or references it explicitly from `deps.local.edn`.
+The composition keeps tools.deps ordering rather than defining a Millstrand merge. tools.deps gathers alias definitions from every dependency source and combines the selected aliases in order. It applies `:deps`, `:replace-deps`, `:paths`, and `:replace-paths` to the shared project source before merging the later extra source. A local top-level `:deps` entry therefore replaces that library's shared coordinate, while local top-level `:paths` replace shared paths even when `:replace-paths` was selected. Resolve and classpath arguments such as `:extra-deps`, `:override-deps`, `:extra-paths`, and `:classpath-overrides` apply after the source merge. Values under the same map-valued alias key combine by library, with collisions won by the later local alias; path values under the same key concatenate distinctly in alias order. Different keys retain their tools.deps precedence: `:replace-deps` wins over `:deps`, `:replace-paths` follows `:paths`, and `:override-deps` overrides resolved coordinates regardless of which selected alias supplied each key. Mill finally adds its paired `io.millstrand/millstrand` runtime coordinate as reserved launch data and starts `millstrand.core.weaver.runtime`.
+
+Shared Weaver-only paths, JVM options, additions, or overrides belong in `:millstrand/weaver`. Personal equivalents belong in `:millstrand/local`; selecting it second places its values later within the same alias key, while different keys keep their tools.deps precedence. Mill selects either alias only when present. The global Clojure user file, normally `~/.clojure/deps.edn`, does not affect a Weaver basis. A user who wants global data in one workspace copies or references it explicitly from `deps.local.edn`.
 
 Mill supplies the reserved runtime coordinate because the Weaver cannot boot without it. Declaring `io.millstrand/millstrand` in either workspace file fails launch with `reserved dependency io.millstrand/millstrand is supplied by Mill`.
 
@@ -83,7 +85,9 @@ Each spool root is an ordinary lib coordinate. For a repository containing `spoo
 
 ### PROP-Dns-001.S3 — Activation graph
 
-`<selected-workspace>/init.clj` is the shared activation file. A module is one owned unit of source and registrations; its keyword passed to `runtime/module!` is the owner key. Optional, normally gitignored `<selected-workspace>/init.local.clj` loads second, and a declaration with the same owner key replaces the shared declaration. `runtime/module!` keeps `:ns`, workspace-relative `:file`, `:load :image`, `:after`, and `:required?`. A `:file` still works because it is read from the selected workspace rather than discovered through the dependency classpath.
+`<selected-workspace>/init.clj` is the shared activation file. A module is one owned unit of source and registrations; its keyword passed to `runtime/module!` is the owner key. Optional `<selected-workspace>/init.local.clj` loads second and is gitignored by bootstrap alongside `deps.local.edn`. It may activate code made available by `deps.local.edn`; neither file changes the team's committed configuration. A declaration with the same owner key replaces the shared declaration. `runtime/module!` keeps `:ns`, workspace-relative `:file`, `:load :image`, `:after`, and `:required?`. A `:file` still works because it is read from the selected workspace rather than discovered through the dependency classpath.
+
+Shared and personal dependencies resolve into one tools.deps basis and one generation classloader. Millstrand does not isolate personal spool namespaces or reconcile incompatible versions. If shared and personal dependencies require conflicting versions or publish the same namespace incompatibly, dependency resolution or Weaver startup may fail; the developer owns that conflict.
 
 Within a module, `def*` is shorthand here for the family of inert definition forms such as `defquery`. The corresponding typed `use-*!` forms, such as `use-query!`, select those declarations; combined `def*!` forms define and select in one step. Collection is owner-complete: after a successful refresh, the selected set becomes the complete published set for that module owner and replaces its previous registrations. Removing a `use-query!` form and refreshing therefore removes that query without an unregister call.
 
@@ -107,7 +111,7 @@ Remove `spools.edn` and `spools.local.edn` bootstrap, parsing, overlays, structu
 | `millstrand.api.runtime.alpha` | `approved`, `declared`, `release-marker`, `upsert-spool-entry!`, `remove-spool-entry!`, their specs and results, and module option `:spools`. |
 | `millstrand.api.spool.alpha` | No removals. `entity-projection`, `fail!`, `reject-unknown-keys!`, `require-valid!`, `attr-key->str`, `attr-get`, and `poll-until!` remain the shared spool-authoring helpers. |
 | Internal namespaces | `millstrand.api.runtime.internal.spools-edn` and `millstrand.core.weaver.spool-sync`, including acquisition, overlay, compatibility, root-approval, and dynamic-loader contracts. |
-| Bootstrap and tests | Seeded manifest files, `spools.local.edn` ignore entries, fixture arguments, and manifest-specific test helpers. Bootstrap replaces the ignored `spools.local.edn` entry with `deps.local.edn`. |
+| Bootstrap and tests | Seeded manifest files, `spools.local.edn` ignore entries, fixture arguments, and manifest-specific test helpers. Bootstrap replaces the ignored `spools.local.edn` entry with `deps.local.edn` and retains `init.local.clj` as an ignored personal activation file. |
 
 The remaining affected runtime APIs are reshaped rather than removed. `plan` becomes a module/configuration refresh preview with no root-sync fields. `status` reports modules, resources, loaded namespaces, the running basis fingerprint, and the last refresh, with no family, root, sync, or pending-generation fields. `reload-code!` accepts a lib present in the running tools.deps basis and reloads source-backed namespaces without resolving or changing coordinates. `resolve-var` uses the generation classloader rather than a spool classloader. `refresh!`, `plan`, `status`, and module result shapes lose root/sync fields and gain basis status where relevant.
 
@@ -123,7 +127,7 @@ If `<selected-workspace>/deps.edn` is absent while a removed spool manifest is p
 
 ### PROP-Dns-001.S9 — Acceptance coverage
 
-End-to-end tests prove that editing, adding, and removing `:file` modules preserves Weaver identity; shared or local coordinate changes require and then take effect after replacement; a missing local overlay is inert; local coordinates override shared Git coordinates; shared and local aliases compose in order; global user deps do not leak into the basis; the workspace portion of the basis can be inspected with tools.deps; removed manifests are rejected clearly; and no runtime path invokes dynamic coordinate mutation.
+End-to-end tests prove that editing, adding, and removing `:file` modules preserves Weaver identity; shared or local coordinate changes require and then take effect after replacement; missing local overlays are inert; a personal dependency can be activated through `init.local.clj`; local coordinates override shared Git coordinates; shared and local aliases compose in order; global user deps do not leak into the basis; the workspace portion of the basis can be inspected with tools.deps; removed manifests are rejected clearly; and no runtime path invokes dynamic coordinate mutation.
 
 ## PROP-Dns-001.P5 Examples
 
@@ -187,9 +191,29 @@ Personal `.millstrand/deps.local.edn` replaces the reviewed Git coordinate with 
    :jvm-opts ["-Dreporting.debug=true"]}}}
 ```
 
-The local file is optional. From the repository root, `mill init --workspace /work/project/.millstrand` adds `deps.local.edn` to that selected workspace's `.gitignore` and never creates or rewrites the overlay itself.
+The local files are optional. From the repository root, `mill init --workspace /work/project/.millstrand` adds `deps.local.edn` and `init.local.clj` to that selected workspace's `.gitignore` and never creates or rewrites either overlay.
 
-To inspect the shared workspace configuration, first change into the selected workspace directory. `:project` names the shared file and `:user nil` disables the nested basis call's global user source:
+A developer can keep a personal review automation spool in a sibling checkout and use it across team repositories. The personal dependency file makes the spool available to this Weaver:
+
+```clojure
+;; .millstrand/deps.local.edn
+{:deps
+ {dev.example/review-cron
+  {:local/root "../../review-cron-spool"}}}
+```
+
+The personal activation file loads the spool module that publishes the cron resource and invokes the reviewer:
+
+```clojure
+;; .millstrand/init.local.clj
+(runtime/module! runtime :dev.example/review-cron
+  {:ns 'dev.example.review-cron
+   :required? true})
+```
+
+Neither file affects another developer's Weaver. The dependency change takes effect after Weaver replacement; later source or activation edits follow the refresh boundary in PROP-Dns-001.S4.
+
+These inspection commands require the [Clojure CLI](https://clojure.org/guides/install_clojure). To inspect the shared workspace configuration, first change into the selected workspace directory. `:project` names the shared file and `:user nil` disables the nested basis call's global user source:
 
 ```sh
 cd /work/project/.millstrand
@@ -267,43 +291,17 @@ mill weaver restart --workspace /work/project/.millstrand
 
 A successful command returns the new generation's `running` status. A dependency resolution failure returns `failed` with stage `deps-resolve`, matching refresh terminology; after correcting the workspace dependency files, the user runs the same command again.
 
-The local override workflow is:
-
-```mermaid
-sequenceDiagram
-  actor User
-  participant Local as deps.local.edn
-  participant Deps as Clojure tools.deps
-  participant Mill
-  participant Weaver
-  User->>Local: Point a lib at a local checkout
-  User->>Deps: Inspect the composed workspace basis
-  Deps-->>User: Resolved libs and classpath
-  User->>Mill: Request Weaver restart
-  Mill->>Deps: Resolve shared and local sources
-  alt Dependency configuration is valid
-    Deps-->>Mill: New basis
-    Mill->>Weaver: Launch replacement generation
-    alt Startup and activation succeed
-      Weaver-->>Mill: Ready
-      Mill-->>User: Running with new generation identity
-    else Startup or activation fails
-      Weaver-->>Mill: Failed stage and logs
-      Mill-->>User: Failed, fix configuration and retry restart
-    end
-  else Dependency read or resolution fails
-    Deps-->>Mill: File, stage, cause, and coordinate
-    Mill-->>User: Failed, fix deps files
-    User->>Deps: Inspect the corrected workspace basis
-    Deps-->>User: Resolved libs and classpath
-    User->>Mill: Retry Weaver restart
-  end
-```
+The restart command and its readiness and failure behavior belong to [`PROP-Wrc-001`](../weaver-restart-continuity/proposal.md). This proposal determines when a changed basis requires that transition.
 
 ## PROP-Dns-001.P6 Evidence and history
 
-Live module behavior is specified by [SPEC-003](../../specs/repl-api.md) and [SPEC-004](../../specs/daemon-runtime.md). The [Clojure 1.12 release notes](https://clojure.org/news/2024/09/05/clojure-1-12-0) state that `add-lib` does not update a library already on the classpath and that `sync-deps` adds libraries not already present. Because the additive API cannot replace a coordinate already on the classpath, it does not cover the coordinate-change boundary in this proposal.
+Live module behavior is specified by [SPEC-003](../../specs/repl-api.md) and [SPEC-004](../../specs/daemon-runtime.md). The [Clojure CLI reference](https://clojure.org/reference/clojure_cli) and [tools.deps API](https://clojure.github.io/tools.deps/clojure.tools.deps.html#var-create-basis) define the inherited dependency-source, alias, and basis behavior. The [Clojure 1.12 release notes](https://clojure.org/news/2024/09/05/clojure-1-12-0) state that `add-lib` does not update a library already on the classpath and that `sync-deps` adds libraries not already present. Because the additive API cannot replace a coordinate already on the classpath, it does not cover the coordinate-change boundary in this proposal.
 
 ## PROP-Dns-001.P7 Deferred specification work
 
-Approval fixes the source order, alias order, user-config exclusion, restart-required behavior, diagnostic content, and public removal boundary above. Follow-on specs still choose the basis fingerprint encoding and wire field names. They must not change those fixed semantics, reintroduce another coordinate format, expand the public removal table, or restore live classpath mutation without returning to human scope review.
+Follow-on specs answer two implementation-level questions:
+
+- **PROP-Dns-001.Q1:** How is the running basis fingerprint encoded?
+- **PROP-Dns-001.Q2:** What exact wire field names report basis status and dependency failures?
+
+Approval fixes the source order, alias order, user-config exclusion, restart-required behavior, diagnostic content, and public removal boundary above. The follow-on answers must not change those semantics, reintroduce another coordinate format, expand the public removal table, or restore live classpath mutation without returning to human scope review.
