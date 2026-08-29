@@ -51,9 +51,11 @@
         create-basis (fn [root version]
                        {:libs {'a/x {:mvn/version version
                                      :deps/manifest :mvn
+                                     :deps/root (str root "/cache")
                                      :paths [(str root "/cache/a-x.jar")]}
                                'io.millstrand/millstrand
                                {:local/root (str root "/millstrand")
+                                :deps/root (str root "/millstrand")
                                 :paths [(str root "/millstrand/src")]}}
                         :classpath-roots [(str root "/workspace/src")]
                         :argmap {:jvm-opts ["-Dmode=weaver"]

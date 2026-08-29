@@ -18,7 +18,7 @@
   #{:deps :replace-deps :extra-deps :override-deps :default-deps})
 (def ^:private derived-path-keys
   #{:paths :extra-paths :replace-paths :classpath-overrides
-    :local/root :git/dir})
+    :local/root :deps/root :git/dir})
 
 (def ^:dynamic *create-basis*
   "Function used to invoke `clojure.tools.deps/create-basis`."
