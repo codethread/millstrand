@@ -242,10 +242,13 @@
         (is (fn? (get-in (first @calls) [:options :prompt])))
         (is (not (str/includes? (str out) "15")))))))
 
-(deftest runtime-api-works-from-explicit-connected-stdin-main
-  (with-runtime
-    (fn [rt _]
-      (let [out (java.io.StringWriter.)]
+(deftest attached-stdin-session-exposes-the-runtime-api
+  (test-alpha/with-weaver-world
+    [ctx {:deps-edn "{:deps {org.clojure/tools.deps {:mvn/version \"0.31.1642\"}}}\n"}]
+    (try
+      (let [rt (:runtime ctx)
+            {:keys [endpoint]} (:metadata rt)
+            out (java.io.StringWriter.)]
         (binding [*in* (java.io.StringReader.
                         (source-file/render-forms
                          ['(require '[millstrand.api.current.alpha :as current]
@@ -256,7 +259,9 @@
                   *out* out
                   *err* (java.io.StringWriter.)
                   *ns* (the-ns 'user)]
-          (repl/-main "--stdin" (:config-dir (:metadata rt))))
+          ((ns-resolve 'millstrand.repl 'attach-stdin!)
+           (:host endpoint)
+           (str (:port endpoint))))
         (let [lines (str/split-lines (str out))
               status (read-string (nth lines 2))
               plan (read-string (nth lines 3))]
@@ -270,7 +275,9 @@
                  (select-keys (:last-refresh status) [:status :mode])))
           (is (= {:status :unchanged :mode :full :dry-run? true}
                  (select-keys plan [:status :mode :dry-run?])))
-          (is (str/includes? (:caveat plan) "No registry publication")))))))
+          (is (str/includes? (:caveat plan) "No registry publication"))))
+      (finally
+        (reset-open-state!)))))
 
 (deftest burn-tombstone-reads-use-in-process-datasource
   (with-runtime
