@@ -70,9 +70,9 @@ jq -e --arg database "$database_path" '.database_path == $database and (.state =
   "$status_running" >/dev/null
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver repl --stdin --workspace "$config_dir" \
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-core-probe.clj" \
-  | sed -n '1p' >"$basis_status"
-jq -e '."basis-fingerprint" | startswith("sha256:") and
-       ."module-keys" == ["millstrand/spools-batteries"] and
+  | sed -n '1p' | jq -r 'fromjson' >"$basis_status"
+jq -e '(."basis-fingerprint" | startswith("sha256:")) and
+       ."module-keys" == ["spools-batteries"] and
        ."last-refresh".status == "applied" and ."last-refresh".mode == "full"' \
   "$basis_status" >/dev/null
 

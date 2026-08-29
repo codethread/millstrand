@@ -9,6 +9,7 @@
             [millstrand.api.current.alpha :as current]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.weaver.alpha :as weaver]
+            [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.runtime :as weaver-runtime]
@@ -35,12 +36,20 @@
           state-dir (io/file root "state")
           data-dir (io/file root "data")]
       (.mkdirs workspace)
+      (spit (io/file workspace "deps.edn") "{:paths []}\n")
       (weaver-config/world (.getCanonicalPath workspace)
                            (.getCanonicalPath state-dir)
                            (.getCanonicalPath data-dir)))))
 
-(defn- generation-basis [world]
-  (let [coordinate {:local/root (.getCanonicalPath (io/file "."))}]
+(defn- generation-basis
+  ([world] (generation-basis world []))
+  ([world classpath-roots]
+   (let [coordinate {:local/root (.getCanonicalPath (io/file "."))}
+         classpath-roots (mapv #(.getCanonicalPath (io/file %)) classpath-roots)
+         classloader (clojure.lang.DynamicClassLoader.
+                      (.getContextClassLoader (Thread/currentThread)))]
+     (doseq [root classpath-roots]
+       (.addURL classloader (.toURL (.toURI (io/file root)))))
     {:sources [{:kind :project
                 :path (.getCanonicalPath
                        (io/file (:config-dir world) "deps.edn"))
@@ -48,16 +57,25 @@
      :aliases []
      :reserved-deps {'io.millstrand/millstrand coordinate}
      :basis {:libs {'io.millstrand/millstrand coordinate}
-             :classpath-roots []
+             :classpath-roots classpath-roots
              :argmap {}}
      :fingerprint basis-fingerprint
-     :classloader (.getContextClassLoader (Thread/currentThread))}))
+     :classloader classloader})))
 
 (defn- start-runtime! [db-file opts]
   (let [world (:world opts)]
     (weaver-runtime/start!
      db-file
-     (assoc opts :generation-basis (generation-basis world)))))
+     (assoc opts :generation-basis
+            (or (:generation-basis opts) (generation-basis world))))))
+
+(defn- fresh-runtime-probe! [world opts]
+  (binding [basis/*create-basis*
+            (fn [{:keys [project extra aliases args]}]
+              {:libs (merge (:deps project) (:deps extra) (:extra-deps args))
+               :classpath-roots []
+               :argmap {:aliases aliases}})]
+    (weaver-runtime/fresh-runtime-probe! world opts)))
 
 (defn with-runtime
   ([f] (with-runtime nil f))
@@ -215,7 +233,7 @@
 (deftest fresh-runtime-probe-is-unpublished-and-cleans-success
   (let [world (temp-world)
         result (try
-                 (weaver-runtime/fresh-runtime-probe!
+                 (fresh-runtime-probe!
                   world {:old-generation-baseline {:status :admitted :projection {}}
                          :generation-basis (generation-basis world)})
                  (finally
@@ -250,7 +268,7 @@
                                       {:success true
                                        :stage :probe/complete
                                        :probe/workspace "/foreign"})))]
-        (let [result (weaver-runtime/fresh-runtime-probe!
+        (let [result (fresh-runtime-probe!
                       world {:old-generation-baseline
                              {:status :admitted :projection {}}
                              :generation-basis (generation-basis world)})]
@@ -392,7 +410,7 @@
                     (fn [root]
                       (throw (ex-info "probe cleanup seam" {:probe/workspace
                                                             (.getPath root)})))]
-        (let [result (weaver-runtime/fresh-runtime-probe!
+        (let [result (fresh-runtime-probe!
                       world {:old-generation-baseline
                              {:status :admitted :projection {}}
                              :generation-basis (generation-basis world)})]
@@ -417,7 +435,7 @@
                       (fn [runtime]
                         (reset! stopped runtime)
                         (original-stop runtime))}
-                     #(weaver-runtime/fresh-runtime-probe!
+                     #(fresh-runtime-probe!
                        world {:old-generation-baseline
                               {:status :admitted :projection {}}
                               :generation-basis (generation-basis world)}))]
@@ -1143,34 +1161,37 @@
             (weaver-runtime/stop! rt))))
       (finally
         (delete-tree! (io/file (:config-dir world)))))))
-(deftest runtime-nrepl-load-file-uses-spool-classloader
-  (with-runtime
-    (fn [rt _]
-      (let [suffix (str/replace (str (java.util.UUID/randomUUID)) "-" "")
-            ns-sym (symbol (str "demo.load-file-" suffix))
-            source-root (io/file (get-in rt [:metadata :config-dir]) "load-file-src")
-            source-file (io/file source-root
-                                 (str (-> (str ns-sym)
-                                          (str/replace \- \_)
-                                          (str/replace \. java.io.File/separatorChar))
-                                      ".clj"))
-            {:keys [host port]} (get-in rt [:metadata :endpoint])]
-        (.mkdirs (.getParentFile source-file))
-        (source-file/spit-forms! source-file [(list 'ns ns-sym) '(def visible :through-spool-loader)])
-        (.addURL ^clojure.lang.DynamicClassLoader (:spool-classloader rt)
-                 (.toURL (.toURI source-root)))
-        (with-open [conn (nrepl/connect :host host :port port)]
-          (let [session (nrepl/client-session
-                         (nrepl/client conn (test-support/await-budget-ms)))
-                responses (doall
-                           (nrepl/message
-                            session
-                            {:op "load-file"
-                             :eval "clojure.core/eval"
-                             :file (source-file/render-forms
-                                    [`(require '~ns-sym)
-                                     `(deref (resolve '~(symbol (str ns-sym) "visible")))])}))]
-            (is (= ":through-spool-loader" (last (keep :value responses))))))))))
+(deftest runtime-nrepl-load-file-uses-generation-classloader
+  (let [world (temp-world)
+        suffix (str/replace (str (java.util.UUID/randomUUID)) "-" "")
+        ns-sym (symbol (str "demo.load-file-" suffix))
+        source-root (io/file (:config-dir world) "load-file-src")
+        source-file (io/file source-root
+                             (str (-> (str ns-sym)
+                                      (str/replace \- \_)
+                                      (str/replace \. java.io.File/separatorChar))
+                                  ".clj"))]
+    (.mkdirs (.getParentFile source-file))
+    (source-file/spit-forms! source-file
+                             [(list 'ns ns-sym) '(def visible :through-generation-loader)])
+    (with-runtime
+      {:world world
+       :generation-basis (generation-basis world [source-root])}
+      (fn [rt _]
+        (let [{:keys [host port]} (get-in rt [:metadata :endpoint])]
+          (with-open [conn (nrepl/connect :host host :port port)]
+            (let [session (nrepl/client-session
+                           (nrepl/client conn (test-support/await-budget-ms)))
+                  responses (doall
+                             (nrepl/message
+                              session
+                              {:op "load-file"
+                               :eval "clojure.core/eval"
+                               :file (source-file/render-forms
+                                      [`(require '~ns-sym)
+                                       `(deref (resolve '~(symbol (str ns-sym) "visible")))])}))]
+              (is (= ":through-generation-loader"
+                     (last (keep :value responses)))))))))))
 (deftest runtime-metadata-rejects-blank-friendly-name
   (let [world (temp-world)
         db-file (db-test/temp-db-file)]

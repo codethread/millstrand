@@ -6,8 +6,7 @@
         result (runtime/module! rt :kanban-source
                                 {:ns 'millhouse.spools.kanban
                                  :load :image})]
-    (println
-     (json/write-str
-      {:module-status (:status result)
-       :source-status (get-in (runtime/status rt)
-                              [:modules :kanban-source :source/status])}))))
+    (json/write-str
+     {:module-status (:status result)
+      :source-status (get-in result
+                             [:modules :kanban-source :source/status])})))

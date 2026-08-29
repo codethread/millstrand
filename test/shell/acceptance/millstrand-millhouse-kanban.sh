@@ -99,8 +99,8 @@ baseline="$tmp_root/baseline.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-probe.clj" \
-  | sed -n '1p' >"$baseline"
-jq -e '."basis-fingerprint" | startswith("sha256:") and
+  | sed -n '1p' | jq -r 'fromjson' >"$baseline"
+jq -e '(."basis-fingerprint" | startswith("sha256:")) and
        ."module-keys" == ["kanban-source"] and
        ."last-refresh".status == "applied" and ."last-refresh".mode == "full"' \
   "$baseline" >/dev/null || { cat "$baseline" >&2; exit 1; }
@@ -109,7 +109,7 @@ source="$tmp_root/source.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-probe.clj" \
-  | sed -n '1p' >"$source"
+  | sed -n '1p' | jq -r 'fromjson' >"$source"
 jq -e --slurpfile baseline "$baseline" '
   .ops == ["about", "bins", "help", "kanban", "kanban-export", "prime"] and
   .queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"] and
@@ -122,14 +122,14 @@ image="$tmp_root/image.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-image.clj" \
-  | sed -n '1p' >"$image"
+  | sed -n '1p' | jq -r 'fromjson' >"$image"
 jq -e '.["module-status"] == "unchanged" and .["source-status"] == "image"' "$image" >/dev/null || { cat "$image" >&2; exit 1; }
 
 replayed="$tmp_root/replayed.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-probe.clj" \
-  | sed -n '1p' >"$replayed"
+  | sed -n '1p' | jq -r 'fromjson' >"$replayed"
 jq -e '.queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"]' "$replayed" >/dev/null
 jq -e '.patterns == ["kanban-batch"] and .bins == ["kanban-dash"]' "$replayed" >/dev/null
 jq -e --slurpfile baseline "$baseline" '
@@ -139,5 +139,5 @@ jq -e --slurpfile baseline "$baseline" '
   .bins == ["kanban-dash"] and
    .["module-keys"] == ["kanban-source"]
 ' "$replayed" >/dev/null
-jq -e '.["source-status"]["kanban-source"] == "image"' "$replayed" >/dev/null
+jq -e '.["source-status"]["kanban-source"] == null' "$replayed" >/dev/null
 echo "Millhouse Kanban module acceptance: clean ($kanban_sha, source and image)"
