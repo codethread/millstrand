@@ -16,6 +16,9 @@
 (def ^:private selected-aliases [:millstrand/weaver :millstrand/local])
 (def ^:private dependency-keys
   #{:deps :replace-deps :extra-deps :override-deps :default-deps})
+(def ^:private derived-path-keys
+  #{:paths :extra-paths :replace-paths :classpath-overrides
+    :local/root :git/dir})
 
 (def ^:dynamic *create-basis*
   "Function used to invoke `clojure.tools.deps/create-basis`."
@@ -175,6 +178,38 @@
                                    StandardCharsets/UTF_8))]
     (str "sha256:" (apply str (map #(format "%02x" (bit-and 0xff %)) digest)))))
 
+(defn- without-derived-paths
+  [value]
+  (cond
+    (map? value)
+    (into (empty value)
+          (keep (fn [[key item]]
+                  (when-not (contains? derived-path-keys key)
+                    [key (without-derived-paths item)])))
+          value)
+
+    (vector? value)
+    (mapv without-derived-paths value)
+
+    (list? value)
+    (apply list (map without-derived-paths value))
+
+    (set? value)
+    (set (map without-derived-paths value))
+
+    (sequential? value)
+    (doall (map without-derived-paths value))
+
+    :else value))
+
+(defn- fingerprint-value
+  [sources aliases basis]
+  {:sources (mapv #(select-keys % [:kind :deps]) sources)
+   :aliases aliases
+   :reserved-runtime {:lib reserved-lib :identity :mill-supplied}
+   :resolved-libs (without-derived-paths (:libs basis))
+   :argmap (without-derived-paths (:argmap basis))})
+
 (defn- source-path-for-coordinate
   [sources coordinate]
   (some (fn [{:keys [path deps]}]
@@ -236,15 +271,13 @@
             basis-projection {:libs (:libs basis)
                               :classpath-roots (vec (:classpath-roots basis))
                               :argmap (:argmap basis)}
-            fingerprint-value {:sources (mapv #(select-keys % [:kind :deps]) sources)
-                               :aliases aliases
-                               :reserved-deps reserved-deps
-                               :basis basis-projection}
             result {:sources sources
                     :aliases aliases
                     :reserved-deps reserved-deps
                     :basis basis-projection
-                    :fingerprint (basis-fingerprint fingerprint-value)
+                    :fingerprint (basis-fingerprint
+                                  (fingerprint-value sources aliases
+                                                     basis-projection))
                     :classloader (generation-classloader
                                   (:classpath-roots basis-projection))}]
         (when-not (s/valid? :millstrand.core.specs/generation-basis result)

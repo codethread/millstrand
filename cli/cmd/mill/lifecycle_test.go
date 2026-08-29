@@ -117,6 +117,27 @@ func TestWeaverLifecycleWithFakeLauncher(t *testing.T) {
 	}
 }
 
+func TestWeaverArgsUseMinimalBasisBootstrap(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "millstrand source")
+	world := config.World{ConfigDir: "/workspace", StateDir: "/state", DataDir: "/data"}
+	args := weaverArgs(world, "weaver", source)
+	joined := strings.Join(args, " ")
+
+	if strings.Contains(joined, "-M:millstrand ") {
+		t.Fatalf("bootstrap must not activate the checkout's :millstrand alias: %#v", args)
+	}
+	for _, want := range []string{"-M:millstrand/bootstrap", "org.clojure/clojure", "org.clojure/data.json", "org.clojure/tools.deps", filepath.ToSlash(filepath.Join(source, "src"))} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("minimal bootstrap args missing %q: %#v", want, args)
+		}
+	}
+	for _, excluded := range []string{"next.jdbc", "spools/batteries", "tools.namespace", "nrepl/nrepl"} {
+		if strings.Contains(joined, excluded) {
+			t.Fatalf("minimal bootstrap args include workspace dependency %q: %#v", excluded, args)
+		}
+	}
+}
+
 func TestAtomicStartClaimSerializesOverlappingStartsAndRestart(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(t.TempDir(), "state"))
 	source := tempSource(t)

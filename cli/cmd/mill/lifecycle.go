@@ -86,7 +86,9 @@ func resolveLaunchSource(cwd string) (string, error) {
 }
 
 func weaverArgs(world config.World, name, source string) []string {
-	args := []string{"-Srepro", "-Sdeps", "{:deps {org.clojure/tools.deps {:mvn/version \"0.31.1642\"}}}", "-M:millstrand", "-m", "millstrand.core.weaver.basis", "--workspace", world.ConfigDir, "--millstrand-source", source, "--dependency-diagnostic", dependencyDiagnosticPath(world), "--state-dir", world.StateDir, "--data-dir", world.DataDir}
+	bootstrapSource, _ := json.Marshal(filepath.Join(source, "src"))
+	bootstrapDeps := fmt.Sprintf("{:aliases {:millstrand/bootstrap {:replace-paths [%s] :replace-deps {org.clojure/clojure {:mvn/version \"1.12.0\"} org.clojure/data.json {:mvn/version \"2.5.1\"} org.clojure/tools.deps {:mvn/version \"0.31.1642\"}}}}}", bootstrapSource)
+	args := []string{"-Srepro", "-Sdeps", bootstrapDeps, "-M:millstrand/bootstrap", "-m", "millstrand.core.weaver.basis", "--workspace", world.ConfigDir, "--millstrand-source", source, "--dependency-diagnostic", dependencyDiagnosticPath(world), "--state-dir", world.StateDir, "--data-dir", world.DataDir}
 	if name != "" {
 		args = append(args, "--name", name)
 	}

@@ -45,16 +45,40 @@
            (get-in @captured [:args :extra-deps])))
     (is (s/valid? :millstrand.core.specs/generation-basis generation))))
 
-(deftest fingerprint-is-canonical-and-path-independent
-  (let [left {:sources [{:kind :project :deps {:deps {'a/x {:mvn/version "1"}
-                                                       'z/x {:mvn/version "2"}}}}]
-              :aliases []
-              :reserved-deps {'io.millstrand/millstrand {:local/root "/m"}}
-              :basis {:libs {} :classpath-roots [] :argmap {}}}
-        right (into (array-map) (reverse left))]
-    (is (= (basis/basis-fingerprint left) (basis/basis-fingerprint right)))
-    (is (re-matches #"sha256:[0-9a-f]{64}"
-                    (basis/basis-fingerprint left)))))
+(deftest fingerprint-is-canonical-and-semantic
+  (let [project {:deps {'a/x {:mvn/version "1"}}
+                 :aliases {:millstrand/weaver {:jvm-opts ["-Dmode=weaver"]}}}
+        create-basis (fn [root version]
+                       {:libs {'a/x {:mvn/version version
+                                     :deps/manifest :mvn
+                                     :paths [(str root "/cache/a-x.jar")]}
+                               'io.millstrand/millstrand
+                               {:local/root (str root "/millstrand")
+                                :paths [(str root "/millstrand/src")]}}
+                        :classpath-roots [(str root "/workspace/src")]
+                        :argmap {:jvm-opts ["-Dmode=weaver"]
+                                 :extra-paths [(str root "/workspace/dev")]}})
+        fingerprint (fn [workspace root version]
+                      (binding [basis/*create-basis*
+                                (fn [_] (create-basis root version))]
+                        (:fingerprint
+                         (basis/create-generation-basis
+                          (.getPath workspace)
+                          {:local/root (str root "/millstrand")}))))
+        left (workspace! project nil)
+        relocated (workspace! project nil)
+        coordinate-edit (workspace! (assoc-in project [:deps 'a/x :mvn/version]
+                                              "2") nil)
+        alias-edit (workspace! (assoc-in project
+                                         [:aliases :millstrand/weaver :jvm-opts]
+                                         ["-Dmode=changed"]) nil)
+        source-edit (workspace! project {:deps {'extra/x {:mvn/version "1"}}})
+        left-fingerprint (fingerprint left "/first" "1")]
+    (is (= left-fingerprint (fingerprint relocated "/copied" "1")))
+    (is (not= left-fingerprint (fingerprint coordinate-edit "/copied" "2")))
+    (is (not= left-fingerprint (fingerprint alias-edit "/copied" "1")))
+    (is (not= left-fingerprint (fingerprint source-edit "/copied" "1")))
+    (is (re-matches #"sha256:[0-9a-f]{64}" left-fingerprint))))
 
 (deftest dependency-files-fail-with-closed-diagnostics
   (testing "missing canonical file"
