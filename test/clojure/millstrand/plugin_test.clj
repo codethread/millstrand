@@ -19,9 +19,8 @@
   (is (nil? (ns-resolve 'millstrand.api.weaver.alpha 'plugins)))
   (is (nil? (ns-resolve 'millstrand.api.weaver.alpha 'plugin))))
 
-(deftest runtime-loader-state-is-the-public-path
+(deftest runtime-status-is-the-public-module-path
   (with-runtime
     (fn [rt]
-      (is (= {:spools {} :families {}} (runtime/approved rt)))
       (is (= {} (:modules (runtime/status rt))))
-      (is (= {} (:root/outcomes (runtime/status rt)))))))
+      (is (string? (:basis-fingerprint (runtime/status rt)))))))

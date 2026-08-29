@@ -31,15 +31,15 @@
                      :families #{'codethread/devflow}
                      :test-namespaces #{'millstrand.ct.config-test}})))))))
 
-(deftest approved-pin-drift-invalidates-the-transition
-  (let [file (java.io.File/createTempFile "millstrand-transition-spools-" ".edn")
-        approvals {:spools (:pins (transition/contract))}]
+(deftest workspace-dependency-pin-drift-invalidates-the-transition
+  (let [file (java.io.File/createTempFile "millstrand-transition-deps-" ".edn")
+        dependencies {:deps (:pins (transition/contract))}]
     (try
-      (spit file (pr-str (assoc-in approvals
-                                   [:spools 'codethread/devflow :git/sha]
+      (spit file (pr-str (assoc-in dependencies
+                                   [:deps 'codethread/devflow :git/sha]
                                    "0000000000000000000000000000000000000000")))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                            #"Approved external pin does not match"
+                            #"Workspace dependency pin does not match"
                             (transition/validate-current! file)))
       (finally
         (.delete file)))))

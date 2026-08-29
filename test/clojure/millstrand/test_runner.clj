@@ -1,6 +1,5 @@
 (ns millstrand.test-runner
-  "Explicit test entrypoint with documented serial JVM-global islands,
-  subprocess shards for add-libs suites, a focused in-process mode for named
+  "Explicit test entrypoint with serial JVM-global islands, focused named
   namespaces, and per-namespace timing output."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
@@ -79,13 +78,10 @@
    'millstrand.integration.restart-admission-test])
 
 (def serial-namespaces
-  "JVM-global namespaces the parent still runs serially outside add-libs shards."
-  [;; Release-marker fixtures redefine source checkout resolution.
-   ;; Release-marker, module, reload, and config fixtures redefine runtime
-   ;; internals and therefore remain on the serial island.
+  "JVM-global namespaces the parent runs serially."
+  [;; Module and config fixtures redefine runtime internals and therefore stay
+   ;; on the serial island.
    'millstrand.runtime.integration-test
-   ;; source-root fixtures redefine the JVM-global source-checkout locator.
-   'millstrand.source-root-spools-test
    ;; ambient REPL connection atoms.
    'millstrand.repl-test
    ;; published singleton semantics.
@@ -107,13 +103,8 @@
    'millstrand.core.weaver.modules-test])
 
 (def add-libs-shards
-  "Subprocess JVM shard groups for tests that mutate JVM-global tools.deps state."
-  {;; Largest add-libs suite stands alone to balance wall time against parent work.
-   "A" ['millstrand.spools-test]
-   ;; runtime-deps intentionally mutates JVM-global tools.deps state.
-   "B" ['millstrand.runtime-deps-test]
-   ;; Medium add-libs suite shares one JVM to amortize boot without exceeding shard A.
-   "C" ['millstrand.ct.config-ops-test]})
+  "The deps-native suite never mutates the running JVM dependency basis."
+  {})
 
 (def shard-timeout-minutes 5)
 

@@ -89,23 +89,23 @@
                 {:scope scope :test-namespaces test-namespaces}))
     value))
 
-(defn- approved-pins
-  [spools-file]
-  (let [data (edn/read-string (slurp spools-file))]
-    (require! (map? data) "Approved spool data must be a map" {:file spools-file})
-    (:spools data)))
+(defn- workspace-deps
+  [deps-file]
+  (let [data (edn/read-string (slurp deps-file))]
+    (require! (map? data) "Workspace dependency data must be a map" {:file deps-file})
+    (:deps data)))
 
 (defn validate-current!
-  "Validate the checked-in transition contract against `.millstrand/spools.edn`."
-  ([] (validate-current! ".millstrand/spools.edn"))
-  ([spools-file]
+  "Validate the checked-in transition contract against `.millstrand/deps.edn`."
+  ([] (validate-current! ".millstrand/deps.edn"))
+  ([deps-file]
    (let [contract (validate-contract! (contract))
-         approved (approved-pins spools-file)]
+         dependencies (workspace-deps deps-file)]
      (doseq [[family expected] (:pins contract)]
-       (let [actual (get approved family)]
+       (let [actual (get dependencies family)]
          (require! (= (select-keys expected [:git/url :git/tag :git/sha])
                       (select-keys actual [:git/url :git/tag :git/sha]))
-                   "Approved external pin does not match the transition contract"
+                   "Workspace dependency pin does not match the transition contract"
                    {:family family :expected expected :actual actual})))
      contract)))
 

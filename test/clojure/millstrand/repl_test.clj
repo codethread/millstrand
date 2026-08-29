@@ -11,8 +11,8 @@
             [millstrand.api.patterns.alpha :as patterns]
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.core.client :as client]
-            [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.core.db-test :as db-test]
+            [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.repl :as repl]
             [millstrand.source-file :as source-file]
             [millstrand.spools.test-support :as test-support]))
@@ -66,16 +66,13 @@
   ([f]
    (with-runtime {} f))
   ([opts f]
-   (let [db-file (db-test/temp-db-file)
-         config-dir (test-support/temp-dir "millstrand-repl")
-         world (test-support/test-world config-dir)
-         rt (weaver-runtime/start! db-file (merge {:world world} opts))]
-     (try
-       (f rt db-file)
-       (finally
-         (reset-open-state!)
-         (weaver-runtime/stop! rt)
-         (db-test/delete-sqlite-family! db-file))))))
+   (test-support/with-runtime
+    opts
+    (fn [rt _]
+      (try
+        (f rt (get-in rt [:metadata :canonical-db-path]))
+        (finally
+          (reset-open-state!)))))))
 
 (deftest connected-accessors-fail-before-connect
   (reset-open-state!)
@@ -262,7 +259,7 @@
               status (read-string (nth lines 3))
               plan (read-string (nth lines 4))]
           (is (= 5 (count lines)))
-          (is (= {:spools {} :families {}} (read-string (nth lines 2))))
+          (is (= {} (read-string (nth lines 2))))
           (is (= {:modules {}
                   :root/outcomes {}
                   :pending-generation nil}

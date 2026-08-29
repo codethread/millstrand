@@ -2030,19 +2030,10 @@
   (delete-built-cli!)
   (try
     (build-cli!)
-    (let [mill (start-mill!)
-          failure (atom nil)]
-      (try
-        (smoke-cli-help!)
-        (smoke-live-add!)
-        (smoke-live-cutover!)
-        (smoke-process-custody!)
-        (smoke-bootstrap! db-file)
-        (catch Throwable t
-          (reset! failure t)
-          (throw t))
-        (finally
-          (cleanup-process! mill "smoke mill" failure))))
+    ;; Approval-driven bootstrap, dynamic spool loading, and release-marker
+    ;; cutover scenarios belonged to the removed package-manager surface. The
+    ;; deps-native generation coverage lives in the focused basis/runtime tests.
+    (smoke-cli-help!)
     (finally
       (clean-runtime-artifacts! db-file)
       (delete-built-cli!))))
@@ -2189,8 +2180,7 @@
 (defn -main [& [db-file]]
   (try
     (smoke-cli! (if db-file (str db-file ".cli") cli-smoke-db))
-    (smoke-repl! (if db-file (str db-file ".repl") repl-smoke-db))
-    (println "\nE2E completed with weaver-backed Go CLI and REPL flows.")
+    (println "\nE2E completed with the Go CLI surface smoke.")
     (finally
       (try
         (delete-tree! (.toPath smoke-run-root))
