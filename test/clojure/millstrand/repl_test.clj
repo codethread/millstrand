@@ -12,6 +12,7 @@
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.core.client :as client]
             [millstrand.core.db-test :as db-test]
+            [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.repl :as repl]
             [millstrand.source-file :as source-file]
@@ -406,12 +407,11 @@
     (fn [rt _]
       (try
         (repl/connect! (:config-dir (:metadata rt)))
-        (weaver-runtime/stop! rt)
+        (metadata/delete! (:metadata rt))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"metadata is missing or stale"
                               (client/call-world (repl/connected-config-dir)
                                                  (repl/connected-opts)
                                                  :list)))
         (finally
-          (reset-open-state!)
-          (weaver-runtime/stop! rt))))))
+          (reset-open-state!))))))

@@ -5,6 +5,7 @@
             [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.string :as str]
+            [clojure.spec.alpha :as s]
             [millstrand.core.weaver.protocol :as protocol])
   (:import [java.lang ProcessHandle]
            [java.net UnixDomainSocketAddress]
@@ -160,7 +161,8 @@
 
 (defn metadata-shape
   "Return the canonical EDN metadata map for a running weaver."
-  [{:keys [pid host port storage-kind storage-label canonical-db-path nonce generation-id started-at world name]
+  [{:keys [pid host port storage-kind storage-label canonical-db-path nonce generation-id
+           basis-fingerprint started-at world name]
     :as shape}]
   (let [socket-path (.getPath (socket-file world))
         name (or name (.getName (io/file (:config-dir world))))]
@@ -180,6 +182,7 @@
      :canonical-db-path canonical-db-path
      :nonce nonce
      :generation-id generation-id
+     :basis-fingerprint basis-fingerprint
      :socket-path socket-path
      :started-at started-at}))
 
@@ -197,6 +200,7 @@
    "database_label" (:storage-label metadata)
    "database_path" (:canonical-db-path metadata)
    "generation_id" (:generation-id metadata)
+   "basis_fingerprint" (:basis-fingerprint metadata)
    "socket_path" (:socket-path metadata)
    "started_at" (:started-at metadata)
    "nrepl" {"host" (get-in metadata [:endpoint :host])
@@ -360,7 +364,9 @@
        ;; at the next replacement; absence alone must not make admission stale.
        (or (nil? (:generation-id metadata))
            (and (string? (:generation-id metadata))
-                (not (str/blank? (:generation-id metadata)))))))
+                (not (str/blank? (:generation-id metadata)))))
+       (s/valid? :millstrand.core.specs/basis-fingerprint
+                 (:basis-fingerprint metadata))))
 
 (defn stale-or-missing?
   "Return true when metadata is absent, malformed, unsupported, or points at a dead process."

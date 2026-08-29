@@ -596,6 +596,7 @@
                                            :canonical-db-path (:canonical-db-path storage)
                                            :nonce nonce
                                            :generation-id generation-id
+                                           :basis-fingerprint basis-fingerprint
                                            :world world
                                            :name (or name (default-name world))
                                            :started-at (str (Instant/now))})

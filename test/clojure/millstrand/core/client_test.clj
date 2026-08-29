@@ -225,6 +225,8 @@
                                        :canonical-db-path canonical
                                        :nonce "unreachable"
                                        :generation-id "generation-unreachable"
+                                       :basis-fingerprint (:fingerprint
+                                                           (generation-basis world))
                                        :world world})]
     (try
       (metadata/publish! meta)
