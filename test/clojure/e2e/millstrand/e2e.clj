@@ -383,6 +383,8 @@
                            "refresh owns the changed-basis reason"))
         (assert= (:generation_id generation-a) (:generation_id (status))
                  "refresh leaves generation A running")
+        (assert= (:basis_fingerprint generation-a) (:basis_fingerprint (status))
+                 "refresh leaves generation A basis unchanged")
         (assert (not (clojure.string/includes?
                       (run-strand-config! workspace "help" "--json")
                       "local-version"))
