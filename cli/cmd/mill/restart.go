@@ -696,13 +696,18 @@ func (s *server) failRestart(t *weaverTransition, stage string, err error, logPa
 	status := baseStatus(t.world, restartStateFailed)
 	status["transition_id"] = t.transitionID
 	status["failure"] = *failure
+	data := map[string]any{
+		"message":  failure.Message,
+		"log_path": failure.LogPath,
+	}
+	var dependencyFailure *dependencyLaunchError
+	if errors.As(err, &dependencyFailure) {
+		data["dependency"] = dependencyFailure.diagnostic
+	}
 	status["diagnostics"] = []map[string]any{{
 		"stage":  failure.Stage,
 		"status": "failed",
-		"data": map[string]any{
-			"message":  failure.Message,
-			"log_path": failure.LogPath,
-		},
+		"data":   data,
 	}}
 	restartBoundaryStatus(t.world, status)
 	// Keep the failed transition available in memory even when its durable

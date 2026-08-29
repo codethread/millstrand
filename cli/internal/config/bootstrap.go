@@ -14,7 +14,7 @@ import (
 var bootstrapTemplates embed.FS
 
 const (
-	spoolsTemplate    = "templates/.millstrand/spools.edn"
+	depsTemplate      = "templates/.millstrand/deps.edn"
 	initTemplate      = "templates/.millstrand/init.clj"
 	helpTemplate      = "templates/.millstrand/me/help.clj"
 	gitignoreTemplate = "templates/.millstrand/.gitignore"
@@ -27,9 +27,6 @@ func BootstrapWorld(cwd, configDir, source string) (World, error) {
 func bootstrapWorld(cwd, configDir, source string, injectGuidance bool) (World, error) {
 	world, err := BootstrapTargetWorld(cwd, configDir)
 	if err != nil {
-		return World{}, err
-	}
-	if err := rejectLegacySpoolConfig(world.ConfigDir); err != nil {
 		return World{}, err
 	}
 	if err := os.MkdirAll(filepath.Join(world.ConfigDir, "me"), 0o755); err != nil {
@@ -46,7 +43,7 @@ func bootstrapWorld(cwd, configDir, source string, injectGuidance bool) (World, 
 	} else if err != nil {
 		return World{}, err
 	}
-	if err := writeMissingTemplate(filepath.Join(world.ConfigDir, "spools.edn"), spoolsTemplate); err != nil {
+	if err := writeMissingTemplate(filepath.Join(world.ConfigDir, "deps.edn"), depsTemplate); err != nil {
 		return World{}, err
 	}
 	if err := writeMissingTemplate(filepath.Join(world.ConfigDir, "init.clj"), initTemplate); err != nil {
@@ -250,22 +247,6 @@ func gitRevParse(cwd string, args ...string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
-}
-
-func rejectLegacySpoolConfig(configDir string) error {
-	var legacy []string
-	for _, name := range []string{"libs.edn", "libs.local.edn"} {
-		path := filepath.Join(configDir, name)
-		if _, err := os.Lstat(path); err == nil {
-			legacy = append(legacy, path)
-		} else if !os.IsNotExist(err) {
-			return err
-		}
-	}
-	if len(legacy) > 0 {
-		return fmt.Errorf("legacy runtime library config files are no longer supported; rename libs.edn/libs.local.edn to spools.edn/spools.local.edn and change top-level :libs to :spools: %s", strings.Join(legacy, ", "))
-	}
-	return nil
 }
 
 func writeMissingTemplate(path, templatePath string) error {

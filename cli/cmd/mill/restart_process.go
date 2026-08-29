@@ -222,12 +222,13 @@ func (s *server) launchReplacement(source string, world config.World, requestedN
 		return nil, nil, err
 	}
 	logPath := weaverLogPath(world.StateDir)
+	_ = os.Remove(dependencyDiagnosticPath(world))
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, nil, err
 	}
 	_, _ = fmt.Fprintf(logFile, "=== weaver replacement %s config_dir=%s ===\n", time.Now().UTC().Format(time.RFC3339), world.ConfigDir)
-	cmd, err := launchWeaver(source, weaverArgs(world, name), logFile, logFile)
+	cmd, err := launchWeaver(source, weaverArgs(world, name, source), logFile, logFile)
 	if err != nil {
 		_, _ = fmt.Fprintf(logFile, "=== replacement startup failure: %s ===\n", err)
 		_ = logFile.Close()
@@ -250,6 +251,11 @@ func (s *server) launchReplacement(source string, world config.World, requestedN
 	if err != nil {
 		if stopErr := s.stopFailedReplacement(child, 2*time.Second); stopErr != nil {
 			return nil, nil, replacementFailure(logPath, fmt.Errorf("replacement weaver failed readiness: %w; replacement termination failed: %v", err, stopErr))
+		}
+		if diagnostic, diagnosticErr := readDependencyDiagnostic(world); diagnosticErr != nil {
+			return nil, nil, replacementFailure(logPath, diagnosticErr)
+		} else if diagnostic != nil {
+			return nil, nil, replacementFailure(logPath, &dependencyLaunchError{diagnostic: *diagnostic, err: err})
 		}
 		return nil, nil, replacementFailure(logPath, fmt.Errorf("replacement weaver failed readiness: %w", err))
 	}

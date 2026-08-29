@@ -59,6 +59,72 @@
     (or (vector? value) (set? value)) (every? data-first-value? value)
     :else false))
 
+;; One generation dependency boundary (DELTA-DnsRuntime-001.CC5-CC7).
+(s/def :millstrand.basis/fingerprint
+  #(and (string? %)
+        (boolean (re-matches #"sha256:[0-9a-f]{64}" %))))
+(s/def :millstrand.core.specs/basis-fingerprint
+  :millstrand.basis/fingerprint)
+(s/def :millstrand.dependency/status #{:invalid-dependency-config})
+(s/def :millstrand.dependency/stage #{:deps-read :deps-resolve})
+(s/def :millstrand.dependency/source-path
+  #(and (non-blank-string? %) (.isAbsolute (File. ^String %))))
+(s/def :millstrand.dependency/message non-blank-string?)
+(s/def :millstrand.dependency/cause non-blank-string?)
+(s/def :millstrand.dependency/lib symbol?)
+(s/def :millstrand.dependency/value data-first-value?)
+(s/def :millstrand.dependency/coordinate
+  (s/nilable
+   (s/and (s/keys :req-un [:millstrand.dependency/lib
+                            :millstrand.dependency/value])
+          #(= #{:lib :value} (set (keys %))))))
+(s/def :millstrand.core.specs/dependency-diagnostic
+  (s/and (s/keys :req-un [:millstrand.dependency/status
+                           :millstrand.dependency/stage
+                           :millstrand.dependency/source-path
+                           :millstrand.dependency/message
+                           :millstrand.dependency/cause
+                           :millstrand.dependency/coordinate])
+         #(= #{:status :stage :source-path :message :cause :coordinate}
+             (set (keys %)))))
+(s/def :millstrand.basis/kind #{:project :extra})
+(s/def :millstrand.basis/deps map?)
+(s/def :millstrand.basis/path
+  #(and (non-blank-string? %) (.isAbsolute (File. ^String %))))
+(s/def :millstrand.basis/source
+  (s/and (s/keys :req-un [:millstrand.basis/kind
+                           :millstrand.basis/path
+                           :millstrand.basis/deps])
+         #(= #{:kind :path :deps} (set (keys %)))))
+(s/def :millstrand.basis/sources
+  (s/coll-of :millstrand.basis/source :kind vector? :min-count 1 :max-count 2))
+(s/def :millstrand.basis/aliases
+  (s/and vector?
+         #(every? #{:millstrand/weaver :millstrand/local} %)
+         #(= % (filterv (set %) [:millstrand/weaver :millstrand/local]))))
+(s/def :millstrand.basis/reserved-deps
+  #(and (= #{'io.millstrand/millstrand} (set (keys %)))
+        (map? (get % 'io.millstrand/millstrand))))
+(s/def :millstrand.basis/libs map?)
+(s/def :millstrand.basis/classpath-roots
+  (s/coll-of non-blank-string? :kind vector?))
+(s/def :millstrand.basis/argmap map?)
+(s/def :millstrand.basis/basis
+  (s/and (s/keys :req-un [:millstrand.basis/libs
+                           :millstrand.basis/classpath-roots
+                           :millstrand.basis/argmap])
+         #(= #{:libs :classpath-roots :argmap} (set (keys %)))))
+(s/def :millstrand.basis/classloader #(instance? ClassLoader %))
+(s/def :millstrand.core.specs/generation-basis
+  (s/and (s/keys :req-un [:millstrand.basis/sources
+                           :millstrand.basis/aliases
+                           :millstrand.basis/reserved-deps
+                           :millstrand.basis/basis
+                           :millstrand.basis/fingerprint
+                           :millstrand.basis/classloader])
+         #(= #{:sources :aliases :reserved-deps :basis :fingerprint :classloader}
+             (set (keys %)))))
+
 (s/def :millstrand.hook/key
   (s/or :keyword keyword?
         :symbol symbol?
