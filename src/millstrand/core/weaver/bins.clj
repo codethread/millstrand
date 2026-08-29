@@ -141,7 +141,7 @@
             match (source-backed-match runtime bin source-file anchor)
             base (case anchor
                    :family (:library-root match)
-                   :root (:library-root match)
+                   :root (:source-root match)
                    (anchor-unresolved! bin source-file anchor))]
         {:exec {:path (.getPath ^java.io.File (canonical-file (io/file base path)))}
          :base base

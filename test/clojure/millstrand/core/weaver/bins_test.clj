@@ -42,29 +42,38 @@
     (try
       (let [source-root (io/file root "src")
             source (io/file source-root "demo/module.clj")
-            executable (io/file root "bin/agent")
+            family-executable (io/file root "bin/family-agent")
+            root-executable (io/file source-root "bin/root-agent")
             _ (io/make-parents source)
             _ (spit source "(ns demo.module)\n")
-            _ (io/make-parents executable)
-            _ (spit executable "#!/bin/sh\n")
-            _ (.setExecutable executable true false)
+            _ (io/make-parents family-executable)
+            _ (spit family-executable "#!/bin/sh\n")
+            _ (.setExecutable family-executable true false)
+            _ (io/make-parents root-executable)
+            _ (spit root-executable "#!/bin/sh\n")
+            _ (.setExecutable root-executable true false)
             coordinate {:local/root (.getCanonicalPath root)
                         :paths [(.getCanonicalPath source-root)]}
             rt (publish!
                 (runtime root {'demo/bins coordinate})
                 {"family" {:name "family" :doc "Family anchor."
-                            :executable [:family "bin/agent"]
+                            :executable [:family "bin/family-agent"]
                             :provenance 'demo/bins
                             :source/file (.getCanonicalPath source)}
                  "root" {:name "root" :doc "Root anchor."
-                          :executable [:root "bin/agent"]
+                          :executable [:root "bin/root-agent"]
                           :provenance 'demo/bins
                           :source/file (.getCanonicalPath source)}})]
-        (doseq [name ["family" "root"]]
-          (let [plan (bins/plan rt name)]
-            (is (= (.getCanonicalPath executable) (get-in plan [:exec :path])))
-            (is (true? (:runnable plan)))
-            (is (s/valid? :millstrand.core.weaver.bins/plan-result plan)))))
+        (let [family-plan (bins/plan rt "family")
+              root-plan (bins/plan rt "root")]
+          (is (= (.getCanonicalPath family-executable)
+                 (get-in family-plan [:exec :path])))
+          (is (= (.getCanonicalPath root-executable)
+                 (get-in root-plan [:exec :path])))
+          (is (true? (:runnable family-plan)))
+          (is (true? (:runnable root-plan)))
+          (is (s/valid? :millstrand.core.weaver.bins/plan-result family-plan))
+          (is (s/valid? :millstrand.core.weaver.bins/plan-result root-plan))))
       (finally
         (delete-tree! root)))))
 
