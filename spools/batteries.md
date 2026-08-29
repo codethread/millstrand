@@ -28,22 +28,20 @@ This doc is the standing contract. It is written against the old public-CLI clau
 deliberate differences are explicit; [§5](#5-equivalence-with-the-old-public-cli) is the clause-by-clause map. Stable ids here use the `BAT-`
 prefix.
 
-`mill init` approves batteries as a shipped source-root spool:
+`mill init` makes batteries available in the workspace basis and activates it explicitly:
 
 ```clojure
-{:spools
- {millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}}}
+{:deps {millstrand.spools/batteries {:local/root "../spools/batteries"}}}
 ```
 
-Its generated `init.clj` activates the approved root through the ordinary guarded module path:
+Its generated `init.clj` activates the module:
 
 ```clojure
 (runtime/module! runtime :millstrand/spools-batteries
-  {:ns 'millstrand.spools.batteries
-   :spools ['millstrand.spools/batteries]})
+  {:ns 'millstrand.spools.batteries})
 ```
 
-The relative coordinate resolves against the mill-selected Millstrand checkout and persists no absolute checkout path. Delete the seeded `spools.edn` entry to opt out; a workspace without it has no batteries ops.
+Dependency presence alone does not activate code. Delete the seeded dependency or declaration to opt out; dependency-basis changes require generation replacement.
 
 The contribution owns every op below plus its glossary outcomes. Each op carries `{:doc … :arg-spec … :returns …}` metadata; its invocable `:arg-spec` leaves carry `:hook-class` and `:deadline-class`. Owner-complete refresh replaces the whole batteries partition atomically.
 
@@ -67,7 +65,7 @@ The contribution owns every op below plus its glossary outcomes. Each op carries
   - `weave --input :stdin` replaces reading raw stdin for `weave`.
 Loud rules (SPEC-003-D003.C2): a reference naming no attached payload fails `:missing-payload`; an
 attached payload that no reference consumed fails `:unused-payloads`.
-- **BAT-C3 (hook classes):** Each invocable arg-spec leaf declares `:hook-class` and `:deadline-class` for metadata-driven gating (SPEC-004-D003). The mutating leaves are `add`, `update`, `supersede`, `burn`, `note`, `weave`, and `spool add`/`spool bump`; the read leaves are `show`, `list`, `ready`, `await`, `notes`, `subgraph`, `runbook`, every `query` and `pattern` verb, and `spool about`/`spool status`. `await` uses `:deadline-class :unbounded`; every other batteries leaf uses `:deadline-class :standard`.
+- **BAT-C3 (hook classes):** Each invocable arg-spec leaf declares `:hook-class` and `:deadline-class` for metadata-driven gating. The mutating leaves are `add`, `update`, `supersede`, `burn`, `note`, and `weave`; the remaining batteries leaves are reads. `await` uses `:deadline-class :unbounded`; every other batteries leaf uses `:deadline-class :standard`.
   Mutating ops pass a request context
   `{:request/source :json-socket :request/operation <op-kw>}` so hooks and
   events observe the same data the old socket dispatch supplied.

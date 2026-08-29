@@ -14,13 +14,13 @@ If you have not met the weaver, workspaces, or the strand model yet, read the [t
   config.local.json  -> personal config overlay
   init.clj           -> shared trusted startup code loaded by the weaver
   init.local.clj     -> personal startup overlay loaded after init.clj
-  spools.edn         -> shared approved spool families and roots
-  spools.local.edn   -> personal approved-spool overlay
+  deps.edn           -> shared tools.deps libraries
+  deps.local.edn     -> personal dependency overlay
   me/help.clj        -> default Batteries help-transform election
   spools/            -> optional local spools, created only when you add one
 ```
 
-When absent, `mill init` creates the shared half: `config.json` with the alpha format marker, `spools.edn` with the seeded batteries source-root coordinate shown below, `init.clj` with its guarded module, and `me/help.clj` with the default help-transform election. It does not create an empty `spools/` directory. Its `.gitignore` ignores only the personal overlays (`config.local.json`, `init.local.clj`, `spools.local.edn`). The overlays are yours to add when you want them: each shared file has a gitignored personal counterpart, so shared config is committed and reviewed while personal config stays on your machine. Explicit `--workspace` bootstrap works the same way on the selected directory, preserving whatever already exists.
+When absent, `mill init` creates the shared half: `config.json`, `deps.edn` with the seeded batteries dependency, `init.clj` with its explicit module, and `me/help.clj`. It does not create an empty `spools/` directory. Its `.gitignore` ignores `config.local.json`, `deps.local.edn`, and `init.local.clj`. Shared config is committed and reviewed; the local overlays stay on your machine. Explicit `--workspace` bootstrap preserves existing files.
 
 ## A private repo-local workspace
 
@@ -28,7 +28,7 @@ Run `mill init --stealth` when you want Millstrand in a repository without commi
 
 Stealth init does not write shared `AGENTS.md` or `CLAUDE.md`. It creates or updates an untracked `CLAUDE.local.md` when safe and prints the instruction Codex users may add to their own guidance. If `.millstrand` or `.ms` is already tracked or a mill-owned marker block was edited, it refuses before changing anything.
 
-Keep the generated startup small. Put personal activation in `init.local.clj` and approvals in `spools.local.edn`. For workspace-owned code, add a file and activate it with `runtime/module!` and `:file`; use a local spool only when the code needs its own repository and approval boundary. `.millstrand` then remains the repo-local entry point.
+Keep generated startup small. Put personal activation in `init.local.clj` and personal dependencies in `deps.local.edn`. For workspace-owned code, add a file and activate it with `runtime/module!` and `:file`; use a local library when code needs its own repository. `.millstrand` remains the repo-local entry point.
 
 ## Startup files
 
@@ -36,9 +36,8 @@ The weaver loads startup files in order: `init.clj`, then `init.local.clj`. Miss
 failing files fail loudly with file context. The generated `init.clj` is intentionally small:
 
 ```clojure
-;; spools.edn
-{:spools
- {millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}}}
+;; deps.edn
+{:deps {millstrand.spools/batteries {:local/root "../spools/batteries"}}}
 ```
 
 ```clojure
@@ -54,12 +53,10 @@ failing files fail loudly with file context. The generated `init.clj` is intenti
 ;; you can omit this `module!` and build entirely your own way, see
 ;; https://codethread.github.io/millstrand/docs/spools/customisation/
 (runtime/module! runtime :millstrand/spools-batteries
-  {:ns 'millstrand.spools.batteries
-   :spools ['millstrand.spools/batteries]})
+  {:ns 'millstrand.spools.batteries})
 
 (runtime/module! runtime :module-me-help
   {:file "me/help.clj"
-   :spools ['millstrand.spools/batteries]
    :after [:millstrand/spools-batteries]})
 ```
 
@@ -97,7 +94,7 @@ before they reach the workspace you rely on. A throwaway world costs one `mktemp
 ```sh
 ws="$(mktemp -d)"
 mill init --workspace "${ws:?}"
-# copy or write your candidate init.clj / spools.edn into "$ws", then:
+# copy or write your candidate deps.edn and init.clj into "$ws", then:
 mill weaver start --workspace "${ws:?}"
 mill weaver stop --workspace "${ws:?}"
 ```
@@ -107,7 +104,7 @@ workspace. If the candidate config is wrong, startup tells you with file context
 away.
 
 Once a customisation is worth keeping, it is worth automated coverage: [`millstrand.test.alpha`](./testing.md)
-weaver worlds take `:init`, `:spools-edn`, and `:files` fixtures, so a test exercises exactly the artifacts
+weaver worlds take `:deps-edn`, `:init`, and `:files` fixtures, so a test exercises exactly the artifacts
 this page has you writing.
 
 ## Reloading a live weaver
@@ -120,8 +117,8 @@ Use refresh during development instead of restarting the weaver:
 (runtime/refresh! (current/runtime))
 ```
 
-Refresh re-reads `init.clj` and `init.local.clj`, synchronizes approved roots,
-reloads changed module source, atomically replaces owner partitions, and reconciles
+Refresh re-reads `init.clj` and `init.local.clj`, compares the dependency basis,
+reloads changed module source when that basis is unchanged, atomically replaces owner partitions, and reconciles
 resources. It preserves unrelated modules, queued events, recent failures, and
 spool state. Missing startup files are skipped; present failures fail loudly.
 
@@ -130,7 +127,7 @@ Direct registrations are the one thing refresh can drop. A direct write is not s
 Recovering it takes one look first. The registry is owner-partitioned and layered: a direct entry lives in your partition, while a module or spool owns its own partition. The refresh that dropped your entry may have published a module that now owns the same name, and `register-*!` refuses a name another owner supplies. Read the current owner before acting. If the module's version is the one you want, leave it. If you want yours above it, `replace-*!` records the override intent and carries the shadow across refresh. To end that experiment, `unregister-*!` removes only your entry and restores the shadowed value. Remove-then-register is not a substitute for replace because the other owner's entry still occupies the name. Anything that must survive a refresh belongs in module source rather than a direct write.
 
 For code-only investigation, `reload-code!` takes a root-lib symbol from the
-family's effective `:roots` map and reloads that root's namespaces in dependency
+basis and reloads that library's source-backed namespaces in dependency
 order:
 
 ```clojure
@@ -216,7 +213,7 @@ same opt-in way yours will. A common layout:
 workspace/
   config.json
   init.clj
-  spools.edn
+  deps.edn
   spools/
     acme-workflows/
       deps.edn
@@ -227,17 +224,13 @@ workspace/
               mine.clj
 ```
 
-A spool source root is on the classpath, so its path mirrors its namespace. Approve the local spool as an implicit one-root family in `spools.edn`:
+A local source root is on the classpath, so its path mirrors its namespace. Add it to the workspace basis in `deps.edn`:
 
 ```clojure
-{:spools {acme.spools/workflows {:local/root "spools/acme-workflows"}}}
+{:deps {acme.spools/workflows {:local/root "spools/acme-workflows"}}}
 ```
 
-A shared local entry has one root at `.` under the entry's symbol. Git families can map
-several roots with `:roots`; local overlays inherit that map from their shared Git family. Relative
-`:local/root` values resolve against the selected workspace. Absolute paths are accepted as
-explicit user-approved paths, and `~` expands to your home directory. Create a minimal `deps.edn`
-in the root (if `:paths` is omitted, Millstrand's namespace loading defaults to `["src"]`):
+Ordinary tools.deps coordinates choose the checkout and classpath paths. Relative `:local/root` values resolve against the selected workspace. Create a minimal `deps.edn` in the root when the checkout needs its own paths:
 
 ```clojure
 {:paths ["src"]}
@@ -271,11 +264,10 @@ Removing `catalogue/ready-mine` from that form removes it from this module at th
 
 ```clojure
 (runtime/module! runtime :acme.workflows/mine
-  {:ns 'acme.spools.workflows.mine
-   :spools ['acme.spools/workflows]})
+  {:ns 'acme.spools.workflows.mine})
 ```
 
-Each piece has one job. `spools.edn` approves source. `runtime/module!` declares the desired module, and the refresh coordinator acquires its roots, collects its declarations, replaces that owner's entries, and reconciles lifecycle effects. A direct `require` from `mill weaver repl` evaluates in the weaver JVM and is useful for trusted experimentation, but for repeatable module activation and status, go through `runtime/module!` or `runtime/refresh!` from startup config or the live REPL.
+Each piece has one job. `deps.edn` supplies source. `runtime/module!` declares the desired module; refresh collects declarations, replaces that owner's entries, and reconciles lifecycle effects. A dependency edit changes the basis and requires generation replacement. A direct `require` from `mill weaver repl` is useful for trusted experiments, but repeatable activation belongs in `runtime/module!` from startup config.
 
 Extension code runs with weaver authority, so only load trusted code. And there is no per-module isolation or
 unload guarantee: restart the weaver when you need a clean runtime.

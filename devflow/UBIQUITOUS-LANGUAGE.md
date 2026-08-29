@@ -12,16 +12,16 @@ This glossary covers Millstrand and this repository. Terms owned by external spo
 | --- | --- | --- |
 | **mill** | The Go router and supervisor. Owns everything that must work without a running weaver: workspace resolution, bootstrap, weaver lifecycle, and the trusted nREPL attach. | Daemon, weaver, launcher, the CLI |
 | **`strand` CLI** | The Go client. A pure dispatcher with zero builtin subcommands: it resolves selection context, assembles one invoke envelope per call, and relays NDJSON back. | Strand (the graph node), client if the REPL is also meant, tool |
-| **Weaver** | The application core. A long-lived local Clojure process owning the SQLite connection, the query and pattern registries, event handlers, approved-root acquisition state, and module activation state. | Daemon, server, backend, mill |
-| **Workspace** | A directory holding Millstrand config, spool approvals, and startup code. `--workspace <dir>` selects an explicit directory. Without that flag, commands target the canonical repository root's `.millstrand` or `.ms`; `mill init` creates `.millstrand` when neither marker exists and completes the existing marker. | Worktree, repo, project, database |
+| **Weaver** | The application core. A long-lived local Clojure process owning the SQLite connection, the query and pattern registries, event handlers, one generation basis/classloader, and module activation state. | Daemon, server, backend, mill |
+| **Workspace** | A directory holding Millstrand config, `deps.edn`, optional local overlays, startup code, and workspace-relative modules. `--workspace <dir>` selects it explicitly. | Worktree, repo, project, database |
 | **Selected workspace** | The workspace a given command actually targets, after `--workspace` resolution. | Default workspace, current workspace |
 | **World** | Informal synonym for a workspace plus the weaver and data behind it. "Disposable world" is a `mktemp -d` workspace for tests and config experiments. | Workspace in specs, environment, instance |
 | **Client** | Anything talking to a weaver: the `strand` CLI over the Unix socket, or the weaver REPL over nREPL. | Consumer, user, agent |
 | **Weaver generation** | One weaver process lifetime. The spool classloader is minted at boot and never swapped while the process runs. | Schema generation, version, restart, session |
 | **Cutover** | The transition from one weaver generation to the next, including the window where the previous generation's classpath ownership still applies. | Migration, upgrade, deploy |
 | **Refresh** | `runtime/refresh!`, the pickup path for config, startup, and module source changes. It classifies each change and applies what it safely can. | Reload, restart, hot reload |
-| **Additive change** | A change refresh can load into the running weaver: a newly approved root, or a coordinate that has never loaded in this generation. | Safe change, minor change |
-| **Non-additive change** | A change refresh refuses in-JVM because applying it means unloading code the running JVM cannot safely drop. Recorded, and it takes effect at the next generation. | Breaking change, failure, error |
+| **Basis change** | A dependency-file, selected-alias, or coordinate change that produces a different candidate basis fingerprint. It requires a new Weaver generation. | Live dependency update, hot dependency reload |
+| **Live source change** | A workspace-relative `:file` module or current-basis source change that refresh can apply in the running generation. | Basis change |
 | **Ambient runtime** | The runtime published as the process-wide default. One real weaver process publishes exactly one (SPEC-004.C8a). | Global runtime, singleton, the weaver |
 | **Harness** | A coding-agent provider. Harness names are data in workspace config, and no feature may require a particular one ([PHILOSOPHY](./PHILOSOPHY.md), "No harness is home"). | Agent, model, LLM, backend, provider |
 | **Invoke envelope** | The request `strand` assembles per call, carrying op name, argv, payloads, and selection context. | Request, payload, command |
@@ -56,14 +56,10 @@ How code gets into a weaver.
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
 | **Spool** | Trusted, authorable Clojure loaded into the weaver. Spools are how every capability above the core arrives. | Plugin, extension, package, module, library |
-| **Family** | One key in `spools.edn` inside the selected workspace. It approves one repository as one release unit and one family entry; its `:roots` map names that repository's public libraries. | Spool, package, repo, dependency |
-| **Coordinate** | The value under a family key, naming where its source comes from: `:local/root`, `:git/url` plus `:git/sha`, or `:millstrand/source-root`. | Dependency, source, path, URL, version |
-| **Root** | A public library within a family, mapped to a checkout path by `:roots`. Every root has exactly one owner. | Spool, namespace, directory, family |
-| **Module** | A `runtime/module!` declaration naming one source target and its world policy, guarded by the `:spools` roots it needs. The activation unit. | Spool, namespace, plugin, component |
+| **Coordinate** | An ordinary tools.deps library coordinate in `deps.edn` or `deps.local.edn`. | Approval, package grammar |
+| **Module** | A `runtime/module!` declaration naming one source target and its world policy. The activation unit. | Spool, namespace, plugin, component |
 | **Authoring form** | A top-level form that defines an ordinary Var and collects a registry or lifecycle declaration while the selected module source is evaluated. | Callback, installer, manifest |
-| **Approval** | A coordinate's presence in `spools.edn`. For a Git family the pinned sha is the consumer's consent. | Install, enable, activate, allowlist |
-| **Acquisition** | Resolving and fetching approved roots. | Install, download, resolve, fetch |
-| **Sync** | Materializing acquired roots into the runtime and reporting per-root outcomes. | Load, install, refresh, reload |
+| **Activation** | An explicit module declaration in `init.clj` or `init.local.clj`. A dependency does not activate code. | Install, enable by presence |
 | **Namespace tiers** | The contractual layering of `millstrand.*` (SPEC-003.C19). `millstrand.api.*.alpha` promises accretion within each subnamespace; `millstrand.core.*` promises nothing; `millstrand.spools.*` is the spool layer; `millstrand.repl` is the human surface. Workspace-owned helper namespaces are downstream code, not a Millstrand tier. | Layers, packages, modules, tiers bare |
 | **Unsafe namespace** | A shipped spool namespace whose name marks it as reaching into `millstrand.core.*`. Only these may touch core, which keeps the coupling visible. | Internal, private, legacy, deprecated |
 
