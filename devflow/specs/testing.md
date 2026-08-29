@@ -14,7 +14,7 @@ This spec defines how downstream projects may test code against Millstrand and h
 ## SPEC-006.P2 Goals
 
 - **SPEC-006.G1:** Let authors choose the cheapest test that proves the behavior they own.
-- **SPEC-006.G2:** Provide a production-faithful disposable world for behavior that depends on weaver startup, acquisition, activation, transports, storage, events, or time.
+- **SPEC-006.G2:** Provide a production-faithful disposable world for behavior that depends on weaver startup, dependency resolution, activation, transports, storage, events, or time.
 - **SPEC-006.G3:** Keep test runtimes isolated from ambient and user-owned Millstrand worlds.
 - **SPEC-006.G4:** Make dependency and classpath boundaries visible rather than allowing a direct test to masquerade as spool-load proof.
 

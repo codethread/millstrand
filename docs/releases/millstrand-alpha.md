@@ -1,6 +1,6 @@
 # Millstrand alpha SHA release
 
-Millstrand is alpha software. This release publishes the renamed core by immutable Git commit only. It creates no release marker, and `v1` is forbidden.
+Millstrand is alpha software. This release publishes the renamed core by immutable Git commit only. It has no Millstrand-managed spool release identity.
 
 The canonical repository is `codethread/millstrand`. The Clojure dependency coordinate is `io.millstrand/millstrand`.
 
@@ -38,4 +38,4 @@ scripts/verify-published-core.sh --mode published \
 
 The verifier waits up to 30 seconds for the supervisor readiness marker. Set `MILLSTRAND_VERIFY_TIMEOUT_SECONDS` to a larger positive value on a slow host, up to 600 seconds.
 
-This SHA pin makes no compatibility promise and cannot satisfy a marker floor. Rollback means returning a consumer to its previous immutable SHA. The repository publishes no alias for the former product identity.
+This SHA pin makes no compatibility promise. Rollback means returning a consumer to its previous immutable SHA. The repository publishes no alias for the former product identity.

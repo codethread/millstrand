@@ -72,7 +72,7 @@ The E2E entrypoint runs `go build` on the repository's CLI sources into `cli/bin
 
 | Fixture class | Location and shape | Evidence |
 | --- | --- | --- |
-| Classpath/direct | Test namespaces and temporary pure-data or file fixtures under `test/clojure/millstrand/`; explicit `:publish? false` runtimes where a runtime is needed. | API, pure, and component behavior. No acquisition or startup claim. |
+| Classpath/direct | Test namespaces and temporary pure-data or file fixtures under `test/clojure/millstrand/`; explicit `:publish? false` runtimes where a runtime is needed. | API, pure, and component behavior. No dependency-resolution or startup claim. |
 | Module lifecycle | Generated `deps.edn`/`:files` worlds used with `millstrand.test.alpha`. | Dependency-basis loading, module collection/publication, lifecycle, and refresh inside an embedded disposable weaver. |
 | Process E2E | `test/clojure/e2e/millstrand/e2e.clj`, the committed `test/fixtures/clojure/authoring-module/` and `test/fixtures/clojure/e2e-live-spool/` fixtures, `test/fixtures/shell/acceptance/`, and the generated Git repositories and v1/v2 live-spool roots created under disposable `/tmp` paths. | Built binaries, public commands and transport, repository bootstrap, process identity, generation changes, and exact-PID teardown. |
 
@@ -84,10 +84,10 @@ Process-specific assertions stay in [`test/clojure/e2e/millstrand/e2e.clj`](./cl
 
 | Scenario | Unique process/repository claim | Authoritative specification | Lower-tier integration ownership |
 | --- | --- | --- | --- |
-| `smoke-live-add!` | A built `mill` supervisor and a separate weaver can start in an isolated world; a root absent at startup can be approved and added through the public refresh path while the existing process identities and generation remain in place; the newly published op is then callable through `strand`; cleanup leaves the ambient mill untouched. | [SPEC-006.C4a](../devflow/specs/testing.md), [SPEC-004.C44c](../devflow/specs/daemon-runtime.md), [SPEC-004.C46](../devflow/specs/daemon-runtime.md) | [`test/clojure/millstrand/spools_test.clj`](./clojure/millstrand/spools_test.clj) keeps loaded-root sync and pending classifications plus reload-code source transitions. |
+| `smoke-live-add!` | A built `mill` supervisor and separate Weaver start in an isolated world; a replacement generation adopts an edited dependency basis and publishes the explicitly activated operation. | [SPEC-006.C4a](../devflow/specs/testing.md), [SPEC-004.C44c](../devflow/specs/daemon-runtime.md), [SPEC-004.C46](../devflow/specs/daemon-runtime.md) | [`test/clojure/millstrand/spools_test.clj`](./clojure/millstrand/spools_test.clj) keeps loaded-root sync and pending classifications plus reload-code source transitions. |
 | `smoke-live-cutover!` | The same public process topology can show a changed loaded root being refused for the current generation, then stop the old weaver and start a new mill-managed generation that activates the replacement root; mill identity persists while weaver identity and generation change, and public dispatch returns the replacement value. | [SPEC-006.C4a](../devflow/specs/testing.md), [SPEC-004.C44d](../devflow/specs/daemon-runtime.md), [SPEC-004.C46](../devflow/specs/daemon-runtime.md) | [`test/clojure/millstrand/core/weaver/modules_test.clj`](./clojure/millstrand/core/weaver/modules_test.clj) keeps module, publication, conflict, and residual combinations; [`test/clojure/millstrand/runtime/integration_test.clj`](./clojure/millstrand/runtime/integration_test.clj) keeps status/reload-code composition and result shapes. |
 
-The table is a locator, not a second contract. [SPEC-004.C44c](../devflow/specs/daemon-runtime.md), [SPEC-004.C44d](../devflow/specs/daemon-runtime.md), and [SPEC-004.C46](../devflow/specs/daemon-runtime.md) own the exact classification, pending-generation, refresh, and publication behavior.
+The table is a locator, not a second contract. [SPEC-004.C42–C50](../devflow/specs/daemon-runtime.md) owns basis comparison, refresh, and publication behavior; [SPEC-004.C113–C123](../devflow/specs/daemon-runtime.md) owns replacement continuity.
 
 ## Merge gate and exclusions
 

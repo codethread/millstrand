@@ -93,20 +93,6 @@ Three tiers answer every "how do I find out" question, and the distinction is lo
 | **help** | Exact invocation: the registered ops, and one op's flags, positionals, and subcommands. | About, manual, usage docs |
 | **Help envelope** | The versioned machine schema behind all three, and the single contract. `--json` is the raw floor the CLI always relays. | Output format, response, JSON schema |
 
-## Spool release
-
-| Term | Definition | Aliases to avoid |
-| --- | --- | --- |
-| **Marker** | A published release identity: an annotated, ordered `v<int>` tag. `v0` is reserved, and human labels like `alpha-3` are mechanically inert. | Version, semver, release number, tag |
-| **WIP** | Untagged upstream work. Sha-pin only; no floor can target it. | Unstable, prerelease, alpha, nightly |
-| **Floor** | The minimum marker accepted for a required root (`:requires`) or for Millstrand itself (`:millstrand/min`). | Minimum version, constraint, range, pin |
-| **Floor raise** | Increasing that minimum. A raise is not a break; the floor and its test pin move in one commit. | Breaking change, major bump |
-| **Previous marker** | The greatest published marker below the release being cut. From `v2` onward `bin/compat-alarm` runs against it. | Last release, latest, HEAD |
-| **Accretion** | Adding to published names without withdrawing or narrowing them. This is the promise `v1` makes. | Backwards compatible, non-breaking, additive |
-| **Bump** | A consumer moving to a newer marker, changing `:git/tag` and `:git/sha` together. | Upgrade, migrate, update |
-| **Break** | Rejecting input the published contract accepted, even when it improves validation. Rejecting what the contract already declared invalid is a fix. | Major version, semver major, regression |
-| **Claims** | The marker a `:local/root` development override asserts it satisfies, since a local path has no tag to read. | Version, tag, declared version |
-
 ## Repo artifacts
 
 | Term | Definition | Aliases to avoid |
@@ -174,9 +160,7 @@ Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/
 - Each **battery** is independently acyclic; **annotation relations** are not, so nothing may assume the whole graph is a DAG (TEN-005).
 - A **note** is a closed strand attached by the `notes` battery. Its text is write-once and cannot be rewritten, archived, or deleted on any mutation path.
 - **Burn** deletes and **close** does not. Every burn writes a **tombstone** in the same transaction; a tombstone supports hand-recovery, never undo.
-- One **family** is one repository and one release unit. A family has one or more **roots**, and each root has exactly one owner.
 - A **spool** is the code; a **module** is its activation. Module source publishes through authoring forms; the activation declaration names only source and world policy.
-- **Approval** is consent, **acquisition** fetches, **sync** materializes. A sha-pinned family cannot change under an unchanged pin.
 - One real weaver process publishes exactly one **ambient runtime**.
 - A **weaver generation** mints its spool classloader at boot and never swaps it, so **non-additive changes** wait for the next generation.
 - An **op** is the only thing the **`strand` CLI** can invoke. There are no builtin subcommands, so every command name came from a spool.
@@ -212,7 +196,7 @@ Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/
 - "State" is the core lifecycle column and nothing else. Kanban lanes and derived task statuses are attributes and projections that spools compute; do not call them state.
 - "Generation" means a **weaver generation** and a **schema generation**. Both appear in the same specs.
 - "Battery" means an operational relation and the **batteries** spool. Unrelated; qualify when both are in scope.
-- "Spool" means a repository, a **family** entry, and a **root** library. Retire bare "spool" wherever two of those are live in a sentence.
+- "Spool" can mean the trusted Clojure code or its repository. Name the repository or tools.deps library when that distinction matters.
 - "Module" and "spool" were used interchangeably. A **spool** is code; a **module** is one activation declaration over it.
 - "Review" means the land **sign-off** step here, and a devflow step, a delegation preset, or a kanban lane elsewhere. Name the surface.
 - "Prime" means the discovery tier and the `mill prime millstrand` orientation command.
@@ -221,6 +205,5 @@ Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/
 - "Hook" was used for both **event handlers** and **lifecycle hooks**. Handlers are async and reactive; hooks are synchronous and may reject.
 - "Checkpoint" should not imply a save point. Nothing rolls back to one — see [PHILOSOPHY](./PHILOSOPHY.md), "resumability, never replayability".
 - "Workspace" is a Millstrand workspace directory. It is not a git worktree, not a Clojure workspace, and not the repository.
-- "Install", "enable", and "activate" were used for **approval**, **acquisition**, and **sync**, which are three distinct steps with distinct failure modes.
-- "Version" is retired for spools. Use **marker** for a published `v<int>`, **floor** for a minimum, and **claims** for a local override's assertion.
-- "Breaking change" is retired for **floor raises**. A raise is not a **break**; a break is rejecting input the published contract accepted.
+- "Install" and "enable" are imprecise for spools. A dependency makes code available; an activation declaration selects a module.
+- Historical spool documents used **marker**, **floor**, and **claims** for Millstrand-owned release checks. Current spools use ordinary coordinate and repository release vocabulary.

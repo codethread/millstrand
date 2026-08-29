@@ -61,7 +61,7 @@ strand search "widget" --limit 200            # raise the row cap
 | `strand search <substring> [--archived] [--attr-key <k>] [--limit <n>]` | Substring search; JSON rows `{id, title, attr-key, snippet}`. |
 | `(search-rows rt opts)` | Explicit-runtime core; `opts` is `{:substring :archived? :attr-key :limit}`. |
 
-The namespace declares the operation with `millstrand.api.millstrand.alpha/defop!`. Activate it with `(runtime/module! rt :key {:ns 'millstrand.spools.unsafe-text-search :spools ['millstrand.spools/unsafe-text-search]})`.
+The namespace declares the operation with `millstrand.api.millstrand.alpha/defop!`. Activate it with `(runtime/module! rt :key {:ns 'millstrand.spools.unsafe-text-search})`.
 
 Flags:
 

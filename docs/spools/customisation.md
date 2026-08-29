@@ -60,7 +60,7 @@ failing files fail loudly with file context. The generated `init.clj` is intenti
    :after [:millstrand/spools-batteries]})
 ```
 
-The declarations name only source targets and world policy; Batteries publishes through authoring forms in its source. The generated adapter has the same Batteries root guard and registers Batteries' help transform after the module loads, so `strand help` renders text by default while `strand help --json` keeps the raw envelope. The source-root coordinate is relative to the mill-selected Millstrand checkout, so bootstrap persists no absolute checkout path. Delete the seeded entry to opt out of batteries; the guarded modules then publish no batteries ops.
+The declarations name only source targets and world policy; Batteries publishes through authoring forms in its source. The generated adapter registers Batteries' help transform after the module loads, so `strand help` renders text by default while `strand help --json` keeps the raw envelope. The source-root coordinate is relative to the mill-selected Millstrand checkout, so bootstrap persists no absolute checkout path. Delete the seeded entry to opt out of batteries; the guarded modules then publish no batteries ops.
 
 `millstrand.api.runtime.alpha` is a privileged built-in runtime loader/config helper namespace shipped with Millstrand —
 not an ordinary user spool, which is why loader/config helpers do not live under `millstrand.spools.*`.
