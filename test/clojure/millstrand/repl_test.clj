@@ -5,6 +5,7 @@
             [clojure.test :refer [deftest is testing]]
             [nrepl.cmdline]
             [nrepl.core :as nrepl]
+            [millstrand.api.current.alpha :as current]
             [millstrand.api.events.alpha :as events]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.hooks.alpha :as hooks]
@@ -13,7 +14,6 @@
             [millstrand.core.client :as client]
             [millstrand.core.db-test :as db-test]
             [millstrand.core.weaver.metadata :as metadata]
-            [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.repl :as repl]
             [millstrand.source-file :as source-file]
             [millstrand.spools.test-support :as test-support]
@@ -67,12 +67,17 @@
 (defn with-runtime
   ([f]
    (with-runtime {} f))
-  ([_opts f]
-   (test-alpha/with-weaver-world [ctx {}]
+  ([opts f]
+   (let [bind-runtime? (get opts :bind-runtime? true)
+         fixture-opts (dissoc opts :bind-runtime?)]
+     (test-alpha/with-weaver-world [ctx fixture-opts]
      (try
-       (f (:runtime ctx) (:db-path ctx))
+       (if bind-runtime?
+         (current/with-runtime* (:runtime ctx)
+                                #(f (:runtime ctx) (:db-path ctx)))
+         (f (:runtime ctx) (:db-path ctx)))
        (finally
-         (reset-open-state!))))))
+         (reset-open-state!)))))))
 
 (deftest connected-accessors-fail-before-connect
   (reset-open-state!)
@@ -113,7 +118,6 @@
 
 (deftest failed-connect-clears-previous-selection
   (with-runtime
-    {:publish? false}
     (fn [rt db-file]
       (repl/connect! (:config-dir (:metadata rt)))
       (spit db-file "not a config dir")
@@ -133,7 +137,6 @@
 
 (deftest explicit-connected-stdin-main-drives-the-weaver-over-the-client-bridge
   (with-runtime
-    {:publish? false}
     (fn [rt _]
       (let [out (java.io.StringWriter.)]
         (binding [*in* (java.io.StringReader.
@@ -181,7 +184,7 @@
     (fn [rt _]
       (let [{:keys [endpoint]} (:metadata rt)
             out (java.io.StringWriter.)]
-        (binding [*in* (java.io.StringReader. "(str *ns*)\n(+ 1 2)\n(str \"a\" \"b\")\n@millstrand.core.weaver.runtime/current-runtime\n")
+        (binding [*in* (java.io.StringReader. "(str *ns*)\n(+ 1 2)\n(str \"a\" \"b\")\n(millstrand.api.current.alpha/runtime)\n")
                   *out* out
                   *err* (java.io.StringWriter.)]
           ((ns-resolve 'millstrand.repl 'attach-stdin!) (:host endpoint) (str (:port endpoint))))
@@ -207,7 +210,6 @@
 
 (deftest attach-repl-delegates-to-helper-ready-nrepl-client-repl
   (with-runtime
-    {:publish? false}
     (fn [rt _]
       (let [{:keys [endpoint]} (:metadata rt)
             calls (atom [])
@@ -365,24 +367,30 @@
         (is (nil? (get (events/handlers rt) :wrap-handler)))))))
 
 (deftest registered-queries-last-only-for-the-weaver-lifetime
-  (with-runtime
-    (fn [rt db-file]
-      (reset-open-state!)
-      (is (= {"mine" [:= [:attr :owner] "agent"]}
-             (repl/register-query! :mine [:= [:attr :owner] "agent"])))
-      (is (= {"mine" [:= [:attr :owner] "agent"]} (graph/queries rt)))
-      (weaver-runtime/stop! rt)
-      (let [fresh-rt (weaver-runtime/start! db-file
-                                            {:world (test-support/test-world (:config-dir (:metadata rt)))
-                                             :generation-basis (:generation-basis rt)})]
-        (try
-          (is (= {} (graph/queries fresh-rt))
-              "SPEC-003.C12: the registry is weaver-lifetime, not durable")
-          (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                                #"Query not registered; cannot replace"
-                                (repl/replace-query! :mine [:= [:attr :owner] "human"])))
-          (finally
-            (weaver-runtime/stop! fresh-rt)))))))
+  (let [root (test-support/temp-dir "millstrand-repl-query-lifetime")]
+    (try
+      (test-alpha/with-weaver-world [ctx {:root root}]
+        (current/with-runtime*
+         (:runtime ctx)
+         #(do
+            (reset-open-state!)
+            (is (= {"mine" [:= [:attr :owner] "agent"]}
+                   (repl/register-query! :mine [:= [:attr :owner] "agent"])))
+            (is (= {"mine" [:= [:attr :owner] "agent"]}
+                   (graph/queries (:runtime ctx)))))))
+      (test-alpha/with-weaver-world [ctx {:root root}]
+        (let [fresh-rt (:runtime ctx)]
+          (current/with-runtime*
+           fresh-rt
+           #(do
+              (is (= {} (graph/queries fresh-rt))
+                  "SPEC-003.C12: the registry is weaver-lifetime, not durable")
+              (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                    #"Query not registered; cannot replace"
+                                    (repl/replace-query! :mine [:= [:attr :owner] "human"])))))))
+      (finally
+        (reset-open-state!)
+        (test-support/delete-tree! root)))))
 
 (deftest registration-wrappers-are-in-process-only
   (reset-open-state!)
@@ -396,7 +404,7 @@
                         #"neither a runtime nor a `connect!` selection"
                         (repl/unregister-hook! :nope)))
   (with-runtime
-    {:publish? false}
+    {:bind-runtime? false}
     (fn [rt _db-file]
       (repl/connect! (:config-dir (:metadata rt)))
       (try
