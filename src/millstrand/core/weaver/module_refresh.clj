@@ -949,22 +949,6 @@
                       :last-refresh result))))
   result)
 
-(defn- refused-result [mode error]
-  {:status :refused
-   :mode mode
-   :modules (sorted-map)
-   :residuals []
-   :conflicts [error]
-   :remedies []
-   :declaration/shadows (sorted-map)})
-
-(defn- record-refused-result! [runtime opts result]
-  (if (:dry-run? opts)
-    (assoc result :dry-run? true :caveat plan-caveat)
-    (do
-      (swap! (:module-state runtime) assoc :last-refresh result)
-      result)))
-
 (defn- select-refresh
   [runtime load-startup-files! opts]
   (let [state @(:module-state runtime)]
@@ -1020,32 +1004,19 @@
   ;; never publish interleaved desired graphs.
   #_{:splint/disable [lint/locking-object]}
   (locking (:module-refresh-lock runtime)
-    (let [selection
-          (try
-            (select-refresh runtime load-startup-files! opts)
-            (catch Throwable throwable
-              (if (:startup? opts)
-                (throw throwable)
-                (if (or (contains? opts :only) (:declare opts))
-                  (throw throwable)
-                  {:refused
-                   (record-refused-result!
-                    runtime opts
-                    (refused-result :full (exception-data throwable)))}))))]
-      (if-let [refused (:refused selection)]
-        refused
-        (let [{:keys [mode collection selected]} selection
-              state @(:module-state runtime)
-              old-graph (:graph state)
-              graph (:graph collection)
-              removed (if (= :full mode)
-                        (set/difference (set (keys old-graph)) (set (keys graph)))
-                        #{})
-              selected (or selected (set (keys graph)))
-              order (module-graph/affected-modules graph selected)
-              record-snapshots (atom {})]
-          (binding [*declaration-record-snapshots* record-snapshots]
-                (try
+    (let [selection (select-refresh runtime load-startup-files! opts)
+          {:keys [mode collection selected]} selection
+          state @(:module-state runtime)
+          old-graph (:graph state)
+          graph (:graph collection)
+          removed (if (= :full mode)
+                    (set/difference (set (keys old-graph)) (set (keys graph)))
+                    #{})
+          selected (or selected (set (keys graph)))
+          order (module-graph/affected-modules graph selected)
+          record-snapshots (atom {})]
+      (binding [*declaration-record-snapshots* record-snapshots]
+        (try
                   (let [previous-contributions (:contributions state)
                         previous-sources (:contribution-sources state)
                         raw (evaluate-affected runtime with-loader graph order
@@ -1151,11 +1122,7 @@
                         (.addSuppressed throwable diagnostic-failure)))
                     ;; Source loads may already have occurred, but no publication
                     ;; follows a coordinator-wide validation failure.
-                    (if (:startup? opts)
-                      (throw throwable)
-                      (record-refused-result!
-                       runtime opts
-                       (refused-result mode (exception-data throwable))))))))))))
+            (throw throwable)))))))
 
 (defn module!
   "Stage a module during startup collection, otherwise declare and refresh it."

@@ -355,18 +355,27 @@
       (when-not (seq roots)
         (throw (ex-info "Library has no source-backed classpath entry"
                         {:lib lib :stage :source-paths})))
-      (let [namespaces
+      (let [source-files (fn [namespace]
+                           (->> (ns-interns namespace)
+                                vals
+                                (keep (comp :file meta))
+                                distinct))
+            loader (:generation-classloader runtime)
+            namespaces
             (->> (all-ns)
                  (keep (fn [namespace]
-                         (when-let [file (:file (meta namespace))]
-                           (when-let [resource (io/resource file)]
-                             (when (= "file" (.getProtocol resource))
-                               (let [path (-> resource .toURI io/file .getCanonicalPath)]
-                                 (when (some #(or (= path %)
-                                                 (str/starts-with?
-                                                  path (str % java.io.File/separator)))
-                                             roots)
-                                   (ns-name namespace))))))))
+                         (when (some (fn [file]
+                                       (when-let [resource (.getResource ^ClassLoader loader file)]
+                                         (when (= "file" (.getProtocol resource))
+                                           (let [path (-> resource .toURI io/file
+                                                          .getCanonicalPath)]
+                                             (some #(or (= path %)
+                                                        (str/starts-with?
+                                                         path
+                                                         (str % java.io.File/separator)))
+                                                   roots)))))
+                                     (source-files namespace))
+                           (ns-name namespace))))
                  (sort-by str)
                  vec)]
         (with-runtime-and-spool-classloader
@@ -682,6 +691,11 @@
                    generation-basis
                    old-generation-baseline pre-publication-claim]
             :or {publish? true}}]
+  (when-not (s/valid? :millstrand.core.specs/generation-basis generation-basis)
+    (throw (ex-info "Weaver startup requires a valid generation basis"
+                    {:explain (s/explain-data
+                               :millstrand.core.specs/generation-basis
+                               generation-basis)})))
   (when (and (publishes-ambient-runtime? publish? probe?) @current-runtime)
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
   (let [world (or world (weaver-config/world))
@@ -738,8 +752,7 @@
                           :generation-basis generation-basis
                           :basis-fingerprint basis-fingerprint
                           :generation-classloader
-                          (or (:classloader generation-basis)
-                              (.getContextClassLoader (Thread/currentThread)))
+                          (:classloader generation-basis)
                           :release-marker resolved-release-marker
                           :source-config-dir (:source-config-dir world)
                           :module-state
@@ -970,6 +983,12 @@
                       :explain (s/explain-data
                                 :millstrand.weaver-start/old-generation-baseline
                                 (:old-generation-baseline opts))})))
+   (when-not (s/valid? :millstrand.core.specs/generation-basis
+                       (:generation-basis opts))
+     (throw (ex-info "Fresh runtime probe requires a valid generation basis"
+                     {:explain (s/explain-data
+                                :millstrand.core.specs/generation-basis
+                                (:generation-basis opts))})))
    (let [probe-root (.toFile (Files/createTempDirectory
                               "millstrand-restart-probe-"
                               (make-array FileAttribute 0)))
@@ -993,9 +1012,16 @@
        (copy-tree! (:config-dir world) probe-config)
        (report! {:stage :probe/workspace :status :completed
                  :data {:workspace (.getPath probe-root)}})
-       (let [runtime (reset! started-runtime
+       (let [runtime-coordinate
+             (get-in opts [:generation-basis :reserved-deps
+                           'io.millstrand/millstrand])
+             generation-basis
+             (basis/create-generation-basis (.getCanonicalPath probe-config)
+                                            runtime-coordinate)
+             runtime (reset! started-runtime
                              (start! nil (merge opts
                                                 {:world probe-world
+                                                 :generation-basis generation-basis
                                                  :publish? false
                                                  :storage :sqlite-memory
                                                  :probe? true
@@ -1158,13 +1184,10 @@
   "Start a foreground weaver process from command-line arguments."
   [& args]
   (let [{:keys [config-dir state-dir data-dir name release-marker]} (parse-main-args args)]
-    (start! nil (cond-> {:world (weaver-config/world config-dir state-dir data-dir)
-                         :name name}
-                  release-marker (assoc :release-marker release-marker)))
-    (install-signal-shutdown!)
-    (println "weaver started")
-    (while @current-runtime
-      (Thread/sleep 100))))
+    (throw (ex-info "Direct Weaver startup requires a resolved generation basis"
+                    {:world (weaver-config/world config-dir state-dir data-dir)
+                     :name name
+                     :release-marker release-marker}))))
 
 (defn start-with-generation-basis!
   "Start a foreground Weaver from an already resolved generation basis.

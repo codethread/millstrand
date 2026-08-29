@@ -65,6 +65,15 @@
         (boolean (re-matches #"sha256:[0-9a-f]{64}" %))))
 (s/def :millstrand.core.specs/basis-fingerprint
   :millstrand.basis/fingerprint)
+(s/def :millstrand.basis/running-fingerprint
+  :millstrand.core.specs/basis-fingerprint)
+(s/def :millstrand.basis/candidate-fingerprint
+  :millstrand.core.specs/basis-fingerprint)
+(s/def :millstrand.core.specs/basis-change
+  (s/and (s/keys :req-un [:millstrand.basis/running-fingerprint
+                           :millstrand.basis/candidate-fingerprint])
+         #(= #{:running-fingerprint :candidate-fingerprint} (set (keys %)))
+         #(not= (:running-fingerprint %) (:candidate-fingerprint %))))
 (s/def :millstrand.dependency/status #{:invalid-dependency-config})
 (s/def :millstrand.dependency/stage #{:deps-read :deps-resolve})
 (s/def :millstrand.dependency/source-path
@@ -437,6 +446,8 @@
 (s/def :millstrand.weaver-start/release-marker ::release-marker-syntax)
 (s/def :millstrand.weaver-start/probe? boolean?)
 (s/def :millstrand.weaver-start/diagnostic! ifn?)
+(s/def :millstrand.weaver-start/generation-basis
+  :millstrand.core.specs/generation-basis)
 (defn- finite-json-number?
   "Return true when `value` is an encodable finite JSON number."
   [value]
@@ -503,9 +514,10 @@
                           :millstrand.weaver-start/release-marker
                           :millstrand.weaver-start/probe?
                           :millstrand.weaver-start/diagnostic!
+                          :millstrand.weaver-start/generation-basis
                           :millstrand.weaver-start/old-generation-baseline])
          #(every? #{:world :name :publish? :storage :release-marker :probe?
-                    :diagnostic! :old-generation-baseline}
+                    :diagnostic! :generation-basis :old-generation-baseline}
                   (keys %))))
 
 (s/def ::add-command (s/cat :title ::title :opts (s/* string?)))

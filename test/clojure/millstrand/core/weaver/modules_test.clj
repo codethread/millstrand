@@ -66,7 +66,10 @@
             started (with-redefs-fn
                       {#'weaver-runtime/install-built-in-ops! (fn [_runtime])}
                       #(weaver-runtime/start!
-                        db-file {:world world :publish? false}))
+                        db-file {:world world
+                                 :publish? false
+                                 :generation-basis
+                                 (generation-basis workspace-path)}))
             basis (generation-basis workspace-path)
             runtime (assoc started
                            :generation-basis basis
@@ -88,6 +91,21 @@
                "(millstrand.api.runtime.alpha/collect-entry! "
                ":queries \"owned\" " (pr-str query) ")\n"))
     file))
+
+(deftest reload-code-selects-loaded-namespaces-from-var-source-provenance
+  (let [root (.getCanonicalPath (io/file "src"))
+        coordinate {:local/root (.getCanonicalPath source-checkout)
+                    :paths [root]}
+        reloaded (atom [])
+        rt {:generation-basis {:basis {:libs {'demo/source coordinate}}}
+            :generation-classloader (.getContextClassLoader (Thread/currentThread))}]
+    (with-redefs [clojure.core/require
+                  (fn [namespace & args]
+                    (swap! reloaded conj [namespace args]))]
+      (let [result (weaver-runtime/reload-basis-lib! rt 'demo/source)]
+        (is (= :reloaded (:status result)))
+        (is (some #{'millstrand.core.weaver.runtime} (:namespaces result)))
+        (is (some #{['millstrand.core.weaver.runtime '(:reload)]} @reloaded))))))
 
 (deftest coordinator-state-has-no-legacy-root-state
   (is (= #{:graph :layers :shadows :startup/files :contributions

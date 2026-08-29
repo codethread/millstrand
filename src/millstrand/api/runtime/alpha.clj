@@ -100,12 +100,7 @@
                    (every? keyword? (:only %))))))
 
 (s/def ::basis-fingerprint :millstrand.core.specs/basis-fingerprint)
-(s/def ::basis-change
-  (s/and #(shapes/exact-keys? #{:running-fingerprint
-                                :candidate-fingerprint} %)
-         #(s/valid? ::basis-fingerprint (:running-fingerprint %))
-         #(s/valid? ::basis-fingerprint (:candidate-fingerprint %))
-         #(not= (:running-fingerprint %) (:candidate-fingerprint %))))
+(s/def ::basis-change :millstrand.core.specs/basis-change)
 (s/def ::dependency-diagnostic :millstrand.core.specs/dependency-diagnostic)
 (s/def ::restart-required-result
   (s/and #(shapes/exact-keys? #{:status :reason :basis} %)
