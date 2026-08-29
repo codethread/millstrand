@@ -1,4 +1,5 @@
 (ns millstrand.core.weaver.basis-test
+  "Tests for generation basis construction and semantic fingerprints."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is testing]]
