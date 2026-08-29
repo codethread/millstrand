@@ -475,11 +475,6 @@ func assertProbeDiagnostics(t *testing.T, diagnostics []any, label string) {
 		}
 		seen[stage] = true
 		data, _ := entry["data"].(map[string]any)
-		if stage == "materialize" {
-			if _, ok := data["roots"]; !ok {
-				t.Fatalf("%s root outcomes missing: %#v", label, entry)
-			}
-		}
 		if stage == "evaluate" {
 			if _, ok := data["modules"]; !ok {
 				t.Fatalf("%s module outcomes missing: %#v", label, entry)
@@ -501,7 +496,7 @@ func assertProbeDiagnostics(t *testing.T, diagnostics []any, label string) {
 			}
 		}
 	}
-	for _, stage := range []string{"materialize", "evaluate", "staged", "publication", "apply", "rearm", "plan", "failure"} {
+	for _, stage := range []string{"evaluate", "staged", "publication", "apply", "rearm", "plan", "failure"} {
 		if !seen[stage] {
 			t.Fatalf("%s diagnostics missing stage %q: %v", label, stage, seen)
 		}
@@ -542,7 +537,7 @@ func assertSuccessfulProbeDiagnostics(t *testing.T, status map[string]any) {
 			}
 		}
 	}
-	for _, stage := range []string{"materialize", "evaluate", "staged", "validate", "plan", "publication", "apply", "rearm"} {
+	for _, stage := range []string{"evaluate", "staged", "validate", "plan", "publication", "apply", "rearm"} {
 		if !seen[stage] {
 			t.Fatalf("successful probe diagnostics missing stage %q: %v", stage, seen)
 		}

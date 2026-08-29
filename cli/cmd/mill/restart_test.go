@@ -92,6 +92,25 @@ func TestDecodeRestartProbeUsesClosedBoundary(t *testing.T) {
 	}
 }
 
+func TestFreshRuntimeProbeExpressionSuppliesGenerationBasis(t *testing.T) {
+	for _, want := range []string{
+		`(System/getenv "MILLSTRAND_PROBE_SOURCE")`,
+		`millstrand.core.weaver.basis/create-generation-basis`,
+		`:generation-basis generation-basis`,
+	} {
+		if !strings.Contains(freshRuntimeProbeExpression, want) {
+			t.Fatalf("fresh runtime probe expression missing %q", want)
+		}
+	}
+	args := freshRuntimeProbeArgs(filepath.Join("tmp", "millstrand"))
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"-Srepro", "-M", "org.clojure/tools.deps"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("fresh runtime probe args missing %q: %q", want, args)
+		}
+	}
+}
+
 func TestRestartProbeConformanceCorpus(t *testing.T) {
 	var corpus struct {
 		ProbeResults []struct {

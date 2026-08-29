@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -328,6 +329,7 @@ func TestMillRoutedStrandOpsAddListHelpAndStream(t *testing.T) {
 	if out, err := h.millCmd("", repo, "", "init"); err != nil {
 		t.Fatalf("init failed: %v\n%s", err, out)
 	}
+	writeLocalBatteriesDeps(t, filepath.Join(repo, ".millstrand"))
 	// Load the pinned streaming-op fixture from the workspace init.clj so the
 	// weaver registers `test-stream` alongside the batteries ops.
 	appendFixtureLoad(t, filepath.Join(repo, ".millstrand", "init.clj"))
@@ -434,6 +436,7 @@ func TestLinkedGitWorktreesShareDefaultWorldAndExplicitConfigDirIsolated(t *test
 	if out, err := h.millCmd("", repo, "", "init"); err != nil {
 		t.Fatalf("init failed: %v\n%s", err, out)
 	}
+	writeLocalBatteriesDeps(t, filepath.Join(repo, ".millstrand"))
 	if out, err := h.millCmd("", repo, "", "weaver", "start"); err != nil {
 		t.Fatalf("weaver start failed: %v\n%s", err, out)
 	}
@@ -464,6 +467,7 @@ func TestLinkedGitWorktreesShareDefaultWorldAndExplicitConfigDirIsolated(t *test
 	if out, err := h.millCmd(explicit, linked, "", "init"); err != nil {
 		t.Fatalf("explicit init failed: %v\n%s", err, out)
 	}
+	writeLocalBatteriesDeps(t, explicit)
 	if out, err := h.millCmd(explicit, linked, "", "weaver", "start"); err != nil {
 		t.Fatalf("explicit weaver start failed: %v\n%s", err, out)
 	}
@@ -572,6 +576,21 @@ func (h harness) addJSON(t *testing.T, workspace, cwd, title, attr string) strin
 func writeClientConfig(t *testing.T, dir string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"configFormat":"alpha"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "deps.edn"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "init.clj"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeLocalBatteriesDeps(t *testing.T, dir string) {
+	t.Helper()
+	root := filepath.Join(sourceRoot(t), "spools", "batteries")
+	deps := fmt.Sprintf("{:deps {io.millstrand/batteries {:local/root %q}}}\n", root)
+	if err := os.WriteFile(filepath.Join(dir, "deps.edn"), []byte(deps), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
