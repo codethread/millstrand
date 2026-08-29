@@ -328,7 +328,81 @@
   (spit (java.io.File. workspace "deps.edn")
         (pr-str {:deps
                  {'io.millstrand/batteries
-                  {:local/root (str checkout-root "/spools/batteries")}}})))
+                 {:local/root (str checkout-root "/spools/batteries")}}})))
+
+(defn- write-local-op-root!
+  [root version]
+  (let [source (java.io.File. root "src/demo/local.clj")]
+    (.mkdirs (.getParentFile source))
+    (spit (java.io.File. root "deps.edn") "{:paths [\"src\"]}\n")
+    (spit source
+          (str "(ns demo.local\n"
+               "  (:require [millstrand.api.millstrand.alpha :as millstrand]))\n"
+               "(millstrand/defop! local-version\n"
+               "  \"Return the local fixture version.\"\n"
+               "  {:arg-spec {:op \"local-version\" :doc \"Return the local fixture version.\"\n"
+               "              :hook-class :read :deadline-class :standard}}\n"
+               "  [_] {:version " version "})\n"))))
+
+(defn- smoke-local-coordinate-replacement!
+  [db-file]
+  (let [workspace (.getCanonicalPath
+                   (.toFile (smoke-workspace (str db-file ".replacement"))))
+        v1 (java.io.File. workspace "local-v1")
+        v2 (java.io.File. workspace "local-v2")
+        deps-local (java.io.File. workspace "deps.local.edn")
+        init-local (java.io.File. workspace "init.local.clj")
+        status #(parse-json (run-mill-config! workspace "weaver" "status"))]
+    (delete-tree! (smoke-workspace (str db-file ".replacement")))
+    (run-mill-config! workspace "init")
+    (write-smoke-deps! workspace)
+    (write-local-op-root! v1 1)
+    (write-local-op-root! v2 2)
+    (spit deps-local
+          (pr-str {:deps {'demo/local {:local/root (.getCanonicalPath v1)}}}))
+    (start-weaver-config! workspace)
+    (try
+      (let [generation-a (status)
+            help-a (run-strand-config! workspace "help" "--json")]
+        (assert (not (clojure.string/includes? help-a "local-version"))
+                "dependency presence alone must not activate its module")
+        (spit deps-local
+              (pr-str {:deps {'demo/local {:local/root (.getCanonicalPath v2)}}}))
+        (spit init-local
+              (str "(require '[millstrand.api.current.alpha :as current]\n"
+                   "         '[millstrand.api.runtime.alpha :as runtime])\n"
+                   "(runtime/module! (current/runtime) :demo/local {:ns 'demo.local})\n"))
+        (let [refresh (run-process! "running generation refuses coordinate change"
+                                    (outside-repo-dir)
+                                    "(runtime/refresh! (current/runtime))\n"
+                                    [mill-bin "weaver" "repl" "--stdin"
+                                     "--workspace" workspace])]
+          (assert-contains refresh ":restart-required"
+                           "refresh reports the restart boundary")
+          (assert-contains refresh ":dependency-basis-changed"
+                           "refresh owns the changed-basis reason"))
+        (assert= (:generation_id generation-a) (:generation_id (status))
+                 "refresh leaves generation A running")
+        (assert (not (clojure.string/includes?
+                      (run-strand-config! workspace "help" "--json")
+                      "local-version"))
+                "refresh refuses before staged local activation")
+        (stop-weaver-config! workspace)
+        (start-weaver-config! workspace)
+        (let [generation-b (status)]
+          (assert (not= (:generation_id generation-a)
+                        (:generation_id generation-b))
+                  "replacement starts generation B")
+          (assert (not= (:basis_fingerprint generation-a)
+                        (:basis_fingerprint generation-b))
+                  "replacement adopts the changed basis fingerprint")
+          (assert= {:version 2}
+                   (parse-json (run-strand-config! workspace "local-version"))
+                   "replacement generation activates and exposes v2")))
+      (finally
+        (when (= "running" (:state (status)))
+          (stop-weaver-config! workspace))
+        (delete-tree! (smoke-workspace (str db-file ".replacement")))))))
 
 (defn smoke-cli-help! []
   (run-process! "Go CLI root help succeeds" [strand-bin "--help"])
@@ -605,6 +679,7 @@
       (try
         (smoke-dispatcher-surface! db-file)
         (smoke-await-cli! db-file)
+        (smoke-local-coordinate-replacement! db-file)
         (finally
           (terminate-process! mill-process "smoke mill"))))
     (finally

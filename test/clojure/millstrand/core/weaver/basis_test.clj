@@ -1,9 +1,24 @@
 (ns millstrand.core.weaver.basis-test
   "Tests for generation basis construction and semantic fingerprints."
-  (:require [clojure.java.io :as io]
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is testing]]
             [millstrand.core.weaver.basis :as basis]))
+
+(defn- inspect-basis!
+  [workspace & arguments]
+  (let [command (into ["clojure" "-Srepro" "-X:deps" "basis"
+                       ":user" "nil" ":project" "\"deps.edn\""]
+                      arguments)
+        process (-> (ProcessBuilder. ^java.util.List command)
+                    (.directory workspace)
+                    (.redirectErrorStream true)
+                    (.start))
+        output (slurp (.getInputStream process))
+        exit (.waitFor process)]
+    (is (zero? exit) (str "basis inspection failed: " output))
+    (edn/read-string output)))
 
 (defn- workspace!
   [project extra]
@@ -61,6 +76,29 @@
     (is (= [] (:aliases generation)))
     (is (nil? (:extra @captured)))
     (is (not (.exists (io/file workspace "deps.local.edn"))))))
+
+(deftest dns-s9-05-documented-basis-inspection
+  (let [shared-root (workspace! {:paths ["shared-src"]} nil)
+        local-root (workspace! {:paths ["local-src"]} nil)
+        workspace
+        (workspace!
+         {:deps {'example/shared {:local/root (.getCanonicalPath shared-root)}}
+          :aliases {:millstrand/weaver {:jvm-opts ["-Dshared=true"]}}}
+         {:deps {'example/local {:local/root (.getCanonicalPath local-root)}}
+          :aliases {:millstrand/local {:jvm-opts ["-Dlocal=true"]}}})
+        shared (inspect-basis! workspace
+                               ":aliases" "[:millstrand/weaver]")
+        overlaid (inspect-basis! workspace
+                                 ":extra" "\"deps.local.edn\""
+                                 ":aliases"
+                                 "[:millstrand/weaver :millstrand/local]")]
+    (is (contains? (:libs shared) 'example/shared))
+    (is (not (contains? (:libs shared) 'example/local)))
+    (is (every? #(contains? (:libs overlaid) %)
+                ['example/shared 'example/local]))
+    (is (= ["-Dshared=true"] (get-in shared [:argmap :jvm-opts])))
+    (is (= ["-Dshared=true" "-Dlocal=true"]
+           (get-in overlaid [:argmap :jvm-opts])))))
 
 (deftest fingerprint-is-canonical-and-semantic
   (let [project {:deps {'a/x {:mvn/version "1"}}

@@ -101,6 +101,7 @@
    ;; `with-redefs` are JVM-global, so this namespace cannot share the
    ;; parallel parent with runtime consumers.
    'millstrand.core.weaver.startup-test
+   'millstrand.runtime-deps-test
    'millstrand.core.weaver.modules-test])
 
 (def add-libs-shards
