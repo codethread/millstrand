@@ -156,21 +156,24 @@
           (is (= {:database "initialized"} (read-string (nth lines 2))))
           (is (= [] (read-string (nth lines 3)))))))))
 
-(deftest stdin-session-can-reach-the-registration-verbs-through-the-repl-alias
+(deftest attached-stdin-session-can-reach-the-registration-verbs-through-the-repl-alias
   (with-runtime
     (fn [rt _]
-      (let [out (java.io.StringWriter.)]
+      (let [{:keys [endpoint]} (:metadata rt)
+            out (java.io.StringWriter.)]
         (binding [*in* (java.io.StringReader.
                         (source-file/render-forms
                          ['(repl/register-query! 'session-query [:= [:attr :owner] "agent"])
                           '(repl/unregister-query! 'session-query)]))
                   *out* out
                   *err* (java.io.StringWriter.)]
-          (repl/-main "--stdin" (:config-dir (:metadata rt))))
+          ((ns-resolve 'millstrand.repl 'attach-stdin!)
+           (:host endpoint)
+           (str (:port endpoint))))
         (let [lines (str/split-lines (str out))]
           (is (= 2 (count lines)))
           (is (= {"session-query" [:= [:attr :owner] "agent"]} (read-string (first lines)))
-              "the session bootstrap aliases millstrand.repl as repl without an explicit require")
+              "the attached session bootstrap aliases millstrand.repl as repl without an explicit require")
           (is (= {:unregistered "session-query"} (read-string (second lines)))))))))
 
 (deftest attach-stdin-evaluates-inside-weaver-jvm
