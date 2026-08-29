@@ -3,8 +3,9 @@
 
   This namespace runs in the author's test JVM and orchestrates real weaver
   runtimes in isolated temporary workspaces: it writes requested config
-  fixtures (`config.json`, `spools.edn`, `init.clj`, arbitrary workspace
-  files), starts an unpublished in-process weaver runtime with explicit
+  fixtures (`deps.edn`, activation files, `config.json`, and arbitrary
+  workspace files), starts an unpublished in-process weaver runtime with a real
+  generation basis and explicit
   storage selection, exposes an orchestration context map, and stops/cleans up
   afterwards. Manual clocks make runtime time and sleeps deterministic.
   Weaver-side behavior is exercised through `repl!`, which
@@ -28,7 +29,8 @@
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.access :as access]
             [millstrand.core.weaver.runtime :as weaver-runtime])
-  (:import [java.nio.file Files Path]
+  (:import [clojure.lang DynamicClassLoader]
+           [java.nio.file Files Path]
            [java.nio.file.attribute FileAttribute]
            [java.time Duration Instant]))
 
@@ -37,6 +39,8 @@
   nil)
 
 (def ^:private default-timeout-ms 10000)
+
+(declare require-spec!)
 
 (def ^:private return-context-keys #{:subcommand :channel})
 (def ^:private stream-channels #{:emits :result})
@@ -207,19 +211,20 @@
     (spit file content)
     file))
 
-(defn- write-fixtures! [root {:keys [config-json spools-edn init files]}]
+(def ^:private default-deps-edn "{:deps {}}\n")
+
+(defn- write-fixtures!
+  [root {:keys [config-json deps-edn deps-local-edn init-clj init-local-clj files]}]
+  (write-fixture! root "deps.edn" (or deps-edn default-deps-edn))
+  (write-fixture! root "init.clj" (or init-clj ""))
   (when (some? config-json)
     (when-not (string? config-json)
       (throw (ex-info ":config-json must be a string of JSON text" {:config-json config-json})))
     (write-fixture! root "config.json" config-json))
-  (when (some? spools-edn)
-    (when-not (map? spools-edn)
-      (throw (ex-info ":spools-edn must be an EDN map, e.g. {:spools {...}}" {:spools-edn spools-edn})))
-    (write-fixture! root "spools.edn" (pr-str spools-edn)))
-  (when (some? init)
-    (when-not (string? init)
-      (throw (ex-info ":init must be a string of Clojure source for init.clj" {:init init})))
-    (write-fixture! root "init.clj" init))
+  (when (some? deps-local-edn)
+    (write-fixture! root "deps.local.edn" deps-local-edn))
+  (when (some? init-local-clj)
+    (write-fixture! root "init.local.clj" init-local-clj))
   (when (some? files)
     (when-not (map? files)
       (throw (ex-info ":files must be a map of workspace-relative path to string content" {:files files})))
@@ -260,13 +265,12 @@
 
   `resource-path` is the spool source's classpath-relative path (for example,
   `\"millstrand/spools/devflow.clj\"`). Returns the directory holding the spool's
-  `deps.edn`, whichever directory-backed checkout supplies the classpath entry:
-  a tools.deps gitlib procurement or a developer's local override. The supplying
+  `deps.edn`, whichever directory-backed checkout supplies the classpath entry.
+  The supplying
   checkout must declare that classpath entry in `deps.edn` `:paths`. Fails
   loudly when the resource is not on the test classpath, is jar-backed, or does
   not come from a directory checkout with the expected layout. This is for tests
-  that must approve the real dependency checkout as a `:local/root` in generated
-  `spools.edn` data.
+  that need an ordinary tools.deps `:local/root` bridge.
 
   The one-argument form resolves `resource-path` with `clojure.java.io/resource`.
   The two-argument form accepts `resource-loader`, a function from resource path
@@ -290,7 +294,7 @@
                             :classpath-root (.getPath classpath-root)})))))))
 
 (defn- source-checkout
-  "Best-effort path of the Millstrand source checkout on this test JVM's classpath."
+  "Return the Millstrand source checkout on this test JVM's classpath."
   []
   (when-let [url (io/resource "millstrand/test/alpha.clj")]
     (when (= "file" (.getProtocol url))
@@ -298,6 +302,48 @@
       (-> (io/file (.toURI url))
           .getParentFile .getParentFile .getParentFile .getParentFile
           .getCanonicalPath))))
+
+(defn- create-generation-basis
+  [workspace source]
+  (let [result-file (java.io.File/createTempFile "millstrand-test-basis-" ".edn")
+        bootstrap-deps
+        {:aliases
+         {:millstrand/bootstrap
+          {:replace-paths [(str (io/file source "src"))]
+           :replace-deps
+           {'org.clojure/clojure {:mvn/version "1.12.0"}
+            'org.clojure/data.json {:mvn/version "2.5.1"}
+            'org.clojure/tools.deps {:mvn/version "0.31.1642"}}}}}
+        form (pr-str
+              `(do
+                 (spit ~(.getPath result-file)
+                       (pr-str
+                        (dissoc
+                         ((requiring-resolve
+                           'millstrand.core.weaver.basis/create-generation-basis)
+                          ~workspace {:local/root ~source})
+                         :classloader)))))
+        process (-> (ProcessBuilder.
+                     ^java.util.List
+                     ["clojure" "-Srepro" "-Sdeps" (pr-str bootstrap-deps)
+                      "-M:millstrand/bootstrap" "-e" form])
+                    (.redirectErrorStream true)
+                    (.start))
+        output (slurp (.getInputStream process))
+        exit (.waitFor process)]
+    (try
+      (when-not (zero? exit)
+        (throw (ex-info (str "Failed to construct weaver world generation basis: "
+                             (str/trim output))
+                        {:workspace workspace :exit exit :output output})))
+      (let [generation (edn/read-string (slurp result-file))
+            loader (DynamicClassLoader. (.getContextClassLoader
+                                         (Thread/currentThread)))]
+        (doseq [root (get-in generation [:basis :classpath-roots])]
+          (.addURL loader (.toURL (.toURI (io/file root)))))
+        (assoc generation :classloader loader))
+      (finally
+        (.delete result-file)))))
 
 (defn- delete-tree! [^java.io.File root]
   (doseq [^java.io.File file (reverse (file-seq root))]
@@ -311,8 +357,49 @@
     (delete-tree! root))
   nil)
 
-(def ^:private known-option-keys
-  #{:storage :root :delete? :name :timeout-ms :source :config-json :spools-edn :init :files})
+(s/def ::storage #{:sqlite-file :sqlite-memory})
+(s/def ::root #(or (string? %) (instance? java.io.File %)))
+(s/def ::delete? boolean?)
+(s/def ::name string?)
+(s/def ::timeout-ms pos-int?)
+(s/def ::source string?)
+(s/def ::config-json string?)
+(s/def ::deps-edn string?)
+(s/def ::deps-local-edn string?)
+(s/def ::init-clj string?)
+(s/def ::init-local-clj string?)
+(s/def ::files (s/map-of string? string?))
+(def ^:private weaver-world-option-keys
+  #{:storage :root :delete? :name :timeout-ms :source :config-json :deps-edn
+    :deps-local-edn :init-clj :init-local-clj :files})
+(s/def ::weaver-world-options
+  (s/and (s/keys :opt-un [::storage ::root ::delete? ::name ::timeout-ms
+                          ::source ::config-json ::deps-edn ::deps-local-edn
+                          ::init-clj ::init-local-clj ::files])
+         #(every? weaver-world-option-keys (keys %))))
+(def ^:private weaver-world-file-keys
+  #{:config-json :deps-edn :deps-local-edn :init-clj :init-local-clj :files})
+(s/def ::weaver-world-files
+  (s/and (s/keys :req-un [::deps-edn ::init-clj]
+                 :opt-un [::config-json ::deps-local-edn ::init-local-clj
+                          ::files])
+         #(every? weaver-world-file-keys (keys %))))
+(s/def ::config-dir string?)
+(s/def ::state-dir string?)
+(s/def ::data-dir string?)
+(s/def ::db-path string?)
+(s/def ::runtime map?)
+(s/def ::metadata map?)
+(s/def ::basis-fingerprint :millstrand.api.runtime.alpha/basis-fingerprint)
+(def ^:private weaver-world-context-keys
+  #{:config-dir :state-dir :data-dir :db-path :storage :source :runtime
+    :metadata :timeout-ms :basis-fingerprint})
+(s/def ::weaver-world-context
+  (s/and (s/keys :req-un [::config-dir ::state-dir ::data-dir ::storage ::source
+                          ::runtime ::metadata ::timeout-ms
+                          ::basis-fingerprint]
+                 :opt-un [::db-path])
+         #(every? weaver-world-context-keys (keys %))))
 
 (defn run-with-weaver-world
   "Start a disposable weaver world from `opts`, call `f` with its context map,
@@ -322,35 +409,51 @@
   (explicit workspace root; default short temp dir), `:delete?` (remove the
   root afterwards; default true, always false for an explicit `:root`),
   `:name` (weaver name), `:timeout-ms` (`repl!` default), `:source` (source
-  checkout override), and the fixture options `:config-json`, `:spools-edn`,
-  `:init`, `:files`.
+  checkout override), and the fixture options `:config-json`, `:deps-edn`,
+  `:deps-local-edn`, `:init-clj`, `:init-local-clj`, and `:files`. The option
+  map conforms to `:millstrand.test.alpha/weaver-world-options`; generated
+  files conform to `:millstrand.test.alpha/weaver-world-files`.
 
   The context map exposes orchestration facts only: `:config-dir`,
   `:state-dir`, `:data-dir`, `:db-path` (file storage only), `:storage`,
-  `:source`, `:runtime`, `:metadata`, and `:timeout-ms`."
+  `:source`, `:runtime`, `:metadata`, `:timeout-ms`, and
+  `:basis-fingerprint`, and conforms to
+  `:millstrand.test.alpha/weaver-world-context`."
   [opts f]
-  (when-let [unknown (seq (remove known-option-keys (keys opts)))]
-    (throw (ex-info "Unknown weaver world options" {:keys (vec unknown)})))
+  (require-spec! ::weaver-world-options "weaver world options" opts)
   (let [explicit-root (some-> (:root opts) io/file .getCanonicalFile)
         ^java.io.File root (or explicit-root (create-temp-root))
         delete? (if (contains? opts :delete?)
                   (boolean (:delete? opts))
                   (nil? explicit-root))
-        storage (:storage opts :sqlite-file)]
+        storage (:storage opts :sqlite-file)
+        source (or (:source opts) (source-checkout)
+                   (throw (ex-info "Millstrand source checkout is not file-backed" {})))
+        fixture-files (select-keys (merge {:deps-edn default-deps-edn
+                                           :init-clj ""}
+                                          opts)
+                                   [:config-json :deps-edn :deps-local-edn
+                                    :init-clj :init-local-clj :files])]
     (try
-      (write-fixtures! root opts)
+      (require-spec! ::weaver-world-files "weaver world files" fixture-files)
+      (write-fixtures! root fixture-files)
       (let [world (weaver-config/world (.getPath root))
-            rt (weaver-runtime/start! nil (cond-> {:world world :publish? false :storage storage}
+            generation-basis (create-generation-basis (.getPath root) source)
+            rt (weaver-runtime/start! nil (cond-> {:world world :publish? false
+                                                   :storage storage
+                                                   :generation-basis generation-basis}
                                             (:name opts) (assoc :name (:name opts))))
             ctx (cond-> {:config-dir (:config-dir world)
                          :state-dir (:state-dir world)
                          :data-dir (:data-dir world)
                          :storage storage
-                         :source (or (:source opts) (source-checkout))
+                         :source source
                          :runtime rt
                          :metadata (:metadata rt)
-                         :timeout-ms (:timeout-ms opts default-timeout-ms)}
+                         :timeout-ms (:timeout-ms opts default-timeout-ms)
+                         :basis-fingerprint (:fingerprint generation-basis)}
                   (= :sqlite-file storage) (assoc :db-path (get-in rt [:metadata :canonical-db-path])))]
+        (require-spec! ::weaver-world-context "weaver world context" ctx)
         (try
           (let [result (f ctx)]
             (stop-and-clean! rt root delete?)
@@ -373,15 +476,20 @@
 (defmacro with-weaver-world
   "Run `body` with `ctx-sym` bound to a disposable weaver world context.
 
-  (with-weaver-world [ctx {:spools-edn {:spools {}}}]
+  Options conform to `:millstrand.test.alpha/weaver-world-options`; the bound
+  context conforms to `:millstrand.test.alpha/weaver-world-context`.
+
+  (with-weaver-world [ctx {:deps-edn (pr-str {:deps {}})}]
     (is (= [] (repl! ctx '(millstrand.api.weaver.alpha/list
                            (millstrand.api.current.alpha/runtime))))))"
   [[ctx-sym opts] & body]
   `(run-with-weaver-world ~opts (fn [~ctx-sym] ~@body)))
 
 (defn weaver-world-fixture
-  "Return a clojure.test fixture that binds *weaver-world* to a fresh
-  disposable weaver world context for each wrapped test."
+  "Return a clojure.test fixture that binds *weaver-world* to a fresh world.
+
+  Options conform to `:millstrand.test.alpha/weaver-world-options`; the bound
+  value conforms to `:millstrand.test.alpha/weaver-world-context`."
   [opts]
   (fn [test-fn]
     (run-with-weaver-world opts (fn [ctx]
@@ -448,7 +556,8 @@
   outcome for every status other than applied or unchanged.
 
   This is a small authoring-test tier for an already constructed runtime. It
-  does not prove spool acquisition, startup-file collection, or weaver startup."
+  does not prove dependency resolution, startup-file collection, or weaver
+  startup."
   ([rt key ns-sym]
    (activate-module! rt key ns-sym {}))
   ([rt key ns-sym opts]
@@ -494,7 +603,8 @@
   `:millstrand.test.alpha/module-form-collection`.
 
   This authoring-form test tier inspects declarations as data. It does not prove
-  module acquisition, source loading, publication, reconciliation, or startup."
+  dependency resolution, source loading, publication, reconciliation, or
+  startup."
   [module-key ns-sym thunk]
   (require-spec! ::module-key "collect-module-forms module-key" module-key)
   (require-spec! ::namespace-symbol "collect-module-forms ns-sym" ns-sym)

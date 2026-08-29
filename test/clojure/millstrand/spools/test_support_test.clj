@@ -55,11 +55,21 @@
     (is (re-find #"Expected a file, path, or string" (ex-message error)))))
 
 (deftest with-runtime-cleans-config-workspace-after-stop
-  (let [config-dir (atom nil)]
+  (let [config-dir (atom nil)
+        generation-basis (atom nil)]
     (test-support/with-runtime
-      (fn [_runtime workspace]
-        (reset! config-dir workspace)))
+      (fn [runtime workspace]
+        (reset! config-dir workspace)
+        (reset! generation-basis (:generation-basis runtime))))
+    (is (= #{:sources :aliases :reserved-deps :basis :fingerprint :classloader}
+           (set (keys @generation-basis))))
     (is (not (.exists ^java.io.File @config-dir)))))
+
+(deftest with-runtime-rejects-removed-fixture-options
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                        #"Unknown bare runtime fixture options"
+                        (test-support/with-runtime {:release-marker "legacy"}
+                          (fn [& _])))))
 
 (deftest run-git-returns-raw-output-and-describes-failure
   (let [root (test-support/temp-dir "millstrand-run-git")]

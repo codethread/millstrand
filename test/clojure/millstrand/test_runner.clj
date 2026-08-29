@@ -13,6 +13,7 @@
   "Test namespaces that are safe to run concurrently, one namespace per worker."
   ['millstrand.core.db-test 'millstrand.core.query-compile-test 'millstrand.core.contract-props-test 'millstrand.core.specs-test 'millstrand.core.db.scheduler.storage-test
    'millstrand.core.weaver.owner-registry-test
+   'millstrand.core.weaver.basis-test
    ;; each test builds its own backing store — no shared state.
    'millstrand.core.weaver.core-registry-test
    ;; each test builds its own registries and unpublished runtimes — no shared state.

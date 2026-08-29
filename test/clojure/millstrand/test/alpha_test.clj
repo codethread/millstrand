@@ -210,18 +210,25 @@
     (testing "generated workspace root is removed after the body"
       (is (false? (.exists (io/file (:config-dir @captured))))))))
 
-(deftest with-weaver-world-writes-fixtures-and-loads-init
+(deftest with-weaver-world-writes-generation-fixtures-and-loads-init
   (t/with-weaver-world [ctx {:config-json "{}\n"
-                             :spools-edn {:spools {}}
-                             :init (pr-str '(do
-                                              (require '[millstrand.api.current.alpha :as current]
-                                                       '[millstrand.api.graph.alpha :as graph])
-                                              (graph/register-query! (current/runtime)
-                                                                     'from-init
-                                                                     [:= :state "active"])))
+                             :deps-edn "{:deps {}}\n"
+                             :deps-local-edn "{:deps {}}\n"
+                             :init-clj (pr-str '(do
+                                                  (require '[millstrand.api.current.alpha :as current]
+                                                           '[millstrand.api.graph.alpha :as graph])
+                                                  (graph/register-query! (current/runtime)
+                                                                         'from-init
+                                                                         [:= :state "active"])))
+                             :init-local-clj ""
                              :files {"modules/demo.clj" "(ns demo)\n"}}]
     (is (= "{}\n" (slurp (io/file (:config-dir ctx) "config.json"))))
-    (is (= "{:spools {}}" (slurp (io/file (:config-dir ctx) "spools.edn"))))
+    (is (= "{:deps {}}\n"
+           (slurp (io/file (:config-dir ctx) "deps.edn"))))
+    (is (= "{:deps {}}\n" (slurp (io/file (:config-dir ctx) "deps.local.edn"))))
+    (is (= "" (slurp (io/file (:config-dir ctx) "init.local.clj"))))
+    (is (not (.exists (io/file (:config-dir ctx) "spools.edn"))))
+    (is (not (.exists (io/file (:config-dir ctx) "spools.local.edn"))))
     (is (= "(ns demo)\n" (slurp (io/file (:config-dir ctx) "modules/demo.clj"))))
     (testing "init.clj ran inside the weaver runtime"
       (is (contains? (t/repl! ctx
@@ -230,6 +237,26 @@
                                           '[millstrand.api.graph.alpha :as graph])
                                  (graph/queries (current/runtime))))
                      "from-init")))))
+
+(deftest weaver-world-publishes-closed-generation-contracts
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (is (s/valid? :millstrand.test.alpha/weaver-world-context ctx))
+    (is (= #{:config-dir :state-dir :data-dir :storage :source :runtime
+             :metadata :timeout-ms :basis-fingerprint}
+           (set (keys ctx))))
+    (is (= (:basis-fingerprint ctx) (:basis-fingerprint (:runtime ctx))))
+    (is (= "{:deps {}}\n" (slurp (io/file (:config-dir ctx) "deps.edn"))))
+    (is (= "" (slurp (io/file (:config-dir ctx) "init.clj")))))
+  (doseq [spec [:millstrand.test.alpha/weaver-world-options
+                :millstrand.test.alpha/weaver-world-files
+                :millstrand.test.alpha/weaver-world-context]]
+    (is (some? (s/get-spec spec)))))
+
+(deftest weaver-world-dependency-input-fails-loudly
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"weaver world options"
+                        (t/run-with-weaver-world {:spools-edn {}} identity)))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"cannot read dependency file"
+                        (t/run-with-weaver-world {:deps-edn "not-edn ["} identity))))
 
 (deftest weaver-world-fixture-binds-memory-storage-context
   ((t/weaver-world-fixture {:storage :sqlite-memory})
@@ -400,17 +427,14 @@
 
 (deftest helper-fails-loudly-on-bad-input
   (testing "unknown options"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown weaver world options"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"weaver world options"
                           (t/run-with-weaver-world {:libs-edn {}} identity))))
   (testing "fixture files must stay inside the workspace root"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"must stay inside"
                           (t/run-with-weaver-world {:files {"../escape.txt" "nope"}} identity))))
-  (testing "spools-edn must be a map"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo #":spools-edn must be an EDN map"
-                          (t/run-with-weaver-world {:spools-edn "{:spools {}}"} identity))))
   (testing "startup failures propagate"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"startup file failed to load"
-                          (t/with-weaver-world [_ {:init "(throw (ex-info \"boom\" {}))"}]
+                          (t/with-weaver-world [_ {:init-clj "(throw (ex-info \"boom\" {}))"}]
                             nil))))
   (testing "weaver-side eval failures throw with weaver context"
     (t/with-weaver-world [ctx {}]
