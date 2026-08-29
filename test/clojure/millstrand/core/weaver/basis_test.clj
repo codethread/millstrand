@@ -24,7 +24,7 @@
    :classpath-roots []
    :argmap {:aliases (:aliases options)}})
 
-(deftest generation-basis-selects-sources-aliases-and-reserved-coordinate
+(deftest dns-s9-01-and-02-compose-workspace-sources-without-user-deps
   (let [workspace (workspace!
                    {:deps {'example/shared {:local/root "shared"}}
                     :aliases {:millstrand/weaver {:extra-paths ["shared-src"]}}}
@@ -45,6 +45,22 @@
     (is (= {'io.millstrand/millstrand runtime-coordinate}
            (get-in @captured [:args :extra-deps])))
     (is (s/valid? :millstrand.core.specs/generation-basis generation))))
+
+(deftest dns-s9-03-absent-local-overlays-are-optional
+  (let [workspace (workspace! {:paths ["shared-src"]} nil)
+        captured (atom nil)
+        generation
+        (binding [basis/*create-basis*
+                  (fn [options]
+                    (reset! captured options)
+                    (resolved-basis options))]
+          (basis/create-generation-basis
+           (.getPath workspace)
+           {:local/root "/millstrand"}))]
+    (is (= [:project] (mapv :kind (:sources generation))))
+    (is (= [] (:aliases generation)))
+    (is (nil? (:extra @captured)))
+    (is (not (.exists (io/file workspace "deps.local.edn"))))))
 
 (deftest fingerprint-is-canonical-and-semantic
   (let [project {:deps {'a/x {:mvn/version "1"}}
@@ -95,6 +111,20 @@
           (is (= :deps-read (:stage (ex-data failure))))
           (is (s/valid? :millstrand.core.specs/dependency-diagnostic
                         (basis/dependency-diagnostic failure)))))))
+  (testing "DNS-S9-08 legacy manifest migration"
+    (let [workspace (workspace! {} nil)
+          deps-path (.getCanonicalPath (io/file workspace "deps.edn"))]
+      (.delete (io/file workspace "deps.edn"))
+      (spit (io/file workspace "spools.edn") "{}\n")
+      (try
+        (basis/create-generation-basis (.getPath workspace)
+                                       {:local/root "/millstrand"})
+        (is false "expected legacy workspace to fail")
+        (catch clojure.lang.ExceptionInfo failure
+          (is (= (str "dependency migration required: create " deps-path
+                      "; spools.edn is no longer supported; see "
+                      "docs/spools/deps-migration.md")
+                 (:message (basis/dependency-diagnostic failure))))))))
   (testing "reserved runtime coordinate"
     (let [workspace (workspace!
                      {:deps {'io.millstrand/millstrand
