@@ -15,7 +15,8 @@
             [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.repl :as repl]
             [millstrand.source-file :as source-file]
-            [millstrand.spools.test-support :as test-support]))
+            [millstrand.spools.test-support :as test-support]
+            [millstrand.test.alpha :as test-alpha]))
 
 (defn reset-open-state! []
   (reset! (var-get (ns-resolve 'millstrand.repl 'active-config-dir))
@@ -65,14 +66,12 @@
 (defn with-runtime
   ([f]
    (with-runtime {} f))
-  ([opts f]
-   (test-support/with-runtime
-    opts
-    (fn [rt _]
-      (try
-        (f rt (get-in rt [:metadata :canonical-db-path]))
-        (finally
-          (reset-open-state!)))))))
+  ([_opts f]
+   (test-alpha/with-weaver-world [ctx {}]
+     (try
+       (f (:runtime ctx) (:db-path ctx))
+       (finally
+         (reset-open-state!))))))
 
 (deftest connected-accessors-fail-before-connect
   (reset-open-state!)
@@ -248,7 +247,6 @@
                          ['(require '[millstrand.api.current.alpha :as current]
                                     '[millstrand.api.runtime.alpha :as runtime])
                           '(def rt (current/runtime))
-                          '(runtime/approved rt)
                           '(runtime/status rt)
                           '(runtime/plan rt)]))
                   *out* out
@@ -256,14 +254,14 @@
                   *ns* (the-ns 'user)]
           (repl/-main "--stdin" (:config-dir (:metadata rt))))
         (let [lines (str/split-lines (str out))
-              status (read-string (nth lines 3))
-              plan (read-string (nth lines 4))]
-          (is (= 5 (count lines)))
-          (is (= {} (read-string (nth lines 2))))
+              status (read-string (nth lines 2))
+              plan (read-string (nth lines 3))]
+          (is (= 4 (count lines)))
           (is (= {:modules {}
-                  :root/outcomes {}
-                  :pending-generation nil}
-                 (select-keys status [:modules :root/outcomes :pending-generation])))
+                  :resources {}}
+                 (select-keys status [:modules :resources])))
+          (is (vector? (:loaded-namespaces status)))
+          (is (string? (:basis-fingerprint status)))
           (is (= {:status :unchanged :mode :full}
                  (select-keys (:last-refresh status) [:status :mode])))
           (is (= {:status :unchanged :mode :full :dry-run? true}
@@ -364,7 +362,8 @@
       (is (= {"mine" [:= [:attr :owner] "agent"]} (graph/queries rt)))
       (weaver-runtime/stop! rt)
       (let [fresh-rt (weaver-runtime/start! db-file
-                                            {:world (test-support/test-world (:config-dir (:metadata rt)))})]
+                                            {:world (test-support/test-world (:config-dir (:metadata rt)))
+                                             :generation-basis (:generation-basis rt)})]
         (try
           (is (= {} (graph/queries fresh-rt))
               "SPEC-003.C12: the registry is weaver-lifetime, not durable")
@@ -403,11 +402,8 @@
           (reset-open-state!))))))
 
 (deftest client-bridge-fails-loudly-when-the-selected-weaver-goes-away
-  (let [db-file (db-test/temp-db-file)
-        config-dir (str "/tmp/td-" (java.util.UUID/randomUUID))]
-    (.mkdirs (java.io.File. config-dir))
-    (let [world (test-support/test-world config-dir)
-          rt (weaver-runtime/start! db-file {:world world})]
+  (with-runtime
+    (fn [rt _]
       (try
         (repl/connect! (:config-dir (:metadata rt)))
         (weaver-runtime/stop! rt)
@@ -418,5 +414,4 @@
                                                  :list)))
         (finally
           (reset-open-state!)
-          (weaver-runtime/stop! rt)
-          (db-test/delete-sqlite-family! db-file))))))
+          (weaver-runtime/stop! rt))))))

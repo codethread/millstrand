@@ -50,8 +50,8 @@
     [code (str out)]))
 
 (def ^:private world-opts
-  "A bare disposable world: no spools, so nothing normalizes the seeded keys."
-  {:spools-edn {:spools {}}})
+  "A bare disposable deps-native world, so nothing normalizes the seeded keys."
+  {})
 
 (deftest rewrites-active-strands-to-the-published-vocabulary
   (test-alpha/with-weaver-world [ctx world-opts]

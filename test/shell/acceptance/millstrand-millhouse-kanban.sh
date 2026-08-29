@@ -7,8 +7,6 @@ state_root=$(mktemp -d /tmp/mks.XXXXXX)
 workspace="$tmp_root/workspace"
 gitlibs_root="$tmp_root/gitlibs"
 cache_root="$tmp_root/cache"
-verifier_root="$tmp_root/verifier"
-verifier_tree="$tmp_root/verifier-tree"
 mill_pid=""
 mill_drain_pid=""
 weaver_started=0
@@ -31,16 +29,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$workspace" "$gitlibs_root" "$cache_root" "$verifier_root" "$verifier_tree"
-git -C "$verifier_root" init -q
-git -C "$verifier_root" fetch -q --depth 1 "$kanban_url" "$kanban_sha"
-git -C "$verifier_root" checkout -q --detach "$kanban_sha"
-[[ -z "$(git -C "$verifier_root" symbolic-ref -q --short HEAD || true)" ]]
-[[ "$(git -C "$verifier_root" rev-parse HEAD)" == "$kanban_sha" ]]
-git -C "$verifier_root" archive "$kanban_sha" | tar -x -f - -C "$verifier_tree"
+mkdir -p "$workspace" "$gitlibs_root" "$cache_root"
 printf '%s\n' \
-  "{:spools {millhouse/spools {:git/url \"$kanban_url\" :git/sha \"$kanban_sha\" :roots {millhouse.spools/kanban \"spools/kanban\"}}}}" \
-  >"$workspace/spools.edn"
+  "{:deps {millhouse.spools/kanban {:git/url \"$kanban_url\" :git/sha \"$kanban_sha\" :deps/root \"spools/kanban\"}}}" \
+  >"$workspace/deps.edn"
 cp "$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-init.clj" "$workspace/init.clj"
 
 mill_log="$tmp_root/mill.log"
@@ -108,17 +100,10 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-probe.clj" \
   | sed -n '1p' >"$baseline"
-jq -e --arg sha "$kanban_sha" --arg url "$kanban_url" \
-  '.spools["millhouse.spools/kanban"].sha == $sha and
-   .spools["millhouse.spools/kanban"].url == $url and
-   .spools["millhouse.spools/kanban"].status == "loaded" and
-   .spools["millhouse.spools/kanban"].kind == "git"' \
+jq -e '."basis-fingerprint" | startswith("sha256:") and
+       ."module-keys" == ["kanban-source"] and
+       ."last-refresh".status == "applied" and ."last-refresh".mode == "full"' \
   "$baseline" >/dev/null || { cat "$baseline" >&2; exit 1; }
-resolved_root=$(jq -er '.spools["millhouse.spools/kanban"].root' "$baseline")
-[[ "$(basename "$resolved_root")" == "kanban" ]]
-[[ -f "$resolved_root/deps.edn" ]]
-[[ ! -e "$resolved_root/.git" ]]
-diff -ru "$verifier_tree/spools/kanban" "$resolved_root"
 
 source="$tmp_root/source.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
@@ -130,11 +115,8 @@ jq -e --slurpfile baseline "$baseline" '
   .queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"] and
   .patterns == ["kanban-batch"] and
   .bins == ["kanban-dash"] and
-  .["lifecycle-modules"] == ["kanban-source"]
+   .["module-keys"] == ["kanban-source"]
 ' "$source" >/dev/null || { cat "$baseline" >&2; cat "$source" >&2; exit 1; }
-jq -e --arg sha "$kanban_sha" --arg url "$kanban_url" \
-  '.spools["millhouse.spools/kanban"].sha == $sha and .spools["millhouse.spools/kanban"].url == $url' \
-  "$source" >/dev/null
 
 image="$tmp_root/image.json"
 GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root" \
@@ -155,10 +137,7 @@ jq -e --slurpfile baseline "$baseline" '
   .queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"] and
   .patterns == ["kanban-batch"] and
   .bins == ["kanban-dash"] and
-  .["lifecycle-modules"] == ["kanban-source"]
+   .["module-keys"] == ["kanban-source"]
 ' "$replayed" >/dev/null
-jq -e --arg sha "$kanban_sha" --arg url "$kanban_url" \
-  '.spools["millhouse.spools/kanban"].sha == $sha and .spools["millhouse.spools/kanban"].url == $url' \
-  "$replayed" >/dev/null
 jq -e '.["source-status"]["kanban-source"] == "image"' "$replayed" >/dev/null
 echo "Millhouse Kanban module acceptance: clean ($kanban_sha, source and image)"

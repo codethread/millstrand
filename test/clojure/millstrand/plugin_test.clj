@@ -1,6 +1,7 @@
 (ns millstrand.plugin-test
   "Tests for weaver plugin/op registration and dispatch."
   (:require [clojure.test :refer [deftest is]]
+            [millstrand.core.client]
             [millstrand.api.runtime.alpha :as runtime]
             [millstrand.api.weaver.alpha]
             [millstrand.spools.test-support :as test-support]))
@@ -14,10 +15,10 @@
   (is (thrown? java.io.FileNotFoundException (require 'atom.plugin.alpha)))
   (is (thrown? java.io.FileNotFoundException (require 'atom.bootstrap.alpha)))
   (is (thrown? java.io.FileNotFoundException (require 'atom.prelude.alpha)))
-  (is (nil? (ns-resolve 'millstrand.core.client 'load-plugin)))
-  (is (nil? (ns-resolve 'millstrand.api.weaver.alpha 'load-plugin)))
-  (is (nil? (ns-resolve 'millstrand.api.weaver.alpha 'plugins)))
-  (is (nil? (ns-resolve 'millstrand.api.weaver.alpha 'plugin))))
+  (is (nil? (ns-resolve (the-ns 'millstrand.core.client) 'load-plugin)))
+  (is (nil? (ns-resolve (the-ns 'millstrand.api.weaver.alpha) 'load-plugin)))
+  (is (nil? (ns-resolve (the-ns 'millstrand.api.weaver.alpha) 'plugins)))
+  (is (nil? (ns-resolve (the-ns 'millstrand.api.weaver.alpha) 'plugin))))
 
 (deftest runtime-status-is-the-public-module-path
   (with-runtime

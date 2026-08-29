@@ -14,6 +14,7 @@ status_alias="$tmp_root/status-alias.json"
 status_reopened="$tmp_root/status-reopened.json"
 list_before="$tmp_root/list-before.json"
 list_after="$tmp_root/list-after.json"
+basis_status="$tmp_root/basis-status.json"
 
 mill_pid=""
 metadata_path="$state_root/millstrand/mill.json"
@@ -53,7 +54,8 @@ mill_pid=$!
 await_mill_metadata
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" init --workspace "$config_dir" >"$tmp_root/init.json"
-cp "$repo_root/test/fixtures/shell/acceptance/millstrand-core-spools.edn" "$config_dir/spools.edn"
+printf '{:deps {io.millstrand/batteries {:local/root "%s"}}}\n' \
+  "$repo_root/spools/batteries" >"$config_dir/deps.edn"
 cp "$repo_root/test/fixtures/shell/acceptance/millstrand-core-init.clj" "$config_dir/init.clj"
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status --workspace "$config_dir" >"$status_before"
@@ -66,6 +68,13 @@ database_path=$(sed -n '1p' "$tmp_root/database-path.txt")
 database_path=$(realpath "$database_path")
 jq -e --arg database "$database_path" '.database_path == $database and (.state == "running")' \
   "$status_running" >/dev/null
+XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver repl --stdin --workspace "$config_dir" \
+  <"$repo_root/test/fixtures/shell/acceptance/millstrand-core-probe.clj" \
+  | sed -n '1p' >"$basis_status"
+jq -e '."basis-fingerprint" | startswith("sha256:") and
+       ."module-keys" == ["millstrand/spools-batteries"] and
+       ."last-refresh".status == "applied" and ."last-refresh".mode == "full"' \
+  "$basis_status" >/dev/null
 
 XDG_STATE_HOME="$state_root" "$repo_root/bin/strand" --workspace "$config_dir" list --limit 1 >"$list_before"
 jq -e '.' "$list_before" >/dev/null

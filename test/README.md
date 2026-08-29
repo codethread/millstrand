@@ -10,7 +10,7 @@ test/clojure/millstrand/api/            public API contract tests
 test/clojure/millstrand/core/           core and storage component tests
 test/clojure/millstrand/                runtime, REPL, spool, and integration tests
 test/clojure/e2e/millstrand/e2e.clj     process/repository E2E entrypoint
-test/fixtures/clojure/                  Clojure and approved-root fixtures
+test/fixtures/clojure/                  Clojure and dependency-basis fixtures
 test/fixtures/shell/                    shell acceptance fixture files
 test/shell/acceptance/                  public CLI acceptance scripts
 test/shell/quality/                     quality regression scripts
@@ -37,19 +37,19 @@ Run commands from the repository root. Cold means starting a fresh test JVM; war
 | Process/repository E2E | `make test-e2e` | Runs the `millstrand.e2e` entrypoint, including public CLI, live refresh, cutover, repository bootstrap, and REPL flows. |
 | Shell acceptance | `make build`, then `test/shell/acceptance/millstrand-core.sh` | Runs public built `bin/mill` and `bin/strand` against disposable worlds. The Kanban module script proves the pinned Millhouse source and retained image surface; the docs and Neovim scripts are `test/shell/acceptance/millstrand-docs.sh` and `test/shell/acceptance/millstrand-neovim.sh`. |
 
-The focused cold runner rejects add-libs shard members (`millstrand.spools-test`, `millstrand.runtime-deps-test`, and `millstrand.ct.config-ops-test`) and unknown namespaces. Run the full suite for those namespaces. `MILLSTRAND_TEST_AWAIT_SCALE=3` widens await budgets on slow hosts; it does not change the test tier.
+The focused cold runner rejects add-libs shard members (`millstrand.spools-test` and `millstrand.runtime-deps-test`) and unknown namespaces. Run the full suite for those namespaces. `MILLSTRAND_TEST_AWAIT_SCALE=3` widens await budgets on slow hosts; it does not change the test tier.
 
 ## Evidence boundaries
 
 ### Direct and component tests
 
-Use ordinary Clojure tests for pure functions and public API contracts. API tests under `test/clojure/millstrand/api/` pin caller-visible argument grammar, validation, result shapes, and errors. Core and component tests under `test/clojure/millstrand/core/` may exercise implementation collaborators and private runtime seams when that ownership is explicit. These tests use explicit runtimes and test classpaths; they do not prove startup files, approved-root acquisition, source loading, or a separate process topology.
+Use ordinary Clojure tests for pure functions and public API contracts. API tests under `test/clojure/millstrand/api/` pin caller-visible argument grammar, validation, result shapes, and errors. Core and component tests under `test/clojure/millstrand/core/` may exercise implementation collaborators and private runtime seams when that ownership is explicit. These tests use explicit runtimes and test classpaths; they do not prove startup files, dependency-basis loading, source loading, or a separate process topology.
 
 The direct tier is also where `millstrand.test.alpha/collect-module-forms` proves declaration construction as data. It does not prove publication, reconciliation, or startup. Keep the exact boundary in [Testing your config and spools](../docs/spools/testing.md).
 
 ### Embedded weaver-world integration
 
-Use `millstrand.test.alpha/with-weaver-world` or `weaver-world-fixture` when behavior needs a real runtime: storage, startup files, approved roots, module publication, transports, events, scheduling, or reload. The world runs in the test JVM, but forms sent through `millstrand.test.alpha/repl!` execute through the weaver's real transport. These tests prove the runtime and component boundary without proving repository-built binaries or separate supervisor/weaver process identities.
+Use `millstrand.test.alpha/with-weaver-world` or `weaver-world-fixture` when behavior needs a real runtime: storage, startup files, dependency bases, module publication, transports, events, scheduling, or reload. The world runs in the test JVM, but forms sent through `millstrand.test.alpha/repl!` execute through the weaver's real transport. These tests prove the runtime and component boundary without proving repository-built binaries or separate supervisor/weaver process identities.
 
 The fixture contract and classpath boundary live in [docs/spools/testing.md](../docs/spools/testing.md). Do not use a direct classpath require as evidence that a weaver can acquire and load the same root.
 
@@ -73,10 +73,10 @@ The E2E entrypoint runs `go build` on the repository's CLI sources into `cli/bin
 | Fixture class | Location and shape | Evidence |
 | --- | --- | --- |
 | Classpath/direct | Test namespaces and temporary pure-data or file fixtures under `test/clojure/millstrand/`; explicit `:publish? false` runtimes where a runtime is needed. | API, pure, and component behavior. No acquisition or startup claim. |
-| Approved-root/module | Generated `:spools-edn`/`:files` worlds used with `millstrand.test.alpha`. | Root approval, source loading, module collection/publication, lifecycle, and refresh inside an embedded disposable weaver. |
+| Module lifecycle | Generated `deps.edn`/`:files` worlds used with `millstrand.test.alpha`. | Dependency-basis loading, module collection/publication, lifecycle, and refresh inside an embedded disposable weaver. |
 | Process E2E | `test/clojure/e2e/millstrand/e2e.clj`, the committed `test/fixtures/clojure/authoring-module/` and `test/fixtures/clojure/e2e-live-spool/` fixtures, `test/fixtures/shell/acceptance/`, and the generated Git repositories and v1/v2 live-spool roots created under disposable `/tmp` paths. | Built binaries, public commands and transport, repository bootstrap, process identity, generation changes, and exact-PID teardown. |
 
-Do not promote a fixture to a higher tier by accident. A source file on the test classpath is not an approved root, and an embedded weaver is not a repository process E2E.
+Do not promote a fixture to a higher tier by accident. A source file on the test classpath is not dependency-basis loading, and an embedded weaver is not a repository process E2E.
 
 ## Live process E2E scenarios and specifications
 

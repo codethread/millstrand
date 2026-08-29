@@ -18,6 +18,7 @@
    ;; each test builds its own registries and unpublished runtimes — no shared state.
    'millstrand.api.registry.alpha-test
    'millstrand.plugin-test 'millstrand.relations-test 'millstrand.notes-test
+   'millstrand.cutover.vocab-reset-test
    'millstrand.spools.unsafe-text-search-test
    'millstrand.test.alpha-test 'millstrand.warm-test 'millstrand.api.cli.alpha-test
    'millstrand.source-file-test
