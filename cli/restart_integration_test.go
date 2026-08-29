@@ -141,11 +141,11 @@ func (h *restartProcessHarness) initWorld(t *testing.T, workspace string) {
 	if out, err := h.run("init", "--workspace", workspace); err != nil {
 		t.Fatalf("mill init: %v\n%s", err, out)
 	}
-	// Keep the acceptance world local and deterministic. The generated init
-	// would activate the repository's full spool graph, which is covered by the
+	// Keep the acceptance world local and deterministic. The generated files
+	// activate the repository's full module graph, which is covered by the
 	// ordinary end-to-end suite rather than this lifecycle boundary test.
-	if err := os.WriteFile(filepath.Join(workspace, "spools.edn"), []byte("{:spools {}}\n"), 0o644); err != nil {
-		t.Fatalf("write disposable spools.edn: %v", err)
+	if err := os.WriteFile(filepath.Join(workspace, "deps.edn"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("write disposable deps.edn: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workspace, "init.clj"), nil, 0o644); err != nil {
 		t.Fatalf("write disposable init.clj: %v", err)
