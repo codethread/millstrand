@@ -9,7 +9,8 @@
             [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.module-refresh :as module-refresh]
-            [millstrand.core.weaver.runtime :as weaver-runtime]))
+            [millstrand.core.weaver.runtime :as weaver-runtime]
+            [millstrand.test.alpha :as t]))
 
 (def ^:private source-checkout
   (.getCanonicalFile (io/file ".")))
@@ -148,6 +149,22 @@
         (is (not (contains? (graph/queries rt) "owned")))
         (is (= generation-id (:generation-id rt)))
         (is (= fingerprint (:basis-fingerprint rt)))))))
+
+(deftest consumer-refresh-resolves-dependencies-from-the-runtime-coordinate
+  (t/with-weaver-world
+    [ctx {:storage :sqlite-memory
+          :deps-edn "{:deps {}}\n"
+          :init-clj (str "(millstrand.api.runtime.alpha/module! "
+                         "millstrand.core.weaver.runtime/*runtime* "
+                         ":consumer {:file \"modules/consumer.clj\"})\n")
+          :files {"modules/consumer.clj"
+                  (str "(ns test.module.consumer)\n"
+                       "(millstrand.api.runtime.alpha/collect-entry! "
+                       ":queries \"consumer\" [:all])\n")}}]
+    (is (= [:all] (get (graph/queries (:runtime ctx)) "consumer")))
+    (spit (io/file (:config-dir ctx) "init.clj") "")
+    (is (= :applied (:status (runtime/refresh! (:runtime ctx)))))
+    (is (not (contains? (graph/queries (:runtime ctx)) "consumer")))))
 
 (deftest changed-basis-short-circuits-before-activation
   (with-runtime
