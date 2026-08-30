@@ -31,11 +31,15 @@ The migration covers only the roots present in the legacy manifest at `3b7a1c183
 | --- | --- | --- |
 | Millstrand | SHA `7b10ffb7addde6ffb77dacf5c419261ca3f23c65` | `millstrand.spools/batteries`, `millstrand.spools/unsafe-text-search` |
 | Millhouse | `v3` → `f487eb42ea9523e8bd405e64a7c319013217d988` | `millhouse.spools/workflow`, `millhouse.spools/chime`, `millhouse.spools/cron`, `millhouse.spools/kanban`, `millhouse.spools/identity` |
-| Agent Harness | `v30` → `fd75bf50ef823e1df520ead410780961d6313474` | `ct.spools/harness-core`, `ct.spools/codex-harness`, `ct.spools/agent-run`, `ct.spools/agent-cli`, `ct.spools/delegation`, `ct.spools/bench` |
+| Agent Harness | `v31` → `fa565ed507b06bda0d6ce9778fa2c4aeaa8cccfe` | `ct.spools/harness-core`, `ct.spools/codex-harness`, `ct.spools/agent-run`, `ct.spools/agent-cli`, `ct.spools/delegation`, `ct.spools/bench` |
 | Devflow | `v23` → `90799b8c950b4509167137562fbf18853524d41c` | `codethread/devflow`, `codethread/devflow-kanban-adapter` |
-| Codethread | SHA `356841d810cac6408cc4fb3cf6cca0094562d28e` | `codethread/config`, `codethread/ralph` |
+| Codethread | SHA `89fb5a7cfd8d0b63f906e98b9fd64844bdb0c649` | `codethread/config`, `codethread/ralph` |
 
 The publication record also preserves the publication-before-pin deviation. Consumers used landed immutable SHAs throughout, but the annotated tags were published after consumer pin `9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197`. The record treats that as an auditable process deviation and records the completed fix-forward publication.
+
+The terminal acceptance replay found two invocation and residue issues after the original cutover. Agent Harness still shipped a retired pre-v26 preparation gate, so PR #47 removed that surface and published `v31`; its full 246-test, 1,516-assertion contract and published verifier pass at the peeled SHA above. Codethread's disposable config fixture assumed canonical sibling checkouts, so PR #10 changed its external inputs to immutable Git coordinates; canonical main then passed 2 Clojure tests with 24 assertions and every Go package.
+
+An initial replay from `/tmp` broke repositories whose tests deliberately refer to the sibling Millstrand checkout. Re-running from the declared repository layout passed. Agent Harness canonical main also contains a user-owned, untracked `.millstrand/spools.local.edn`; it was left untouched, and the exact merged SHA was verified in a clean adjacent disposable worktree. Neither condition is shipped dependency resolution behavior.
 
 ## Gate contract
 
