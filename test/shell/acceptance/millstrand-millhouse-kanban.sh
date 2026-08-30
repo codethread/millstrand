@@ -10,7 +10,7 @@ cache_root="$tmp_root/cache"
 mill_pid=""
 mill_drain_pid=""
 weaver_started=0
-kanban_sha="f1cdda3b46706b186f547251d285791be650d232"
+kanban_sha="f487eb42ea9523e8bd405e64a7c319013217d988"
 kanban_url="https://github.com/codethread/millhouse.spool.git"
 
 cleanup() {
