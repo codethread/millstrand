@@ -1,8 +1,8 @@
 (ns quality.millstrand-transition
-  "Validate the Millstrand publisher transition contract.
+  "Validate the coordinated dependency transition contract.
 
-  Workspace config and the external suite are active against the published
-  publisher coordinates. The checked-in contract carries no deferrals."
+  Workspace config pins every maintained root in the coordinated release set.
+  The checked-in contract carries no deferrals."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]))
 
@@ -10,17 +10,64 @@
 (def ^:private expected-scopes #{})
 (def ^:private allowed-scopes #{:pinned-external-spool-suite})
 (def ^:private expected-pins
-  {'codethread/devflow
+  {'codethread/config
+   {:git/url "https://github.com/codethread/codethread.spool.git"
+    :git/sha "1b5ca296b4000e605a5d7c63d6414df30c53961f"
+    :deps/root "spools/config"}
+   'codethread/ralph
+   {:git/url "https://github.com/codethread/codethread.spool.git"
+    :git/sha "1b5ca296b4000e605a5d7c63d6414df30c53961f"
+    :deps/root "spools/ralph"}
+   'codethread/devflow
    {:git/url "https://github.com/codethread/devflow.spool.git"
-    :git/sha "f3a74045296eba0394709a1feab46f5ca910e343"}
-   'millhouse/spools
-   {:git/url "https://github.com/codethread/millhouse.spool.git"
-    :git/sha "f1cdda3b46706b186f547251d285791be650d232"}
+    :git/sha "f3a74045296eba0394709a1feab46f5ca910e343"
+    :deps/root "."}
+   'ct.spools/harness-core
+   {:git/url "https://github.com/codethread/agent-harness.spool.git"
+    :git/sha "85eaa606d2a8cc9200ad1098056d9f7bb94a2f20"
+    :deps/root "harness-core"}
+   'ct.spools/codex-harness
+   {:git/url "https://github.com/codethread/agent-harness.spool.git"
+    :git/sha "85eaa606d2a8cc9200ad1098056d9f7bb94a2f20"
+    :deps/root "codex-harness"}
    'ct.spools/agent-run
    {:git/url "https://github.com/codethread/agent-harness.spool.git"
-    :git/sha "85eaa606d2a8cc9200ad1098056d9f7bb94a2f20"}})
-(def ^:private expected-families (set (keys expected-pins)))
-(def ^:private expected-deferred-families #{})
+    :git/sha "85eaa606d2a8cc9200ad1098056d9f7bb94a2f20"
+    :deps/root "agent-run"}
+   'ct.spools/agent-cli
+   {:git/url "https://github.com/codethread/agent-harness.spool.git"
+    :git/sha "85eaa606d2a8cc9200ad1098056d9f7bb94a2f20"
+    :deps/root "agent-cli"}
+   'ct.spools/delegation
+   {:git/url "https://github.com/codethread/agent-harness.spool.git"
+    :git/sha "85eaa606d2a8cc9200ad1098056d9f7bb94a2f20"
+    :deps/root "delegation"}
+   'ct.spools/bench
+   {:git/url "https://github.com/codethread/agent-harness.spool.git"
+    :git/sha "85eaa606d2a8cc9200ad1098056d9f7bb94a2f20"
+    :deps/root "bench"}
+   'millhouse.spools/identity
+   {:git/url "https://github.com/codethread/millhouse.spool.git"
+    :git/sha "f1cdda3b46706b186f547251d285791be650d232"
+    :deps/root "spools/identity"}
+   'millhouse.spools/workflow
+   {:git/url "https://github.com/codethread/millhouse.spool.git"
+    :git/sha "f1cdda3b46706b186f547251d285791be650d232"
+    :deps/root "spools/workflow"}
+   'millhouse.spools/chime
+   {:git/url "https://github.com/codethread/millhouse.spool.git"
+    :git/sha "f1cdda3b46706b186f547251d285791be650d232"
+    :deps/root "spools/chime"}
+   'millhouse.spools/cron
+   {:git/url "https://github.com/codethread/millhouse.spool.git"
+    :git/sha "f1cdda3b46706b186f547251d285791be650d232"
+    :deps/root "spools/cron"}
+   'millhouse.spools/kanban
+   {:git/url "https://github.com/codethread/millhouse.spool.git"
+    :git/sha "f1cdda3b46706b186f547251d285791be650d232"
+    :deps/root "spools/kanban"}})
+(def ^:private expected-libs (set (keys expected-pins)))
+(def ^:private maintained-git-urls (set (map :git/url (vals expected-pins))))
 
 (defn- fail!
   [message data]
@@ -46,30 +93,30 @@
   "Validate the transition contract shape and return it.
 
   This checks the allowlist itself. `validate-current!` additionally compares
-  every named pin with the repository's approved external coordinates."
+  every maintained root with the repository's workspace coordinates."
   [value]
   (require! (map? value) "Transition contract must be a map" {:value value})
-  (require! (= "PROP-Msr-001.S6" (:contract value))
+  (require! (= "PROP-Dns-001.S7" (:contract value))
             "Transition contract has the wrong feature clause"
             {:contract (:contract value)})
-  (require! (= :external-publishers-compatible (:phase value))
+  (require! (= :coordinated-release-set-pinned (:phase value))
             "Transition contract has the wrong phase"
             {:phase (:phase value)})
   (let [pins (:pins value)
         deferrals (:deferrals value)]
-    (require! (= expected-families (set (keys pins)))
-              "Transition contract must name exactly the external family pins"
-              {:expected expected-families :actual (set (keys pins))})
-    (doseq [[family pin] pins]
+    (require! (= expected-libs (set (keys pins)))
+              "Transition contract must name exactly the maintained root pins"
+              {:expected expected-libs :actual (set (keys pins))})
+    (doseq [[lib pin] pins]
       (require! (and (map? pin)
+                     (= #{:git/url :git/sha :deps/root} (set (keys pin)))
                      (string? (:git/url pin))
                      (valid-sha? (:git/sha pin))
-                     (or (nil? (:git/tag pin))
-                         (string? (:git/tag pin))))
-                "Transition contract contains a malformed family pin"
-                {:family family :pin pin}))
+                     (string? (:deps/root pin)))
+                "Transition contract contains a malformed root pin"
+                {:lib lib :pin pin}))
     (require! (= expected-pins pins)
-              "Transition contract external pins drifted"
+              "Transition contract maintained pins drifted"
               {:expected expected-pins :actual pins})
     (require! (vector? deferrals)
               "Transition contract deferrals must be a vector"
@@ -80,10 +127,7 @@
     (require! (= expected-scopes (set (map :scope deferrals)))
               "Transition contract scopes drifted"
               {:expected expected-scopes :actual (set (map :scope deferrals))})
-    (doseq [{:keys [scope families test-namespaces]} deferrals]
-      (require! (= expected-deferred-families families)
-                "Deferred scope must name only the exact incompatible family pin"
-                {:scope scope :families families})
+    (doseq [{:keys [scope test-namespaces]} deferrals]
       (require! (empty? test-namespaces)
                 "External-suite deferral cannot hide test namespaces"
                 {:scope scope :test-namespaces test-namespaces}))
@@ -93,20 +137,30 @@
   [deps-file]
   (let [data (edn/read-string (slurp deps-file))]
     (require! (map? data) "Workspace dependency data must be a map" {:file deps-file})
+    (require! (map? (:deps data))
+              "Workspace :deps must be a map"
+              {:file deps-file :deps (:deps data)})
     (:deps data)))
+
+(defn- maintained-deps
+  [dependencies]
+  (into {}
+        (filter (fn [[lib coordinate]]
+                  (or (contains? expected-libs lib)
+                      (and (map? coordinate)
+                           (contains? maintained-git-urls (:git/url coordinate))))))
+        dependencies))
 
 (defn validate-current!
   "Validate the checked-in transition contract against `.millstrand/deps.edn`."
   ([] (validate-current! ".millstrand/deps.edn"))
   ([deps-file]
    (let [contract (validate-contract! (contract))
-         dependencies (workspace-deps deps-file)]
-     (doseq [[family expected] (:pins contract)]
-       (let [actual (get dependencies family)]
-         (require! (= (select-keys expected [:git/url :git/tag :git/sha])
-                      (select-keys actual [:git/url :git/tag :git/sha]))
-                   "Workspace dependency pin does not match the transition contract"
-                   {:family family :expected expected :actual actual})))
+         dependencies (workspace-deps deps-file)
+         actual (maintained-deps dependencies)]
+     (require! (= (:pins contract) actual)
+               "Workspace maintained dependency set does not match the transition contract"
+               {:expected (:pins contract) :actual actual})
      contract)))
 
 (defn deferred-test-namespaces
