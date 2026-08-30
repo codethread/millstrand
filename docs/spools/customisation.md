@@ -134,12 +134,12 @@ order:
 (runtime/reload-code! (current/runtime) 'millstrand.spools/batteries)
 ```
 
-The result names the root lib, canonical root, and namespaces in reload order, and conforms to
+The result names the library and namespaces in reload order, and conforms to
 `:millstrand.api.runtime.alpha/reload-code-result`. It deliberately performs no
 publication or resource reconciliation; use a targeted refresh for the normal
 path.
 
-Some changes cannot load into a running weaver at all: removing an already-loaded root, repointing one at different source, or bumping a loaded Maven coordinate's version. Refresh refuses those changes and records a pending generation that takes effect at the next weaver restart. Use the Mill-owned transition when you are ready. If other users share this weaver, get their explicit sign-off before running it:
+A dependency edit produces a candidate basis fingerprint. When it differs from the running fingerprint, refresh returns `:restart-required` and refuses activation in the current generation. Use the Mill-owned replacement when you are ready. If other users share this weaver, get their explicit sign-off before running it:
 
 ```sh
 mill weaver restart --workspace "${workspace:?}"
@@ -320,7 +320,7 @@ For a temporary live experiment, register it from the connected REPL:
 strand echo value
 ```
 
-Op handlers return data; the CLI prints it as JSON. The explicit-runtime registration is weaver-lifetime state, so keep a durable command in module source. To mask a spool op durably, put `(millstrand/defop! {:override? true} ...)` in a workspace module; a local-root and a git-pinned spool follow the same registry rules. `replace-op!` is the live, intentional shadow; `unregister-op!` retracts only your shadow and restores the original. The [Kanban spool](https://github.com/codethread/millhouse.spool/tree/main/spools/kanban) is a complete example of this pattern: a board surface built from ops, queries, and attributes.
+Op handlers return data; the CLI prints it as JSON. The explicit-runtime registration is weaver-lifetime state, so keep a durable command in module source. To mask a spool op durably, put `(millstrand/defop! {:override? true} ...)` in a workspace module; ordinary local or Git coordinates in the workspace basis follow the same registry rules. `replace-op!` is the live, intentional shadow; `unregister-op!` retracts only your shadow and restores the original. The [Kanban spool](https://github.com/codethread/millhouse.spool/tree/main/spools/kanban) is a complete example of this pattern: a board surface built from ops, queries, and attributes.
 
 Name an op by what it exposes. When your command fronts another spool's surface, keep that spool's
 verbs, nouns, and attribute keys — the op is your entry point to the primitive, not a new language

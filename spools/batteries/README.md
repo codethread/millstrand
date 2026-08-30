@@ -1,6 +1,6 @@
 # Millstrand Batteries spool
 
-`millstrand.spools.batteries` registers the everyday `strand` command surface: add/update/show/supersede/burn/list/ready/subgraph, plus the `weave`, `query`, `pattern`, and `spool` ops.
+`millstrand.spools.batteries` registers the everyday `strand` command surface: add/update/show/supersede/burn/list/ready/subgraph, plus the `weave`, `query`, and `pattern` ops.
 
 ## Loading
 

@@ -17,7 +17,7 @@ This glossary covers Millstrand and this repository. Terms owned by external spo
 | **Selected workspace** | The workspace a given command actually targets, after `--workspace` resolution. | Default workspace, current workspace |
 | **World** | Informal synonym for a workspace plus the weaver and data behind it. "Disposable world" is a `mktemp -d` workspace for tests and config experiments. | Workspace in specs, environment, instance |
 | **Client** | Anything talking to a weaver: the `strand` CLI over the Unix socket, or the weaver REPL over nREPL. | Consumer, user, agent |
-| **Weaver generation** | One weaver process lifetime. The spool classloader is minted at boot and never swapped while the process runs. | Schema generation, version, restart, session |
+| **Weaver generation** | One weaver process lifetime. Its generation basis and classloader are minted at boot and never swapped while the process runs. | Schema generation, version, restart, session |
 | **Cutover** | The transition from one weaver generation to the next, including the window where the previous generation's classpath ownership still applies. | Migration, upgrade, deploy |
 | **Refresh** | `runtime/refresh!`, the pickup path for config, startup, and module source changes. It classifies each change and applies what it safely can. | Reload, restart, hot reload |
 | **Basis change** | A dependency-file, selected-alias, or coordinate change that produces a different candidate basis fingerprint. It requires a new Weaver generation. | Live dependency update, hot dependency reload |
@@ -136,7 +136,7 @@ Contract: [`spools/batteries.md`](../spools/batteries.md).
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **Batteries** | The reference spool registering the everyday `strand` surface: `add`, `update`, `list`, `ready`, `show`, `note`, `burn`, `supersede`, `subgraph`, `query`, `weave`, `vocab`, `spool`. | Core, builtins, the CLI, standard library |
+| **Batteries** | The reference spool registering the everyday `strand` surface: `add`, `update`, `list`, `ready`, `show`, `note`, `burn`, `supersede`, `subgraph`, `query`, `weave`, and `vocab`. | Core, builtins, the CLI, standard library |
 
 ## Repo workflows
 
@@ -162,7 +162,7 @@ Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/
 - **Burn** deletes and **close** does not. Every burn writes a **tombstone** in the same transaction; a tombstone supports hand-recovery, never undo.
 - A **spool** is the code; a **module** is its activation. Module source publishes through authoring forms; the activation declaration names only source and world policy.
 - One real weaver process publishes exactly one **ambient runtime**.
-- A **weaver generation** mints its spool classloader at boot and never swaps it, so **non-additive changes** wait for the next generation.
+- A **weaver generation** mints one generation basis and classloader at boot. A **basis change** requires a replacement generation; workspace-relative source changes can refresh live in the current basis.
 - An **op** is the only thing the **`strand` CLI** can invoke. There are no builtin subcommands, so every command name came from a spool.
 - A **workflow run** has one root at a time, and that root moves as **stages** advance.
 - A **gate** is a step and a **checkpoint** is not work. **Procedure** joins never appear in the **frontier**.
@@ -177,7 +177,7 @@ Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/
 >
 > **Dev:** "I edited the spool source. Do I restart the weaver?"
 >
-> **Domain expert:** "Try **refresh** first. Source changes to an already-loaded root are a **non-additive change**, so refresh records them for the next **weaver generation** — but config and module changes usually load live. Restarting the canonical weaver tears down every live run other agents depend on, so it needs the user's sign-off."
+> **Domain expert:** "Try **refresh** first. A workspace-relative source change can load live in the current basis. A **basis change** returns restart-required and needs a replacement **weaver generation**. Restarting the canonical weaver tears down every live run other agents depend on, so it needs the user's sign-off."
 >
 > **Dev:** "Where do I add the new `priority` field?"
 >
