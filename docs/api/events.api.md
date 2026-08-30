@@ -4,7 +4,7 @@
 
 Explicit-runtime API for managing and inspecting weaver event handlers.
 
-Registration, replacement, and unregistration mutate the runtime's weaver-lifetime handler registry; `handlers` and `recent-failures` are the data-first reads over registry and failure state. Every registration is validated loudly at the seam — stable key, non-empty keyword type set, fully qualified function symbol resolvable under the runtime spool classloader, data-first metadata — and entries replace by key within the registering owner's partition, which is what makes reload workflows idempotent. Event submission is not public surface: internal mutation APIs submit events through `millstrand.core.weaver.dispatch` (SPEC-004.C73), and the event-lane quiescence await ships in `millstrand.test.alpha` (SPEC-004.C74b).
+Registration, replacement, and unregistration mutate the runtime's weaver-lifetime handler registry; `handlers` and `recent-failures` are the data-first reads over registry and failure state. Every registration is validated loudly at the seam — stable key, non-empty keyword type set, fully qualified function symbol resolvable under the runtime generation classloader, data-first metadata — and entries replace by key within the registering owner's partition, which is what makes reload workflows idempotent. Event submission is not public surface: internal mutation APIs submit events through `millstrand.core.weaver.dispatch` (SPEC-004.C73), and the event-lane quiescence await ships in `millstrand.test.alpha` (SPEC-004.C74b).
 
 Callers own runtime selection and pass the target weaver runtime as the first argument.
 
