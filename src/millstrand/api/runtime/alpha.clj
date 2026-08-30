@@ -445,7 +445,7 @@
   [runtime sym]
   (require-valid! ::resolvable-symbol sym
                   "resolve-var symbol must be fully qualified")
-  (access/with-spool-classloader runtime #(requiring-resolve sym)))
+  (access/with-generation-classloader runtime #(requiring-resolve sym)))
 
 (s/fdef resolve-var
   :args (s/cat :runtime map? :sym ::resolvable-symbol)

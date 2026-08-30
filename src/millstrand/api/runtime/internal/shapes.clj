@@ -18,10 +18,6 @@
 (s/def :millstrand.api.runtime.alpha/ns symbol?)
 (s/def :millstrand.api.runtime.alpha/file (s/and string? (complement str/blank?)))
 
-;; --- spools.edn write-seam components
-
-(s/def :millstrand.api.runtime.alpha/spool-write-status #{:inserted :updated :removed})
-
 ;; --- reload-code! result components
 
 (s/def :millstrand.api.runtime.alpha/reload-namespace

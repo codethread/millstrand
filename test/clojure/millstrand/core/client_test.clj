@@ -2,6 +2,7 @@
   "Tests for millstrand.core.client: routing CLI calls to a running weaver over nREPL."
   (:refer-clojure :exclude [list update])
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is use-fixtures]]
             [millstrand.core.client :as client]
             [millstrand.api.hooks.alpha :as hooks]
@@ -35,7 +36,7 @@
      :basis {:libs {'io.millstrand/millstrand coordinate}
              :classpath-roots []
              :argmap {}}
-     :fingerprint (str "sha256:" (apply str (repeat 64 "a")))
+     :fingerprint (str "sha256:" (str/join (repeat 64 "a")))
      :classloader (.getContextClassLoader (Thread/currentThread))}))
 
 ;; Namespace-level on purpose: hooks are registered by symbol and resolved

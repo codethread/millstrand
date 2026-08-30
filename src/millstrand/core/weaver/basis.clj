@@ -4,8 +4,7 @@
             [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [clojure.string :as str]
-            [millstrand.core.specs :as specs])
+            [clojure.string :as str])
   (:import [clojure.lang DynamicClassLoader]
            [java.io PushbackReader]
            [java.math BigDecimal BigInteger]
@@ -176,7 +175,7 @@
   (let [digest (.digest (MessageDigest/getInstance "SHA-256")
                         (.getBytes ^String (canonical-edn fingerprint-value)
                                    StandardCharsets/UTF_8))]
-    (str "sha256:" (apply str (map #(format "%02x" (bit-and 0xff %)) digest)))))
+    (str "sha256:" (str/join (map #(format "%02x" (bit-and 0xff %)) digest)))))
 
 (defn- without-derived-paths
   [value]

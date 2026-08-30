@@ -315,14 +315,13 @@
             'org.clojure/data.json {:mvn/version "2.5.1"}
             'org.clojure/tools.deps {:mvn/version "0.31.1642"}}}}}
         form (pr-str
-              `(do
-                 (spit ~(.getPath result-file)
-                       (pr-str
-                        (dissoc
-                         ((requiring-resolve
-                           'millstrand.core.weaver.basis/create-generation-basis)
-                          ~workspace {:local/root ~source})
-                         :classloader)))))
+              `(spit ~(.getPath result-file)
+                     (pr-str
+                      (dissoc
+                       ((requiring-resolve
+                         'millstrand.core.weaver.basis/create-generation-basis)
+                        ~workspace {:local/root ~source})
+                       :classloader))))
         ^java.util.List command ["clojure" "-Srepro" "-Sdeps" (pr-str bootstrap-deps)
                                  "-M:millstrand/bootstrap" "-e" form]
         process (-> (ProcessBuilder. command)

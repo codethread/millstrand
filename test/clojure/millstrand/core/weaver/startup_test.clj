@@ -26,7 +26,7 @@
 (def delete-tree! test-support/delete-tree!)
 
 (def ^:private basis-fingerprint
-  (str "sha256:" (apply str (repeat 64 "a"))))
+  (str "sha256:" (str/join (repeat 64 "a"))))
 
 (defn temp-world []
   (let [root (java.io.File/createTempFile "tdx" "")]
@@ -50,17 +50,17 @@
                       (.getContextClassLoader (Thread/currentThread)))]
      (doseq [root classpath-roots]
        (.addURL classloader (.toURL (.toURI (io/file root)))))
-    {:sources [{:kind :project
-                :path (.getCanonicalPath
-                       (io/file (:config-dir world) "deps.edn"))
-                :deps {:paths []}}]
-     :aliases []
-     :reserved-deps {'io.millstrand/millstrand coordinate}
-     :basis {:libs {'io.millstrand/millstrand coordinate}
-             :classpath-roots classpath-roots
-             :argmap {}}
-     :fingerprint basis-fingerprint
-     :classloader classloader})))
+     {:sources [{:kind :project
+                 :path (.getCanonicalPath
+                        (io/file (:config-dir world) "deps.edn"))
+                 :deps {:paths []}}]
+      :aliases []
+      :reserved-deps {'io.millstrand/millstrand coordinate}
+      :basis {:libs {'io.millstrand/millstrand coordinate}
+              :classpath-roots classpath-roots
+              :argmap {}}
+      :fingerprint basis-fingerprint
+      :classloader classloader})))
 
 (defn- start-runtime! [db-file opts]
   (let [world (:world opts)]
@@ -224,7 +224,7 @@
     (try
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"does not take a database file"
                             (start-runtime! (db-test/temp-db-file)
-                                                   {:world world :publish? false :storage :sqlite-memory})))
+                                            {:world world :publish? false :storage :sqlite-memory})))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown weaver storage kind"
                             (start-runtime! nil {:world world :publish? false :storage :postgres})))
       (finally
@@ -451,10 +451,10 @@
 (deftest direct-probe-start-is-unpublished
   (let [world (temp-world)
         rt (start-runtime! nil {:world world
-                                       :probe? true
-                                       :storage :sqlite-memory
-                                       :old-generation-baseline
-                                       {:status :admitted :projection {}}})]
+                                :probe? true
+                                :storage :sqlite-memory
+                                :old-generation-baseline
+                                {:status :admitted :projection {}}})]
     (try
       (is (nil? @weaver-runtime/current-runtime))
       (is (nil? (metadata/read-metadata world)))
@@ -468,8 +468,8 @@
     (try
       (let [failure (try
                       (start-runtime! nil {:world world
-                                                  :probe? true
-                                                  :storage :sqlite-memory})
+                                           :probe? true
+                                           :storage :sqlite-memory})
                       (catch Throwable t t))]
         (is (instance? clojure.lang.ExceptionInfo failure))
         (is (= :metadata-present (:reason (ex-data failure))))
@@ -485,8 +485,8 @@
       (spit (metadata/socket-file world) "orphan")
       (let [failure (try
                       (start-runtime! nil {:world world
-                                                  :probe? true
-                                                  :storage :sqlite-memory})
+                                           :probe? true
+                                           :storage :sqlite-memory})
                       (catch Throwable t t))]
         (is (instance? clojure.lang.ExceptionInfo failure))
         (is (= :orphaned-socket (:reason (ex-data failure))))

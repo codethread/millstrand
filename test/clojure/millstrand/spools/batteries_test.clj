@@ -110,8 +110,7 @@
           (is (= :mutating (get-in entry [:arg-spec :hook-class])))
           (is (= :standard (get-in entry [:arg-spec :deadline-class])))
           (is (nil? (:hook-class entry)))
-          (is (nil? (:deadline-class entry)))))
-      )))
+          (is (nil? (:deadline-class entry))))))))
 
 (deftest activate-registers-exact-coordination-query-shapes
   (with-batteries

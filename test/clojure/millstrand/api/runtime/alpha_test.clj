@@ -1,6 +1,7 @@
 (ns millstrand.api.runtime.alpha-test
   "Public result and option-shape pins for the explicit runtime API."
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [millstrand.api.runtime.alpha :as runtime]))
 
@@ -15,8 +16,8 @@
     (is (not (s/valid? ::runtime/spool-state-opts opts)))))
 
 (deftest basis-result-specs-own-public-shapes
-  (let [a (str "sha256:" (apply str (repeat 64 "a")))
-        b (str "sha256:" (apply str (repeat 64 "b")))]
+  (let [a (str "sha256:" (str/join (repeat 64 "a")))
+        b (str "sha256:" (str/join (repeat 64 "b")))]
     (is (s/valid? ::runtime/basis-fingerprint a))
     (is (s/valid? ::runtime/basis-change
                   {:running-fingerprint a :candidate-fingerprint b}))
@@ -48,7 +49,7 @@
       (is (not (s/valid? ::runtime/plan-result applied-refresh-result)))
       (is (not (s/valid? ::runtime/plan-result (assoc planned :caveat ""))))))
   (testing "status and reload results reject missing or extra fields"
-    (let [status {:basis-fingerprint (str "sha256:" (apply str (repeat 64 "a")))
+    (let [status {:basis-fingerprint (str "sha256:" (str/join (repeat 64 "a")))
                   :modules {} :resources {} :loaded-namespaces []
                   :last-refresh nil}
           reload {:lib 'demo/root :status :reloaded

@@ -16,7 +16,7 @@
             [millstrand.core.query :as query]
             [millstrand.core.specs :as specs]
             [millstrand.core.weaver.access :refer [ds normalize pattern-registry pattern-store
-                                                   with-spool-classloader]]
+                                                   with-generation-classloader]]
             [millstrand.core.weaver.core-registry :as core-registry]
             [millstrand.core.weaver.dispatch :as dispatch]
             [millstrand.core.weaver.lifecycle :refer [event-base request-context
@@ -186,7 +186,7 @@
          {fn-sym :fn input-spec :input-spec} (resolve-pattern runtime pattern-name)
          canonical-name (canonical-pattern-name pattern-name)]
      (validate-pattern-input! canonical-name input-spec input)
-     (let [batch (with-spool-classloader
+     (let [batch (with-generation-classloader
                    runtime
                    #((requiring-resolve fn-sym) {:input input}))
            normalized-batch (normalize-weave-strand-attributes
@@ -262,7 +262,7 @@
 (defn- validate-pattern-fn!
   "Fail loudly unless fn-sym resolves to a callable value in `runtime`."
   [runtime fn-sym]
-  (let [resolved (with-spool-classloader runtime #(requiring-resolve fn-sym))
+  (let [resolved (with-generation-classloader runtime #(requiring-resolve fn-sym))
         value (if (var? resolved) @resolved resolved)]
     (when-not (ifn? value)
       (throw (ex-info "Pattern function must resolve to a callable value"

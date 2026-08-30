@@ -41,7 +41,7 @@
      :basis {:libs {'io.millstrand/millstrand coordinate}
              :classpath-roots []
              :argmap {}}
-     :fingerprint (str "sha256:" (apply str (repeat 64 "a")))
+     :fingerprint (str "sha256:" (str/join (repeat 64 "a")))
      :classloader (.getContextClassLoader (Thread/currentThread))}))
 
 (defn- refresh! [rt]
@@ -153,7 +153,7 @@
   (with-runtime
     (fn [rt workspace]
       (let [running (:basis-fingerprint rt)
-            candidate (str "sha256:" (apply str (repeat 64 "f")))
+            candidate (str "sha256:" (str/join (repeat 64 "f")))
             before @(:module-state rt)]
         (spit (io/file workspace "init.clj") "(throw (ex-info \"must not run\" {}))\n")
         (with-redefs [basis/create-generation-basis

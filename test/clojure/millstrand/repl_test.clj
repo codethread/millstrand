@@ -71,13 +71,13 @@
    (let [bind-runtime? (get opts :bind-runtime? true)
          fixture-opts (dissoc opts :bind-runtime?)]
      (test-alpha/with-weaver-world [ctx fixture-opts]
-     (try
-       (if bind-runtime?
-         (current/with-runtime* (:runtime ctx)
-                                #(f (:runtime ctx) (:db-path ctx)))
-         (f (:runtime ctx) (:db-path ctx)))
-       (finally
-         (reset-open-state!)))))))
+       (try
+         (if bind-runtime?
+           (current/with-runtime* (:runtime ctx)
+             #(f (:runtime ctx) (:db-path ctx)))
+           (f (:runtime ctx) (:db-path ctx)))
+         (finally
+           (reset-open-state!)))))))
 
 (deftest connected-accessors-fail-before-connect
   (reset-open-state!)
@@ -371,23 +371,23 @@
     (try
       (test-alpha/with-weaver-world [ctx {:root root}]
         (current/with-runtime*
-         (:runtime ctx)
-         #(do
-            (reset-open-state!)
-            (is (= {"mine" [:= [:attr :owner] "agent"]}
-                   (repl/register-query! :mine [:= [:attr :owner] "agent"])))
-            (is (= {"mine" [:= [:attr :owner] "agent"]}
-                   (graph/queries (:runtime ctx)))))))
+          (:runtime ctx)
+          #(do
+             (reset-open-state!)
+             (is (= {"mine" [:= [:attr :owner] "agent"]}
+                    (repl/register-query! :mine [:= [:attr :owner] "agent"])))
+             (is (= {"mine" [:= [:attr :owner] "agent"]}
+                    (graph/queries (:runtime ctx)))))))
       (test-alpha/with-weaver-world [ctx {:root root}]
         (let [fresh-rt (:runtime ctx)]
           (current/with-runtime*
-           fresh-rt
-           #(do
-              (is (= {} (graph/queries fresh-rt))
-                  "SPEC-003.C12: the registry is weaver-lifetime, not durable")
-              (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                                    #"Query not registered; cannot replace"
-                                    (repl/replace-query! :mine [:= [:attr :owner] "human"])))))))
+            fresh-rt
+            #(do
+               (is (= {} (graph/queries fresh-rt))
+                   "SPEC-003.C12: the registry is weaver-lifetime, not durable")
+               (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                     #"Query not registered; cannot replace"
+                                     (repl/replace-query! :mine [:= [:attr :owner] "human"])))))))
       (finally
         (reset-open-state!)
         (test-support/delete-tree! root)))))

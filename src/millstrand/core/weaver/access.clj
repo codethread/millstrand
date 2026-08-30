@@ -99,10 +99,10 @@
   [runtime]
   (:handler-store (event-system runtime)))
 
-(defn with-spool-classloader
+(defn with-generation-classloader
   "Run `f` with the runtime bound and its generation classloader installed."
   [runtime f]
-  (weaver-runtime/with-runtime-and-spool-classloader runtime f))
+  (weaver-runtime/with-runtime-and-generation-classloader runtime f))
 
 (defn config-dir
   "Return the runtime's selected config-dir path."

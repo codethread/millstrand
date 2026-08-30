@@ -70,7 +70,6 @@
 (def ^:private default-read-limit 500)
 (def ^:private read-limit-state-version 1)
 (def ^:private readable-states #{"active" "closed" "replaced"})
-(def ^:private release-tag-pattern #"v([1-9][0-9]*)")
 (def ^:private await-default-timeout-secs 1800)
 (def ^:private await-poll-ms 1000)
 

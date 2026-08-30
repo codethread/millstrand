@@ -55,7 +55,7 @@
           (basis/create-generation-basis (.getPath workspace)
                                          runtime-coordinate))]
     (is (= [:millstrand/weaver :millstrand/local] (:aliases generation)))
-    (is (= nil (:user @captured)))
+    (is (nil? (:user @captured)))
     (is (= (.getCanonicalPath workspace) (:dir @captured)))
     (is (= {'io.millstrand/millstrand runtime-coordinate}
            (get-in @captured [:args :extra-deps])))

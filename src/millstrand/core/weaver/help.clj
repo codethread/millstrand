@@ -34,7 +34,7 @@
   map's keys directly, and everything below `access` in the graph can
   only reach it and the alpha module dynamically — the `requiring-resolve` calls
   here (`register-op!`, `resolve-op`, the handler pointer, and
-  `access/with-spool-classloader`) are call-time reaches into the public surface,
+  `access/with-generation-classloader`) are call-time reaches into the public surface,
   the same idiom the socket transport uses for `op!`.
 
   Every `help` invocation renders through the registered default help transform
@@ -132,7 +132,7 @@
   `{file, line}`. Only the resolve step is guarded; any other failure is unrelated
   and propagates loudly rather than masquerading as a null source."
   [runtime entry]
-  ((requiring-resolve 'millstrand.core.weaver.access/with-spool-classloader)
+  ((requiring-resolve 'millstrand.core.weaver.access/with-generation-classloader)
    runtime
    (fn []
      (when-let [var (try (requiring-resolve (:fn entry))

@@ -57,23 +57,23 @@
             rt (publish!
                 (runtime root {'demo/bins coordinate})
                 {"family" {:name "family" :doc "Family anchor."
-                            :executable [:family "bin/family-agent"]
-                            :provenance 'demo/bins
-                            :source/file (.getCanonicalPath source)}
+                           :executable [:family "bin/family-agent"]
+                           :provenance 'demo/bins
+                           :source/file (.getCanonicalPath source)}
                  "root" {:name "root" :doc "Root anchor."
-                          :executable [:root "bin/root-agent"]
-                          :provenance 'demo/bins
-                          :source/file (.getCanonicalPath source)}})]
-        (let [family-plan (bins/plan rt "family")
-              root-plan (bins/plan rt "root")]
-          (is (= (.getCanonicalPath family-executable)
-                 (get-in family-plan [:exec :path])))
-          (is (= (.getCanonicalPath root-executable)
-                 (get-in root-plan [:exec :path])))
-          (is (true? (:runnable family-plan)))
-          (is (true? (:runnable root-plan)))
-          (is (s/valid? :millstrand.core.weaver.bins/plan-result family-plan))
-          (is (s/valid? :millstrand.core.weaver.bins/plan-result root-plan))))
+                         :executable [:root "bin/root-agent"]
+                         :provenance 'demo/bins
+                         :source/file (.getCanonicalPath source)}})
+            family-plan (bins/plan rt "family")
+            root-plan (bins/plan rt "root")]
+        (is (= (.getCanonicalPath family-executable)
+               (get-in family-plan [:exec :path])))
+        (is (= (.getCanonicalPath root-executable)
+               (get-in root-plan [:exec :path])))
+        (is (true? (:runnable family-plan)))
+        (is (true? (:runnable root-plan)))
+        (is (s/valid? :millstrand.core.weaver.bins/plan-result family-plan))
+        (is (s/valid? :millstrand.core.weaver.bins/plan-result root-plan)))
       (finally
         (delete-tree! root)))))
 

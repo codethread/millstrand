@@ -1,15 +1,16 @@
 (ns millstrand.runtime-deps-test
   "Full-suite checks for the runtime dependency-basis boundary."
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.runtime :as runtime]))
 
 (def ^:private running-fingerprint
-  (str "sha256:" (apply str (repeat 64 "a"))))
+  (str "sha256:" (str/join (repeat 64 "a"))))
 
 (def ^:private candidate-fingerprint
-  (str "sha256:" (apply str (repeat 64 "b"))))
+  (str "sha256:" (str/join (repeat 64 "b"))))
 
 (defn- runtime-map []
   {:source-config-dir "/tmp/workspace"
@@ -46,4 +47,4 @@
       (doseq [forbidden ["clojure.repl.deps/add-libs"
                          "sync-deps"
                          "spool-sync"]]
-        (is (not (.contains source forbidden)) forbidden)))))
+        (is (not (str/includes? source forbidden)) forbidden)))))

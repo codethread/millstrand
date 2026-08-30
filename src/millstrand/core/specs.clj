@@ -71,7 +71,7 @@
   :millstrand.core.specs/basis-fingerprint)
 (s/def :millstrand.core.specs/basis-change
   (s/and (s/keys :req-un [:millstrand.basis/running-fingerprint
-                           :millstrand.basis/candidate-fingerprint])
+                          :millstrand.basis/candidate-fingerprint])
          #(= #{:running-fingerprint :candidate-fingerprint} (set (keys %)))
          #(not= (:running-fingerprint %) (:candidate-fingerprint %))))
 (s/def :millstrand.dependency/status #{:invalid-dependency-config})
@@ -85,15 +85,15 @@
 (s/def :millstrand.dependency/coordinate
   (s/nilable
    (s/and (s/keys :req-un [:millstrand.dependency/lib
-                            :millstrand.dependency/value])
+                           :millstrand.dependency/value])
           #(= #{:lib :value} (set (keys %))))))
 (s/def :millstrand.core.specs/dependency-diagnostic
   (s/and (s/keys :req-un [:millstrand.dependency/status
-                           :millstrand.dependency/stage
-                           :millstrand.dependency/source-path
-                           :millstrand.dependency/message
-                           :millstrand.dependency/cause
-                           :millstrand.dependency/coordinate])
+                          :millstrand.dependency/stage
+                          :millstrand.dependency/source-path
+                          :millstrand.dependency/message
+                          :millstrand.dependency/cause
+                          :millstrand.dependency/coordinate])
          #(= #{:status :stage :source-path :message :cause :coordinate}
              (set (keys %)))))
 (s/def :millstrand.basis/kind #{:project :extra})
@@ -102,8 +102,8 @@
   #(and (non-blank-string? %) (.isAbsolute (File. ^String %))))
 (s/def :millstrand.basis/source
   (s/and (s/keys :req-un [:millstrand.basis/kind
-                           :millstrand.basis/path
-                           :millstrand.basis/deps])
+                          :millstrand.basis/path
+                          :millstrand.basis/deps])
          #(= #{:kind :path :deps} (set (keys %)))))
 (s/def :millstrand.basis/sources
   (s/coll-of :millstrand.basis/source :kind vector? :min-count 1 :max-count 2))
@@ -120,17 +120,17 @@
 (s/def :millstrand.basis/argmap map?)
 (s/def :millstrand.basis/basis
   (s/and (s/keys :req-un [:millstrand.basis/libs
-                           :millstrand.basis/classpath-roots
-                           :millstrand.basis/argmap])
+                          :millstrand.basis/classpath-roots
+                          :millstrand.basis/argmap])
          #(= #{:libs :classpath-roots :argmap} (set (keys %)))))
 (s/def :millstrand.basis/classloader #(instance? ClassLoader %))
 (s/def :millstrand.core.specs/generation-basis
   (s/and (s/keys :req-un [:millstrand.basis/sources
-                           :millstrand.basis/aliases
-                           :millstrand.basis/reserved-deps
-                           :millstrand.basis/basis
-                           :millstrand.basis/fingerprint
-                           :millstrand.basis/classloader])
+                          :millstrand.basis/aliases
+                          :millstrand.basis/reserved-deps
+                          :millstrand.basis/basis
+                          :millstrand.basis/fingerprint
+                          :millstrand.basis/classloader])
          #(= #{:sources :aliases :reserved-deps :basis :fingerprint :classloader}
              (set (keys %)))))
 

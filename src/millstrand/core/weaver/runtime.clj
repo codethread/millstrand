@@ -54,8 +54,8 @@
   down while the lane idles; this bounds the pickup latency of the next event."
   5)
 
-(declare stop! with-spool-classloader with-runtime-binding
-         with-runtime-and-spool-classloader)
+(declare stop! with-generation-classloader with-runtime-binding
+         with-runtime-and-generation-classloader)
 
 (defn- event-system-base []
   (let [handler-store (core-registry/backed-registry :events)]
@@ -107,7 +107,7 @@
                               (try
                                 (with-runtime-binding
                                   runtime
-                                  #(with-spool-classloader runtime (fn [] (scheduler/run-fire! runtime event))))
+                                  #(with-generation-classloader runtime (fn [] (scheduler/run-fire! runtime event))))
                                 (catch Throwable _ nil))
                               ;; :fn stays un-destructured: a local named `fn` would
                               ;; shadow the fn macro in the handler thunks below.
@@ -123,7 +123,7 @@
                                 (try
                                   (with-runtime-binding
                                     runtime
-                                    #(with-spool-classloader runtime (fn [] (fn-value event))))
+                                    #(with-generation-classloader runtime (fn [] (fn-value event))))
                                   (catch Throwable t
                                     (let [failure {:handler/key key
                                                    :handler/fn (:fn handler)
@@ -262,7 +262,7 @@
                          ((requiring-resolve
                            'millstrand.core.weaver.module-refresh/with-startup-file)
                           (assoc startup-file :layer layer)
-                          #(with-spool-classloader runtime (fn [] (load-file file))))))
+                          #(with-generation-classloader runtime (fn [] (load-file file))))))
                 (catch Throwable t
                   (throw (ex-info "Selected workspace startup file failed to load"
                                   {:config-dir (:config-dir world)
@@ -274,7 +274,7 @@
   {:load-startup-files!
    #(load-startup-files! runtime
                          {:config-dir (get-in runtime [:metadata :config-dir])})
-   :with-loader #(with-runtime-and-spool-classloader runtime %)})
+   :with-loader #(with-runtime-and-generation-classloader runtime %)})
 
 (defn declare-module!
   "Stage or apply one stable internal runtime module declaration.
@@ -375,7 +375,7 @@
                            (ns-name namespace))))
                  (sort-by str)
                  vec)]
-        (with-runtime-and-spool-classloader
+        (with-runtime-and-generation-classloader
           runtime
           #(doseq [namespace namespaces]
              (require namespace :reload)))
@@ -404,7 +404,7 @@
       ((requiring-resolve 'millstrand.core.weaver.help/register-built-in-ops!) runtime)
       ((requiring-resolve 'millstrand.core.weaver.bins/register-built-in-ops!) runtime))))
 
-(defn- with-spool-classloader [runtime f]
+(defn- with-generation-classloader [runtime f]
   (let [thread (Thread/currentThread)
         previous-loader (.getContextClassLoader thread)]
     (try
@@ -413,7 +413,7 @@
       (finally
         (.setContextClassLoader thread previous-loader)))))
 
-(defn with-runtime-and-spool-classloader
+(defn with-runtime-and-generation-classloader
   "Call `f` with runtime ambiently bound and the generation classloader as
   the thread's context classloader, matching trusted startup-file evaluation.
 
@@ -424,7 +424,7 @@
   [runtime f]
   (with-runtime-binding
     runtime
-    #(with-spool-classloader
+    #(with-generation-classloader
        runtime
        (fn []
          (clojure.lang.Var/pushThreadBindings
@@ -476,7 +476,7 @@
 
 (defn- eval-runtime-form [form]
   (if-let [runtime (some-> nrepl-eval/*msg* ::runtime-state deref)]
-    (with-runtime-and-spool-classloader
+    (with-runtime-and-generation-classloader
       runtime
       #(clojure.lang.Compiler/eval form true))
     (throw (ex-info "Weaver nREPL eval has no runtime"

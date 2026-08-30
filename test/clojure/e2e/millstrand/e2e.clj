@@ -127,35 +127,6 @@
 (defn- smoke-await-ms [base-ms]
   (long (* base-ms (smoke-await-scale))))
 
-(defn- wait-diagnostics [label started-at timeout-ms]
-  {:label label
-   :elapsed-ms (long (/ (- (System/nanoTime) started-at) 1000000))
-   :deadline-ms timeout-ms})
-
-(defn- await-condition!
-  "Wait for a condition until its scaled deadline, then report timing context."
-  ([label timeout-ms condition]
-   (await-condition! label timeout-ms condition nil))
-  ([label timeout-ms condition on-timeout]
-   (let [started-at (System/nanoTime)
-         deadline (+ started-at (* timeout-ms 1000000))]
-     (loop []
-       (let [diagnostics (wait-diagnostics label started-at timeout-ms)
-             result (condition diagnostics)
-             remaining (- deadline (System/nanoTime))]
-         (or result
-             (if (pos? remaining)
-               (do
-                 (java.util.concurrent.locks.LockSupport/parkNanos
-                  (min remaining 50000000))
-                 (recur))
-               (if on-timeout
-                 (on-timeout diagnostics)
-                 (throw (ex-info (str "Timed out waiting for " label
-                                      " after " (:elapsed-ms diagnostics)
-                                      " ms (deadline " timeout-ms " ms)")
-                                 diagnostics))))))))))
-
 (defn terminate-process!
   "Terminate a smoke-owned process and assert that its PID exits."
   [^Process process label]
@@ -328,7 +299,7 @@
   (spit (java.io.File. workspace "deps.edn")
         (pr-str {:deps
                  {'io.millstrand/batteries
-                 {:local/root (str checkout-root "/spools/batteries")}}})))
+                  {:local/root (str checkout-root "/spools/batteries")}}})))
 
 (defn- write-local-op-root!
   [root version]
@@ -670,7 +641,6 @@
         (stop-weaver-config! workspace)
         (delete-tree! (smoke-workspace (str db-file ".await")))))))
 
-
 (defn smoke-cli! [db-file]
   (clean-runtime-artifacts! db-file)
   (delete-built-cli!)
@@ -781,7 +751,7 @@
            :basis {:libs {'io.millstrand/millstrand coordinate}
                    :classpath-roots []
                    :argmap {}}
-           :fingerprint (str "sha256:" (apply str (repeat 64 "e")))
+           :fingerprint (str "sha256:" (clojure.string/join (repeat 64 "e")))
            :classloader (.getContextClassLoader (Thread/currentThread))}
           runtime (with-redefs [basis/create-generation-basis
                                 (fn [_workspace _coordinate]
@@ -797,54 +767,54 @@
             ;; through the client bridge; millstrand.repl holds the selection.
             (repl/connect! (:config-dir world))
             (let [call (fn [op & args]
-                     (apply client/call-world (repl/connected-config-dir)
-                            (repl/connected-opts) op args))
-              a (:id (call :add {:title "First strand" :state "closed"}))
-              b (:id (call :add {:title "Second strand" :attributes {:owner "agent"}}))]
-          (call :update b {:edges [{:type "depends-on" :to a}]})
-          (assert= ["Second strand"] (titles (call :ready))
-                   "the client bridge reads strands with closed dependencies")
+                         (apply client/call-world (repl/connected-config-dir)
+                                (repl/connected-opts) op args))
+                  a (:id (call :add {:title "First strand" :state "closed"}))
+                  b (:id (call :add {:title "Second strand" :attributes {:owner "agent"}}))]
+              (call :update b {:edges [{:type "depends-on" :to a}]})
+              (assert= ["Second strand"] (titles (call :ready))
+                       "the client bridge reads strands with closed dependencies")
 
           ;; The registration verbs are runtime-implied and in-process, so the
           ;; same session reaches the live registry without a runtime argument.
-          (assert= {"agent-owner" [:= [:attr :owner] "agent"]}
-                   (repl/register-query! 'agent-owner '[:= [:attr :owner] "agent"])
-                   "millstrand.repl registers a named query with the runtime implied")
-          (assert= ["Second strand"]
-                   (titles (call :list-query 'agent-owner {}))
-                   "a query registered from the REPL tier is visible over the bridge")
-          (repl/replace-query! 'agent-owner '[:= [:attr :owner] "nobody"])
-          (assert= [] (titles (call :list-query 'agent-owner {}))
-                   "replace-query! swaps the live definition in place")
-          (assert= {:unregistered "agent-owner"} (repl/unregister-query! 'agent-owner)
-                   "unregister-query! retracts this session's own claim")
+              (assert= {"agent-owner" [:= [:attr :owner] "agent"]}
+                       (repl/register-query! 'agent-owner '[:= [:attr :owner] "agent"])
+                       "millstrand.repl registers a named query with the runtime implied")
+              (assert= ["Second strand"]
+                       (titles (call :list-query 'agent-owner {}))
+                       "a query registered from the REPL tier is visible over the bridge")
+              (repl/replace-query! 'agent-owner '[:= [:attr :owner] "nobody"])
+              (assert= [] (titles (call :list-query 'agent-owner {}))
+                       "replace-query! swaps the live definition in place")
+              (assert= {:unregistered "agent-owner"} (repl/unregister-query! 'agent-owner)
+                       "unregister-query! retracts this session's own claim")
 
-          (call :update b {:state "closed"})
-          (assert= "closed" (:state (call :show b)) "the bridge updates strand state")
+              (call :update b {:state "closed"})
+              (assert= "closed" (:state (call :show b)) "the bridge updates strand state")
 
           ;; Burn plus tombstone recovery: in-process only, the whole trio.
-          (let [scratch (:id (call :add {:title "Scratch REPL strand"
-                                         :attributes {:temporary "true"}}))]
-            (assert= {:burned [scratch] :count 1} (repl/burn-by-ids! [scratch])
-                     "burn-by-ids! deletes a scratch strand row")
-            (assert (nil? (call :show scratch)) "the burned strand is gone")
-            (assert= [scratch] (mapv :strand_id (repl/burn-history scratch))
-                     "burn-history recovers the tombstone for the burned id")
-            (assert= [scratch] (mapv :strand_id (repl/recent-burns 10))
-                     "recent-burns scans tombstones across all strands"))
+              (let [scratch (:id (call :add {:title "Scratch REPL strand"
+                                             :attributes {:temporary "true"}}))]
+                (assert= {:burned [scratch] :count 1} (repl/burn-by-ids! [scratch])
+                         "burn-by-ids! deletes a scratch strand row")
+                (assert (nil? (call :show scratch)) "the burned strand is gone")
+                (assert= [scratch] (mapv :strand_id (repl/burn-history scratch))
+                         "burn-history recovers the tombstone for the burned id")
+                (assert= [scratch] (mapv :strand_id (repl/recent-burns 10))
+                         "recent-burns scans tombstones across all strands"))
 
-          (let [old (:id (call :add {:title "Old REPL strand"}))
-                replacement (:id (call :add {:title "Replacement REPL strand"}))
-                dependent (:id (call :add {:title "Dependent REPL strand"}))]
-            (call :update dependent {:edges [{:type "depends-on" :to old}]})
-            (let [result (call :supersede old replacement)]
-              (assert= "replaced" (get-in result [:old :after :state])
-                       "supersede marks the old strand replaced")
-              (assert= replacement (:replacement-id result)
-                       "supersede reports the replacement id")
-              (assert= #{dependent}
-                       (set (map :from (:rewired-dependencies result)))
-                       "supersede rewires direct dependents"))))
+              (let [old (:id (call :add {:title "Old REPL strand"}))
+                    replacement (:id (call :add {:title "Replacement REPL strand"}))
+                    dependent (:id (call :add {:title "Dependent REPL strand"}))]
+                (call :update dependent {:edges [{:type "depends-on" :to old}]})
+                (let [result (call :supersede old replacement)]
+                  (assert= "replaced" (get-in result [:old :after :state])
+                           "supersede marks the old strand replaced")
+                  (assert= replacement (:replacement-id result)
+                           "supersede reports the replacement id")
+                  (assert= #{dependent}
+                           (set (map :from (:rewired-dependencies result)))
+                           "supersede rewires direct dependents"))))
             (smoke-attribute-storage! runtime)
             (smoke-scheduler! runtime)))
         (finally

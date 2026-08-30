@@ -263,7 +263,7 @@
   (when-not (and (symbol? fn-sym) (namespace fn-sym))
     (throw (ex-info "Event handler function must be a fully qualified symbol" {:fn fn-sym})))
   (let [resolved (try
-                   (access/with-spool-classloader runtime #(requiring-resolve fn-sym))
+                   (access/with-generation-classloader runtime #(requiring-resolve fn-sym))
                    (catch Throwable t
                      (throw (ex-info "Event handler function could not be resolved"
                                      {:fn fn-sym} t))))

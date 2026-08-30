@@ -41,7 +41,7 @@
   ([start-options f]
    (let [db-file (db-test/temp-db-file)
          world (or (:world start-options) (temp-world))
-         rt (weaver-runtime/start! db-file (assoc (or start-options {}) :world world :publish? false))]
+         rt (weaver-runtime/start! db-file (assoc (or start-options {}) :world world :publish? false :generation-basis (or (:generation-basis start-options) (test-support/generation-basis (:config-dir world)))))]
      (try
        (weaver-runtime/with-runtime-binding rt #(f rt db-file))
        (finally
@@ -1044,7 +1044,9 @@
       (spit socket-file "orphaned")
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"cannot prove weaver world is stale"
-                            (weaver-runtime/start! nil {:world world :publish? false})))
+                            (weaver-runtime/start! nil {:world world
+                                                        :publish? false
+                                                        :generation-basis (test-support/generation-basis (:config-dir world))})))
       (is (.exists socket-file))
       (finally
         (metadata/delete! world)
@@ -1053,7 +1055,9 @@
 (deftest runtime-stop-removes-metadata
   (let [db-file (db-test/temp-db-file)
         world (temp-world)
-        rt (weaver-runtime/start! db-file {:world world :publish? false})]
+        rt (weaver-runtime/start! db-file {:world world
+                                           :publish? false
+                                           :generation-basis (test-support/generation-basis (:config-dir world))})]
     (try
       (weaver-runtime/stop! rt)
       (is (nil? (metadata/read-metadata world)))
@@ -1066,11 +1070,15 @@
 (deftest runtime-rejects-duplicate-live-metadata
   (let [db-file (db-test/temp-db-file)
         world (temp-world)
-        rt (weaver-runtime/start! db-file {:world world :publish? false})]
+        rt (weaver-runtime/start! db-file {:world world
+                                           :publish? false
+                                           :generation-basis (test-support/generation-basis (:config-dir world))})]
     (try
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"metadata already exists"
-                            (weaver-runtime/start! db-file {:world world :publish? false})))
+                            (weaver-runtime/start! db-file {:world world
+                                                            :publish? false
+                                                            :generation-basis (test-support/generation-basis (:config-dir world))})))
       (finally
         (weaver-runtime/stop! rt)
         (db-test/delete-sqlite-family! db-file)))))

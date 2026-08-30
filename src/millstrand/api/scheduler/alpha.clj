@@ -158,7 +158,7 @@
     (throw (ex-info "Scheduler handler must be a fully qualified symbol"
                     {:handler handler})))
   (let [resolved (try
-                   (access/with-spool-classloader runtime #(requiring-resolve handler))
+                   (access/with-generation-classloader runtime #(requiring-resolve handler))
                    (catch Throwable t
                      (throw (ex-info "Scheduler handler could not be resolved"
                                      {:handler handler} t))))

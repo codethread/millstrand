@@ -30,7 +30,7 @@
   ([start-options f]
    (let [db-file (db-test/temp-db-file)
          world (or (:world start-options) (temp-world))
-         rt (weaver-runtime/start! db-file (assoc (or start-options {}) :world world :publish? false))]
+         rt (weaver-runtime/start! db-file (assoc (or start-options {}) :world world :publish? false :generation-basis (or (:generation-basis start-options) (test-support/generation-basis (:config-dir world)))))]
      (try
        (weaver-runtime/with-runtime-binding rt #(f rt db-file))
        (finally

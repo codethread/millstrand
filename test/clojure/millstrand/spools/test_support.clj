@@ -163,6 +163,18 @@
   (t/is (= (set expected-keys) (set (keys (new-state-fn))))
         "spool-state key set drifted — bump the spool's state-version and this expected key set together"))
 
+(defn generation-basis
+  "Build the minimal explicit generation basis for a disposable test world."
+  [config-dir]
+  {:sources [{:kind :project
+              :path (.getCanonicalPath (io/file config-dir "deps.edn"))
+              :deps {}}]
+   :aliases []
+   :reserved-deps {'io.millstrand/millstrand {:local/root "."}}
+   :basis {:libs {} :classpath-roots [] :argmap {}}
+   :fingerprint (str "sha256:" (str/join (repeat 64 "0")))
+   :classloader (.getContextClassLoader (Thread/currentThread))})
+
 (defn with-runtime
   "Run `f` (a `(fn [rt config-dir] ...)`) against a fresh, disposable weaver
   runtime.
@@ -184,19 +196,10 @@
          db-file (db-test/temp-db-file)
          config-dir (temp-config-dir (select-keys opts [:prefix :nest-millstrand?]))]
      (try
-       (let [generation-basis
-             {:sources [{:kind :project
-                         :path (.getCanonicalPath (io/file config-dir "deps.edn"))
-                         :deps {}}]
-              :aliases []
-              :reserved-deps {'io.millstrand/millstrand {:local/root "."}}
-              :basis {:libs {} :classpath-roots [] :argmap {}}
-              :fingerprint (str "sha256:" (apply str (repeat 64 "0")))
-              :classloader (.getContextClassLoader (Thread/currentThread))}
-             rt (weaver-runtime/start!
+       (let [rt (weaver-runtime/start!
                  db-file {:world (test-world (.getCanonicalPath config-dir))
                           :publish? publish?
-                          :generation-basis generation-basis})]
+                          :generation-basis (generation-basis config-dir)})]
          (try
            (weaver-runtime/with-runtime-binding rt #(f rt config-dir))
            (finally

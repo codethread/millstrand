@@ -234,7 +234,7 @@
   (str "(do "
        "(require '[millstrand.core.weaver.runtime]) "
        "(let [rt " (runtime-form port) "] "
-       "(millstrand.core.weaver.runtime/with-runtime-and-spool-classloader rt "
+       "(millstrand.core.weaver.runtime/with-runtime-and-generation-classloader rt "
        "(fn [] (try {:ok true :value (clojure.core/load-string " (pr-str code) ")} "
        "(catch Throwable t "
        ;; load-string wraps thrown exceptions in CompilerException; report the cause
