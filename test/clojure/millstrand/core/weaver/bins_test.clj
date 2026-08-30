@@ -52,7 +52,8 @@
             _ (io/make-parents root-executable)
             _ (spit root-executable "#!/bin/sh\n")
             _ (.setExecutable root-executable true false)
-            coordinate {:local/root (.getCanonicalPath root)
+            coordinate {:git/dir "spools/ralph"
+                        :deps/root (.getCanonicalPath root)
                         :paths [(.getCanonicalPath source-root)]}
             rt (publish!
                 (runtime root {'demo/bins coordinate})
@@ -82,7 +83,7 @@
     (try
       (let [source-root (io/file root "src")
             source (io/file source-root "demo/module.clj")
-            coordinate {:local/root (.getCanonicalPath root)
+            coordinate {:deps/root (.getCanonicalPath root)
                         :paths [(.getCanonicalPath source-root)]}
             entry {:name "agent" :doc "Ambiguous anchor."
                    :executable [:root "bin/agent"]

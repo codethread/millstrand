@@ -72,10 +72,7 @@
     (or (= file-path root-path) (str/starts-with? file-path prefix))))
 
 (defn- library-root [coordinate]
-  (when-let [root (or (:git/dir coordinate) (:local/root coordinate))]
-    (canonical-file (if-let [deps-root (:deps/root coordinate)]
-                      (io/file root deps-root)
-                      root))))
+  (some-> (:deps/root coordinate) canonical-file))
 
 (defn- basis-root-matches [runtime source-file]
   (let [source-file (canonical-file source-file)]
