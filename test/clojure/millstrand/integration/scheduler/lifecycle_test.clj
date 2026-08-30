@@ -60,7 +60,9 @@
       (reset! fired (promise))
       ;; First weaver schedules a wake through the blessed API, confirms it is
       ;; pending, then stops before the wake is due.
-      (let [rt1 (weaver-runtime/start! db-file {:world world :publish? false})]
+      (let [rt1 (weaver-runtime/start! db-file {:world world
+                                                :publish? false
+                                                :generation-basis (test-support/generation-basis (:config-dir world))})]
         (try
           (test-alpha/set-clock! rt1 (test-alpha/manual-clock (Instant/ofEpochSecond 0)))
           (scheduler/schedule! rt1 {:key "survivor"
@@ -78,7 +80,9 @@
                          {:key "survivor" :wake-at (Instant/ofEpochSecond 1)
                           :handler 'millstrand.integration.scheduler.lifecycle-test/add-strand-handler
                           :payload {:title "Survivor strand"}})
-      (let [rt2 (weaver-runtime/start! db-file {:world world :publish? false})]
+      (let [rt2 (weaver-runtime/start! db-file {:world world
+                                                :publish? false
+                                                :generation-basis (test-support/generation-basis (:config-dir world))})]
         (try
           (is (await-fire) "the persisted overdue wake fires after a real weaver restart")
           ;; await-fire only proves the handler body ran; the wake's completion
