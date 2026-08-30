@@ -2,7 +2,7 @@
 
 A Weaver is the Clojure process serving one selected workspace; a spool is a Clojure library loaded into it. EDN is Clojure's data notation. tools.deps reads `deps.edn` and resolves the libraries and classpath, called a basis, for one process generation.
 
-This feature follows [Weaver restart continuity](../weaver-restart-continuity/proposal.md), which adds a supervised restart command, readiness waiting, and native-process survival across replacement.
+This feature follows [Weaver restart continuity](../../feat/weaver-restart-continuity/proposal.md), which adds a supervised restart command, readiness waiting, and native-process survival across replacement.
 
 Millstrand should stop using `spools.edn` as a second dependency system. A selected workspace should use ordinary tools.deps data in `<selected-workspace>/deps.edn` to declare the shared code available to its Weaver. An optional, gitignored `<selected-workspace>/deps.local.edn` should provide personal dependency and classpath overrides through the same tools.deps grammar. For the default marker these are `.millstrand/deps.edn` and `.millstrand/deps.local.edn`; `.ms` and explicit `--workspace` directories work the same way. `init.clj` and optional `init.local.clj` remain the corresponding activation surfaces.
 

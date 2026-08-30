@@ -82,6 +82,6 @@ mill weaver stop --workspace "$workspace"
 
 `mill weaver repl --workspace "$workspace"` attaches a live REPL to a running weaver. [The tutorial](./docs/tutorial.md) walks through the user surface, and [`docs/reference.md`](./docs/reference.md) points to the specifications, guides, and generated API documentation.
 
-Use the [repository test map](./test/README.md) for test tiers, fixtures, and isolation rules. The tracked [land quality contract](./.millstrand/land-quality.sh) is the merge gate; its main local commands are `clojure -M:test`, `make test-go`, `make test-e2e`, `make spool-suite-gate`, `make fmt-check lint reflect-check docs-check`, and `git diff --check`.
+Use the [repository test map](./test/README.md) for test tiers, fixtures, and isolation rules. The tracked [land quality contract](./.millstrand/land-quality.sh) is the merge gate; its main local commands are `clojure -M:test`, `make test-go`, `make test-e2e`, `make fmt-check lint reflect-check docs-check`, and `git diff --check`.
 
 After validation, `git status --short` should show no generated SQLite, socket, metadata, smoke, or built CLI artifacts.

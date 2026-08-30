@@ -84,14 +84,19 @@
         "ct.spools/delegation",
         "ct.spools/bench"
       ],
-      "revision": "fd75bf50ef823e1df520ead410780961d6313474",
+      "revision": "fa565ed507b06bda0d6ce9778fa2c4aeaa8cccfe",
       "marker": {
         "kind": "annotated-tag",
-        "value": "v30",
-        "tag_object": "4a980ec9b42079fdbed24261ab97352de91da083",
-        "peeled_sha": "fd75bf50ef823e1df520ead410780961d6313474"
+        "value": "v31",
+        "tag_object": "1e858d7a0f79c2dc7108aa9cc7404670230d0432",
+        "peeled_sha": "fa565ed507b06bda0d6ce9778fa2c4aeaa8cccfe"
       },
-      "land": {"pr": 46, "run_id": "agent-harness-tu15x-land-6f94bdc"},
+      "land": {"pr": 47, "run_id": "agent-harness-r839q-fix-land"},
+      "deps_native_cutover": {
+        "revision": "fd75bf50ef823e1df520ead410780961d6313474",
+        "marker": "v30",
+        "land": {"pr": 46, "run_id": "agent-harness-tu15x-land-6f94bdc"}
+      },
       "validation": {
         "commands": [
           "make test",
@@ -99,9 +104,9 @@
           "make identity-check",
           "make release-check",
           "./.millstrand/land-quality.sh",
-          "bin/verify-release --mode published --repository https://github.com/codethread/agent-harness.spool.git --tag v30 --sha fd75bf50ef823e1df520ead410780961d6313474 --core-release release/msr04-release.json --kanban-release release/msr05-release.json"
+          "bin/verify-release --mode published --repository https://github.com/codethread/agent-harness.spool.git --tag v31 --sha fa565ed507b06bda0d6ce9778fa2c4aeaa8cccfe --core-release release/msr04-release.json --kanban-release release/msr05-release.json"
         ],
-        "result": "pass: 246 tests, 1516 assertions; published verifier exited 0"
+        "result": "pass: 246 tests, 1516 assertions; published v31 verifier exited 0; obsolete pre-v26 preparation surface absent"
       },
       "rollback_command": "git revert --no-edit fd75bf50ef823e1df520ead410780961d6313474",
       "rollback_delivery": "land"
@@ -133,12 +138,16 @@
       "name": "Codethread",
       "url": "https://github.com/codethread/codethread.spool",
       "roots": ["codethread/config", "codethread/ralph"],
-      "revision": "356841d810cac6408cc4fb3cf6cca0094562d28e",
-      "marker": {"kind": "sha", "value": "356841d810cac6408cc4fb3cf6cca0094562d28e", "remote_main": "356841d810cac6408cc4fb3cf6cca0094562d28e"},
-      "land": {"pr": 9, "run_id": "codethread-aawqy-land-5164047"},
+      "revision": "89fb5a7cfd8d0b63f906e98b9fd64844bdb0c649",
+      "marker": {"kind": "sha", "value": "89fb5a7cfd8d0b63f906e98b9fd64844bdb0c649", "remote_main": "89fb5a7cfd8d0b63f906e98b9fd64844bdb0c649", "reachable_on_remote_main": true},
+      "land": {"pr": 10, "run_id": "codethread-q1hh7-fix-land"},
+      "deps_native_cutover": {
+        "revision": "356841d810cac6408cc4fb3cf6cca0094562d28e",
+        "land": {"pr": 9, "run_id": "codethread-aawqy-land-5164047"}
+      },
       "validation": {
         "commands": ["make quality", "./.millstrand/land-quality.sh"],
-        "result": "pass"
+        "result": "pass: 2 Clojure tests, 24 assertions, and all Go packages; disposable config fixture uses immutable external Git coordinates"
       },
       "rollback_command": "git revert --no-edit 356841d810cac6408cc4fb3cf6cca0094562d28e",
       "rollback_delivery": "land"
@@ -149,7 +158,7 @@
     "note": "zidop",
     "coordinator_note": "umdyz",
     "ordering": "after consumer pin advanced",
-    "result": "annotated tags v3, v30, and v23 remotely verified; Agent Harness published verifier exited 0",
+    "result": "annotated tags v3, v23, and terminal Agent Harness v31 remotely verified; Agent Harness v31 published verifier exited 0",
     "publication_order_deviation": {
       "expected_order": "publish immutable tags before advancing the consumer pin",
       "actual_order": "consumer pin 9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197 advanced before annotated tags v3, v30, and v23 were published",
@@ -270,6 +279,55 @@
           "result": "pass: source and image clean at Millhouse f487eb42"
         }
       ]
+    },
+    "terminal_cutover_acceptance": {
+      "millstrand_commit": "c1a9773310a75b62d3b026506139659f2eafe1a7",
+      "stage": "terminal acceptance after dependent-spool fix-forwards",
+      "command": "./.millstrand/land-quality.sh",
+      "result": "12 pass, 2 timing warnings, 0 failures, 0 timeouts, 0 blocked",
+      "repositories": [
+        {
+          "name": "Millhouse",
+          "marker": "v3",
+          "revision": "f487eb42ea9523e8bd405e64a7c319013217d988",
+          "result": "unchanged immutable release; full recorded acceptance passed"
+        },
+        {
+          "name": "Agent Harness",
+          "marker": "v31",
+          "revision": "fa565ed507b06bda0d6ce9778fa2c4aeaa8cccfe",
+          "tag_object": "1e858d7a0f79c2dc7108aa9cc7404670230d0432",
+          "land": {"pr": 47, "run_id": "agent-harness-r839q-fix-land"},
+          "result": "246 tests, 1516 assertions, all quality checks passed; published verifier exited 0"
+        },
+        {
+          "name": "Devflow",
+          "marker": "v23",
+          "revision": "90799b8c950b4509167137562fbf18853524d41c",
+          "result": "unchanged immutable release; full recorded acceptance passed"
+        },
+        {
+          "name": "Codethread",
+          "marker": "89fb5a7cfd8d0b63f906e98b9fd64844bdb0c649",
+          "revision": "89fb5a7cfd8d0b63f906e98b9fd64844bdb0c649",
+          "land": {"pr": 10, "run_id": "codethread-q1hh7-fix-land"},
+          "result": "2 Clojure tests, 24 assertions, and all Go packages passed on canonical main"
+        }
+      ],
+      "invocation_notes": [
+        "Tests with a declared sibling Millstrand path were rerun from that repository layout after an invalid /tmp invocation.",
+        "Agent Harness canonical main's user-owned untracked .millstrand/spools.local.edn was left untouched; the exact merged SHA passed from a clean adjacent disposable worktree."
+      ],
+      "surface_scan": {
+        "scope": ["Millstrand", "Millhouse", "Agent Harness", "Devflow", "Codethread"],
+        "result": "no shipped legacy dependency-resolution or dynamic-mutation path remains",
+        "classified_matches": [
+          "Millstrand retains explicit legacy-file rejection, negative transition tests, migration prose, historical records, and the unrelated static registry layer keyword :spools.",
+          "Millhouse retains migration prose and unrelated registry-owner test data.",
+          "Devflow retains an inert local-file ignore and historical changelog prose.",
+          "Agent Harness and Codethread have no tracked matches in the final scan."
+        ]
+      }
     }
   }
 }
