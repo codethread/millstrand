@@ -19,10 +19,10 @@
   #{:paths :extra-paths :replace-paths :classpath-overrides
     :local/root :deps/root :git/dir})
 
-(def ^:dynamic *create-basis*
+(defn ^:dynamic *create-basis*
   "Function used to invoke `clojure.tools.deps/create-basis`."
-  (fn [options]
-    ((requiring-resolve 'clojure.tools.deps/create-basis) options)))
+  [options]
+  ((requiring-resolve 'clojure.tools.deps/create-basis) options))
 
 (defn- diagnostic-ex
   [message stage source-path cause coordinate]
