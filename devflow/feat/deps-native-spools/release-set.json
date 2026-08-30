@@ -12,15 +12,23 @@
       "name": "Millstrand",
       "url": "https://github.com/codethread/millstrand",
       "roots": ["millstrand.spools/batteries", "millstrand.spools/unsafe-text-search"],
-      "revision": "bbca5638bce72ad6a00b2ca916cabcfe99107828",
+      "revision": "7b10ffb7addde6ffb77dacf5c419261ca3f23c65",
       "marker": {
         "kind": "sha",
-        "value": "bbca5638bce72ad6a00b2ca916cabcfe99107828",
+        "value": "7b10ffb7addde6ffb77dacf5c419261ca3f23c65",
+        "remote_main": "7b10ffb7addde6ffb77dacf5c419261ca3f23c65",
         "reachable_on_remote_main": true
       },
       "land": {
-        "pr": 436,
-        "run_id": "millstrand-0wltm-land-cf45bcb9"
+        "pr": 439,
+        "run_id": "millstrand-lw7pf-custody-land"
+      },
+      "deps_native_cutover": {
+        "core_revision": "bbca5638bce72ad6a00b2ca916cabcfe99107828",
+        "land": {
+          "pr": 436,
+          "run_id": "millstrand-0wltm-land-cf45bcb9"
+        }
       },
       "validation": {
         "commands": [
@@ -238,27 +246,27 @@
       "result": "v3, v30, and v23 published and remotely peeled to their recorded revisions"
     },
     "final_post_publication_acceptance": {
-      "runtime_commit": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197",
-      "record_branch_head": "1cf81e5eaf490f67293334546e36f0355445ad67",
+      "runtime_commit": "7b10ffb7addde6ffb77dacf5c419261ca3f23c65",
+      "gate": "73tu4",
       "stage": "final post-publication acceptance",
       "command": "./.millstrand/land-quality.sh",
-      "result": "12 pass, 2 timing warnings, 0 fail/timeout/block",
+      "result": "11 pass, 3 timing warnings, 0 failures",
       "evidence": [
         {
           "command": "make test-e2e",
-          "duration": "46.7s",
+          "duration": "45.7s",
           "scenario": "smoke-local-coordinate-replacement! composes shared Batteries from deps.edn with a personal dependency in deps.local.edn, activates it from init.local.clj, proves refresh reports restart-required without changing generation, and proves replacement adopts and activates the new basis",
           "result": "pass"
         },
         {
           "command": "make test-restart-acceptance",
-          "duration": "76.9s",
+          "duration": "77.6s",
           "scenario": "TestDisposableWeaverRestartAcceptance against recorded disposable processes",
           "result": "pass"
         },
         {
           "command": "test/shell/acceptance/millstrand-millhouse-kanban.sh",
-          "duration": "33.5s",
+          "duration": "33.1s",
           "scenario": "Millhouse Kanban acceptance",
           "result": "pass: source and image clean at Millhouse f487eb42"
         }
