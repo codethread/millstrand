@@ -42,8 +42,7 @@
       "consumer_pin": {
         "pr": 437,
         "land_run_id": "millstrand-bu1ot-pin-land",
-        "commit": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197",
-        "remote_main": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197"
+        "commit": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197"
       },
       "rollback_command": "git revert --no-edit 9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197",
       "rollback_delivery": "land"
