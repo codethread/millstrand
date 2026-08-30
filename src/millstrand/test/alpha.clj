@@ -323,10 +323,9 @@
                            'millstrand.core.weaver.basis/create-generation-basis)
                           ~workspace {:local/root ~source})
                          :classloader)))))
-        process (-> (ProcessBuilder.
-                     ^java.util.List
-                     ["clojure" "-Srepro" "-Sdeps" (pr-str bootstrap-deps)
-                      "-M:millstrand/bootstrap" "-e" form])
+        ^java.util.List command ["clojure" "-Srepro" "-Sdeps" (pr-str bootstrap-deps)
+                                 "-M:millstrand/bootstrap" "-e" form]
+        process (-> (ProcessBuilder. command)
                     (.redirectErrorStream true)
                     (.start))
         output (slurp (.getInputStream process))
