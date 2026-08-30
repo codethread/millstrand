@@ -1,0 +1,124 @@
+{
+  "proposal": "PROP-Dns-001.S7",
+  "release_order": [
+    "Millstrand",
+    "Millhouse",
+    "Agent Harness",
+    "Devflow",
+    "Codethread"
+  ],
+  "repositories": [
+    {
+      "name": "Millstrand",
+      "url": "https://github.com/codethread/millstrand",
+      "roots": ["Batteries", "unsafe-text-search"],
+      "revision": "bbca5638bce72ad6a00b2ca916cabcfe99107828",
+      "marker": {
+        "kind": "sha",
+        "value": "bbca5638bce72ad6a00b2ca916cabcfe99107828",
+        "reachable_on_remote_main": true
+      },
+      "land": {
+        "run_id": "deps-native-millstrand-20260830"
+      },
+      "validation": {
+        "commands": [
+          "flock -w 3600 /tmp/millstrand-test.lock clojure -M:test",
+          "make test-go",
+          "make test-e2e",
+          "make fmt-check lint reflect-check docs-check"
+        ],
+        "result": "pass"
+      },
+      "consumer_pin": {
+        "pr": 437,
+        "land_run_id": "millstrand-bu1ot-pin-land",
+        "commit": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197",
+        "remote_main": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197"
+      },
+      "rollback_command": "git revert --no-edit 9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197",
+      "rollback_delivery": "land"
+    },
+    {
+      "name": "Millhouse",
+      "url": "https://github.com/codethread/millhouse.spool",
+      "roots": ["workflow", "chime", "cron", "kanban", "identity"],
+      "revision": "f487eb42ea9523e8bd405e64a7c319013217d988",
+      "marker": {
+        "kind": "annotated-tag",
+        "value": "v3",
+        "tag_object": "bb49ca0e9253c4baf7a51047c735bc0aa8da0f57",
+        "peeled_sha": "f487eb42ea9523e8bd405e64a7c319013217d988"
+      },
+      "land": {"pr": 18, "run_id": "millhouse-wij2z-land-final"},
+      "validation": {
+        "commands": ["make quality", "hosted Quality gates run 33301524486"],
+        "result": "pass: 379 tests, 2873 assertions; full-range review clean"
+      },
+      "rollback_command": "git revert --no-edit f487eb42ea9523e8bd405e64a7c319013217d988",
+      "rollback_delivery": "land"
+    },
+    {
+      "name": "Agent Harness",
+      "url": "https://github.com/codethread/agent-harness.spool",
+      "roots": ["harness-core", "codex-harness", "agent-run", "agent-cli", "delegation", "bench"],
+      "revision": "fd75bf50ef823e1df520ead410780961d6313474",
+      "marker": {
+        "kind": "annotated-tag",
+        "value": "v30",
+        "tag_object": "4a980ec9b42079fdbed24261ab97352de91da083",
+        "peeled_sha": "fd75bf50ef823e1df520ead410780961d6313474"
+      },
+      "land": {"pr": 46, "run_id": "agent-harness-tu15x-land-6f94bdc"},
+      "validation": {
+        "commands": [
+          "tracked land-quality",
+          "bin/verify-release --mode published --repository https://github.com/codethread/agent-harness.spool.git --tag v30 --sha fd75bf50ef823e1df520ead410780961d6313474 --core-release release/msr04-release.json --kanban-release release/msr05-release.json"
+        ],
+        "result": "pass: 246 tests, 1516 assertions; published verifier exited 0"
+      },
+      "rollback_command": "git revert --no-edit fd75bf50ef823e1df520ead410780961d6313474",
+      "rollback_delivery": "land"
+    },
+    {
+      "name": "Devflow",
+      "url": "https://github.com/codethread/devflow.spool",
+      "roots": ["root", "kanban-adapter"],
+      "revision": "90799b8c950b4509167137562fbf18853524d41c",
+      "marker": {
+        "kind": "annotated-tag",
+        "value": "v23",
+        "tag_object": "72c6cc20b3d0cd6f1373d0081e641a9e9652ee2c",
+        "peeled_sha": "90799b8c950b4509167137562fbf18853524d41c"
+      },
+      "land": {"pr": 20, "run_id": "devflow-amki6-land-25b933c"},
+      "validation": {
+        "commands": ["tracked land-quality", "identity and card-authoring equivalence"],
+        "result": "pass: 19 tests, 226 assertions; final targeted reviews clean"
+      },
+      "rollback_command": "git revert --no-edit 90799b8c950b4509167137562fbf18853524d41c",
+      "rollback_delivery": "land"
+    },
+    {
+      "name": "Codethread",
+      "url": "https://github.com/codethread/codethread.spool",
+      "roots": ["config", "ralph"],
+      "revision": "356841d810cac6408cc4fb3cf6cca0094562d28e",
+      "marker": {"kind": "sha", "value": "356841d810cac6408cc4fb3cf6cca0094562d28e", "remote_main": "356841d810cac6408cc4fb3cf6cca0094562d28e"},
+      "land": {"pr": 9, "run_id": "codethread-aawqy-land-5164047"},
+      "validation": {
+        "commands": ["repository quality", "fresh one-Mill/one-Weaver runtime proof", "Ralph build"],
+        "result": "pass"
+      },
+      "rollback_command": "git revert --no-edit 356841d810cac6408cc4fb3cf6cca0094562d28e",
+      "rollback_delivery": "land"
+    }
+  ],
+  "publication_evidence": {
+    "strand": "h7apj",
+    "note": "zidop",
+    "coordinator_note": "umdyz",
+    "result": "all markers remotely verified; Agent Harness published verifier passed"
+  },
+  "cross_repository_acceptance": "complete: all five ordered revisions passed their recorded acceptance; annotated markers were remotely peeled and both SHA-only remote-main markers were verified before the consumer pin advanced"
+}
