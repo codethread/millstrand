@@ -330,8 +330,8 @@
                        (make-array java.nio.file.attribute.FileAttribute 0)))
         repository (repository-root)
         configured-sha (get-in (edn/read-string
-                                (slurp (io/file repository ".millstrand" "spools.edn")))
-                               [:spools 'millhouse/spools :git/sha])]
+                                (slurp (io/file repository ".millstrand" "deps.edn")))
+                               [:deps 'millhouse.spools/workflow :git/sha])]
     (try
       (write-consumer-file! root "deps.edn" (pr-str (millhouse-consumer-deps)))
       (write-consumer-file!
