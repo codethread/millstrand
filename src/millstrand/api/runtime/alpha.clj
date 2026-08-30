@@ -359,8 +359,7 @@
   or recording coordinator state. They return a `::refresh-result`-shaped map
   flagged `:dry-run? true` with a `:caveat`; collection may evaluate module
   source code. Options conform to `::refresh-opts`; malformed options fail
-  loudly. The result conforms to `::plan-result`
-  (DELTA-Dns-Repl-001.C11)."
+  loudly. The result conforms to `::plan-result` (SPEC-003.C26b)."
   ([runtime] (plan runtime {}))
   ([runtime opts]
    (validate-refresh-opts! opts)
@@ -378,7 +377,7 @@
   Returns exactly the running basis fingerprint, desired modules, resource
   outcomes, loaded namespaces, and last refresh result. It performs no
   dependency read, file write, source load, registration, or reconcile. The
-  result conforms to `::status-result` (DELTA-Dns-Repl-001.C12)."
+  result conforms to `::status-result` (SPEC-003.C26c)."
   [runtime]
   (let [module-status (weaver-runtime/module-status runtime)]
     (validate-status-result!
@@ -398,8 +397,7 @@
   This advanced code-only seam reloads namespaces whose file resources belong
   to the selected library's source paths. It does not publish module
   contributions or reconcile resources; use `refresh!` for the normal path.
-  The result conforms to `::reload-code-result`
-  (DELTA-Dns-Repl-001.C5)."
+  The result conforms to `::reload-code-result` (SPEC-003.C24)."
   [runtime root-lib]
   (require-valid! ::root-lib root-lib "reload-code! root-lib must be a symbol")
   (validate-reload-code-result!

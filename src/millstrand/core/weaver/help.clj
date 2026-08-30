@@ -24,7 +24,7 @@
   — into that schema; nothing here re-models or hand-writes usage.
 
   `source` is the op-wide handler pointer resolved best-effort at projection
-  (DELTA-Dtf-002.CC2): `requiring-resolve` under the runtime spool classloader,
+  (DELTA-Dtf-002.CC2): `requiring-resolve` under the runtime generation classloader,
   then the resolved var's `:file`/`:line` mapped to a readable on-disk path, or
   `null` in the three best-effort cases. `glossary` is the referenced-term closure
   of the returned subtree, resolved once against the runtime glossary
@@ -124,9 +124,9 @@
   projection (DELTA-Dtf-002.CC2).
 
   Resolves `entry`'s stored handler symbol via `requiring-resolve` under
-  `runtime`'s spool classloader (so a synced-spool handler resolves and its
-  on-disk source is found through the same classloader), then reads the resolved
-  var's `:file`/`:line`. Always returns a value: `nil` in exactly the three
+  `runtime`'s generation classloader (so a dependency-backed module handler
+  resolves and its on-disk source is found through the same classloader), then
+  reads the resolved var's `:file`/`:line`. Always returns a value: `nil` in exactly the three
   best-effort cases — `requiring-resolve` fails (throws or yields nil), the var
   carries no `:file`/`:line`, or `:file` is not a readable on-disk file — else
   `{file, line}`. Only the resolve step is guarded; any other failure is unrelated

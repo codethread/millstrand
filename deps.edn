@@ -25,8 +25,6 @@
   ;; Per-worktree warm test REPL: compose with :test to inherit its classpath and
   ;; native-access opt — `clojure -M:test:test-repl` boots millstrand.test.warm.
   :test-repl {:main-opts ["-m" "millstrand.test.warm"]}
-  :transition-check {:extra-paths ["scripts"]
-                     :main-opts ["-m" "quality.millstrand-transition"]}
   ;; Deliberately self-contained (not composed with :test like :test-repl): the bench
   ;; must run standalone as `clojure -M:large-attr-bench`, and :test's :main-opts
   ;; (millstrand.test-runner) would swallow the -m entrypoint under composition.
@@ -43,60 +41,28 @@
                              "spools/unsafe-text-search/src"]
                :extra-deps {codethread/config
                             {:git/url "https://github.com/codethread/codethread.spool.git"
-                             :git/sha "356841d810cac6408cc4fb3cf6cca0094562d28e"
+                             :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe"
                              :deps/root "spools/config"}
                             codethread/ralph
                             {:git/url "https://github.com/codethread/codethread.spool.git"
-                             :git/sha "356841d810cac6408cc4fb3cf6cca0094562d28e"
+                             :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe"
                              :deps/root "spools/ralph"}
-                            codethread/devflow
-                            {:git/url "https://github.com/codethread/devflow.spool.git"
-                             :git/sha "90799b8c950b4509167137562fbf18853524d41c"
-                             :deps/root "."}
-                            ct.spools/harness-core
-                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
-                             :git/sha "fd75bf50ef823e1df520ead410780961d6313474"
-                             :deps/root "harness-core"}
-                            ct.spools/codex-harness
-                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
-                             :git/sha "fd75bf50ef823e1df520ead410780961d6313474"
-                             :deps/root "codex-harness"}
-                            ct.spools/agent-run
-                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
-                             :git/sha "fd75bf50ef823e1df520ead410780961d6313474"
-                             :deps/root "agent-run"}
                             ct.spools/agent-cli
                             {:git/url "https://github.com/codethread/agent-harness.spool.git"
-                             :git/sha "fd75bf50ef823e1df520ead410780961d6313474"
+                             :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb"
                              :deps/root "agent-cli"}
-                            ct.spools/delegation
-                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
-                             :git/sha "fd75bf50ef823e1df520ead410780961d6313474"
-                             :deps/root "delegation"}
                             ct.spools/bench
                             {:git/url "https://github.com/codethread/agent-harness.spool.git"
-                             :git/sha "fd75bf50ef823e1df520ead410780961d6313474"
+                             :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb"
                              :deps/root "bench"}
-                            millhouse.spools/identity
-                            {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "f487eb42ea9523e8bd405e64a7c319013217d988"
-                             :deps/root "spools/identity"}
-                            millhouse.spools/workflow
-                            {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "f487eb42ea9523e8bd405e64a7c319013217d988"
-                             :deps/root "spools/workflow"}
                             millhouse.spools/chime
                             {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "f487eb42ea9523e8bd405e64a7c319013217d988"
+                             :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5"
                              :deps/root "spools/chime"}
                             millhouse.spools/cron
                             {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "f487eb42ea9523e8bd405e64a7c319013217d988"
-                             :deps/root "spools/cron"}
-                            millhouse.spools/kanban
-                            {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "f487eb42ea9523e8bd405e64a7c319013217d988"
-                             :deps/root "spools/kanban"}}
+                             :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5"
+                             :deps/root "spools/cron"}}
                :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
   :e2e {:extra-paths ["test/clojure/e2e"]
         :jvm-opts ["--enable-native-access=ALL-UNNAMED"]

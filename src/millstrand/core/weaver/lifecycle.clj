@@ -58,12 +58,12 @@
          :hook/fn (:fn hook)))
 
 (defn- hook-callable
-  "Resolve hook's `:fn` symbol under the runtime's spool classloader.
+  "Resolve hook's `:fn` symbol under the runtime's generation classloader.
 
   Every hook binds at its declared `:hook/dispatch-start` moment: direct
   registration validated the symbol eagerly, module publication stored
   the declaration verbatim, and both dispatch through the symbol so a
-  synced-root reload's fresh classloader is honoured rather than a stale
+  generation refresh's fresh classloader is honoured rather than a stale
   captured callable. An unresolvable symbol fails loudly and surfaces
   through the standard `hook/failed` wrapper."
   [runtime {fn-sym :fn}]

@@ -46,7 +46,7 @@ Function.
 
 Register Batteries' builtin help transform as `runtime`'s default.
 
-Resolves the two-argument transform through the runtime's spool classloader. The Batteries root must already be synced into the running weaver. Like direct registration, this fails loudly when the slot is occupied.
+Resolves the two-argument transform through the runtime's generation classloader. The Batteries transform must be available in the running generation. Like direct registration, this fails loudly when the slot is occupied.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/help_transform/alpha.clj#L61-L73">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.help-transform.alpha/register-default-help-transform!">`register-default-help-transform!`</a>

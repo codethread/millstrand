@@ -59,7 +59,7 @@ Function.
 
 Register an event handler in `runtime` for selected event types.
 
-Builds the registry entry from loudly validated pieces — `key` a keyword, symbol, or non-blank string; `types` a non-empty set of event type keywords; `fn-sym` a fully qualified symbol resolving to a callable under the runtime spool classloader (resolution happens here, so a bad symbol fails registration, not dispatch); `metadata` a data-first map — swaps it into the registry, and returns the entry as data (the resolved function value stays internal). Re-registering a key this owner already holds replaces that entry; a key another owner supplies collides loudly, and `replace-handler!` is the deliberate override for it.
+Builds the registry entry from loudly validated pieces — `key` a keyword, symbol, or non-blank string; `types` a non-empty set of event type keywords; `fn-sym` a fully qualified symbol resolving to a callable under the runtime generation classloader (resolution happens here, so a bad symbol fails registration, not dispatch); `metadata` a data-first map — swaps it into the registry, and returns the entry as data (the resolved function value stays internal). Re-registering a key this owner already holds replaces that entry; a key another owner supplies collides loudly, and `replace-handler!` is the deliberate override for it.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/events/alpha.clj#L29-L48">Source</a></sub></p>
 
 ## <a name="millstrand.api.events.alpha/replace-handler!">`replace-handler!`</a>

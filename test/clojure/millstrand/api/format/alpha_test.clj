@@ -11,7 +11,7 @@
             [millstrand.api.format.alpha :as fmt]))
 
 (deftest prose-renders-without-scope-and-preserves-markdown-after-baseline-dedent
-  (is (= "# Consumer tooling\n\nRead the repository before changing it.\n  - Preserve deliberate list indentation.\n```sh\nstrand spool status\n```"
+  (is (= "# Consumer tooling\n\nRead the repository before changing it.\n  - Preserve deliberate list indentation.\n```sh\nstrand help\n```"
          (fmt/prose
           "
             # Consumer tooling
@@ -19,7 +19,7 @@
             Read the repository before changing it.
               - Preserve deliberate list indentation.
             ```sh
-            strand spool status
+            strand help
             ```
             "))))
 

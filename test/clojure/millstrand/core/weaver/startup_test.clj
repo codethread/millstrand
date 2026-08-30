@@ -995,14 +995,14 @@
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required flag --data-dir"
                           (parse-main-args ["--workspace" "/tmp/c" "--state-dir" "/tmp/s"])))))
 
-(deftest startup-rejects-removed-release-marker-flag
+(deftest startup-rejects-unknown-flags
   (let [parse-main-args (ns-resolve 'millstrand.core.weaver.runtime 'parse-main-args)]
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo #"Unknown flag"
          (parse-main-args ["--workspace" "/tmp/c"
                            "--state-dir" "/tmp/s"
                            "--data-dir" "/tmp/d"
-                           "--release-marker" "v2"])))))
+                           "--unknown-option" "value"])))))
 
 (deftest startup-failing-init-aborts-before-ready-metadata
   (let [world (temp-world)]

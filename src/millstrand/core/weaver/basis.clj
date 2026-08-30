@@ -39,7 +39,7 @@
   "Return the closed dependency diagnostic carried by `throwable`, or nil.
 
   The returned shape is owned by `:millstrand.core.specs/dependency-diagnostic`
-  (DELTA-DnsRuntime-001.CC5)."
+  (SPEC-004.C44)."
   [throwable]
   (let [diagnostic (select-keys (ex-data throwable)
                                 [:status :stage :source-path :message :cause
@@ -54,14 +54,8 @@
     (cond
       (not (.exists file))
       (when required?
-        (let [legacy? (or (.exists (io/file (.getParentFile file) "spools.edn"))
-                          (.exists (io/file (.getParentFile file) "spools.local.edn")))
-              message (if legacy?
-                        (str "dependency migration required: create " canonical-path
-                             "; spools.edn is no longer supported; see "
-                             "docs/spools/deps-migration.md")
-                        (str "required dependency file does not exist: "
-                             canonical-path))]
+        (let [message (str "required dependency file does not exist: "
+                           canonical-path)]
           (throw (diagnostic-ex message :deps-read canonical-path message nil))))
 
       (not (.isFile file))
@@ -141,8 +135,7 @@
   "Encode `value` as deterministic, whitespace-minimal EDN.
 
   Map entries and set members use UTF-8 byte ordering of their canonical EDN.
-  Values outside the untagged EDN domain fail loudly
-  (DELTA-DnsRuntime-001.CC6)."
+  Values outside the untagged EDN domain fail loudly (SPEC-004.C45)."
   [value]
   (cond
     (map? value)
@@ -249,7 +242,7 @@
   `workspace` is the selected workspace directory. `runtime-coordinate` is the
   paired `io.millstrand/millstrand` coordinate supplied by Mill. The result is
   validated against `:millstrand.core.specs/generation-basis` before return
-  (DELTA-DnsRuntime-001.CC2-CC8)."
+  (SPEC-004.C42-C45)."
   [workspace runtime-coordinate]
   (let [workspace-path (.getPath (.getCanonicalFile (io/file workspace)))
         project (read-deps! (str (io/file workspace-path "deps.edn")) true)

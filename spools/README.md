@@ -2,7 +2,7 @@
 
 A spool is ordinary trusted Clojure. A workspace makes it available with a tools.deps coordinate in `deps.edn` or optional `deps.local.edn`, then activates its module explicitly from `init.clj` or optional `init.local.clj`. Dependency presence never activates code.
 
-Each spool repository exposes normal tools.deps library coordinates. Multi-library repositories use one coordinate per public library as ordinary tools.deps permits. Millstrand has no family, root-map, release-marker, floor, acquisition, or package-operation layer.
+Each spool repository exposes normal tools.deps library coordinates. Multi-library repositories use one coordinate per public library. tools.deps resolves and materializes those coordinates for each Weaver generation.
 
 ## Shipped spools
 

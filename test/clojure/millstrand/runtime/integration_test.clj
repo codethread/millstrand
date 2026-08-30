@@ -1,5 +1,5 @@
 (ns millstrand.runtime.integration-test
-  "Integration coverage for runtime module declarations after deps-native cutover."
+  "Integration coverage for runtime module declarations."
   (:require [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is]]
             [millstrand.api.runtime.alpha :as runtime]
@@ -12,7 +12,3 @@
       (let [status (runtime/status rt)]
         (is (= (:basis-fingerprint rt) (:basis-fingerprint status)))
         (is (= {} (:modules status)))))))
-
-(deftest removed-spool-approval-apis-stay-absent
-  (is (nil? (ns-resolve 'millstrand.api.runtime.alpha 'approved)))
-  (is (nil? (ns-resolve 'millstrand.api.runtime.alpha 'release-marker))))

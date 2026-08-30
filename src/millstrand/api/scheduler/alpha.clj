@@ -37,7 +37,7 @@
 
   `wake` is a map of :key (stable non-blank string), :wake-at
   (java.time.Instant), :handler (fully qualified symbol resolvable in
-  `runtime`'s spool classloader), and optional :payload (nil or a map that
+  `runtime`'s generation classloader), and optional :payload (nil or a map that
   encodes to a JSON object). Replacing an existing key resets its attempt
   count. Returns the persisted wake as a decoded `::pending-wake` map.
   Malformed keys/instants/payloads and unresolvable or non-callable handlers
@@ -149,7 +149,7 @@
 ;; --- handler resolution -------------------------------------------------------
 
 (defn- resolve-handler-fn!
-  "Resolve `handler` under `runtime`'s spool classloader to a callable value.
+  "Resolve `handler` under `runtime`'s generation classloader to a callable value.
 
   Throws when the symbol is not fully qualified, cannot be resolved, or
   names a non-callable value."

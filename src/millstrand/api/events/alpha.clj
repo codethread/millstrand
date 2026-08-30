@@ -32,7 +32,7 @@
   Builds the registry entry from loudly validated pieces — `key` a keyword,
   symbol, or non-blank string; `types` a non-empty set of event type
   keywords; `fn-sym` a fully qualified symbol resolving to a callable under
-  the runtime spool classloader (resolution happens here, so a bad symbol
+  the runtime generation classloader (resolution happens here, so a bad symbol
   fails registration, not dispatch); `metadata` a data-first map — swaps it
   into the registry, and returns the entry as data (the resolved function
   value stays internal). Re-registering a key this owner already holds
@@ -255,7 +255,7 @@
 ;; --- handler function resolution ------------------------------------------------
 
 (defn- resolve-handler-fn!
-  "Resolve `fn-sym` under `runtime`'s spool classloader to a callable value.
+  "Resolve `fn-sym` under `runtime`'s generation classloader to a callable value.
 
   Throws when the symbol is not fully qualified, cannot be resolved, or names
   a non-callable value."

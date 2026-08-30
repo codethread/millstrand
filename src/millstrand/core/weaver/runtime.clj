@@ -339,8 +339,7 @@
   "Reload loaded namespaces backed by source paths for `lib` in the running basis.
 
   Returns the closed result owned by
-  `:millstrand.api.runtime.alpha/reload-code-result`
-  (DELTA-Dns-Repl-001.C4)."
+  `:millstrand.api.runtime.alpha/reload-code-result` (SPEC-003.C24)."
   [runtime lib]
   (let [coordinate (get-in runtime [:generation-basis :basis :libs lib])]
     (when-not coordinate
@@ -1056,8 +1055,7 @@
   `generation-basis` conforms to
   `:millstrand.core.specs/generation-basis`; `runtime-args` contains the
   ordinary runtime launch flags after the basis launcher has consumed its own
-  options (DELTA-DnsRuntime-001.CC7-CC8). Dependency files are not read again
-  during startup."
+  options (SPEC-004.C44a). Dependency files are not read again during startup."
   [generation-basis runtime-args]
   (when-not (s/valid? :millstrand.core.specs/generation-basis generation-basis)
     (throw (ex-info "Generation basis has an invalid shape"

@@ -774,8 +774,8 @@
   cold focused runner's single validation-and-execution core
   (`millstrand.test-runner/run-focused-core`), so a warm focused run accepts and
   rejects exactly the namespace set a cold `clojure -M:test <ns...>` run does:
-  an add-libs shard namespace, or a namespace not declared in the runner's
-  island sets, fails loudly. The runner is resolved at call time
+  a namespace not declared in the runner's island sets fails loudly. The
+  runner is resolved at call time
   (`requiring-resolve`) because it lives on the test classpath while this
   namespace is on the main classpath, so requiring `millstrand.test.alpha` outside a
   test JVM is unaffected.

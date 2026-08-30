@@ -59,7 +59,7 @@
     (or (vector? value) (set? value)) (every? data-first-value? value)
     :else false))
 
-;; One generation dependency boundary (DELTA-DnsRuntime-001.CC5-CC7).
+;; One generation dependency boundary (SPEC-004.C43-C45).
 (s/def :millstrand.basis/fingerprint
   #(and (string? %)
         (boolean (re-matches #"sha256:[0-9a-f]{64}" %))))

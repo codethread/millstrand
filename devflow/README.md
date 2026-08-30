@@ -27,7 +27,6 @@ Root specs are canonical for shipped behavior:
 
 Archived feature folders preserve historical planning context. Current shipped contracts are the root specs above, even if older archive notes describe pre-spec documentation locations. Default `rg` searches skip `archive/`; use `rg --no-ignore devflow/archive` when you need those records.
 
-- `26-08-30__deps-native-spools` — shipped native dependency bases for shared and local workspace spools.
 - `26-08-14__clj-kondo-provenance` — shipped clj-kondo ownership and provenance hygiene.
 - `26-08-14__selectable-authoring-declarations` — shipped selectable authoring declarations and the coordinated repository cutover.
 - `26-08-14__source-root-spools` — shipped `:millstrand/source-root` coordinates and the batteries source-root cutover.

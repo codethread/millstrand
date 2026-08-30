@@ -1511,7 +1511,7 @@
 
 (deftest weaver-op-source-pointer-resolution
   ;; The op-wide `source` resolves best-effort at projection: `requiring-resolve`
-  ;; under the spool classloader, then the var's :file/:line mapped to a readable
+  ;; under the generation classloader, then the var's :file/:line mapped to a readable
   ;; on-disk path. It is always present, `null` in exactly three cases, and never
   ;; swallows an unrelated projection failure (DELTA-Dtf-002.CC2).
   (with-runtime

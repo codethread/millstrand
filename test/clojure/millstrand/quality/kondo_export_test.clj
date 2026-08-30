@@ -9,8 +9,6 @@
             [millstrand.api.millstrand.alpha]))
 
 (def ^:private clj-kondo-version "2025.06.05")
-(def ^:private millhouse-url "https://github.com/codethread/millhouse.spool.git")
-(def ^:private millhouse-sha "f487eb42ea9523e8bd405e64a7c319013217d988")
 
 (def ^:private config-import-command
   ["sh" "-c"
@@ -57,14 +55,23 @@
    :aliases {:lint {:main-opts ["-m" "clj-kondo.main"]}}})
 
 (defn- millhouse-consumer-deps
-  "Return tools.deps data for a consumer of the pinned Workflow root."
-  []
+  "Return tools.deps data for a consumer of the resolved Workflow root."
+  [coordinate]
   {:paths ["src"]
-   :deps {'millhouse.spools/workflow {:git/url millhouse-url
-                                      :git/sha millhouse-sha
-                                      :deps/root "spools/workflow"}
+   :deps {'millhouse.spools/workflow
+          (select-keys coordinate [:git/url :git/sha :deps/root])
           'clj-kondo/clj-kondo {:mvn/version clj-kondo-version}}
    :aliases {:lint {:main-opts ["-m" "clj-kondo.main"]}}})
+
+(defn- repository-basis
+  "Resolve the checkout's Millstrand alias through its current dependency graph."
+  [^java.io.File root]
+  ((requiring-resolve 'clojure.tools.deps/create-basis)
+   {:dir (.getPath root)
+    :root :standard
+    :user nil
+    :project (edn/read-string (slurp (io/file root "deps.edn")))
+    :aliases [:millstrand]}))
 
 (def ^:private consumer-source
   (str
@@ -324,16 +331,16 @@
       (finally
         (delete-tree! root)))))
 
-(deftest consumer-imports-landed-millhouse-workflow-export
+(deftest consumer-imports-millhouse-workflow-export-from-resolved-basis
   (let [root (.toFile (java.nio.file.Files/createTempDirectory
                        "millhouse-kondo-consumer"
                        (make-array java.nio.file.attribute.FileAttribute 0)))
         repository (repository-root)
-        configured-sha (get-in (edn/read-string
-                                (slurp (io/file repository ".millstrand" "deps.edn")))
-                               [:deps 'millhouse.spools/workflow :git/sha])]
+        workflow-coordinate (get-in (repository-basis repository)
+                                    [:libs 'millhouse.spools/workflow])]
     (try
-      (write-consumer-file! root "deps.edn" (pr-str (millhouse-consumer-deps)))
+      (write-consumer-file! root "deps.edn"
+                            (pr-str (millhouse-consumer-deps workflow-coordinate)))
       (write-consumer-file!
        root "src/example/workflow.clj"
        (str
@@ -362,7 +369,6 @@
                                        ".clj-kondo/imports/millhouse.spools/workflow/config.edn")
             checked-in-hooks (io/file repository
                                       ".clj-kondo/imports/millhouse.spools/workflow/hooks/millhouse/spools/workflow.clj_kondo")]
-        (is (= millhouse-sha configured-sha))
         (is (zero? exit) (str output import-output lint-output))
         (is (zero? import-exit) import-output)
         (is (zero? lint-exit) lint-output)
