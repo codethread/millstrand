@@ -221,9 +221,16 @@
   unchanged, so a fixture failure names the refusal instead of cascading into
   unrelated assertions. Returns the refresh result."
   [rt key ns-sym & {:keys [after load]}]
-  (require ns-sym)
-  (let [result (runtime/module! rt key (cond-> {:ns ns-sym}
-                                         load (assoc :load load)
+  (let [source-path (str (str/replace (munge (str ns-sym)) "." "/") ".clj")
+        declaration (if (= :image load)
+                      {:ns ns-sym :load :image}
+                      (let [source (io/resource source-path)
+                            target (io/file (get-in rt [:metadata :config-dir]) source-path)]
+                        (io/make-parents target)
+                        (with-open [input (io/input-stream source)]
+                          (io/copy input target))
+                        {:file source-path}))
+        result (runtime/module! rt key (cond-> declaration
                                          after (assoc :after after)))
         status (get-in result [:modules key :status])]
     (when-not (contains? #{:applied :unchanged} status)
