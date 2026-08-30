@@ -4,7 +4,8 @@
             [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [millstrand.core.specs])
   (:import [clojure.lang DynamicClassLoader]
            [java.io PushbackReader]
            [java.math BigDecimal BigInteger]
