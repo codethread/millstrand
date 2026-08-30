@@ -41,8 +41,10 @@ func TestBootstrapSeedsCanonicalDepsAndOnlyIgnoresPersonalOverlays(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(deps), "io.millstrand/batteries") {
-		t.Fatalf("deps.edn missing Batteries coordinate: %s", deps)
+	for _, want := range []string{"io.millstrand/batteries", "251db0a7a9cdd1d00859140e8ae4c716af6771bc"} {
+		if !strings.Contains(string(deps), want) {
+			t.Fatalf("deps.edn missing %q: %s", want, deps)
+		}
 	}
 	ignored, err := os.ReadFile(filepath.Join(world.ConfigDir, ".gitignore"))
 	if err != nil {
