@@ -125,8 +125,8 @@
 
   Resolves `entry`'s stored handler symbol via `requiring-resolve` under
   `runtime`'s generation classloader (so a dependency-backed module handler
-  resolves and its on-disk source is found through the same classloader), then reads the resolved
-  var's `:file`/`:line`. Always returns a value: `nil` in exactly the three
+  resolves and its on-disk source is found through the same classloader), then
+  reads the resolved var's `:file`/`:line`. Always returns a value: `nil` in exactly the three
   best-effort cases — `requiring-resolve` fails (throws or yields nil), the var
   carries no `:file`/`:line`, or `:file` is not a readable on-disk file — else
   `{file, line}`. Only the resolve step is guarded; any other failure is unrelated
