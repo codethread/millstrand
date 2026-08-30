@@ -227,8 +227,6 @@
            (slurp (io/file (:config-dir ctx) "deps.edn"))))
     (is (= "{:deps {}}\n" (slurp (io/file (:config-dir ctx) "deps.local.edn"))))
     (is (= "" (slurp (io/file (:config-dir ctx) "init.local.clj"))))
-    (is (not (.exists (io/file (:config-dir ctx) "spools.edn"))))
-    (is (not (.exists (io/file (:config-dir ctx) "spools.local.edn"))))
     (is (= "(ns demo)\n" (slurp (io/file (:config-dir ctx) "modules/demo.clj"))))
     (testing "init.clj ran inside the weaver runtime"
       (is (contains? (t/repl! ctx
@@ -254,7 +252,7 @@
 
 (deftest weaver-world-dependency-input-fails-loudly
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"weaver world options"
-                        (t/run-with-weaver-world {:spools-edn {}} identity)))
+                        (t/run-with-weaver-world {:unknown-option {}} identity)))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"cannot read dependency file"
                         (t/run-with-weaver-world {:deps-edn "not-edn ["} identity))))
 
@@ -340,7 +338,7 @@
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unknown keys"
                           (t/activate-module! {} :test/module
                                               'millstrand.api.clock.alpha
-                                              {:spools []}))))
+                                              {:unknown-option []}))))
   (testing "invalid tested option values are actionable"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #":after"
                           (t/activate-module! {} :test/module

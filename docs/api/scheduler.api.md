@@ -48,5 +48,5 @@ Function.
 
 Persist or replace a durable wake in `runtime` and arm it for dispatch.
 
-`wake` is a map of :key (stable non-blank string), :wake-at (java.time.Instant), :handler (fully qualified symbol resolvable in `runtime`'s spool classloader), and optional :payload (nil or a map that encodes to a JSON object). Replacing an existing key resets its attempt count. Returns the persisted wake as a decoded `::pending-wake` map. Malformed keys/instants/payloads and unresolvable or non-callable handlers fail loudly; no wake is persisted on failure.
+`wake` is a map of :key (stable non-blank string), :wake-at (java.time.Instant), :handler (fully qualified symbol resolvable in `runtime`'s generation classloader), and optional :payload (nil or a map that encodes to a JSON object). Replacing an existing key resets its attempt count. Returns the persisted wake as a decoded `::pending-wake` map. Malformed keys/instants/payloads and unresolvable or non-callable handlers fail loudly; no wake is persisted on failure.
 <p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/scheduler/alpha.clj#L35-L50">Source</a></sub></p>

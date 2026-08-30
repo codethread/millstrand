@@ -996,7 +996,7 @@
   `:only` for targeted refresh, or internal `:declare` for module declaration
   outside startup collection. `:dry-run? true` runs collection, source-load,
   and staging without publishing, reconciling, or recording coordinator state
-  (DELTA-Dns-Repl-001.C11).
+  (SPEC-003.C26b).
 
   Validation failures leave the live world untouched."
   [runtime {:keys [load-startup-files! with-loader]} opts]

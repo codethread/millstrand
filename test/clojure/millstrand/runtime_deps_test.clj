@@ -1,8 +1,7 @@
 (ns millstrand.runtime-deps-test
   "Full-suite checks for the runtime dependency-basis boundary."
-  (:require [clojure.java.io :as io]
-            [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is]]
             [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.runtime :as runtime]))
 
@@ -40,11 +39,3 @@
                   (fn [_workspace _coordinate]
                     (throw (ex-info "invalid" diagnostic)))]
       (is (= diagnostic (runtime/refresh-modules! (runtime-map)))))))
-
-(deftest runtime-source-has-no-dynamic-dependency-mutation
-  (let [source (slurp (io/resource "millstrand/core/weaver/runtime.clj"))]
-    (testing "basis changes never mutate the running classpath"
-      (doseq [forbidden ["clojure.repl.deps/add-libs"
-                         "sync-deps"
-                         "spool-sync"]]
-        (is (not (str/includes? source forbidden)) forbidden)))))

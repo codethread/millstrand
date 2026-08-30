@@ -19,7 +19,7 @@ The module exposes the live-image lifecycle: declare stable modules (`module!`),
 Function.
 
 Return `runtime`'s installed `millstrand.api.clock.alpha/Clock`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L416-L419">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L414-L417">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.alpha/collect-entry!">`collect-entry!`</a>
 
@@ -91,7 +91,7 @@ Function.
 Return the current java.time.Instant from `runtime`'s clock seam.
 
 Defaults to the real wall clock; deterministic tests inject an advanceable clock through `millstrand.test.alpha/set-clock!`.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L425-L431">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L423-L429">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.alpha/plan">`plan`</a>
 
@@ -104,8 +104,8 @@ Function.
 
 Return the dry-run intentions of `refresh!` without publishing or reconciling.
 
-Full plan performs the same dependency-basis comparison as `refresh!`. Current-basis plans collect and stage source without publishing, reconciling, or recording coordinator state. They return a `::refresh-result`-shaped map flagged `:dry-run? true` with a `:caveat`; collection may evaluate module source code. Options conform to `::refresh-opts`; malformed options fail loudly. The result conforms to `::plan-result` (DELTA-Dns-Repl-001.C11).
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L354-L368">Source</a></sub></p>
+Full plan performs the same dependency-basis comparison as `refresh!`. Current-basis plans collect and stage source without publishing, reconciling, or recording coordinator state. They return a `::refresh-result`-shaped map flagged `:dry-run? true` with a `:caveat`; collection may evaluate module source code. Options conform to `::refresh-opts`; malformed options fail loudly. The result conforms to `::plan-result` (SPEC-003.C26b).
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L354-L367">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.alpha/refresh!">`refresh!`</a>
 
@@ -131,8 +131,8 @@ Function.
 
 Reload loaded namespaces from source-backed entries for basis `root-lib`.
 
-This advanced code-only seam reloads namespaces whose file resources belong to the selected library's source paths. It does not publish module contributions or reconcile resources; use `refresh!` for the normal path. The result conforms to `::reload-code-result` (DELTA-Dns-Repl-001.C5).
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L395-L406">Source</a></sub></p>
+This advanced code-only seam reloads namespaces whose file resources belong to the selected library's source paths. It does not publish module contributions or reconcile resources; use `refresh!` for the normal path. The result conforms to `::reload-code-result` (SPEC-003.C24).
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L394-L404">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.alpha/resolve-var">`resolve-var`</a>
 
@@ -145,7 +145,7 @@ Function.
 Resolve fully qualified `sym` to its Var under `runtime`'s generation classloader, backed by its resolved tools.deps basis.
 
 Declarations name behavior by symbol, and symbols on that basis load only under that classloader — a bare `requiring-resolve` is blind to it. Returns the Var, or nil when its namespace loads but defines nothing under that name; a namespace that cannot be loaded at all throws, carrying the load error as its cause.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L437-L449">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L435-L447">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.alpha/spool-state">`spool-state`</a>
 
@@ -161,7 +161,7 @@ Return runtime-owned state for a spool key, creating it with `init-fn` once.
 The runtime stores spool state under arbitrary keys in its `:spool-state` atom. `init-fn` is called only when `key` has not been installed for this runtime; the returned value is then reused for the rest of the runtime lifetime. Spools should use this accessor instead of reaching into runtime internals.
 
 Spool state survives `refresh!` by design, so a spool whose state shape changed between refreshes would otherwise silently reuse a preserved value that is missing the new keys. The four-arg arity guards against that: pass opts `{:version v :migrate-fn f}` and, when a preserved value's stored version does not `=` `version`, the runtime deliberately reinits (or, with `:migrate-fn`, hands the old value to `f` to produce the new one) instead of reusing a shape-mismatched map. Silent reuse of shape-mismatched state is impossible once a version is declared. Opts conform to `:millstrand.api.runtime.alpha/spool-state-opts`; a malformed map fails loudly at the call site rather than degrading to the unversioned path.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L468-L522">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L466-L520">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.alpha/status">`status`</a>
 
@@ -173,5 +173,5 @@ Function.
 
 Return `runtime`'s offline, read-only joined module status.
 
-Returns exactly the running basis fingerprint, desired modules, resource outcomes, loaded namespaces, and last refresh result. It performs no dependency read, file write, source load, registration, or reconcile. The result conforms to `::status-result` (DELTA-Dns-Repl-001.C12).
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L375-L389">Source</a></sub></p>
+Returns exactly the running basis fingerprint, desired modules, resource outcomes, loaded namespaces, and last refresh result. It performs no dependency read, file write, source load, registration, or reconcile. The result conforms to `::status-result` (SPEC-003.C26c).
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L374-L388">Source</a></sub></p>

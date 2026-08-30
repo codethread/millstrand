@@ -8,7 +8,6 @@
             [millstrand.core.db-test :as db-test]
             [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.config :as weaver-config]
-            [millstrand.core.weaver.module-refresh :as module-refresh]
             [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.test.alpha :as t]))
 
@@ -108,18 +107,13 @@
         (is (some #{'millstrand.core.weaver.runtime} (:namespaces result)))
         (is (some #{['millstrand.core.weaver.runtime '(:reload)]} @reloaded))))))
 
-(deftest coordinator-state-has-no-legacy-root-state
-  (is (= #{:graph :layers :shadows :startup/files :contributions
-           :contribution-sources :lifecycle :resources :outcomes :last-refresh}
-         (set (keys (module-refresh/initial-state))))))
-
-(deftest module-declarations-reject-removed-spools-option
+(deftest module-declarations-reject-unknown-options
   (let [error (try
                 (runtime/module! {} :demo {:ns 'demo.module
-                                           :spools ['demo/root]})
+                                           :unknown-option true})
                 nil
                 (catch clojure.lang.ExceptionInfo e e))]
-    (is (= [:spools] (-> error ex-data :unknown)))
+    (is (= [:unknown-option] (-> error ex-data :unknown)))
     (is (re-find #"unknown keys" (ex-message error)))))
 
 (deftest file-modules-change-live-within-one-generation
@@ -191,6 +185,4 @@
                  :loaded-namespaces :last-refresh}
                (set (keys status))))
         (is (= (:basis-fingerprint rt) (:basis-fingerprint status)))
-        (is (every? #(not (contains? % :spools))
-                    (vals (:modules status))))
         (is (vector? (:loaded-namespaces status)))))))

@@ -22,7 +22,7 @@
   another owner supplies collides loudly — `replace-hook!` is the deliberate
   override for it. `types` is a non-empty set of hook type keywords, and
   `fn-sym` a fully qualified symbol validated here as resolvable under the
-  runtime's spool classloader. The entry stores only the symbol — every hook
+  runtime's generation classloader. The entry stores only the symbol — every hook
   binds its callable at dispatch start, so a reload's fresh definition is the one
   that runs. `opts` may carry an integer `:order` (default 0) plus data-first
   metadata. Registration input and the returned entry conform to

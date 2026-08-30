@@ -216,7 +216,7 @@
   install — including entries other owners contributed and the absences of
   entries an owner dropped. `:owners` names the winning contributor per entry,
   which is what a rejection needs to say who must repair it. The symbol resolves
-  under the runtime's spool classloader, because a synced spool root's namespace
+  under the runtime's generation classloader, because a dependency-backed module's namespace
   is only loadable there. A throwing validator aborts the refresh before
   `publish!`, so every owner retains its previous live partition."
   [runtime backends candidate-map]

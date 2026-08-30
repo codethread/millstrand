@@ -65,10 +65,10 @@
            (set (keys @generation-basis))))
     (is (not (.exists ^java.io.File @config-dir)))))
 
-(deftest with-runtime-rejects-removed-fixture-options
+(deftest with-runtime-rejects-unknown-fixture-options
   (is (thrown-with-msg? clojure.lang.ExceptionInfo
                         #"Unknown bare runtime fixture options"
-                        (test-support/with-runtime {:release-marker "legacy"}
+                        (test-support/with-runtime {:unknown-option true}
                           (fn [& _])))))
 
 (deftest run-git-returns-raw-output-and-describes-failure

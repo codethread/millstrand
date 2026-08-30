@@ -62,7 +62,7 @@
   declaration before publication.
 
   An optional `:candidate-validator` names a fully qualified symbol the module
-  refresh coordinator resolves under the runtime's spool classloader and calls
+  refresh coordinator resolves under the runtime's generation classloader and calls
   with `{:runtime <rt> :kind <kind-id> :entries <effective candidate entries>
   :owners <entry-key to winning owner>}` once every owner's contribution is
   staged and before any publication. It is

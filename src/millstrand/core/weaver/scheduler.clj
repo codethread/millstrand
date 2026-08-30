@@ -10,7 +10,7 @@
   Lifecycle:
   - `rearm!` is the post-config entry point. Runtime startup and module resource
     reconciliation call it after selected startup files finish loading, so
-    handlers supplied by approved spools/config are resolvable before any timer
+    handlers supplied by configured modules are resolvable before any timer
     arms. It cancels the in-memory timer, discards stale in-flight claims, and
     rebuilds from durable pending rows.
   - Runtime stop closes the executor through the spool-state `:close-fn` before
@@ -34,8 +34,8 @@
   and the scheduler re-arms after a short backoff rather than dropping the wake.
 
   Handler invocation contract (DELTA-weaver-scheduler-runtime-001.CC9): a wake
-  handler is a fully qualified symbol resolved in the runtime spool classloader
-  and invoked with one context map. Its return value is ignored. The context map
+  handler is a fully qualified symbol resolved in the runtime generation
+  classloader and invoked with one context map. Its return value is ignored. The context map
   keys are:
 
     :runtime  - the weaver runtime the wake fired in
@@ -113,7 +113,7 @@
                :timer (atom nil)
                :in-flight (atom #{})
                ;; Durable rows are deliberately retained when their handler no
-               ;; longer names live approved code. rearm! clears this parking
+               ;; longer names live configured code. rearm! clears this parking
                ;; set after a repair so the same generation can deliver.
                :parked-wakes (atom {})
                :dispatch-failures (atom [])
@@ -345,9 +345,9 @@
   "Resolve and invoke a due wake's handler on the shared event lane.
 
   Called by the runtime event worker for a `:scheduler/fire` envelope, already
-  under the runtime binding and spool classloader. Re-reads the durable row so a
+  under the runtime binding and generation classloader. Re-reads the durable row so a
   cancelled or rescheduled key is skipped; resolves the handler symbol in the
-  spool classloader; invokes it with the documented context map; records
+  generation classloader; invokes it with the documented context map; records
   completion or failure into scheduler history. Never throws into the worker: the
   key is always released from the in-flight set and the scheduler re-armed."
   [runtime envelope]

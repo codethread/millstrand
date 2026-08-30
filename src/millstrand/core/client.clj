@@ -228,7 +228,8 @@
 
   Code evaluates via load-string so its top-level forms compile one at a time
   and in-code requires/aliases work like they do at a REPL. It runs under the
-  runtime spool classloader so synced spool namespaces are requirable, matching
+  runtime generation classloader so dependency-backed module namespaces are
+  requirable, matching
   trusted startup-file evaluation."
   [code port]
   (str "(do "

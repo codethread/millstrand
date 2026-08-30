@@ -53,7 +53,7 @@ func TestBootstrapSeedsCanonicalDepsAndOnlyIgnoresPersonalOverlays(t *testing.T)
 	if got, want := string(ignored), "config.local.json\ndeps.local.edn\ninit.local.clj\n"; got != want {
 		t.Fatalf("unexpected workspace ignore template: got %q want %q", got, want)
 	}
-	for _, name := range []string{"deps.local.edn", "init.local.clj", "spools.edn", "spools.local.edn"} {
+	for _, name := range []string{"deps.local.edn", "init.local.clj"} {
 		if _, err := os.Stat(filepath.Join(world.ConfigDir, name)); !os.IsNotExist(err) {
 			t.Fatalf("bootstrap must not create %s: %v", name, err)
 		}

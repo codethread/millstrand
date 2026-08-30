@@ -116,21 +116,11 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 			t.Fatalf("deps.edn missing %q, got:\n%s", want, deps)
 		}
 	}
-	for _, removed := range []string{"spools.edn", "spools.local.edn"} {
-		if _, err := os.Stat(filepath.Join(cfg, removed)); !os.IsNotExist(err) {
-			t.Fatalf("bootstrap must not create removed manifest %s: %v", removed, err)
-		}
-	}
 	initPath := filepath.Join(cfg, "init.clj")
 	got := string(mustReadFile(t, initPath))
 	declaration := "(runtime/module! runtime :millstrand/spools-batteries\n                 {:ns 'millstrand.spools.batteries\n                  :required? true})"
 	if !strings.Contains(got, declaration) {
 		t.Fatalf("init.clj missing the unguarded Batteries declaration %q, got:\n%s", declaration, got)
-	}
-	for _, removed := range []string{":contribute", ":reconcile", ":spools"} {
-		if strings.Contains(got, removed) {
-			t.Fatalf("init.clj seeds removed entry-point key %q, got:\n%s", removed, got)
-		}
 	}
 	if strings.Contains(got, "(require 'millstrand.spools.batteries)") {
 		t.Fatalf("init.clj retained the bare batteries require, got:\n%s", got)

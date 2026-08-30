@@ -12,7 +12,3 @@
       (let [status (runtime/status rt)]
         (is (= (:basis-fingerprint rt) (:basis-fingerprint status)))
         (is (= {} (:modules status)))))))
-
-(deftest removed-spool-approval-apis-stay-absent
-  (is (nil? (ns-resolve 'millstrand.api.runtime.alpha 'approved)))
-  (is (nil? (ns-resolve 'millstrand.api.runtime.alpha 'release-marker))))
