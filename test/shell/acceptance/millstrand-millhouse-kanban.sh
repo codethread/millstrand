@@ -112,7 +112,7 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
   | sed -n '1p' | jq -r 'fromjson' >"$source"
 jq -e --slurpfile baseline "$baseline" '
   .ops == ["about", "bins", "help", "kanban", "kanban-export", "prime"] and
-  .queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"] and
+  .queries == ["kanban-cards", "kanban-epic-pending", "kanban-identity-work", "kanban-pending"] and
   .patterns == ["kanban-batch"] and
   .bins == ["kanban-dash"] and
    .["module-keys"] == ["kanban-source"]
@@ -130,11 +130,11 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-probe.clj" \
   | sed -n '1p' | jq -r 'fromjson' >"$replayed"
-jq -e '.queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"]' "$replayed" >/dev/null
+jq -e '.queries == ["kanban-cards", "kanban-epic-pending", "kanban-identity-work", "kanban-pending"]' "$replayed" >/dev/null
 jq -e '.patterns == ["kanban-batch"] and .bins == ["kanban-dash"]' "$replayed" >/dev/null
 jq -e --slurpfile baseline "$baseline" '
   .ops == ["about", "bins", "help", "kanban", "kanban-export", "prime"] and
-  .queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"] and
+  .queries == ["kanban-cards", "kanban-epic-pending", "kanban-identity-work", "kanban-pending"] and
   .patterns == ["kanban-batch"] and
   .bins == ["kanban-dash"] and
    .["module-keys"] == ["kanban-source"]
