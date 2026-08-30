@@ -5,7 +5,7 @@
   weaver-lifetime handler registry; `handlers` and `recent-failures` are
   the data-first reads over registry and failure state. Every registration
   is validated loudly at the seam — stable key, non-empty keyword type set,
-  fully qualified function symbol resolvable under the runtime spool
+  fully qualified function symbol resolvable under the runtime generation
   classloader, data-first metadata — and entries replace by key within the
   registering owner's partition, which is what makes reload workflows
   idempotent. Event submission is not public surface: internal
