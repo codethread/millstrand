@@ -75,7 +75,7 @@ func processExitWaitableDarwin(pid int) (bool, error) {
 		uintptr(darwinPID),
 		uintptr(pid),
 		uintptr(unsafe.Pointer(&info)),
-		uintptr(unix.WEXITED|unix.WNOHANG|unix.WNOWAIT),
+		uintptr(unix.WEXITED|unix.WNOWAIT),
 		0,
 		0,
 	)
