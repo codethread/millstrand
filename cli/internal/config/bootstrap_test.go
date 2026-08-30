@@ -41,7 +41,7 @@ func TestBootstrapSeedsCanonicalDepsAndOnlyIgnoresPersonalOverlays(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"io.millstrand/batteries", "251db0a7a9cdd1d00859140e8ae4c716af6771bc"} {
+	for _, want := range []string{"io.millstrand/batteries", "d0284a70b63be4ea6e050dc5a116b90550ec814e"} {
 		if !strings.Contains(string(deps), want) {
 			t.Fatalf("deps.edn missing %q: %s", want, deps)
 		}
