@@ -1,5 +1,5 @@
 (ns millstrand.core.weaver.modules-test
-  "Tests for deps-native module refresh and generation continuity."
+  "Tests for module refresh and generation continuity."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]

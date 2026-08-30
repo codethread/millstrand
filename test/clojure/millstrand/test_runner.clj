@@ -23,7 +23,7 @@
    'millstrand.test.alpha-test 'millstrand.warm-test 'millstrand.api.cli.alpha-test
    'millstrand.source-file-test
    ;; pure findings logic over its own temp-dir fixtures — no shared state.
-   'millstrand.quality.conventions-check-test 'millstrand.quality.transition-contract-test
+   'millstrand.quality.conventions-check-test
    'millstrand.quality.kondo-export-test
    'millstrand.api.return-shape.alpha-test
    'millstrand.api.spec.alpha-test
@@ -105,7 +105,7 @@
    'millstrand.core.weaver.modules-test])
 
 (def add-libs-shards
-  "The deps-native suite never mutates the running JVM dependency basis."
+  "The dependency-basis suite never mutates the running JVM dependency basis."
   {})
 
 (def shard-timeout-minutes 5)

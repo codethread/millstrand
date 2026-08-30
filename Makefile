@@ -1,4 +1,4 @@
-.PHONY: help build kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check transition-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop
+.PHONY: help build kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop
 
 help:
 	@printf '%s\n' \
@@ -14,7 +14,6 @@ help:
 		'  make reflect-check      Fail on reflected Java interop' \
 		'  make identity-check     Audit active files for stale product identity' \
 		'  make ci-config-check    Verify CI invokes identity and documentation gates' \
-		'  make transition-check   Validate the temporary external publisher boundary' \
 		'  make docs-check         Regenerate and verify documentation' \
 		'  make install            Install globally stamped strand and mill binaries' \
 		'  make dash               Launch the kanban dashboard' \
@@ -159,9 +158,6 @@ identity-check:
 
 ci-config-check:
 	bash scripts/quality/millstrand-ci-config.sh
-
-transition-check:
-	clojure -M:transition-check
 
 deps-report:
 	-clojure -M:deps/antq

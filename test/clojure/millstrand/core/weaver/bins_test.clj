@@ -1,5 +1,5 @@
 (ns millstrand.core.weaver.bins-test
-  "Tests for deps-native bin planning and executable publication."
+  "Tests for bin planning and executable publication."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is]]

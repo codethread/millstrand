@@ -4,7 +4,7 @@
 
 ## Loading
 
-Batteries is an ordinary dependency and explicit module. `mill init` seeds its library in `deps.edn` and its module in `init.clj`. Delete the dependency or declaration to opt out; a dependency alone does not activate code. A dependency-basis edit takes effect in a replacement Weaver generation. See [the migration guide](../../docs/spools/deps-migration.md).
+Batteries is an ordinary dependency and explicit module. `mill init` seeds its library in `deps.edn` and its module in `init.clj`. Delete the dependency or declaration to opt out; a dependency alone does not activate code. A dependency-basis edit takes effect in a replacement Weaver generation.
 
 The `deps.edn` here declares the spool's own `src` root for tools and consumers that address the spool directory directly. Production Weaver loading uses the selected workspace basis.
 

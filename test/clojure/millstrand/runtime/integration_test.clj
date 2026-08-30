@@ -1,5 +1,5 @@
 (ns millstrand.runtime.integration-test
-  "Integration coverage for runtime module declarations after deps-native cutover."
+  "Integration coverage for runtime module declarations."
   (:require [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is]]
             [millstrand.api.runtime.alpha :as runtime]

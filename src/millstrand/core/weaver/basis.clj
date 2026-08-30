@@ -54,14 +54,8 @@
     (cond
       (not (.exists file))
       (when required?
-        (let [legacy? (or (.exists (io/file (.getParentFile file) "spools.edn"))
-                          (.exists (io/file (.getParentFile file) "spools.local.edn")))
-              message (if legacy?
-                        (str "dependency migration required: create " canonical-path
-                             "; spools.edn is no longer supported; see "
-                             "docs/spools/deps-migration.md")
-                        (str "required dependency file does not exist: "
-                             canonical-path))]
+        (let [message (str "required dependency file does not exist: "
+                           canonical-path)]
           (throw (diagnostic-ex message :deps-read canonical-path message nil))))
 
       (not (.isFile file))
