@@ -142,12 +142,6 @@
           "result": "pass"
         },
         {
-          "repository": "Millstrand",
-          "revision": "bbca5638bce72ad6a00b2ca916cabcfe99107828",
-          "command": "test/shell/acceptance/millstrand-millhouse-kanban.sh",
-          "result": "Millhouse Kanban module acceptance: clean (f487eb42ea9523e8bd405e64a7c319013217d988, source and image)"
-        },
-        {
           "repository": "Millhouse",
           "revision": "f487eb42ea9523e8bd405e64a7c319013217d988",
           "command": "./.millstrand/land-quality.sh",
@@ -173,20 +167,49 @@
         }
       ]
     },
+    "consumer_pin_candidate": {
+      "commit": "ff88c23d3f127031e989c425aa59ad0583e06560",
+      "result": "pass",
+      "evidence": [
+        {
+          "repository": "Millstrand",
+          "revision": "ff88c23d3f127031e989c425aa59ad0583e06560",
+          "command": "test/shell/acceptance/millstrand-millhouse-kanban.sh",
+          "result": "Millhouse Kanban module acceptance: clean (f487eb42ea9523e8bd405e64a7c319013217d988, source and image)"
+        }
+      ]
+    },
     "consumer_pin": {
       "commit": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197",
       "pr": 437,
       "land_run_id": "millstrand-bu1ot-pin-land",
       "result": "advanced after pre-pin acceptance"
     },
+    "post_pin_acceptance": {
+      "commit": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197",
+      "result": "10 pass, 4 warn, 0 fail",
+      "evidence": [
+        {
+          "repository": "Millstrand",
+          "revision": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197",
+          "command": "./.millstrand/land-quality.sh",
+          "result": "10 pass, 4 warn, 0 fail"
+        }
+      ]
+    },
     "post_pin_publication": {
       "commands": [
         "git -C /Users/ct/dev/projects/millhouse.spool tag -a v3 f487eb42ea9523e8bd405e64a7c319013217d988 -m 'v3: migrate Millhouse to deps-native spools'",
-        "git -C /Users/ct/dev/projects/millhouse.spool push origin \"refs/tags/${tag}:refs/tags/${tag}\"",
+        "git -C /Users/ct/dev/projects/millhouse.spool push origin refs/tags/v3:refs/tags/v3",
         "git -C /Users/ct/dev/projects/agent-harness.spool tag -a v30 fd75bf50ef823e1df520ead410780961d6313474 -m 'Agent Harness v30: deps-native resolution'",
-        "git -C /Users/ct/dev/projects/agent-harness.spool push origin \"refs/tags/${tag}:refs/tags/${tag}\"",
+        "git -C /Users/ct/dev/projects/agent-harness.spool push origin refs/tags/v30:refs/tags/v30",
         "git -C /Users/ct/dev/projects/devflow.spool tag -a v23 90799b8c950b4509167137562fbf18853524d41c -m 'Devflow spool v23: deps-native roots'",
-        "git -C /Users/ct/dev/projects/devflow.spool push origin \"refs/tags/${tag}:refs/tags/${tag}\""
+        "git -C /Users/ct/dev/projects/devflow.spool push origin refs/tags/v23:refs/tags/v23"
+      ],
+      "read_only_remote_verification_commands": [
+        "git -C /Users/ct/dev/projects/millhouse.spool ls-remote origin refs/tags/v3 refs/tags/v3^{}",
+        "git -C /Users/ct/dev/projects/agent-harness.spool ls-remote origin refs/tags/v30 refs/tags/v30^{}",
+        "git -C /Users/ct/dev/projects/devflow.spool ls-remote origin refs/tags/v23 refs/tags/v23^{}"
       ],
       "result": "v3, v30, and v23 published and remotely peeled to their recorded revisions"
     }
