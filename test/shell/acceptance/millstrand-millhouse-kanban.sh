@@ -10,7 +10,7 @@ cache_root="$tmp_root/cache"
 mill_pid=""
 mill_drain_pid=""
 weaver_started=0
-kanban_sha="f1cdda3b46706b186f547251d285791be650d232"
+kanban_sha="f487eb42ea9523e8bd405e64a7c319013217d988"
 kanban_url="https://github.com/codethread/millhouse.spool.git"
 
 cleanup() {
@@ -112,7 +112,7 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
   | sed -n '1p' | jq -r 'fromjson' >"$source"
 jq -e --slurpfile baseline "$baseline" '
   .ops == ["about", "bins", "help", "kanban", "kanban-export", "prime"] and
-  .queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"] and
+  .queries == ["kanban-cards", "kanban-epic-pending", "kanban-identity-work", "kanban-pending"] and
   .patterns == ["kanban-batch"] and
   .bins == ["kanban-dash"] and
    .["module-keys"] == ["kanban-source"]
@@ -130,11 +130,11 @@ GITLIBS="$gitlibs_root" XDG_CACHE_HOME="$cache_root" XDG_STATE_HOME="$state_root
   "$repo_root/bin/mill" weaver repl --stdin --workspace "$workspace" \
   <"$repo_root/test/fixtures/shell/acceptance/millstrand-millhouse-kanban-probe.clj" \
   | sed -n '1p' | jq -r 'fromjson' >"$replayed"
-jq -e '.queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"]' "$replayed" >/dev/null
+jq -e '.queries == ["kanban-cards", "kanban-epic-pending", "kanban-identity-work", "kanban-pending"]' "$replayed" >/dev/null
 jq -e '.patterns == ["kanban-batch"] and .bins == ["kanban-dash"]' "$replayed" >/dev/null
 jq -e --slurpfile baseline "$baseline" '
   .ops == ["about", "bins", "help", "kanban", "kanban-export", "prime"] and
-  .queries == ["kanban-cards", "kanban-epic-pending", "kanban-pending"] and
+  .queries == ["kanban-cards", "kanban-epic-pending", "kanban-identity-work", "kanban-pending"] and
   .patterns == ["kanban-batch"] and
   .bins == ["kanban-dash"] and
    .["module-keys"] == ["kanban-source"]

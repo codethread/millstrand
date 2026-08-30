@@ -62,7 +62,7 @@
       (assert-invalid
        (assoc pins 'codethread/extra
               {:git/url "https://github.com/codethread/codethread.spool.git"
-               :git/sha "1b5ca296b4000e605a5d7c63d6414df30c53961f"
+               :git/sha "356841d810cac6408cc4fb3cf6cca0094562d28e"
                :deps/root "spools/extra"})))
     (testing "a maintained pin cannot drift"
       (assert-invalid
