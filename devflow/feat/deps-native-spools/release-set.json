@@ -19,14 +19,15 @@
         "reachable_on_remote_main": true
       },
       "land": {
-        "run_id": "deps-native-millstrand-20260830"
+        "pr": 436,
+        "run_id": "millstrand-0wltm-land-cf45bcb9"
       },
       "validation": {
         "commands": [
-          "flock -w 3600 /tmp/millstrand-test.lock clojure -M:test",
-          "make test-go",
-          "make test-e2e",
-          "make fmt-check lint reflect-check docs-check"
+          "./.millstrand/land-quality.sh",
+          "clojure -M:test millstrand.quality.transition-contract-test",
+          "clojure -M:test millstrand.quality.kondo-export-test",
+          "test/shell/acceptance/millstrand-millhouse-kanban.sh"
         ],
         "result": "pass"
       },
@@ -52,7 +53,8 @@
       },
       "land": {"pr": 18, "run_id": "millhouse-wij2z-land-final"},
       "validation": {
-        "commands": ["make quality", "hosted Quality gates run 33301524486"],
+        "commands": ["make test", "make quality", "./.millstrand/land-quality.sh"],
+        "hosted_quality_gates_run_id": 33301524486,
         "result": "pass: 379 tests, 2873 assertions; full-range review clean"
       },
       "rollback_command": "git revert --no-edit f487eb42ea9523e8bd405e64a7c319013217d988",
@@ -72,7 +74,11 @@
       "land": {"pr": 46, "run_id": "agent-harness-tu15x-land-6f94bdc"},
       "validation": {
         "commands": [
-          "tracked land-quality",
+          "make test",
+          "make quality",
+          "make identity-check",
+          "make release-check",
+          "./.millstrand/land-quality.sh",
           "bin/verify-release --mode published --repository https://github.com/codethread/agent-harness.spool.git --tag v30 --sha fd75bf50ef823e1df520ead410780961d6313474 --core-release release/msr04-release.json --kanban-release release/msr05-release.json"
         ],
         "result": "pass: 246 tests, 1516 assertions; published verifier exited 0"
@@ -93,7 +99,11 @@
       },
       "land": {"pr": 20, "run_id": "devflow-amki6-land-25b933c"},
       "validation": {
-        "commands": ["tracked land-quality", "identity and card-authoring equivalence"],
+        "commands": [
+          "./.millstrand/land-quality.sh",
+          "bin/identity-check",
+          "bin/verify-card-authoring-equivalence"
+        ],
         "result": "pass: 19 tests, 226 assertions; final targeted reviews clean"
       },
       "rollback_command": "git revert --no-edit 90799b8c950b4509167137562fbf18853524d41c",
@@ -107,7 +117,7 @@
       "marker": {"kind": "sha", "value": "356841d810cac6408cc4fb3cf6cca0094562d28e", "remote_main": "356841d810cac6408cc4fb3cf6cca0094562d28e"},
       "land": {"pr": 9, "run_id": "codethread-aawqy-land-5164047"},
       "validation": {
-        "commands": ["repository quality", "fresh one-Mill/one-Weaver runtime proof", "Ralph build"],
+        "commands": ["make quality", "./.millstrand/land-quality.sh"],
         "result": "pass"
       },
       "rollback_command": "git revert --no-edit 356841d810cac6408cc4fb3cf6cca0094562d28e",
@@ -118,7 +128,67 @@
     "strand": "h7apj",
     "note": "zidop",
     "coordinator_note": "umdyz",
-    "result": "all markers remotely verified; Agent Harness published verifier passed"
+    "ordering": "after consumer pin advanced",
+    "result": "annotated tags v3, v30, and v23 remotely verified; Agent Harness published verifier exited 0"
   },
-  "cross_repository_acceptance": "complete: all five ordered revisions passed their recorded acceptance; annotated markers were remotely peeled and both SHA-only remote-main markers were verified before the consumer pin advanced"
+  "cross_repository_acceptance": {
+    "pre_pin": {
+      "result": "pass",
+      "evidence": [
+        {
+          "repository": "Millstrand",
+          "revision": "bbca5638bce72ad6a00b2ca916cabcfe99107828",
+          "command": "./.millstrand/land-quality.sh",
+          "result": "pass"
+        },
+        {
+          "repository": "Millstrand",
+          "revision": "bbca5638bce72ad6a00b2ca916cabcfe99107828",
+          "command": "test/shell/acceptance/millstrand-millhouse-kanban.sh",
+          "result": "Millhouse Kanban module acceptance: clean (f487eb42ea9523e8bd405e64a7c319013217d988, source and image)"
+        },
+        {
+          "repository": "Millhouse",
+          "revision": "f487eb42ea9523e8bd405e64a7c319013217d988",
+          "command": "./.millstrand/land-quality.sh",
+          "result": "pass: 379 tests, 2873 assertions; full-range review clean"
+        },
+        {
+          "repository": "Agent Harness",
+          "revision": "fd75bf50ef823e1df520ead410780961d6313474",
+          "command": "./.millstrand/land-quality.sh",
+          "result": "pass: 246 tests, 1516 assertions"
+        },
+        {
+          "repository": "Devflow",
+          "revision": "90799b8c950b4509167137562fbf18853524d41c",
+          "command": "./.millstrand/land-quality.sh",
+          "result": "pass: 19 tests, 226 assertions; final targeted reviews clean"
+        },
+        {
+          "repository": "Codethread",
+          "revision": "356841d810cac6408cc4fb3cf6cca0094562d28e",
+          "command": "./.millstrand/land-quality.sh",
+          "result": "pass"
+        }
+      ]
+    },
+    "consumer_pin": {
+      "commit": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197",
+      "pr": 437,
+      "land_run_id": "millstrand-bu1ot-pin-land",
+      "result": "advanced after pre-pin acceptance"
+    },
+    "post_pin_publication": {
+      "commands": [
+        "git -C /Users/ct/dev/projects/millhouse.spool tag -a v3 f487eb42ea9523e8bd405e64a7c319013217d988 -m 'v3: migrate Millhouse to deps-native spools'",
+        "git -C /Users/ct/dev/projects/millhouse.spool push origin \"refs/tags/${tag}:refs/tags/${tag}\"",
+        "git -C /Users/ct/dev/projects/agent-harness.spool tag -a v30 fd75bf50ef823e1df520ead410780961d6313474 -m 'Agent Harness v30: deps-native resolution'",
+        "git -C /Users/ct/dev/projects/agent-harness.spool push origin \"refs/tags/${tag}:refs/tags/${tag}\"",
+        "git -C /Users/ct/dev/projects/devflow.spool tag -a v23 90799b8c950b4509167137562fbf18853524d41c -m 'Devflow spool v23: deps-native roots'",
+        "git -C /Users/ct/dev/projects/devflow.spool push origin \"refs/tags/${tag}:refs/tags/${tag}\""
+      ],
+      "result": "v3, v30, and v23 published and remotely peeled to their recorded revisions"
+    }
+  }
 }
