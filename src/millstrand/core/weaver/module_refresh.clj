@@ -313,7 +313,7 @@
          problem))
 
 (defn- namespace-resource-name [ns-sym]
-  (str (str/replace (str ns-sym) "." "/") ".clj"))
+  (str (str/replace (munge (str ns-sym)) "." "/") ".clj"))
 
 (defn- ns-source-file
   "Return the file-backed generation resource for `ns-sym`, or nil."
