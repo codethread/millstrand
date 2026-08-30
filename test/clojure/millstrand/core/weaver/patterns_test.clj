@@ -2,6 +2,7 @@
   "Tests for pattern registration, validation, and execution."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
+            [clojure.spec.test.alpha :as stest]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [millstrand.api.current.alpha :as current]
@@ -426,11 +427,12 @@
 
 (defn counting-pattern [_]
   (swap! pattern-call-count inc)
-  [{:title "Should not run"}])
+  [{:ref 'counted :title "Counted"}])
 
 (s/def ::title string?)
 (s/def ::pattern-input (s/keys :req-un [::title]))
 (s/def ::json-pattern-input #(string? (get % "title")))
+(s/def ::vector-pattern-input vector?)
 (s/def ::never-valid (constantly false))
 
 ;; Benchmark shapes for the shared input projection: the pinned delegation
@@ -542,6 +544,23 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Pattern function"
                             (patterns/register-pattern! rt 'bad 'unqualified ::pattern-input))))))
+
+(deftest weave-input-contract-defers-to-the-registered-spec
+  (with-runtime
+    (fn [rt _]
+      (weaver/init rt)
+      (patterns/register-pattern! rt 'counting
+                                  'millstrand.core.weaver.patterns-test/counting-pattern
+                                  ::vector-pattern-input)
+      (stest/instrument [`patterns/weave!])
+      (try
+        (is (= 1 (count (:created (patterns/weave! rt :counting [:accepted])))))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"Pattern input failed spec validation"
+                              (patterns/weave! rt :counting {:rejected true})))
+        (is (= 1 @pattern-call-count))
+        (finally
+          (stest/unstrument [`patterns/weave!]))))))
 
 (deftest pattern-input-projection-benchmarks
   (with-runtime

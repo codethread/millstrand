@@ -218,12 +218,12 @@
                               :pattern-name (s/or :keyword keyword?
                                                   :symbol symbol?
                                                   :string string?)
-                              :input map?)
+                              :input any?)
               :with-ctx (s/cat :runtime map?
                                :pattern-name (s/or :keyword keyword?
                                                    :symbol symbol?
                                                    :string string?)
-                               :input map?
+                               :input any?
                                :req-ctx ::specs/request-context))
   :ret ::weave-result)
 
