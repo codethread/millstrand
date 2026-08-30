@@ -22,8 +22,9 @@
 
 (def plan-caveat
   "The one honest side effect a dry-run plan still incurs (DELTA-OlrRepl-001.CC14)."
-  (str "Collection may evaluate module source code. No registry publication, "
-       "resource reconcile, or coordinator state write runs."))
+  (format/reflow
+   "|Collection may evaluate module source code. No registry publication,
+    |resource reconcile, or coordinator state write runs."))
 
 (def ^:private declaration-record-key
   ::declaration-record)

@@ -4,7 +4,7 @@
 **Root spec:** [daemon-runtime.md](../../../specs/daemon-runtime.md) (`SPEC-004`)
 **Feature:** [../proposal.md](../proposal.md) (`PROP-Dns-001`)
 **Status:** Proposed
-**Last Updated:** 2026-08-29
+**Last Updated:** 2026-08-30
 
 This delta replaces `SPEC-004.C39-C50b` and `SPEC-004.C91-C94a`. It preserves `SPEC-004.C113-C123` without weakening or restating their ownership.
 

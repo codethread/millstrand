@@ -435,13 +435,14 @@
   :ret inst?)
 
 (defn resolve-var
-  "Resolve fully qualified `sym` to its Var under `runtime`'s spool classloader.
+  "Resolve fully qualified `sym` to its Var under `runtime`'s generation
+  classloader, backed by its resolved tools.deps basis.
 
-  Declarations name behavior by symbol, and a symbol living in a synced spool
-  root only loads under that classloader — a bare `requiring-resolve` is blind
-  to it. Returns the Var, or nil when its namespace loads but defines nothing
-  under that name; a namespace that cannot be loaded at all throws, carrying the
-  load error as its cause."
+  Declarations name behavior by symbol, and symbols on that basis load only
+  under that classloader — a bare `requiring-resolve` is blind to it. Returns
+  the Var, or nil when its namespace loads but defines nothing under that name;
+  a namespace that cannot be loaded at all throws, carrying the load error as
+  its cause."
   [runtime sym]
   (require-valid! ::resolvable-symbol sym
                   "resolve-var symbol must be fully qualified")

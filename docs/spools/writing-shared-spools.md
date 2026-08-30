@@ -383,12 +383,7 @@ Ordering is safe: module publication does not run the direct-registration glossa
 
 ### The `:about`/`:prime` metadata shape is a compatibility boundary
 
-Moving a spool from an `about`/`prime` *subcommand* to `:about`/`:prime` *op-metadata* changes the
-shape consumers see. Treat it as a contract change and release it with corresponding consumer and test updates, per
-[Dependencies and release](#dependencies-and-release). Until an op migrates, a declared `about`/`prime`
-subcommand still resolves via `<op> about` while `strand about <op>` returns `discovery/unavailable`
-for that op — the two surfaces are distinct, so migrate the whole op in one release rather than
-straddling both.
+Moving a spool from an `about`/`prime` *subcommand* to `:about`/`:prime` *op-metadata* changes the shape consumers see. Treat it as a contract change and release it with corresponding consumer and test updates, per [Dependencies and release](#dependencies-and-release). Until an op migrates, a declared `about`/`prime` subcommand still resolves via `<op> about` while `strand about <op>` returns `discovery/unavailable` for that op — the two surfaces are distinct, so migrate the whole op in one release rather than straddling both.
 
 ## CLI style
 
@@ -761,7 +756,7 @@ A running generation cannot adopt that coordinate edit. Full refresh reports a b
 
 Classpath tests cover pure functions and authoring forms. Runtime integration tests create a disposable workspace with mandatory `deps.edn`, optional `deps.local.edn`, shared `init.clj`, and optional `init.local.clj`. A test that claims dependency loading supplies both a coordinate and explicit activation. Use `spool-checkout-root` only to obtain a tools.deps `:local/root` path.
 
-## The pattern pair## The pattern pair
+## The pattern pair
 
 ### A shared spool exposes explicit-runtime functions
 

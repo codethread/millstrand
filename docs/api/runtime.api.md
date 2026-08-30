@@ -142,10 +142,10 @@ This advanced code-only seam reloads namespaces whose file resources belong to t
 
 Function.
 
-Resolve fully qualified `sym` to its Var under `runtime`'s spool classloader.
+Resolve fully qualified `sym` to its Var under `runtime`'s generation classloader, backed by its resolved tools.deps basis.
 
-Declarations name behavior by symbol, and a symbol living in a synced spool root only loads under that classloader — a bare `requiring-resolve` is blind to it. Returns the Var, or nil when its namespace loads but defines nothing under that name; a namespace that cannot be loaded at all throws, carrying the load error as its cause.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L437-L448">Source</a></sub></p>
+Declarations name behavior by symbol, and symbols on that basis load only under that classloader — a bare `requiring-resolve` is blind to it. Returns the Var, or nil when its namespace loads but defines nothing under that name; a namespace that cannot be loaded at all throws, carrying the load error as its cause.
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L437-L449">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.alpha/spool-state">`spool-state`</a>
 
@@ -161,7 +161,7 @@ Return runtime-owned state for a spool key, creating it with `init-fn` once.
 The runtime stores spool state under arbitrary keys in its `:spool-state` atom. `init-fn` is called only when `key` has not been installed for this runtime; the returned value is then reused for the rest of the runtime lifetime. Spools should use this accessor instead of reaching into runtime internals.
 
 Spool state survives `refresh!` by design, so a spool whose state shape changed between refreshes would otherwise silently reuse a preserved value that is missing the new keys. The four-arg arity guards against that: pass opts `{:version v :migrate-fn f}` and, when a preserved value's stored version does not `=` `version`, the runtime deliberately reinits (or, with `:migrate-fn`, hands the old value to `f` to produce the new one) instead of reusing a shape-mismatched map. Silent reuse of shape-mismatched state is impossible once a version is declared. Opts conform to `:millstrand.api.runtime.alpha/spool-state-opts`; a malformed map fails loudly at the call site rather than degrading to the unversioned path.
-<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L467-L521">Source</a></sub></p>
+<p><sub><a href="https://github.com/codethread/millstrand/blob/main/src/millstrand/api/runtime/alpha.clj#L468-L522">Source</a></sub></p>
 
 ## <a name="millstrand.api.runtime.alpha/status">`status`</a>
 
