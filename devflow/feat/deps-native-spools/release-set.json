@@ -11,7 +11,7 @@
     {
       "name": "Millstrand",
       "url": "https://github.com/codethread/millstrand",
-      "roots": ["Batteries", "unsafe-text-search"],
+      "roots": ["millstrand.spools/batteries", "millstrand.spools/unsafe-text-search"],
       "revision": "bbca5638bce72ad6a00b2ca916cabcfe99107828",
       "marker": {
         "kind": "sha",
@@ -43,7 +43,13 @@
     {
       "name": "Millhouse",
       "url": "https://github.com/codethread/millhouse.spool",
-      "roots": ["workflow", "chime", "cron", "kanban", "identity"],
+      "roots": [
+        "millhouse.spools/workflow",
+        "millhouse.spools/chime",
+        "millhouse.spools/cron",
+        "millhouse.spools/kanban",
+        "millhouse.spools/identity"
+      ],
       "revision": "f487eb42ea9523e8bd405e64a7c319013217d988",
       "marker": {
         "kind": "annotated-tag",
@@ -63,7 +69,14 @@
     {
       "name": "Agent Harness",
       "url": "https://github.com/codethread/agent-harness.spool",
-      "roots": ["harness-core", "codex-harness", "agent-run", "agent-cli", "delegation", "bench"],
+      "roots": [
+        "ct.spools/harness-core",
+        "ct.spools/codex-harness",
+        "ct.spools/agent-run",
+        "ct.spools/agent-cli",
+        "ct.spools/delegation",
+        "ct.spools/bench"
+      ],
       "revision": "fd75bf50ef823e1df520ead410780961d6313474",
       "marker": {
         "kind": "annotated-tag",
@@ -89,7 +102,7 @@
     {
       "name": "Devflow",
       "url": "https://github.com/codethread/devflow.spool",
-      "roots": ["root", "kanban-adapter"],
+      "roots": ["codethread/devflow", "codethread/devflow-kanban-adapter"],
       "revision": "90799b8c950b4509167137562fbf18853524d41c",
       "marker": {
         "kind": "annotated-tag",
@@ -112,7 +125,7 @@
     {
       "name": "Codethread",
       "url": "https://github.com/codethread/codethread.spool",
-      "roots": ["config", "ralph"],
+      "roots": ["codethread/config", "codethread/ralph"],
       "revision": "356841d810cac6408cc4fb3cf6cca0094562d28e",
       "marker": {"kind": "sha", "value": "356841d810cac6408cc4fb3cf6cca0094562d28e", "remote_main": "356841d810cac6408cc4fb3cf6cca0094562d28e"},
       "land": {"pr": 9, "run_id": "codethread-aawqy-land-5164047"},
@@ -225,7 +238,8 @@
       "result": "v3, v30, and v23 published and remotely peeled to their recorded revisions"
     },
     "final_post_publication_acceptance": {
-      "commit": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197",
+      "runtime_commit": "9c6988a4e11c36eec46b82a3fa5b9c1d4cb82197",
+      "record_branch_head": "1cf81e5eaf490f67293334546e36f0355445ad67",
       "stage": "final post-publication acceptance",
       "command": "./.millstrand/land-quality.sh",
       "result": "12 pass, 2 timing warnings, 0 fail/timeout/block",
