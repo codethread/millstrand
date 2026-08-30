@@ -36,6 +36,7 @@
    :canonical-db-path (.getPath (io/file workspace "data" "millstrand.sqlite"))
    :nonce (str "nonce-" name "-" (System/nanoTime))
    :generation-id (str "generation-" name "-" (System/nanoTime))
+   :basis-fingerprint "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
    :socket-path (.getPath (metadata/socket-file {:state-dir (.getPath state-dir)}))
    :started-at "2026-07-02T00:00:00Z"})
 
