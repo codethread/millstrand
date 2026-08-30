@@ -12,16 +12,16 @@ This glossary covers Millstrand and this repository. Terms owned by external spo
 | --- | --- | --- |
 | **mill** | The Go router and supervisor. Owns everything that must work without a running weaver: workspace resolution, bootstrap, weaver lifecycle, and the trusted nREPL attach. | Daemon, weaver, launcher, the CLI |
 | **`strand` CLI** | The Go client. A pure dispatcher with zero builtin subcommands: it resolves selection context, assembles one invoke envelope per call, and relays NDJSON back. | Strand (the graph node), client if the REPL is also meant, tool |
-| **Weaver** | The application core. A long-lived local Clojure process owning the SQLite connection, the query and pattern registries, event handlers, approved-root acquisition state, and module activation state. | Daemon, server, backend, mill |
-| **Workspace** | A directory holding Millstrand config, spool approvals, and startup code. `--workspace <dir>` selects an explicit directory. Without that flag, commands target the canonical repository root's `.millstrand` or `.ms`; `mill init` creates `.millstrand` when neither marker exists and completes the existing marker. | Worktree, repo, project, database |
+| **Weaver** | The application core. A long-lived local Clojure process owning the SQLite connection, the query and pattern registries, event handlers, one generation basis/classloader, and module activation state. | Daemon, server, backend, mill |
+| **Workspace** | A directory holding Millstrand config, `deps.edn`, optional local overlays, startup code, and workspace-relative modules. `--workspace <dir>` selects it explicitly. | Worktree, repo, project, database |
 | **Selected workspace** | The workspace a given command actually targets, after `--workspace` resolution. | Default workspace, current workspace |
 | **World** | Informal synonym for a workspace plus the weaver and data behind it. "Disposable world" is a `mktemp -d` workspace for tests and config experiments. | Workspace in specs, environment, instance |
 | **Client** | Anything talking to a weaver: the `strand` CLI over the Unix socket, or the weaver REPL over nREPL. | Consumer, user, agent |
-| **Weaver generation** | One weaver process lifetime. The spool classloader is minted at boot and never swapped while the process runs. | Schema generation, version, restart, session |
+| **Weaver generation** | One weaver process lifetime. Its generation basis and classloader are minted at boot and never swapped while the process runs. | Schema generation, version, restart, session |
 | **Cutover** | The transition from one weaver generation to the next, including the window where the previous generation's classpath ownership still applies. | Migration, upgrade, deploy |
 | **Refresh** | `runtime/refresh!`, the pickup path for config, startup, and module source changes. It classifies each change and applies what it safely can. | Reload, restart, hot reload |
-| **Additive change** | A change refresh can load into the running weaver: a newly approved root, or a coordinate that has never loaded in this generation. | Safe change, minor change |
-| **Non-additive change** | A change refresh refuses in-JVM because applying it means unloading code the running JVM cannot safely drop. Recorded, and it takes effect at the next generation. | Breaking change, failure, error |
+| **Basis change** | A dependency-file, selected-alias, or coordinate change that produces a different candidate basis fingerprint. It requires a new Weaver generation. | Live dependency update, hot dependency reload |
+| **Live source change** | A workspace-relative `:file` module or current-basis source change that refresh can apply in the running generation. | Basis change |
 | **Ambient runtime** | The runtime published as the process-wide default. One real weaver process publishes exactly one (SPEC-004.C8a). | Global runtime, singleton, the weaver |
 | **Harness** | A coding-agent provider. Harness names are data in workspace config, and no feature may require a particular one ([PHILOSOPHY](./PHILOSOPHY.md), "No harness is home"). | Agent, model, LLM, backend, provider |
 | **Invoke envelope** | The request `strand` assembles per call, carrying op name, argv, payloads, and selection context. | Request, payload, command |
@@ -56,14 +56,10 @@ How code gets into a weaver.
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
 | **Spool** | Trusted, authorable Clojure loaded into the weaver. Spools are how every capability above the core arrives. | Plugin, extension, package, module, library |
-| **Family** | One key in `spools.edn` inside the selected workspace. It approves one repository as one release unit and one family entry; its `:roots` map names that repository's public libraries. | Spool, package, repo, dependency |
-| **Coordinate** | The value under a family key, naming where its source comes from: `:local/root`, `:git/url` plus `:git/sha`, or `:millstrand/source-root`. | Dependency, source, path, URL, version |
-| **Root** | A public library within a family, mapped to a checkout path by `:roots`. Every root has exactly one owner. | Spool, namespace, directory, family |
-| **Module** | A `runtime/module!` declaration naming one source target and its world policy, guarded by the `:spools` roots it needs. The activation unit. | Spool, namespace, plugin, component |
+| **Coordinate** | An ordinary tools.deps library coordinate in `deps.edn` or `deps.local.edn`. | Approval, package grammar |
+| **Module** | A `runtime/module!` declaration naming one source target and its world policy. The activation unit. | Spool, namespace, plugin, component |
 | **Authoring form** | A top-level form that defines an ordinary Var and collects a registry or lifecycle declaration while the selected module source is evaluated. | Callback, installer, manifest |
-| **Approval** | A coordinate's presence in `spools.edn`. For a Git family the pinned sha is the consumer's consent. | Install, enable, activate, allowlist |
-| **Acquisition** | Resolving and fetching approved roots. | Install, download, resolve, fetch |
-| **Sync** | Materializing acquired roots into the runtime and reporting per-root outcomes. | Load, install, refresh, reload |
+| **Activation** | An explicit module declaration in `init.clj` or `init.local.clj`. A dependency does not activate code. | Install, enable by presence |
 | **Namespace tiers** | The contractual layering of `millstrand.*` (SPEC-003.C19). `millstrand.api.*.alpha` promises accretion within each subnamespace; `millstrand.core.*` promises nothing; `millstrand.spools.*` is the spool layer; `millstrand.repl` is the human surface. Workspace-owned helper namespaces are downstream code, not a Millstrand tier. | Layers, packages, modules, tiers bare |
 | **Unsafe namespace** | A shipped spool namespace whose name marks it as reaching into `millstrand.core.*`. Only these may touch core, which keeps the coupling visible. | Internal, private, legacy, deprecated |
 
@@ -96,20 +92,6 @@ Three tiers answer every "how do I find out" question, and the distinction is lo
 | **about** | One op's manual: semantics, conventions, and attribute contracts. A machine-readable man page. | Help, docs, description, summary |
 | **help** | Exact invocation: the registered ops, and one op's flags, positionals, and subcommands. | About, manual, usage docs |
 | **Help envelope** | The versioned machine schema behind all three, and the single contract. `--json` is the raw floor the CLI always relays. | Output format, response, JSON schema |
-
-## Spool release
-
-| Term | Definition | Aliases to avoid |
-| --- | --- | --- |
-| **Marker** | A published release identity: an annotated, ordered `v<int>` tag. `v0` is reserved, and human labels like `alpha-3` are mechanically inert. | Version, semver, release number, tag |
-| **WIP** | Untagged upstream work. Sha-pin only; no floor can target it. | Unstable, prerelease, alpha, nightly |
-| **Floor** | The minimum marker accepted for a required root (`:requires`) or for Millstrand itself (`:millstrand/min`). | Minimum version, constraint, range, pin |
-| **Floor raise** | Increasing that minimum. A raise is not a break; the floor and its test pin move in one commit. | Breaking change, major bump |
-| **Previous marker** | The greatest published marker below the release being cut. From `v2` onward `bin/compat-alarm` runs against it. | Last release, latest, HEAD |
-| **Accretion** | Adding to published names without withdrawing or narrowing them. This is the promise `v1` makes. | Backwards compatible, non-breaking, additive |
-| **Bump** | A consumer moving to a newer marker, changing `:git/tag` and `:git/sha` together. | Upgrade, migrate, update |
-| **Break** | Rejecting input the published contract accepted, even when it improves validation. Rejecting what the contract already declared invalid is a fix. | Major version, semver major, regression |
-| **Claims** | The marker a `:local/root` development override asserts it satisfies, since a local path has no tag to read. | Version, tag, declared version |
 
 ## Repo artifacts
 
@@ -154,7 +136,7 @@ Contract: [`spools/batteries.md`](../spools/batteries.md).
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **Batteries** | The reference spool registering the everyday `strand` surface: `add`, `update`, `list`, `ready`, `show`, `note`, `burn`, `supersede`, `subgraph`, `query`, `weave`, `vocab`, `spool`. | Core, builtins, the CLI, standard library |
+| **Batteries** | The reference spool registering the everyday `strand` surface: `add`, `update`, `list`, `ready`, `show`, `note`, `burn`, `supersede`, `subgraph`, `query`, `weave`, and `vocab`. | Core, builtins, the CLI, standard library |
 
 ## Repo workflows
 
@@ -178,11 +160,9 @@ Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/
 - Each **battery** is independently acyclic; **annotation relations** are not, so nothing may assume the whole graph is a DAG (TEN-005).
 - A **note** is a closed strand attached by the `notes` battery. Its text is write-once and cannot be rewritten, archived, or deleted on any mutation path.
 - **Burn** deletes and **close** does not. Every burn writes a **tombstone** in the same transaction; a tombstone supports hand-recovery, never undo.
-- One **family** is one repository and one release unit. A family has one or more **roots**, and each root has exactly one owner.
 - A **spool** is the code; a **module** is its activation. Module source publishes through authoring forms; the activation declaration names only source and world policy.
-- **Approval** is consent, **acquisition** fetches, **sync** materializes. A sha-pinned family cannot change under an unchanged pin.
 - One real weaver process publishes exactly one **ambient runtime**.
-- A **weaver generation** mints its spool classloader at boot and never swaps it, so **non-additive changes** wait for the next generation.
+- A **weaver generation** mints one generation basis and classloader at boot. A **basis change** requires a replacement generation; workspace-relative source changes can refresh live in the current basis.
 - An **op** is the only thing the **`strand` CLI** can invoke. There are no builtin subcommands, so every command name came from a spool.
 - A **workflow run** has one root at a time, and that root moves as **stages** advance.
 - A **gate** is a step and a **checkpoint** is not work. **Procedure** joins never appear in the **frontier**.
@@ -197,7 +177,7 @@ Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/
 >
 > **Dev:** "I edited the spool source. Do I restart the weaver?"
 >
-> **Domain expert:** "Try **refresh** first. Source changes to an already-loaded root are a **non-additive change**, so refresh records them for the next **weaver generation** — but config and module changes usually load live. Restarting the canonical weaver tears down every live run other agents depend on, so it needs the user's sign-off."
+> **Domain expert:** "Try **refresh** first. A workspace-relative source change can load live in the current basis. A **basis change** returns restart-required and needs a replacement **weaver generation**. Restarting the canonical weaver tears down every live run other agents depend on, so it needs the user's sign-off."
 >
 > **Dev:** "Where do I add the new `priority` field?"
 >
@@ -216,7 +196,7 @@ Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/
 - "State" is the core lifecycle column and nothing else. Kanban lanes and derived task statuses are attributes and projections that spools compute; do not call them state.
 - "Generation" means a **weaver generation** and a **schema generation**. Both appear in the same specs.
 - "Battery" means an operational relation and the **batteries** spool. Unrelated; qualify when both are in scope.
-- "Spool" means a repository, a **family** entry, and a **root** library. Retire bare "spool" wherever two of those are live in a sentence.
+- "Spool" can mean the trusted Clojure code or its repository. Name the repository or tools.deps library when that distinction matters.
 - "Module" and "spool" were used interchangeably. A **spool** is code; a **module** is one activation declaration over it.
 - "Review" means the land **sign-off** step here, and a devflow step, a delegation preset, or a kanban lane elsewhere. Name the surface.
 - "Prime" means the discovery tier and the `mill prime millstrand` orientation command.
@@ -225,6 +205,5 @@ Registered by the modules under `.millstrand/ct/workflows/` and `.millstrand/ct/
 - "Hook" was used for both **event handlers** and **lifecycle hooks**. Handlers are async and reactive; hooks are synchronous and may reject.
 - "Checkpoint" should not imply a save point. Nothing rolls back to one — see [PHILOSOPHY](./PHILOSOPHY.md), "resumability, never replayability".
 - "Workspace" is a Millstrand workspace directory. It is not a git worktree, not a Clojure workspace, and not the repository.
-- "Install", "enable", and "activate" were used for **approval**, **acquisition**, and **sync**, which are three distinct steps with distinct failure modes.
-- "Version" is retired for spools. Use **marker** for a published `v<int>`, **floor** for a minimum, and **claims** for a local override's assertion.
-- "Breaking change" is retired for **floor raises**. A raise is not a **break**; a break is rejecting input the published contract accepted.
+- "Install" and "enable" are imprecise for spools. A dependency makes code available; an activation declaration selects a module.
+- Historical spool documents used **marker**, **floor**, and **claims** for Millstrand-owned release checks. Current spools use ordinary coordinate and repository release vocabulary.

@@ -10,7 +10,7 @@ test/clojure/millstrand/api/            public API contract tests
 test/clojure/millstrand/core/           core and storage component tests
 test/clojure/millstrand/                runtime, REPL, spool, and integration tests
 test/clojure/e2e/millstrand/e2e.clj     process/repository E2E entrypoint
-test/fixtures/clojure/                  Clojure and approved-root fixtures
+test/fixtures/clojure/                  Clojure and dependency-basis fixtures
 test/fixtures/shell/                    shell acceptance fixture files
 test/shell/acceptance/                  public CLI acceptance scripts
 test/shell/quality/                     quality regression scripts
@@ -27,9 +27,9 @@ Run commands from the repository root. Cold means starting a fresh test JVM; war
 
 | Need | Command | What it covers |
 | --- | --- | --- |
-| Full Clojure suite | `clojure -M:test` | Registered serial namespaces, parallel namespaces, and add-libs subprocess shards A, B, and C. |
+| Full Clojure suite | `clojure -M:test` | Registered serial namespaces, then registered parallel namespaces. |
 | Locked Clojure suite | `flock -w 3600 /tmp/millstrand-test.lock clojure -M:test` | Queue acceptance when the full JVM suite must have the shared test lock. |
-| Focused cold slice | `clojure -M:test millstrand.relations-test` | One registered serial or parallel namespace, in-process. Pass the namespace names explicitly. |
+| Focused cold slice | `clojure -M:test millstrand.relations-test` | One or more registered serial or parallel namespaces, in-process. Pass the namespace names explicitly. |
 | Warm iteration | `make test-warm NS="millstrand.relations-test"` | Reuses or boots the worktree warm REPL and runs a focused slice without leaving the JVM. |
 | Stop warm iteration | `make test-warm-stop` | Stops the PID recorded in `.test-repl.pid` and removes the warm runtime files. |
 | Go suite | `make test-go` | Runs `go test ./...` in `cli`, `tools/kanban-tree`, and `tools/land-quality`. |
@@ -37,21 +37,21 @@ Run commands from the repository root. Cold means starting a fresh test JVM; war
 | Process/repository E2E | `make test-e2e` | Runs the `millstrand.e2e` entrypoint, including public CLI, live refresh, cutover, repository bootstrap, and REPL flows. |
 | Shell acceptance | `make build`, then `test/shell/acceptance/millstrand-core.sh` | Runs public built `bin/mill` and `bin/strand` against disposable worlds. The Kanban module script proves the pinned Millhouse source and retained image surface; the docs and Neovim scripts are `test/shell/acceptance/millstrand-docs.sh` and `test/shell/acceptance/millstrand-neovim.sh`. |
 
-The focused cold runner rejects add-libs shard members (`millstrand.spools-test`, `millstrand.runtime-deps-test`, and `millstrand.ct.config-ops-test`) and unknown namespaces. Run the full suite for those namespaces. `MILLSTRAND_TEST_AWAIT_SCALE=3` widens await budgets on slow hosts; it does not change the test tier.
+The focused cold runner accepts only registered serial or parallel namespaces and rejects unknown names. `MILLSTRAND_TEST_AWAIT_SCALE=3` widens await budgets on slow hosts; it does not change the test tier.
 
 ## Evidence boundaries
 
 ### Direct and component tests
 
-Use ordinary Clojure tests for pure functions and public API contracts. API tests under `test/clojure/millstrand/api/` pin caller-visible argument grammar, validation, result shapes, and errors. Core and component tests under `test/clojure/millstrand/core/` may exercise implementation collaborators and private runtime seams when that ownership is explicit. These tests use explicit runtimes and test classpaths; they do not prove startup files, approved-root acquisition, source loading, or a separate process topology.
+Use ordinary Clojure tests for pure functions and public API contracts. API tests under `test/clojure/millstrand/api/` pin caller-visible argument grammar, validation, result shapes, and errors. Core and component tests under `test/clojure/millstrand/core/` may exercise implementation collaborators and private runtime seams when that ownership is explicit. These tests use explicit runtimes and test classpaths; they do not prove startup files, dependency-basis loading, source loading, or a separate process topology.
 
 The direct tier is also where `millstrand.test.alpha/collect-module-forms` proves declaration construction as data. It does not prove publication, reconciliation, or startup. Keep the exact boundary in [Testing your config and spools](../docs/spools/testing.md).
 
 ### Embedded weaver-world integration
 
-Use `millstrand.test.alpha/with-weaver-world` or `weaver-world-fixture` when behavior needs a real runtime: storage, startup files, approved roots, module publication, transports, events, scheduling, or reload. The world runs in the test JVM, but forms sent through `millstrand.test.alpha/repl!` execute through the weaver's real transport. These tests prove the runtime and component boundary without proving repository-built binaries or separate supervisor/weaver process identities.
+Use `millstrand.test.alpha/with-weaver-world` or `weaver-world-fixture` when behavior needs a real runtime: storage, startup files, dependency bases, module publication, transports, events, scheduling, or reload. The world runs in the test JVM, but forms sent through `millstrand.test.alpha/repl!` execute through the weaver's real transport. These tests prove the runtime and component boundary without proving repository-built binaries or separate supervisor/weaver process identities.
 
-The fixture contract and classpath boundary live in [docs/spools/testing.md](../docs/spools/testing.md). Do not use a direct classpath require as evidence that a weaver can acquire and load the same root.
+The fixture contract and classpath boundary live in [docs/spools/testing.md](../docs/spools/testing.md). Do not use a direct classpath require as evidence that a Weaver has a resolved basis or an explicitly activated module.
 
 ### Process and repository E2E
 
@@ -72,11 +72,11 @@ The E2E entrypoint runs `go build` on the repository's CLI sources into `cli/bin
 
 | Fixture class | Location and shape | Evidence |
 | --- | --- | --- |
-| Classpath/direct | Test namespaces and temporary pure-data or file fixtures under `test/clojure/millstrand/`; explicit `:publish? false` runtimes where a runtime is needed. | API, pure, and component behavior. No acquisition or startup claim. |
-| Approved-root/module | Generated `:spools-edn`/`:files` worlds used with `millstrand.test.alpha`. | Root approval, source loading, module collection/publication, lifecycle, and refresh inside an embedded disposable weaver. |
+| Classpath/direct | Test namespaces and temporary pure-data or file fixtures under `test/clojure/millstrand/`; explicit `:publish? false` runtimes where a runtime is needed. | API, pure, and component behavior. No dependency-resolution or startup claim. |
+| Module lifecycle | Generated `deps.edn`/`:files` worlds used with `millstrand.test.alpha`. | Dependency-basis loading, module collection/publication, lifecycle, and refresh inside an embedded disposable weaver. |
 | Process E2E | `test/clojure/e2e/millstrand/e2e.clj`, the committed `test/fixtures/clojure/authoring-module/` and `test/fixtures/clojure/e2e-live-spool/` fixtures, `test/fixtures/shell/acceptance/`, and the generated Git repositories and v1/v2 live-spool roots created under disposable `/tmp` paths. | Built binaries, public commands and transport, repository bootstrap, process identity, generation changes, and exact-PID teardown. |
 
-Do not promote a fixture to a higher tier by accident. A source file on the test classpath is not an approved root, and an embedded weaver is not a repository process E2E.
+Do not promote a fixture to a higher tier by accident. A source file on the test classpath is not dependency-basis loading, and an embedded weaver is not a repository process E2E.
 
 ## Live process E2E scenarios and specifications
 
@@ -84,10 +84,9 @@ Process-specific assertions stay in [`test/clojure/e2e/millstrand/e2e.clj`](./cl
 
 | Scenario | Unique process/repository claim | Authoritative specification | Lower-tier integration ownership |
 | --- | --- | --- | --- |
-| `smoke-live-add!` | A built `mill` supervisor and a separate weaver can start in an isolated world; a root absent at startup can be approved and added through the public refresh path while the existing process identities and generation remain in place; the newly published op is then callable through `strand`; cleanup leaves the ambient mill untouched. | [SPEC-006.C4a](../devflow/specs/testing.md), [SPEC-004.C44c](../devflow/specs/daemon-runtime.md), [SPEC-004.C46](../devflow/specs/daemon-runtime.md) | [`test/clojure/millstrand/spools_test.clj`](./clojure/millstrand/spools_test.clj) keeps loaded-root sync and pending classifications plus reload-code source transitions. |
-| `smoke-live-cutover!` | The same public process topology can show a changed loaded root being refused for the current generation, then stop the old weaver and start a new mill-managed generation that activates the replacement root; mill identity persists while weaver identity and generation change, and public dispatch returns the replacement value. | [SPEC-006.C4a](../devflow/specs/testing.md), [SPEC-004.C44d](../devflow/specs/daemon-runtime.md), [SPEC-004.C46](../devflow/specs/daemon-runtime.md) | [`test/clojure/millstrand/core/weaver/modules_test.clj`](./clojure/millstrand/core/weaver/modules_test.clj) keeps module, publication, conflict, and residual combinations; [`test/clojure/millstrand/runtime/integration_test.clj`](./clojure/millstrand/runtime/integration_test.clj) keeps status/reload-code composition and result shapes. |
+| `smoke-local-coordinate-replacement!` | A built `mill` supervisor and separate Weaver start in an isolated world. A changed local coordinate is refused by the current generation, then a replacement generation activates the coordinate and publishes its operation. | [SPEC-006.C4a](../devflow/specs/testing.md), [SPEC-004.C42-C50](../devflow/specs/daemon-runtime.md), [SPEC-004.C113-C123](../devflow/specs/daemon-runtime.md) | [`basis_test.clj`](./clojure/millstrand/core/weaver/basis_test.clj) owns basis comparison; [`runtime_deps_test.clj`](./clojure/millstrand/runtime_deps_test.clj) owns dependency configuration; [`modules_test.clj`](./clojure/millstrand/core/weaver/modules_test.clj) owns module publication and replacement coverage. |
 
-The table is a locator, not a second contract. [SPEC-004.C44c](../devflow/specs/daemon-runtime.md), [SPEC-004.C44d](../devflow/specs/daemon-runtime.md), and [SPEC-004.C46](../devflow/specs/daemon-runtime.md) own the exact classification, pending-generation, refresh, and publication behavior.
+The table is a locator, not a second contract. [SPEC-004.C42–C50](../devflow/specs/daemon-runtime.md) owns basis comparison, refresh, and publication behavior; [SPEC-004.C113–C123](../devflow/specs/daemon-runtime.md) owns replacement continuity.
 
 ## Merge gate and exclusions
 

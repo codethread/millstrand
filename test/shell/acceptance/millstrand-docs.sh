@@ -103,7 +103,8 @@ run_capture "mill init" "$tmp_root/init.json" env XDG_STATE_HOME="$state_root" "
   echo "millstrand docs acceptance: mill init did not create the default .millstrand workspace" >&2
   exit 1
 }
-cp "$repo_root/test/fixtures/shell/acceptance/millstrand-core-spools.edn" .millstrand/spools.edn
+printf '{:deps {io.millstrand/batteries {:local/root "%s"}}}\n' \
+  "$repo_root/spools/batteries" >.millstrand/deps.edn
 cp "$repo_root/test/fixtures/shell/acceptance/millstrand-core-init.clj" .millstrand/init.clj
 
 run_capture "mill weaver status before start" "$status_before" env XDG_STATE_HOME="$state_root" "$repo_root/bin/mill" weaver status

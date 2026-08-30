@@ -9,7 +9,8 @@
 
 (deftest stop-unpublishes-published-runtime
   (let [world (test-support/temp-world)
-        rt (weaver-runtime/start! nil {:world world})]
+        rt (weaver-runtime/start! nil {:world world
+                                       :generation-basis (test-support/generation-basis (:config-dir world))})]
     (try
       (is (= rt @weaver-runtime/current-runtime))
       (weaver-runtime/stop! rt)
@@ -22,7 +23,9 @@
         init (io/file (:config-dir world) "init.clj")]
     (try
       (source-file/spit-forms! init ['(throw (ex-info "init failed" {}))])
-      (is (thrown? Exception (weaver-runtime/start! nil {:world world})))
+      (is (thrown? Exception
+                   (weaver-runtime/start! nil {:world world
+                                               :generation-basis (test-support/generation-basis (:config-dir world))})))
       (is (nil? @weaver-runtime/current-runtime))
       (is (nil? (metadata/read-metadata world)))
       (is (false? (.exists (metadata/json-metadata-file world))))
@@ -34,7 +37,9 @@
 
 (deftest unpublished-start-does-not-publish
   (let [world (test-support/temp-world)
-        rt (weaver-runtime/start! nil {:world world :publish? false})]
+        rt (weaver-runtime/start! nil {:world world
+                                       :publish? false
+                                       :generation-basis (test-support/generation-basis (:config-dir world))})]
     (try
       (is (nil? @weaver-runtime/current-runtime))
       (finally
@@ -44,11 +49,13 @@
 (deftest publishing-second-runtime-still-fails-loudly
   (let [world-a (test-support/temp-world)
         world-b (test-support/temp-world)
-        rt-a (weaver-runtime/start! nil {:world world-a})]
+        rt-a (weaver-runtime/start! nil {:world world-a
+                                         :generation-basis (test-support/generation-basis (:config-dir world-a))})]
     (try
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"runtime is already active"
-                            (weaver-runtime/start! nil {:world world-b})))
+                            (weaver-runtime/start! nil {:world world-b
+                                                        :generation-basis (test-support/generation-basis (:config-dir world-b))})))
       (finally
         (weaver-runtime/stop! rt-a)
         (test-support/delete-tree! (io/file (:config-dir world-a) ".."))

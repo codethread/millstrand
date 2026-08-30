@@ -36,6 +36,7 @@
    :canonical-db-path (.getPath (io/file workspace "data" "millstrand.sqlite"))
    :nonce (str "nonce-" name "-" (System/nanoTime))
    :generation-id (str "generation-" name "-" (System/nanoTime))
+   :basis-fingerprint "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
    :socket-path (.getPath (metadata/socket-file {:state-dir (.getPath state-dir)}))
    :started-at "2026-07-02T00:00:00Z"})
 
@@ -159,12 +160,18 @@
         state-root (io/file root "state" "millstrand")
         db-a (db-test/temp-db-file)
         db-b (db-test/temp-db-file)
-        rt-a (weaver-runtime/start! db-a {:world (world-under root "a" "alpha") :name "alpha"})]
+        world-a (world-under root "a" "alpha")
+        world-b (world-under root "b" "beta")
+        rt-a (weaver-runtime/start! db-a {:world world-a
+                                          :name "alpha"
+                                          :generation-basis (test-support/generation-basis (:config-dir world-a))})]
     ;; The runtime enforces one process-current runtime for REPL convenience;
     ;; peer socket tests need two independent local runtimes and do not rely on
     ;; current-runtime dispatch.
     (reset! weaver-runtime/current-runtime nil)
-    (let [rt-b (weaver-runtime/start! db-b {:world (world-under root "b" "beta") :name "beta"})]
+    (let [rt-b (weaver-runtime/start! db-b {:world world-b
+                                            :name "beta"
+                                            :generation-basis (test-support/generation-basis (:config-dir world-b))})]
       (try
         (with-state-root state-root #(f rt-a rt-b))
         (finally
@@ -264,7 +271,10 @@
   (let [root (short-temp-root "sgstop")
         state-root (io/file root "state" "millstrand")
         db-b (db-test/temp-db-file)
-        rt-b (weaver-runtime/start! db-b {:world (world-under root "b" "beta") :name "beta"})]
+        world-b (world-under root "b" "beta")
+        rt-b (weaver-runtime/start! db-b {:world world-b
+                                          :name "beta"
+                                          :generation-basis (test-support/generation-basis (:config-dir world-b))})]
     (try
       (let [beta (with-state-root state-root #(first (filter (fn [row] (= "beta" (:name row)))
                                                              (peers/peers))))]

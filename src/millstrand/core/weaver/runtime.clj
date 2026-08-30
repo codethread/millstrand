@@ -9,6 +9,7 @@
             [millstrand.api.clock.alpha :as clock]
             [millstrand.core.specs :as specs]
             [millstrand.core.weaver.config :as weaver-config]
+            [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.core-registry :as core-registry]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.scheduler :as scheduler]
@@ -21,9 +22,6 @@
            [java.nio.file.attribute FileAttribute]))
 
 (def ^:private loopback-host "127.0.0.1")
-(def ^:private reserved-release-marker-message
-  "Release marker v0 is reserved; the first public release marker is v1")
-
 (defonce ^{:doc "Atom containing the published ambient weaver runtime map for this process, or nil."} current-runtime
   (atom nil))
 
@@ -56,8 +54,8 @@
   down while the lane idles; this bounds the pickup latency of the next event."
   5)
 
-(declare stop! with-spool-classloader with-runtime-binding
-         with-runtime-and-spool-classloader)
+(declare stop! with-generation-classloader with-runtime-binding
+         with-runtime-and-generation-classloader)
 
 (defn- event-system-base []
   (let [handler-store (core-registry/backed-registry :events)]
@@ -109,7 +107,7 @@
                               (try
                                 (with-runtime-binding
                                   runtime
-                                  #(with-spool-classloader runtime (fn [] (scheduler/run-fire! runtime event))))
+                                  #(with-generation-classloader runtime (fn [] (scheduler/run-fire! runtime event))))
                                 (catch Throwable _ nil))
                               ;; :fn stays un-destructured: a local named `fn` would
                               ;; shadow the fn macro in the handler thunks below.
@@ -125,7 +123,7 @@
                                 (try
                                   (with-runtime-binding
                                     runtime
-                                    #(with-spool-classloader runtime (fn [] (fn-value event))))
+                                    #(with-generation-classloader runtime (fn [] (fn-value event))))
                                   (catch Throwable t
                                     (let [failure {:handler/key key
                                                    :handler/fn (:fn handler)
@@ -264,7 +262,7 @@
                          ((requiring-resolve
                            'millstrand.core.weaver.module-refresh/with-startup-file)
                           (assoc startup-file :layer layer)
-                          #(with-spool-classloader runtime (fn [] (load-file file))))))
+                          #(with-generation-classloader runtime (fn [] (load-file file))))))
                 (catch Throwable t
                   (throw (ex-info "Selected workspace startup file failed to load"
                                   {:config-dir (:config-dir world)
@@ -276,7 +274,7 @@
   {:load-startup-files!
    #(load-startup-files! runtime
                          {:config-dir (get-in runtime [:metadata :config-dir])})
-   :with-loader #(with-runtime-and-spool-classloader runtime %)})
+   :with-loader #(with-runtime-and-generation-classloader runtime %)})
 
 (defn declare-module!
   "Stage or apply one stable internal runtime module declaration.
@@ -308,13 +306,82 @@
   ([runtime]
    (refresh-modules! runtime {}))
   ([runtime opts]
-   ((requiring-resolve 'millstrand.core.weaver.module-refresh/refresh!)
-    runtime (module-coordinator-context runtime) opts)))
+   (let [running (:generation-basis runtime)
+         boundary? (and running
+                        (not (:startup? opts))
+                        (not (contains? opts :only))
+                        (not (:declare opts)))
+         candidate-result
+         (when boundary?
+           (try
+             (let [coordinate (get (:reserved-deps running)
+                                   'io.millstrand/millstrand)
+                   candidate (basis/create-generation-basis
+                              (:source-config-dir runtime) coordinate)]
+               (when-not (= (:fingerprint running) (:fingerprint candidate))
+                 {:status :restart-required
+                  :reason :dependency-basis-changed
+                  :basis {:running-fingerprint (:fingerprint running)
+                          :candidate-fingerprint (:fingerprint candidate)}}))
+             (catch Throwable throwable
+               (or (basis/dependency-diagnostic throwable)
+                   (throw throwable)))))]
+     (or candidate-result
+         ((requiring-resolve 'millstrand.core.weaver.module-refresh/refresh!)
+          runtime (module-coordinator-context runtime) opts)))))
 
 (defn module-status
   "Return offline joined state for the internal live-module coordinator."
   [runtime]
   ((requiring-resolve 'millstrand.core.weaver.module-refresh/status) runtime))
+
+(defn reload-basis-lib!
+  "Reload loaded namespaces backed by source paths for `lib` in the running basis.
+
+  Returns the closed result owned by
+  `:millstrand.api.runtime.alpha/reload-code-result`
+  (DELTA-Dns-Repl-001.C4)."
+  [runtime lib]
+  (let [coordinate (get-in runtime [:generation-basis :basis :libs lib])]
+    (when-not coordinate
+      (throw (ex-info "Library is absent from the running generation basis"
+                      {:lib lib :stage :lookup})))
+    (let [roots (->> (:paths coordinate)
+                     (map #(-> % io/file .getCanonicalPath))
+                     vec)]
+      (when-not (seq roots)
+        (throw (ex-info "Library has no source-backed classpath entry"
+                        {:lib lib :stage :source-paths})))
+      (let [source-files (fn [namespace]
+                           (->> (ns-interns namespace)
+                                vals
+                                (keep (comp :file meta))
+                                distinct))
+            loader (:generation-classloader runtime)
+            namespaces
+            (->> (all-ns)
+                 (keep (fn [namespace]
+                         (when (some (fn [file]
+                                       (when-let [resource (.getResource ^ClassLoader loader file)]
+                                         (when (= "file" (.getProtocol resource))
+                                           (let [path (-> resource .toURI io/file
+                                                          .getCanonicalPath)]
+                                             (some #(or (= path %)
+                                                        (str/starts-with?
+                                                         path
+                                                         (str % java.io.File/separator)))
+                                                   roots)))))
+                                     (source-files namespace))
+                           (ns-name namespace))))
+                 (sort-by str)
+                 vec)]
+        (with-runtime-and-generation-classloader
+          runtime
+          #(doseq [namespace namespaces]
+             (require namespace :reload)))
+        {:lib lib
+         :status (if (seq namespaces) :reloaded :unchanged)
+         :namespaces namespaces}))))
 
 (defn- close-module-lifecycle!
   "Close runtime-scoped module lifecycle resources before spool state."
@@ -337,31 +404,31 @@
       ((requiring-resolve 'millstrand.core.weaver.help/register-built-in-ops!) runtime)
       ((requiring-resolve 'millstrand.core.weaver.bins/register-built-in-ops!) runtime))))
 
-(defn- with-spool-classloader [runtime f]
+(defn- with-generation-classloader [runtime f]
   (let [thread (Thread/currentThread)
         previous-loader (.getContextClassLoader thread)]
     (try
-      (.setContextClassLoader thread (:spool-classloader runtime))
+      (.setContextClassLoader thread (:generation-classloader runtime))
       (f)
       (finally
         (.setContextClassLoader thread previous-loader)))))
 
-(defn with-runtime-and-spool-classloader
-  "Call `f` with runtime ambiently bound and the runtime spool classloader as
+(defn with-runtime-and-generation-classloader
+  "Call `f` with runtime ambiently bound and the generation classloader as
   the thread's context classloader, matching trusted startup-file evaluation.
 
-  Also rebinds Compiler/LOADER onto the spool classloader: inside an outer
+  Also rebinds Compiler/LOADER onto the generation classloader: inside an outer
   eval (such as an nREPL session) a compiler loader is already bound, so the
   context classloader alone would not let require/load in `f` see synced spool
   sources."
   [runtime f]
   (with-runtime-binding
     runtime
-    #(with-spool-classloader
+    #(with-generation-classloader
        runtime
        (fn []
          (clojure.lang.Var/pushThreadBindings
-          {clojure.lang.Compiler/LOADER (clojure.lang.DynamicClassLoader. (:spool-classloader runtime))})
+          {clojure.lang.Compiler/LOADER (:generation-classloader runtime)})
          (try
            (f)
            (finally
@@ -409,7 +476,7 @@
 
 (defn- eval-runtime-form [form]
   (if-let [runtime (some-> nrepl-eval/*msg* ::runtime-state deref)]
-    (with-runtime-and-spool-classloader
+    (with-runtime-and-generation-classloader
       runtime
       #(clojure.lang.Compiler/eval form true))
     (throw (ex-info "Weaver nREPL eval has no runtime"
@@ -444,137 +511,8 @@
                      (db/memory-storage))
     (throw (ex-info "Unknown weaver storage kind" {:storage storage}))))
 
-(defn- require-release-marker! [marker provenance]
-  (when-not (s/valid? ::specs/release-marker-syntax marker)
-    (throw (ex-info "Release marker must be strictly v<int> with no leading zeroes"
-                    {:reason :invalid-release-marker
-                     :marker marker
-                     :provenance provenance
-                     :spec ::specs/release-marker-syntax
-                     :explain (s/explain-data ::specs/release-marker-syntax marker)})))
-  (when (= "v0" marker)
-    (throw (ex-info reserved-release-marker-message
-                    {:reason :reserved-release-marker
-                     :marker marker
-                     :provenance provenance})))
-  (when-not (s/valid? ::specs/release-marker-claim marker)
-    (throw (ex-info "Release marker claim has an invalid shape"
-                    {:reason :invalid-release-marker
-                     :marker marker
-                     :provenance provenance
-                     :spec ::specs/release-marker-claim
-                     :explain (s/explain-data ::specs/release-marker-claim marker)})))
-  marker)
-
-(defn- run-git [dir & args]
-  (let [command (vec (cons "git" args))
-        root (some-> dir io/file .getCanonicalFile)
-        failure-data (fn [exit stderr]
-                       {:reason :git-inspection-failed
-                        :command command
-                        :root (some-> root .getPath)
-                        :exit exit
-                        :stderr stderr})]
-    (try
-      (let [process (-> (ProcessBuilder. ^"[Ljava.lang.String;" (into-array String command))
-                        (.directory dir)
-                        (.redirectErrorStream false)
-                        (.start))
-            stderr (future (slurp (.getErrorStream process)))
-            stdout (future (slurp (.getInputStream process)))
-            exit (.waitFor process)
-            result {:command command
-                    :root (.getPath root)
-                    :exit exit
-                    :stdout @stdout
-                    :stderr @stderr}]
-        (when (or (not (zero? exit)) (not (str/blank? (:stderr result))))
-          (throw (ex-info "Git inspection command failed"
-                          (failure-data exit (:stderr result)))))
-        result)
-      (catch java.io.IOException e
-        (throw (ex-info "Git inspection command could not start"
-                        (failure-data 127 (ex-message e))
-                        e))))))
-
-(defn- non-repo-root-result? [data]
-  (and (= ["git" "rev-parse" "--show-toplevel"] (:command data))
-       (not (zero? (:exit data)))
-       (boolean (re-find #"(?i)not a git repository" (or (:stderr data) "")))))
-
-(defn source-checkout-root
-  "Return the running weaver's mill-resolved millstrand source checkout root, or nil.
-
-  The resource-derived source-checkout authority (SPEC-004.C50b): it locates the
-  checkout from this module's own classpath resource, never from cwd, the config
-  directory, or request/envelope state. Returns nil when the resource is not a
-  `file:` checkout resource; throws only when a located git checkout reports no
-  toplevel. Callers that require a checkout (source-root coordinate resolution)
-  wrap this and fail loudly on nil; the release-marker path tolerates nil."
-  ([] (source-checkout-root (io/resource "millstrand/core/weaver/runtime.clj")))
-  ([^java.net.URL url]
-   (when (and url (= "file" (.getProtocol url)))
-     (let [resource-dir (-> (io/file (.toURI url)) .getCanonicalFile .getParentFile)
-           result (try
-                    (run-git resource-dir "rev-parse" "--show-toplevel")
-                    (catch clojure.lang.ExceptionInfo e
-                      (when-not (non-repo-root-result? (ex-data e))
-                        (throw e))))]
-       (when result
-         (let [root-path (str/trim (:stdout result))]
-           (when (str/blank? root-path)
-             (throw (ex-info "Git inspection returned no source checkout root"
-                             (assoc (select-keys result [:command :root :exit :stderr])
-                                    :reason :invalid-git-root))))
-           (.getCanonicalFile (io/file root-path))))))))
-
-(defn- annotated-head-release-markers [source-root]
-  (when source-root
-    (let [result (run-git source-root
-                          "for-each-ref"
-                          "--points-at"
-                          "HEAD"
-                          "--format=%(objecttype)%09%(refname:short)"
-                          "refs/tags")]
-      (->> (str/split-lines (:stdout result))
-           (keep (fn [line]
-                   (let [[object-type tag] (str/split line #"\t" 2)]
-                     (when (and (= "tag" object-type)
-                                (s/valid? ::specs/release-marker-syntax tag))
-                       tag))))
-           distinct
-           sort
-           vec))))
-
-(defn- require-release-marker-result! [result]
-  (when-not (s/valid? ::specs/release-marker-result result)
-    (throw (ex-info "Resolved release marker has an invalid shape"
-                    {:reason :invalid-release-marker-result
-                     :result result
-                     :spec ::specs/release-marker-result
-                     :explain (s/explain-data ::specs/release-marker-result result)})))
-  result)
-
-(defn- resolve-release-marker [claim]
-  (require-release-marker-result!
-   (if (some? claim)
-     {:marker (require-release-marker! claim :claimed)
-      :provenance :claimed}
-     (let [markers (annotated-head-release-markers (source-checkout-root))]
-       (case (count markers)
-         0 {:marker nil :provenance :none}
-         1 {:marker (require-release-marker! (first markers) :tag)
-            :provenance :tag}
-         (throw (ex-info "Source HEAD has multiple annotated release marker tags"
-                         {:reason :ambiguous-release-marker
-                          :markers markers})))))))
-
 (defn- require-start-options! [opts]
   (when-not (s/valid? ::specs/weaver-start-options opts)
-    ;; Preserve the claim-specific diagnostic, including v0's reserved-marker
-    ;; error, while the options spec remains the owning structural contract.
-    (when (and (map? opts) (contains? opts :release-marker))
-      (require-release-marker! (:release-marker opts) :claimed))
     (throw (ex-info "Weaver start options have an invalid shape"
                     {:reason :invalid-start-options
                      :options opts
@@ -617,14 +555,20 @@
         :else (recur)))))
 
 (defn- start-with-options-unlocked!
-  [db-file {:keys [world name publish? storage release-marker probe? diagnostic!
+  [db-file {:keys [world name publish? storage probe? diagnostic!
+                   generation-basis
                    old-generation-baseline pre-publication-claim]
             :or {publish? true}}]
+  (when-not (s/valid? :millstrand.core.specs/generation-basis generation-basis)
+    (throw (ex-info "Weaver startup requires a valid generation basis"
+                    {:explain (s/explain-data
+                               :millstrand.core.specs/generation-basis
+                               generation-basis)})))
   (when (and (publishes-ambient-runtime? publish? probe?) @current-runtime)
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
   (let [world (or world (weaver-config/world))
         world (assoc world :source-config-dir (validated-source-config-dir world))
-        resolved-release-marker (resolve-release-marker release-marker)]
+        basis-fingerprint (:fingerprint generation-basis)]
     (if probe?
       ;; Probe worlds are normally disposable, but `:probe?` does not make an
       ;; arbitrary caller-supplied world safe to reuse. Keep the same
@@ -652,6 +596,7 @@
                                            :canonical-db-path (:canonical-db-path storage)
                                            :nonce nonce
                                            :generation-id generation-id
+                                           :basis-fingerprint basis-fingerprint
                                            :world world
                                            :name (or name (default-name world))
                                            :started-at (str (Instant/now))})
@@ -672,32 +617,16 @@
                           :glossary-registry (atom {})
                           :help-transform-slot (atom nil)
                           :generation-id generation-id
-                          :release-marker resolved-release-marker
-                          :approved-spool-sync-state (atom {})
-                          :approved-spool-generation-state (atom {})
-                          :approved-spool-generation-fingerprints (atom {})
-                          :approved-spool-generation-maven (atom {})
-                          :pending-spool-generation (atom nil)
+                          :generation-basis generation-basis
+                          :basis-fingerprint basis-fingerprint
+                          :generation-classloader
+                          (:classloader generation-basis)
                           :source-config-dir (:source-config-dir world)
-                        ;; Append-only for this process generation. Config reload
-                        ;; deliberately leaves loaded-code evidence intact.
-                          :namespace-load-ledger (atom {:last-order 0 :records []})
-                        ;; Embedded runtimes can share a JVM. Namespaces already
-                        ;; present before this runtime creates its spool loader
-                        ;; belong to the inherited image, not this runtime's
-                        ;; synced-root ledger.
-                          :inherited-namespaces (into #{} (map ns-name) (all-ns))
-                        ;; Status reads this recorded classification without
-                        ;; consulting source files. Sync/source-load boundaries
-                        ;; replace it when their in-memory evidence changes.
-                          :namespace-load-status (atom nil)
                           :module-state
                           (atom ((requiring-resolve
                                   'millstrand.core.weaver.module-refresh/initial-state)))
                           :module-refresh-lock (Object.)
                           :spool-state (atom {})
-                          :spool-classloader (clojure.lang.DynamicClassLoader.
-                                              (.getContextClassLoader (Thread/currentThread)))
                           :server server
                           :metadata meta}
             runtime-base (start-event-system! runtime-base (not probe?))
@@ -724,7 +653,7 @@
                 (throw (ex-info "Initial module refresh did not complete successfully"
                                 refresh-result)))
            ;; Arm the scheduler only after startup files finish loading, so
-           ;; handlers supplied by approved spools/config resolve before any
+           ;; handlers supplied by activated modules/config resolve before any
            ;; durable pending wake is re-armed. Probe mode has no live scheduler.
               (when-not probe?
                 (scheduler/rearm! runtime))
@@ -817,11 +746,7 @@
   other runtimes in the same JVM. Trusted callers may select `:storage
   :sqlite-memory` for a weaver-lifetime in-memory database; file-backed SQLite
   in the selected workspace remains the default. In probe mode, publication is
-  always disabled even when `:publish?` is omitted or true. `:release-marker`
-  explicitly
-  claims the running source generation as a canonical `v<int>` marker; without
-  a claim, startup uses an annotated marker tag on the source checkout's HEAD
-  when one can be resolved. Options conform to
+  always disabled even when `:publish?` is omitted or true. Options conform to
   `:millstrand.core.specs/weaver-start-options`."
   ([] (start! nil {}))
   ([db-file] (start! db-file {}))
@@ -921,6 +846,12 @@
                       :explain (s/explain-data
                                 :millstrand.weaver-start/old-generation-baseline
                                 (:old-generation-baseline opts))})))
+   (when-not (s/valid? :millstrand.core.specs/generation-basis
+                       (:generation-basis opts))
+     (throw (ex-info "Fresh runtime probe requires a valid generation basis"
+                     {:explain (s/explain-data
+                                :millstrand.core.specs/generation-basis
+                                (:generation-basis opts))})))
    (let [probe-root (.toFile (Files/createTempDirectory
                               "millstrand-restart-probe-"
                               (make-array FileAttribute 0)))
@@ -944,9 +875,16 @@
        (copy-tree! (:config-dir world) probe-config)
        (report! {:stage :probe/workspace :status :completed
                  :data {:workspace (.getPath probe-root)}})
-       (let [runtime (reset! started-runtime
+       (let [runtime-coordinate
+             (get-in opts [:generation-basis :reserved-deps
+                           'io.millstrand/millstrand])
+             generation-basis
+             (basis/create-generation-basis (.getCanonicalPath probe-config)
+                                            runtime-coordinate)
+             runtime (reset! started-runtime
                              (start! nil (merge opts
                                                 {:world probe-world
+                                                 :generation-basis generation-basis
                                                  :publish? false
                                                  :storage :sqlite-memory
                                                  :probe? true
@@ -1076,8 +1014,7 @@
                        :doc "Selected runtime-state directory."}
            :data-dir {:required? true
                       :doc "Selected persistent-data directory."}
-           :name {:doc "Friendly weaver name."}
-           :release-marker {:doc "Explicit canonical vN release marker claim."}}})
+           :name {:doc "Friendly weaver name."}}})
 
 (defn- parse-main-args
   ([args] (parse-main-args args {}))
@@ -1108,10 +1045,33 @@
 (defn -main
   "Start a foreground weaver process from command-line arguments."
   [& args]
-  (let [{:keys [config-dir state-dir data-dir name release-marker]} (parse-main-args args)]
-    (start! nil (cond-> {:world (weaver-config/world config-dir state-dir data-dir)
-                         :name name}
-                  release-marker (assoc :release-marker release-marker)))
+  (let [{:keys [config-dir state-dir data-dir name]} (parse-main-args args)]
+    (throw (ex-info "Direct Weaver startup requires a resolved generation basis"
+                    {:world (weaver-config/world config-dir state-dir data-dir)
+                     :name name}))))
+
+(defn start-with-generation-basis!
+  "Start a foreground Weaver from an already resolved generation basis.
+
+  `generation-basis` conforms to
+  `:millstrand.core.specs/generation-basis`; `runtime-args` contains the
+  ordinary runtime launch flags after the basis launcher has consumed its own
+  options (DELTA-DnsRuntime-001.CC7-CC8). Dependency files are not read again
+  during startup."
+  [generation-basis runtime-args]
+  (when-not (s/valid? :millstrand.core.specs/generation-basis generation-basis)
+    (throw (ex-info "Generation basis has an invalid shape"
+                    {:explain (s/explain-data
+                               :millstrand.core.specs/generation-basis
+                               generation-basis)})))
+  (let [workspace (some-> generation-basis :sources first :path io/file .getParent)
+        {:keys [config-dir state-dir data-dir name]}
+        (parse-main-args (into ["--workspace" workspace] runtime-args))]
+    (start-with-options!
+     nil
+     {:world (weaver-config/world config-dir state-dir data-dir)
+      :name name
+      :generation-basis generation-basis})
     (install-signal-shutdown!)
     (println "weaver started")
     (while @current-runtime

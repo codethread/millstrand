@@ -141,11 +141,11 @@ func (h *restartProcessHarness) initWorld(t *testing.T, workspace string) {
 	if out, err := h.run("init", "--workspace", workspace); err != nil {
 		t.Fatalf("mill init: %v\n%s", err, out)
 	}
-	// Keep the acceptance world local and deterministic. The generated init
-	// would activate the repository's full spool graph, which is covered by the
+	// Keep the acceptance world local and deterministic. The generated files
+	// activate the repository's full module graph, which is covered by the
 	// ordinary end-to-end suite rather than this lifecycle boundary test.
-	if err := os.WriteFile(filepath.Join(workspace, "spools.edn"), []byte("{:spools {}}\n"), 0o644); err != nil {
-		t.Fatalf("write disposable spools.edn: %v", err)
+	if err := os.WriteFile(filepath.Join(workspace, "deps.edn"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("write disposable deps.edn: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workspace, "init.clj"), nil, 0o644); err != nil {
 		t.Fatalf("write disposable init.clj: %v", err)
@@ -475,11 +475,6 @@ func assertProbeDiagnostics(t *testing.T, diagnostics []any, label string) {
 		}
 		seen[stage] = true
 		data, _ := entry["data"].(map[string]any)
-		if stage == "materialize" {
-			if _, ok := data["roots"]; !ok {
-				t.Fatalf("%s root outcomes missing: %#v", label, entry)
-			}
-		}
 		if stage == "evaluate" {
 			if _, ok := data["modules"]; !ok {
 				t.Fatalf("%s module outcomes missing: %#v", label, entry)
@@ -501,7 +496,7 @@ func assertProbeDiagnostics(t *testing.T, diagnostics []any, label string) {
 			}
 		}
 	}
-	for _, stage := range []string{"materialize", "evaluate", "staged", "publication", "apply", "rearm", "plan", "failure"} {
+	for _, stage := range []string{"evaluate", "staged", "publication", "apply", "rearm", "plan", "failure"} {
 		if !seen[stage] {
 			t.Fatalf("%s diagnostics missing stage %q: %v", label, stage, seen)
 		}
@@ -542,7 +537,7 @@ func assertSuccessfulProbeDiagnostics(t *testing.T, status map[string]any) {
 			}
 		}
 	}
-	for _, stage := range []string{"materialize", "evaluate", "staged", "validate", "plan", "publication", "apply", "rearm"} {
+	for _, stage := range []string{"evaluate", "staged", "validate", "plan", "publication", "apply", "rearm"} {
 		if !seen[stage] {
 			t.Fatalf("successful probe diagnostics missing stage %q: %v", stage, seen)
 		}

@@ -5,9 +5,7 @@
   wait-until/await-eventually/await-* helper across the suite wraps instead
   of reinventing its own deadline/sleep/recur loop."
   (:require [clojure.data.json :as json]
-            [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :as t]
             [millstrand.api.runtime.alpha :as runtime]
@@ -15,61 +13,10 @@
             [millstrand.core.db-test :as db-test]
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.protocol :as protocol]
-            [millstrand.core.weaver.runtime :as weaver-runtime]
-            [millstrand.core.weaver.spool-sync :as spool-sync])
+            [millstrand.core.weaver.runtime :as weaver-runtime])
   (:import [java.io BufferedReader BufferedWriter InputStreamReader OutputStreamWriter]
            [java.net StandardProtocolFamily UnixDomainSocketAddress]
            [java.nio.channels Channels SocketChannel]))
-
-(defn- invalid-embedded-spools! [source-path family received expected-shape]
-  (throw (ex-info "Invalid embedded spools.edn shape"
-                  {:source-path source-path
-                   :family family
-                   :received received
-                   :received-type (if (nil? received) "nil" (.getName (class received)))
-                   :expected-shape expected-shape})))
-
-(defn embedded-spools-edn
-  "Read spool approvals from `source-path`, making local roots absolute.
-
-  Entries validate against :millstrand.core.weaver.spool-sync/family-entry — the
-  same owning spec sync consults — before rewriting; IO and reader failures
-  rethrow with the source path and expected shape."
-  [source-path]
-  (let [config (try
-                 (edn/read-string (slurp source-path))
-                 (catch Exception cause
-                   (throw (ex-info "Unreadable embedded spools.edn"
-                                   {:source-path source-path
-                                    :expected-shape "an EDN map carrying a :spools map"}
-                                   cause))))
-        spools (:spools config)
-        config-dir (.getParentFile (.getCanonicalFile (io/file source-path)))]
-    (when-not (map? spools)
-      (invalid-embedded-spools! source-path nil spools "a :spools map"))
-    (assoc config
-           :spools
-           (into {}
-                 (map (fn [[family entry]]
-                        (when-not (symbol? family)
-                          (invalid-embedded-spools! source-path family family "a symbol family key"))
-                        (when-not (map? entry)
-                          (invalid-embedded-spools! source-path family entry "a map family entry"))
-                        (let [root (:local/root entry)]
-                          (when (and (contains? entry :local/root)
-                                     (or (not (string? root)) (str/blank? root)))
-                            (invalid-embedded-spools! source-path family root
-                                                      "a non-blank string :local/root"))
-                          (when-not (s/valid? ::spool-sync/family-entry entry)
-                            (invalid-embedded-spools!
-                             source-path family
-                             (s/explain-data ::spool-sync/family-entry entry)
-                             "a :millstrand.core.weaver.spool-sync/family-entry"))
-                          [family (if root
-                                    (assoc entry :local/root
-                                           (.getCanonicalPath (io/file config-dir root)))
-                                    entry)])))
-                 spools))))
 
 (defn test-world [config-dir]
   (weaver-config/world config-dir
@@ -216,26 +163,43 @@
   (t/is (= (set expected-keys) (set (keys (new-state-fn))))
         "spool-state key set drifted — bump the spool's state-version and this expected key set together"))
 
+(defn generation-basis
+  "Build the minimal explicit generation basis for a disposable test world."
+  [config-dir]
+  {:sources [{:kind :project
+              :path (.getCanonicalPath (io/file config-dir "deps.edn"))
+              :deps {}}]
+   :aliases []
+   :reserved-deps {'io.millstrand/millstrand {:local/root "."}}
+   :basis {:libs {} :classpath-roots [] :argmap {}}
+   :fingerprint (str "sha256:" (str/join (repeat 64 "0")))
+   :classloader (.getContextClassLoader (Thread/currentThread))})
+
 (defn with-runtime
   "Run `f` (a `(fn [rt config-dir] ...)`) against a fresh, disposable weaver
   runtime.
 
   opts: `:publish?` (default false — the runtime is thread-bound for `f` via
   `with-runtime-binding` rather than published as the process ambient
-  runtime), `:release-marker`, and `:prefix`/`:nest-millstrand?`, threaded straight
-  to `temp-config-dir`. Set `:publish? true` when `f` (or code it calls, e.g.
+  runtime) and `:prefix`/`:nest-millstrand?`, threaded straight to
+  `temp-config-dir`. Set `:publish? true` when `f` (or code it calls, e.g.
   spawned worker threads that resolve the runtime via `current/runtime`
   rather than a per-call binding) needs the ambient singleton to actually
   exist."
   ([f] (with-runtime {} f))
   ([opts f]
-   (let [{:keys [publish? release-marker] :or {publish? false}} opts
+   (when-let [unknown (seq (remove #{:publish? :prefix :nest-millstrand?}
+                                   (keys opts)))]
+     (throw (ex-info "Unknown bare runtime fixture options"
+                     {:keys (vec unknown)})))
+   (let [{:keys [publish?] :or {publish? false}} opts
          db-file (db-test/temp-db-file)
          config-dir (temp-config-dir (select-keys opts [:prefix :nest-millstrand?]))]
      (try
-       (let [rt (weaver-runtime/start! db-file (cond-> {:world (test-world (.getCanonicalPath config-dir))
-                                                        :publish? publish?}
-                                                 release-marker (assoc :release-marker release-marker)))]
+       (let [rt (weaver-runtime/start!
+                 db-file {:world (test-world (.getCanonicalPath config-dir))
+                          :publish? publish?
+                          :generation-basis (generation-basis config-dir)})]
          (try
            (weaver-runtime/with-runtime-binding rt #(f rt config-dir))
            (finally
@@ -247,7 +211,7 @@
 (defn activate-spool!
   "Activate a spool module on a bare test runtime.
 
-  `ns-sym` is the spool's namespace symbol. Modules default to source activation,
+  `ns-sym` is the module's namespace symbol. Modules default to source activation,
   which collects and retains their declarations. Pass `:load :image` only after
   a successful source activation retained that namespace's declaration record.
   An optional `:after` edge is added before `runtime/module!` refreshes the
@@ -257,13 +221,20 @@
   unchanged, so a fixture failure names the refusal instead of cascading into
   unrelated assertions. Returns the refresh result."
   [rt key ns-sym & {:keys [after load]}]
-  (require ns-sym)
-  (let [result (runtime/module! rt key (cond-> {:ns ns-sym}
-                                         load (assoc :load load)
+  (let [source-path (str (str/replace (munge (str ns-sym)) "." "/") ".clj")
+        declaration (if (= :image load)
+                      {:ns ns-sym :load :image}
+                      (let [source (io/resource source-path)
+                            target (io/file (get-in rt [:metadata :config-dir]) source-path)]
+                        (io/make-parents target)
+                        (with-open [input (io/input-stream source)]
+                          (io/copy input target))
+                        {:file source-path}))
+        result (runtime/module! rt key (cond-> declaration
                                          after (assoc :after after)))
         status (get-in result [:modules key :status])]
     (when-not (contains? #{:applied :unchanged} status)
-      (throw (ex-info "Spool module activation failed"
+      (throw (ex-info "Module activation failed"
                       {:module/key key :module/status status :result result})))
     result))
 

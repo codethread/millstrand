@@ -31,6 +31,55 @@ func TestEnsureAgentGuidanceAppendsToExisting(t *testing.T) {
 	}
 }
 
+func TestBootstrapSeedsCanonicalDepsAndOnlyIgnoresPersonalOverlays(t *testing.T) {
+	directory := t.TempDir()
+	world, err := bootstrapWorld(directory, filepath.Join(directory, "world"), "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps, err := os.ReadFile(filepath.Join(world.ConfigDir, "deps.edn"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(deps), "io.millstrand/batteries") {
+		t.Fatalf("deps.edn missing Batteries coordinate: %s", deps)
+	}
+	ignored, err := os.ReadFile(filepath.Join(world.ConfigDir, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(ignored), "config.local.json\ndeps.local.edn\ninit.local.clj\n"; got != want {
+		t.Fatalf("unexpected workspace ignore template: got %q want %q", got, want)
+	}
+	for _, name := range []string{"deps.local.edn", "init.local.clj", "spools.edn", "spools.local.edn"} {
+		if _, err := os.Stat(filepath.Join(world.ConfigDir, name)); !os.IsNotExist(err) {
+			t.Fatalf("bootstrap must not create %s: %v", name, err)
+		}
+	}
+}
+
+func TestBootstrapNeverOverwritesDependencyOrActivationOverlays(t *testing.T) {
+	directory := t.TempDir()
+	worldPath := filepath.Join(directory, "world")
+	if err := os.MkdirAll(worldPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"deps.edn", "deps.local.edn", "init.local.clj"} {
+		if err := os.WriteFile(filepath.Join(worldPath, name), []byte(name+" sentinel\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := bootstrapWorld(directory, worldPath, "", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"deps.edn", "deps.local.edn", "init.local.clj"} {
+		content, err := os.ReadFile(filepath.Join(worldPath, name))
+		if err != nil || string(content) != name+" sentinel\n" {
+			t.Fatalf("bootstrap overwrote %s: content=%q err=%v", name, content, err)
+		}
+	}
+}
+
 func TestEnsureAgentGuidanceIdempotent(t *testing.T) {
 	d := t.TempDir()
 	path := filepath.Join(d, "AGENTS.md")

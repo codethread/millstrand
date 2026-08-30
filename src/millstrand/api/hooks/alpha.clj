@@ -179,7 +179,7 @@
   so this guards the direct-registration path against typos without freezing
   a resolved value into the entry."
   [runtime fn-sym]
-  (let [resolved (access/with-spool-classloader runtime #(requiring-resolve fn-sym))
+  (let [resolved (access/with-generation-classloader runtime #(requiring-resolve fn-sym))
         value (if (var? resolved) @resolved resolved)]
     (when-not (ifn? value)
       (throw (ex-info "Hook symbol must resolve to a callable value"

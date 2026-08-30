@@ -5,17 +5,19 @@
             [clojure.test :refer [deftest is testing]]
             [nrepl.cmdline]
             [nrepl.core :as nrepl]
+            [millstrand.api.current.alpha :as current]
             [millstrand.api.events.alpha :as events]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.hooks.alpha :as hooks]
             [millstrand.api.patterns.alpha :as patterns]
             [millstrand.api.weaver.alpha :as weaver]
             [millstrand.core.client :as client]
-            [millstrand.core.weaver.runtime :as weaver-runtime]
             [millstrand.core.db-test :as db-test]
+            [millstrand.core.weaver.metadata :as metadata]
             [millstrand.repl :as repl]
             [millstrand.source-file :as source-file]
-            [millstrand.spools.test-support :as test-support]))
+            [millstrand.spools.test-support :as test-support]
+            [millstrand.test.alpha :as test-alpha]))
 
 (defn reset-open-state! []
   (reset! (var-get (ns-resolve 'millstrand.repl 'active-config-dir))
@@ -66,16 +68,16 @@
   ([f]
    (with-runtime {} f))
   ([opts f]
-   (let [db-file (db-test/temp-db-file)
-         config-dir (test-support/temp-dir "millstrand-repl")
-         world (test-support/test-world config-dir)
-         rt (weaver-runtime/start! db-file (merge {:world world} opts))]
-     (try
-       (f rt db-file)
-       (finally
-         (reset-open-state!)
-         (weaver-runtime/stop! rt)
-         (db-test/delete-sqlite-family! db-file))))))
+   (let [bind-runtime? (get opts :bind-runtime? true)
+         fixture-opts (dissoc opts :bind-runtime?)]
+     (test-alpha/with-weaver-world [ctx fixture-opts]
+       (try
+         (if bind-runtime?
+           (current/with-runtime* (:runtime ctx)
+             #(f (:runtime ctx) (:db-path ctx)))
+           (f (:runtime ctx) (:db-path ctx)))
+         (finally
+           (reset-open-state!)))))))
 
 (deftest connected-accessors-fail-before-connect
   (reset-open-state!)
@@ -116,7 +118,6 @@
 
 (deftest failed-connect-clears-previous-selection
   (with-runtime
-    {:publish? false}
     (fn [rt db-file]
       (repl/connect! (:config-dir (:metadata rt)))
       (spit db-file "not a config dir")
@@ -136,7 +137,6 @@
 
 (deftest explicit-connected-stdin-main-drives-the-weaver-over-the-client-bridge
   (with-runtime
-    {:publish? false}
     (fn [rt _]
       (let [out (java.io.StringWriter.)]
         (binding [*in* (java.io.StringReader.
@@ -159,21 +159,24 @@
           (is (= {:database "initialized"} (read-string (nth lines 2))))
           (is (= [] (read-string (nth lines 3)))))))))
 
-(deftest stdin-session-can-reach-the-registration-verbs-through-the-repl-alias
+(deftest attached-stdin-session-can-reach-the-registration-verbs-through-the-repl-alias
   (with-runtime
     (fn [rt _]
-      (let [out (java.io.StringWriter.)]
+      (let [{:keys [endpoint]} (:metadata rt)
+            out (java.io.StringWriter.)]
         (binding [*in* (java.io.StringReader.
                         (source-file/render-forms
                          ['(repl/register-query! 'session-query [:= [:attr :owner] "agent"])
                           '(repl/unregister-query! 'session-query)]))
                   *out* out
                   *err* (java.io.StringWriter.)]
-          (repl/-main "--stdin" (:config-dir (:metadata rt))))
+          ((ns-resolve 'millstrand.repl 'attach-stdin!)
+           (:host endpoint)
+           (str (:port endpoint))))
         (let [lines (str/split-lines (str out))]
           (is (= 2 (count lines)))
           (is (= {"session-query" [:= [:attr :owner] "agent"]} (read-string (first lines)))
-              "the session bootstrap aliases millstrand.repl as repl without an explicit require")
+              "the attached session bootstrap aliases millstrand.repl as repl without an explicit require")
           (is (= {:unregistered "session-query"} (read-string (second lines)))))))))
 
 (deftest attach-stdin-evaluates-inside-weaver-jvm
@@ -181,7 +184,7 @@
     (fn [rt _]
       (let [{:keys [endpoint]} (:metadata rt)
             out (java.io.StringWriter.)]
-        (binding [*in* (java.io.StringReader. "(str *ns*)\n(+ 1 2)\n(str \"a\" \"b\")\n@millstrand.core.weaver.runtime/current-runtime\n")
+        (binding [*in* (java.io.StringReader. "(str *ns*)\n(+ 1 2)\n(str \"a\" \"b\")\n(millstrand.api.current.alpha/runtime)\n")
                   *out* out
                   *err* (java.io.StringWriter.)]
           ((ns-resolve 'millstrand.repl 'attach-stdin!) (:host endpoint) (str (:port endpoint))))
@@ -207,7 +210,6 @@
 
 (deftest attach-repl-delegates-to-helper-ready-nrepl-client-repl
   (with-runtime
-    {:publish? false}
     (fn [rt _]
       (let [{:keys [endpoint]} (:metadata rt)
             calls (atom [])
@@ -242,36 +244,42 @@
         (is (fn? (get-in (first @calls) [:options :prompt])))
         (is (not (str/includes? (str out) "15")))))))
 
-(deftest runtime-api-works-from-explicit-connected-stdin-main
-  (with-runtime
-    (fn [rt _]
-      (let [out (java.io.StringWriter.)]
+(deftest attached-stdin-session-exposes-the-runtime-api
+  (test-alpha/with-weaver-world
+    [ctx {:deps-edn "{:deps {org.clojure/tools.deps {:mvn/version \"0.31.1642\"}}}\n"}]
+    (try
+      (let [rt (:runtime ctx)
+            {:keys [endpoint]} (:metadata rt)
+            out (java.io.StringWriter.)]
         (binding [*in* (java.io.StringReader.
                         (source-file/render-forms
                          ['(require '[millstrand.api.current.alpha :as current]
                                     '[millstrand.api.runtime.alpha :as runtime])
                           '(def rt (current/runtime))
-                          '(runtime/approved rt)
                           '(runtime/status rt)
                           '(runtime/plan rt)]))
                   *out* out
                   *err* (java.io.StringWriter.)
                   *ns* (the-ns 'user)]
-          (repl/-main "--stdin" (:config-dir (:metadata rt))))
+          ((ns-resolve 'millstrand.repl 'attach-stdin!)
+           (:host endpoint)
+           (str (:port endpoint))))
         (let [lines (str/split-lines (str out))
-              status (read-string (nth lines 3))
-              plan (read-string (nth lines 4))]
-          (is (= 5 (count lines)))
-          (is (= {:spools {} :families {}} (read-string (nth lines 2))))
+              status (read-string (nth lines 2))
+              plan (read-string (nth lines 3))]
+          (is (= 4 (count lines)))
           (is (= {:modules {}
-                  :root/outcomes {}
-                  :pending-generation nil}
-                 (select-keys status [:modules :root/outcomes :pending-generation])))
+                  :resources {}}
+                 (select-keys status [:modules :resources])))
+          (is (vector? (:loaded-namespaces status)))
+          (is (string? (:basis-fingerprint status)))
           (is (= {:status :unchanged :mode :full}
                  (select-keys (:last-refresh status) [:status :mode])))
           (is (= {:status :unchanged :mode :full :dry-run? true}
                  (select-keys plan [:status :mode :dry-run?])))
-          (is (str/includes? (:caveat plan) "No registry publication")))))))
+          (is (str/includes? (:caveat plan) "No registry publication"))))
+      (finally
+        (reset-open-state!)))))
 
 (deftest burn-tombstone-reads-use-in-process-datasource
   (with-runtime
@@ -359,23 +367,30 @@
         (is (nil? (get (events/handlers rt) :wrap-handler)))))))
 
 (deftest registered-queries-last-only-for-the-weaver-lifetime
-  (with-runtime
-    (fn [rt db-file]
-      (reset-open-state!)
-      (is (= {"mine" [:= [:attr :owner] "agent"]}
-             (repl/register-query! :mine [:= [:attr :owner] "agent"])))
-      (is (= {"mine" [:= [:attr :owner] "agent"]} (graph/queries rt)))
-      (weaver-runtime/stop! rt)
-      (let [fresh-rt (weaver-runtime/start! db-file
-                                            {:world (test-support/test-world (:config-dir (:metadata rt)))})]
-        (try
-          (is (= {} (graph/queries fresh-rt))
-              "SPEC-003.C12: the registry is weaver-lifetime, not durable")
-          (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                                #"Query not registered; cannot replace"
-                                (repl/replace-query! :mine [:= [:attr :owner] "human"])))
-          (finally
-            (weaver-runtime/stop! fresh-rt)))))))
+  (let [root (test-support/temp-dir "millstrand-repl-query-lifetime")]
+    (try
+      (test-alpha/with-weaver-world [ctx {:root root}]
+        (current/with-runtime*
+          (:runtime ctx)
+          #(do
+             (reset-open-state!)
+             (is (= {"mine" [:= [:attr :owner] "agent"]}
+                    (repl/register-query! :mine [:= [:attr :owner] "agent"])))
+             (is (= {"mine" [:= [:attr :owner] "agent"]}
+                    (graph/queries (:runtime ctx)))))))
+      (test-alpha/with-weaver-world [ctx {:root root}]
+        (let [fresh-rt (:runtime ctx)]
+          (current/with-runtime*
+            fresh-rt
+            #(do
+               (is (= {} (graph/queries fresh-rt))
+                   "SPEC-003.C12: the registry is weaver-lifetime, not durable")
+               (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                     #"Query not registered; cannot replace"
+                                     (repl/replace-query! :mine [:= [:attr :owner] "human"])))))))
+      (finally
+        (reset-open-state!)
+        (test-support/delete-tree! root)))))
 
 (deftest registration-wrappers-are-in-process-only
   (reset-open-state!)
@@ -389,7 +404,7 @@
                         #"neither a runtime nor a `connect!` selection"
                         (repl/unregister-hook! :nope)))
   (with-runtime
-    {:publish? false}
+    {:bind-runtime? false}
     (fn [rt _db-file]
       (repl/connect! (:config-dir (:metadata rt)))
       (try
@@ -406,20 +421,15 @@
           (reset-open-state!))))))
 
 (deftest client-bridge-fails-loudly-when-the-selected-weaver-goes-away
-  (let [db-file (db-test/temp-db-file)
-        config-dir (str "/tmp/td-" (java.util.UUID/randomUUID))]
-    (.mkdirs (java.io.File. config-dir))
-    (let [world (test-support/test-world config-dir)
-          rt (weaver-runtime/start! db-file {:world world})]
+  (with-runtime
+    (fn [rt _]
       (try
         (repl/connect! (:config-dir (:metadata rt)))
-        (weaver-runtime/stop! rt)
+        (metadata/delete! (:metadata rt))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"metadata is missing or stale"
                               (client/call-world (repl/connected-config-dir)
                                                  (repl/connected-opts)
                                                  :list)))
         (finally
-          (reset-open-state!)
-          (weaver-runtime/stop! rt)
-          (db-test/delete-sqlite-family! db-file))))))
+          (reset-open-state!))))))

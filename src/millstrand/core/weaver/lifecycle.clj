@@ -67,14 +67,14 @@
   captured callable. An unresolvable symbol fails loudly and surfaces
   through the standard `hook/failed` wrapper."
   [runtime {fn-sym :fn}]
-  (or (access/with-spool-classloader runtime #(requiring-resolve fn-sym))
+  (or (access/with-generation-classloader runtime #(requiring-resolve fn-sym))
       (throw (ex-info "Hook function symbol cannot be resolved"
                       {:code "hook/unresolvable" :hook/fn fn-sym}))))
 
 (defn- invoke-hook! [runtime hook-type hook ctx]
   (try
     (let [callable (hook-callable runtime hook)]
-      (access/with-spool-classloader runtime #(callable ctx)))
+      (access/with-generation-classloader runtime #(callable ctx)))
     (catch Throwable t
       (throw (ex-info "Lifecycle hook failed"
                       (hook-failure-data hook-type hook t)
@@ -114,7 +114,7 @@
        hook-type
        hook
        (let [callable (hook-callable runtime hook)]
-         (access/with-spool-classloader runtime #(callable ctx))))))
+         (access/with-generation-classloader runtime #(callable ctx))))))
     (catch Throwable t
       (throw (ex-info "Lifecycle hook failed"
                       (hook-failure-data hook-type hook t)

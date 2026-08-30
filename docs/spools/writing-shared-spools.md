@@ -256,7 +256,7 @@ backs it with the duplicate-owner check: if two owners claim the same namespace,
 
 Every reference spool builds on two small blessed helper namespaces, `millstrand.api.spool.alpha` and
 `millstrand.api.format.alpha`. Both are source-visible on the Millstrand checkout/classpath — require them
-directly, no `spools.edn` approval needed. They are part of the spool-authoring contract only where
+directly. They are part of the spool-authoring contract only where
 this guide documents them; prefer them over local copies when writing a shared spool.
 
 ### `millstrand.api.spool.alpha`
@@ -383,13 +383,7 @@ Ordering is safe: module publication does not run the direct-registration glossa
 
 ### The `:about`/`:prime` metadata shape is a compatibility boundary
 
-Moving a spool from an `about`/`prime` *subcommand* to `:about`/`:prime` *op-metadata* changes the
-shape consumers see and raises the Millstrand API floor your spool needs. Treat it as a breaking change:
-ship it under a new release marker and, where relevant, an updated `:millstrand/min` floor, per
-[Versioning and release](#versioning-and-release). Until an op migrates, a declared `about`/`prime`
-subcommand still resolves via `<op> about` while `strand about <op>` returns `discovery/unavailable`
-for that op — the two surfaces are distinct, so migrate the whole op in one release rather than
-straddling both.
+Moving a spool from an `about`/`prime` *subcommand* to `:about`/`:prime` *op-metadata* changes the shape consumers see. Treat it as a contract change and release it with corresponding consumer and test updates, per [Dependencies and release](#dependencies-and-release). Until an op migrates, a declared `about`/`prime` subcommand still resolves via `<op> about` while `strand about <op>` returns `discovery/unavailable` for that op — the two surfaces are distinct, so migrate the whole op in one release rather than straddling both.
 
 ## CLI style
 
@@ -407,238 +401,45 @@ applies to shared-spool CLIs.
 - Prefer one op with declared subcommands for a cohesive multi-verb domain. Compose deeper verb trees from flat `def` node blocks, reusing a node where more than one parent needs the same leaf. Keep single-purpose projections and config-registered ops flat.
 - Before a `v1` promise, a vocabulary correction may be a clear cut under
   TEN-000@1. After `v1`, keep the old contract and publish the correction under a
-  new name as described in [Versioning and release](#versioning-and-release).
+  new name as described in [Dependencies and release](#dependencies-and-release).
 
 Every text-bearing flag or positional MUST use the declared arg-spec parser so whole-value `:stdin` and `:payload/<name>` references resolve.
 
-## Versioning and release
+## Dependencies and release
 
-### Publishing a shared spool with git distribution
+A shared spool repository exposes ordinary tools.deps library coordinates. Publish each public library under its own lib symbol using the coordinate forms supported by tools.deps. Consumers place shared coordinates in `deps.edn` and developer-only replacements in `deps.local.edn`.
 
-A spool repository is one release unit. Approve it once in `spools.edn`, at one commit, and map each library root to its path in that checkout:
+Pin Git coordinates with an immutable SHA. Tags may help humans choose a revision, but Millstrand assigns them no marker or compatibility-floor semantics. Maven version selection, exclusions, overrides, local roots, and Git dependencies use ordinary tools.deps behavior.
 
-```clojure
-{:spools
- {acme/priority-spool
-  {:git/url "https://github.com/acme/priority.spool.git"
-   :git/tag "v3"
-   :git/sha "0123456789abcdef0123456789abcdef01234567"
-   :roots {acme/priority "priority"
-           acme/reports "reports"}
-   :requires {acme.spools/workflow "v2"}
-   :millstrand/min "v1"}}}
-```
+A dependency only makes code available to a Weaver generation. It never activates a module. Consumers activate each module explicitly in `init.clj` or `init.local.clj`.
 
-This family shape makes mixed generations of roots from one repository unrepresentable. `:git/sha`
-is the consent boundary: it names the exact source a consumer agreed to run. `:git/tag` is an
-ordered release marker of the form `v<int>`, with no SemVer range or resolver semantics. Releases
-use annotated tags. An annotated tag has a tag-object sha and a peeled commit sha; `:git/sha` must
-be the peeled commit reported as `refs/tags/vN^{}` by `git ls-remote`.
+When either dependency file or a selected alias changes, `runtime/refresh!` compares the candidate basis with the running fingerprint and returns `:restart-required` without applying staged activation changes. The replacement generation resolves and adopts the new basis. Millstrand does not mutate coordinates in the running classloader.
 
-A work-in-progress repository is untagged and can only be sha-pinned. Floors cannot target it, and
-the missing `:git/tag` in a consumer file is the visible nudge that no promise exists yet. Authors
-may use labels such as `alpha-3` for humans, but those labels are mechanically inert. The marker
-parser rejects them. `v0` is reserved and rejected.
-
-`v1` is the smallest promise: from here, breaks take new names. It carries none of SemVer 1.0's
-baggage. Later markers record release order, not degrees of compatibility.
-
-### Consumer-file validation
-
-Core validates the whole effective consumer file before materializing a family. Shape and marker
-errors fail first. `:claims "vN"` on a `spools.local.edn` family means the local checkout preserves
-that family's published contracts through marker `vN`. Choose the greatest published marker whose
-[compatibility alarm](#compatibility-alarm) passes against the checkout. Core requires the claim on
-every local family overlay and uses it as that family's pin for `:requires` floor validation.
-
-Requirement failures share the exception reason
-`:spool-requirements-unsatisfied` and appear in `:findings` as:
-
-- `:pin-below-minimum` when an approved family's `:git/tag` or local overlay `:claims` is below a
-  `:requires` floor;
-- `:required-root-not-approved` when no approved family supplies the required root;
-- `:required-root-unmarked` when the family supplying the root has no effective marker, including an
-  untagged Git family or a shared local family;
-- `:millstrand-below-minimum` when the running Millstrand release marker is below `:millstrand/min`.
-
-Pin suggestions contain the greatest minimum found for each below-floor family. There is no
-suggestion for an unapproved or unmarked root. A root lib may belong to only one family; duplicate
-ownership fails with `:reason :duplicate-spool-root` and names the root lib and its owning families.
-
-The public runtime validates `:millstrand/min` against its running release marker. If any family declares
-that floor while the running core has no annotated release marker or explicit startup claim,
-`approved` and refresh acquisition refuse with `:reason :release-marker-unavailable`, the declared floors, and a
-remedy to start the runtime with a release-marker claim. An unmarked core never treats those floors
-as satisfied.
-
-### Accretion under a name
-
-Keep every published name accretion-only. The classification rule is exact:
-
-> rejecting input the published contract accepted is breaking even when it improves validation;
-> rejecting what the contract declared invalid is a fix.
-
-A new optional key, function, op, or root is accretion. Removing a case, changing a default, making
-an optional field required, changing an accepted type, or giving an old name new behavior is a
-break. Name contracts, not broad concepts: `capture-on!` says what changed more clearly than a
-generic `capture-v2!`. When a whole model needs the same concept name and no contract-specific name
-fits, use a numeric suffix such as `notebook2`; do not mix `next`, `new`, dates, and release-marker
-suffixes for the same purpose.
-
-The rename cost depends on the surface:
-
-| Broken surface | What gets a new name | Cost to callers |
-| --- | --- | --- |
-| Function | A fresh function in the same namespace | Small: call sites opt into the new contract. |
-| Registered op or CLI verb | A new op or subcommand; the old one stays registered | Scripts, help text, and automation must opt in. |
-| Attribute vocabulary | A new namespaced key or value vocabulary | Highest: persisted rows, queries, and contributing spools need an explicit migration boundary. |
-
-Escalate only as far as the break reaches:
-
-1. For one function contract, add a function name. Keep `capture!` unchanged and add
-   `capture-on!`; changing `capture!` from two arguments to three would break its old callers.
-2. When a namespace model changes, add a sibling root in the same repository. A family may keep
-   `records` and add `records2`; adding the root is accretion at family level.
-3. When the whole concept changes, start a repository and family. This should be rare.
-
-A sibling root should provide a complete contract for its task. Consumers may load old and new roots while
-migrating, but should not mix their requires to assemble one job. Give every public var in the new
-root a fresh `defn` and its own docstring. Do not re-export vars with `(def f old/f)` or Potemkin:
-arglists, docs, and source navigation must describe the new contract. Bodies may delegate.
-
-Share internal namespaces while the compatibility alarm runs old tests against the whole working
-tree. When the old contract can use the new implementation, put the implementation in the new root
-and keep fresh wrappers in the old root.
-
-Floor raises in `:requires` or `:millstrand/min` are not breaks. They constrain which release families
-may be assembled; they do not change a published name's input contract. Raise a floor only with
-evidence from tests at that floor.
-
-### Compatibility alarm
-
-Keep `bin/compat-alarm` in the spool repository. It takes a previous marker, extracts that release's
-tests, and runs them against the working tree. The
-[agent-harness.spool alarm](https://github.com/codethread/agent-harness.spool/blob/d01e6ce6555d370dc5c9e4e0371cdabe10fab491/bin/compat-alarm)
-is a shipped example.
-
-`v1` has no previous marker, so its release gate is the current test suite only. Start running the
-previous-marker alarm when cutting `v2`.
-
-The alarm catches behavior covered by the old suite; it does not classify changes or prove
-compatibility. Authors still apply the contract rule above. Core validation has a different job: it
-refuses family pins below declared floors and roots the consumer has not approved. A helper may run
-the alarm before writing a bump, but the floor validator stays offline and never selects or fetches
-a newer release.
-
-### Author tests
-
-Test two different facts:
-
-1. Classpath tests prove each declared floor. Pin required roots and Millstrand at exactly the markers in
-   `:requires` and `:millstrand/min`, not at newer convenient releases. A floor raise and its test-pin
-   bump belong in one commit. A small in-repo check may resolve markers with `git ls-remote` and
-   verify that those pins match the declared floors; this is helper or repository policy, not core.
-2. Runtime integration tests prove the consumer path. Keep a literal consumer-workspace fixture
-   whose `spools.edn` pins the spool family and its requirements. A fixture `spools.local.edn`
-   overrides the family with `:local/root` plus `:claims "vN"`. Sync them in an embedded runtime
-   with `:publish? false`.
-
-For cross-repository work, a tools.deps `:sibling` alias should override the same dependency that a
-gitignored `spools.local.edn` family override replaces. The local family entry carries `:claims
-"vN"`; the alias uses `:override-deps`. This symmetry lets both test tiers exercise the same sibling
-checkout without weakening the committed floors. The runtime tier must execute its fixture through
-an embedded unpublished runtime; committing the files alone does not prove the consumer path.
-
-### Open attribute vocabularies
-
-Composition across release skew works best through open, namespaced attributes. Declare the
-namespace owner and document each key's contract. A renderer must render unknown contributors in
-that vocabulary instead of rejecting a closed set of contributor names. A spool may then add
-`journal.section/daily-update` without a release of the journal spool.
-
-Two domain spools can compose through a shared relation such as `:subagent`: each spool owns its behavior while the shared graph vocabulary carries the connection. This is an extension
-point, not permission to mint keys in another spool's namespace; coordinate the vocabulary contract
-with its owner.
-
-### Release and bump sequence
-
-Sha pins let producer and consumer repositories land independently:
-
-1. In the producer, make the change accretive or give the broken surface a new name. For `v1`, run
-   current tests only. From `v2`, also run `bin/compat-alarm` against the previous marker.
-2. Update `spool.edn` floors and their test pins together when a floor changes. Commit, create the
-   next annotated `v<int>` tag, push it, and obtain its peeled commit sha.
-3. In each consumer, change `:git/tag` and `:git/sha` atomically. Add a new root mapping only when
-   opting into that root. Validate the whole consumer file before loading or landing the bump.
-4. Land downstream changes in dependency order. Every unchanged consumer remains on its old sha;
-   no upstream push can alter it.
-
-If a consumer uses a new name, its code and family-entry bump land together. Do not delete the old
-name as cleanup: pinned consumers may still rely on it, and bump-time validation is the place to
-refuse a release that no longer contains an approved root.
-
-### Nested-spool prerequisites
-
-A repository that contains several spool roots gets one Git family entry. Use one sha-pinned Git
-coordinate, then map each approved library to its relative path with `:roots`. A local checkout
-overrides that Git family through `spools.local.edn` and inherits its root map. A requiring spool
-names the library root and floor in `:requires`; the consumer adds or bumps the family that owns
-that root. Do not create a separate `:deps/root` coordinate for each nested root.
-
-### Optional producer manifest (`spool.edn`)
-
-Authors may publish the singular advisory manifest `spool.edn` at the repository root. It is
-distinct from the consumer's plural `spools.edn`:
-
-```clojure
-{:spool/format 1
- :millstrand/min "v1"
- :roots {acme/priority {:root "priority"}
-         acme/reports {:root "reports"}}
- :requires {acme.spools/workflow "v2"}}
-```
-
-The pinned
-[agent-harness.spool manifest](https://github.com/codethread/agent-harness.spool/blob/d01e6ce6555d370dc5c9e4e0371cdabe10fab491/spool.edn)
-is a real multi-root example. A single-root consumer coordinate supplies one root at `"."` by default.
-
-This follows the package.el split. Authoring helpers may read it to prepare a consumer family entry;
-the core loader never reads it. The committed `spools.edn` remains the consumer's explicit consent
-record and the only input to load-boundary validation. A README should still show the full family
-entry and activation order, so a consumer can review what a helper would write. No prerequisite is
-fetched transitively.
-
-Core enforces load-boundary checks. Authoring helpers, including the batteries `spool add` and `spool bump` verbs, help users write entries that pass those checks. Userland may replace the helpers, but not the checks.
-
-If a prerequisite is a blessed `millstrand.api.*.alpha` namespace, document the namespace and why it is required but do not invent a family coordinate for it; blessed API namespaces ship on the selected Millstrand classpath. Batteries is different: it is an ordinary approved root, normally present through the `millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}` entry seeded by `mill init`. Name that root in the module's `:spools` prerequisites when the module needs batteries, and use `:after` when it depends on the batteries module's published contribution. Every external source repository still gets its own family entry.
+Release changes with tests at the exact coordinates consumers will use. Keep public names accretive when compatibility matters, and coordinate deliberate breaks across consumers. Millstrand adds no family manifest, root map, release floor, producer manifest, compatibility alarm, or package-operation contract.
 
 ## Activating a module
 
-A module is one unit of activation, and its contract is split across three surfaces that different people own:
-
-- The consumer's `runtime/module!` call is activation data: which source to load, which approved roots it needs, and how loudly to fail without them. It names no functions.
-- Contribution forms publish registry data. Lifecycle forms declare live effects.
+The consumer owns activation. A module declaration names exactly one `:ns` or selected-workspace-relative `:file`, plus optional `:load :image`, `:after`, and `:required?` policy. It contains no dependency coordinates.
 
 ### README activation snippet
 
-Include an **Activation** section with the complete trusted `init.clj` snippet.
-
-The consumer owns the runtime and declares modules explicitly. The option map is closed, and every key in it is activation data: exactly one source target (`:ns` namespace symbol or workspace-relative `:file` string), plus optional `:load :image`, `:spools` for every approved root prerequisite, `:after` when one module must follow another, and `:required?` for a loud missing-prerequisite refusal. It never carries `:contribute` or `:reconcile`; a declaration naming either withdrawn key is refused with guidance to use authoring forms.
+Show both steps:
 
 ```clojure
-;; .millstrand/init.clj — the consumer's trusted config
+;; deps.edn
+{:deps {acme/priority {:git/url "https://github.com/acme/priority.spool"
+                       :git/sha "0123456789abcdef0123456789abcdef01234567"}}}
+```
+
+```clojure
+;; init.clj
 (require '[millstrand.api.current.alpha :as current]
          '[millstrand.api.runtime.alpha :as runtime])
 
-(def rt (current/runtime))
-
-(runtime/module! rt :acme/priority
-  {:ns 'acme.priority.alpha
-   :spools ['acme/priority]
-   :required? true})
+(runtime/module! (current/runtime) :acme/priority {:ns 'acme.priority})
 ```
 
-Under `:required? true`, missing or failed root prerequisites refuse refresh. Namespace loading, contribution publication, and lifecycle failures are reported in the joined refresh result and `runtime/status`.
+State plainly that the coordinate does not activate the module and that dependency edits require generation replacement.
 
 ### Author contributions with kind-specific forms
 
@@ -938,105 +739,22 @@ The declaration is trusted config, running in `.millstrand/init.clj` after `rt` 
 
 A file with no namespace may still collect authoring forms. A public `spool` var is rejected in either form.
 
-## Maven dependencies in a spool root
+## Spool dependencies and local development
 
-A spool root may declare ordinary JVM library dependencies in its top-level `deps.edn :deps`. Those
-dependencies are loaded into the live weaver during refresh with the same runtime dependency path
-used for spool roots. Runtime loading is weaver-wide: there is no per-spool dependency isolation and
-no unload semantics.
+Put every library dependency in the spool repository's own `deps.edn` using ordinary tools.deps coordinates. Consumers depend on the spool library; they do not copy its transitive dependencies into workspace configuration.
 
-The policy is intentionally narrow:
-
-- The rule applies to every approved spool root: Git, local, or `:millstrand/source-root`, from shared `spools.edn` or gitignored `spools.local.edn`.
-- Every `:deps` entry must be a Maven coordinate map containing `:mvn/version`.
-- Source-bearing coordinates are rejected in spool-root `deps.edn :deps`, including `:git/url`, `:git/sha`, `:local/root`, and `:millstrand/source-root`. If a spool composes with another source root, document that root's repository as a family entry in `spools.edn`.
-- Mutable Maven versions are rejected: no `-SNAPSHOT`, `RELEASE`, or `LATEST`.
-- Repo redirection is rejected: no top-level `:mvn/repos` or `:mvn/local-repo`
-  in the spool root.
-- Standard Maven refinement keys such as `:exclusions`, `:classifier`, and
-  `:extension` are allowed alongside `:mvn/version`.
-- Aliases and other non-rejected top-level keys are ignored by refresh acquisition; no alias
-  activation participates in the spool contract.
-
-Example:
+For local development, replace the shared lib in the workspace's gitignored `deps.local.edn`. Keep the lib symbol the same so activation files do not need a package-specific branch.
 
 ```clojure
-;; deps.edn inside the spool root
-{:paths ["src"]
- :deps {camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.3"}}}
+;; deps.local.edn
+{:deps {acme/priority {:local/root "../priority.spool"}}}
 ```
 
-Refresh acquisition resolves all approved spool Maven deps as one universe. If two roots
-declare the same Maven lib with different coordinates, the whole acquisition fails and
-names the lib, roots, and coordinates. Pin that lib with a top-level
-`:mvn-overrides` map in `spools.edn` or `spools.local.edn`:
-
-```clojure
-{:spools {acme/a {:local/root "spools/a"}
-          acme/b {:local/root "spools/b"}}
- :mvn-overrides {camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.3"}}}
-```
-
-Overrides are overlaid shared-then-local like `:spools` and use the same
-Maven-only policy as spool-root `:deps`: Maven coordinates only, no mutable
-versions, and no source-bearing coordinate keys.
-
-## Local development overrides
-
-Use the same family coordinate in shared `spools.edn` and gitignored `spools.local.edn` to develop
-against a checkout while other users stay pinned to the git sha. Local entries overlay shared
-entries by coordinate and must claim the release contract they preserve.
-
-Shared `spools.edn`:
-
-```clojure
-{:spools
- {acme/priority-spool
-  {:git/url "https://github.com/acme/millstrand-priority-spool.git"
-   :git/sha "0123456789abcdef0123456789abcdef01234567"
-   :git/tag "v3"
-   :roots {acme/priority "priority"
-           acme/reports "reports"}}}}
-```
-
-Developer-only `spools.local.edn`:
-
-```clojure
-{:spools
- {acme/priority-spool
-  {:local/root "~/dev/projects/millstrand-priority-spool"
-   :claims "v3"}}}
-```
-
-The overlay inherits the base family's `:roots`, `:requires`, and `:millstrand/min`; it replaces the
-source coordinate. A missing `:claims` fails loudly. Run the local checkout's compatibility alarm
-against the claimed marker to check the claim. The Maven-only dependency policy still applies to
-every local override root.
-
-**Caution: refresh resolves the current approved Maven universe.** Each full refresh
-reads the roots approved at that moment, validates their `deps.edn` files, and
-resolves their Maven dependencies as one stateless universe. A root removed from
-`spools.edn` is simply absent from the next resolution; there is no retained
-root set to stub out. If a root is still approved but its directory was deleted
-or moved, that root reports a per-spool missing/unreadable failure until you
-update or restore the approved entry.
+A running generation cannot adopt that coordinate edit. Full refresh reports a basis change; start a replacement generation. Source edits to a selected-workspace-relative `:file` module remain live when `deps.edn` and `deps.local.edn` are unchanged.
 
 ## Test mechanics
 
-Floor-pinned producer tests use ordinary Clojure test tooling. Put the spool's roots in `:paths`,
-its tests in a `:test` alias, and each required root in `:extra-deps` at the peeled sha for its
-declared floor. Give the test namespace a `-main` that exits non-zero on failure so
-`clojure -M:test` works in CI.
-
-Consumer-workspace tests declare modules guarded by the roots approved in their fixture, then run
-refresh in the embedded runtime. The test JVM does not independently pin those spool roots in
-Millstrand's `deps.edn`.
-
-Use `millstrand.test.alpha/with-weaver-world` for the consumer-workspace tier and take the runtime it
-hands you explicitly. Reach for `millstrand.core.weaver.runtime/with-runtime-binding` only when a test
-must exercise userland code that resolves the ambient runtime, never the shared spool's own
-functions. The general fixture API and isolation rules live in [Testing your config and
-spools](./testing.md).
+Classpath tests cover pure functions and authoring forms. Runtime integration tests create a disposable workspace with mandatory `deps.edn`, optional `deps.local.edn`, shared `init.clj`, and optional `init.local.clj`. A test that claims dependency loading supplies both a coordinate and explicit activation. Use `spool-checkout-root` only to obtain a tools.deps `:local/root` path.
 
 ## The pattern pair
 
@@ -1091,11 +809,11 @@ Workspace-owned helper namespaces sit below this list. They may provide terse er
 - External/shared spool source namespaces use the author's org prefix; codethread
   spools use `ct.spools.<name>`. The `millstrand.*` prefix is reserved for source
   shipped by the Millstrand checkout. A source namespace is separate from the
-  `.millstrand/spools.edn` coordinate symbol, such as `codethread/<name>`.
+  tools.deps library symbol, such as `codethread/<name>`.
 
 ## Enforcement
 
-Shared-spool source must not require a workspace-owned helper or use its hidden runtime default. Local and third-party shared spools are held to that rule by review and this guide. If a distributed spool starts depending on workspace ergonomics, add a lint over approved roots at module refresh time that rejects the dependency.
+Shared-spool source must not require a workspace-owned helper or use its hidden runtime default. Local and third-party shared spools are held to that rule by review and this guide. If a distributed spool starts depending on workspace ergonomics, add a source lint in the spool repository that rejects the dependency.
 
 ## Unsafe spools
 
@@ -1143,13 +861,13 @@ A spool that ships or requires an unsafe namespace is **unsafe-carrying**, and i
 distribution unit inherits the breakage contract — encapsulation can hide a name one require-hop
 deep, but it cannot discharge upgrade breakage. A wholly unsafe spool therefore renames its
 directory and coordinate too (`unsafe-text-search`), so the contract is visible at the point of
-approval.
+activation.
 
 For spools shipped in this repo, the tier line is machine-enforced: `make lint` fails on any
 `millstrand.core.*` usage from a safe-named namespace under `spools/*/src`, on a stale unsafe name that
 touches no internals, on a safe namespace requiring another spool's unsafe namespace, and on a
 docstring whose `UNSAFE:` lead disagrees with the name (`quality.spool-tiers`). External spools are
 held to the convention by review and this guide; the tracked follow-ups are consumer consent in
-`spools.edn` (`:allow-unsafe #{ns-sym ...}` on an entry, checked at activation — sound because
+an explicit consumer policy checked at activation because
 spools have no transitive dependencies, so every classpath root has exactly one consent entry) and
 an author-side export of this lint for spool repos' own suites.

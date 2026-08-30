@@ -9,6 +9,7 @@
             [millstrand.api.current.alpha :as current]
             [millstrand.api.graph.alpha :as graph]
             [millstrand.api.weaver.alpha :as weaver]
+            [millstrand.core.weaver.basis :as basis]
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.runtime :as weaver-runtime]
@@ -24,6 +25,9 @@
 
 (def delete-tree! test-support/delete-tree!)
 
+(def ^:private basis-fingerprint
+  (str "sha256:" (str/join (repeat 64 "a"))))
+
 (defn temp-world []
   (let [root (java.io.File/createTempFile "tdx" "")]
     (.delete root)
@@ -32,16 +36,53 @@
           state-dir (io/file root "state")
           data-dir (io/file root "data")]
       (.mkdirs workspace)
+      (spit (io/file workspace "deps.edn") "{:paths []}\n")
       (weaver-config/world (.getCanonicalPath workspace)
                            (.getCanonicalPath state-dir)
                            (.getCanonicalPath data-dir)))))
+
+(defn- generation-basis
+  ([world] (generation-basis world []))
+  ([world classpath-roots]
+   (let [coordinate {:local/root (.getCanonicalPath (io/file "."))}
+         classpath-roots (mapv #(.getCanonicalPath (io/file %)) classpath-roots)
+         classloader (clojure.lang.DynamicClassLoader.
+                      (.getContextClassLoader (Thread/currentThread)))]
+     (doseq [root classpath-roots]
+       (.addURL classloader (.toURL (.toURI (io/file root)))))
+     {:sources [{:kind :project
+                 :path (.getCanonicalPath
+                        (io/file (:config-dir world) "deps.edn"))
+                 :deps {:paths []}}]
+      :aliases []
+      :reserved-deps {'io.millstrand/millstrand coordinate}
+      :basis {:libs {'io.millstrand/millstrand coordinate}
+              :classpath-roots classpath-roots
+              :argmap {}}
+      :fingerprint basis-fingerprint
+      :classloader classloader})))
+
+(defn- start-runtime! [db-file opts]
+  (let [world (:world opts)]
+    (weaver-runtime/start!
+     db-file
+     (assoc opts :generation-basis
+            (or (:generation-basis opts) (generation-basis world))))))
+
+(defn- fresh-runtime-probe! [world opts]
+  (binding [basis/*create-basis*
+            (fn [{:keys [project extra aliases args]}]
+              {:libs (merge (:deps project) (:deps extra) (:extra-deps args))
+               :classpath-roots []
+               :argmap {:aliases aliases}})]
+    (weaver-runtime/fresh-runtime-probe! world opts)))
 
 (defn with-runtime
   ([f] (with-runtime nil f))
   ([start-options f]
    (let [db-file (db-test/temp-db-file)
          world (or (:world start-options) (temp-world))
-         rt (weaver-runtime/start! db-file (assoc (or start-options {}) :world world :publish? false))]
+         rt (start-runtime! db-file (assoc (or start-options {}) :world world :publish? false))]
      (try
        (weaver-runtime/with-runtime-binding rt #(f rt db-file))
        (finally
@@ -92,7 +133,7 @@
 
 (deftest startup-uses-independent-xdg-world-dirs-and-initializes-storage
   (let [world (temp-world)
-        rt (weaver-runtime/start! nil {:world world :publish? false})]
+        rt (start-runtime! nil {:world world :publish? false})]
     (try
       (let [metadata (:metadata rt)]
         (is (= (:config-dir world) (:config-dir metadata)))
@@ -102,6 +143,13 @@
         (is (string? (:generation-id metadata)))
         (is (not (str/blank? (:generation-id metadata))))
         (is (= (:generation-id metadata) (:generation-id rt)))
+        (is (= (:basis-fingerprint rt) (:basis-fingerprint metadata)))
+        (is (= basis-fingerprint (:basis-fingerprint metadata)))
+        (is (= metadata (metadata/read-metadata world)))
+        (is (false? (metadata/valid-metadata?
+                     (dissoc metadata :basis-fingerprint))))
+        (is (false? (metadata/valid-metadata?
+                     (assoc metadata :basis-fingerprint "sha256:invalid"))))
         (is (.isFile (io/file (:state-dir world) "weaver.edn")))
         (is (.isFile (io/file (:state-dir world) "weaver.json")))
         (is (.exists (io/file (:state-dir world) "weaver.sock")))
@@ -114,7 +162,7 @@
 
 (deftest runtime-owns-a-file-storage-handle
   (let [world (temp-world)
-        rt (weaver-runtime/start! nil {:world world :publish? false})]
+        rt (start-runtime! nil {:world world :publish? false})]
     (try
       (let [storage (:storage rt)]
         (is (= :sqlite-file (:storage-kind storage)))
@@ -128,7 +176,7 @@
 
 (deftest memory-storage-runtime-serves-weaver-api-without-a-db-file
   (let [world (temp-world)
-        rt (weaver-runtime/start! nil {:world world :publish? false :storage :sqlite-memory})]
+        rt (start-runtime! nil {:world world :publish? false :storage :sqlite-memory})]
     (try
       (is (= :sqlite-memory (get-in rt [:storage :storage-kind])))
       (is (nil? (get-in rt [:storage :canonical-db-path])))
@@ -141,6 +189,8 @@
           (is (= "sqlite-memory" (get json-disk "database_kind")))
           (is (= (get-in rt [:metadata :storage-label]) (get json-disk "database_label")))
           (is (= (get-in rt [:metadata :generation-id]) (get json-disk "generation_id")))
+          (is (= (:basis-fingerprint rt)
+                 (get json-disk "basis_fingerprint")))
           (is (contains? json-disk "database_path"))
           (is (nil? (get json-disk "database_path"))))
         (let [status (socket-request rt "status" {})]
@@ -173,18 +223,19 @@
   (let [world (temp-world)]
     (try
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"does not take a database file"
-                            (weaver-runtime/start! (db-test/temp-db-file)
-                                                   {:world world :publish? false :storage :sqlite-memory})))
+                            (start-runtime! (db-test/temp-db-file)
+                                            {:world world :publish? false :storage :sqlite-memory})))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown weaver storage kind"
-                            (weaver-runtime/start! nil {:world world :publish? false :storage :postgres})))
+                            (start-runtime! nil {:world world :publish? false :storage :postgres})))
       (finally
         (delete-tree! (io/file (:config-dir world) ".."))))))
 
 (deftest fresh-runtime-probe-is-unpublished-and-cleans-success
   (let [world (temp-world)
         result (try
-                 (weaver-runtime/fresh-runtime-probe!
-                  world {:old-generation-baseline {:status :admitted :projection {}}})
+                 (fresh-runtime-probe!
+                  world {:old-generation-baseline {:status :admitted :projection {}}
+                         :generation-basis (generation-basis world)})
                  (finally
                    (delete-tree! (io/file (:config-dir world) ".."))))]
     (is (true? (:success result)))
@@ -196,35 +247,12 @@
     (is (not (.exists (io/file (:state-dir world) "weaver.json"))))
     (is (not (.exists (io/file (:data-dir world) "millstrand.sqlite"))))))
 
-(deftest fresh-runtime-probe-resolves-relative-local-root-from-selected-workspace
-  (let [world (temp-world)
-        workspace (:config-dir world)
-        root (io/file workspace ".." "probe-root")]
-    (try
-      (.mkdirs (io/file root "src"))
-      (spit (io/file workspace "spools.edn")
-            (pr-str {:spools {'test/probe-root {:local/root "../probe-root"}}}))
-      (spit (io/file root "deps.edn") "{:paths [\"src\"]}\n")
-      (spit (io/file root "src/probe_root.clj") "(ns test.probe-root)\n")
-      (let [result (weaver-runtime/fresh-runtime-probe!
-                    world {:old-generation-baseline
-                           {:status :admitted :projection {}}})]
-        (is (true? (:success result)) (pr-str result))
-        (is (= :probe/complete (:stage result)))
-        (let [sync-diagnostic (some #(when (= :spools/materialize (:stage %)) %)
-                                    (:diagnostics result))]
-          (is (= (.getCanonicalPath root)
-                 (get-in sync-diagnostic
-                         [:data :sync :spools 'test/probe-root :root])))))
-      (finally
-        (delete-tree! (io/file workspace ".."))))))
-
 (deftest runtime-rejects-invalid-source-config-dir-provenance
   (let [world (assoc (temp-world) :source-config-dir 42)]
     (try
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Weaver start options have an invalid shape"
-                            (weaver-runtime/start!
+                            (start-runtime!
                              nil {:world world
                                   :publish? false
                                   :storage :sqlite-memory})))
@@ -240,9 +268,10 @@
                                       {:success true
                                        :stage :probe/complete
                                        :probe/workspace "/foreign"})))]
-        (let [result (weaver-runtime/fresh-runtime-probe!
+        (let [result (fresh-runtime-probe!
                       world {:old-generation-baseline
-                             {:status :admitted :projection {}}})]
+                             {:status :admitted :projection {}}
+                             :generation-basis (generation-basis world)})]
           (is (false? (:success result)))
           (is (= :probe/failure (:stage result)))
           (is (not= "/foreign" (:probe/workspace result)))
@@ -381,9 +410,10 @@
                     (fn [root]
                       (throw (ex-info "probe cleanup seam" {:probe/workspace
                                                             (.getPath root)})))]
-        (let [result (weaver-runtime/fresh-runtime-probe!
+        (let [result (fresh-runtime-probe!
                       world {:old-generation-baseline
-                             {:status :admitted :projection {}}})]
+                             {:status :admitted :projection {}}
+                             :generation-basis (generation-basis world)})]
           (is (false? (:success result)))
           (is (= :probe/failure (:stage result)))
           (is (string? (:probe/workspace result)))
@@ -405,9 +435,10 @@
                       (fn [runtime]
                         (reset! stopped runtime)
                         (original-stop runtime))}
-                     #(weaver-runtime/fresh-runtime-probe!
+                     #(fresh-runtime-probe!
                        world {:old-generation-baseline
-                              {:status :admitted :projection {}}}))]
+                              {:status :admitted :projection {}}
+                              :generation-basis (generation-basis world)}))]
         (is (false? (:success result)))
         (is (= "post-start probe failure"
                (get-in result [:failure :message])))
@@ -419,11 +450,11 @@
 
 (deftest direct-probe-start-is-unpublished
   (let [world (temp-world)
-        rt (weaver-runtime/start! nil {:world world
-                                       :probe? true
-                                       :storage :sqlite-memory
-                                       :old-generation-baseline
-                                       {:status :admitted :projection {}}})]
+        rt (start-runtime! nil {:world world
+                                :probe? true
+                                :storage :sqlite-memory
+                                :old-generation-baseline
+                                {:status :admitted :projection {}}})]
     (try
       (is (nil? @weaver-runtime/current-runtime))
       (is (nil? (metadata/read-metadata world)))
@@ -433,12 +464,12 @@
 
 (deftest probe-preserves-live-metadata-preflight
   (let [world (temp-world)
-        rt (weaver-runtime/start! nil {:world world :publish? false})]
+        rt (start-runtime! nil {:world world :publish? false})]
     (try
       (let [failure (try
-                      (weaver-runtime/start! nil {:world world
-                                                  :probe? true
-                                                  :storage :sqlite-memory})
+                      (start-runtime! nil {:world world
+                                           :probe? true
+                                           :storage :sqlite-memory})
                       (catch Throwable t t))]
         (is (instance? clojure.lang.ExceptionInfo failure))
         (is (= :metadata-present (:reason (ex-data failure))))
@@ -453,9 +484,9 @@
       (.mkdirs (io/file (:state-dir world)))
       (spit (metadata/socket-file world) "orphan")
       (let [failure (try
-                      (weaver-runtime/start! nil {:world world
-                                                  :probe? true
-                                                  :storage :sqlite-memory})
+                      (start-runtime! nil {:world world
+                                           :probe? true
+                                           :storage :sqlite-memory})
                       (catch Throwable t t))]
         (is (instance? clojure.lang.ExceptionInfo failure))
         (is (= :orphaned-socket (:reason (ex-data failure))))
@@ -477,6 +508,7 @@
                 :canonical-db-path (metadata/canonical-db-path db-file)
                 :nonce "stale-generation"
                 :generation-id "generation-old"
+                :basis-fingerprint basis-fingerprint
                 :world world
                 :name "stale"
                 :started-at "2026-08-24T00:00:00Z"})
@@ -507,6 +539,7 @@
                 :canonical-db-path (metadata/canonical-db-path db-file)
                 :nonce "unknown-owner"
                 :generation-id "generation-unknown"
+                :basis-fingerprint basis-fingerprint
                 :world world
                 :name "unknown-owner"
                 :started-at "2026-08-24T00:00:00Z"})
@@ -537,7 +570,7 @@
                       (fn [_]
                         (deliver published true)
                         @release)]
-              (weaver-runtime/start! nil {:world world}))
+              (start-runtime! nil {:world world}))
             (catch Throwable t
               t)))]
     (try
@@ -546,7 +579,7 @@
       (let [admitted @weaver-runtime/current-runtime]
         (is admitted "candidate generation is ambiently admitted")
         (weaver-runtime/stop! admitted)
-        (let [replacement (weaver-runtime/start! nil {:world world})]
+        (let [replacement (start-runtime! nil {:world world})]
           (try
             (deliver release true)
             (let [failure (deref candidate (test-support/await-budget-ms) ::timed-out)]
@@ -581,12 +614,12 @@
                           (fn [_]
                             (deliver published true)
                             @release)]
-                  (weaver-runtime/start! nil {:world world :publish? false})))]
+                  (start-runtime! nil {:world world :publish? false})))]
     (try
       (is (true? (deref published (test-support/await-budget-ms) false))
           "first startup publishes before the overlapping preflight")
       (let [failure (try
-                      (weaver-runtime/start! nil {:world world :publish? false})
+                      (start-runtime! nil {:world world :publish? false})
                       (catch Throwable t t))]
         (is (instance? clojure.lang.ExceptionInfo failure))
         (is (= :metadata-present (:reason (ex-data failure))))
@@ -659,11 +692,11 @@
                   (throw (ex-info "fail after metadata publication" {})))]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"fail after metadata publication"
-                              (weaver-runtime/start! nil {:world world :publish? false}))))
+                              (start-runtime! nil {:world world :publish? false}))))
       (is (nil? (metadata/read-metadata world)))
       (is (false? (.exists (metadata/json-metadata-file world))))
       (is (false? (.exists (metadata/socket-file world))))
-      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+      (let [replacement (start-runtime! nil {:world world :publish? false})]
         (try
           (is (true? (get (socket-request replacement "status" {}) "ok")))
           (finally
@@ -681,11 +714,11 @@
                       (throw (ex-info "json metadata publication failed" {})))]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"json metadata publication failed"
-                              (weaver-runtime/start! nil {:world world :publish? false}))))
+                              (start-runtime! nil {:world world :publish? false}))))
       (is (nil? (metadata/read-metadata world)))
       (is (false? (.exists (metadata/json-metadata-file world))))
       (is (false? (.exists (metadata/socket-file world))))
-      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+      (let [replacement (start-runtime! nil {:world world :publish? false})]
         (try
           (is (true? (get (socket-request replacement "status" {}) "ok")))
           (finally
@@ -700,11 +733,11 @@
                                        (throw (ex-info "rearm failed before publication" {})))]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"rearm failed before publication"
-                              (weaver-runtime/start! nil {:world world :publish? false}))))
+                              (start-runtime! nil {:world world :publish? false}))))
       (is (nil? (metadata/read-metadata world)))
       (is (false? (.exists (metadata/json-metadata-file world))))
       (is (false? (.exists (metadata/socket-file world))))
-      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+      (let [replacement (start-runtime! nil {:world world :publish? false})]
         (try
           (is (true? (get (socket-request replacement "status" {}) "ok")))
           (finally
@@ -723,7 +756,7 @@
                close-storage (fn [_]
                                (throw (ex-info "storage close failure" {})))}
               #(try
-                 (weaver-runtime/start! nil {:world world :publish? false})
+                 (start-runtime! nil {:world world :publish? false})
                  (catch Throwable t t)))]
         (is (instance? clojure.lang.ExceptionInfo failure))
         (is (= "rearm primary failure" (ex-message failure)))
@@ -731,7 +764,7 @@
                   (.getSuppressed ^Throwable failure))))
       (is (nil? (metadata/read-metadata world)))
       (is (false? (.exists (metadata/socket-file world))))
-      (let [replacement (weaver-runtime/start! nil {:world world :publish? false})]
+      (let [replacement (start-runtime! nil {:world world :publish? false})]
         (try
           (is (true? (get (socket-request replacement "status" {}) "ok")))
           (finally
@@ -748,14 +781,14 @@
                           metadata/delete! (fn [_]
                                              (throw (ex-info "artifact delete failure" {})))]
               (try
-                (weaver-runtime/start! nil {:world world :publish? false})
+                (start-runtime! nil {:world world :publish? false})
                 (catch Throwable t t)))]
         (is (= "rearm primary failure" (ex-message failure)))
         (is (some #(and (= :artifacts/delete (:teardown/step (ex-data %)))
                         (= "artifact delete failure" (some-> % ex-cause ex-message)))
                   (.getSuppressed ^Throwable failure))))
       (metadata/delete! world)
-      (let [runtime (weaver-runtime/start! nil {:world world :publish? false})]
+      (let [runtime (start-runtime! nil {:world world :publish? false})]
         (try
           (is (true? (get (socket-request runtime "status" {}) "ok")))
           (finally
@@ -880,10 +913,10 @@
 
 (deftest stale-stop-preserves-a-same-world-replacement
   (let [world (temp-world)
-        original (weaver-runtime/start! nil {:world world})]
+        original (start-runtime! nil {:world world})]
     (try
       (weaver-runtime/stop! original)
-      (let [replacement (weaver-runtime/start! nil {:world world})]
+      (let [replacement (start-runtime! nil {:world world})]
         (try
           (weaver-runtime/stop! original)
           (is (= (:generation-id replacement)
@@ -918,8 +951,8 @@
         world-b (temp-world)
         db-a (db-test/temp-db-file)
         db-b (db-test/temp-db-file)
-        rt-a (weaver-runtime/start! db-a {:world world-a :publish? false})
-        rt-b (weaver-runtime/start! db-b {:world world-b :publish? false})]
+        rt-a (start-runtime! db-a {:world world-a :publish? false})
+        rt-b (start-runtime! db-b {:world world-b :publish? false})]
     (try
       (weaver/init rt-a)
       (weaver/init rt-b)
@@ -946,7 +979,7 @@
      (io/file (:config-dir world) "init.clj")
      ['(require '[millstrand.api.current.alpha :as current])
       `(spit ~(str marker) (pr-str (get-in (current/runtime) [:metadata :nonce])))])
-    (let [rt (weaver-runtime/start! nil {:world world :publish? false})]
+    (let [rt (start-runtime! nil {:world world :publish? false})]
       (try
         (is (= (get-in rt [:metadata :nonce]) (read-string (slurp marker))))
         (finally
@@ -962,19 +995,14 @@
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Missing required flag --data-dir"
                           (parse-main-args ["--workspace" "/tmp/c" "--state-dir" "/tmp/s"])))))
 
-(deftest startup-release-marker-uses-declared-payload-resolution
-  (let [parse-main-args (ns-resolve 'millstrand.core.weaver.runtime 'parse-main-args)
-        required ["--workspace" "/tmp/c"
-                  "--state-dir" "/tmp/s"
-                  "--data-dir" "/tmp/d"]]
-    (is (= "v8"
-           (:release-marker
-            (parse-main-args (conj required "--release-marker" ":stdin")
-                             {"stdin" "v8"}))))
-    (is (= "v9"
-           (:release-marker
-            (parse-main-args (conj required "--release-marker" ":payload/marker")
-                             {"marker" "v9"}))))))
+(deftest startup-rejects-removed-release-marker-flag
+  (let [parse-main-args (ns-resolve 'millstrand.core.weaver.runtime 'parse-main-args)]
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"Unknown flag"
+         (parse-main-args ["--workspace" "/tmp/c"
+                           "--state-dir" "/tmp/s"
+                           "--data-dir" "/tmp/d"
+                           "--release-marker" "v2"])))))
 
 (deftest startup-failing-init-aborts-before-ready-metadata
   (let [world (temp-world)]
@@ -983,7 +1011,7 @@
        (io/file (:config-dir world) "init.clj")
        ['(throw (ex-info "init boom" {:source :shared}))])
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"startup file failed"
-                            (weaver-runtime/start! nil {:world world :publish? false})))
+                            (start-runtime! nil {:world world :publish? false})))
       (is (nil? (metadata/read-metadata world)))
       (is (not (.exists (io/file (:state-dir world) "weaver.json"))))
       (finally
@@ -1030,7 +1058,7 @@
                                                                                (throw (ex-info "close boom" {:source :spool-close})))}))
                  (throw (ex-info "post spool boom" {:source :startup}))))])
       (let [failure (try
-                      (weaver-runtime/start! nil {:world world :publish? false})
+                      (start-runtime! nil {:world world :publish? false})
                       nil
                       (catch clojure.lang.ExceptionInfo e e))]
         (is failure "expected startup failure")
@@ -1059,7 +1087,7 @@
        [`(spit ~(str order-file)
                (pr-str (conj (read-string (slurp ~(str order-file))) :local)))
         :local])
-      (let [rt (weaver-runtime/start! db-file {:world world :publish? false})]
+      (let [rt (start-runtime! db-file {:world world :publish? false})]
         (try
           (is (= [:shared :local] (read-string (slurp order-file))))
           (finally
@@ -1076,7 +1104,7 @@
       (source-file/spit-forms!
        (io/file (:config-dir world) "init.clj")
        [`(spit ~(str marker) (pr-str :shared))])
-      (let [rt (weaver-runtime/start! db-file {:world world :publish? false})]
+      (let [rt (start-runtime! db-file {:world world :publish? false})]
         (try
           (is (= :shared (read-string (slurp marker))))
           (finally
@@ -1093,7 +1121,7 @@
        (io/file (:config-dir world) "init.local.clj")
        ['(throw (ex-info "local boom" {:source :local}))])
       (try
-        (weaver-runtime/start! db-file {:world world :publish? false})
+        (start-runtime! db-file {:world world :publish? false})
         (is false "expected startup failure")
         (catch clojure.lang.ExceptionInfo e
           (is (= "Selected workspace startup file failed to load" (ex-message e)))
@@ -1105,7 +1133,7 @@
         (delete-tree! (io/file (:config-dir world)))))))
 (deftest runtime-uses-world-default-database-and-directories
   (let [world (temp-world)
-        rt (weaver-runtime/start! nil {:world world :publish? false})]
+        rt (start-runtime! nil {:world world :publish? false})]
     (try
       (is (= (.getPath (.getCanonicalFile (io/file (:db-path world))))
              (get-in rt [:metadata :canonical-db-path])))
@@ -1126,41 +1154,44 @@
        ['(require '[millstrand.api.current.alpha :as current]
                   '[millstrand.api.graph.alpha :as graph])
         '(graph/register-query! (current/runtime) 'trusted [:= :state "active"])])
-      (let [rt (weaver-runtime/start! nil {:world world :publish? false})]
+      (let [rt (start-runtime! nil {:world world :publish? false})]
         (try
           (is (= {"trusted" [:= :state "active"]} (graph/queries rt)))
           (finally
             (weaver-runtime/stop! rt))))
       (finally
         (delete-tree! (io/file (:config-dir world)))))))
-(deftest runtime-nrepl-load-file-uses-spool-classloader
-  (with-runtime
-    (fn [rt _]
-      (let [suffix (str/replace (str (java.util.UUID/randomUUID)) "-" "")
-            ns-sym (symbol (str "demo.load-file-" suffix))
-            source-root (io/file (get-in rt [:metadata :config-dir]) "load-file-src")
-            source-file (io/file source-root
-                                 (str (-> (str ns-sym)
-                                          (str/replace \- \_)
-                                          (str/replace \. java.io.File/separatorChar))
-                                      ".clj"))
-            {:keys [host port]} (get-in rt [:metadata :endpoint])]
-        (.mkdirs (.getParentFile source-file))
-        (source-file/spit-forms! source-file [(list 'ns ns-sym) '(def visible :through-spool-loader)])
-        (.addURL ^clojure.lang.DynamicClassLoader (:spool-classloader rt)
-                 (.toURL (.toURI source-root)))
-        (with-open [conn (nrepl/connect :host host :port port)]
-          (let [session (nrepl/client-session
-                         (nrepl/client conn (test-support/await-budget-ms)))
-                responses (doall
-                           (nrepl/message
-                            session
-                            {:op "load-file"
-                             :eval "clojure.core/eval"
-                             :file (source-file/render-forms
-                                    [`(require '~ns-sym)
-                                     `(deref (resolve '~(symbol (str ns-sym) "visible")))])}))]
-            (is (= ":through-spool-loader" (last (keep :value responses))))))))))
+(deftest runtime-nrepl-load-file-uses-generation-classloader
+  (let [world (temp-world)
+        suffix (str/replace (str (java.util.UUID/randomUUID)) "-" "")
+        ns-sym (symbol (str "demo.load-file-" suffix))
+        source-root (io/file (:config-dir world) "load-file-src")
+        source-file (io/file source-root
+                             (str (-> (str ns-sym)
+                                      (str/replace \- \_)
+                                      (str/replace \. java.io.File/separatorChar))
+                                  ".clj"))]
+    (.mkdirs (.getParentFile source-file))
+    (source-file/spit-forms! source-file
+                             [(list 'ns ns-sym) '(def visible :through-generation-loader)])
+    (with-runtime
+      {:world world
+       :generation-basis (generation-basis world [source-root])}
+      (fn [rt _]
+        (let [{:keys [host port]} (get-in rt [:metadata :endpoint])]
+          (with-open [conn (nrepl/connect :host host :port port)]
+            (let [session (nrepl/client-session
+                           (nrepl/client conn (test-support/await-budget-ms)))
+                  responses (doall
+                             (nrepl/message
+                              session
+                              {:op "load-file"
+                               :eval "clojure.core/eval"
+                               :file (source-file/render-forms
+                                      [`(require '~ns-sym)
+                                       `(deref (resolve '~(symbol (str ns-sym) "visible")))])}))]
+              (is (= ":through-generation-loader"
+                     (last (keep :value responses)))))))))))
 (deftest runtime-metadata-rejects-blank-friendly-name
   (let [world (temp-world)
         db-file (db-test/temp-db-file)]
@@ -1172,6 +1203,7 @@
                                                       :port 5555
                                                       :canonical-db-path (metadata/canonical-db-path db-file)
                                                       :nonce "weaver"
+                                                      :basis-fingerprint basis-fingerprint
                                                       :world world
                                                       :name "  "
                                                       :started-at "now"})))
@@ -1185,6 +1217,7 @@
                    :data-dir (:data-dir world)
                    :canonical-db-path (metadata/canonical-db-path db-file)
                    :nonce "weaver"
+                   :basis-fingerprint basis-fingerprint
                    :socket-path (str (:state-dir world) "/weaver.sock")
                    :started-at "now"
                    :name "  "})))

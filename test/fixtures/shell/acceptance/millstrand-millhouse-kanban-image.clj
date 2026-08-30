@@ -5,10 +5,8 @@
   (let [rt (current/runtime)
         result (runtime/module! rt :kanban-source
                                 {:ns 'millhouse.spools.kanban
-                                 :load :image
-                                 :spools ['millhouse.spools/kanban]})]
-    (println
-     (json/write-str
-      {:module-status (:status result)
-       :source-status (get-in (runtime/status rt)
-                              [:module/outcomes :kanban-source :source/status])}))))
+                                 :load :image})]
+    (json/write-str
+     {:module-status (:status result)
+      :source-status (get-in result
+                             [:modules :kanban-source :source/status])})))

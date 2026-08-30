@@ -50,7 +50,6 @@
    :pattern-explain 'millstrand.api.patterns.alpha/explain
    :weave! 'millstrand.api.patterns.alpha/weave!
    :apply-batch 'millstrand.api.batch.alpha/apply!
-   :approved-spools 'millstrand.api.runtime.alpha/approved
    :module! 'millstrand.api.runtime.alpha/module!
    :refresh! 'millstrand.api.runtime.alpha/refresh!
    :plan 'millstrand.api.runtime.alpha/plan
@@ -235,7 +234,7 @@
   (str "(do "
        "(require '[millstrand.core.weaver.runtime]) "
        "(let [rt " (runtime-form port) "] "
-       "(millstrand.core.weaver.runtime/with-runtime-and-spool-classloader rt "
+       "(millstrand.core.weaver.runtime/with-runtime-and-generation-classloader rt "
        "(fn [] (try {:ok true :value (clojure.core/load-string " (pr-str code) ")} "
        "(catch Throwable t "
        ;; load-string wraps thrown exceptions in CompilerException; report the cause

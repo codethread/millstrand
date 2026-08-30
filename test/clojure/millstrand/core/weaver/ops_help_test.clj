@@ -39,7 +39,7 @@
   ([start-options f]
    (let [db-file (db-test/temp-db-file)
          world (or (:world start-options) (temp-world))
-         rt (weaver-runtime/start! db-file (assoc (or start-options {}) :world world :publish? false))]
+         rt (weaver-runtime/start! db-file (assoc (or start-options {}) :world world :publish? false :generation-basis (or (:generation-basis start-options) (test-support/generation-basis (:config-dir world)))))]
      (try
        (weaver-runtime/with-runtime-binding rt #(f rt db-file))
        (finally
@@ -249,15 +249,13 @@
     (reset! deadline-started (promise))
     (reset! op-side-effects [])
     (f)))
-(deftest weaver-op-resolves-through-spool-classloader
+(deftest weaver-op-resolves-through-generation-classloader
   (with-runtime
     (fn [rt _]
       (let [suffix (str/replace (str (java.util.UUID/randomUUID)) "-" "")
             lib (symbol (str "op-" suffix))
             ns-sym (symbol (str "demo.op-" suffix))
             root (write-op-lib! (get-in rt [:metadata :config-dir]) lib ns-sym)]
-        (.addURL ^clojure.lang.DynamicClassLoader (:spool-classloader rt)
-                 (.toURL (.toURI (io/file root "src"))))
         (load-file (str (io/file root "src" (str (-> (str ns-sym)
                                                      (str/replace \- \_)
                                                      (str/replace \. java.io.File/separatorChar))

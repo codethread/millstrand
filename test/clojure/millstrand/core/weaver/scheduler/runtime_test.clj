@@ -310,7 +310,9 @@
                                :payload {:n 7}}))
       (reset! captured nil)
       (reset! fired (promise))
-      (let [rt (weaver-runtime/start! db-file {:world world :publish? false})]
+      (let [rt (weaver-runtime/start! db-file {:world world
+                                               :publish? false
+                                               :generation-basis (test-support/generation-basis (:config-dir world))})]
         (try
           (is (await-fire) "a persisted overdue wake fires on startup re-arm")
           (is (= {:n 7} (:payload @captured)))
@@ -356,7 +358,9 @@
 (deftest stop-closes-scheduler-executor-thread
   (let [db-file (db-test/temp-db-file)
         world (test-support/temp-world)
-        rt (weaver-runtime/start! db-file {:world world :publish? false})]
+        rt (weaver-runtime/start! db-file {:world world
+                                           :publish? false
+                                           :generation-basis (test-support/generation-basis (:config-dir world))})]
     (try
       (let [executor (:executor (scheduler/state rt))]
         (is (not (.isShutdown executor)) "the scheduler executor runs while the weaver is up")

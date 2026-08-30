@@ -1,6 +1,5 @@
 (ns millstrand.test-runner
-  "Explicit test entrypoint with documented serial JVM-global islands,
-  subprocess shards for add-libs suites, a focused in-process mode for named
+  "Explicit test entrypoint with serial JVM-global islands, focused named
   namespaces, and per-namespace timing output."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
@@ -13,11 +12,13 @@
   "Test namespaces that are safe to run concurrently, one namespace per worker."
   ['millstrand.core.db-test 'millstrand.core.query-compile-test 'millstrand.core.contract-props-test 'millstrand.core.specs-test 'millstrand.core.db.scheduler.storage-test
    'millstrand.core.weaver.owner-registry-test
+   'millstrand.core.weaver.basis-test
    ;; each test builds its own backing store — no shared state.
    'millstrand.core.weaver.core-registry-test
    ;; each test builds its own registries and unpublished runtimes — no shared state.
    'millstrand.api.registry.alpha-test
    'millstrand.plugin-test 'millstrand.relations-test 'millstrand.notes-test
+   'millstrand.cutover.vocab-reset-test
    'millstrand.spools.unsafe-text-search-test
    'millstrand.test.alpha-test 'millstrand.warm-test 'millstrand.api.cli.alpha-test
    'millstrand.source-file-test
@@ -78,13 +79,10 @@
    'millstrand.integration.restart-admission-test])
 
 (def serial-namespaces
-  "JVM-global namespaces the parent still runs serially outside add-libs shards."
-  [;; Release-marker fixtures redefine source checkout resolution.
-   ;; Release-marker, module, reload, and config fixtures redefine runtime
-   ;; internals and therefore remain on the serial island.
+  "JVM-global namespaces the parent runs serially."
+  [;; Module and config fixtures redefine runtime internals and therefore stay
+   ;; on the serial island.
    'millstrand.runtime.integration-test
-   ;; source-root fixtures redefine the JVM-global source-checkout locator.
-   'millstrand.source-root-spools-test
    ;; ambient REPL connection atoms.
    'millstrand.repl-test
    ;; published singleton semantics.
@@ -103,16 +101,12 @@
    ;; `with-redefs` are JVM-global, so this namespace cannot share the
    ;; parallel parent with runtime consumers.
    'millstrand.core.weaver.startup-test
+   'millstrand.runtime-deps-test
    'millstrand.core.weaver.modules-test])
 
 (def add-libs-shards
-  "Subprocess JVM shard groups for tests that mutate JVM-global tools.deps state."
-  {;; Largest add-libs suite stands alone to balance wall time against parent work.
-   "A" ['millstrand.spools-test]
-   ;; runtime-deps intentionally mutates JVM-global tools.deps state.
-   "B" ['millstrand.runtime-deps-test]
-   ;; Medium add-libs suite shares one JVM to amortize boot without exceeding shard A.
-   "C" ['millstrand.ct.config-ops-test]})
+  "The deps-native suite never mutates the running JVM dependency basis."
+  {})
 
 (def shard-timeout-minutes 5)
 

@@ -85,8 +85,10 @@ func resolveLaunchSource(cwd string) (string, error) {
 	return "", fmt.Errorf("unable to resolve Millstrand source for weaver launch; set MILLSTRAND_SOURCE to a Millstrand checkout, reinstall mill with a valid install-time source, or run mill weaver start from a canonical Millstrand checkout cwd containing deps.edn")
 }
 
-func weaverArgs(world config.World, name string) []string {
-	args := []string{"-M:millstrand", "-m", "millstrand.core.weaver.runtime", "--workspace", world.ConfigDir, "--state-dir", world.StateDir, "--data-dir", world.DataDir}
+func weaverArgs(world config.World, name, source string) []string {
+	bootstrapSource, _ := json.Marshal(filepath.Join(source, "src"))
+	bootstrapDeps := fmt.Sprintf("{:aliases {:millstrand/bootstrap {:replace-paths [%s] :replace-deps {org.clojure/clojure {:mvn/version \"1.12.0\"} org.clojure/data.json {:mvn/version \"2.5.1\"} org.clojure/tools.deps {:mvn/version \"0.31.1642\"}}}}}", bootstrapSource)
+	args := []string{"-Srepro", "-Sdeps", bootstrapDeps, "-M:millstrand/bootstrap", "-m", "millstrand.core.weaver.basis", "--workspace", world.ConfigDir, "--millstrand-source", source, "--dependency-diagnostic", dependencyDiagnosticPath(world), "--state-dir", world.StateDir, "--data-dir", world.DataDir}
 	if name != "" {
 		args = append(args, "--name", name)
 	}
@@ -210,12 +212,13 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 	// appended across restarts so a crashed boot stays post-mortem readable,
 	// and deliberately left in place by cleanupWorldArtifacts.
 	logPath := weaverLogPath(world.StateDir)
+	_ = os.Remove(dependencyDiagnosticPath(world))
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, err
 	}
 	_, _ = fmt.Fprintf(logFile, "=== weaver start %s config_dir=%s ===\n", time.Now().UTC().Format(time.RFC3339), world.ConfigDir)
-	cmd, err := launchWeaver(source, weaverArgs(world, name), logFile, logFile)
+	cmd, err := launchWeaver(source, weaverArgs(world, name, source), logFile, logFile)
 	if err != nil {
 		_ = logFile.Close()
 		return nil, err
@@ -261,6 +264,11 @@ func (s *server) startWeaverLoop(req client.MillWorldRequest) (map[string]any, e
 		// early start would tear down its successor's healthy weaver.
 		if s.releaseChild(world.ConfigDir, registered) && registered.identity.WeaverID != "" {
 			_ = cleanupWorldArtifactsOwned(world, registered.identity)
+		}
+		if diagnostic, diagnosticErr := readDependencyDiagnostic(world); diagnosticErr != nil {
+			return nil, diagnosticErr
+		} else if diagnostic != nil {
+			return nil, &dependencyLaunchError{diagnostic: *diagnostic, err: err}
 		}
 		if tail := tailOfFile(logPath, 4096); tail != "" {
 			return nil, fmt.Errorf("%w; weaver log tail (%s):\n%s", err, logPath, tail)
@@ -574,11 +582,12 @@ func statusFromMetadata(m client.Metadata, state string) map[string]any {
 	if strings.TrimSpace(m.GenerationID) != "" {
 		status["generation_id"] = m.GenerationID
 	}
+	status["basis_fingerprint"] = m.BasisFingerprint
 	return status
 }
 
 func validateMetadata(world config.World, m client.Metadata) string {
-	if m.ProtocolVersion != client.ProtocolVersion || m.PID == 0 || m.DaemonID == "" || m.ConfigDir == "" || m.StateDir == "" || m.DataDir == "" || strings.TrimSpace(m.Name) == "" || m.SocketPath == "" || m.StartedAt == "" || m.NREPL.Host == "" || m.NREPL.Port == 0 {
+	if m.ProtocolVersion != client.ProtocolVersion || m.PID == 0 || m.DaemonID == "" || m.ConfigDir == "" || m.StateDir == "" || m.DataDir == "" || strings.TrimSpace(m.Name) == "" || m.SocketPath == "" || m.StartedAt == "" || m.NREPL.Host == "" || m.NREPL.Port == 0 || !validBasisFingerprint(m.BasisFingerprint) {
 		return "malformed weaver metadata: missing required fields"
 	}
 	if err := client.ValidateStorageIdentity(m); err != nil {
@@ -594,6 +603,18 @@ func validateMetadata(world config.World, m client.Metadata) string {
 		return fmt.Sprintf("pid %d is not alive", m.PID)
 	}
 	return ""
+}
+
+func validBasisFingerprint(value string) bool {
+	if len(value) != len("sha256:")+64 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	for _, char := range value[len("sha256:"):] {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func samePath(a, b string) bool {

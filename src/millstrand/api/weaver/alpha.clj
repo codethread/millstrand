@@ -35,7 +35,7 @@
             [millstrand.core.query :as query]
             [millstrand.core.specs :as specs]
             [millstrand.core.weaver.access :refer [ds normalize query-registry op-registry
-                                                   op-store with-spool-classloader]]
+                                                   op-store with-generation-classloader]]
             [millstrand.core.weaver.core-registry :as core-registry]
             [millstrand.core.weaver.dispatch :as dispatch]
             [millstrand.core.weaver.help :as help]
@@ -617,7 +617,7 @@
                     (contains? envelope :emit!)
                     (assoc :op/emit! (:emit! envelope)))
              ctx (assoc ctx0 :op/args (cli/parse arg-spec argv payloads))
-             result (with-spool-classloader runtime #((requiring-resolve fn-sym) ctx))
+             result (with-generation-classloader runtime #((requiring-resolve fn-sym) ctx))
              parsed-args (:op/args ctx)]
          (if-not (and (map? result) (contains? parsed-args :subcommand))
            result

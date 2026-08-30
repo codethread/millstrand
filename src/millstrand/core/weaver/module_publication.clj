@@ -104,7 +104,7 @@
   [runtime fn-sym]
   (access/validate-fn-symbol! "Event handler" fn-sym)
   (let [resolved (try
-                   (access/with-spool-classloader runtime #(requiring-resolve fn-sym))
+                   (access/with-generation-classloader runtime #(requiring-resolve fn-sym))
                    (catch Throwable throwable
                      (throw (ex-info "Event handler function could not be resolved"
                                      {:fn fn-sym}
@@ -224,7 +224,7 @@
           :let [candidate (get candidate-map storage)
                 validator (get-in candidate [:kinds kind-id :candidate-validator])]
           :when validator]
-    (let [validate! (access/with-spool-classloader
+    (let [validate! (access/with-generation-classloader
                       runtime #(requiring-resolve validator))]
       (when-not validate!
         (throw (ex-info "Registry kind candidate validator cannot be resolved"

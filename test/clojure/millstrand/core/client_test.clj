@@ -1,15 +1,43 @@
 (ns millstrand.core.client-test
   "Tests for millstrand.core.client: routing CLI calls to a running weaver over nREPL."
   (:refer-clojure :exclude [list update])
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is use-fixtures]]
             [millstrand.core.client :as client]
             [millstrand.api.hooks.alpha :as hooks]
             [millstrand.core.weaver.metadata :as metadata]
             [millstrand.core.weaver.runtime :as weaver-runtime]
-            [millstrand.core.db-test :as db-test]
-            [millstrand.spools.test-support :as test-support]))
+            [millstrand.core.weaver.config :as weaver-config]
+            [millstrand.core.db-test :as db-test]))
+
+(defn- temp-dir []
+  (.toFile (java.nio.file.Files/createTempDirectory
+            "tcw" (make-array java.nio.file.attribute.FileAttribute 0))))
+
+(defn- delete-tree! [root]
+  (when (.exists (io/file root))
+    (doseq [file (reverse (file-seq (io/file root)))]
+      (java.nio.file.Files/deleteIfExists (.toPath ^java.io.File file)))))
+
 (defn temp-world []
-  (test-support/test-world (test-support/temp-dir "tcw")))
+  (let [root (temp-dir)]
+    (weaver-config/world (.getPath root)
+                         (.getPath (io/file root "state"))
+                         (.getPath (io/file root "data")))))
+
+(defn- generation-basis [world]
+  (let [coordinate {:local/root (.getCanonicalPath (io/file "."))}]
+    {:sources [{:kind :project
+                :path (.getCanonicalPath (io/file (:config-dir world) "deps.edn"))
+                :deps {:paths []}}]
+     :aliases []
+     :reserved-deps {'io.millstrand/millstrand coordinate}
+     :basis {:libs {'io.millstrand/millstrand coordinate}
+             :classpath-roots []
+             :argmap {}}
+     :fingerprint (str "sha256:" (str/join (repeat 64 "a")))
+     :classloader (.getContextClassLoader (Thread/currentThread))}))
 
 ;; Namespace-level on purpose: hooks are registered by symbol and resolved
 ;; to top-level vars, so capture state cannot be a per-test local. Reset by
@@ -29,13 +57,14 @@
 (defn with-runtime [f]
   (let [db-file (db-test/temp-db-file)
         world (temp-world)
-        rt (weaver-runtime/start! db-file {:world world :publish? false})]
+        rt (weaver-runtime/start! db-file {:world world :publish? false
+                                           :generation-basis (generation-basis world)})]
     (try
       (f rt world db-file)
       (finally
         (weaver-runtime/stop! rt)
         (db-test/delete-sqlite-family! db-file)
-        (test-support/delete-tree! (java.io.File. (:config-dir world)))))))
+        (delete-tree! (java.io.File. (:config-dir world)))))))
 
 (defn call-world [world op & args]
   (apply client/call-world (:config-dir world) {} op args))
@@ -48,8 +77,10 @@
         db-b (db-test/temp-db-file)
         world-a (temp-world)
         world-b (temp-world)
-        rt-a (weaver-runtime/start! db-a {:world world-a :publish? false})
-        rt-b (weaver-runtime/start! db-b {:world world-b :publish? false})]
+        rt-a (weaver-runtime/start! db-a {:world world-a :publish? false
+                                          :generation-basis (generation-basis world-a)})
+        rt-b (weaver-runtime/start! db-b {:world world-b :publish? false
+                                          :generation-basis (generation-basis world-b)})]
     (try
       (is (= {:database "initialized"} (call-world world-a :init)))
       (is (= {:database "initialized"} (call-world world-b :init)))
@@ -64,8 +95,8 @@
         (weaver-runtime/stop! rt-b)
         (db-test/delete-sqlite-family! db-a)
         (db-test/delete-sqlite-family! db-b)
-        (test-support/delete-tree! (java.io.File. (:config-dir world-a)))
-        (test-support/delete-tree! (java.io.File. (:config-dir world-b)))))))
+        (delete-tree! (java.io.File. (:config-dir world-a)))
+        (delete-tree! (java.io.File. (:config-dir world-b)))))))
 
 (deftest client-calls-running-daemon-and-returns-clojure-data
   (with-runtime
@@ -181,7 +212,7 @@
       (finally
         (metadata/delete! world)
         (db-test/delete-sqlite-family! db-file)
-        (test-support/delete-tree! (java.io.File. (:config-dir world)))))))
+        (delete-tree! (java.io.File. (:config-dir world)))))))
 
 (deftest client-fails-loudly-for-unreachable-and-non-local-endpoints
   (let [db-file (db-test/temp-db-file)
@@ -195,6 +226,8 @@
                                        :canonical-db-path canonical
                                        :nonce "unreachable"
                                        :generation-id "generation-unreachable"
+                                       :basis-fingerprint (:fingerprint
+                                                           (generation-basis world))
                                        :world world})]
     (try
       (metadata/publish! meta)
@@ -208,7 +241,7 @@
       (finally
         (metadata/delete! world)
         (db-test/delete-sqlite-family! db-file)
-        (test-support/delete-tree! (java.io.File. (:config-dir world)))))))
+        (delete-tree! (java.io.File. (:config-dir world)))))))
 
 (deftest client-fails-loudly-for-wrong-daemon-identity
   (with-runtime

@@ -27,16 +27,12 @@
 
 (def runtime (current/runtime))
 
-;; Batteries is approved as a shipped source-root spool by default. The module
-;; guard keeps source loading behind that visible approval; its `millstrand/defop!`
-;; forms publish the CLI partition and its lifecycle seed owns the failure
-;; glossary those operations reference.
+;; Batteries is a workspace dependency. Its `millstrand/defop!` forms publish
+;; the CLI partition and its lifecycle seed owns the failure glossary.
 (runtime/module! runtime :millstrand/spools-batteries
-                 {:ns 'millstrand.spools.batteries
-                  :spools ['millstrand.spools/batteries]})
+                 {:ns 'millstrand.spools.batteries})
 (runtime/module! runtime :batteries-runbook
                  {:file "ct/runbook.clj"
-                  :spools ['millstrand.spools/batteries]
                   :after [:millstrand/spools-batteries]
                   :required? true})
 
@@ -44,18 +40,13 @@
 ;; The engine's collected open-kind and lifecycle declarations own Workflow
 ;; definition/executor publication and its process-lifetime vocabulary seed.
 (runtime/module! runtime :millhouse/spools-workflow
-                 {:ns 'millhouse.spools.workflow
-                  :spools ['millhouse.spools/workflow]})
+                 {:ns 'millhouse.spools.workflow})
 (runtime/module! runtime :millstrand/spools-unsafe-text-search
-                 {:ns 'millstrand.spools.unsafe-text-search
-                  :spools ['millstrand.spools/unsafe-text-search]})
-;; devflow is an external git-distributed spool: activation is gated on the
-;; approved codethread/devflow coordinate (spools.edn pin or a developer's
-;; spools.local.edn checkout), never on an incidental classpath copy. Its whole
-;; contribution is the stage `defworkflow` entries its load collects.
+                 {:ns 'millstrand.spools.unsafe-text-search})
+;; Devflow is an ordinary workspace dependency. Its contribution is the stage
+;; `defworkflow` entries its load collects.
 (runtime/module! runtime :millstrand/spools-devflow
                  {:ns 'ct.spools.devflow
-                  :spools ['codethread/devflow]
                   :after [:millhouse/spools-workflow]
                   :required? true})
 
@@ -64,36 +55,29 @@
 ;; Named lifecycle resources own their runtime setup and removal.
 (runtime/module! runtime :millhouse/spools-identity
                  {:ns 'millhouse.spools.identity
-                  :spools ['millhouse.spools/identity]
                   :required? true})
 (runtime/module! runtime :millstrand/spools-shuttle
                  {:ns 'ct.spools.agent-run
-                  :spools ['ct.spools/agent-run 'millhouse.spools/identity]
                   :after [:millhouse/spools-identity]
                   :required? true})
 (runtime/module! runtime :millstrand/spools-harness-core
                  {:ns 'ct.spools.harness-core
-                  :spools ['ct.spools/harness-core 'millhouse.spools/identity]
                   :after [:millhouse/spools-identity]
                   :required? true})
 (runtime/module! runtime :millstrand/spools-codex-harness
                  {:ns 'ct.spools.codex-harness
-                  :spools ['ct.spools/codex-harness 'ct.spools/harness-core]
                   :after [:millstrand/spools-harness-core]
                   :required? true})
 (runtime/module! runtime :millstrand/spools-agent-cli
                  {:ns 'ct.spools.agent-cli
-                  :spools ['ct.spools/agent-cli 'ct.spools/harness-core]
                   :after [:millstrand/spools-harness-core :millstrand/spools-codex-harness]
                   :required? true})
 (runtime/module! runtime :millstrand/spools-delegation
                  {:ns 'ct.spools.delegation
-                  :spools ['ct.spools/delegation]
                   :after [:millstrand/spools-shuttle]
                   :required? true})
 (runtime/module! runtime :millstrand/spools-bench
                  {:ns 'ct.spools.bench
-                  :spools ['ct.spools/bench]
                   :after [:millstrand/spools-shuttle]
                   :required? true})
 
@@ -102,28 +86,21 @@
 ;; repository keeps reviewer rosters and task/review policy local.
 (runtime/module! runtime :codethread/config-agents
                  {:ns 'ct.spools.codethread.agents
-                  :spools ['codethread/config 'ct.spools/agent-run]
                   :after [:millstrand/spools-shuttle]
                   :required? true})
 (runtime/module! runtime :codethread/config-help
                  {:ns 'ct.spools.codethread.help
-                  :spools ['codethread/config 'millstrand.spools/batteries]
                   :after [:millstrand/spools-batteries]
                   :required? true})
 (runtime/module! runtime :codethread/config-devflow
                  {:ns 'ct.spools.codethread.devflow
-                  :spools ['codethread/config]
                   :required? true})
 (runtime/module! runtime :devflow/kanban-adapter
                  {:ns 'ct.spools.devflow-kanban-adapter
-                  :spools ['codethread/devflow-kanban-adapter 'codethread/devflow
-                           'millhouse.spools/kanban 'millhouse.spools/workflow]
                   :after [:millstrand/spools-devflow :millstrand/spools-kanban :millhouse/spools-workflow]
                   :required? true})
 (runtime/module! runtime :codethread/config
                  {:ns 'ct.spools.codethread.config
-                  :spools ['codethread/config 'millstrand.spools/batteries
-                           'ct.spools/agent-run 'ct.spools/delegation]
                   :after [:codethread/config-agents
                           :codethread/config-help
                           :codethread/config-devflow
@@ -138,7 +115,6 @@
 ;; relative to the shared Codethread agents module is not load-bearing.
 (runtime/module! runtime :reviewers
                  {:file "ct/agents/reviewers.clj"
-                  :spools ['ct.spools/delegation]
                   :after [:millstrand/spools-delegation]
                   :required? true})
 ;; The delegation contracts are workspace policy over the shared agent-run and
@@ -146,7 +122,6 @@
 ;; contribution so it binds the exported worker/review contract text in order.
 (runtime/module! runtime :delegation-contracts
                  {:file "ct/agents/delegation_contracts.clj"
-                  :spools ['ct.spools/agent-run 'ct.spools/delegation]
                   :after [:codethread/config :millstrand/spools-shuttle
                           :millstrand/spools-delegation]
                   :required? true})
@@ -160,11 +135,9 @@
 ;; loud notifier-missing errors.
 (runtime/module! runtime :millhouse/spools-chime
                  {:ns 'millhouse.spools.chime
-                  :spools ['millhouse.spools/chime]
                   :required? true})
 (runtime/module! runtime :attention
                  {:file "ct/notifications/attention.clj"
-                  :spools ['millhouse.spools/chime 'ct.spools/agent-run]
                   :after [:millhouse/spools-chime :millstrand/spools-shuttle]
                   :required? true})
 
@@ -172,7 +145,6 @@
 ;; Kanban is the Millhouse root that owns this workspace's board surface.
 (runtime/module! runtime :millstrand/spools-kanban
                  {:ns 'millhouse.spools.kanban
-                  :spools ['millhouse.spools/kanban]
                   :required? true})
 ;; --- cron timer engine + the NVD scan job -----------------------------------
 ;; Cron is a generic weaver timer engine. Its collected open-kind and lifecycle
@@ -180,13 +152,11 @@
 ;; job through `defjob`, so it is ordered after cron.
 (runtime/module! runtime :millhouse/spools-cron
                  {:ns 'millhouse.spools.cron
-                  :spools ['millhouse.spools/cron]
                   :required? true})
 ;; The NVD scan job is its own module (not part of ct/policy/config.clj) so config_test's
 ;; direct ct/policy/config.clj load never registers the job or seeds against real gh.
 (runtime/module! runtime :nvd-scan
                  {:file "ct/jobs/nvd_scan.clj"
-                  :spools ['millhouse.spools/cron 'millhouse.spools/kanban]
                   :after [:millhouse/spools-cron :millstrand/spools-kanban]
                   :required? true})
 
@@ -203,7 +173,6 @@
 ;; ct/workflows/common.clj owns the shared authoring patterns.
 (runtime/module! runtime :workflows
                  {:file "ct/workflows/common.clj"
-                  :spools ['millhouse.spools/workflow 'ct.spools/delegation]
                   :after [:millhouse/spools-workflow :millstrand/spools-delegation
                           :config :workflows.support]
                   :required? true})
@@ -212,31 +181,26 @@
 ;; contribution without growing a broad definitions file.
 (runtime/module! runtime :workflows.land
                  {:file "ct/workflows/land.clj"
-                  :spools ['millhouse.spools/workflow 'ct.spools/delegation]
                   :after [:millhouse/spools-workflow :millstrand/spools-delegation
                           :reviewers :workflows.support]
                   :required? true})
 (runtime/module! runtime :workflows.story
                  {:file "ct/workflows/story.clj"
-                  :spools ['millhouse.spools/workflow 'ct.spools/delegation]
                   :after [:millhouse/spools-workflow :millstrand/spools-delegation
                           :workflows.support]
                   :required? true})
 (runtime/module! runtime :workflows.explore
                  {:file "ct/workflows/explore.clj"
-                  :spools ['millhouse.spools/workflow]
                   :after [:millhouse/spools-workflow :workflows.support]
                   :required? true})
 (runtime/module! runtime :workflows.fix
                  {:file "ct/workflows/fix.clj"
-                  :spools ['millhouse.spools/workflow]
                   :after [:millhouse/spools-workflow :workflows.support]
                   :required? true})
 ;; ct/workflows/land_policy.clj owns the narrow land policy op: merge lock, merge queue,
 ;; and kanban lane moves. It loads after the land definitions it drives.
 (runtime/module! runtime :workflows.land-policy
                  {:file "ct/workflows/land_policy.clj"
-                  :spools ['millhouse.spools/workflow 'millhouse.spools/kanban]
                   :after [:millhouse/spools-workflow :millstrand/spools-kanban
                           :workflows :workflows.land]
                   :required? true})
@@ -244,7 +208,6 @@
 ;; Codethread; landing policy and reviewer evidence stay local to this repo.
 (runtime/module! runtime :codethread/ralph
                  {:ns 'ct.spools.codethread.ralph
-                  :spools ['codethread/ralph 'millhouse.spools/workflow]
                   :after [:millhouse/spools-workflow]
                   :required? true})
 
@@ -252,7 +215,6 @@
 ;; executors' initial scans can resolve all persisted gate symbols.
 (runtime/module! runtime :millhouse/spools-workflow-providers
                  {:ns 'millhouse.spools.workflow.spool
-                  :spools ['millhouse.spools/workflow]
                   :after [:millhouse/spools-workflow :workflows
                           :workflows.land
                           :workflows.story :workflows.explore :workflows.fix
@@ -264,7 +226,6 @@
 ;; durable ready gate would be stamped gate/error on every cold start.
 (runtime/module! runtime :millstrand/spools-treadle
                  {:ns 'ct.spools.executors.subagent
-                  :spools ['ct.spools/agent-run]
                   :after [:millstrand/spools-shuttle :millhouse/spools-workflow
                           :codethread/config :reviewers :workflows :workflows.land
                           :workflows.story :codethread/ralph]

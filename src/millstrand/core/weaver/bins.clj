@@ -3,15 +3,14 @@
 
   Registration keeps authored path spellings and never touches the filesystem.
   The read-only `bins` operation is the single planning boundary: it resolves
-  approved family/root anchors, computes the executable readiness tri-state, and
+  basis library/root anchors, computes the executable readiness tri-state, and
   supplies the selected workspace environment overlay."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [millstrand.api.spool.alpha :refer [require-valid!]]
             [millstrand.core.weaver.access :as access]
-            [millstrand.core.weaver.core-registry :as core-registry]
-            [millstrand.core.weaver.spool-sync :as spool-sync]))
+            [millstrand.core.weaver.core-registry :as core-registry]))
 
 (defn- non-blank-string? [value]
   (and (string? value) (not (str/blank? value))))
@@ -72,37 +71,46 @@
         prefix (str root-path java.io.File/separator)]
     (or (= file-path root-path) (str/starts-with? file-path prefix))))
 
-(defn- approved [runtime]
-  (if (contains? runtime :release-marker)
-    (spool-sync/approved-spools runtime (some-> runtime :release-marker :marker))
-    (spool-sync/approved-spools runtime)))
+(defn- library-root [coordinate]
+  (when-let [root (or (:git/dir coordinate) (:local/root coordinate))]
+    (canonical-file (if-let [deps-root (:deps/root coordinate)]
+                      (io/file root deps-root)
+                      root))))
 
-(defn- root-matches [runtime source-file]
-  (let [source-file (canonical-file source-file)
-        approved (approved runtime)]
-    (->> (:spools approved)
-         (keep (fn [[lib entry]]
-                 (when (file-under? source-file (:root entry))
-                   (let [family (::spool-sync/family (meta entry))]
+(defn- basis-root-matches [runtime source-file]
+  (let [source-file (canonical-file source-file)]
+    (->> (get-in runtime [:generation-basis :basis :libs])
+         (mapcat (fn [[lib coordinate]]
+                   (for [path (:paths coordinate)
+                         :let [root (canonical-file path)]
+                         :when (file-under? source-file root)]
                      {:lib lib
-                      :entry entry
-                      :family family
-                      :coordinate (get-in approved [:families family :effective-coordinate])
-                      :root (canonical-file (:root entry))}))))
-         (sort-by (comp count #(.getPath ^java.io.File (:root %))))
-         reverse)))
+                      :coordinate coordinate
+                      :library-root (library-root coordinate)
+                      :source-root root})))
+         vec)))
 
-(defn- longest-root-match [runtime source-file]
-  (first (root-matches runtime source-file)))
-
-(defn- coordinate-root [runtime coordinate]
-  (case (:kind coordinate)
-    :git (canonical-file (io/file (access/cache-base) "millstrand" "spools" (:git/sha coordinate)))
-    :local (canonical-file (access/canonical-root runtime (:local/root coordinate)))
-    :millstrand/source-root
-    (canonical-file (io/file (access/source-checkout-root) (:millstrand/source-root coordinate)))
-    (throw (ex-info "Bin anchor has an unsupported approved coordinate"
-                    {:reason :bin/anchor-unresolved :coordinate coordinate}))))
+(defn- source-backed-match [runtime bin source-file anchor]
+  (let [matches (basis-root-matches runtime source-file)]
+    (when-not (= 1 (count matches))
+      (throw (ex-info "Bin declaration source does not identify one basis source root"
+                      {:reason :bin/anchor-unresolved
+                       :code "bin/anchor-unresolved"
+                       :bin bin
+                       :file source-file
+                       :anchor anchor
+                       :matches (mapv #(select-keys % [:lib :source-root]) matches)})))
+    (let [match (first matches)]
+      (when (nil? (:library-root match))
+        (throw (ex-info "Bin declaration library has no source-backed library root"
+                        {:reason :bin/anchor-unresolved
+                         :code "bin/anchor-unresolved"
+                         :bin bin
+                         :file source-file
+                         :anchor anchor
+                         :lib (:lib match)
+                         :coordinate (:coordinate match)})))
+      match)))
 
 (defn- anchor-unresolved! [bin source-file anchor]
   (throw (ex-info "Bin executable anchor cannot be resolved"
@@ -130,15 +138,13 @@
         (anchor-unresolved! bin source-file (first executable))))
     (if (vector? executable)
       (let [[anchor path] executable
-            match (longest-root-match runtime source-file)
-            _ (when-not match (anchor-unresolved! bin source-file anchor))
+            match (source-backed-match runtime bin source-file anchor)
             base (case anchor
-                   :family (coordinate-root runtime (:coordinate match))
-                   :root (:root match)
+                   :family (:library-root match)
+                   :root (:source-root match)
                    (anchor-unresolved! bin source-file anchor))]
         {:exec {:path (.getPath ^java.io.File (canonical-file (io/file base path)))}
          :base base
-         :family (:family match)
          :root-match match})
       (let [path executable
             bare? (not (re-find #"[\\/]" path))
@@ -152,9 +158,7 @@
         {:exec (if resolved-path
                  {:path (.getPath ^java.io.File resolved-path)}
                  {:command path})
-         :base (source-directory source-file)
-         :family (some-> (longest-root-match runtime source-file) :family)
-         :root-match (longest-root-match runtime source-file)}))))
+         :base (source-directory source-file)}))))
 
 (defn- effective-entry [runtime bin]
   (let [name (if (keyword? bin) (name bin) (str bin))]

@@ -356,6 +356,11 @@ func (s *server) handle(conn net.Conn) {
 	case "weaver-start":
 		result, err := s.startWeaver(req.World)
 		if err != nil {
+			var dependencyFailure *dependencyLaunchError
+			if errors.As(err, &dependencyFailure) {
+				_ = json.NewEncoder(conn).Encode(client.MillResponse{ProtocolVersion: client.MillProtocolVersion, RequestID: req.RequestID, OK: false, Error: &client.ResponseError{Type: "domain", Code: "mill/weaver-start-failed", Message: "weaver start failed", Details: map[string]any{"dependency": dependencyFailure.diagnostic}}})
+				return
+			}
 			_ = json.NewEncoder(conn).Encode(errorResponse(req.RequestID, "domain", "mill/weaver-start-failed", "weaver start failed", err.Error()))
 			return
 		}

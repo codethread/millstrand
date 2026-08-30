@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -108,27 +109,23 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 	if _, ok := cfgFile["source"]; ok || cfgFile["configFormat"] != "alpha" {
 		t.Fatalf("unexpected bootstrap config: %#v", cfgFile)
 	}
-	spoolsPath := filepath.Join(cfg, "spools.edn")
-	if _, err := os.Stat(spoolsPath); err != nil {
-		t.Fatalf("expected spools.edn bootstrap: %v", err)
+	depsPath := filepath.Join(cfg, "deps.edn")
+	deps := string(mustReadFile(t, depsPath))
+	if !strings.Contains(deps, "io.millstrand/batteries") {
+		t.Fatalf("deps.edn missing Batteries coordinate, got:\n%s", deps)
 	}
-	spools := string(mustReadFile(t, spoolsPath))
-	if want := `millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}`; !strings.Contains(spools, want) {
-		t.Fatalf("spools.edn missing %q, got:\n%s", want, spools)
-	}
-	if strings.Contains(spools, "{:spools {}}") {
-		t.Fatalf("spools.edn retained the empty-spools seed, got:\n%s", spools)
+	for _, removed := range []string{"spools.edn", "spools.local.edn"} {
+		if _, err := os.Stat(filepath.Join(cfg, removed)); !os.IsNotExist(err) {
+			t.Fatalf("bootstrap must not create removed manifest %s: %v", removed, err)
+		}
 	}
 	initPath := filepath.Join(cfg, "init.clj")
 	got := string(mustReadFile(t, initPath))
-	// The seeded declaration carries a source target and world policy only: the
-	// module's contribution is the declaration data its authoring forms collect,
-	// so the removed entry-point keys must appear nowhere in the file.
-	declaration := "(runtime/module! runtime :millstrand/spools-batteries\n                 {:ns 'millstrand.spools.batteries\n                  :spools ['millstrand.spools/batteries]})"
+	declaration := "(runtime/module! runtime :millstrand/spools-batteries\n                 {:ns 'millstrand.spools.batteries\n                  :required? true})"
 	if !strings.Contains(got, declaration) {
-		t.Fatalf("init.clj missing the source/world-policy declaration %q, got:\n%s", declaration, got)
+		t.Fatalf("init.clj missing the unguarded Batteries declaration %q, got:\n%s", declaration, got)
 	}
-	for _, removed := range []string{":contribute", ":reconcile"} {
+	for _, removed := range []string{":contribute", ":reconcile", ":spools"} {
 		if strings.Contains(got, removed) {
 			t.Fatalf("init.clj seeds removed entry-point key %q, got:\n%s", removed, got)
 		}
@@ -142,7 +139,6 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 		";; you can omit this `module!` and build entirely your own way, see\n;; https://codethread.github.io/millstrand/docs/spools/customisation/",
 		`(runtime/module! runtime :module-me-help`,
 		`{:file "me/help.clj"`,
-		`:spools ['millstrand.spools/batteries]`,
 		`:after [:millstrand/spools-batteries]})`,
 	} {
 		if !strings.Contains(got, want) {
@@ -161,7 +157,7 @@ func TestInitBootstrapsConfigDirWorkspaceThroughMill(t *testing.T) {
 			t.Fatalf("me/help.clj missing %q, got:\n%s", want, helpAdapter)
 		}
 	}
-	if got := string(mustReadFile(t, filepath.Join(cfg, ".gitignore"))); got != "config.local.json\ninit.local.clj\nspools.local.edn\n" {
+	if got := string(mustReadFile(t, filepath.Join(cfg, ".gitignore"))); got != "config.local.json\ndeps.local.edn\ninit.local.clj\n" {
 		t.Fatalf("unexpected bootstrap .gitignore: %q", got)
 	}
 	if _, err := os.Stat(filepath.Join(cfg, "spools")); !os.IsNotExist(err) {
@@ -333,6 +329,7 @@ func TestMillRoutedStrandOpsAddListHelpAndStream(t *testing.T) {
 	if out, err := h.millCmd("", repo, "", "init"); err != nil {
 		t.Fatalf("init failed: %v\n%s", err, out)
 	}
+	writeLocalBatteriesDeps(t, filepath.Join(repo, ".millstrand"))
 	// Load the pinned streaming-op fixture from the workspace init.clj so the
 	// weaver registers `test-stream` alongside the batteries ops.
 	appendFixtureLoad(t, filepath.Join(repo, ".millstrand", "init.clj"))
@@ -439,6 +436,7 @@ func TestLinkedGitWorktreesShareDefaultWorldAndExplicitConfigDirIsolated(t *test
 	if out, err := h.millCmd("", repo, "", "init"); err != nil {
 		t.Fatalf("init failed: %v\n%s", err, out)
 	}
+	writeLocalBatteriesDeps(t, filepath.Join(repo, ".millstrand"))
 	if out, err := h.millCmd("", repo, "", "weaver", "start"); err != nil {
 		t.Fatalf("weaver start failed: %v\n%s", err, out)
 	}
@@ -469,6 +467,7 @@ func TestLinkedGitWorktreesShareDefaultWorldAndExplicitConfigDirIsolated(t *test
 	if out, err := h.millCmd(explicit, linked, "", "init"); err != nil {
 		t.Fatalf("explicit init failed: %v\n%s", err, out)
 	}
+	writeLocalBatteriesDeps(t, explicit)
 	if out, err := h.millCmd(explicit, linked, "", "weaver", "start"); err != nil {
 		t.Fatalf("explicit weaver start failed: %v\n%s", err, out)
 	}
@@ -577,6 +576,21 @@ func (h harness) addJSON(t *testing.T, workspace, cwd, title, attr string) strin
 func writeClientConfig(t *testing.T, dir string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"configFormat":"alpha"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "deps.edn"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "init.clj"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeLocalBatteriesDeps(t *testing.T, dir string) {
+	t.Helper()
+	root := filepath.Join(sourceRoot(t), "spools", "batteries")
+	deps := fmt.Sprintf("{:deps {io.millstrand/batteries {:local/root %q}}}\n", root)
+	if err := os.WriteFile(filepath.Join(dir, "deps.edn"), []byte(deps), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

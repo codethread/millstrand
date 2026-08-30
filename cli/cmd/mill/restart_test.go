@@ -92,6 +92,25 @@ func TestDecodeRestartProbeUsesClosedBoundary(t *testing.T) {
 	}
 }
 
+func TestFreshRuntimeProbeExpressionSuppliesGenerationBasis(t *testing.T) {
+	for _, want := range []string{
+		`(System/getenv "MILLSTRAND_PROBE_SOURCE")`,
+		`millstrand.core.weaver.basis/create-generation-basis`,
+		`:generation-basis generation-basis`,
+	} {
+		if !strings.Contains(freshRuntimeProbeExpression, want) {
+			t.Fatalf("fresh runtime probe expression missing %q", want)
+		}
+	}
+	args := freshRuntimeProbeArgs(filepath.Join("tmp", "millstrand"))
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"-Srepro", "-M", "org.clojure/tools.deps"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("fresh runtime probe args missing %q: %q", want, args)
+		}
+	}
+}
+
 func TestRestartProbeConformanceCorpus(t *testing.T) {
 	var corpus struct {
 		ProbeResults []struct {
@@ -491,7 +510,8 @@ func writeWeaverMetadataForIdentity(t *testing.T, world config.World, identity w
 	metadata := map[string]any{
 		"protocol_version": 3, "pid": identity.PID, "database_kind": "sqlite-file",
 		"database_label": world.DBPath, "database_path": world.DBPath,
-		"weaver_id": identity.WeaverID, "generation_id": "generation-" + identity.WeaverID, "config_dir": identity.ConfigDir,
+		"weaver_id": identity.WeaverID, "generation_id": "generation-" + identity.WeaverID,
+		"basis_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "config_dir": identity.ConfigDir,
 		"state_dir": identity.StateDir, "data_dir": identity.DataDir, "name": name,
 		"socket_path": identity.Socket, "started_at": identity.StartedAt,
 		"nrepl": map[string]any{"host": "127.0.0.1", "port": 5555},

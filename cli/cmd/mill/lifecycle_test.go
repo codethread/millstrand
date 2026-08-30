@@ -61,7 +61,7 @@ func TestWeaverLifecycleWithFakeLauncher(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if launchedSource != source || !reflect.DeepEqual(launchedArgs, weaverArgs(world, filepath.Base(world.ConfigDir))) {
+	if launchedSource != source || !reflect.DeepEqual(launchedArgs, weaverArgs(world, filepath.Base(world.ConfigDir), source)) {
 		t.Fatalf("unexpected launch source/args: source=%q args=%#v", launchedSource, launchedArgs)
 	}
 	if status["state"] != "running" || status["pid"] == nil || status["weaver_id"] != "weaver-one" || status["socket_path"] == nil || status["nrepl"] == nil {
@@ -114,6 +114,27 @@ func TestWeaverLifecycleWithFakeLauncher(t *testing.T) {
 	}
 	if strings.Contains(logText, "probe: child stdout line") {
 		t.Fatalf("weaver child output should not be forwarded to mill logs:\n%s", logText)
+	}
+}
+
+func TestWeaverArgsUseMinimalBasisBootstrap(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "millstrand source")
+	world := config.World{ConfigDir: "/workspace", StateDir: "/state", DataDir: "/data"}
+	args := weaverArgs(world, "weaver", source)
+	joined := strings.Join(args, " ")
+
+	if strings.Contains(joined, "-M:millstrand ") {
+		t.Fatalf("bootstrap must not activate the checkout's :millstrand alias: %#v", args)
+	}
+	for _, want := range []string{"-M:millstrand/bootstrap", "org.clojure/clojure", "org.clojure/data.json", "org.clojure/tools.deps", filepath.ToSlash(filepath.Join(source, "src"))} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("minimal bootstrap args missing %q: %#v", want, args)
+		}
+	}
+	for _, excluded := range []string{"next.jdbc", "spools/batteries", "tools.namespace", "nrepl/nrepl"} {
+		if strings.Contains(joined, excluded) {
+			t.Fatalf("minimal bootstrap args include workspace dependency %q: %#v", excluded, args)
+		}
 	}
 }
 
@@ -510,7 +531,7 @@ func TestWeaverStatusDistinguishesStaleMetadata(t *testing.T) {
 	if err != nil || status["state"] != "stale" || status["stale_reason"] == nil {
 		t.Fatalf("expected malformed stale status, got %#v err=%v", status, err)
 	}
-	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(`{"protocol_version":3,"pid":1,"database_kind":"sqlite-file","database_label":"/wrong","database_path":"/wrong","weaver_id":"wrong","generation_id":"generation-wrong","config_dir":"/wrong","state_dir":"/wrong","data_dir":"/wrong","name":"wrong","socket_path":"/wrong","started_at":"now","nrepl":{"host":"127.0.0.1","port":1}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(`{"protocol_version":3,"pid":1,"database_kind":"sqlite-file","database_label":"/wrong","database_path":"/wrong","weaver_id":"wrong","generation_id":"generation-wrong","basis_fingerprint":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","config_dir":"/wrong","state_dir":"/wrong","data_dir":"/wrong","name":"wrong","socket_path":"/wrong","started_at":"now","nrepl":{"host":"127.0.0.1","port":1}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	status, err = s.weaverStatus(req)
@@ -934,7 +955,7 @@ func writeWeaverMetadataWithName(t *testing.T, world config.World, pid int, id s
 	if err := os.MkdirAll(world.StateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	meta := `{"protocol_version":3,"pid":` + intString(pid) + `,"database_kind":"sqlite-file","database_label":"` + world.DBPath + `","database_path":"` + world.DBPath + `","weaver_id":"` + id + `","generation_id":"generation-` + id + `","config_dir":"` + world.ConfigDir + `","state_dir":"` + world.StateDir + `","data_dir":"` + world.DataDir + `","name":"` + name + `","socket_path":"` + filepath.Join(world.StateDir, "weaver.sock") + `","started_at":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","nrepl":{"host":"127.0.0.1","port":5555}}`
+	meta := `{"protocol_version":3,"pid":` + intString(pid) + `,"database_kind":"sqlite-file","database_label":"` + world.DBPath + `","database_path":"` + world.DBPath + `","weaver_id":"` + id + `","generation_id":"generation-` + id + `","basis_fingerprint":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","config_dir":"` + world.ConfigDir + `","state_dir":"` + world.StateDir + `","data_dir":"` + world.DataDir + `","name":"` + name + `","socket_path":"` + filepath.Join(world.StateDir, "weaver.sock") + `","started_at":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","nrepl":{"host":"127.0.0.1","port":5555}}`
 	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(meta), 0o644); err != nil {
 		t.Fatal(err)
 	}

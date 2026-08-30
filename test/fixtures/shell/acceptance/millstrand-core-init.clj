@@ -5,4 +5,4 @@
 
 (runtime/module! runtime :millstrand/spools-batteries
                  {:ns 'millstrand.spools.batteries
-                  :spools ['millstrand.spools/batteries]})
+                  :required? true})

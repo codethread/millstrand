@@ -28,22 +28,20 @@ This doc is the standing contract. It is written against the old public-CLI clau
 deliberate differences are explicit; [§5](#5-equivalence-with-the-old-public-cli) is the clause-by-clause map. Stable ids here use the `BAT-`
 prefix.
 
-`mill init` approves batteries as a shipped source-root spool:
+`mill init` makes batteries available in the workspace basis and activates it explicitly:
 
 ```clojure
-{:spools
- {millstrand.spools/batteries {:millstrand/source-root "spools/batteries"}}}
+{:deps {millstrand.spools/batteries {:local/root "../spools/batteries"}}}
 ```
 
-Its generated `init.clj` activates the approved root through the ordinary guarded module path:
+Its generated `init.clj` activates the module:
 
 ```clojure
 (runtime/module! runtime :millstrand/spools-batteries
-  {:ns 'millstrand.spools.batteries
-   :spools ['millstrand.spools/batteries]})
+  {:ns 'millstrand.spools.batteries})
 ```
 
-The relative coordinate resolves against the mill-selected Millstrand checkout and persists no absolute checkout path. Delete the seeded `spools.edn` entry to opt out; a workspace without it has no batteries ops.
+Dependency presence alone does not activate code. Delete the seeded dependency or declaration to opt out; dependency-basis changes require generation replacement.
 
 The contribution owns every op below plus its glossary outcomes. Each op carries `{:doc … :arg-spec … :returns …}` metadata; its invocable `:arg-spec` leaves carry `:hook-class` and `:deadline-class`. Owner-complete refresh replaces the whole batteries partition atomically.
 
@@ -67,7 +65,7 @@ The contribution owns every op below plus its glossary outcomes. Each op carries
   - `weave --input :stdin` replaces reading raw stdin for `weave`.
 Loud rules (SPEC-003-D003.C2): a reference naming no attached payload fails `:missing-payload`; an
 attached payload that no reference consumed fails `:unused-payloads`.
-- **BAT-C3 (hook classes):** Each invocable arg-spec leaf declares `:hook-class` and `:deadline-class` for metadata-driven gating (SPEC-004-D003). The mutating leaves are `add`, `update`, `supersede`, `burn`, `note`, `weave`, and `spool add`/`spool bump`; the read leaves are `show`, `list`, `ready`, `await`, `notes`, `subgraph`, `runbook`, every `query` and `pattern` verb, and `spool about`/`spool status`. `await` uses `:deadline-class :unbounded`; every other batteries leaf uses `:deadline-class :standard`.
+- **BAT-C3 (hook classes):** Each invocable arg-spec leaf declares `:hook-class` and `:deadline-class` for metadata-driven gating. The mutating leaves are `add`, `update`, `supersede`, `burn`, `note`, and `weave`; the remaining batteries leaves are reads. `await` uses `:deadline-class :unbounded`; every other batteries leaf uses `:deadline-class :standard`.
   Mutating ops pass a request context
   `{:request/source :json-socket :request/operation <op-kw>}` so hooks and
   events observe the same data the old socket dispatch supplied.
@@ -303,45 +301,7 @@ input spec, plus optional `doc`). Registry names are canonical strings (e.g. `"t
 missing/blank name on `explain` and unknown pattern names fail loudly. Pattern *registration* stays
 a trusted config/REPL workflow — never exposed here.
 
-### 3.3 Spool release coordinates — BAT-C24
-
-```
-strand spool about
-strand spool add <git-url> [--tag vN | --unversioned-head] [--lib family]
-strand spool bump <family> --latest tag|sha
-strand spool status
-```
-
-`spool about` returns each verb's behavior and the helper's conventions as data; the invocation forms above come from `strand help spool`. `spool add` and `spool bump` are mutating leaves, while the offline `spool status` projection is a read leaf. Per-leaf hook classes keep status free of mutation gating.
-
-The public boundary specs are `::spool-op-context`, `::spool-about-result`, `::spool-add-result`, `::spool-bump-result`, `::spool-status-result`, and `::advisory-manifest` in `millstrand.spools.batteries`. Closed result and manifest maps also use the named `exact-keys?` predicate because `clojure.spec.alpha/keys` accepts extra keys.
-
-Add lists the remote tags and accepts annotated `vN` tags only, where `N` is a positive integer.
-It resolves the peeled `refs/tags/vN^{}` commit and records that 40-character commit sha, never the
-tag-object sha. `--tag` chooses one release; without it, add chooses the highest numbered release.
-Lightweight tags, `v0`, missing releases, and untagged repositories fail loudly. `--unversioned-head` is for a repository with no tags at all: it verifies that condition, resolves and fetches the default-branch `HEAD`, then writes a SHA-only coordinate. It is mutually exclusive with `--tag`. A repository with any tag fails and directs the caller to use `--tag`.
-
-At the selected commit, add reads the optional producer `spool.edn` as an advisory manifest. A present
-manifest supplies the roots, Millstrand floor, and root requirements written into the consumer family
-entry. When `--lib` is also present, it must match one of the manifest's root symbols; a conflict
-fails before any write and names the requested and declared symbols. Without a manifest, add creates
-one root at `.`. Its symbol defaults to the Git URL basename, while `--lib` confirms or overrides
-that implicit symbol. The completed entry goes through the validated, comment-preserving atomic
-`spools.edn` write path.
-
-Bump requires `--latest tag` or `--latest sha`. `tag` lists annotated, peeled releases and selects the
-highest valid `vN`, then updates `:git/tag` and `:git/sha` together. `sha` resolves the remote default
-branch `HEAD`, fetches that exact 40-character lowercase commit from the declared Git URL, writes
-`:git/sha`, and removes any stale `:git/tag`. The result includes the post-write requirements report
-and `compare-url`; a direct SHA coordinate has a nil tag. GitHub HTTPS, SSH, and SCP remotes become
-an HTTPS web URL before the compare path is added. Other HTTP(S) remotes keep their transport URL
-without a trailing `.git`. An unrecognized non-HTTP(S) remote produces a nil `compare-url`, because
-batteries cannot infer a usable web URL. The hint does not claim that the compared commits are
-compatible.
-
-`spool status` performs no Git call, file write, refresh, or adoption action. It joins the declared family projection with local-overlay provenance and claims, root outcomes, module declarations, pending generation, requirement outcome, and release marker. The result reports current truth; it does not try to repair or adopt anything.
-
-### 3.4 Discovery — help, about, prime — BAT-C25
+### 3.3 Discovery — help, about, prime — BAT-C25
 
 Every batteries op is discoverable through the three built-in meta-verbs (see
 [cli.md](../devflow/specs/cli.md) SPEC-002.C39 and the discovery-tier deltas). The behavior batteries
@@ -351,7 +311,7 @@ opts into:
   it adds value, an op's arg-spec also declares a closed `:annotations` sub-map — `use-when` (when to
   reach for the op), `notes` (a subtlety the flag docs do not cover), and `failure-modes` (the named
   outcomes the op can produce). For a subcommand op, annotations sit on the routed child, so
-  `strand help spool add` shows only that verb's failure modes. `--help` after an op (`strand add
+  `strand help add` shows only that operation's failure modes. `--help` after an op (`strand add
   --help`) is sugar for the same projection.
 - **`strand about <op>`** returns the op's cross-verb narrative — how it relates to its sibling verbs
   — for the ops that declare `:about` prose (today `add` and `weave`). It is prose, not a flag list;

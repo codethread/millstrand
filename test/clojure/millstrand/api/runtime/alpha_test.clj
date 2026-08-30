@@ -3,9 +3,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [millstrand.api.runtime.alpha :as runtime]
-            [millstrand.core.specs :as specs])
-  (:import [java.io File]))
+            [millstrand.api.runtime.alpha :as runtime]))
 
 (deftest spool-state-opts-spec-owns-public-shape
   (is (s/valid? ::runtime/spool-state-opts nil))
@@ -17,23 +15,24 @@
                 {:migrate-fn identity}]]
     (is (not (s/valid? ::runtime/spool-state-opts opts)))))
 
-(deftest runtime-result-specs-own-public-shapes
-  (is (s/valid? ::specs/release-marker-syntax "v0"))
-  (is (not (s/valid? ::specs/release-marker-syntax "v01")))
-  (is (s/valid? ::specs/release-marker-claim "v12"))
-  (is (not (s/valid? ::specs/release-marker-claim "v0")))
-  (is (s/valid? ::specs/release-marker-result
-                {:marker nil :provenance :none}))
-  (is (not (s/valid? ::specs/release-marker-result
-                     {:marker "v2" :provenance :none})))
-  (is (s/valid? ::specs/config-dir-result "/tmp/config"))
-  (is (s/valid? ::specs/spools-file-result (File. "/tmp/config/spools.edn"))))
+(deftest basis-result-specs-own-public-shapes
+  (let [a (str "sha256:" (str/join (repeat 64 "a")))
+        b (str "sha256:" (str/join (repeat 64 "b")))]
+    (is (s/valid? ::runtime/basis-fingerprint a))
+    (is (s/valid? ::runtime/basis-change
+                  {:running-fingerprint a :candidate-fingerprint b}))
+    (is (not (s/valid? ::runtime/basis-change
+                       {:running-fingerprint a :candidate-fingerprint a})))
+    (is (s/valid? ::runtime/refresh-result
+                  {:status :restart-required
+                   :reason :dependency-basis-changed
+                   :basis {:running-fingerprint a
+                           :candidate-fingerprint b}}))))
 
 (def ^:private applied-refresh-result
   {:status :applied
    :mode :full
    :modules {:demo {:module/key :demo :status :applied}}
-   :roots {}
    :residuals []
    :conflicts []
    :remedies []
@@ -43,9 +42,6 @@
 (deftest live-module-result-specs-own-public-shapes
   (testing "refresh and plan results keep their public envelopes"
     (is (s/valid? ::runtime/refresh-result applied-refresh-result))
-    (is (s/valid? ::runtime/refresh-result
-                  {:status :refused :mode :targeted :modules {} :roots {}
-                   :residuals [] :conflicts [{:reason :boom}] :remedies []}))
     (is (not (s/valid? ::runtime/refresh-result
                        (assoc applied-refresh-result :status :bogus))))
     (let [planned (assoc applied-refresh-result :dry-run? true :caveat "loads recorded")]
@@ -53,20 +49,18 @@
       (is (not (s/valid? ::runtime/plan-result applied-refresh-result)))
       (is (not (s/valid? ::runtime/plan-result (assoc planned :caveat ""))))))
   (testing "status and reload results reject missing or extra fields"
-    (let [status {:modules {} :declaration/layers {} :declaration/shadows {}
-                  :contributions {} :module/outcomes {} :resource/outcomes {}
-                  :root/outcomes {} :loaded {} :pending-generation nil
+    (let [status {:basis-fingerprint (str "sha256:" (str/join (repeat 64 "a")))
+                  :modules {} :resources {} :loaded-namespaces []
                   :last-refresh nil}
-          reload {:root-lib 'demo/root :root "/tmp/root"
-                  :namespaces [{:ns 'demo.core :file "/tmp/root/demo/core.clj"}]
-                  :residuals [] :hard-conflicts []}]
+          reload {:lib 'demo/root :status :reloaded
+                  :namespaces ['demo.core]}]
       (is (s/valid? ::runtime/status-result status))
       (is (not (s/valid? ::runtime/status-result (dissoc status :last-refresh))))
       (is (s/valid? ::runtime/reload-code-result reload))
-      (is (not (s/valid? ::runtime/reload-code-result (dissoc reload :residuals))))))
+      (is (not (s/valid? ::runtime/reload-code-result (dissoc reload :status))))))
   (testing "module declarations keep the public file/image grammar"
     (let [image {:ns 'millstrand.api.runtime.alpha-test :load :image
-                 :spools [] :after [] :required? false}]
+                 :after [] :required? false}]
       (is (s/valid? ::runtime/module-declaration image))
       (is (not (s/valid? ::runtime/module-declaration (assoc image :load :classpath))))
       (is (not (s/valid? ::runtime/module-declaration (assoc image :extra :unsupported))))
@@ -80,16 +74,3 @@
     (is (not (s/valid? ::runtime/refresh-opts {:only ["demo"]})))
     (is (s/valid? ::runtime/collect-entry-opts {:override? true}))
     (is (not (s/valid? ::runtime/collect-entry-opts {:override? :yes})))))
-
-(deftest spool-config-write-specs-own-public-shapes
-  (let [entry {:git/url "https://example.invalid/demo.git"
-               :git/sha (str/join (repeat 40 "a"))
-               :git/tag "v1"}]
-    (is (s/valid? ::runtime/spool-family 'demo/family))
-    (is (s/valid? ::runtime/spool-entry entry))
-    (is (s/valid? ::runtime/spool-write-result
-                  {:status :inserted :lib 'demo/family :entry entry
-                   :file (File. "/tmp/spools.edn")}))
-    (is (not (s/valid? ::runtime/spool-entry (assoc entry :git/sha "short"))))
-    (is (not (s/valid? ::runtime/spool-write-result
-                       {:status :inserted :lib 'demo/family :entry entry})))))

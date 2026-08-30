@@ -10,9 +10,8 @@
 ;; https://codethread.github.io/millstrand/docs/spools/customisation/
 (runtime/module! runtime :millstrand/spools-batteries
                  {:ns 'millstrand.spools.batteries
-                  :spools ['millstrand.spools/batteries]})
+                  :required? true})
 
 (runtime/module! runtime :module-me-help
                  {:file "me/help.clj"
-                  :spools ['millstrand.spools/batteries]
                   :after [:millstrand/spools-batteries]})
