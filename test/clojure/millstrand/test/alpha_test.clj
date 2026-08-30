@@ -316,6 +316,13 @@
              (get-in (t/module-status ctx)
                      [:modules :test/clock :ns]))))))
 
+(deftest activate-module-loads-declarations-from-a-hyphenated-namespace
+  (t/with-weaver-world [ctx {:storage :sqlite-memory}]
+    (t/activate-module! (:runtime ctx) :test/hyphen-source
+                        'millstrand.test.hyphen-source-fixture)
+    (is (= [:= [:attr :fixture] :loaded]
+           (get (graph/queries (:runtime ctx)) "loaded-query")))))
+
 (deftest module-authoring-helpers-publish-their-spec-contracts
   (doseq [spec [:millstrand.test.alpha/bare-runtime
                 :millstrand.test.alpha/module-key
