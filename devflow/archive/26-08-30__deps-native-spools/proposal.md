@@ -3,7 +3,7 @@
 **Document ID:** `PROP-Dns-001`
 **Status:** Approved
 **Approved:** 2026-08-29
-**Depends on:** [`PROP-Wrc-001`, Weaver restart continuity](../weaver-restart-continuity/proposal.md)
+**Depends on:** [`PROP-Wrc-001`, Weaver restart continuity](../../feat/weaver-restart-continuity/proposal.md)
 **Related RFCs:** [Spool authoring forms](../../rfcs/2026-07-28-spool-authoring-forms.md), [Lifecycle authoring forms](../../rfcs/2026-07-28-lifecycle-authoring-forms.md), [Runtime module `:using`](../../rfcs/2026-08-14-runtime-module-using.md)
 **Related root specs:** [CLI](../../specs/cli.md) (SPEC-002), [REPL API](../../specs/repl-api.md) (SPEC-003), [Weaver runtime](../../specs/daemon-runtime.md) (SPEC-004), [Alpha surface](../../specs/alpha-surface.md) (SPEC-005), [Testing](../../specs/testing.md) (SPEC-006)
 
@@ -17,7 +17,7 @@ A Weaver is the Clojure process serving one selected workspace. A spool is a Clo
 
 The separate dependency subsystem exists mainly so a running Weaver can add libraries without restarting. Replacement and removal already need a fresh generation because the JVM cannot safely unload an active classpath. Once Weaver replacement is supervised and readiness-aware, live coordinate mutation no longer justifies a second dependency language.
 
-Replacement still disconnects REPLs and interrupts uncheckpointed JVM callbacks while the new Weaver starts. A failed replacement leaves the workspace in the predecessor proposal's visible `failed` state until the user fixes the cause and retries. [`PROP-Wrc-001`](../weaver-restart-continuity/proposal.md) preserves registered native work and exposes replacement readiness and failure to callers without replaying accepted mutations. That limits the accepted disruption to disconnected REPLs and uncheckpointed JVM callbacks. This proposal accepts that interruption in exchange for removing live coordinate mutation and its second package-management model.
+Replacement still disconnects REPLs and interrupts uncheckpointed JVM callbacks while the new Weaver starts. A failed replacement leaves the workspace in the predecessor proposal's visible `failed` state until the user fixes the cause and retries. [`PROP-Wrc-001`](../../feat/weaver-restart-continuity/proposal.md) preserves registered native work and exposes replacement readiness and failure to callers without replaying accepted mutations. That limits the accepted disruption to disconnected REPLs and uncheckpointed JVM callbacks. This proposal accepts that interruption in exchange for removing live coordinate mutation and its second package-management model.
 
 ## PROP-Dns-001.P2 Goals
 
@@ -291,7 +291,7 @@ mill weaver restart --workspace /work/project/.millstrand
 
 A successful command returns the new generation's `running` status. A dependency resolution failure returns `failed` with stage `deps-resolve`, matching refresh terminology; after correcting the workspace dependency files, the user runs the same command again.
 
-The restart command and its readiness and failure behavior belong to [`PROP-Wrc-001`](../weaver-restart-continuity/proposal.md). This proposal determines when a changed basis requires that transition.
+The restart command and its readiness and failure behavior belong to [`PROP-Wrc-001`](../../feat/weaver-restart-continuity/proposal.md). This proposal determines when a changed basis requires that transition.
 
 ## PROP-Dns-001.P6 Evidence and history
 
