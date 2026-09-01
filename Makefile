@@ -197,7 +197,7 @@ lint-clj-root: kondo-configs-root
 
 lint-clj-millstrand: kondo-configs-millstrand
 	@echo "==> .millstrand clj-kondo"
-	@cd .millstrand && $(CLJ_KONDO) --repro --parallel --lint init.clj ct
+	@cd .millstrand && $(CLJ_KONDO) --repro --parallel --lint init.clj me
 
 lint-clj-batteries: kondo-configs-batteries
 	@echo "==> spools/batteries clj-kondo"

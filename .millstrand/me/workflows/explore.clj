@@ -1,9 +1,9 @@
-(ns ct.workflows.explore
+(ns me.workflows.explore
   "The open-ended exploration workflow (family `explore`)."
   (:require [clojure.spec.alpha :as s]
             [millstrand.api.format.alpha :as format-alpha]
             [millhouse.spools.workflow :as workflow]
-            [ct.workflows.support :as support]))
+            [me.workflows.support :as support]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."
@@ -28,7 +28,7 @@
 (s/def ::topic ::non-blank-string)
 (s/def ::explore-params (s/keys :req-un [::topic] :opt-un [::card]))
 
-(workflow/defworkflow! explore
+(workflow/defworkflow explore
   "Run the open-ended EXPLORE workflow (family \"explore\").
 
   The zero-ceremony mode for exploration with an agent: claim a kanban

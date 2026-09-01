@@ -1,4 +1,4 @@
-(ns ct.agents.delegation-contracts
+(ns me.agents.delegation-contracts
   "Workspace-local defaults for the agent-run task and review contracts."
   (:require [millstrand.api.current.alpha :as current]
             [millstrand.api.lifecycle.alpha :as lifecycle]
@@ -21,7 +21,7 @@
     (agent-run/set-default-review-contract! nil)
     (agent-run/set-default-task-contract! nil)))
 
-(lifecycle/defresource! delegation-contracts
+(lifecycle/defresource delegation-contracts
   "Own this workspace's default task and review contracts."
-  {:open 'ct.agents.delegation-contracts/open-contracts!
-   :close 'ct.agents.delegation-contracts/close-contracts!})
+  {:open 'me.agents.delegation-contracts/open-contracts!
+   :close 'me.agents.delegation-contracts/close-contracts!})

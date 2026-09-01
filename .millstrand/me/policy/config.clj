@@ -1,4 +1,4 @@
-(ns ct.policy.config
+(ns me.policy.config
   "Repo-local Millstrand runtime configuration for millstrand-src: named queries and the
   validation helpers used by workspace policy.
 
@@ -6,10 +6,10 @@
   `millhouse.spools.workflow` is its generic CLI, `ct.spools.delegation` owns the
   `strand agent` surface plus the `agent-plan` pattern (all activated from
   init.clj). This file registers named queries. Sibling init.clj modules hold
-  the rest of the repo policy: hand-authored modules under ct/workflows/,
-  reviewer rosters in ct/agents/reviewers.clj, chime attention rules
-  in ct/notifications/attention.clj, and the NVD scan cron job in
-  ct/jobs/nvd_scan.clj."
+  the rest of the repo policy: hand-authored modules under me/workflows/,
+  reviewer rosters in me/agents/reviewers.clj, chime attention rules
+  in me/notifications/attention.clj, and the NVD scan cron job in
+  me/jobs/nvd_scan.clj."
   (:require [clojure.data.json :as json]
             [clojure.string :as str]
             [millstrand.api.millstrand.alpha :as millstrand]))
@@ -18,7 +18,7 @@
 ;; Named queries
 ;; ---------------------------------------------------------------------------
 
-(millstrand/defquery! run-active
+(millstrand/defquery run-active
   "Parameterized query for the active strands of one workflow run."
   {:usage "strand list --query run-active --param run-id=<run-id>"}
   {:params [:run-id]
@@ -26,7 +26,7 @@
            [:= :state "active"]
            [:= [:attr "workflow/run-id"] [:param :run-id]]]})
 
-(millstrand/defquery! kanban-feature-work
+(millstrand/defquery kanban-feature-work
   "Parameterized query for active direct task children of one feature card."
   {:usage "strand ready --query kanban-feature-work --param feature=<feature-id>"}
   {:params [:feature]
@@ -35,28 +35,28 @@
            [:= [:attr "kanban/task"] "true"]
            [:edge/in "parent-of" [:= :id [:param :feature]]]]})
 
-(millstrand/defquery! workflow-runs
+(millstrand/defquery workflow-runs
   "Query for active workflow roots (any family)."
   {:usage "strand list --query workflow-runs --limit 500"}
   [:and
    [:= :state "active"]
    [:= [:attr "workflow/role"] "root"]])
 
-(millstrand/defquery! merge-lock
+(millstrand/defquery merge-lock
   "Query for the active singleton landing lock."
   {:usage "strand list --query merge-lock"}
   [:and
    [:= :state "active"]
    [:= [:attr "kind"] "merge-lock"]])
 
-(millstrand/defquery! merge-queue
+(millstrand/defquery merge-queue
   "Query for the runs queued to merge, including the one holding the lock."
   {:usage "strand list --query merge-queue"}
   [:and
    [:= :state "active"]
    [:= [:attr "kind"] "merge-queue-entry"]])
 
-(millstrand/defquery! work
+(millstrand/defquery work
   "Query for active actionable work, excluding workflow plumbing, agent run records, and inert kanban refinement cards."
   {:usage "strand ready --query work"}
   [:and

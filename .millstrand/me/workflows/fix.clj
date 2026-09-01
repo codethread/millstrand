@@ -1,9 +1,9 @@
-(ns ct.workflows.fix
+(ns me.workflows.fix
   "The light bug-fix workflow (family `fix`)."
   (:require [clojure.spec.alpha :as s]
             [millstrand.api.format.alpha :as format-alpha]
             [millhouse.spools.workflow :as workflow]
-            [ct.workflows.support :as support]))
+            [me.workflows.support :as support]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."
@@ -87,7 +87,7 @@
        |run."
       branch worktree))))
 
-(workflow/defworkflow! fix
+(workflow/defworkflow fix
   "Run the light BUG-FIX workflow (family \"fix\").
 
   The low-ceremony path for a bug fix, direct or picking up an existing
