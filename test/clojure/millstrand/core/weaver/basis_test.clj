@@ -3,6 +3,7 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [millstrand.core.weaver.basis :as basis]))
 
@@ -38,6 +39,16 @@
                 (get-in options [:args :extra-deps]))
    :classpath-roots []
    :argmap {:aliases (:aliases options)}})
+
+(defn- local-library!
+  [parent name namespace-name]
+  (let [root (io/file parent name)
+        source (io/file root "src" (str (str/replace namespace-name "." "/")
+                                        ".clj"))]
+    (.mkdirs (.getParentFile source))
+    (spit (io/file root "deps.edn") "{:paths [\"src\"]}\n")
+    (spit source (str "(ns " namespace-name ")\n"))
+    root))
 
 (deftest dns-s9-01-and-02-compose-workspace-sources-without-user-deps
   (let [workspace (workspace!
@@ -99,6 +110,59 @@
     (is (= ["-Dshared=true"] (get-in shared [:argmap :jvm-opts])))
     (is (= ["-Dshared=true" "-Dlocal=true"]
            (get-in overlaid [:argmap :jvm-opts])))))
+
+(deftest copied-workspace-rebases-relative-local-roots-from-source
+  (let [source (workspace! {} nil)
+        parent (.getParentFile source)
+        prefix (.getName source)
+        project-name (str prefix "-project-lib")
+        extra-name (str prefix "-extra-lib")
+        alias-name (str prefix "-alias-lib")
+        project-lib (local-library! parent project-name "example.project-lib")
+        extra-lib (local-library! parent extra-name "example.extra-lib")
+        alias-lib (local-library! parent alias-name "example.alias-lib")
+        project {:deps {'example/project {:local/root (str "../" project-name)}}
+                 :aliases {:millstrand/weaver
+                           {:extra-deps {'example/alias
+                                         {:local/root (str "../" alias-name)}}}}}
+        extra {:deps {'example/extra {:local/root (str "../" extra-name)}}}
+        copied (workspace! project extra)]
+    (spit (io/file source "deps.edn") (pr-str project))
+    (spit (io/file source "deps.local.edn") (pr-str extra))
+    (let [generation
+          (basis/create-generation-basis
+           (.getPath copied)
+           {:local/root (.getCanonicalPath (io/file "."))}
+           {:dependency-source-workspace (.getPath source)})
+          roots (set (get-in generation [:basis :classpath-roots]))]
+      (is (every? roots
+                  (map #(str (.getCanonicalPath %) "/src")
+                       [project-lib extra-lib alias-lib])))
+      (is (= (str "../" project-name)
+             (get-in (edn/read-string (slurp (io/file copied "deps.edn")))
+                     [:deps 'example/project :local/root])))
+      (is (= (str "../" alias-name)
+             (get-in (edn/read-string (slurp (io/file copied "deps.edn")))
+                     [:aliases :millstrand/weaver :extra-deps
+                      'example/alias :local/root])))
+      (is (= (str "../" extra-name)
+             (get-in (edn/read-string
+                      (slurp (io/file copied "deps.local.edn")))
+                     [:deps 'example/extra :local/root]))))))
+
+(deftest copied-workspace-missing-relative-local-root-fails-loudly
+  (let [source (workspace! {:deps {'example/missing
+                                   {:local/root "../does-not-exist"}}}
+                           nil)
+        copied (workspace! (edn/read-string (slurp (io/file source "deps.edn")))
+                           nil)]
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"cannot resolve Weaver dependency basis"
+         (basis/create-generation-basis
+          (.getPath copied)
+          {:local/root (.getCanonicalPath (io/file "."))}
+          {:dependency-source-workspace (.getPath source)})))))
 
 (deftest fingerprint-is-canonical-and-semantic
   (let [project {:deps {'a/x {:mvn/version "1"}}

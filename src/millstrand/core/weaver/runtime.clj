@@ -883,7 +883,9 @@
                            'io.millstrand/millstrand])
              generation-basis
              (basis/create-generation-basis (.getCanonicalPath probe-config)
-                                            runtime-coordinate)
+                                            runtime-coordinate
+                                            {:dependency-source-workspace
+                                             (:config-dir world)})
              runtime (reset! started-runtime
                              (start! nil (merge opts
                                                 {:world probe-world
