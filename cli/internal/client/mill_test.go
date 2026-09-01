@@ -96,6 +96,18 @@ func TestReadMillMetadataProtocolMismatchNamesVersionsAndSkipsStartRemedy(t *tes
 	if err == nil || !strings.Contains(err.Error(), "build abc1234") {
 		t.Fatalf("expected mismatch error naming mill build abc1234, got %v", err)
 	}
+
+	originalVersion := config.Version
+	config.Version = "0.5.1"
+	t.Cleanup(func() { config.Version = originalVersion })
+	writeMillMetadata(t, metadataPath, MillMetadata{ProtocolVersion: MillProtocolVersion, MillVersion: "0.5.0", PID: os.Getpid(), MillID: "mill-test", StateRoot: root, SocketPath: filepath.Join(root, config.MillSocketFileName), StartedAt: time.Now().UTC().Format(time.RFC3339Nano), MillBuild: "old-release"})
+	_, err = ReadMillMetadata()
+	if err == nil || !errors.Is(err, ErrMillVersionMismatch) || !strings.Contains(err.Error(), "version 0.5.0") || !strings.Contains(err.Error(), "version 0.5.1") {
+		t.Fatalf("expected product version mismatch naming both releases, got %v", err)
+	}
+	if strings.Contains(err.Error(), "start one with: mill start") {
+		t.Fatalf("version mismatch must not carry the mill start remedy, got %v", err)
+	}
 }
 
 func writeMillMetadata(t *testing.T, path string, metadata MillMetadata) {

@@ -161,7 +161,9 @@
   nil)
 
 (defn metadata-shape
-  "Return the canonical EDN metadata map for a running weaver."
+  "Return the canonical EDN metadata map for a running weaver.
+
+  Product `version` must conform to `:millstrand.release/version`."
   [{:keys [pid version host port storage-kind storage-label canonical-db-path nonce generation-id
            basis-fingerprint started-at world name]
     :as shape}]

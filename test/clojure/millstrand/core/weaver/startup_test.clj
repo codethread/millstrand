@@ -147,6 +147,10 @@
         (is (= basis-fingerprint (:basis-fingerprint metadata)))
         (is (= metadata (metadata/read-metadata world)))
         (is (false? (metadata/valid-metadata?
+                     (dissoc metadata :version))))
+        (is (false? (metadata/valid-metadata?
+                     (assoc metadata :version "next"))))
+        (is (false? (metadata/valid-metadata?
                      (dissoc metadata :basis-fingerprint))))
         (is (false? (metadata/valid-metadata?
                      (assoc metadata :basis-fingerprint "sha256:invalid"))))

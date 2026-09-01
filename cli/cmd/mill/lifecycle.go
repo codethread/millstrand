@@ -601,11 +601,14 @@ func statusFromMetadata(m client.Metadata, state string) map[string]any {
 }
 
 func validateMetadata(world config.World, m client.Metadata) string {
-	if m.ProtocolVersion != client.ProtocolVersion || m.PID == 0 || m.DaemonID == "" || m.ConfigDir == "" || m.StateDir == "" || m.DataDir == "" || strings.TrimSpace(m.Name) == "" || m.SocketPath == "" || m.StartedAt == "" || m.NREPL.Host == "" || m.NREPL.Port == 0 || !validBasisFingerprint(m.BasisFingerprint) {
+	if m.ProtocolVersion != client.ProtocolVersion || m.Version == "" || m.PID == 0 || m.DaemonID == "" || m.ConfigDir == "" || m.StateDir == "" || m.DataDir == "" || strings.TrimSpace(m.Name) == "" || m.SocketPath == "" || m.StartedAt == "" || m.NREPL.Host == "" || m.NREPL.Port == 0 || !validBasisFingerprint(m.BasisFingerprint) {
 		return "malformed weaver metadata: missing required fields"
 	}
-	if m.Version != "" && !config.ValidVersion(m.Version) {
+	if !config.ValidVersion(m.Version) {
 		return fmt.Sprintf("malformed weaver metadata: invalid product version %q", m.Version)
+	}
+	if config.ValidVersion(config.Version) && m.Version != config.Version {
+		return fmt.Sprintf("weaver product version %q does not match mill product version %q", m.Version, config.Version)
 	}
 	if err := client.ValidateStorageIdentity(m); err != nil {
 		return err.Error()

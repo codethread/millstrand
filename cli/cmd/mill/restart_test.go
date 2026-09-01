@@ -508,7 +508,7 @@ func writeWeaverMetadataForIdentity(t *testing.T, world config.World, identity w
 		t.Fatal(err)
 	}
 	metadata := map[string]any{
-		"protocol_version": 3, "pid": identity.PID, "database_kind": "sqlite-file",
+		"protocol_version": 3, "version": "0.5.1", "pid": identity.PID, "database_kind": "sqlite-file",
 		"database_label": world.DBPath, "database_path": world.DBPath,
 		"weaver_id": identity.WeaverID, "generation_id": "generation-" + identity.WeaverID,
 		"basis_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "config_dir": identity.ConfigDir,

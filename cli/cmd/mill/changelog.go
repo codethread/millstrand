@@ -20,7 +20,7 @@ func renderChangelog() ([]byte, error) {
 		return nil, fmt.Errorf("mill changelog cannot resolve the Millstrand source from cwd %s: %w", cwd, err)
 	}
 	if _, err := config.ValidateSourceVersion(source, config.Version); err != nil {
-		return nil, fmt.Errorf("mill changelog cannot read the installed release identity: %w", err)
+		return nil, fmt.Errorf("mill changelog cannot read the resolved release identity: %w", err)
 	}
 	path := filepath.Join(source, changelogFileName)
 	info, err := os.Stat(path)

@@ -7,7 +7,7 @@
             [nrepl.server :as nrepl]
             [millstrand.api.cli.alpha :as cli]
             [millstrand.api.clock.alpha :as clock]
-            [millstrand.core.release :as release]
+            [millstrand.core.internal.release :as release]
             [millstrand.core.specs :as specs]
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.basis :as basis]
@@ -1058,8 +1058,9 @@
 
   `generation-basis` conforms to
   `:millstrand.core.specs/generation-basis`; `expected-version` is the product
-  version stamped into Mill; `runtime-args` contains the ordinary runtime
-  launch flags after the basis launcher has consumed its own options
+  version stamped into Mill and conforms to
+  `:millstrand.release/expected-version`; `runtime-args` contains the ordinary
+  runtime launch flags after the basis launcher has consumed its own options
   (SPEC-004.C44a). Dependency files are not read again during startup."
   [generation-basis expected-version runtime-args]
   (when-not (s/valid? :millstrand.core.specs/generation-basis generation-basis)
@@ -1067,6 +1068,12 @@
                     {:explain (s/explain-data
                                :millstrand.core.specs/generation-basis
                                generation-basis)})))
+  (when-not (s/valid? :millstrand.release/expected-version expected-version)
+    (throw (ex-info "Mill product version has an invalid shape"
+                    {:version expected-version
+                     :explain (s/explain-data
+                               :millstrand.release/expected-version
+                               expected-version)})))
   (let [workspace (some-> generation-basis :sources first :path io/file .getParent)
         {:keys [config-dir state-dir data-dir name]}
         (parse-main-args (into ["--workspace" workspace] runtime-args))]

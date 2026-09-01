@@ -17,7 +17,7 @@ func TestMillChangelogCommandHierarchy(t *testing.T) {
 	}
 }
 
-func TestRenderChangelogPrintsInstalledFile(t *testing.T) {
+func TestRenderChangelogPrintsResolvedFile(t *testing.T) {
 	want := "# Changelog\n\n## 0.5.1 - 2026-09-01\n"
 	source := writeSourceFixture(t, map[string]string{
 		"VERSION":      "0.5.1\n",

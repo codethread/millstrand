@@ -1,5 +1,9 @@
-(ns millstrand.core.release
-  "Read the product release identity retained with Millstrand source."
+(ns millstrand.core.internal.release
+  "Validate the core-internal product identity retained with Millstrand source.
+
+  `:millstrand.release/version` is one canonical `MAJOR.MINOR.PATCH` value.
+  `:millstrand.release/expected-version` also permits `dev` for unstamped
+  development binaries. Neither this namespace nor its vars are public API."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [millstrand.core.specs]))
@@ -12,7 +16,8 @@
 
   Read `VERSION` from the Mill-supplied runtime root. Missing, non-file, and
   malformed release identities fail during Weaver startup. When Mill supplies
-  `expected-version`, require it to match the retained source."
+  `expected-version`, require it to conform to
+  `:millstrand.release/expected-version` and match the retained source."
   ([generation-basis]
    (version generation-basis nil))
   ([generation-basis expected-version]
@@ -37,8 +42,7 @@
                    "Millstrand VERSION must contain one MAJOR.MINOR.PATCH line"
                    {:path (.getPath file) :content content})))
          (when (and expected-version
-                    (not= "dev" expected-version)
-                    (not (s/valid? :millstrand.release/version
+                    (not (s/valid? :millstrand.release/expected-version
                                    expected-version)))
            (throw (ex-info "Mill product version is invalid"
                            {:mill-version expected-version})))

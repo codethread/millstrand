@@ -2,7 +2,7 @@
   "Tests for product release identity validation."
   (:require [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing]]
-            [millstrand.core.release :as release]
+            [millstrand.core.internal.release :as release]
             [millstrand.spools.test-support :as test-support]))
 
 (defn- generation-basis

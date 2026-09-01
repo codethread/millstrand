@@ -103,6 +103,9 @@
            (re-matches
             #"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
             %))))
+(s/def :millstrand.release/expected-version
+  (s/or :development #{"dev"}
+        :release :millstrand.release/version))
 (s/def :millstrand.basis/deps map?)
 (s/def :millstrand.basis/path
   #(and (non-blank-string? %) (.isAbsolute (File. ^String %))))

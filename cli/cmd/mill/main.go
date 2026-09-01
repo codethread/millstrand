@@ -214,7 +214,7 @@ Environment:
 		return runMillstrandPrime()
 	}})
 	root.AddCommand(prime)
-	root.AddCommand(&cobra.Command{Use: "changelog", Short: "Print the installed Millstrand changelog", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	root.AddCommand(&cobra.Command{Use: "changelog", Short: "Print the resolved Millstrand changelog", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		return runChangelog()
 	}})
 	root.AddCommand(newBinCommand())
