@@ -111,6 +111,47 @@
                               {:lib reserved-lib :value value})))))
   nil)
 
+(defn- rebase-local-root
+  [source-workspace coordinate]
+  (if-let [local-root (:local/root coordinate)]
+    (if (.isAbsolute (io/file local-root))
+      coordinate
+      (assoc coordinate :local/root
+             (.getPath (.getCanonicalFile
+                        (io/file source-workspace local-root)))))
+    coordinate))
+
+(defn- rebase-dependencies
+  [source-workspace dependencies]
+  (when dependencies
+    (into (empty dependencies)
+          (map (fn [[lib coordinate]]
+                 [lib (if (map? coordinate)
+                        (rebase-local-root source-workspace coordinate)
+                        coordinate)]))
+          dependencies)))
+
+(defn- rebase-relative-local-roots
+  [deps source-workspace aliases]
+  (let [rebase-map (fn [value]
+                     (reduce (fn [result dependency-key]
+                               (if (contains? result dependency-key)
+                                 (update result dependency-key
+                                         #(rebase-dependencies source-workspace %))
+                                 result))
+                             value
+                             dependency-keys))]
+    (cond-> (rebase-map deps)
+      (and (seq aliases) (contains? deps :aliases))
+      (update :aliases
+              (fn [alias-map]
+                (reduce (fn [result alias]
+                          (if (contains? result alias)
+                            (update result alias rebase-map)
+                            result))
+                        alias-map
+                        aliases))))))
+
 (declare canonical-edn)
 
 (defn- utf8-compare
@@ -236,53 +277,88 @@
       (.addURL loader (.toURL (.toURI (io/file root)))))
     loader))
 
+(defn- require-create-generation-basis-options!
+  [options]
+  (when-not (s/valid?
+             :millstrand.core.specs/create-generation-basis-options options)
+    (throw
+     (ex-info
+      "create-generation-basis options violate their contract"
+      {:value options
+       :explain
+       (s/explain-data
+        :millstrand.core.specs/create-generation-basis-options options)})))
+  options)
+
 (defn create-generation-basis
   "Compose and describe the immutable basis for one Weaver generation.
 
   `workspace` is the selected workspace directory. `runtime-coordinate` is the
   paired `io.millstrand/millstrand` coordinate supplied by Mill. The result is
   validated against `:millstrand.core.specs/generation-basis` before return
-  (SPEC-004.C42-C45)."
-  [workspace runtime-coordinate]
-  (let [workspace-path (.getPath (.getCanonicalFile (io/file workspace)))
-        project (read-deps! (str (io/file workspace-path "deps.edn")) true)
-        extra (read-deps! (str (io/file workspace-path "deps.local.edn")) false)
-        sources (cond-> [(assoc project :kind :project)]
-                  extra (conj (assoc extra :kind :extra)))
-        aliases (selected-aliases-for sources)
-        reserved-deps {reserved-lib runtime-coordinate}]
-    (reject-reserved! sources aliases)
-    (try
-      (let [basis (*create-basis*
-                   {:dir workspace-path
-                    :root :standard
-                    :user nil
-                    :project (:deps project)
-                    :extra (:deps extra)
-                    :aliases aliases
-                    :args {:extra-deps reserved-deps}})
-            basis-projection {:libs (:libs basis)
-                              :classpath-roots (vec (:classpath-roots basis))
-                              :argmap (:argmap basis)}
-            result {:sources sources
-                    :aliases aliases
-                    :reserved-deps reserved-deps
-                    :basis basis-projection
-                    :fingerprint (basis-fingerprint
-                                  (fingerprint-value sources aliases
-                                                     basis-projection))
-                    :classloader (generation-classloader
-                                  (:classpath-roots basis-projection))}]
-        (when-not (s/valid? :millstrand.core.specs/generation-basis result)
-          (throw (ex-info "constructed generation basis violates its contract"
-                          {:explain (s/explain-data
-                                     :millstrand.core.specs/generation-basis
-                                     result)})))
-        result)
-      (catch Throwable throwable
-        (if (dependency-diagnostic throwable)
-          (throw throwable)
-          (throw (resolution-diagnostic throwable sources)))))))
+  (SPEC-004.C42-C45).
+
+  The closed three-arity options shape is owned by
+  `:millstrand.core.specs/create-generation-basis-options`. When
+  `:dependency-source-workspace` is supplied, relative `:local/root`
+  coordinates are resolved from that directory in memory. This preserves the
+  dependency semantics of config copied into an isolated probe workspace
+  without changing the copied files."
+  ([workspace runtime-coordinate]
+   (create-generation-basis workspace runtime-coordinate {}))
+  ([workspace runtime-coordinate options]
+   (let [{:keys [dependency-source-workspace]}
+         (require-create-generation-basis-options! options)
+         workspace-path (.getPath (.getCanonicalFile (io/file workspace)))
+         dependency-source-path (some-> dependency-source-workspace
+                                        io/file
+                                        .getCanonicalFile
+                                        .getPath)
+         project (read-deps! (str (io/file workspace-path "deps.edn")) true)
+         extra (read-deps! (str (io/file workspace-path "deps.local.edn")) false)
+         sources (cond-> [(assoc project :kind :project)]
+                   extra (conj (assoc extra :kind :extra)))
+         aliases (selected-aliases-for sources)
+         basis-project (cond-> (:deps project)
+                         dependency-source-path
+                         (rebase-relative-local-roots dependency-source-path aliases))
+         basis-extra (when extra
+                       (cond-> (:deps extra)
+                         dependency-source-path
+                         (rebase-relative-local-roots dependency-source-path aliases)))
+         reserved-deps {reserved-lib runtime-coordinate}]
+     (reject-reserved! sources aliases)
+     (try
+       (let [basis (*create-basis*
+                    {:dir workspace-path
+                     :root :standard
+                     :user nil
+                     :project basis-project
+                     :extra basis-extra
+                     :aliases aliases
+                     :args {:extra-deps reserved-deps}})
+             basis-projection {:libs (:libs basis)
+                               :classpath-roots (vec (:classpath-roots basis))
+                               :argmap (:argmap basis)}
+             result {:sources sources
+                     :aliases aliases
+                     :reserved-deps reserved-deps
+                     :basis basis-projection
+                     :fingerprint (basis-fingerprint
+                                   (fingerprint-value sources aliases
+                                                      basis-projection))
+                     :classloader (generation-classloader
+                                   (:classpath-roots basis-projection))}]
+         (when-not (s/valid? :millstrand.core.specs/generation-basis result)
+           (throw (ex-info "constructed generation basis violates its contract"
+                           {:explain (s/explain-data
+                                      :millstrand.core.specs/generation-basis
+                                      result)})))
+         result)
+       (catch Throwable throwable
+         (if (dependency-diagnostic throwable)
+           (throw throwable)
+           (throw (resolution-diagnostic throwable sources))))))))
 
 (defn- take-launch-option
   [args option]

@@ -251,6 +251,72 @@
     (is (not (.exists (io/file (:state-dir world) "weaver.json"))))
     (is (not (.exists (io/file (:data-dir world) "millstrand.sqlite"))))))
 
+(deftest fresh-runtime-probe-resolves-copied-relative-local-roots-from-source
+  (let [world (temp-world)
+        source-root (io/file (:config-dir world) ".." "probe-lib")
+        source-dir (io/file source-root "src" "probe")
+        captured-roots (atom nil)]
+    (.mkdirs source-dir)
+    (spit (io/file source-root "deps.edn") "{:paths [\"src\"]}\n")
+    (spit (io/file source-dir "fixture.clj") "(ns probe.fixture)\n")
+    (spit (io/file (:config-dir world) "deps.edn")
+          "{:deps {probe/fixture {:local/root \"../probe-lib\"}}}\n")
+    (try
+      (let [result
+            (binding [basis/*create-basis*
+                      (fn [options]
+                        (let [resolved
+                              ((requiring-resolve
+                                'clojure.tools.deps/create-basis)
+                               options)]
+                          (reset! captured-roots (:classpath-roots resolved))
+                          resolved))]
+              (weaver-runtime/fresh-runtime-probe!
+               world {:old-generation-baseline
+                      {:status :admitted :projection {}}
+                      :generation-basis (generation-basis world)}))]
+        (is (true? (:success result)))
+        (is (some #{(.getCanonicalPath (io/file source-root "src"))}
+                  @captured-roots)))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
+(deftest fresh-runtime-probe-loads-namespace-modules-from-candidate-basis
+  (let [world (temp-world)
+        module-root (io/file (:config-dir world) ".." "probe-module")
+        module-source (io/file module-root "src" "probe" "candidate_module.clj")
+        module-source-root (.getCanonicalPath (io/file module-root "src"))]
+    (io/make-parents module-source)
+    (spit (io/file module-root "deps.edn") "{:paths [\"src\"]}\n")
+    (spit module-source
+          (str "(ns probe.candidate-module)\n"
+               "(millstrand.api.runtime.alpha/collect-entry! "
+               ":queries \"candidate-only\" [:all])\n"))
+    (spit (io/file (:config-dir world) "deps.edn")
+          "{:deps {probe/module {:local/root \"../probe-module\"}}}\n")
+    (spit (io/file (:config-dir world) "init.clj")
+          (str "(millstrand.api.runtime.alpha/module! "
+               "millstrand.core.weaver.runtime/*runtime* "
+               ":candidate-only {:ns 'probe.candidate-module})\n"))
+    (try
+      (let [result
+            (binding [basis/*create-basis*
+                      (fn [{:keys [project extra aliases args]}]
+                        {:libs (merge (:deps project) (:deps extra)
+                                      (:extra-deps args))
+                         :classpath-roots [module-source-root]
+                         :argmap {:aliases aliases}})]
+              (weaver-runtime/fresh-runtime-probe!
+               world {:old-generation-baseline
+                      {:status :admitted :projection {}}
+                      :generation-basis (generation-basis world)}))]
+        (is (true? (:success result)))
+        (is (= ["all"]
+               (get-in result [:candidate-registries "queries" "effective"
+                               "queries" "candidate-only" "value"]))))
+      (finally
+        (delete-tree! (io/file (:config-dir world) ".."))))))
+
 (deftest runtime-rejects-invalid-source-config-dir-provenance
   (let [world (assoc (temp-world) :source-config-dir 42)]
     (try
