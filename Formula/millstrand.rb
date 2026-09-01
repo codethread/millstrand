@@ -19,10 +19,8 @@ class Millstrand < Formula
     system "go", "build", "-buildvcs=false", "-ldflags", ldflags,
            "-o", bin/"mill", "./cli/cmd/mill"
 
+    prefix.install "CHANGELOG.md"
     libexec.install Dir["*", ".[!.]*"]
-  end
-
-  def post_install
     libexec.install_symlink prefix/"CHANGELOG.md"
   end
 
