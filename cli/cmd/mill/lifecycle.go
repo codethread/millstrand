@@ -52,13 +52,24 @@ func (s *server) releaseStartClaim(configDir string, claim chan struct{}) {
 // stderr so it never corrupts stdout doc/JSON output; overridable in tests.
 var sourceDiagOut io.Writer = os.Stderr
 
+func validateLaunchSource(label, source string) (string, error) {
+	resolved, err := config.ValidateSource(label, source)
+	if err != nil {
+		return "", err
+	}
+	if _, err := config.ValidateSourceVersion(resolved, config.Version); err != nil {
+		return "", fmt.Errorf("%s release identity is incompatible with this mill: %w", label, err)
+	}
+	return resolved, nil
+}
+
 func resolveLaunchSource(cwd string) (string, error) {
 	if source := os.Getenv("MILLSTRAND_SOURCE"); source != "" {
-		return config.ValidateSource("MILLSTRAND_SOURCE", source)
+		return validateLaunchSource("MILLSTRAND_SOURCE", source)
 	}
 	var installedErr error
 	if config.InstalledSource != "" {
-		resolved, err := config.ValidateSource("installed Millstrand source", config.InstalledSource)
+		resolved, err := validateLaunchSource("installed Millstrand source", config.InstalledSource)
 		if err == nil {
 			return resolved, nil
 		}
@@ -66,7 +77,7 @@ func resolveLaunchSource(cwd string) (string, error) {
 	}
 	root, rootErr := config.GitRoot(cwd)
 	if rootErr == nil {
-		resolved, err := config.ValidateSource("canonical Millstrand checkout cwd", root)
+		resolved, err := validateLaunchSource("canonical Millstrand checkout cwd", root)
 		if err == nil {
 			if installedErr != nil {
 				// mill was installed with a source checkout that has since become
@@ -88,7 +99,7 @@ func resolveLaunchSource(cwd string) (string, error) {
 func weaverArgs(world config.World, name, source string) []string {
 	bootstrapSource, _ := json.Marshal(filepath.Join(source, "src"))
 	bootstrapDeps := fmt.Sprintf("{:aliases {:millstrand/bootstrap {:replace-paths [%s] :replace-deps {org.clojure/clojure {:mvn/version \"1.12.0\"} org.clojure/data.json {:mvn/version \"2.5.1\"} org.clojure/tools.deps {:mvn/version \"0.31.1642\"}}}}}", bootstrapSource)
-	args := []string{"-Srepro", "-Sdeps", bootstrapDeps, "-M:millstrand/bootstrap", "-m", "millstrand.core.weaver.basis", "--workspace", world.ConfigDir, "--millstrand-source", source, "--dependency-diagnostic", dependencyDiagnosticPath(world), "--state-dir", world.StateDir, "--data-dir", world.DataDir}
+	args := []string{"-Srepro", "-Sdeps", bootstrapDeps, "-M:millstrand/bootstrap", "-m", "millstrand.core.weaver.basis", "--workspace", world.ConfigDir, "--millstrand-source", source, "--millstrand-version", config.Version, "--dependency-diagnostic", dependencyDiagnosticPath(world), "--state-dir", world.StateDir, "--data-dir", world.DataDir}
 	if name != "" {
 		args = append(args, "--name", name)
 	}
@@ -579,6 +590,9 @@ func statusFromMetadata(m client.Metadata, state string) map[string]any {
 		"started_at":     m.StartedAt,
 		"log_path":       weaverLogPath(m.StateDir),
 	}
+	if strings.TrimSpace(m.Version) != "" {
+		status["version"] = m.Version
+	}
 	if strings.TrimSpace(m.GenerationID) != "" {
 		status["generation_id"] = m.GenerationID
 	}
@@ -587,8 +601,14 @@ func statusFromMetadata(m client.Metadata, state string) map[string]any {
 }
 
 func validateMetadata(world config.World, m client.Metadata) string {
-	if m.ProtocolVersion != client.ProtocolVersion || m.PID == 0 || m.DaemonID == "" || m.ConfigDir == "" || m.StateDir == "" || m.DataDir == "" || strings.TrimSpace(m.Name) == "" || m.SocketPath == "" || m.StartedAt == "" || m.NREPL.Host == "" || m.NREPL.Port == 0 || !validBasisFingerprint(m.BasisFingerprint) {
+	if m.ProtocolVersion != client.ProtocolVersion || m.Version == "" || m.PID == 0 || m.DaemonID == "" || m.ConfigDir == "" || m.StateDir == "" || m.DataDir == "" || strings.TrimSpace(m.Name) == "" || m.SocketPath == "" || m.StartedAt == "" || m.NREPL.Host == "" || m.NREPL.Port == 0 || !validBasisFingerprint(m.BasisFingerprint) {
 		return "malformed weaver metadata: missing required fields"
+	}
+	if !config.ValidVersion(m.Version) {
+		return fmt.Sprintf("malformed weaver metadata: invalid product version %q", m.Version)
+	}
+	if config.ValidVersion(config.Version) && m.Version != config.Version {
+		return fmt.Sprintf("weaver product version %q does not match mill product version %q", m.Version, config.Version)
 	}
 	if err := client.ValidateStorageIdentity(m); err != nil {
 		return err.Error()

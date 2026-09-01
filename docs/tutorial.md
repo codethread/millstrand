@@ -24,6 +24,14 @@ make install
 
 This builds and installs `strand` and `mill` and records the checkout as the source used to launch weavers.
 
+Both binaries report the same product version. The build id identifies the exact source revision, while the protocol version changes only when the CLI and Weaver can no longer speak the same wire format. You can also read the release notes without starting Millstrand:
+
+```sh
+strand --version
+mill --version
+mill changelog
+```
+
 You will also use `jq` once to read an id from JSON. Install it before continuing if it is not already available.
 
 ## Create a repository and workspace

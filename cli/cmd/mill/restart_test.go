@@ -95,8 +95,10 @@ func TestDecodeRestartProbeUsesClosedBoundary(t *testing.T) {
 func TestFreshRuntimeProbeExpressionSuppliesGenerationBasis(t *testing.T) {
 	for _, want := range []string{
 		`(System/getenv "MILLSTRAND_PROBE_SOURCE")`,
+		`(System/getenv "MILLSTRAND_PROBE_VERSION")`,
 		`millstrand.core.weaver.basis/create-generation-basis`,
 		`:generation-basis generation-basis`,
+		`:expected-version`,
 	} {
 		if !strings.Contains(freshRuntimeProbeExpression, want) {
 			t.Fatalf("fresh runtime probe expression missing %q", want)
@@ -108,6 +110,27 @@ func TestFreshRuntimeProbeExpressionSuppliesGenerationBasis(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("fresh runtime probe args missing %q: %q", want, args)
 		}
+	}
+}
+
+func TestFreshRuntimeProbeCommandCarriesProductVersion(t *testing.T) {
+	originalVersion := config.Version
+	config.Version = "0.5.1"
+	t.Cleanup(func() { config.Version = originalVersion })
+	source := t.TempDir()
+	world := config.World{ConfigDir: "/config", StateDir: "/state", DataDir: "/data"}
+	cmd := freshRuntimeProbeCommand(source, world, "/baseline.json", "/result.json")
+	env := map[string]string{}
+	for _, entry := range cmd.Env {
+		if key, value, ok := strings.Cut(entry, "="); ok {
+			env[key] = value
+		}
+	}
+	if got := env["MILLSTRAND_PROBE_VERSION"]; got != config.Version {
+		t.Fatalf("probe product version = %q, want %q", got, config.Version)
+	}
+	if cmd.Dir != source {
+		t.Fatalf("probe cwd = %q, want %q", cmd.Dir, source)
 	}
 }
 
@@ -508,7 +531,7 @@ func writeWeaverMetadataForIdentity(t *testing.T, world config.World, identity w
 		t.Fatal(err)
 	}
 	metadata := map[string]any{
-		"protocol_version": 3, "pid": identity.PID, "database_kind": "sqlite-file",
+		"protocol_version": 3, "version": "0.5.1", "pid": identity.PID, "database_kind": "sqlite-file",
 		"database_label": world.DBPath, "database_path": world.DBPath,
 		"weaver_id": identity.WeaverID, "generation_id": "generation-" + identity.WeaverID,
 		"basis_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "config_dir": identity.ConfigDir,

@@ -7,6 +7,7 @@
             [nrepl.server :as nrepl]
             [millstrand.api.cli.alpha :as cli]
             [millstrand.api.clock.alpha :as clock]
+            [millstrand.core.internal.release :as release]
             [millstrand.core.specs :as specs]
             [millstrand.core.weaver.config :as weaver-config]
             [millstrand.core.weaver.basis :as basis]
@@ -556,7 +557,8 @@
 (defn- start-with-options-unlocked!
   [db-file {:keys [world name publish? storage probe? diagnostic!
                    generation-basis
-                   old-generation-baseline pre-publication-claim]
+                   expected-version old-generation-baseline
+                   pre-publication-claim]
             :or {publish? true}}]
   (when-not (s/valid? :millstrand.core.specs/generation-basis generation-basis)
     (throw (ex-info "Weaver startup requires a valid generation basis"
@@ -567,6 +569,7 @@
     (throw (ex-info "A weaver runtime is already active in this process" {:metadata (:metadata @current-runtime)})))
   (let [world (or world (weaver-config/world))
         world (assoc world :source-config-dir (validated-source-config-dir world))
+        version (release/version generation-basis expected-version)
         basis-fingerprint (:fingerprint generation-basis)]
     (if probe?
       ;; Probe worlds are normally disposable, but `:probe?` does not make an
@@ -588,6 +591,7 @@
             nonce (metadata/new-nonce)
             generation-id (str (java.util.UUID/randomUUID))
             meta (metadata/metadata-shape {:pid (current-pid)
+                                           :version version
                                            :host loopback-host
                                            :port port
                                            :storage-kind (:storage-kind storage)
@@ -1053,15 +1057,23 @@
   "Start a foreground Weaver from an already resolved generation basis.
 
   `generation-basis` conforms to
-  `:millstrand.core.specs/generation-basis`; `runtime-args` contains the
-  ordinary runtime launch flags after the basis launcher has consumed its own
-  options (SPEC-004.C44a). Dependency files are not read again during startup."
-  [generation-basis runtime-args]
+  `:millstrand.core.specs/generation-basis`; `expected-version` is the product
+  version stamped into Mill and conforms to
+  `:millstrand.release/expected-version`; `runtime-args` contains the ordinary
+  runtime launch flags after the basis launcher has consumed its own options
+  (SPEC-004.C44a). Dependency files are not read again during startup."
+  [generation-basis expected-version runtime-args]
   (when-not (s/valid? :millstrand.core.specs/generation-basis generation-basis)
     (throw (ex-info "Generation basis has an invalid shape"
                     {:explain (s/explain-data
                                :millstrand.core.specs/generation-basis
                                generation-basis)})))
+  (when-not (s/valid? :millstrand.release/expected-version expected-version)
+    (throw (ex-info "Mill product version has an invalid shape"
+                    {:version expected-version
+                     :explain (s/explain-data
+                               :millstrand.release/expected-version
+                               expected-version)})))
   (let [workspace (some-> generation-basis :sources first :path io/file .getParent)
         {:keys [config-dir state-dir data-dir name]}
         (parse-main-args (into ["--workspace" workspace] runtime-args))]
@@ -1069,6 +1081,7 @@
      nil
      {:world (weaver-config/world config-dir state-dir data-dir)
       :name name
+      :expected-version expected-version
       :generation-basis generation-basis})
     (install-signal-shutdown!)
     (println "weaver started")

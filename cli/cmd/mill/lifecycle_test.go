@@ -393,11 +393,32 @@ func TestValidateMetadataRejectsWhitespaceOnlyName(t *testing.T) {
 	world.StateDir = filepath.Join(t.TempDir(), "state")
 	world.DataDir = filepath.Join(t.TempDir(), "data")
 	world.DBPath = filepath.Join(world.DataDir, "millstrand.sqlite")
-	m := client.Metadata{ProtocolVersion: client.ProtocolVersion, PID: os.Getpid(), DatabaseKind: "sqlite-file", DatabaseLabel: world.DBPath, DatabasePath: &world.DBPath, DaemonID: "weaver", ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir, Name: "   ", SocketPath: filepath.Join(world.StateDir, "weaver.sock"), StartedAt: "now"}
+	m := client.Metadata{ProtocolVersion: client.ProtocolVersion, Version: "0.5.1", PID: os.Getpid(), DatabaseKind: "sqlite-file", DatabaseLabel: world.DBPath, DatabasePath: &world.DBPath, DaemonID: "weaver", ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir, Name: "   ", SocketPath: filepath.Join(world.StateDir, "weaver.sock"), StartedAt: "now"}
 	m.NREPL.Host = "127.0.0.1"
 	m.NREPL.Port = 5555
 	if got := validateMetadata(world, m); got != "malformed weaver metadata: missing required fields" {
 		t.Fatalf("expected malformed metadata for blank name, got %q", got)
+	}
+}
+
+func TestValidateMetadataRejectsMissingAndMismatchedProductVersion(t *testing.T) {
+	world := config.World{ConfigDir: filepath.Join(t.TempDir(), "cfg")}
+	world.StateDir = filepath.Join(t.TempDir(), "state")
+	world.DataDir = filepath.Join(t.TempDir(), "data")
+	world.DBPath = filepath.Join(world.DataDir, "millstrand.sqlite")
+	m := client.Metadata{ProtocolVersion: client.ProtocolVersion, PID: os.Getpid(), DatabaseKind: "sqlite-file", DatabaseLabel: world.DBPath, DatabasePath: &world.DBPath, DaemonID: "weaver", GenerationID: "generation-weaver", BasisFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", ConfigDir: world.ConfigDir, StateDir: world.StateDir, DataDir: world.DataDir, Name: "weaver", SocketPath: filepath.Join(world.StateDir, "weaver.sock"), StartedAt: "now"}
+	m.NREPL.Host = "127.0.0.1"
+	m.NREPL.Port = 5555
+	if got := validateMetadata(world, m); got != "malformed weaver metadata: missing required fields" {
+		t.Fatalf("expected missing version failure, got %q", got)
+	}
+
+	originalVersion := config.Version
+	config.Version = "0.5.1"
+	t.Cleanup(func() { config.Version = originalVersion })
+	m.Version = "0.5.0"
+	if got := validateMetadata(world, m); !strings.Contains(got, "does not match") {
+		t.Fatalf("expected product version mismatch, got %q", got)
 	}
 }
 
@@ -452,6 +473,21 @@ func TestResolveLaunchSourceUnusableInstalledAndNoCheckoutFailsLoud(t *testing.T
 	_, err := resolveLaunchSource(t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "installed source is unusable") || !strings.Contains(err.Error(), "not a canonical Millstrand checkout") {
 		t.Fatalf("expected combined failure preserving installed-source error, got %v", err)
+	}
+}
+
+func TestResolveLaunchSourceRejectsProductVersionSkew(t *testing.T) {
+	source := tempSource(t)
+	if err := os.WriteFile(filepath.Join(source, config.VersionFileName), []byte("0.5.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	originalVersion := config.Version
+	config.Version = "0.5.1"
+	t.Cleanup(func() { config.Version = originalVersion })
+	t.Setenv("MILLSTRAND_SOURCE", source)
+
+	if _, err := resolveLaunchSource(t.TempDir()); err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("expected product version skew failure, got %v", err)
 	}
 }
 
@@ -531,7 +567,7 @@ func TestWeaverStatusDistinguishesStaleMetadata(t *testing.T) {
 	if err != nil || status["state"] != "stale" || status["stale_reason"] == nil {
 		t.Fatalf("expected malformed stale status, got %#v err=%v", status, err)
 	}
-	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(`{"protocol_version":3,"pid":1,"database_kind":"sqlite-file","database_label":"/wrong","database_path":"/wrong","weaver_id":"wrong","generation_id":"generation-wrong","basis_fingerprint":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","config_dir":"/wrong","state_dir":"/wrong","data_dir":"/wrong","name":"wrong","socket_path":"/wrong","started_at":"now","nrepl":{"host":"127.0.0.1","port":1}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(`{"protocol_version":3,"version":"0.5.1","pid":1,"database_kind":"sqlite-file","database_label":"/wrong","database_path":"/wrong","weaver_id":"wrong","generation_id":"generation-wrong","basis_fingerprint":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","config_dir":"/wrong","state_dir":"/wrong","data_dir":"/wrong","name":"wrong","socket_path":"/wrong","started_at":"now","nrepl":{"host":"127.0.0.1","port":1}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	status, err = s.weaverStatus(req)
@@ -908,6 +944,9 @@ func tempSource(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, "deps.edn"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, config.VersionFileName), []byte("0.5.1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	return dir
 }
 
@@ -955,7 +994,7 @@ func writeWeaverMetadataWithName(t *testing.T, world config.World, pid int, id s
 	if err := os.MkdirAll(world.StateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	meta := `{"protocol_version":3,"pid":` + intString(pid) + `,"database_kind":"sqlite-file","database_label":"` + world.DBPath + `","database_path":"` + world.DBPath + `","weaver_id":"` + id + `","generation_id":"generation-` + id + `","basis_fingerprint":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","config_dir":"` + world.ConfigDir + `","state_dir":"` + world.StateDir + `","data_dir":"` + world.DataDir + `","name":"` + name + `","socket_path":"` + filepath.Join(world.StateDir, "weaver.sock") + `","started_at":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","nrepl":{"host":"127.0.0.1","port":5555}}`
+	meta := `{"protocol_version":3,"version":"0.5.1","pid":` + intString(pid) + `,"database_kind":"sqlite-file","database_label":"` + world.DBPath + `","database_path":"` + world.DBPath + `","weaver_id":"` + id + `","generation_id":"generation-` + id + `","basis_fingerprint":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","config_dir":"` + world.ConfigDir + `","state_dir":"` + world.StateDir + `","data_dir":"` + world.DataDir + `","name":"` + name + `","socket_path":"` + filepath.Join(world.StateDir, "weaver.sock") + `","started_at":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","nrepl":{"host":"127.0.0.1","port":5555}}`
 	if err := os.WriteFile(filepath.Join(world.StateDir, "weaver.json"), []byte(meta), 0o644); err != nil {
 		t.Fatal(err)
 	}

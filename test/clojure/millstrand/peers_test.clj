@@ -24,6 +24,7 @@
 
 (defn- metadata-map [state-dir workspace name pid]
   {:pid pid
+   :version "0.5.1"
    :transport :nrepl
    :protocol-version 3
    :endpoint {:host "127.0.0.1" :port 5555}
@@ -198,6 +199,7 @@
         (is (= {"name" "echo" "argv" ["x" "y"] "from" "peer-test"} echoed))
         (is (= {"name" "echo" "argv" [] "from" "peer-test"} via-symbol))
         (is (= (:weaver-id beta) (get status "weaver_id")))
+        (is (= (get-in rt-b [:metadata :version]) (get status "version")))
         (is (true? (get status "healthy")))
         (is (some #(= "echo" (get-in % ["operation" "name"])) (get listed "ops")))))))
 

@@ -97,6 +97,15 @@
          #(= #{:status :stage :source-path :message :cause :coordinate}
              (set (keys %)))))
 (s/def :millstrand.basis/kind #{:project :extra})
+(s/def :millstrand.release/version
+  (s/and string?
+         #(boolean
+           (re-matches
+            #"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+            %))))
+(s/def :millstrand.release/expected-version
+  (s/or :development #{"dev"}
+        :release :millstrand.release/version))
 (s/def :millstrand.basis/deps map?)
 (s/def :millstrand.basis/path
   #(and (non-blank-string? %) (.isAbsolute (File. ^String %))))
@@ -431,6 +440,8 @@
 (s/def :millstrand.weaver-start/diagnostic! ifn?)
 (s/def :millstrand.weaver-start/generation-basis
   :millstrand.core.specs/generation-basis)
+(s/def :millstrand.weaver-start/expected-version
+  :millstrand.release/expected-version)
 (defn- finite-json-number?
   "Return true when `value` is an encodable finite JSON number."
   [value]
@@ -497,9 +508,11 @@
                           :millstrand.weaver-start/probe?
                           :millstrand.weaver-start/diagnostic!
                           :millstrand.weaver-start/generation-basis
+                          :millstrand.weaver-start/expected-version
                           :millstrand.weaver-start/old-generation-baseline])
          #(every? #{:world :name :publish? :storage :probe?
-                    :diagnostic! :generation-basis :old-generation-baseline}
+                    :diagnostic! :generation-basis :expected-version
+                    :old-generation-baseline}
                   (keys %))))
 
 (s/def ::add-command (s/cat :title ::title :opts (s/* string?)))

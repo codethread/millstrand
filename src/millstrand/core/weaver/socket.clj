@@ -300,6 +300,7 @@
   (let [m (:metadata runtime)
         result {"healthy" true
                 "pid" (:pid m)
+                "version" (:version m)
                 "protocol_version" (:protocol-version m)
                 "config_dir" (:config-dir m)
                 "state_dir" (:state-dir m)

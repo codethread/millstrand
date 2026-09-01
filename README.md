@@ -229,6 +229,14 @@ make install
 
 </details>
 
+Check the installed release and read its notes without starting Millstrand:
+
+```sh
+strand --version
+mill --version
+mill changelog
+```
+
 ### Run
 
 `mill` is a supervisor you start once. It routes to a **weaver** per workspace — the Clojure process that owns that repo's strands.

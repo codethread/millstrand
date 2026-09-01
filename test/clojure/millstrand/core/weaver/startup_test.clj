@@ -147,6 +147,10 @@
         (is (= basis-fingerprint (:basis-fingerprint metadata)))
         (is (= metadata (metadata/read-metadata world)))
         (is (false? (metadata/valid-metadata?
+                     (dissoc metadata :version))))
+        (is (false? (metadata/valid-metadata?
+                     (assoc metadata :version "next"))))
+        (is (false? (metadata/valid-metadata?
                      (dissoc metadata :basis-fingerprint))))
         (is (false? (metadata/valid-metadata?
                      (assoc metadata :basis-fingerprint "sha256:invalid"))))
@@ -501,6 +505,7 @@
         db-file (db-test/temp-db-file)
         stale (metadata/metadata-shape
                {:pid 999999
+                :version "0.5.1"
                 :host "127.0.0.1"
                 :port 5555
                 :storage-kind :sqlite-file
@@ -532,6 +537,7 @@
         db-file (db-test/temp-db-file)
         stale (metadata/metadata-shape
                {:pid 999999
+                :version "0.5.1"
                 :host "127.0.0.1"
                 :port 5555
                 :storage-kind :sqlite-file
@@ -1199,6 +1205,7 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Weaver name must not be blank"
                             (metadata/metadata-shape {:pid 1
+                                                      :version "0.5.1"
                                                       :host "127.0.0.1"
                                                       :port 5555
                                                       :canonical-db-path (metadata/canonical-db-path db-file)
@@ -1249,6 +1256,7 @@
         (is (string? (:nonce status)))
         (is (= (.getName (io/file (:config-dir status))) (:name status)))
         (is (= (:name status) (get json-disk "name")))
+        (is (= "0.5.1" (:version status) (get json-disk "version")))
         (is (= :nrepl (:transport status)))
         (is (= 3 (:protocol-version status)))
         (is (string? (:socket-path status)))

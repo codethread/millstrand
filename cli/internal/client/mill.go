@@ -21,13 +21,14 @@ const defaultWeaverReadyTimeout = 5 * time.Minute
 
 type MillMetadata struct {
 	ProtocolVersion int    `json:"protocol_version"`
+	MillVersion     string `json:"mill_version,omitempty"`
 	PID             int    `json:"pid"`
 	MillID          string `json:"mill_id"`
 	StateRoot       string `json:"state_root"`
 	SocketPath      string `json:"socket_path"`
 	StartedAt       string `json:"started_at"`
-	// MillBuild is the writing mill's config.BuildID; absent in metadata from
-	// builds that predate stamping, so it never joins the required-field set.
+	// MillBuild remains optional diagnostic attribution. A stamped release rejects
+	// an absent or mismatched MillVersion after proving the recorded mill is live.
 	MillBuild string `json:"mill_build,omitempty"`
 }
 
@@ -35,6 +36,10 @@ type MillMetadata struct {
 // different mill protocol than this binary: the fix is version alignment, so
 // callers must not append the generic "start one with: mill start" remedy.
 var ErrMillProtocolMismatch = errors.New("mill protocol mismatch")
+
+// ErrMillVersionMismatch marks metadata written by a live mill from a
+// different product release than this binary.
+var ErrMillVersionMismatch = errors.New("mill product version mismatch")
 
 type MillRequest struct {
 	ProtocolVersion int              `json:"protocol_version"`
@@ -149,7 +154,7 @@ func millCallPayload(operation string, world MillWorldRequest, payload map[strin
 func ReadMillMetadata() (MillMetadata, error) {
 	metadata, err := readMillMetadata()
 	if err != nil {
-		if errors.Is(err, ErrMillProtocolMismatch) {
+		if errors.Is(err, ErrMillProtocolMismatch) || errors.Is(err, ErrMillVersionMismatch) {
 			return MillMetadata{}, &TransportError{Err: err, Code: errfmt.CodeMillUnreachable}
 		}
 		return MillMetadata{}, &TransportError{
@@ -208,8 +213,13 @@ func readMillMetadata() (MillMetadata, error) {
 	// running: this is version skew, not an absent or stale mill.
 	if m.ProtocolVersion != MillProtocolVersion {
 		return MillMetadata{}, fmt.Errorf(
-			"%w: the running mill (pid %d, build %s) wrote %s with mill protocol v%d, but this strand (build %s) speaks v%d; rebuild strand from the running mill's checkout, or restart mill from this build",
-			ErrMillProtocolMismatch, m.PID, buildLabel(m.MillBuild), file, m.ProtocolVersion, buildLabel(config.BuildID), MillProtocolVersion)
+			"%w: the running mill (pid %d, version %s, build %s) wrote %s with mill protocol v%d, but this strand (version %s, build %s) speaks v%d; rebuild strand from the running mill's checkout, or restart mill from this build",
+			ErrMillProtocolMismatch, m.PID, buildLabel(m.MillVersion), buildLabel(m.MillBuild), file, m.ProtocolVersion, buildLabel(config.Version), buildLabel(config.BuildID), MillProtocolVersion)
+	}
+	if config.ValidVersion(config.Version) && m.MillVersion != config.Version {
+		return MillMetadata{}, fmt.Errorf(
+			"%w: the running mill (pid %d, version %s, build %s) wrote %s, but this strand is version %s (build %s); rebuild strand from the running mill's checkout, or restart mill from this build",
+			ErrMillVersionMismatch, m.PID, buildLabel(m.MillVersion), buildLabel(m.MillBuild), file, config.Version, buildLabel(config.BuildID))
 	}
 	return m, nil
 }
