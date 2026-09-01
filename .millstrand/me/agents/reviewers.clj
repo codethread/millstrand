@@ -1,4 +1,4 @@
-(ns ct.agents.reviewers
+(ns me.agents.reviewers
   "This repository's declarative reviewer roster.
 
   This file is the source of truth for who reviews a change in this

@@ -1,27 +1,13 @@
-;; Startup entrypoint for the repo's canonical coordination world. Every concern
-;; is a stable runtime module (DELTA-OlrDrt-001.CC1): the module key is its owner
-;; identity, `:after` orders the dependency-first graph, and a full `refresh!`
-;; re-reads this file to recollect the whole graph. Startup-file collection only
-;; STAGES declarations — no source load, publication, or reconcile runs here — so
-;; this file holds no imperative effects; each concern's registrations live in its
-;; module's contribution and lifecycle declarations are collected from its
-;; authoring forms. Declarations carry only a source target and world policy.
+;; Startup entrypoint for the repo's canonical coordination world.
 ;;
-;; File-per-concern map (each Clojure file is one module):
-;;   ct/runbook.clj               — elect Batteries' strand-tracking runbook
-;;   ct/policy/config.clj         — named queries + shared validation helpers
-;;   ct/workflows/               — workflow definitions, policy, and support
-;;   workflows/scripts/          — standalone workflow shell scripts
-;;   ct/agents/reviewers.clj      — reviewer rosters
-;;   ct/agents/delegation_contracts.clj — workspace task and review contracts
-;;   ct/notifications/attention.clj — chime attention rules
-;;   ct/jobs/nvd_scan.clj         — NVD scan cron job
-;;   Codethread roots             — shared agents, config (help transform), and Ralph
+;; Dependency spools remain independent runtime modules. All repository-owned
+;; Clojure lives under me/ and is loaded through the single :me/config module.
+;; Its sibling namespaces define authoring Vars; me/config.clj selects them into
+;; one owner-complete contribution.
 ;;
-;; Gitignored init.local.clj is layered after this file on startup and every
-;; refresh; a module key it redeclares shadows the one here and wins, and it binds
-;; each developer's chime notifier. Read docs/reference.md before changing this
-;; config; smoke-test changes in a disposable world first.
+;; Gitignored init.local.clj is layered after this file on startup and refresh.
+;; Read docs/reference.md before changing this config, and smoke-test changes in
+;; a disposable world first.
 (require '[millstrand.api.current.alpha :as current]
          '[millstrand.api.runtime.alpha :as runtime])
 
@@ -31,10 +17,6 @@
 ;; the CLI partition and its lifecycle seed owns the failure glossary.
 (runtime/module! runtime :millstrand/spools-batteries
                  {:ns 'millstrand.spools.batteries})
-(runtime/module! runtime :batteries-runbook
-                 {:file "ct/runbook.clj"
-                  :after [:millstrand/spools-batteries]
-                  :required? true})
 
 ;; --- workflow engine + shell executor -------------------------------------
 ;; The engine's collected open-kind and lifecycle declarations own Workflow
@@ -109,36 +91,11 @@
                           :millstrand/spools-delegation
                           :devflow/kanban-adapter]
                   :required? true})
-;; The declarative reviewer roster stays a small git-reviewable data document,
-;; collected as the workspace-owned partition of delegation's roster kind.
-;; Roster harness aliases resolve at review time, not registration time, so order
-;; relative to the shared Codethread agents module is not load-bearing.
-(runtime/module! runtime :reviewers
-                 {:file "ct/agents/reviewers.clj"
-                  :after [:millstrand/spools-delegation]
-                  :required? true})
-;; The delegation contracts are workspace policy over the shared agent-run and
-;; delegation spools. Keep this resource after their shared Codethread agents
-;; contribution so it binds the exported worker/review contract text in order.
-(runtime/module! runtime :delegation-contracts
-                 {:file "ct/agents/delegation_contracts.clj"
-                  :after [:codethread/config :millstrand/spools-shuttle
-                          :millstrand/spools-delegation]
-                  :required? true})
-
-;; --- chime notification engine + this repo's attention rules ----------------
-;; Chime is vocabulary-agnostic; ct/notifications/attention.clj contributes this repo's attention
-;; rules (HITL checkpoints, kanban completion, and parked runs) with defrule, and
-;; each developer binds how they are notified in
-;; gitignored init.local.clj. Chime's defresource owns its handler, mutation
-;; barrier, and visible rule view as one atomic boundary. Unbound chime records
-;; loud notifier-missing errors.
+;; --- chime notification engine ---------------------------------------------
+;; Chime is vocabulary-agnostic. The local attention rules are selected later by
+;; :me/config, while init.local.clj binds each developer's notifier.
 (runtime/module! runtime :millhouse/spools-chime
                  {:ns 'millhouse.spools.chime
-                  :required? true})
-(runtime/module! runtime :attention
-                 {:file "ct/notifications/attention.clj"
-                  :after [:millhouse/spools-chime :millstrand/spools-shuttle]
                   :required? true})
 
 ;; --- kanban board -------------------------------------------------------------
@@ -146,66 +103,26 @@
 (runtime/module! runtime :millstrand/spools-kanban
                  {:ns 'millhouse.spools.kanban
                   :required? true})
-;; --- cron timer engine + the NVD scan job -----------------------------------
-;; Cron is a generic weaver timer engine. Its collected open-kind and lifecycle
-;; declarations own job publication and scheduling; ct/jobs/nvd_scan.clj contributes a
-;; job through `defjob`, so it is ordered after cron.
+;; --- cron timer engine ------------------------------------------------------
+;; Cron owns job publication and scheduling. :me/config selects the local NVD
+;; scan job after this module is available.
 (runtime/module! runtime :millhouse/spools-cron
                  {:ns 'millhouse.spools.cron
                   :required? true})
-;; The NVD scan job is its own module (not part of ct/policy/config.clj) so config_test's
-;; direct ct/policy/config.clj load never registers the job or seeds against real gh.
-(runtime/module! runtime :nvd-scan
-                 {:file "ct/jobs/nvd_scan.clj"
-                  :after [:millhouse/spools-cron :millstrand/spools-kanban]
+;; --- repository config ------------------------------------------------------
+;; All repository-owned config is loaded and selected by this one module.
+(runtime/module! runtime :me/config
+                 {:file "me/config.clj"
+                  :after [:millstrand/spools-batteries
+                          :millhouse/spools-workflow
+                          :millstrand/spools-delegation
+                          :millstrand/spools-shuttle
+                          :millstrand/spools-kanban
+                          :millhouse/spools-chime
+                          :millhouse/spools-cron
+                          :codethread/config]
                   :required? true})
 
-;; --- config queries/helpers and hand-authored workflows ---------------------
-;; ct/policy/config.clj authors named queries with defquery and public validation helpers.
-(runtime/module! runtime :config
-                 {:file "ct/policy/config.clj"
-                  :required? true})
-;; Shared script sources load before the focused workflow modules.
-(runtime/module! runtime :workflows.support
-                 {:file "ct/workflows/support.clj"
-                  :after [:config]
-                  :required? true})
-;; ct/workflows/common.clj owns the shared authoring patterns.
-(runtime/module! runtime :workflows
-                 {:file "ct/workflows/common.clj"
-                  :after [:millhouse/spools-workflow :millstrand/spools-delegation
-                          :config :workflows.support]
-                  :required? true})
-;; Each concrete workflow definition owns one focused source module. Keeping
-;; these modules independent lets a change to one routine refresh its own
-;; contribution without growing a broad definitions file.
-(runtime/module! runtime :workflows.land
-                 {:file "ct/workflows/land.clj"
-                  :after [:millhouse/spools-workflow :millstrand/spools-delegation
-                          :reviewers :workflows.support]
-                  :required? true})
-(runtime/module! runtime :workflows.story
-                 {:file "ct/workflows/story.clj"
-                  :after [:millhouse/spools-workflow :millstrand/spools-delegation
-                          :workflows.support]
-                  :required? true})
-(runtime/module! runtime :workflows.explore
-                 {:file "ct/workflows/explore.clj"
-                  :after [:millhouse/spools-workflow :workflows.support]
-                  :required? true})
-(runtime/module! runtime :workflows.fix
-                 {:file "ct/workflows/fix.clj"
-                  :after [:millhouse/spools-workflow :workflows.support]
-                  :required? true})
-;; ct/workflows/land_policy.clj owns the narrow land policy op: merge lock, merge queue,
-;; and kanban lane moves. It loads after the land definitions it drives.
-(runtime/module! runtime :workflows.land-policy
-                 {:file "ct/workflows/land_policy.clj"
-                  :after [:millhouse/spools-workflow :millstrand/spools-kanban
-                          :workflows :workflows.land]
-                  :required? true})
-;; Ralph remains an independent one-card-per-iteration workflow owned by
-;; Codethread; landing policy and reviewer evidence stay local to this repo.
 (runtime/module! runtime :codethread/ralph
                  {:ns 'ct.spools.codethread.ralph
                   :after [:millhouse/spools-workflow]
@@ -215,10 +132,7 @@
 ;; executors' initial scans can resolve all persisted gate symbols.
 (runtime/module! runtime :millhouse/spools-workflow-providers
                  {:ns 'millhouse.spools.workflow.spool
-                  :after [:millhouse/spools-workflow :workflows
-                          :workflows.land
-                          :workflows.story :workflows.explore :workflows.fix
-                          :codethread/ralph]
+                  :after [:millhouse/spools-workflow :me/config :codethread/ralph]
                   :required? true})
 
 ;; The subagent gate executor activates last: its lifecycle resource runs an initial gate
@@ -227,6 +141,5 @@
 (runtime/module! runtime :millstrand/spools-treadle
                  {:ns 'ct.spools.executors.subagent
                   :after [:millstrand/spools-shuttle :millhouse/spools-workflow
-                          :codethread/config :reviewers :workflows :workflows.land
-                          :workflows.story :codethread/ralph]
+                          :codethread/config :me/config :codethread/ralph]
                   :required? true})

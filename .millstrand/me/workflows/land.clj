@@ -1,4 +1,4 @@
-(ns ct.workflows.land
+(ns me.workflows.land
   "The coordinator land workflow definitions (family `land`)."
   (:require [clojure.spec.alpha :as s]
             [ct.spools.delegation :as agents]
@@ -7,7 +7,7 @@
             [millstrand.api.spool.alpha :refer [attr-get fail!]]
             [millstrand.api.weaver.alpha :as weaver]
             [millhouse.spools.workflow :as workflow]
-            [ct.workflows.support :as support]))
+            [me.workflows.support :as support]))
 
 (defn- non-blank-string?
   "Return true when v is a non-blank string."
@@ -97,7 +97,7 @@
   [item key]
   (get (:attrs item) key))
 
-(workflow/defworkflow! land-abort
+(workflow/defworkflow land-abort
   (format-alpha/prose
    "
      Record an intentional abort of a land run.
@@ -140,7 +140,7 @@
                                 "
                                 {})})))
 
-(workflow/defworkflow! land-merge
+(workflow/defworkflow land-merge
   (format-alpha/prose
    "
      Run the mechanical merge continuation for an approved land run.
@@ -341,7 +341,7 @@
                                       "
                                     {})))})))
 
-(workflow/defworkflow! land
+(workflow/defworkflow land
   (format-alpha/prose
    "
      Drive the coordinator LANDING workflow for a feature branch (family `land`).

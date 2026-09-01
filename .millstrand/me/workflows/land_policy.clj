@@ -1,7 +1,7 @@
-(ns ct.workflows.land-policy
+(ns me.workflows.land-policy
   "The coordinator landing policy: the merge train and the narrow `land` op.
 
-  The land WORKFLOW definitions live in ct/workflows/land.clj — live
+  The land WORKFLOW definitions live in me/workflows/land.clj — live
   runs carry their qualified symbols on persisted gates — and this module owns
   the policy the engine has no business knowing: the singleton merge lock, the
   first-in first-out merge queue in front of it, and the kanban lane moves that
@@ -194,7 +194,7 @@
                                    |restoring one usable :workflow/run-id.")})))
     run-id))
 
-(millstrand/defhook! require-merge-lock-at-signoff-approval
+(millstrand/defhook require-merge-lock-at-signoff-approval
   "Veto committing an approved land sign-off that holds no merge lock.
 
   `strand land choose <run> approved` acquires the singleton merge lock and a
@@ -775,7 +775,7 @@
             |terminal `land complete <run-id>` when ready asks for it. Full
             |verb shapes: `strand help land`.")})
 
-(millstrand/defop! land
+(millstrand/defop land
   "Enforce coordinator landing policy across workflows, kanban, and merge locks.
 
   Use the generic `workflow` op for every operation that does not cross those

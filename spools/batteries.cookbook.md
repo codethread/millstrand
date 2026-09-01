@@ -196,7 +196,7 @@ strand ready --query work         # same query, gated to the unblocked frontier
   key isn't a declared parameter fails loudly, and `--param` without a `--query`
   is rejected — you can't accidentally pass a value into nothing.
 
-Honest source: the `query`/`list`/`ready` ops in `spools/src/millstrand/spools/batteries.clj`, the `list-and-ready-named-queries` and `query-list-and-explain-shapes` tests in `test/clojure/millstrand/spools/batteries_test.clj`, and the `work`/`run-active` queries this repo registers in [`.millstrand/ct/policy/config.clj`](../.millstrand/ct/policy/config.clj). Verified against a demo query registered in a disposable workspace.
+Honest source: the `query`/`list`/`ready` ops in `spools/src/millstrand/spools/batteries.clj`, the `list-and-ready-named-queries` and `query-list-and-explain-shapes` tests in `test/clojure/millstrand/spools/batteries_test.clj`, and the `work`/`run-active` queries this repo registers in [`.millstrand/me/policy/config.clj`](../.millstrand/me/policy/config.clj). Verified against a demo query registered in a disposable workspace.
 
 ---
 

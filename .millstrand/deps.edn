@@ -1,4 +1,5 @@
-{:deps {io.millstrand/batteries {:local/root "../spools/batteries"}
+{:paths ["."]
+ :deps {io.millstrand/batteries {:local/root "../spools/batteries"}
         io.millstrand/unsafe-text-search {:local/root "../spools/unsafe-text-search"}
         codethread/config {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe" :deps/root "spools/config"}
         codethread/ralph {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe" :deps/root "spools/ralph"}
