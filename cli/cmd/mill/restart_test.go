@@ -95,8 +95,10 @@ func TestDecodeRestartProbeUsesClosedBoundary(t *testing.T) {
 func TestFreshRuntimeProbeExpressionSuppliesGenerationBasis(t *testing.T) {
 	for _, want := range []string{
 		`(System/getenv "MILLSTRAND_PROBE_SOURCE")`,
+		`(System/getenv "MILLSTRAND_PROBE_VERSION")`,
 		`millstrand.core.weaver.basis/create-generation-basis`,
 		`:generation-basis generation-basis`,
+		`:expected-version`,
 	} {
 		if !strings.Contains(freshRuntimeProbeExpression, want) {
 			t.Fatalf("fresh runtime probe expression missing %q", want)

@@ -440,6 +440,8 @@
 (s/def :millstrand.weaver-start/diagnostic! ifn?)
 (s/def :millstrand.weaver-start/generation-basis
   :millstrand.core.specs/generation-basis)
+(s/def :millstrand.weaver-start/expected-version
+  :millstrand.release/expected-version)
 (defn- finite-json-number?
   "Return true when `value` is an encodable finite JSON number."
   [value]
@@ -506,9 +508,11 @@
                           :millstrand.weaver-start/probe?
                           :millstrand.weaver-start/diagnostic!
                           :millstrand.weaver-start/generation-basis
+                          :millstrand.weaver-start/expected-version
                           :millstrand.weaver-start/old-generation-baseline])
          #(every? #{:world :name :publish? :storage :probe?
-                    :diagnostic! :generation-basis :old-generation-baseline}
+                    :diagnostic! :generation-basis :expected-version
+                    :old-generation-baseline}
                   (keys %))))
 
 (s/def ::add-command (s/cat :title ::title :opts (s/* string?)))
