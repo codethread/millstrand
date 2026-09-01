@@ -294,7 +294,7 @@ An await-shaped op accepts `--timeout-secs` as an `:int` in the inclusive range 
 
 Build the wait with [`poll-until!`](#millstrandapispoolalpha) and pass the runtime Clock as described above. This keeps the production wait on the runtime's clock and lets tests advance a manual Clock without sleeping. Tell callers to cap a blocking await at about 50 minutes and re-issue it so an idle provider prompt cache does not expire.
 
-[`strand await`](../../spools/batteries.md) is the reference implementation; its owning root contract is [SPEC-003.C63c](../../devflow/specs/repl-api.md). Domain waits such as agent supervision, workflow attention, and land queue ordering are not query-cardinality waits and keep their own surfaces. They conform only to the convention in this section.
+[`strand await`](../../spools/batteries.md) is the reference implementation; [BAT-C26](../../spools/batteries.md#await-bat-c26) owns its contract. Domain waits such as agent supervision, workflow attention, and land queue ordering are not query-cardinality waits and keep their own surfaces. They conform only to the convention in this section.
 
 ### `millstrand.api.errors.alpha`
 
@@ -640,7 +640,7 @@ Everything is validated before anything is swapped. Each of these throws while e
 - an entry that shadows a lower-layer owner's entry for the same key without your contribution naming that key in `:overrides` — override intent has to be declared, never inferred;
 - an `:overrides` key naming an entry you did not supply.
 
-A kind may additionally declare a `:candidate-validator`, which the coordinator runs once per refresh over that kind's complete effective candidate after every owner is staged. It is the seam for rules a per-entry spec cannot state — for example, a route may name another registered definition, and whether that target still exists depends on what every owner staged. A validator that throws refuses the whole refresh before publication (SPEC-004.C46d).
+A kind may additionally declare a `:candidate-validator`, which the coordinator runs once per refresh over that kind's complete effective candidate after every owner is staged. It is the seam for rules a per-entry spec cannot state — for example, a route may name another registered definition, and whether that target still exists depends on what every owner staged. A validator that throws refuses the whole refresh before publication (SPEC-003.C23b).
 
 ### Declare lifecycle effects
 

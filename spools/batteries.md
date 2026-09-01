@@ -23,10 +23,7 @@ through `strand <op> …` (RFC-019). The namespace owns no module-level state: h
 runtime from their invocation context (`:op/runtime`) and never touch the published ambient
 singleton.
 
-This doc is the standing contract. It is written against the old public-CLI clauses in
-[`devflow/specs/cli.md`](../devflow/specs/cli.md) §SPEC-002.C6–C13 so behavior equivalences and
-deliberate differences are explicit; [§5](#5-equivalence-with-the-old-public-cli) is the clause-by-clause map. Stable ids here use the `BAT-`
-prefix.
+This doc is the standing contract. Stable ids here use the `BAT-` prefix. The migration notes retain useful differences from the retired builtin CLI without treating its removed clauses as current contracts.
 
 `mill init` makes batteries available in the workspace basis and activates it explicitly:
 
@@ -71,8 +68,8 @@ attached payload that no reference consumed fails `:unused-payloads`.
   events observe the same data the old socket dispatch supplied.
 - **BAT-C4 (result shapes):** Handlers return JSON-safe data (strings,
   numbers, booleans, nil, vectors, string/keyword-keyed maps). `attributes`
-  and `state` are normalized; the old lifecycle fields `active` / `inactive_at`
-  are never emitted (old C9). Every batteries op declares `:returns`; use
+  and `state` are normalized; the retired lifecycle fields `active` / `inactive_at`
+  are never emitted. Every batteries op declares `:returns`; use
   `strand help <op>` for the live flat, subcommand, or stream-channel shape.
 
 ## 3. Op reference
@@ -94,7 +91,7 @@ Creates a strand with generated id, lifecycle state, timestamps, and merged attr
 `--attr` (highest, repeatable string map) over `--attributes` (lowest, a JSON object of typed
 values). `--state` defaults to `active` and accepts `active|closed` (`replaced` is reserved for
 supersession and rejected). `--edge edge-type:to-id` adds an outgoing edge; repeatable. Duplicate
-keys **within** `--attr` fail loudly (old C6e); a blank `--attributes` key fails loudly; a malformed
+keys **within** `--attr` fail loudly; a blank `--attributes` key fails loudly; a malformed
 `--edge` (no/edge-terminal `:`) fails loudly. Returns the normalized strand `{:id :title :state
 :attributes …}`.
 
@@ -133,7 +130,7 @@ strand supersede <old-id> <replacement-id>
 
 Delegates to the weaver supersession transaction: stores `replacement --supersedes--> old`, marks
 the old strand `replaced`, rewires incoming `depends-on` edges, and returns the normalized
-supersession result (old C9a).
+supersession result.
 
 #### `burn` — BAT-C8
 
@@ -142,7 +139,7 @@ strand burn <id>
 ```
 
 Physically deletes one strand and its incident edges. Returns `{:burned [<id>] :count 1}`-shaped
-JSON (old C9b).
+JSON.
 
 #### `note` — BAT-C9
 
@@ -163,14 +160,14 @@ strand weave --pattern <name> --input <json-value-ref>
 ```
 
 Applies an already-registered create-only weaver pattern to exactly one JSON input value and returns
-the pattern-created batch (`{:created [row…] :refs {…}}`, old C13a). Both flags are required.
+the pattern-created batch (`{:created [row…] :refs {…}}`). Both flags are required.
 `--input` resolves a payload reference (or inline literal JSON) and is parsed **strictly** in the
 handler: empty, malformed, and trailing-value input all fail loudly with
 `{:code "pattern/input-invalid"}` before any mutation. A missing/blank `--pattern` fails in the
 parser; an unknown pattern fails `Pattern not found` carrying available names. The parsed object is
 keywordized before dispatch, matching the socket `weave` case.
 
-> **Divergence (recorded):** old C13a specifies `weave --input` as `:parse :json`, but
+> **Migration note:** the retired builtin declared `weave --input` as `:parse :json`, but
 > the parser's `:parse :json` uses `clojure.data.json/read-str`, which silently returns
 > the first value and ignores trailing input — it cannot enforce "exactly one JSON
 > value". So `--input` is declared `:type :string` and the handler parses it strictly
@@ -195,7 +192,7 @@ strand list [--state active|closed|replaced] [--query name [--param key=value]�
 ```
 
 Lists strands. Optional `--state` filters lifecycle (`active|closed|replaced`; callers who care must
-pass it explicitly — old C11). Optional `--query` resolves a weaver-registered named query with
+pass it explicitly). Optional `--query` resolves a weaver-registered named query with
 repeatable string-valued `--param key=value`; `--state` overlays the query as an additional
 `[:= :state …]` clause. `--param` without `--query`, a blank `--query`, and unknown query params all fail
 loudly. Returns a JSON array of normalized strands. The result uses the lean read tier by default:
@@ -216,7 +213,7 @@ fetch a full row.
 strand ready [--query name [--param key=value]…] [--limit N]
 ```
 
-Returns strands with `state="active"` and no active `depends-on` blocker (old C10), optionally
+Returns strands with `state="active"` and no active `depends-on` blocker, optionally
 scoped to a named query's result set exactly as `list`. `ready` takes no `--state`. Like `list`,
 `ready` uses the lean read tier by default for large attribute values above the fixed 1 KiB floor
 and has no hydration flag; use `show <id>` for full fidelity. It uses the same default cap, trusted
@@ -264,7 +261,7 @@ strand subgraph <root-id> [--relation type]
 ```
 
 Returns a relation-scoped graph traversed downward from the root over the declared acyclic relation
-named by `--relation` (weaver default `parent-of` when omitted — old C11a). Result is the
+named by `--relation` (weaver default `parent-of` when omitted). Result is the
 string-keyed `{"root_ids" […] "strands" […] "edges" […]}` shape verbatim from the socket op.
 
 #### `query` — BAT-C16 (registry introspection)
@@ -274,7 +271,7 @@ strand query list
 strand query explain <name>
 ```
 
-Read-only introspection of registered named queries (old C13aa/C13ab), moved from the deleted
+Read-only introspection of registered named queries, moved from the deleted
 builtin to a batteries op (SPEC-002-D004.C12). `query` declares `list` and `explain` as parser-owned
 subcommands, so `strand help query` renders both verbs and missing/unknown subcommands fail in the
 parser with the available names before the handler runs. `list` takes no arguments and returns a
@@ -292,7 +289,7 @@ strand pattern list
 strand pattern explain <name>
 ```
 
-Read-only introspection of registered weave patterns (old C13b). `pattern` declares `list` and
+Read-only introspection of registered weave patterns. `pattern` declares `list` and
 `explain` as parser-owned subcommands, so help rendering and missing/unknown-subcommand failures are
 handled by the blessed arg-spec parser. `list` takes no arguments and returns registered pattern
 metadata ordered by name. `explain <name>` returns input-spec guidance (`name`, `fn`, `input-spec`,
@@ -330,11 +327,11 @@ always bypasses any elected transform.
 
 ## 4. Attribute and edge flag semantics
 
-Reproducing old SPEC-002.C6–C8 (see SPEC-002-D004.R2):
+These flags preserve the useful behavior of the retired builtin CLI:
 
 - **BAT-C19:** `--attr key=value` — repeatable, highest-precedence string map.
   Values may be payload references. Duplicate keys within a single op's `--attr`
-  set fail loudly (old C6e), enforced in the handler by recovering flag keys
+  set fail loudly, enforced in the handler by recovering flag keys
   from the raw argv (the parser's `:map` type silently collapses duplicates).
 - **BAT-C20:** `--attributes <ref>` — a payload reference to one JSON object of
   typed bulk attributes, lowest precedence, on `add` and `update`. Cross-priority
@@ -351,34 +348,14 @@ Reproducing old SPEC-002.C6–C8 (see SPEC-002-D004.R2):
   `list` / `ready`; last-wins collapse (matching the old CLI's non-dedup
   `parseKV`), restricted to the query's declared param names.
 
-## 5. Equivalence with the old public CLI
+## 5. Migration from the retired builtin CLI
 
-| Old clause (cli.md) | Batteries | Equivalence / difference |
-|---|---|---|
-| SPEC-002.C6 `add` | BAT-C5 | Equivalent. |
-| SPEC-002.C6a `--attr` | BAT-C19 | Equivalent. |
-| SPEC-002.C6b `--attr-file` | BAT-C2/C19 | Replaced by `--attr key=:payload/x`. |
-| SPEC-002.C6c `--attr-stdin` | BAT-C2/C19 | Replaced by `--attr key=:stdin`. |
-| SPEC-002.C6d `--attributes-stdin` | BAT-C2/C20 | Replaced by `--attributes :stdin` (JSON-object parse). |
-| SPEC-002.C6e precedence + dup loudness | BAT-C19/C20 | Equivalent; the mutual-exclusion of two stdin sources dissolves — payloads are named, not a single stdin. |
-| SPEC-002.C7 `update` | BAT-C6 | `update` now accepts `--attributes` as a typed JSON Merge Patch (JSON `null` removes a key), matching `add` precedence. |
-| SPEC-002.C8 `--edge` | BAT-C21 | Equivalent. |
-| SPEC-002.C9 normalized JSON | BAT-C4 | Equivalent. |
-| SPEC-002.C9a `supersede` | BAT-C7 | Equivalent. |
-| SPEC-002.C9b `burn` | BAT-C8 | Equivalent. |
-| SPEC-002.C10 `ready` | BAT-C13 | Equivalent. |
-| SPEC-002.C11 `list`/`ready` queries + `--state` | BAT-C12/C13/C23 | Equivalent. |
-| SPEC-002.C11a `graph subgraph` | BAT-C15 | Equivalent; the `graph` command group is gone — it is the root op `subgraph`. |
-| SPEC-002.C13a `weave` | BAT-C10 | Behavior-equivalent; strict single-JSON parse moved handler-side (see divergence note). |
-| SPEC-002.C13aa `query list` | BAT-C16 | Equivalent payload; now a registered read op, not a builtin. |
-| SPEC-002.C13ab `query explain` | BAT-C16 | Equivalent payload; unknown-name loudness handler-side. |
-| SPEC-002.C13b `pattern list`/`explain` | BAT-C17 | Equivalent payload; now a registered read op. |
+Payload references replace the builtin's dedicated file and stdin attribute flags: use `--attr key=:payload/x`, `--attr key=:stdin`, or `--attributes :stdin`. Named payloads remove the old mutual exclusion between stdin sources. `update --attributes` is a typed JSON Merge Patch, `subgraph` is a root op rather than a command-group child, and query and pattern introspection are registered read ops. `weave` keeps strict single-value JSON parsing in its handler.
 
-Not part of batteries (out of scope here): `op help` → the core `help` op (SPEC-002-D004.C12), and
-`init` / `weaver *` → mill (SPEC-002-D004.C9).
+The core `help` op and Mill's `init` and `weaver` commands are outside Batteries.
 
 ## 6. See also
 
-- [cli.md](../devflow/specs/cli.md) — CLI surface spec (old C6–C13 clauses).
+- [cli.md](../devflow/specs/cli.md) — current CLI surface spec.
 - [repl-api.md](../devflow/specs/repl-api.md) — op registry and blessed parser.
 - The workflow spool's patterns are one of the userland surfaces that `weave` can drive.

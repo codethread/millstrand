@@ -40,12 +40,12 @@
   node (DELTA-Dtf-001.CC2) with no per-level branch. It is exported for trusted
   config election and never auto-registers.
 
-  Attribute/edge flag semantics reproduce old SPEC-002.C6–C11: `--attr key=value`
-  is a repeatable, highest-precedence string map whose values may be payload
-  references; `--attributes` references a JSON object of typed bulk attributes at
-  lowest precedence; `--edge edge-type:to-id` adds outgoing edges. `--state`
-  accepts `active|closed` for mutations and `active|closed|replaced` for `list`
-  filtering."
+  Attribute/edge flag semantics preserve the retired builtin CLI behavior:
+  `--attr key=value` is a repeatable, highest-precedence string map whose values
+  may be payload references; `--attributes` references a JSON object of typed
+  bulk attributes at lowest precedence; `--edge edge-type:to-id` adds outgoing
+  edges. `--state` accepts `active|closed` for mutations and
+  `active|closed|replaced` for `list` filtering."
   (:refer-clojure :exclude [await list update])
   (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
@@ -161,12 +161,12 @@
 
 ;; The blessed parser's :parse :json uses clojure.data.json/read-str, which
 ;; silently returns the first value and ignores trailing input, so it cannot
-;; enforce old C13a's "exactly one JSON value" contract. weave reads --input as
-;; a raw string and parses it strictly here instead: empty, malformed, and
-;; trailing-value inputs all fail loudly before any mutation.
+;; enforce the retired builtin's "exactly one JSON value" contract. weave reads
+;; --input as a raw string and parses it strictly here instead: empty, malformed,
+;; and trailing-value inputs all fail loudly before any mutation.
 (defn- read-single-json
   "Read exactly one JSON value from s, failing loudly on empty, malformed, or
-  trailing input (reproduces old SPEC-002.C13a stdin parsing weaver-side)."
+  trailing input. This preserves the retired builtin's strict stdin parsing."
   [s]
   (let [eof (Object.)
         ;; data.json/read unreads several characters of lookahead while parsing,
