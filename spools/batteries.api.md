@@ -16,7 +16,7 @@ Ops adopt the discovery-tier pattern (DELTA-Dtf-003.CC2): their arg-specs drive 
 
 Batteries also EXPORTS `default-help-transform` — the reference default help transform (DELTA-Dtf-002.CC1): one recursive renderer over the uniform fractal node (DELTA-Dtf-001.CC2) with no per-level branch. It is exported for trusted config election and never auto-registers.
 
-Attribute/edge flag semantics reproduce old SPEC-002.C6–C11: `--attr key=value` is a repeatable, highest-precedence string map whose values may be payload references; `--attributes` references a JSON object of typed bulk attributes at lowest precedence; `--edge edge-type:to-id` adds outgoing edges. `--state` accepts `active|closed` for mutations and `active|closed|replaced` for `list` filtering.
+Attribute/edge flag semantics preserve the retired builtin CLI behavior: `--attr key=value` is a repeatable, highest-precedence string map whose values may be payload references; `--attributes` references a JSON object of typed bulk attributes at lowest precedence; `--edge edge-type:to-id` adds outgoing edges. `--state` accepts `active|closed` for mutations and `active|closed|replaced` for `list` filtering.
 
 ## <a name="millstrand.spools.batteries/add">`add`</a>
 

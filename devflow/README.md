@@ -106,7 +106,7 @@ Archived feature folders preserve historical planning context. Current shipped c
 - `26-07-05__weaver-scheduler` — shipped the weaver-owned scheduler primitive: durable `wake-at` records in dedicated SQLite tables, startup/reload re-arming, fully-qualified-symbol handler resolution, at-least-once serialized async dispatch, and data-first introspection.
 - `26-07-09__deterministic-test-time` — shipped two test-time control seams — a runtime-owned clock component (`skein.api.runtime.alpha/now` read, `skein.test.alpha/set-clock!`/`advance!` controls, and a clock-pump registry `advance!` drives) and an `skein.test.alpha/await-quiescent!` event-lane settle primitive — collapsed the scheduler onto the shared runtime clock, migrated the timer/event serial suites onto the seams, and graduated them from the serial island to the parallel batch.
 - `26-07-06__attr-scaling-ship-now` — shipped the immediate attribute-scaling measures: L0a SQLite pragmas and L1 lean read paths, staged ahead of the EAV storage change.
-- `26-07-06__fix-land-signoff-details` — shipped land sign-off input discoverability (SPEC-002.C39a): reviewers see what a sign-off decision needs before deciding.
+- `26-07-06__fix-land-signoff-details` — shipped land sign-off input discoverability: reviewers see what a sign-off decision needs before deciding.
 - `26-07-07__eav-attr-storage` — shipped EAV attribute row storage under the map contract, with the `archived` cold tier, partial hot indexes, and the merge-blocking benchmark gate.
 - `26-07-08__skein-readability-macros` — shipped the RFC-020 readability macros for the scan-first `.millstrand` config surface.
 - `26-07-08__workflow-shell-gates` — shipped shell-command workflow gates: a mechanical done-signal executor beside the subagent gate, with the SPEC-005 gate contracts.
@@ -124,7 +124,7 @@ Archived feature folders preserve historical planning context. Current shipped c
 - `26-07-11__spool-hot-reload` — shipped spool hot reload through the runtime workspace helpers (SPEC-003.C17–C19).
 - `26-07-11__spool-suite-ci-gate` — shipped the pinned external spool suite CI gate (`make spool-suite-gate`).
 - `26-07-11__sync-retained-root-guard` — shipped the sync retained-root guard refusing removal of loaded local roots (SPEC-004.C42/C43/C46).
-- `26-07-11__unify-spool-classpath` — shipped the unified spool classloader model across sync, activation, and reload (SPEC-004.C41–C50a).
+- `26-07-11__unify-spool-classpath` — shipped the unified spool classloader model across sync, activation, and reload.
 - `26-07-12__3pqk1-generation-migration-docs` — shipped the weaver-generation, drain-or-retry, and one-time migration-restart documentation.
 - `26-07-12__burn-tombstones` — shipped burn tombstones: every burn atomically records what it deleted, hand-recoverable from the REPL.
 - `26-07-12__c5kss-sync-owns-resolution` — shipped sync-owned stateless per-call tools.deps resolution, deleting the add-libs path and its global state.
@@ -147,7 +147,7 @@ Archived feature folders preserve historical planning context. Current shipped c
 - `26-07-19__reload-preflight` — shipped the reload preflight: `preflight-approved-sync!` reports what a sync would do before it mutates (SPEC-004.C46/C96).
 - `26-07-19__reload-spool-fingerprint` — shipped approved-spool generation fingerprints so reload detects drifted spool source (SPEC-004.C46/C44d).
 - `26-07-21__5hzoe-agent-run-clock` — shipped agent-run awaits migrated onto the clock-aware `poll-until!` seam.
-- `26-07-21__clock-aware-polling` — shipped clock-aware polling primitives on the runtime clock, replacing wall-clock sleeps (SPEC-003.C1a/C5a/C28a).
+- `26-07-21__clock-aware-polling` — shipped clock-aware polling primitives on the runtime clock, replacing wall-clock sleeps.
 - `26-07-21__tz0ki-discovery-tiers` — shipped the discovery-tier factoring: one canonical versioned fractal help envelope, `help`/`about`/`prime` meta-verbs, a runtime glossary of named failure outcomes, and the config-electable help transform with the `--json` raw floor (SPEC-002.C39/C44–C47, SPEC-003.C66–C69, SPEC-004.C106–C112).
 - `26-07-21__xijst-edge-removal` — shipped the public edge-removal primitive so spools no longer work around upsert-only `api/update`.
 - `26-07-22__8wwjk-leaf-hook-class` — shipped mandatory per-leaf hook and deadline classes, recursive arity-N subcommands, recursive return routing, and deep help slicing (SPEC-004.C63a/C64/C65).
