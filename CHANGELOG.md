@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2 - 2026-09-01
+
+- Workspace-owned declarations can be defined across focused namespaces and selected through one owner-complete configuration module.
+- Relative workspace classpath roots now resolve from the selected workspace, independent of the Weaver process working directory.
+
 ## 0.5.1 - 2026-09-01
 
 - Millstrand now has one product version across Weaver, `mill`, `strand`, and the Homebrew package. Build revisions and transport protocol versions remain separate identities.
