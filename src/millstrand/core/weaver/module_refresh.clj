@@ -470,7 +470,7 @@
   (try
     (if (= :image (:load declaration))
       (evaluate-image-module key declaration)
-      (let [context (collection-context runtime key declaration)
+      (let [context (with-loader #(collection-context runtime key declaration))
             {:keys [return kind-declarations lifecycle] collected :contribution}
             (module-graph/with-contribution-collection
               context
@@ -514,8 +514,8 @@
          :module/namespace module-ns
          :source/status source-status
          :source/result return
-         :source/stamp (when-let [ns-sym (:ns declaration)]
-                         (source-stamp (ns-source-file ns-sym)))
+         :source/stamp (when (:ns declaration)
+                         (source-stamp (:source/file context)))
          :declaration/source :source-collection
          :kind-declarations kind-declarations
          :lifecycle lifecycle
