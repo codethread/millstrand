@@ -277,6 +277,19 @@
       (.addURL loader (.toURL (.toURI (io/file root)))))
     loader))
 
+(defn- require-create-generation-basis-options!
+  [options]
+  (when-not (s/valid?
+             :millstrand.core.specs/create-generation-basis-options options)
+    (throw
+     (ex-info
+      "create-generation-basis options violate their contract"
+      {:value options
+       :explain
+       (s/explain-data
+        :millstrand.core.specs/create-generation-basis-options options)})))
+  options)
+
 (defn create-generation-basis
   "Compose and describe the immutable basis for one Weaver generation.
 
@@ -285,14 +298,18 @@
   validated against `:millstrand.core.specs/generation-basis` before return
   (SPEC-004.C42-C45).
 
-  When `:dependency-source-workspace` is supplied, relative `:local/root`
+  The closed three-arity options shape is owned by
+  `:millstrand.core.specs/create-generation-basis-options`. When
+  `:dependency-source-workspace` is supplied, relative `:local/root`
   coordinates are resolved from that directory in memory. This preserves the
   dependency semantics of config copied into an isolated probe workspace
   without changing the copied files."
   ([workspace runtime-coordinate]
    (create-generation-basis workspace runtime-coordinate {}))
-  ([workspace runtime-coordinate {:keys [dependency-source-workspace]}]
-   (let [workspace-path (.getPath (.getCanonicalFile (io/file workspace)))
+  ([workspace runtime-coordinate options]
+   (let [{:keys [dependency-source-workspace]}
+         (require-create-generation-basis-options! options)
+         workspace-path (.getPath (.getCanonicalFile (io/file workspace)))
          dependency-source-path (some-> dependency-source-workspace
                                         io/file
                                         .getCanonicalFile

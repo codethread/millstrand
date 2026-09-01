@@ -88,6 +88,26 @@
     (is (nil? (:extra @captured)))
     (is (not (.exists (io/file workspace "deps.local.edn"))))))
 
+(deftest create-generation-basis-validates-its-closed-options-contract
+  (let [workspace (workspace! {} nil)
+        runtime-coordinate {:local/root "/millstrand"}]
+    (binding [basis/*create-basis* resolved-basis]
+      (is (s/valid?
+           :millstrand.core.specs/generation-basis
+           (basis/create-generation-basis
+            (.getPath workspace)
+            runtime-coordinate
+            {:dependency-source-workspace (.getPath workspace)}))))
+    (doseq [options [{:unknown true}
+                     {:dependency-source-workspace 42}]]
+      (let [error (try
+                    (basis/create-generation-basis
+                     (.getPath workspace) runtime-coordinate options)
+                    nil
+                    (catch clojure.lang.ExceptionInfo throwable throwable))]
+        (is (re-find #"options violate their contract" (ex-message error)))
+        (is (map? (:explain (ex-data error))))))))
+
 (deftest dns-s9-05-documented-basis-inspection
   (let [shared-root (workspace! {:paths ["shared-src"]} nil)
         local-root (workspace! {:paths ["local-src"]} nil)

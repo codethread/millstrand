@@ -142,6 +142,12 @@
                           :millstrand.basis/classloader])
          #(= #{:sources :aliases :reserved-deps :basis :fingerprint :classloader}
              (set (keys %)))))
+(s/def :millstrand.generation-basis/dependency-source-workspace
+  non-blank-string?)
+(s/def :millstrand.core.specs/create-generation-basis-options
+  (s/and
+   (s/keys :opt-un [:millstrand.generation-basis/dependency-source-workspace])
+   #(every? #{:dependency-source-workspace} (keys %))))
 
 (s/def :millstrand.hook/key
   (s/or :keyword keyword?
