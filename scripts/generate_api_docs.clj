@@ -50,7 +50,7 @@
          :filename-remove-prefix (str (.getCanonicalPath root)
                                       java.io.File/separator)}))))
 
-(doseq [{:keys [outfile resource] :as doc} (concat spool-docs alpha-api-docs)]
+(doseq [{:keys [outfile] :as doc} (concat spool-docs alpha-api-docs)]
   (let [{:keys [source filename-remove-prefix]} (source-location doc)]
     (quickdoc/quickdoc
      (cond->

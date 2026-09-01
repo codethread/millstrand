@@ -19,7 +19,7 @@
                       ;; off the main src/weaver classpath.
                       nubank/matcher-combinators {:mvn/version "3.9.1"}
                       org.clojure/test.check {:mvn/version "1.1.1"}
-                      clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
+                      clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
          :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
          :main-opts ["-m" "millstrand.test-runner"]}
   ;; Per-worktree warm test REPL: compose with :test to inherit its classpath and
@@ -34,36 +34,6 @@
   :repl {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
   :rebel {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]
           :main-opts ["-m" "rebel-readline.main"]}
-  ;; Static projection of the workspace dependencies used by this repository's
-  ;; Millstrand config. Keep these coordinates aligned with .millstrand/deps.edn.
-  :millstrand {:extra-paths [".millstrand"
-                             "spools/batteries/src"
-                             "spools/unsafe-text-search/src"]
-               :extra-deps {codethread/config
-                            {:git/url "https://github.com/codethread/codethread.spool.git"
-                             :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe"
-                             :deps/root "spools/config"}
-                            codethread/ralph
-                            {:git/url "https://github.com/codethread/codethread.spool.git"
-                             :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe"
-                             :deps/root "spools/ralph"}
-                            ct.spools/agent-cli
-                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
-                             :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb"
-                             :deps/root "agent-cli"}
-                            ct.spools/bench
-                            {:git/url "https://github.com/codethread/agent-harness.spool.git"
-                             :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb"
-                             :deps/root "bench"}
-                            millhouse.spools/chime
-                            {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5"
-                             :deps/root "spools/chime"}
-                            millhouse.spools/cron
-                            {:git/url "https://github.com/codethread/millhouse.spool.git"
-                             :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5"
-                             :deps/root "spools/cron"}}
-               :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
   :e2e {:extra-paths ["test/clojure/e2e"]
         :jvm-opts ["--enable-native-access=ALL-UNNAMED"]
         :main-opts ["-m" "millstrand.e2e"]}
@@ -87,13 +57,6 @@
                            ".millstrand/ct/agents/reviewers.clj" ".millstrand/ct/agents/delegation_contracts.clj"
                            ".millstrand/ct/notifications/attention.clj"
                            ".millstrand/ct/jobs/nvd_scan.clj"]}
-  :lint/clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
-                   :main-opts ["-m" "clj-kondo.main" "--lint" "src" "spools/batteries/src" "spools/unsafe-text-search/src" "test/clojure"]}
-  :lint/millstrand {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
-                    :main-opts ["-m" "clj-kondo.main" "--fail-level" "error" "--lint"
-                                "src" "dev" ".millstrand/ct"
-                                "spools/batteries/src" "spools/unsafe-text-search/src"
-                                "test/clojure"]}
   :lint/conventions {:extra-paths ["scripts"]
                      :extra-deps {clj-kondo/clj-kondo {:mvn/version "2025.06.05"}}
                      :main-opts ["-m" "quality.conventions-check"]}

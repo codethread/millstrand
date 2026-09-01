@@ -132,7 +132,8 @@
           (println "conventions-check: configured source root does not exist:" root))
         (System/exit 1)))
     (let [{:keys [analysis]} (kondo/run! {:lint source-roots
-                                          :config {:analysis {:locals true}}})
+                                          :config {:analysis {:locals true}
+                                                   :exclude-files "(^|/)\\.clj-kondo/"}})
           undocumented (->> (:namespace-definitions analysis)
                             (remove :doc)
                             (map (juxt :filename :name)))

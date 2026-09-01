@@ -1,4 +1,0 @@
-{:copy-kondo-configs? false
- :project-specs [{:project-path "deps.edn"
-                  :classpath-cmd ["clojure" "-Srepro" "-A:millstrand:test" "-Spath"]}]
- :source-aliases #{:millstrand :test}}

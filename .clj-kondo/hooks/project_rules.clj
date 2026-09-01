@@ -1,4 +1,5 @@
 (ns hooks.project-rules
+  "Enforce repository-specific source conventions during clj-kondo analysis."
   (:require [clj-kondo.hooks-api :as api]
             [clojure.string :as str]))
 

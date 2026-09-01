@@ -1,4 +1,7 @@
 .cpcache/
+**/.lsp/.cache/
+**/.clj-kondo/.cache/
+**/.clj-kondo/imports/
 *.sqlite
 *.sqlite-*
 *.sqlite.repl*
@@ -12,7 +15,3 @@ cli/bin/
 /go.work.sum
 site/
 node_modules/
-
-.lsp/*
-!.lsp/config.edn
-.clj-kondo/.cache/

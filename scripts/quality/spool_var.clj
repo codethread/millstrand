@@ -89,14 +89,13 @@
   (into [] (mapcat declaration-sites) (source-forms/read-all file)))
 
 (defn findings
-  "Turn `sites` ({:filename :line :form-kind :private? :value :has-value?
-  :read-error :read-error/class :read-error/data})
+  "Turn `sites` ({:filename :line :private? :read-error
+  :read-error/class :read-error/data})
   into finding strings. Every public site is a finding because the module
   entry-point convention has been removed. Private sites are ignored, and a
   file the scanner could not read is itself a finding."
   [sites]
-  (for [{:keys [filename line form-kind private? value has-value? read-error]
-         :as site} sites
+  (for [{:keys [filename line private? read-error] :as site} sites
         :let [error-class (:read-error/class site)
               error-data (:read-error/data site)
               finding
