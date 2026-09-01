@@ -19,7 +19,7 @@ This spec draws the line around what Millstrand ships as "alpha": which surface 
 
 ## SPEC-005.P3 Explicitly internal
 
-- **SPEC-005.C5:** `millstrand.core.*` is internal and may change freely (public vars included); trusted code that requires it accepts the compatibility cost (SPEC-004.C40).
+- **SPEC-005.C5:** `millstrand.core.*` is internal and may change freely (public vars included); trusted code that requires it accepts the compatibility cost.
 - **SPEC-005.C5b:** All non-alpha `millstrand.api.*` implementation plumbing is internal, including `.internal` namespaces and singular internal modules such as `millstrand.api.process.internal`. Only a sibling `.alpha` module may expose behavior from this plumbing as contract (SPEC-003.C19a); its public vars may change freely.
 - **SPEC-005.C5a:** Deterministic time is in-contract through the blessed tiers in C2: `millstrand.api.clock.alpha` owns the Clock abstraction, `millstrand.api.runtime.alpha/clock` and `now` expose the runtime Clock and its data-first read, and `millstrand.test.alpha/manual-clock`, `set-clock!`, and `advance!` are author-side controls (SPEC-004.C1a, SPEC-003.C17a/C28a). The runtime-map `:clock` slot and clock-pump registry remain internal core plumbing.
 - **SPEC-005.C6:** The mill JSON socket protocol is internal transport glue. SPEC-002 owns the CLI contract and SPEC-004.C9a owns published artifact locations; socket frames, operations, error codes, protocol version, and `mill.json` fields are outside both contracts.
