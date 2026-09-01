@@ -22,6 +22,10 @@ class Millstrand < Formula
     libexec.install Dir["*", ".[!.]*"]
   end
 
+  def post_install
+    libexec.install_symlink prefix/"CHANGELOG.md"
+  end
+
   test do
     expected_identity = {
       "build_id"         => "8c94b0f8cae41ebc49e2418a8c2cbfddd99c87da",
