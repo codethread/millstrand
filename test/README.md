@@ -34,7 +34,7 @@ Run commands from the repository root. Cold means starting a fresh test JVM; war
 | Stop warm iteration | `make test-warm-stop` | Stops the PID recorded in `.test-repl.pid` and removes the warm runtime files. |
 | Go suite | `make test-go` | Runs `go test ./...` in `cli`, `tools/kanban-tree`, and `tools/land-quality`. |
 | Restart process acceptance | `make test-restart-acceptance` | Builds repository-local `mill` and `strand`, then runs the tagged `TestDisposableWeaverRestartAcceptance` against disposable Mill and Weaver processes. This is a mandatory `make land-quality` check, separate from the bounded Go suite. |
-| Process/repository E2E | `make test-e2e` | Runs the `millstrand.e2e` entrypoint, including public CLI, live refresh, cutover, repository bootstrap, and REPL flows. |
+| Process/repository E2E | `make test-e2e` | Runs the `millstrand.e2e` entrypoint, which invokes `make build`, copies the built `bin/mill` and `bin/strand` entrypoints into its disposable fixture, and covers public CLI, live refresh, cutover, repository bootstrap, and REPL flows. |
 | Shell acceptance | `make build`, then `test/shell/acceptance/millstrand-core.sh` | Runs public built `bin/mill` and `bin/strand` against disposable worlds. The Kanban module script proves the pinned Millhouse source and retained image surface; the docs and Neovim scripts are `test/shell/acceptance/millstrand-docs.sh` and `test/shell/acceptance/millstrand-neovim.sh`. |
 
 The focused cold runner accepts only registered serial or parallel namespaces and rejects unknown names. `MILLSTRAND_TEST_AWAIT_SCALE=3` widens await budgets on slow hosts; it does not change the test tier.
@@ -57,7 +57,7 @@ The fixture contract and classpath boundary live in [docs/spools/testing.md](../
 
 Use [`test/clojure/e2e/millstrand/e2e.clj`](./clojure/e2e/millstrand/e2e.clj) only for claims that need the repository, public CLI entrypoints built from repository Go sources, public `mill`/`strand` commands, public process transport, and separate process identities together. `mill weaver repl` is an allowed public process transport. It may evaluate trusted forms using blessed `millstrand.api.*.alpha` namespaces and observe process state needed for topology evidence. The forbidden shortcut is a test-side in-process runtime handle or private runtime construction that bypasses the separate process. The E2E tier is defined by [SPEC-006.C4a](../devflow/specs/testing.md); it adds evidence to the lower tiers rather than replacing them.
 
-The E2E entrypoint runs `go build` on the repository's CLI sources into `cli/bin/strand` and `cli/bin/mill` for its run; it does not use `make build`. Shell acceptance is separate: run `make build`, then the acceptance scripts use the repository-local `bin/mill` and `bin/strand`. Both forms use disposable repositories, workspaces, state, data, sockets, and fixture roots.
+The E2E entrypoint invokes `make build`, then copies the repository-local `bin/strand` and `bin/mill` into `cli/bin` under its disposable fixture. Shell acceptance is separate: run `make build`, then the acceptance scripts use the repository-local `bin/mill` and `bin/strand` directly. Both forms use disposable repositories, workspaces, state, data, sockets, and fixture roots.
 
 ## Isolation and cleanup
 

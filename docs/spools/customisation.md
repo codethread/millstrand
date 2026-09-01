@@ -104,7 +104,7 @@ workspace. If the candidate config is wrong, startup tells you with file context
 away.
 
 Once a customisation is worth keeping, it is worth automated coverage: [`millstrand.test.alpha`](./testing.md)
-weaver worlds take `:deps-edn`, `:init`, and `:files` fixtures, so a test exercises exactly the artifacts
+weaver worlds take `:deps-edn`, `:init-clj`, and `:files` fixtures, so a test exercises exactly the artifacts
 this page has you writing.
 
 ## Reloading a live weaver
