@@ -1,1 +1,5 @@
-{:paths ["src"]}
+{:paths ["src"]
+ :aliases
+ {:test
+  {:extra-deps
+   {io.millstrand/millstrand {:local/root "../.."}}}}}

@@ -774,6 +774,7 @@
                           (= :unchanged (:status outcome)))
                      (assoc :status :applied)))
             :lifecycle-state
+            #_{:clj-kondo/ignore [:type-mismatch]}
             (if (seq (:effects next-state))
               (assoc lifecycle-state module-key next-state)
               (dissoc lifecycle-state module-key))}))))
@@ -1003,7 +1004,8 @@
   ;; The runtime slot is one dedicated Object monitor. Splint cannot see the
   ;; stable object behind the map lookup; refreshes serialize so two collectors
   ;; never publish interleaved desired graphs.
-  #_{:splint/disable [lint/locking-object]}
+  #_{:clj-kondo/ignore [:locking-suspicious-lock]
+     :splint/disable [lint/locking-object]}
   (locking (:module-refresh-lock runtime)
     (let [selection (select-refresh runtime load-startup-files! opts)
           {:keys [mode collection selected]} selection

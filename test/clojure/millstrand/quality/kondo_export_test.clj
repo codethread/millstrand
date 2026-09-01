@@ -8,7 +8,7 @@
             [clojure.test :refer [deftest is testing]]
             [millstrand.api.millstrand.alpha]))
 
-(def ^:private clj-kondo-version "2025.06.05")
+(def ^:private clj-kondo-version "2026.08.04")
 
 (def ^:private config-import-command
   ["sh" "-c"
@@ -63,15 +63,15 @@
           'clj-kondo/clj-kondo {:mvn/version clj-kondo-version}}
    :aliases {:lint {:main-opts ["-m" "clj-kondo.main"]}}})
 
-(defn- repository-basis
-  "Resolve the checkout's Millstrand alias through its current dependency graph."
+(defn- workspace-basis
+  "Resolve the checkout's workspace dependency graph."
   [^java.io.File root]
-  ((requiring-resolve 'clojure.tools.deps/create-basis)
-   {:dir (.getPath root)
-    :root :standard
-    :user nil
-    :project (edn/read-string (slurp (io/file root "deps.edn")))
-    :aliases [:millstrand]}))
+  (let [workspace (io/file root ".millstrand")]
+    ((requiring-resolve 'clojure.tools.deps/create-basis)
+     {:dir (.getPath workspace)
+      :root :standard
+      :user nil
+      :project (edn/read-string (slurp (io/file workspace "deps.edn")))})))
 
 (def ^:private consumer-source
   (str
@@ -336,7 +336,7 @@
                        "millhouse-kondo-consumer"
                        (make-array java.nio.file.attribute.FileAttribute 0)))
         repository (repository-root)
-        workflow-coordinate (get-in (repository-basis repository)
+        workflow-coordinate (get-in (workspace-basis repository)
                                     [:libs 'millhouse.spools/workflow])]
     (try
       (write-consumer-file! root "deps.edn"
@@ -364,18 +364,12 @@
             imported-config (io/file root
                                      ".clj-kondo/imports/millhouse.spools/workflow/config.edn")
             imported-hooks (io/file root
-                                    ".clj-kondo/imports/millhouse.spools/workflow/hooks/millhouse/spools/workflow.clj_kondo")
-            checked-in-config (io/file repository
-                                       ".clj-kondo/imports/millhouse.spools/workflow/config.edn")
-            checked-in-hooks (io/file repository
-                                      ".clj-kondo/imports/millhouse.spools/workflow/hooks/millhouse/spools/workflow.clj_kondo")]
+                                    ".clj-kondo/imports/millhouse.spools/workflow/hooks/millhouse/spools/workflow.clj_kondo")]
         (is (zero? exit) (str output import-output lint-output))
         (is (zero? import-exit) import-output)
         (is (zero? lint-exit) lint-output)
         (is (.isFile imported-config))
-        (is (.isFile imported-hooks))
-        (is (= (slurp checked-in-config) (slurp imported-config)))
-        (is (= (slurp checked-in-hooks) (slurp imported-hooks))))
+        (is (.isFile imported-hooks)))
       (finally
         (delete-tree! root)))))
 

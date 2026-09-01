@@ -1057,6 +1057,7 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"fully qualified" (hooks/register-hook! rt :bad #{:x} 'capture-hook {})))
       (is (thrown? Throwable (hooks/register-hook! rt :bad #{:x} 'missing.ns/hook {})))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"callable" (hooks/register-hook! rt :bad #{:x} 'millstrand.core.weaver.hooks-events-test/not-callable-hook {})))
+      #_{:clj-kondo/ignore [:type-mismatch]}
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"opts" (hooks/register-hook! rt :bad #{:x} 'millstrand.core.weaver.hooks-events-test/capture-hook :opaque)))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"data-first" (hooks/register-hook! rt :bad #{:x} 'millstrand.core.weaver.hooks-events-test/capture-hook {:opaque (Object.)})))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"integer" (hooks/register-hook! rt :bad #{:x} 'millstrand.core.weaver.hooks-events-test/capture-hook {:order 1.5}))))))

@@ -1,4 +1,4 @@
-.PHONY: help build kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go test-warm test-warm-stop
+.PHONY: help build kanban-tree land-quality install dash api-docs test-go test-restart-acceptance test-e2e docs-site docs-serve docs-check identity-check ci-config-check fmt fmt-check-clj fmt-check-go lint lint-go lint-clj lint-clj-root lint-clj-millstrand lint-clj-batteries lint-clj-unsafe-text-search lint-splint lint-conventions reflect-check deps-report security-report security-report-clj security-report-go kondo-configs kondo-configs-root kondo-configs-millstrand kondo-configs-batteries kondo-configs-unsafe-text-search check-clj-kondo clean-kondo test-warm test-warm-stop
 
 help:
 	@printf '%s\n' \
@@ -30,6 +30,8 @@ BUILD_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 SOURCE_LDFLAGS := -X millstrand-strand-cli/internal/config.InstalledSource=$(CURDIR) -X millstrand-strand-cli/internal/config.BuildID=$(BUILD_ID)
 QUICKDOC_DEPS := '{:deps {io.github.borkdude/quickdoc {:git/tag "v0.2.6" :git/sha "ce86780"}}}'
 QUICKDOC_SCRIPT := scripts/generate_api_docs.clj
+CLJ_KONDO := clj-kondo
+CLJ_KONDO_VERSION := 2026.08.04
 
 # repo-local build for agents/worktrees validating CLI changes without touching
 # the user's global install; run the resulting ./bin/strand and ./bin/mill directly
@@ -125,8 +127,81 @@ test-e2e:
 
 lint: lint-clj lint-splint lint-conventions lint-go
 
-lint-clj:
-	clojure -M:lint/clj-kondo
+check-clj-kondo:
+	@command -v $(CLJ_KONDO) >/dev/null 2>&1 || { \
+		echo "clj-kondo $(CLJ_KONDO_VERSION) is required" >&2; \
+		exit 1; \
+	}
+	@actual="$$($(CLJ_KONDO) --version)"; \
+	expected="clj-kondo v$(CLJ_KONDO_VERSION)"; \
+	if [ "$$actual" != "$$expected" ]; then \
+		echo "Expected $$expected, found $$actual" >&2; \
+		exit 1; \
+	fi
+
+kondo-configs: kondo-configs-root kondo-configs-millstrand kondo-configs-batteries kondo-configs-unsafe-text-search
+
+kondo-configs-root: check-clj-kondo
+	@echo "==> root clj-kondo imports"
+	@rm -rf .clj-kondo/imports
+	@classpath="$$(clojure -Spath -M:test)"; \
+	$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
+
+kondo-configs-millstrand: check-clj-kondo
+	@echo "==> .millstrand clj-kondo imports"
+	@cd .millstrand && \
+		rm -rf .clj-kondo/imports && \
+		mkdir -p .clj-kondo && \
+		classpath="$$(clojure -Spath -M:dev)" && \
+		$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
+
+kondo-configs-batteries: check-clj-kondo
+	@echo "==> spools/batteries clj-kondo imports"
+	@cd spools/batteries && \
+		rm -rf .clj-kondo/imports && \
+		mkdir -p .clj-kondo && \
+		classpath="$$(clojure -Spath -M:test)" && \
+		$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
+
+kondo-configs-unsafe-text-search: check-clj-kondo
+	@echo "==> spools/unsafe-text-search clj-kondo imports"
+	@cd spools/unsafe-text-search && \
+		rm -rf .clj-kondo/imports && \
+		mkdir -p .clj-kondo && \
+		classpath="$$(clojure -Spath -M:test)" && \
+		$(CLJ_KONDO) --repro --lint "$$classpath" --copy-configs --skip-lint
+
+lint-clj: lint-clj-root lint-clj-millstrand lint-clj-batteries lint-clj-unsafe-text-search
+
+lint-clj-root: kondo-configs-root
+	@echo "==> root clj-kondo"
+	@$(CLJ_KONDO) --repro --parallel --lint src test/clojure
+	@$(CLJ_KONDO) --repro --parallel --lint dev
+	@$(CLJ_KONDO) --repro --parallel --lint scripts
+	@$(CLJ_KONDO) --repro --parallel --lint resources/clj-kondo.exports .clj-kondo/hooks
+
+lint-clj-millstrand: kondo-configs-millstrand
+	@echo "==> .millstrand clj-kondo"
+	@cd .millstrand && $(CLJ_KONDO) --repro --parallel --lint init.clj ct
+
+lint-clj-batteries: kondo-configs-batteries
+	@echo "==> spools/batteries clj-kondo"
+	@cd spools/batteries && $(CLJ_KONDO) --repro --parallel --lint src
+
+lint-clj-unsafe-text-search: kondo-configs-unsafe-text-search
+	@echo "==> spools/unsafe-text-search clj-kondo"
+	@cd spools/unsafe-text-search && $(CLJ_KONDO) --repro --parallel --lint src
+
+clean-kondo:
+	rm -rf \
+		.clj-kondo/imports \
+		.clj-kondo/.cache \
+		.millstrand/.clj-kondo/imports \
+		.millstrand/.clj-kondo/.cache \
+		spools/batteries/.clj-kondo/imports \
+		spools/batteries/.clj-kondo/.cache \
+		spools/unsafe-text-search/.clj-kondo/imports \
+		spools/unsafe-text-search/.clj-kondo/.cache
 
 lint-splint:
 	clojure -M:lint/splint

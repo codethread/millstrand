@@ -92,7 +92,8 @@
   (reset! (:closed? state) true)
   ;; :lock is a dedicated per-state (Object.) monitor (see state ctor); the rule only
   ;; recognises bare-symbol locks and can't see the stable Object behind the map get.
-  #_{:splint/disable [lint/locking-object]}
+  #_{:clj-kondo/ignore [:locking-suspicious-lock]
+     :splint/disable [lint/locking-object]}
   (locking (:lock state)
     (when-let [^ScheduledFuture fut @(:timer state)]
       (.cancel fut false)
@@ -242,7 +243,8 @@
   [runtime delay-ms]
   (let [st (state runtime)]
     ;; :lock is the dedicated per-state (Object.) monitor; false positive, see close-state!.
-    #_{:splint/disable [lint/locking-object]}
+    #_{:clj-kondo/ignore [:locking-suspicious-lock]
+       :splint/disable [lint/locking-object]}
     (locking (:lock st)
       (when-not @(:closed? st)
         (when-let [^ScheduledFuture fut @(:timer st)]
@@ -263,7 +265,8 @@
   (let [ds (:datasource runtime)
         st (state runtime)]
     ;; :lock is the dedicated per-state (Object.) monitor; false positive, see close-state!.
-    #_{:splint/disable [lint/locking-object]}
+    #_{:clj-kondo/ignore [:locking-suspicious-lock]
+       :splint/disable [lint/locking-object]}
     (locking (:lock st)
       (when-not @(:closed? st)
         (when-let [^ScheduledFuture fut @(:timer st)]
@@ -334,7 +337,8 @@
   [runtime]
   (let [st (state runtime)]
     ;; :lock is the dedicated per-state (Object.) monitor; false positive, see close-state!.
-    #_{:splint/disable [lint/locking-object]}
+    #_{:clj-kondo/ignore [:locking-suspicious-lock]
+       :splint/disable [lint/locking-object]}
     (locking (:lock st)
       (reset! (:in-flight st) #{})
       (reset! (:parked-wakes st) {})))

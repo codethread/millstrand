@@ -1,7 +1,13 @@
-{:paths ["../spools/batteries/src" "../spools/unsafe-text-search/src"]
- :deps {codethread/config {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe" :deps/root "spools/config"}
+{:deps {io.millstrand/batteries {:local/root "../spools/batteries"}
+        io.millstrand/unsafe-text-search {:local/root "../spools/unsafe-text-search"}
+        codethread/config {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe" :deps/root "spools/config"}
         codethread/ralph {:git/url "https://github.com/codethread/codethread.spool.git" :git/sha "ab10ed817296181d09fd94c7b30d745df4dcd4fe" :deps/root "spools/ralph"}
         ct.spools/agent-cli {:git/url "https://github.com/codethread/agent-harness.spool.git" :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb" :deps/root "agent-cli"}
         ct.spools/bench {:git/url "https://github.com/codethread/agent-harness.spool.git" :git/sha "f3b950769a54ccf66712f1887813a1255afecdeb" :deps/root "bench"}
         millhouse.spools/chime {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5" :deps/root "spools/chime"}
-        millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5" :deps/root "spools/cron"}}}
+        millhouse.spools/cron {:git/url "https://github.com/codethread/millhouse.spool.git" :git/sha "e52162bda3bd2e3b806b262e216d688de5b811b5" :deps/root "spools/cron"}}
+ :aliases
+ {:dev
+  {:extra-paths ["."]
+   :extra-deps
+   {io.millstrand/millstrand {:local/root ".."}}}}}
