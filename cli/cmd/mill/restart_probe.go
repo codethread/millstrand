@@ -196,6 +196,13 @@ func freshRuntimeProbeArgs(source string) []string {
 	return []string{"-Srepro", "-Sdeps", probeDeps, "-M", "-e", freshRuntimeProbeExpression}
 }
 
+func freshRuntimeProbeCommand(source string, world config.World, baselinePath, resultPath string) *exec.Cmd {
+	cmd := exec.Command("clojure", freshRuntimeProbeArgs(source)...)
+	cmd.Dir = source
+	cmd.Env = append(os.Environ(), "MILLSTRAND_PROBE_SOURCE="+source, "MILLSTRAND_PROBE_VERSION="+config.Version, "MILLSTRAND_PROBE_CONFIG="+world.ConfigDir, "MILLSTRAND_PROBE_STATE="+world.StateDir, "MILLSTRAND_PROBE_DATA="+world.DataDir, "MILLSTRAND_PROBE_BASELINE_PATH="+baselinePath, "MILLSTRAND_PROBE_RESULT="+resultPath)
+	return cmd
+}
+
 func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult, error) {
 	status, stale := readStatus(world)
 	if status == nil || stale {
@@ -240,9 +247,7 @@ func runFreshRuntimeProbe(source string, world config.World) (restartProbeResult
 		return restartProbeResult{}, fmt.Errorf("close restart probe result sink: %w", err)
 	}
 	defer func() { _ = os.Remove(resultPath) }()
-	cmd := exec.Command("clojure", freshRuntimeProbeArgs(source)...)
-	cmd.Dir = source
-	cmd.Env = append(os.Environ(), "MILLSTRAND_PROBE_SOURCE="+source, "MILLSTRAND_PROBE_VERSION="+config.Version, "MILLSTRAND_PROBE_CONFIG="+world.ConfigDir, "MILLSTRAND_PROBE_STATE="+world.StateDir, "MILLSTRAND_PROBE_DATA="+world.DataDir, "MILLSTRAND_PROBE_BASELINE_PATH="+baselinePath, "MILLSTRAND_PROBE_RESULT="+resultPath)
+	cmd := freshRuntimeProbeCommand(source, world, baselinePath, resultPath)
 	var stderr cappedBuffer
 	stderr.limit = maxProbeStderr
 	// User init/module code may write ordinary stdout.  The probe result has a

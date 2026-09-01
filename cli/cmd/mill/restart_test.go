@@ -113,6 +113,27 @@ func TestFreshRuntimeProbeExpressionSuppliesGenerationBasis(t *testing.T) {
 	}
 }
 
+func TestFreshRuntimeProbeCommandCarriesProductVersion(t *testing.T) {
+	originalVersion := config.Version
+	config.Version = "0.5.1"
+	t.Cleanup(func() { config.Version = originalVersion })
+	source := t.TempDir()
+	world := config.World{ConfigDir: "/config", StateDir: "/state", DataDir: "/data"}
+	cmd := freshRuntimeProbeCommand(source, world, "/baseline.json", "/result.json")
+	env := map[string]string{}
+	for _, entry := range cmd.Env {
+		if key, value, ok := strings.Cut(entry, "="); ok {
+			env[key] = value
+		}
+	}
+	if got := env["MILLSTRAND_PROBE_VERSION"]; got != config.Version {
+		t.Fatalf("probe product version = %q, want %q", got, config.Version)
+	}
+	if cmd.Dir != source {
+		t.Fatalf("probe cwd = %q, want %q", cmd.Dir, source)
+	}
+}
+
 func TestRestartProbeConformanceCorpus(t *testing.T) {
 	var corpus struct {
 		ProbeResults []struct {
