@@ -24,7 +24,7 @@ Dependency presence never activates a module. A fixture that claims dependency l
 
 ## Change boundaries
 
-Changing `deps.edn`, `deps.local.edn`, a selected alias, or a coordinate changes the candidate basis. Full refresh returns `:restart-required` and applies none of the staged activation changes. Prove adoption through a replacement generation.
+Changing `deps.edn`, `deps.local.edn`, a selected alias, or a coordinate changes the candidate basis. Full refresh in an embedded `millstrand.test.alpha` world can observe `:restart-required` and applies none of the staged activation changes, but that world cannot adopt a new generation. Prove replacement adoption at the process/repository E2E tier with the public Mill lifecycle commands.
 
 Workspace-relative `:file` source edits and activation edits remain live when the basis is unchanged. Full refresh re-reads activation files; targeted refresh does not.
 
