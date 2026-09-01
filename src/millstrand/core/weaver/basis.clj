@@ -269,6 +269,17 @@
     (diagnostic-ex "cannot resolve Weaver dependency basis"
                    :deps-resolve source-path cause coordinate)))
 
+(defn- resolve-classpath-roots
+  [workspace-path classpath-roots]
+  (mapv (fn [root]
+          (let [root-file (io/file root)]
+            (.getPath
+             (.getCanonicalFile
+              (if (.isAbsolute root-file)
+                root-file
+                (io/file workspace-path root))))))
+        classpath-roots))
+
 (defn- generation-classloader
   [classpath-roots]
   (let [loader (DynamicClassLoader. (.getContextClassLoader
@@ -338,7 +349,9 @@
                      :aliases aliases
                      :args {:extra-deps reserved-deps}})
              basis-projection {:libs (:libs basis)
-                               :classpath-roots (vec (:classpath-roots basis))
+                               :classpath-roots
+                               (resolve-classpath-roots
+                                workspace-path (:classpath-roots basis))
                                :argmap (:argmap basis)}
              result {:sources sources
                      :aliases aliases

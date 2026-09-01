@@ -8,18 +8,15 @@
   [v]
   (and (string? v) (not (str/blank? v))))
 
-(def scripts-dir
-  "Directory containing this workspace's standalone workflow scripts."
-  (io/file (-> (io/file *file*)
-               .getParentFile
-               .getParentFile
-               .getParentFile)
-           "workflows" "scripts"))
-
 (defn script
-  "Return the frozen source of named workspace script."
+  "Return the frozen source of a named workspace script."
   [name]
-  (slurp (io/file scripts-dir name)))
+  (let [resource-name (str "workflows/scripts/" name)
+        resource (io/resource resource-name)]
+    (when-not resource
+      (throw (ex-info "Workspace workflow script is missing"
+                      {:resource resource-name})))
+    (slurp resource)))
 
 (defn sh-gate
   "Return shell argv that runs script with name as `$0` and args as positionals."

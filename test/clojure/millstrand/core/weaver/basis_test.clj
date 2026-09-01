@@ -88,6 +88,23 @@
     (is (nil? (:extra @captured)))
     (is (not (.exists (io/file workspace "deps.local.edn"))))))
 
+(deftest relative-classpath-roots-resolve-from-the-selected-workspace
+  (let [workspace (workspace! {:paths ["."]} nil)
+        absolute-root (.getCanonicalPath (io/file workspace "absolute"))
+        generation
+        (binding [basis/*create-basis*
+                  (fn [_]
+                    {:libs {}
+                     :classpath-roots ["." "src" absolute-root]
+                     :argmap {}})]
+          (basis/create-generation-basis
+           (.getPath workspace)
+           {:local/root "/millstrand"}))]
+    (is (= [(.getCanonicalPath workspace)
+            (.getCanonicalPath (io/file workspace "src"))
+            absolute-root]
+           (get-in generation [:basis :classpath-roots])))))
+
 (deftest create-generation-basis-validates-its-closed-options-contract
   (let [workspace (workspace! {} nil)
         runtime-coordinate {:local/root "/millstrand"}]
