@@ -3,8 +3,8 @@ class Millstrand < Formula
   homepage "https://github.com/codethread/millstrand"
   url "https://github.com/codethread/millstrand.git",
       branch:   "main",
-      revision: "8c94b0f8cae41ebc49e2418a8c2cbfddd99c87da"
-  version "0.5.1"
+      revision: "802848e27ac8890a8ce6b3a8b40bdc413918fce0"
+  version "0.5.2"
 
   depends_on "go" => :build
   depends_on "clojure"
@@ -12,7 +12,7 @@ class Millstrand < Formula
   def install
     ldflags = "-X millstrand-strand-cli/internal/config.InstalledSource=#{opt_libexec} " \
               "-X millstrand-strand-cli/internal/config.Version=#{version} " \
-              "-X millstrand-strand-cli/internal/config.BuildID=8c94b0f8cae41ebc49e2418a8c2cbfddd99c87da"
+              "-X millstrand-strand-cli/internal/config.BuildID=802848e27ac8890a8ce6b3a8b40bdc413918fce0"
 
     system "go", "build", "-buildvcs=false", "-ldflags", ldflags,
            "-o", bin/"strand", "./cli/cmd/strand"
@@ -26,9 +26,9 @@ class Millstrand < Formula
 
   test do
     expected_identity = {
-      "build_id"         => "8c94b0f8cae41ebc49e2418a8c2cbfddd99c87da",
+      "build_id"         => "802848e27ac8890a8ce6b3a8b40bdc413918fce0",
       "protocol_version" => 3,
-      "version"          => "0.5.1",
+      "version"          => "0.5.2",
     }
 
     assert_path_exists libexec/".millstrand/config.json"
@@ -36,7 +36,7 @@ class Millstrand < Formula
     assert_path_exists libexec/"CHANGELOG.md"
     assert_equal expected_identity, JSON.parse(shell_output("#{bin}/strand --version"))
     assert_equal expected_identity, JSON.parse(shell_output("#{bin}/mill --version"))
-    assert_match "## 0.5.1", shell_output("#{bin}/mill changelog")
+    assert_match "## 0.5.2", shell_output("#{bin}/mill changelog")
     assert_match "Millstrand", shell_output("#{bin}/mill prime millstrand")
   end
 end
